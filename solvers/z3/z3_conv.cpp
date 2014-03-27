@@ -362,7 +362,13 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
     // processing code.
     const array_type2t &arr = to_array_type(type);
     unsigned int domain_width = calculate_array_domain_width(arr);
-    smt_sortt domain = mk_sort(SMT_SORT_BV, domain_width, false);
+
+    smt_sortt domain;
+    if (int_encoding)
+      domain = mk_sort(SMT_SORT_INT);
+    else
+      domain = mk_sort(SMT_SORT_BV, domain_width, false);
+
     smt_sortt range = convert_sort(arr.subtype);
     sort = z3_sort_downcast(mk_sort(SMT_SORT_ARRAY, domain, range))->s;
     break;
@@ -646,9 +652,6 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     return new_ast(z3::to_expr(ctx, Z3_mk_int2real(ctx, asts[0]->e)), s);
   case SMT_FUNC_IS_INT:
     return new_ast(z3::to_expr(ctx, Z3_mk_is_int(ctx, asts[0]->e)), s);
-  case SMT_FUNC_POW:
-        return new_ast(z3::to_expr(ctx, Z3_mk_power(ctx, asts[0]->e,                                                       asts[1]->e)), s);
-  case SMT_FUNC_HACKS:
   default:
     assert(0 && "Unhandled SMT func in z3 conversion");
   }

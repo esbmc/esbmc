@@ -559,6 +559,11 @@ smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
 
   // If it's a pointer, rewrite.
   if (is_pointer_type(expr->type)) {
+
+    // Guard against free pointer value
+    if (is_nil_expr(outstruct->datatype_members[0]))
+      return expr2tc();
+
     uint64_t num = to_constant_int2t(outstruct->datatype_members[0])
                                     .constant_value.to_uint64();
     uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])

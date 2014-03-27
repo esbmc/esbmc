@@ -163,6 +163,21 @@ smt_convt::smt_post_init(void)
 
   init_addr_space_array();
 
+  if (int_encoding) {
+    std::vector<expr2tc> power_array_data;
+    uint64_t pow;
+    unsigned int count = 0;
+    type2tc powarr_elemt = get_uint_type(64);
+    for (pow = 1ULL; count < 64; pow <<= 1, count++)
+      power_array_data.push_back(constant_int2tc(powarr_elemt, BigInt(pow)));
+
+    type2tc power_array_type(new array_type2t(powarr_elemt,
+                                              gen_uint(64), false));
+
+    constant_array2tc power_array(power_array_type, power_array_data);
+    int_shift_op_array = convert_ast(power_array);
+  }
+
   ptr_foo_inited = true;
 }
 
@@ -675,8 +690,8 @@ expr_handle_table:
     if (int_encoding) {
       // Raise 2^shift, then multiply first operand by that value. If it's
       // negative, what to do? FIXME.
-      constant_int2tc two(shl.type, BigInt(2));
-      args[1] = mk_func_app(sort, SMT_FUNC_POW, args[1], convert_ast(two));
+      smt_astt powval = int_shift_op_array->select(this, shl.side_2);
+      args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_MUL, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVSHL, &args[0], 2);
@@ -698,8 +713,8 @@ expr_handle_table:
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
       // XXX XXX XXX haven't implemented that yet.
-      constant_int2tc two(ashr.type, BigInt(2));
-      args[1] = mk_func_app(sort, SMT_FUNC_POW, args[1], convert_ast(two));
+      smt_astt powval = int_shift_op_array->select(this, ashr.side_2);
+      args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVASHR, &args[0], 2);
@@ -722,8 +737,8 @@ expr_handle_table:
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
       // XXX XXX XXX haven't implemented that yet.
-      constant_int2tc two(lshr.type, BigInt(2));
-      args[1] = mk_func_app(sort, SMT_FUNC_POW, args[1], convert_ast(two));
+      smt_astt powval = int_shift_op_array->select(this, lshr.side_2);
+      args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVLSHR, &args[0], 2);
@@ -881,9 +896,9 @@ smt_convt::convert_sort(const type2tc &type)
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sortt r;
-    if (!int_encoding && is_bool_type(range) &&
-        !array_api->supports_bools_in_arrays) {
-      r = mk_sort(SMT_SORT_BV, 1, false);
+    if (is_bool_type(range) && !array_api->supports_bools_in_arrays) {
+      r = (int_encoding) ? mk_sort(SMT_SORT_INT)
+                         : mk_sort(SMT_SORT_BV, 1, false);
     } else {
       r = convert_sort(range);
     }
@@ -1212,8 +1227,10 @@ smt_convt::make_bool_bit(smt_astt a)
 
   assert(a->sort->id == SMT_SORT_BOOL && "Wrong sort fed to "
          "smt_convt::make_bool_bit");
-  smt_astt one = mk_smt_bvint(BigInt(1), false, 1);
-  smt_astt zero = mk_smt_bvint(BigInt(0), false, 1);
+  smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
+                                : mk_smt_bvint(BigInt(1), false, 1);
+  smt_astt zero = (int_encoding) ? mk_smt_int(BigInt(0), false)
+                                 : mk_smt_bvint(BigInt(0), false, 1);
   return mk_func_app(one->sort, SMT_FUNC_ITE, a, one, zero);
 }
 
@@ -1221,10 +1238,13 @@ smt_astt
 smt_convt::make_bit_bool(smt_astt a)
 {
 
-  assert(a->sort->id == SMT_SORT_BV && "Wrong sort fed to "
-         "smt_convt::make_bit_bool");
+  assert(((!int_encoding && a->sort->id == SMT_SORT_BV) ||
+          (int_encoding && a->sort->id == SMT_SORT_INT)) &&
+        "Wrong sort fed to " "smt_convt::make_bit_bool");
+
   smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
-  smt_astt one = mk_smt_bvint(BigInt(1), false, 1);
+  smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
+                                : mk_smt_bvint(BigInt(1), false, 1);
   return mk_func_app(boolsort, SMT_FUNC_EQ, a, one);
 }
 
@@ -1453,8 +1473,7 @@ smt_convt::convert_array_index(const expr2tc &expr)
   a = a->select(this, newidx);
 
   const array_type2t &arrtype = to_array_type(index.source_value->type);
-  if (!int_encoding && is_bool_type(arrtype.subtype) &&
-      !array_api->supports_bools_in_arrays) {
+  if (is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays) {
     return make_bit_bool(a);
   } else {
     return a;
@@ -1485,8 +1504,7 @@ smt_convt::convert_array_store(const expr2tc &expr)
   const array_type2t &arrtype = to_array_type(expr->type);
 
   // Workaround for bools-in-arrays.
-  if (!int_encoding && is_bool_type(arrtype.subtype) &&
-      !array_api->supports_bools_in_arrays) {
+  if (is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays) {
     typecast2tc cast(get_uint_type(1), update_val);
     update = convert_ast(cast);
   } else {
@@ -1662,22 +1680,22 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "bvint_func_id",
   "real_func_id",
   "symbol_func_id",
-  "add",
+  "+",
   "bvadd",
-  "sub",
+  "-",
   "bvsub",
-  "mul",
+  "*",
   "bvmul",
-  "div",
+  "/",
   "bvudiv",
   "bvsdiv",
-  "mod",
+  "%",
   "bvsmod",
   "bvumod",
   "shl",
   "bvshl",
   "bvashr",
-  "neg",
+  "-",
   "bvneg",
   "bvshlr",
   "bvnot",
@@ -1692,16 +1710,16 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "or",
   "and",
   "not",
-  "lt",
+  "<",
   "bvslt",
   "bvult",
-  "gt",
+  ">",
   "bvsgt",
   "bvugt",
-  "lte",
+  "<=",
   "bvsle",
   "bvule",
-  "gte",
+  ">=",
   "bvsge",
   "bvuge",
   "=",
@@ -1713,7 +1731,6 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "extract",
   "int2real",
   "real2int",
-  "pow",
   "is_int"
 };
 
@@ -1740,6 +1757,9 @@ smt_convt::get(const expr2tc &expr)
   {
     // XXX -- again, another candidate for refactoring.
     expr2tc tmp = get_bv(expr->type, convert_ast(expr));
+    if (is_nil_expr(tmp))
+      return tmp;
+
     const constant_int2t &intval = to_constant_int2t(tmp);
     uint64_t val = intval.constant_value.to_ulong();
     std::stringstream ss;
@@ -2005,8 +2025,10 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   smt_sortt range_sort = NULL;
   if (sort->data_width == 1 && ctx->array_api->supports_bools_in_arrays)
     range_sort = ctx->mk_sort(SMT_SORT_BOOL);
-  else
+  else if (!ctx->int_encoding)
     range_sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); //XXX sign?
+  else
+    range_sort = ctx->mk_sort(SMT_SORT_INT);
 
   return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT,
                           this, ctx->convert_ast(idx));
