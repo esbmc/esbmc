@@ -1455,22 +1455,24 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   attempt to detect overflows, because it would appear that the integer width
   of how the result is going to be used falls by the wayside somewhere.
   It's safer to just not simplify these things.
-#endif
   return expr2tc(new overflow2t(new_operand));
+#endif
 
 
-#if 0
 
   // We can simplify that expression, so do it. And how do we detect overflows?
   // Perform the operation twice, once with a small type, one with huge, and
-  // see if they differ.
+  // see if they differ. Max we can do is 64 bits, so if the expression already
+  // has that size, give up.
+  if (new_operand->type->get_width() == 64)
+    return expr2tc();
 
   expr2tc simpl_op = new_operand->simplify();
   assert(is_constant_expr(simpl_op));
   expr2tc op_with_big_type = new_operand->clone();
   op_with_big_type.get()->type = (is_signedbv_type(new_operand))
-                                 ? type_pool.get_int(128)
-                                 : type_pool.get_uint(128);
+                                 ? type_pool.get_int(64)
+                                 : type_pool.get_uint(64);
   op_with_big_type = op_with_big_type->simplify();
 
   // Now ensure they're the same.
@@ -1483,7 +1485,6 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   tmp = tmp->simplify();
   assert(!is_nil_expr(tmp) && is_constant_bool2t(tmp));
   return tmp;
-#endif
 }
 
 // Heavily inspired by cbmc's simplify_exprt::objects_equal_address_of
