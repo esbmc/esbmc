@@ -448,11 +448,15 @@ smt_convt::convert_typecast(const expr2tc &expr)
   if (cast.type == cast.from->type)
     return convert_ast(cast.from);
 
+  // Casts to and from pointers need to be addressed all as one
   if (is_pointer_type(cast.type)) {
     return convert_typecast_to_ptr(cast);
   } else if (is_pointer_type(cast.from)) {
     return convert_typecast_from_ptr(cast);
-  } else if (is_bool_type(cast.type)) {
+  }
+
+  // Otherwise, look at the result type.
+  if (is_bool_type(cast.type)) {
     return convert_typecast_bool(cast);
   } else if (is_fixedbv_type(cast.type) && !int_encoding) {
     return convert_typecast_fixedbv_nonint(expr);
