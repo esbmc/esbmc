@@ -5,7 +5,7 @@
 #include "smt_conv.h"
 
 smt_astt 
-smt_convt::convert_typecast_bool(const typecast2t &cast)
+smt_convt::convert_typecast_to_bool(const typecast2t &cast)
 {
 
   if (is_bv_type(cast.from)) {
@@ -24,7 +24,7 @@ smt_convt::convert_typecast_bool(const typecast2t &cast)
 }
 
 smt_astt 
-smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
+smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
@@ -354,7 +354,7 @@ smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 }
 
 smt_astt 
-smt_convt::convert_typecast_struct(const typecast2t &cast)
+smt_convt::convert_typecast_to_struct(const typecast2t &cast)
 {
 
   const struct_type2t &struct_type_from = to_struct_type(cast.from->type);
@@ -457,15 +457,15 @@ smt_convt::convert_typecast(const expr2tc &expr)
 
   // Otherwise, look at the result type.
   if (is_bool_type(cast.type)) {
-    return convert_typecast_bool(cast);
+    return convert_typecast_to_bool(cast);
   } else if (is_fixedbv_type(cast.type) && !int_encoding) {
-    return convert_typecast_fixedbv_nonint(expr);
+    return convert_typecast_to_fixedbv_nonint(expr);
   } else if (is_bv_type(cast.type) ||
              is_fixedbv_type(cast.type) ||
              is_pointer_type(cast.type)) {
     return convert_typecast_to_ints(cast);
   } else if (is_struct_type(cast.type)) {
-    return convert_typecast_struct(cast);
+    return convert_typecast_to_struct(cast);
   } else if (is_union_type(cast.type)) {
     if (base_type_eq(cast.type, cast.from->type, ns)) {
       return convert_ast(cast.from); // No additional conversion required
