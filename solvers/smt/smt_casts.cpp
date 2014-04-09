@@ -497,9 +497,7 @@ smt_convt::convert_typecast(const expr2tc &expr)
     return convert_typecast_to_bool(cast);
   } else if (is_fixedbv_type(cast.type) && !int_encoding) {
     return convert_typecast_to_fixedbv_nonint(expr);
-  } else if (is_bv_type(cast.type) ||
-             is_fixedbv_type(cast.type) ||
-             is_pointer_type(cast.type)) {
+  } else if (is_bv_type(cast.type) || is_fixedbv_type(cast.type)) {
     return convert_typecast_to_ints(cast);
   } else if (is_struct_type(cast.type)) {
     return convert_typecast_to_struct(cast);
