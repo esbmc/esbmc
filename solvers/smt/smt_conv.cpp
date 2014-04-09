@@ -833,16 +833,26 @@ smt_convt::convert_sort(const type2tc &type)
 {
   bool is_signed = true;
 
+  smt_sort_cachet::const_iterator it = sort_cache.find(type);
+  if (it != sort_cache.end()) {
+    return it->second;
+  }
+
+  smt_sortt result = NULL;
   switch (type->type_id) {
   case type2t::bool_id:
-    return boolean_sort;
+    result = boolean_sort;
+    break;
   case type2t::struct_id:
-    return tuple_api->mk_struct_sort(type);
+    result = tuple_api->mk_struct_sort(type);
+    break;
   case type2t::union_id:
-    return tuple_api->mk_union_sort(type);
+    result = tuple_api->mk_union_sort(type);
+    break;
   case type2t::code_id:
   case type2t::pointer_id:
-    return tuple_api->mk_struct_sort(pointer_struct);
+    result = tuple_api->mk_struct_sort(pointer_struct);
+    break;
   case type2t::unsignedbv_id:
     is_signed = false;
     /* FALLTHROUGH */
@@ -850,25 +860,28 @@ smt_convt::convert_sort(const type2tc &type)
   {
     unsigned int width = type->get_width();
     if (int_encoding)
-      return mk_sort(SMT_SORT_INT, is_signed);
+      result = mk_sort(SMT_SORT_INT, is_signed);
     else
-      return mk_sort(SMT_SORT_BV, width, is_signed);
+      result = mk_sort(SMT_SORT_BV, width, is_signed);
   }
+  break;
   case type2t::fixedbv_id:
   {
     unsigned int width = type->get_width();
     if (int_encoding)
-      return mk_sort(SMT_SORT_REAL);
+      result = mk_sort(SMT_SORT_REAL);
     else
-      return mk_sort(SMT_SORT_BV, width, false);
+      result = mk_sort(SMT_SORT_BV, width, false);
   }
+  break;
   case type2t::string_id:
   {
     const string_type2t &str_type = to_string_type(type);
     constant_int2tc width(get_uint_type(config.ansi_c.int_width),
                           BigInt(str_type.width));
     type2tc new_type(new array_type2t(get_uint8_type(), width, false));
-    return convert_sort(new_type);
+    result = convert_sort(new_type);
+    break;
   }
   case type2t::array_id:
   {
@@ -887,7 +900,8 @@ smt_convt::convert_sort(const type2tc &type)
 
     if (is_tuple_ast_type(range)) {
       type2tc thetype = flatten_array_type(type);
-      return tuple_api->mk_struct_sort(thetype);
+      result = tuple_api->mk_struct_sort(thetype);
+      break;
     }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
@@ -899,7 +913,8 @@ smt_convt::convert_sort(const type2tc &type)
       r = convert_sort(range);
     }
 
-    return mk_sort(SMT_SORT_ARRAY, d, r);
+    result = mk_sort(SMT_SORT_ARRAY, d, r);
+    break;
   }
   case type2t::cpp_name_id:
   case type2t::symbol_id:
@@ -908,6 +923,9 @@ smt_convt::convert_sort(const type2tc &type)
     std::cerr << "Unexpected type ID reached SMT conversion" << std::endl;
     abort();
   }
+
+  sort_cache.insert(smt_sort_cachet::value_type(type, result));
+  return result;
 }
 
 static std::string
