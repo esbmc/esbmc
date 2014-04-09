@@ -1410,6 +1410,7 @@ expr2tc
 overflow2t::do_simplify(bool second __attribute__((unused))) const
 {
   unsigned int num_const = 0;
+  bool simplified = false;
 
   // Non constant expression. We can't just simplify the operand, because it has
   // to remain the operation we expect (i.e., add2t shouldn't distribute itself)
@@ -1422,17 +1423,25 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
     expr2tc tmp = (**it).simplify();
     if (!is_nil_expr(tmp)) {
       *it= tmp;
+      simplified = true;
     }
 
     if (is_constant_expr(*it))
       num_const++;
   }
 
-  // If we have two constant operands to the operand, we can simplify
-  // completely; otherwise just return the current operand with simplified
-  // operands.
-  if (num_const != 2)
-    return expr2tc(new overflow2t(new_operand));
+  // If we don't have two constant operands, we can't simplify this expression.
+  // We also don't want the underlying addition / whatever to become
+  // distributed, so if the sub expressions are simplifiable, return a new
+  // overflow with simplified subexprs, but no distribution.
+  // The 'simplified' test guards against a continuous chain of simplifying the
+  // same overflow expression over and over again.
+  if (num_const != 2) {
+    if (simplified)
+      return expr2tc(new overflow2t(new_operand));
+    else
+      return expr2tc();
+  }
 
   // Can only simplify ints
   if (!is_bv_type(new_operand))
