@@ -765,6 +765,9 @@ public:
   smt_astt convert_typecast_to_bool(const typecast2t &cast);
   /** Typecast to a fixedbv in bitvector mode */
   smt_astt convert_typecast_to_fixedbv_nonint(const expr2tc &cast);
+  smt_astt convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &cast);
+  smt_astt convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &cast);
+  smt_astt convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &cast);
   /** Typecast anything to an integer (but not pointers) */
   smt_astt convert_typecast_to_ints(const typecast2t &cast);
   /** Typecast something (i.e. an integer) to a pointer */

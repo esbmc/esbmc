@@ -27,98 +27,135 @@ smt_astt
 smt_convt::convert_typecast_to_fixedbv_nonint(const expr2tc &expr)
 {
   const typecast2t &cast = to_typecast2t(expr);
-  const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
-  unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
-  unsigned to_integer_bits = fbvt.integer_bits;
 
   if (is_pointer_type(cast.from)) {
     std::cerr << "Converting pointer to a float is unsupported" << std::endl;
     abort();
   }
 
-  smt_astt a = convert_ast(cast.from);
-  smt_sortt s = convert_sort(cast.type);
-
-  if (is_bv_type(cast.from)) {
-    unsigned from_width = cast.from->type->get_width();
-
-    smt_astt frontpart;
-    if (from_width == to_integer_bits) {
-      // Just concat fraction ozeros at the bottom
-      frontpart = a;
-    } else if (from_width > to_integer_bits) {
-      smt_sortt tmp = mk_sort(SMT_SORT_BV, from_width - to_integer_bits,
-                                    false);
-      frontpart = mk_extract(a, to_integer_bits-1, 0, tmp);
-    } else {
-      assert(from_width < to_integer_bits);
-      smt_sortt tmp = mk_sort(SMT_SORT_BV, to_integer_bits, false);
-      frontpart = convert_sign_ext(a, tmp, from_width,
-                                 to_integer_bits - from_width);
-    }
-
-    // Make all zeros fraction bits
-    smt_astt zero_fracbits = mk_smt_bvint(BigInt(0), false, to_fraction_bits);
-    return mk_func_app(s, SMT_FUNC_CONCAT, frontpart, zero_fracbits);
-  } else if (is_bool_type(cast.from)) {
-    smt_sortt intsort;
-    smt_astt zero = mk_smt_bvint(BigInt(0), false, to_integer_bits);
-    smt_astt one = mk_smt_bvint(BigInt(1), false, to_integer_bits);
-    intsort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
-    smt_astt switched = mk_func_app(intsort, SMT_FUNC_ITE, a, zero, one);
-    return mk_func_app(s, SMT_FUNC_CONCAT, switched, zero);
-  } else if (is_fixedbv_type(cast.from)) {
-    // FIXME: conversion here for to_int_bits > from_int_bits is factually
-    // broken, run 01_cbmc_Fixedbv8 with --no-simplify
-    smt_astt magnitude, fraction;
-
-    const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
-
-    unsigned from_fraction_bits = from_fbvt.width - from_fbvt.integer_bits;
-    unsigned from_integer_bits = from_fbvt.integer_bits;
-    unsigned from_width = from_fbvt.width;
-
-    if (to_integer_bits <= from_integer_bits) {
-      smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
-      magnitude = mk_extract(a, (from_fraction_bits + to_integer_bits - 1),
-                             from_fraction_bits, tmp_sort);
-    } else   {
-      assert(to_integer_bits > from_integer_bits);
-      smt_sortt tmp_sort = mk_sort(SMT_SORT_BV,
-                                        from_width - from_fraction_bits, false);
-      smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits,
-                                      tmp_sort);
-
-      tmp_sort = mk_sort(SMT_SORT_BV, (from_width - from_fraction_bits)
-                                      + (to_integer_bits - from_integer_bits),
-                                      false);
-      magnitude = convert_sign_ext(ext, tmp_sort,
-                                   from_width - from_fraction_bits,
-                                   to_integer_bits - from_integer_bits);
-    }
-
-    if (to_fraction_bits <= from_fraction_bits) {
-      smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
-      fraction = mk_extract(a, from_fraction_bits - 1,
-                            from_fraction_bits - to_fraction_bits, tmp_sort);
-    } else {
-      smt_astt args[2];
-      assert(to_fraction_bits > from_fraction_bits);
-      smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, from_fraction_bits,
-                                         false);
-      args[0] = mk_extract(a, from_fraction_bits -1, 0, tmp_sort);
-      args[1] = mk_smt_bvint(BigInt(0), false,
-                             to_fraction_bits - from_fraction_bits);
-
-      tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
-      fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, args, 2);
-    }
-
-    return mk_func_app(s, SMT_FUNC_CONCAT, magnitude, fraction);
-  }
+  if (is_bv_type(cast.from))
+    return convert_typecast_to_fixedbv_nonint_from_bv(expr);
+  else if (is_bool_type(cast.from))
+    return convert_typecast_to_fixedbv_nonint_from_bool(expr);
+  else if (is_fixedbv_type(cast.from))
+    return convert_typecast_to_fixedbv_nonint_from_fixedbv(expr);
 
   std::cerr << "unexpected typecast to fixedbv" << std::endl;
   abort();
+}
+
+smt_astt 
+smt_convt::convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &expr)
+{
+  const typecast2t &cast = to_typecast2t(expr);
+  const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
+  unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
+  unsigned to_integer_bits = fbvt.integer_bits;
+  assert(is_bv_type(cast.from));
+
+  smt_astt a = convert_ast(cast.from);
+  smt_sortt s = convert_sort(cast.type);
+
+  unsigned from_width = cast.from->type->get_width();
+
+  smt_astt frontpart;
+  if (from_width == to_integer_bits) {
+    // Just concat fraction ozeros at the bottom
+    frontpart = a;
+  } else if (from_width > to_integer_bits) {
+    smt_sortt tmp = mk_sort(SMT_SORT_BV, from_width - to_integer_bits,
+                                  false);
+    frontpart = mk_extract(a, to_integer_bits-1, 0, tmp);
+  } else {
+    assert(from_width < to_integer_bits);
+    smt_sortt tmp = mk_sort(SMT_SORT_BV, to_integer_bits, false);
+    frontpart = convert_sign_ext(a, tmp, from_width,
+                               to_integer_bits - from_width);
+  }
+
+  // Make all zeros fraction bits
+  smt_astt zero_fracbits = mk_smt_bvint(BigInt(0), false, to_fraction_bits);
+  return mk_func_app(s, SMT_FUNC_CONCAT, frontpart, zero_fracbits);
+}
+
+smt_astt 
+smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
+{
+  const typecast2t &cast = to_typecast2t(expr);
+  const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
+  unsigned to_integer_bits = fbvt.integer_bits;
+  assert(is_bool_type(cast.from));
+
+  smt_astt a = convert_ast(cast.from);
+  smt_sortt s = convert_sort(cast.type);
+
+  smt_sortt intsort;
+  smt_astt zero = mk_smt_bvint(BigInt(0), false, to_integer_bits);
+  smt_astt one = mk_smt_bvint(BigInt(1), false, to_integer_bits);
+  intsort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
+  smt_astt switched = mk_func_app(intsort, SMT_FUNC_ITE, a, zero, one);
+  return mk_func_app(s, SMT_FUNC_CONCAT, switched, zero);
+}
+
+smt_astt 
+smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
+{
+  const typecast2t &cast = to_typecast2t(expr);
+  const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
+  unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
+  unsigned to_integer_bits = fbvt.integer_bits;
+  assert(is_fixedbv_type(cast.from));
+
+  smt_astt a = convert_ast(cast.from);
+  smt_sortt s = convert_sort(cast.type);
+
+  // FIXME: conversion here for to_int_bits > from_int_bits is factually
+  // broken, run 01_cbmc_Fixedbv8 with --no-simplify
+  smt_astt magnitude, fraction;
+
+  const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
+
+  unsigned from_fraction_bits = from_fbvt.width - from_fbvt.integer_bits;
+  unsigned from_integer_bits = from_fbvt.integer_bits;
+  unsigned from_width = from_fbvt.width;
+
+  if (to_integer_bits <= from_integer_bits) {
+    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
+    magnitude = mk_extract(a, (from_fraction_bits + to_integer_bits - 1),
+                           from_fraction_bits, tmp_sort);
+  } else   {
+    assert(to_integer_bits > from_integer_bits);
+    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV,
+                                      from_width - from_fraction_bits, false);
+    smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits,
+                                    tmp_sort);
+
+    tmp_sort = mk_sort(SMT_SORT_BV, (from_width - from_fraction_bits)
+                                    + (to_integer_bits - from_integer_bits),
+                                    false);
+    magnitude = convert_sign_ext(ext, tmp_sort,
+                                 from_width - from_fraction_bits,
+                                 to_integer_bits - from_integer_bits);
+  }
+
+  if (to_fraction_bits <= from_fraction_bits) {
+    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
+    fraction = mk_extract(a, from_fraction_bits - 1,
+                          from_fraction_bits - to_fraction_bits, tmp_sort);
+  } else {
+    smt_astt args[2];
+    assert(to_fraction_bits > from_fraction_bits);
+    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, from_fraction_bits,
+                                       false);
+    args[0] = mk_extract(a, from_fraction_bits -1, 0, tmp_sort);
+    args[1] = mk_smt_bvint(BigInt(0), false,
+                           to_fraction_bits - from_fraction_bits);
+
+    tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
+    fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, args, 2);
+  }
+
+  return mk_func_app(s, SMT_FUNC_CONCAT, magnitude, fraction);
 }
 
 smt_astt 
