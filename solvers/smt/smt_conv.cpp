@@ -66,7 +66,7 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 }
 
 smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
-  : ctx_level(0), caching(true), int_encoding(intmode), ns(_ns)
+  : ctx_level(0), boolean_sort(NULL), int_encoding(intmode), ns(_ns)
 {
   tuple_api = NULL;
   array_api = NULL;
@@ -161,6 +161,8 @@ smt_convt::smt_post_init(void)
     machine_uint_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, false);
   }
 
+  boolean_sort = mk_sort(SMT_SORT_BOOL);
+
   init_addr_space_array();
 
   if (int_encoding) {
@@ -238,9 +240,8 @@ smt_convt::make_disjunct(const ast_vec &v)
   if (i > 1) {
     unsigned int j;
     smt_astt accuml = args[0];
-    smt_sortt sort = mk_sort(SMT_SORT_BOOL);
     for (j = 1; j < i; j++) {
-      accuml = mk_func_app(sort, SMT_FUNC_OR, accuml, args[j]);
+      accuml = mk_func_app(boolean_sort, SMT_FUNC_OR, accuml, args[j]);
     }
     result = accuml;
   } else {
@@ -267,10 +268,9 @@ smt_convt::make_conjunct(const ast_vec &v)
   // Chain these.
   if (i > 1) {
     unsigned int j;
-    smt_sortt sort = mk_sort(SMT_SORT_BOOL);
     smt_astt accuml = args[0];
     for (j = 1; j < i; j++) {
-      accuml = mk_func_app(sort, SMT_FUNC_AND, accuml, args[j]);
+      accuml = mk_func_app(boolean_sort, SMT_FUNC_AND, accuml, args[j]);
     }
     result = accuml;
   } else {
@@ -359,11 +359,9 @@ smt_convt::convert_ast(const expr2tc &expr)
   bool make_ints_reals = false;
   bool special_cases = true;
 
-  if (caching) {
-    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
-    if (cache_result != smt_cache.end())
-      return (cache_result->ast);
-  }
+  smt_cachet::const_iterator cache_result = smt_cache.find(expr);
+  if (cache_result != smt_cache.end())
+    return (cache_result->ast);
 
   // Second fail -- comparisons are turning up in 01_cbmc_abs1 that compare
   // ints and reals, which is invalid. So convert ints up to reals.
@@ -817,10 +815,8 @@ expr_handle_table:
   }
 
 done:
-  if (caching) {
-    struct smt_cache_entryt entry = { expr, a, ctx_level };
-    smt_cache.insert(entry);
-  }
+  struct smt_cache_entryt entry = { expr, a, ctx_level };
+  smt_cache.insert(entry);
 
   return a;
 }
@@ -837,16 +833,26 @@ smt_convt::convert_sort(const type2tc &type)
 {
   bool is_signed = true;
 
+  smt_sort_cachet::const_iterator it = sort_cache.find(type);
+  if (it != sort_cache.end()) {
+    return it->second;
+  }
+
+  smt_sortt result = NULL;
   switch (type->type_id) {
   case type2t::bool_id:
-    return mk_sort(SMT_SORT_BOOL);
+    result = boolean_sort;
+    break;
   case type2t::struct_id:
-    return tuple_api->mk_struct_sort(type);
+    result = tuple_api->mk_struct_sort(type);
+    break;
   case type2t::union_id:
-    return tuple_api->mk_union_sort(type);
+    result = tuple_api->mk_union_sort(type);
+    break;
   case type2t::code_id:
   case type2t::pointer_id:
-    return tuple_api->mk_struct_sort(pointer_struct);
+    result = tuple_api->mk_struct_sort(pointer_struct);
+    break;
   case type2t::unsignedbv_id:
     is_signed = false;
     /* FALLTHROUGH */
@@ -854,25 +860,28 @@ smt_convt::convert_sort(const type2tc &type)
   {
     unsigned int width = type->get_width();
     if (int_encoding)
-      return mk_sort(SMT_SORT_INT, is_signed);
+      result = mk_sort(SMT_SORT_INT, is_signed);
     else
-      return mk_sort(SMT_SORT_BV, width, is_signed);
+      result = mk_sort(SMT_SORT_BV, width, is_signed);
   }
+  break;
   case type2t::fixedbv_id:
   {
     unsigned int width = type->get_width();
     if (int_encoding)
-      return mk_sort(SMT_SORT_REAL);
+      result = mk_sort(SMT_SORT_REAL);
     else
-      return mk_sort(SMT_SORT_BV, width, false);
+      result = mk_sort(SMT_SORT_BV, width, false);
   }
+  break;
   case type2t::string_id:
   {
     const string_type2t &str_type = to_string_type(type);
     constant_int2tc width(get_uint_type(config.ansi_c.int_width),
                           BigInt(str_type.width));
     type2tc new_type(new array_type2t(get_uint8_type(), width, false));
-    return convert_sort(new_type);
+    result = convert_sort(new_type);
+    break;
   }
   case type2t::array_id:
   {
@@ -891,7 +900,8 @@ smt_convt::convert_sort(const type2tc &type)
 
     if (is_tuple_ast_type(range)) {
       type2tc thetype = flatten_array_type(type);
-      return tuple_api->mk_struct_sort(thetype);
+      result = tuple_api->mk_struct_sort(thetype);
+      break;
     }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
@@ -903,7 +913,8 @@ smt_convt::convert_sort(const type2tc &type)
       r = convert_sort(range);
     }
 
-    return mk_sort(SMT_SORT_ARRAY, d, r);
+    result = mk_sort(SMT_SORT_ARRAY, d, r);
+    break;
   }
   case type2t::cpp_name_id:
   case type2t::symbol_id:
@@ -912,6 +923,9 @@ smt_convt::convert_sort(const type2tc &type)
     std::cerr << "Unexpected type ID reached SMT conversion" << std::endl;
     abort();
   }
+
+  sort_cache.insert(smt_sort_cachet::value_type(type, result));
+  return result;
 }
 
 static std::string
@@ -1047,7 +1061,7 @@ smt_astt
 smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
 {
   const isnan2t &isnan = to_isnan2t(expr);
-  smt_sortt bs = mk_sort(SMT_SORT_BOOL);
+  smt_sortt bs = boolean_sort;
 
   // Assumes operand is fixedbv.
   assert(is_fixedbv_type(isnan.value));
@@ -1119,7 +1133,7 @@ smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
   smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
   smt_astt the_top_bit = mk_extract(a, topbit-1, topbit-1, bit);
   smt_astt zero_bit = mk_smt_bvint(BigInt(0), false, 1);
-  smt_sortt b = mk_sort(SMT_SORT_BOOL);
+  smt_sortt b = boolean_sort;
   smt_astt t = mk_func_app(b, SMT_FUNC_EQ, the_top_bit, zero_bit);
 
   smt_astt z = mk_smt_bvint(BigInt(0), false, topwidth);
@@ -1156,7 +1170,7 @@ smt_convt::round_real_to_int(smt_astt a)
   // already an integer.
   smt_sortt realsort = mk_sort(SMT_SORT_REAL);
   smt_sortt intsort = mk_sort(SMT_SORT_INT);
-  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = boolean_sort;
   smt_astt is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, a, mk_smt_real("0"));
 
   // The actual conversion
@@ -1187,7 +1201,7 @@ smt_convt::round_fixedbv_to_int(smt_astt a, unsigned int fromwidth,
   smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
   smt_sortt halfwidth = mk_sort(SMT_SORT_BV, frac_width, false);
   smt_sortt tosort = mk_sort(SMT_SORT_BV, towidth, false);
-  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = boolean_sort;
 
   // Determine whether the source is signed from its topmost bit.
   smt_astt is_neg_bit = mk_extract(a, fromwidth-1, fromwidth-1, bit);
@@ -1242,7 +1256,7 @@ smt_convt::make_bit_bool(smt_astt a)
           (int_encoding && a->sort->id == SMT_SORT_INT)) &&
         "Wrong sort fed to " "smt_convt::make_bit_bool");
 
-  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = boolean_sort;
   smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
                                 : mk_smt_bvint(BigInt(1), false, 1);
   return mk_func_app(boolsort, SMT_FUNC_EQ, a, one);
@@ -1986,8 +2000,7 @@ smt_astt
 smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   // Simple approach: this is a leaf piece of SMT, compute a basic equality.
-  smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
-  return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, this, other);
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, this, other);
 }
 
 smt_astt
@@ -2024,7 +2037,7 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   // Guess the resulting sort. This could be a lot, lot better.
   smt_sortt range_sort = NULL;
   if (sort->data_width == 1 && ctx->array_api->supports_bools_in_arrays)
-    range_sort = ctx->mk_sort(SMT_SORT_BOOL);
+    range_sort = ctx->boolean_sort;
   else if (!ctx->int_encoding)
     range_sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); //XXX sign?
   else

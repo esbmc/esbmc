@@ -891,6 +891,8 @@ public:
     >
   > smt_cachet;
 
+  typedef hash_map_cont<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
+
   struct expr_op_convert {
     smt_func_kind int_mode_func;
     smt_func_kind bv_mode_func_signed;
@@ -909,6 +911,8 @@ public:
   union_varst union_vars;
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
+  /** A cache of converted type2tc's to smt sorts */
+  smt_sort_cachet sort_cache;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
@@ -928,8 +932,8 @@ public:
   smt_sortt machine_int_sort;
   /** The SMT sort of this machines unsigned integer type. */
   smt_sortt machine_uint_sort;
-  /** Whether or not we are using the SMT cache. */
-  bool caching;
+  /** Sort for booleans. For fast access. */
+  smt_sortt boolean_sort;
   /** Whether we are encoding expressions in integer mode or not. */
   bool int_encoding;
   /** A namespace containing all the types in the program. Used to resolve the
