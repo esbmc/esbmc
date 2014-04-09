@@ -928,6 +928,8 @@ public:
   smt_sortt machine_int_sort;
   /** The SMT sort of this machines unsigned integer type. */
   smt_sortt machine_uint_sort;
+  /** Sort for booleans. For fast access. */
+  smt_sortt boolean_sort;
   /** Whether we are encoding expressions in integer mode or not. */
   bool int_encoding;
   /** A namespace containing all the types in the program. Used to resolve the

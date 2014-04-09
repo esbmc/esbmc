@@ -66,7 +66,7 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 }
 
 smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
-  : ctx_level(0), int_encoding(intmode), ns(_ns)
+  : ctx_level(0), boolean_sort(NULL), int_encoding(intmode), ns(_ns)
 {
   tuple_api = NULL;
   array_api = NULL;
@@ -160,6 +160,8 @@ smt_convt::smt_post_init(void)
     machine_int_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, true);
     machine_uint_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, false);
   }
+
+  boolean_sort = mk_sort(SMT_SORT_BOOL);
 
   init_addr_space_array();
 
