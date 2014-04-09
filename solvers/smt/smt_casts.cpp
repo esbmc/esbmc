@@ -463,7 +463,7 @@ smt_convt::convert_typecast(const expr2tc &expr)
   } else if (is_struct_type(cast.type))     {
     return convert_typecast_struct(cast);
   } else if (is_union_type(cast.type)) {
-    if (base_type_eq(cast.type, cast.from->type, namespacet(contextt()))) {
+    if (base_type_eq(cast.type, cast.from->type, ns)) {
       return convert_ast(cast.from); // No additional conversion required
     } else {
       std::cerr << "Can't typecast between unions" << std::endl;
