@@ -1410,25 +1410,23 @@ expr2tc
 overflow2t::do_simplify(bool second __attribute__((unused))) const
 {
   unsigned int num_const = 0;
-  bool changed = false;
 
   // Non constant expression. We can't just simplify the operand, because it has
   // to remain the operation we expect (i.e., add2t shouldn't distribute itself)
-  // so simplify its operands instead.
+  // so simplify its operands right here.
+  if (second)
+    return expr2tc();
+
   expr2tc new_operand = operand->clone();
   Forall_operands2(it, idx, new_operand) {
     expr2tc tmp = (**it).simplify();
     if (!is_nil_expr(tmp)) {
       *it= tmp;
-      changed = true;
-      if (is_constant_expr(tmp))
-        num_const++;
     }
-  }
 
-  // If we changed nothing, no further simplification.
-  if (!changed)
-    return expr2tc();
+    if (is_constant_expr(*it))
+      num_const++;
+  }
 
   // If we have two constant operands to the operand, we can simplify
   // completely; otherwise just return the current operand with simplified
