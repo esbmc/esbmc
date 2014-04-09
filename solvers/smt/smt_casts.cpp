@@ -454,13 +454,13 @@ smt_convt::convert_typecast(const expr2tc &expr)
     return convert_typecast_from_ptr(cast);
   } else if (is_bool_type(cast.type)) {
     return convert_typecast_bool(cast);
-  } else if (is_fixedbv_type(cast.type) && !int_encoding)      {
+  } else if (is_fixedbv_type(cast.type) && !int_encoding) {
     return convert_typecast_fixedbv_nonint(expr);
   } else if (is_bv_type(cast.type) ||
              is_fixedbv_type(cast.type) ||
              is_pointer_type(cast.type)) {
     return convert_typecast_to_ints(cast);
-  } else if (is_struct_type(cast.type))     {
+  } else if (is_struct_type(cast.type)) {
     return convert_typecast_struct(cast);
   } else if (is_union_type(cast.type)) {
     if (base_type_eq(cast.type, cast.from->type, ns)) {
