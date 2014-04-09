@@ -891,6 +891,8 @@ public:
     >
   > smt_cachet;
 
+  typedef hash_map_cont<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
+
   struct expr_op_convert {
     smt_func_kind int_mode_func;
     smt_func_kind bv_mode_func_signed;
