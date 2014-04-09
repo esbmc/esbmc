@@ -79,7 +79,7 @@ smt_convt::overflow_arith(const expr2tc &expr)
 
     // Zero extend; multiply; Make a decision based on the top half.
     unsigned int sz = zero->type->get_width();
-    smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
+    smt_sortt boolsort = boolean_sort;
     smt_sortt normalsort = mk_sort(SMT_SORT_BV, sz, false);
     smt_sortt bigsort = mk_sort(SMT_SORT_BV, sz * 2, false);
 
@@ -154,7 +154,7 @@ smt_convt::overflow_cast(const expr2tc &expr)
   const overflow_cast2t &ocast = to_overflow_cast2t(expr);
   unsigned int width = ocast.operand->type->get_width();
   unsigned int bits = ocast.bits;
-  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = boolean_sort;
 
   if (ocast.bits >= width || ocast.bits == 0) {
     std::cerr << "SMT conversion: overflow-typecast got wrong number of bits"

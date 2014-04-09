@@ -240,9 +240,8 @@ smt_convt::make_disjunct(const ast_vec &v)
   if (i > 1) {
     unsigned int j;
     smt_astt accuml = args[0];
-    smt_sortt sort = mk_sort(SMT_SORT_BOOL);
     for (j = 1; j < i; j++) {
-      accuml = mk_func_app(sort, SMT_FUNC_OR, accuml, args[j]);
+      accuml = mk_func_app(boolean_sort, SMT_FUNC_OR, accuml, args[j]);
     }
     result = accuml;
   } else {
@@ -269,10 +268,9 @@ smt_convt::make_conjunct(const ast_vec &v)
   // Chain these.
   if (i > 1) {
     unsigned int j;
-    smt_sortt sort = mk_sort(SMT_SORT_BOOL);
     smt_astt accuml = args[0];
     for (j = 1; j < i; j++) {
-      accuml = mk_func_app(sort, SMT_FUNC_AND, accuml, args[j]);
+      accuml = mk_func_app(boolean_sort, SMT_FUNC_AND, accuml, args[j]);
     }
     result = accuml;
   } else {
@@ -837,7 +835,7 @@ smt_convt::convert_sort(const type2tc &type)
 
   switch (type->type_id) {
   case type2t::bool_id:
-    return mk_sort(SMT_SORT_BOOL);
+    return boolean_sort;
   case type2t::struct_id:
     return tuple_api->mk_struct_sort(type);
   case type2t::union_id:
@@ -1045,7 +1043,7 @@ smt_astt
 smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
 {
   const isnan2t &isnan = to_isnan2t(expr);
-  smt_sortt bs = mk_sort(SMT_SORT_BOOL);
+  smt_sortt bs = boolean_sort;
 
   // Assumes operand is fixedbv.
   assert(is_fixedbv_type(isnan.value));
@@ -1117,7 +1115,7 @@ smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
   smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
   smt_astt the_top_bit = mk_extract(a, topbit-1, topbit-1, bit);
   smt_astt zero_bit = mk_smt_bvint(BigInt(0), false, 1);
-  smt_sortt b = mk_sort(SMT_SORT_BOOL);
+  smt_sortt b = boolean_sort;
   smt_astt t = mk_func_app(b, SMT_FUNC_EQ, the_top_bit, zero_bit);
 
   smt_astt z = mk_smt_bvint(BigInt(0), false, topwidth);
@@ -1154,7 +1152,7 @@ smt_convt::round_real_to_int(smt_astt a)
   // already an integer.
   smt_sortt realsort = mk_sort(SMT_SORT_REAL);
   smt_sortt intsort = mk_sort(SMT_SORT_INT);
-  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = boolean_sort;
   smt_astt is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, a, mk_smt_real("0"));
 
   // The actual conversion
@@ -1185,7 +1183,7 @@ smt_convt::round_fixedbv_to_int(smt_astt a, unsigned int fromwidth,
   smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
   smt_sortt halfwidth = mk_sort(SMT_SORT_BV, frac_width, false);
   smt_sortt tosort = mk_sort(SMT_SORT_BV, towidth, false);
-  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = boolean_sort;
 
   // Determine whether the source is signed from its topmost bit.
   smt_astt is_neg_bit = mk_extract(a, fromwidth-1, fromwidth-1, bit);
@@ -1240,7 +1238,7 @@ smt_convt::make_bit_bool(smt_astt a)
           (int_encoding && a->sort->id == SMT_SORT_INT)) &&
         "Wrong sort fed to " "smt_convt::make_bit_bool");
 
-  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = boolean_sort;
   smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
                                 : mk_smt_bvint(BigInt(1), false, 1);
   return mk_func_app(boolsort, SMT_FUNC_EQ, a, one);
@@ -1984,8 +1982,7 @@ smt_astt
 smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   // Simple approach: this is a leaf piece of SMT, compute a basic equality.
-  smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
-  return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, this, other);
+  return ctx->mk_func_app(ctx->boolean_sort, SMT_FUNC_EQ, this, other);
 }
 
 smt_astt
@@ -2022,7 +2019,7 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   // Guess the resulting sort. This could be a lot, lot better.
   smt_sortt range_sort = NULL;
   if (sort->data_width == 1 && ctx->array_api->supports_bools_in_arrays)
-    range_sort = ctx->mk_sort(SMT_SORT_BOOL);
+    range_sort = ctx->boolean_sort;
   else if (!ctx->int_encoding)
     range_sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); //XXX sign?
   else

@@ -106,7 +106,7 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
   smt_astt real_idx = ctx->convert_ast(idx);
   smt_astt args[2], idxargs[2], impargs[2];
   unsigned long dom_width = ma->sort->domain_width;
-  smt_sortt bool_sort = ctx->mk_sort(SMT_SORT_BOOL);
+  smt_sortt bool_sort = ctx->boolean_sort;
 
   args[0] = fresh;
   idxargs[0] = real_idx;
@@ -155,7 +155,7 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
   smt_astt real_value = value;
   smt_astt iteargs[3], idxargs[2];
   unsigned long dom_width = mast->sort->domain_width;
-  smt_sortt bool_sort = ctx->mk_sort(SMT_SORT_BOOL);
+  smt_sortt bool_sort = ctx->boolean_sort;
 
   idxargs[0] = real_idx;
   iteargs[1] = real_value;
@@ -444,7 +444,7 @@ array_convt::execute_array_trans(
   std::vector<smt_astt > &dest_data = data[idx+1];
   collate_array_values(dest_data, idx_map, array_values[arr][idx+1], subtype);
 
-  smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = ctx->boolean_sort;
 
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
@@ -569,7 +569,7 @@ array_convt::collate_array_values(std::vector<smt_astt > &vals,
   } else {
     // We need to assign the initial value in, except where there's already
     // a select/index, in which case we assert that the values are equal.
-    smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+    smt_sortt boolsort = ctx->boolean_sort;
     for (std::vector<smt_astt >::iterator it = vals.begin();
          it != vals.end(); it++) {
       if (*it == NULL) {
@@ -592,7 +592,7 @@ array_convt::add_initial_ackerman_constraints(
                                   const std::map<expr2tc,unsigned> &idx_map)
 {
   // Lolquadratic,
-  smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = ctx->boolean_sort;
   for (std::map<expr2tc, unsigned>::const_iterator it = idx_map.begin();
        it != idx_map.end(); it++) {
     smt_astt outer_idx = ctx->convert_ast(it->first);
