@@ -9,6 +9,7 @@ smt_convt::overflow_arith(const expr2tc &expr)
 
   const overflow2t &overflow = to_overflow2t(expr);
   const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
+  assert(opers.side_1->type == opers.side_2->type);
   constant_int2tc zero(opers.side_1->type, BigInt(0));
   lessthan2tc op1neg(opers.side_1, zero);
   lessthan2tc op2neg(opers.side_2, zero);
@@ -23,49 +24,25 @@ smt_convt::overflow_arith(const expr2tc &expr)
 
   if (is_add2t(overflow.operand)) {
     if (is_signed) {
-      // Three cases; pos/pos, pos/neg, neg/neg, each with their own failure
-      // modes.
-      // First, if both pos, usual constraint.
-      greaterthanequal2tc c1(overflow.operand, zero);
+      // Two cases: pos/pos, and neg/neg, which can over and underflow resp.
+      // In pos/neg cases, no overflow or underflow is possible, for any value.
+      constant_int2tc zero(opers.side_1->type, BigInt(0));
 
-      // If pos/neg, result needs to be in the range posval > x >= negval
-      lessthan2tc foo(overflow.operand, opers.side_1);
-      lessthanequal2tc bar(opers.side_2, overflow.operand);
-      and2tc c2_1(foo, bar);
+      lessthan2tc op1pos(zero, opers.side_1);
+      lessthan2tc op2pos(zero, opers.side_2);
+      and2tc both_pos(op1pos, op2pos);
 
-      // And vice versa for neg/pos
-      lessthan2tc oof(overflow.operand, opers.side_2);
-      lessthanequal2tc rab(opers.side_1, overflow.operand);
-      and2tc c2_2(oof, rab);
+      not2tc negop1(op1pos);
+      not2tc negop2(op2pos);
+      and2tc both_neg(negop1, negop2);
 
-      // neg/neg: result should be below 0.
-      lessthan2tc c3(overflow.operand, zero);
-
-      // Finally, encode this into a series of implies that must always be true
-      or2tc ncase1(op1neg, op2neg);
-      not2tc case1(ncase1);
-      implies2tc f1(case1, c1);
-      
-      equality2tc e1(op1neg, false_expr);
-      equality2tc e2(op2neg, true_expr);
-      and2tc case2_1(e1, e2);
-      implies2tc f2(case2_1, c2_1);
-
-      equality2tc e3(op1neg, true_expr);
-      equality2tc e4(op2neg, false_expr);
-      and2tc case2_2(e3, e4);
-      implies2tc f3(case2_2, c2_2);
-
-      and2tc case3(op1neg, op2neg);
-      implies2tc f4(case3, c3);
-
-      // Link them up.
-      and2tc f5(f1, f2);
-      and2tc f6(f3, f4);
-      and2tc f7(f5, f6);
-      not2tc inv(f7);
-      return convert_ast(inv);
+      implies2tc nooverflow(both_pos,
+                            greaterthanequal2tc(overflow.operand, zero));
+      implies2tc nounderflow(both_neg,
+                            lessthanequal2tc(overflow.operand, zero));
+      return convert_ast(not2tc(and2tc(nooverflow, nounderflow)));
     } else {
+      std::cerr << "Lolunsignedoverflows"<< std::endl;
       // Just ensure the result is >= both operands.
       greaterthanequal2tc ge1(overflow.operand, opers.side_1);
       greaterthanequal2tc ge2(overflow.operand, opers.side_2);
@@ -75,38 +52,22 @@ smt_convt::overflow_arith(const expr2tc &expr)
     }
   } else if (is_sub2t(overflow.operand)) {
     if (is_signed) {
-      // Same deal as with add. Enumerate the cases.
-      // plus/plus, only failure mode is underflowing:
-      lessthanequal2tc c1(overflow.operand, opers.side_1);
+      // Convert to be an addition
+      neg2tc negop2(opers.side_2->type, opers.side_2);
+      add2tc anadd(opers.side_1->type, opers.side_1, negop2);
+      expr2tc add_overflows(new overflow2t(anadd));
 
-      // pos/neg, could overflow.
-      greaterthan2tc c2(overflow.operand, opers.side_1);
-
-      // neg/pos - already covered by c1
-
-      // neg/neg - impossible to get wrong.
-
-      equality2tc e1(op1neg, false_expr);
-      equality2tc e2(op2neg, false_expr);
-      equality2tc e3(op1neg, true_expr);
-      equality2tc e4(op2neg, true_expr);
-
-      and2tc cond1(e1, e2);
-      and2tc cond3(e3, e2);
-      or2tc dualcond(cond1, cond3);
-      implies2tc f1(dualcond, c1);
-
-      and2tc cond2(e1, e4);
-      implies2tc f2(cond2, c2);
-
-      // No encoding for neg/neg on account of how it's impossible to be wrong
-
-      // Combine
-      and2tc f3(f1, f2);
-      not2tc inv(f3);
-      return convert_ast(inv);
+      // Corner case: subtracting MIN_INT from many things overflows. The result
+      // should always be positive.
+      constant_int2tc zero(opers.side_1->type, BigInt(0));
+      uint64_t topbit = 1ULL << (opers.side_1->type->get_width() - 1);
+      constant_int2tc min_int(opers.side_1->type, BigInt(topbit));
+      equality2tc is_min_int(min_int, opers.side_2);
+      implies2tc imp(is_min_int, greaterthan2tc(overflow.operand, zero));
+      return convert_ast(or2tc(add_overflows, is_min_int));
     } else {
       // Just ensure the result is >= the operands.
+      std::cerr << "lolunsgnedsubs" << std::endl;
       lessthanequal2tc le1(overflow.operand, opers.side_1);
       lessthanequal2tc le2(overflow.operand, opers.side_2);
       and2tc res(le1, le2);
