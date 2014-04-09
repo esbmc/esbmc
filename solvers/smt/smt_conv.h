@@ -911,6 +911,8 @@ public:
   union_varst union_vars;
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
+  /** A cache of converted type2tc's to smt sorts */
+  smt_sort_cachet sort_cache;
   /** Pointer_logict object, which contains some code for formatting how
    *  pointers are displayed in counter-examples. This is a list so that we
    *  can push and pop data when context push/pop operations occur. */
