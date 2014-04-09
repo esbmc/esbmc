@@ -66,7 +66,7 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 }
 
 smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
-  : ctx_level(0), caching(true), int_encoding(intmode), ns(_ns)
+  : ctx_level(0), int_encoding(intmode), ns(_ns)
 {
   tuple_api = NULL;
   array_api = NULL;
@@ -359,11 +359,9 @@ smt_convt::convert_ast(const expr2tc &expr)
   bool make_ints_reals = false;
   bool special_cases = true;
 
-  if (caching) {
-    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
-    if (cache_result != smt_cache.end())
-      return (cache_result->ast);
-  }
+  smt_cachet::const_iterator cache_result = smt_cache.find(expr);
+  if (cache_result != smt_cache.end())
+    return (cache_result->ast);
 
   // Second fail -- comparisons are turning up in 01_cbmc_abs1 that compare
   // ints and reals, which is invalid. So convert ints up to reals.
@@ -817,10 +815,8 @@ expr_handle_table:
   }
 
 done:
-  if (caching) {
-    struct smt_cache_entryt entry = { expr, a, ctx_level };
-    smt_cache.insert(entry);
-  }
+  struct smt_cache_entryt entry = { expr, a, ctx_level };
+  smt_cache.insert(entry);
 
   return a;
 }
