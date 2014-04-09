@@ -1438,26 +1438,6 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   if (!is_bv_type(new_operand))
     return expr2tc(new overflow2t(new_operand));
 
-#if 0
-  XXXjmorse - the following code:
-
-  int main()
-  {
-    int8_t face, twenty;;
-    twenty = 20;
-    face = twenty * twenty;
-    return 0;
-  }
-
-  Results in a 32 bit multiply of two 8 bit integers. This breaks the below
-  attempt to detect overflows, because it would appear that the integer width
-  of how the result is going to be used falls by the wayside somewhere.
-  It's safer to just not simplify these things.
-  return expr2tc(new overflow2t(new_operand));
-#endif
-
-
-
   // We can simplify that expression, so do it. And how do we detect overflows?
   // Perform the operation twice, once with a small type, one with huge, and
   // see if they differ. Max we can do is 64 bits, so if the expression already
