@@ -364,17 +364,25 @@ runtime_encoded_equationt::flush_latest_instructions(void)
 
   SSA_stepst::iterator run_it = scoped_end_points.back();
 
-  // Convert this run.
-  if (SSA_steps.size() != 0) {
-    // Horror: if the start-of-run iterator is end, then it actually refers to
-    // the start of the list. The start doesn't have a persistent iterator, so
-    // we can't keep a reference to it when there's nothing in the list :|
-    if (run_it == SSA_steps.end())
-      run_it = SSA_steps.begin();
-    for (; run_it != SSA_steps.end(); run_it++)
-      convert_internal_step(conv, assumpt_chain.back(), assert_vec_list.back(),
-                            *run_it);
-  }
+  if (SSA_steps.size() == 0)
+    return;
+
+  // The start-of-run iterator is set to end() when a push occurs, and the SSA
+  // list is empty. This is because the end iterator is the only stable
+  // iterator at that point. When this happens, we need to start conversion
+  // from the start of the list.
+  // Otherwise, it's set to the last insn to be converted, so we have to start
+  // from one instruction further up.
+
+  if (run_it == SSA_steps.end())
+    run_it = SSA_steps.begin();
+  else
+    run_it++;
+
+  // Now iterate from the start insn to convert, to the end of the list.
+  for (; run_it != SSA_steps.end(); run_it++)
+    convert_internal_step(conv, assumpt_chain.back(), assert_vec_list.back(),
+                          *run_it);
 }
 
 void
