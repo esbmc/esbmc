@@ -116,6 +116,10 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   // FIXME: conversion here for to_int_bits > from_int_bits is factually
   // broken, run 01_cbmc_Fixedbv8 with --no-simplify
 
+  // The plan here is to extract the magnitude and fraction from the source
+  // fbv, extend or truncate them appropriately, then concatenate them.
+
+  // Start with the magnitude
   if (to_integer_bits <= from_integer_bits) {
     smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
     magnitude = mk_extract(a, (from_fraction_bits + to_integer_bits - 1),
@@ -131,6 +135,7 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
                                  additional_bits);
   }
 
+  // Followed by the fraction part
   if (to_fraction_bits <= from_fraction_bits) {
     smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
     fraction = mk_extract(a, from_fraction_bits - 1,
@@ -148,6 +153,7 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
     fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, args, 2);
   }
 
+  // Finally, concatenate the adjusted magnitude / fraction
   return mk_func_app(s, SMT_FUNC_CONCAT, magnitude, fraction);
 }
 
