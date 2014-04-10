@@ -31,9 +31,7 @@ yices_convt::yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp)
   else
     yices_default_config_for_logic(config, "QF_AUFBV");
 
-  // XXX -- work out mode detection in the future.
-  // yices_set_config(config, "mode", "push-pop");
-  yices_set_config(config, "mode", "one-shot");
+  yices_set_config(config, "mode", "push-pop");
 
   yices_ctx = yices_new_context(config);
   yices_free_config(config);
@@ -43,6 +41,33 @@ yices_convt::~yices_convt()
 {
   yices_free_context(yices_ctx);
   yices_garbage_collect(NULL, 0, NULL, 0, false);
+}
+
+void
+yices_convt::push_ctx()
+{
+  smt_convt::push_ctx();
+  int32_t res = yices_push(yices_ctx);
+
+  if (res != 0) {
+    std::cerr << "Error pushing yices context" << std::endl;
+    yices_print_error(stderr);
+    abort();
+  }
+}
+
+void
+yices_convt::pop_ctx()
+{
+  int32_t res = yices_pop(yices_ctx);
+
+  if (res != 0) {
+    std::cerr << "Error poping yices context" << std::endl;
+    yices_print_error(stderr);
+    abort();
+  }
+
+  smt_convt::pop_ctx();
 }
 
 smt_convt::resultt
