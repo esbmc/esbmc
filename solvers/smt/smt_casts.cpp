@@ -244,9 +244,6 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
   } else if (from_width < to_width) {
     return convert_sign_ext(a, s, from_width, (to_width - from_width));
   } else if (from_width > to_width) {
-    if (!to_width)
-      to_width = config.ansi_c.int_width;
-
     return mk_extract(a, to_width - 1, 0, s);
   }
 
