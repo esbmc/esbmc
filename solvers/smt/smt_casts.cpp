@@ -212,6 +212,7 @@ smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
 smt_astt
 smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 {
+  assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
   smt_sortt s = convert_sort(cast.type);
   smt_astt a = convert_ast(cast.from);
@@ -219,31 +220,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
     unsigned from_width = cast.from->type->get_width();
 
     if (from_width == to_width) {
-      if (int_encoding && is_signedbv_type(cast.from) &&
-               is_fixedbv_type(cast.type)) {
-        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1);
-      } else if (int_encoding && is_fixedbv_type(cast.from) &&
-               is_signedbv_type(cast.type)) {
-        return round_real_to_int(a);
-      } else if (int_encoding && is_unsignedbv_type(cast.from) &&
-                 is_signedbv_type(cast.type)) {
-        // Unsigned -> Signed. Seeing how integer mode is an approximation,
-        // just return the original value, and if it would have wrapped around,
-        // too bad.
-        return convert_ast(cast.from);
-      } else if (int_encoding && is_signedbv_type(cast.from) &&
-                 is_unsignedbv_type(cast.type)) {
-        // XXX XXX XXX seriously rethink what this code attempts to do,
-        // implementing something that tries to look like twos compliment.
-        constant_int2tc maxint(cast.type, BigInt(0xFFFFFFFF));
-        add2tc add(cast.type, maxint, cast.from);
-
-        constant_int2tc zero(cast.from->type, BigInt(0));
-        lessthan2tc lt(cast.from, zero);
-        if2tc ite(cast.type, lt, add, cast.from);
-        return convert_ast(ite);
-      } else if (!int_encoding && is_fixedbv_type(cast.from) &&
-                 is_bv_type(cast.type)) {
+      if (is_fixedbv_type(cast.from) && is_bv_type(cast.type)) {
         return round_fixedbv_to_int(a, from_width, to_width);
       } else if ((is_signedbv_type(cast.type) && is_unsignedbv_type(cast.from))
             || (is_unsignedbv_type(cast.type) && is_signedbv_type(cast.from))) {
@@ -254,29 +231,12 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
         abort();
       }
     } else if (from_width < to_width) {
-      if (int_encoding &&
-          ((is_fixedbv_type(cast.type) && is_signedbv_type(cast.from)))) {
-        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1);
-      } else if (int_encoding) {
-	return a; // output = output
-      } else {
         return convert_sign_ext(a, s, from_width, (to_width - from_width));
-      }
     } else if (from_width > to_width) {
-      if (int_encoding &&
-          ((is_signedbv_type(cast.from) && is_fixedbv_type(cast.type)))) {
-        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1);
-      } else if (int_encoding &&
-                (is_fixedbv_type(cast.from) && is_signedbv_type(cast.type))) {
-        return round_real_to_int(a);
-      } else if (int_encoding) {
-        return a; // output = output
-      } else {
 	if (!to_width)
           to_width = config.ansi_c.int_width;
 
         return mk_extract(a, to_width-1, 0, s);
-      }
     }
 
   std::cerr << "Malformed cast from signedbv/fixedbv" << std::endl;
@@ -286,6 +246,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 smt_astt
 smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
 {
+  assert(!int_encoding);
   unsigned to_width = cast.type->get_width();
   smt_sortt s = convert_sort(cast.type);
   smt_astt a = convert_ast(cast.from);
@@ -295,18 +256,10 @@ smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
     if (from_width == to_width) {
       return a; // output = output
     } else if (from_width < to_width) {
-      if (int_encoding) {
-	return a; // output = output
-      } else {
         return convert_zero_ext(a, s, (to_width - from_width));
-      }
     } else {
       assert(from_width > to_width);
-      if (int_encoding) {
-	return a; // output = output
-      } else {
         return mk_extract(a, to_width - 1, 0, s);
-      }
     }
 }
 
@@ -314,27 +267,15 @@ smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
 smt_astt
 smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)
 {
+  assert(!int_encoding);
   smt_sortt s = convert_sort(cast.type);
   smt_astt a = convert_ast(cast.from);
 
     smt_astt zero, one;
     unsigned width = cast.type->get_width();
 
-    if (is_bv_type(cast.type)) {
-      if (int_encoding) {
-        zero = mk_smt_int(BigInt(0), false);
-        one = mk_smt_int(BigInt(1), false);
-      } else {
         zero = mk_smt_bvint(BigInt(0), false, width);
         one = mk_smt_bvint(BigInt(1), false, width);
-      }
-    } else if (is_fixedbv_type(cast.type)) {
-      zero = mk_smt_real("0");
-      one = mk_smt_real("1");
-    } else {
-      std::cerr << "Unexpected type in typecast of bool" << std::endl;
-      abort();
-    }
 
     return mk_func_app(s, SMT_FUNC_ITE, a, one, zero);
 }
