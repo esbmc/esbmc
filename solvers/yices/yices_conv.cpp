@@ -31,9 +31,7 @@ yices_convt::yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp)
   else
     yices_default_config_for_logic(config, "QF_AUFBV");
 
-  // XXX -- work out mode detection in the future.
-  // yices_set_config(config, "mode", "push-pop");
-  yices_set_config(config, "mode", "one-shot");
+  yices_set_config(config, "mode", "push-pop");
 
   yices_ctx = yices_new_context(config);
   yices_free_config(config);
