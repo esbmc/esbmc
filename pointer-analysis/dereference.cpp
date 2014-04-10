@@ -657,7 +657,7 @@ dereferencet::build_reference_to(
   // introduced by the dereferencing expression.
   if (!is_constant_int2t(final_offset)) {
     assert(o.alignment != 0);
-    final_offset = pointer_offset2tc(index_type2(), deref_expr);
+    final_offset = pointer_offset2tc(pointer_type2(), deref_expr);
 
     if (scalar_step_list && scalar_step_list->size()) {
       expr2tc extra_offs = compute_pointer_offset(scalar_step_list->back());
