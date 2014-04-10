@@ -125,17 +125,13 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
                            from_fraction_bits, tmp_sort);
   } else {
     assert(to_integer_bits > from_integer_bits);
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV,
-                                 from_width - from_fraction_bits, false);
-    smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits,
-                              tmp_sort);
+    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, from_integer_bits, false);
+    smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits, tmp_sort);
 
-    tmp_sort = mk_sort(SMT_SORT_BV, (from_width - from_fraction_bits)
-                       + (to_integer_bits - from_integer_bits),
-                       false);
-    magnitude = convert_sign_ext(ext, tmp_sort,
-                                 from_width - from_fraction_bits,
-                                 to_integer_bits - from_integer_bits);
+    unsigned int additional_bits = to_integer_bits - from_integer_bits;
+    tmp_sort = mk_sort(SMT_SORT_BV, from_integer_bits + additional_bits, false);
+    magnitude = convert_sign_ext(ext, tmp_sort, from_integer_bits,
+                                 additional_bits);
   }
 
   if (to_fraction_bits <= from_fraction_bits) {
