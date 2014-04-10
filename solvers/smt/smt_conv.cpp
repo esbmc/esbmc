@@ -1301,12 +1301,12 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
 {
   // Index arrays by the smallest integer required to represent its size.
   // Unless it's either infinite or dynamic in size, in which case use the
-  // machine int size.
+  // machine word size.
   if (!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size)) {
     constant_int2tc thesize = arr.array_size;
     return size_to_bit_width(thesize->constant_value.to_ulong());
   } else {
-    return config.ansi_c.int_width;
+    return config.ansi_c.word_size;
   }
 }
 

@@ -279,7 +279,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
   // the address space record.
   if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
     // Fetch a size.
-    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));
+    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.word_size));
     expr2tc size;
     try {
       uint64_t type_size = expr->type->get_width() / 8;
@@ -345,7 +345,8 @@ smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
     // the end of the address space (ie, wrap around). So, also assert that
     // end > start
     // Except when the size is zero, which might not be statically dicoverable
-    equality2tc zeroeq(zero_uint, the_offs);
+    constant_int2tc zero_val(the_offs->type, BigInt(0));
+    equality2tc zeroeq(zero_val, the_offs);
     greaterthan2tc wraparound(end_sym, start_sym);
     assert_expr(or2tc(zeroeq, wraparound));
 
