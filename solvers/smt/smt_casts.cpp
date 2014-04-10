@@ -162,6 +162,9 @@ smt_astt
 smt_convt::convert_typecast_to_ints(const typecast2t &cast)
 {
 
+  if (int_encoding)
+    return convert_typecast_to_ints_intmode(cast);
+
   if (is_signedbv_type(cast.from) || is_fixedbv_type(cast.from)) {
     return convert_typecast_to_ints_from_fbv_sint(cast);
   } else if (is_unsignedbv_type(cast.from)) {
@@ -172,6 +175,38 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
 
   std::cerr << "Unexpected type in int/ptr typecast" << std::endl;
   abort();
+}
+
+smt_astt
+smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
+{
+  assert(int_encoding);
+  // Integer-mode conversion of integers. Immediately, we don't care about
+  // bit widths, to the extent that any fixedbv <=> fixedbv conversion can
+  // remain a real, and any {un,}signedbv <=> {un,}signedbv conversion can
+  // remain an int. The only thing we actually need to care about is the
+  // conversion between ints and reals.
+
+  if (is_fixedbv_type(cast.type) && is_fixedbv_type(cast.from))
+    return convert_ast(cast.from);
+
+  if (is_bv_type(cast.type) && is_bv_type(cast.from))
+    // NB: this means negative numbers assigned to unsigned ints remain
+    // negative. This IMO is one of the inaccuracies accepted by the use of
+    // ir mode.
+    return convert_ast(cast.from);
+
+  smt_astt a = convert_ast(cast.from);
+
+  // Is this a convert to a real, or from a real?
+  if (is_fixedbv_type(cast.type)) {
+    assert(is_bv_type(cast.from));
+    return mk_func_app(convert_sort(cast.type) , SMT_FUNC_INT2REAL, &a, 1);
+  } else {
+    assert(is_bv_type(cast.type));
+    assert(is_fixedbv_type(cast.from));
+    return round_real_to_int(a);
+  }
 }
 
 smt_astt
