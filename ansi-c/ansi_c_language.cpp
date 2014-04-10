@@ -78,7 +78,7 @@ static void internal_additions(std::string &code)
     "_Bool __ESBMC_alloc[__ESBMC_constant_infinity_uint];\n"
     "_Bool __ESBMC_deallocated[__ESBMC_constant_infinity_uint];\n"
     "_Bool __ESBMC_is_dynamic[__ESBMC_constant_infinity_uint];\n"
-    "unsigned __ESBMC_alloc_size[__ESBMC_constant_infinity_uint];\n"
+    "unsigned long __ESBMC_alloc_size[__ESBMC_constant_infinity_uint];\n"
 
     "void *__ESBMC_realloc(void *ptr, long unsigned int size);\n"
 
