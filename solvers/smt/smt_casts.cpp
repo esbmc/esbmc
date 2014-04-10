@@ -141,16 +141,17 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
     fraction = mk_extract(a, from_fraction_bits - 1,
                           from_fraction_bits - to_fraction_bits, tmp_sort);
   } else {
-    smt_astt args[2];
     assert(to_fraction_bits > from_fraction_bits);
-    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, from_fraction_bits,
-                                 false);
-    args[0] = mk_extract(a, from_fraction_bits - 1, 0, tmp_sort);
-    args[1] = mk_smt_bvint(BigInt(0), false,
-                           to_fraction_bits - from_fraction_bits);
+
+    // Increase the size of the fraction by adding zeros on the end. This is
+    // not a zero extension because they're at the end, not the start
+    smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, from_fraction_bits, false);
+    smt_astt src_fraction = mk_extract(a, from_fraction_bits - 1, 0, tmp_sort);
+    smt_astt zeros = mk_smt_bvint(BigInt(0), false,
+                                  to_fraction_bits - from_fraction_bits);
 
     tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
-    fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, args, 2);
+    fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, src_fraction, zeros);
   }
 
   // Finally, concatenate the adjusted magnitude / fraction
