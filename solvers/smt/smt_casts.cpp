@@ -387,7 +387,7 @@ smt_astt
 smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 {
 
-  type2tc int_type = machine_uint;
+  type2tc int_type = machine_ptr;
 
   // The plan: index the object id -> address-space array and pick out the
   // start address, then add it to any additional pointer offset.

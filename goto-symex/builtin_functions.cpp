@@ -122,7 +122,7 @@ goto_symext::symex_malloc(
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
 
-  pointer_object2tc ptr_obj(int_type2(), ptr_rhs);
+  pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
 
   dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
@@ -188,7 +188,7 @@ void goto_symext::symex_free(const expr2tc &expr)
   dereference(tmp, false, true);
 
   address_of2tc addrof(code.operand->type, tmp);
-  pointer_offset2tc ptr_offs(uint_type2(), addrof);
+  pointer_offset2tc ptr_offs(pointer_type2(), addrof);
   equality2tc eq(ptr_offs, zero_uint);
   claim(eq, "Operand of free must have zero pointer offset");
 
@@ -196,7 +196,7 @@ void goto_symext::symex_free(const expr2tc &expr)
   guardt guard;
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  pointer_object2tc ptr_obj(uint_type2(), code.operand);
+  pointer_object2tc ptr_obj(pointer_type2(), code.operand);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
@@ -307,7 +307,7 @@ void goto_symext::symex_cpp_new(
                                               expr2tc(), true));
   symbol2tc sym(sym_type, "cpp::__ESBMC_is_dynamic");
 
-  pointer_object2tc ptr_obj(int_type2(), lhs);
+  pointer_object2tc ptr_obj(pointer_type2(), lhs);
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = true_expr;
 
@@ -386,7 +386,7 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   }
 
   // Install pointer modelling data into the relevant arrays.
-  pointer_object2tc ptr_obj(int_type2(), result);
+  pointer_object2tc ptr_obj(pointer_type2(), result);
   track_new_pointer(ptr_obj, type2tc(), realloc_size);
 
   // Assign the result to the left hand side.
