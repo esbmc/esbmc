@@ -333,7 +333,7 @@ smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
     // from start. Express this in irep.
     expr2tc endisequal;
     expr2tc the_offs;
-    the_offs = size;
+    the_offs = typecast2tc(machine_ptr, size);
     add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
     endisequal = equality2tc(start_plus_offs, end_sym);
 
