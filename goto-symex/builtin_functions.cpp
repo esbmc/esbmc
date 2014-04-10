@@ -157,7 +157,8 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
   expr2tc falseity = false_expr;
   symex_assign_rec(dealloc_index_expr, falseity, guard);
 
-  type2tc sz_sym_type = type2tc(new array_type2t(uint_type2(), expr2tc(),true));
+  type2tc sz_sym_type =
+    type2tc(new array_type2t(pointer_type2(), expr2tc(),true));
   symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
   index2tc sz_index_expr(get_bool_type(), sz_sym, ptr_obj);
 
@@ -165,9 +166,10 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
   if (is_nil_expr(size)) {
     try {
       mp_integer object_size = type_byte_size(*new_type);
-      object_size_exp = gen_uint(object_size.to_ulong());
+      object_size_exp =
+        constant_int2tc(pointer_type2(), object_size.to_ulong());
     } catch (array_type2t::dyn_sized_array_excp *e) {
-      object_size_exp = e->size;
+      object_size_exp = typecast2tc(pointer_type2(), e->size);
     }
   } else {
     object_size_exp = size;

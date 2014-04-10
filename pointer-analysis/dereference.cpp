@@ -854,7 +854,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
     // this.
     expr2tc mask_expr = gen_mach_uint(deref_size -1);
     bitand2tc anded(mask_expr->type, mask_expr, mod2);
-    notequal2tc neq(anded, zero_uint);
+    notequal2tc neq(anded, gen_mach_uint(0));
 
     guardt tmp_guard = guard;
     tmp_guard.add(neq);
@@ -889,7 +889,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
 
     expr2tc mask_expr = gen_mach_uint(deref_size -1);
     bitand2tc anded(mask_expr->type, mask_expr, mod2);
-    notequal2tc neq(anded, zero_uint);
+    notequal2tc neq(anded, gen_mach_uint(0));
 
     guardt tmp_guard = guard;
     tmp_guard.add(neq);
@@ -981,7 +981,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 
       if (!is_scalar_type(*it)) {
         // We have to do even more extraction...
-        build_reference_rec(res, zero_uint, type, guard, mode);
+        build_reference_rec(res, gen_mach_uint(0), type, guard, mode);
       }
 
       value = res;
@@ -1370,7 +1370,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     // We have our index; now compute guard/offset. Guard expression is
     // (offs >= 0 && offs < size_of_this_array)
     expr2tc new_offset = mod;
-    expr2tc gte = greaterthanequal2tc(offs, zero_uint);
+    expr2tc gte = greaterthanequal2tc(offs, gen_mach_uint(0));
     expr2tc arr_size_in_bytes =
       mul2tc(sub_size->type, arr_type.array_size, sub_size);
     expr2tc lt = lessthan2tc(offs, arr_size_in_bytes);
@@ -1386,7 +1386,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     expr2tc tmp = value;
     if (dereference_type_compare(tmp, type)) {
       // Excellent. Guard that the offset is zero and finish.
-      expr2tc offs_is_zero = and2tc(accuml_guard, equality2tc(offs, zero_uint));
+      expr2tc offs_is_zero = and2tc(accuml_guard, equality2tc(offs, gen_mach_uint(0)));
       output.push_back(std::pair<expr2tc, expr2tc>(offs_is_zero, tmp));
       return;
     }
