@@ -100,8 +100,8 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
 smt_astt
 smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
 {
-  assert(is_fixedbv_type(cast.from));
   const typecast2t &cast = to_typecast2t(expr);
+  assert(is_fixedbv_type(cast.from));
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
   const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
   unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
