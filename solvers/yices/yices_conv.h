@@ -72,6 +72,9 @@ public:
   virtual smt_astt mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
+
   smt_astt convert_array_of(const expr2tc &init_val,
                                   unsigned long domain_width);
 

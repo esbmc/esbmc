@@ -43,6 +43,33 @@ yices_convt::~yices_convt()
   yices_garbage_collect(NULL, 0, NULL, 0, false);
 }
 
+void
+yices_convt::push_ctx()
+{
+  smt_convt::push_ctx();
+  int32_t res = yices_push(yices_ctx);
+
+  if (res != 0) {
+    std::cerr << "Error pushing yices context" << std::endl;
+    yices_print_error(stderr);
+    abort();
+  }
+}
+
+void
+yices_convt::pop_ctx()
+{
+  int32_t res = yices_pop(yices_ctx);
+
+  if (res != 0) {
+    std::cerr << "Error poping yices context" << std::endl;
+    yices_print_error(stderr);
+    abort();
+  }
+
+  smt_convt::pop_ctx();
+}
+
 smt_convt::resultt
 yices_convt::dec_solve()
 {
