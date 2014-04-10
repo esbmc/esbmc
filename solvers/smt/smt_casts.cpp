@@ -198,7 +198,21 @@ smt_convt::convert_typecast_to_ints_intmode(const typecast2t &cast)
 
   smt_astt a = convert_ast(cast.from);
 
-  // Is this a convert to a real, or from a real?
+  // Handle conversions from booleans
+  if (is_bool_type(cast.from)) {
+    smt_astt zero, one;
+    if (is_bv_type(cast.type)) {
+      zero = mk_smt_int(BigInt(0), false);
+      one = mk_smt_int(BigInt(1), false);
+    } else {
+      zero = mk_smt_real("0");
+      one = mk_smt_real("1");
+    }
+
+    return mk_func_app(convert_sort(cast.type), SMT_FUNC_ITE, a, one, zero);
+  }
+
+  // Otherwise, we're looking at a cast between reals and int sorts.
   if (is_fixedbv_type(cast.type)) {
     assert(is_bv_type(cast.from));
     return mk_func_app(convert_sort(cast.type) , SMT_FUNC_INT2REAL, &a, 1);
