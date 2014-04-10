@@ -308,7 +308,7 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // is expensive, but here we are.
 
   // First cast it to an unsignedbv
-  type2tc int_type = machine_uint;
+  type2tc int_type = machine_ptr;
   typecast2tc cast_to_unsigned(int_type, cast.from);
   expr2tc target = cast_to_unsigned;
 
@@ -356,7 +356,7 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   id = constant_int2tc(int_type, pointer_logic.back().get_invalid_object());
 
   // Calculate ptr offset - target minus start of invalid range, ie 1
-  offs = sub2tc(int_type, target, one_uint);
+  offs = sub2tc(int_type, target, constant_int2tc(int_type, BigInt(1)));
 
   std::vector<expr2tc> membs;
   membs.push_back(id);
