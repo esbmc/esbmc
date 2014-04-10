@@ -770,6 +770,9 @@ public:
   smt_astt convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &cast);
   /** Typecast anything to an integer (but not pointers) */
   smt_astt convert_typecast_to_ints(const typecast2t &cast);
+  smt_astt convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast);
+  smt_astt convert_typecast_to_ints_from_unsigned(const typecast2t &cast);
+  smt_astt convert_typecast_to_ints_from_bool(const typecast2t &cast);
   /** Typecast something (i.e. an integer) to a pointer */
   smt_astt convert_typecast_to_ptr(const typecast2t &cast);
   /** Typecast a pointer to an integer */

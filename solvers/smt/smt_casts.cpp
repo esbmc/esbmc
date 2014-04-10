@@ -158,14 +158,29 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
   return mk_func_app(s, SMT_FUNC_CONCAT, magnitude, fraction);
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_typecast_to_ints(const typecast2t &cast)
+{
+
+  if (is_signedbv_type(cast.from) || is_fixedbv_type(cast.from)) {
+    return convert_typecast_to_ints_from_fbv_sint(cast);
+  } else if (is_unsignedbv_type(cast.from)) {
+    return convert_typecast_to_ints_from_unsigned(cast);
+  } else if (is_bool_type(cast.from)) {
+    return convert_typecast_to_ints_from_bool(cast);
+  }
+
+  std::cerr << "Unexpected type in int/ptr typecast" << std::endl;
+  abort();
+}
+
+smt_astt
+smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
 {
   unsigned to_width = cast.type->get_width();
   smt_sortt s = convert_sort(cast.type);
   smt_astt a = convert_ast(cast.from);
 
-  if (is_signedbv_type(cast.from) || is_fixedbv_type(cast.from)) {
     unsigned from_width = cast.from->type->get_width();
 
     if (from_width == to_width) {
@@ -228,7 +243,18 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
         return mk_extract(a, to_width-1, 0, s);
       }
     }
-  } else if (is_unsignedbv_type(cast.from)) {
+
+  std::cerr << "Malformed cast from signedbv/fixedbv" << std::endl;
+  abort();
+}
+
+smt_astt
+smt_convt::convert_typecast_to_ints_from_unsigned(const typecast2t &cast)
+{
+  unsigned to_width = cast.type->get_width();
+  smt_sortt s = convert_sort(cast.type);
+  smt_astt a = convert_ast(cast.from);
+
     unsigned from_width = cast.from->type->get_width();
 
     if (from_width == to_width) {
@@ -239,14 +265,23 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
       } else {
         return convert_zero_ext(a, s, (to_width - from_width));
       }
-    } else if (from_width > to_width) {
+    } else {
+      assert(from_width > to_width);
       if (int_encoding) {
 	return a; // output = output
       } else {
         return mk_extract(a, to_width - 1, 0, s);
       }
     }
-  } else if (is_bool_type(cast.from)) {
+}
+
+
+smt_astt
+smt_convt::convert_typecast_to_ints_from_bool(const typecast2t &cast)
+{
+  smt_sortt s = convert_sort(cast.type);
+  smt_astt a = convert_ast(cast.from);
+
     smt_astt zero, one;
     unsigned width = cast.type->get_width();
 
@@ -267,10 +302,6 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
     }
 
     return mk_func_app(s, SMT_FUNC_ITE, a, one, zero);
-  }
-
-  std::cerr << "Unexpected type in int/ptr typecast" << std::endl;
-  abort();
 }
 
 smt_astt 
