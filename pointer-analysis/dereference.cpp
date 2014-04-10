@@ -270,6 +270,8 @@ dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode)
       assert(!is_nil_expr(offs) && "Pointer offset of index/member "
              "combination should be valid int");
 
+      offs = typecast2tc(pointer_type2(), offs);
+
       // Cast to a byte pointer; add; cast back. Can't think of a better way
       // to produce safe pointer arithmetic right now.
       expr2tc output =
@@ -663,6 +665,7 @@ dereferencet::build_reference_to(
 
     if (scalar_step_list && scalar_step_list->size()) {
       expr2tc extra_offs = compute_pointer_offset(scalar_step_list->back());
+      extra_offs = typecast2tc(pointer_type2(), extra_offs);
       final_offset = add2tc(final_offset->type, final_offset, extra_offs);
     }
   }
@@ -1667,11 +1670,13 @@ dereferencet::check_code_access(expr2tc &value, const expr2tc &offset,
 }
 
 void
-dereferencet::check_data_obj_access(const expr2tc &value, const expr2tc &offset,
+dereferencet::check_data_obj_access(const expr2tc &value,
+                                    const expr2tc &src_offset,
                                     const type2tc &type, const guardt &guard)
 {
   assert(!is_array_type(value));
 
+  expr2tc offset = typecast2tc(pointer_type2(), src_offset);
   unsigned long data_sz = type_byte_size(*value->type).to_ulong();
   unsigned long access_sz = type_byte_size(*type).to_ulong();
   expr2tc data_sz_e = gen_mach_uint(data_sz);
