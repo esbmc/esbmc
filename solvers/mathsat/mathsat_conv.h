@@ -62,6 +62,9 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+  void push_ctx();
+  void pop_ctx();
+
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
   expr2tc get_array_elem(const smt_ast *array, uint64_t idx,

@@ -41,6 +41,20 @@ mathsat_convt::~mathsat_convt(void)
 }
 
 void
+mathsat_convt::push_ctx()
+{
+  smt_convt::push_ctx();
+  msat_push_backtrack_point(env);
+}
+
+void
+mathsat_convt::pop_ctx()
+{
+  msat_pop_backtrack_point(env);
+  smt_convt::pop_ctx();
+}
+
+void
 mathsat_convt::assert_ast(const smt_ast *a)
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
