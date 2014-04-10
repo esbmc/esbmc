@@ -460,7 +460,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     smt_astt a = convert_ast(addr);
 
     // Update pointer offset to offset to that field.
-    constant_int2tc offset(machine_int, BigInt(offs));
+    constant_int2tc offset(machine_ptr, BigInt(offs));
     return a->update(this, convert_ast(offset), 1);
   } else if (is_symbol2t(obj.ptr_obj)) {
 // XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
