@@ -762,17 +762,24 @@ public:
   void finalize_pointer_chain(unsigned int obj_num);
 
   /** Typecast data to bools */
-  smt_astt convert_typecast_bool(const typecast2t &cast);
+  smt_astt convert_typecast_to_bool(const typecast2t &cast);
   /** Typecast to a fixedbv in bitvector mode */
-  smt_astt convert_typecast_fixedbv_nonint(const expr2tc &cast);
+  smt_astt convert_typecast_to_fixedbv_nonint(const expr2tc &cast);
+  smt_astt convert_typecast_to_fixedbv_nonint_from_bv(const expr2tc &cast);
+  smt_astt convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &cast);
+  smt_astt convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &cast);
   /** Typecast anything to an integer (but not pointers) */
   smt_astt convert_typecast_to_ints(const typecast2t &cast);
+  smt_astt convert_typecast_to_ints_intmode(const typecast2t &cast);
+  smt_astt convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast);
+  smt_astt convert_typecast_to_ints_from_unsigned(const typecast2t &cast);
+  smt_astt convert_typecast_to_ints_from_bool(const typecast2t &cast);
   /** Typecast something (i.e. an integer) to a pointer */
   smt_astt convert_typecast_to_ptr(const typecast2t &cast);
   /** Typecast a pointer to an integer */
   smt_astt convert_typecast_from_ptr(const typecast2t &cast);
   /** Typecast structs to other structs */
-  smt_astt convert_typecast_struct(const typecast2t &cast);
+  smt_astt convert_typecast_to_struct(const typecast2t &cast);
   /** Despatch a typecast expression to a more specific typecast mkethod */
   smt_astt convert_typecast(const expr2tc &expr);
   /** Round a real to an integer; not straightforwards at all. */
