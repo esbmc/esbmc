@@ -1577,7 +1577,8 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
     unsigned long subtype_size_int
       = type_byte_size(*arr_type.subtype).to_ulong();
     constant_int2tc subtype_size(pointer_type2(), BigInt(subtype_size_int));
-    arrsize = mul2tc(pointer_type2(), arr_type.array_size, subtype_size);
+    expr2tc array_size = typecast2tc(pointer_type2(), arr_type.array_size);
+    arrsize = mul2tc(pointer_type2(), array_size, subtype_size);
   }
 
   typecast2tc unsigned_offset(pointer_type2(), offset);
