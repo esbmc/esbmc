@@ -100,24 +100,21 @@ smt_convt::convert_typecast_to_fixedbv_nonint_from_bool(const expr2tc &expr)
 smt_astt
 smt_convt::convert_typecast_to_fixedbv_nonint_from_fixedbv(const expr2tc &expr)
 {
+  assert(is_fixedbv_type(cast.from));
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
+  const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
   unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
   unsigned to_integer_bits = fbvt.integer_bits;
-  assert(is_fixedbv_type(cast.from));
-
+  unsigned from_fraction_bits = from_fbvt.width - from_fbvt.integer_bits;
+  unsigned from_integer_bits = from_fbvt.integer_bits;
+  unsigned from_width = from_fbvt.width;
+  smt_astt magnitude, fraction;
   smt_astt a = convert_ast(cast.from);
   smt_sortt s = convert_sort(cast.type);
 
   // FIXME: conversion here for to_int_bits > from_int_bits is factually
   // broken, run 01_cbmc_Fixedbv8 with --no-simplify
-  smt_astt magnitude, fraction;
-
-  const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
-
-  unsigned from_fraction_bits = from_fbvt.width - from_fbvt.integer_bits;
-  unsigned from_integer_bits = from_fbvt.integer_bits;
-  unsigned from_width = from_fbvt.width;
 
   if (to_integer_bits <= from_integer_bits) {
     smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
