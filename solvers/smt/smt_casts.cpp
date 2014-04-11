@@ -9,7 +9,7 @@ smt_convt::convert_typecast_to_bool(const typecast2t &cast)
 {
 
   if (is_bv_type(cast.from)) {
-    notequal2tc neq(cast.from, zero_uint);
+    notequal2tc neq(cast.from, gen_uint(cast.from->type, 0));
     return convert_ast(neq);
   } else if (is_pointer_type(cast.from)) {
     // Convert to two casts.

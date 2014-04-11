@@ -96,7 +96,7 @@ goto_symext::symex_malloc(
     type2tc subtype;
     migrate_type(symbol.type.subtype(), subtype);
     expr2tc sym = symbol2tc(new_type, symbol.name);
-    expr2tc idx_val = zero_uint;
+    expr2tc idx_val = zero_ulong;
     expr2tc idx = index2tc(subtype, sym, idx_val);
     rhs_addrof.get()->type =
       get_pointer_type(pointer_typet(symbol.type.subtype()));
@@ -191,7 +191,7 @@ void goto_symext::symex_free(const expr2tc &expr)
 
   address_of2tc addrof(code.operand->type, tmp);
   pointer_offset2tc ptr_offs(pointer_type2(), addrof);
-  equality2tc eq(ptr_offs, zero_uint);
+  equality2tc eq(ptr_offs, zero_ulong);
   claim(eq, "Operand of free must have zero pointer offset");
 
   // Clear the alloc bit, and set the deallocated bit.
@@ -292,7 +292,7 @@ void goto_symext::symex_cpp_new(
   if(do_array)
   {
     symbol2tc sym(newtype, symbol.name);
-    index2tc idx(renamedtype2, sym, zero_uint);
+    index2tc idx(renamedtype2, sym, zero_ulong);
     rhs.get()->ptr_obj = idx;
   }
   else

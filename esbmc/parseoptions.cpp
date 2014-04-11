@@ -449,6 +449,9 @@ int cbmc_parseoptionst::doit()
   optionst opts;
   get_command_line_options(opts);
 
+  // Depends on command line options and config
+  init_expr_constants();
+
   if(cmdline.isset("preprocess"))
   {
     preprocessing();
