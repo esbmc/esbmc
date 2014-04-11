@@ -512,7 +512,7 @@ void value_sett::get_value_set_rec(
       const type2tc &dynamic_type = side.alloctype;
 
 
-      expr2tc locnum = gen_uint(location_number);
+      expr2tc locnum = gen_ulong(location_number);
       dynamic_object2tc dynobj(dynamic_type, locnum, false, false);
 
       insert(dest, dynobj, mp_integer(0));
@@ -525,7 +525,7 @@ void value_sett::get_value_set_rec(
       assert(suffix=="");
       assert(is_pointer_type(side.type));
 
-      expr2tc locnum = gen_uint(location_number);
+      expr2tc locnum = gen_ulong(location_number);
 
       const pointer_type2t &ptr = to_pointer_type(side.type);
 

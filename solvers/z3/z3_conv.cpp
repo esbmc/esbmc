@@ -1151,8 +1151,8 @@ z3_convt::overflow_cast(const expr2tc &expr)
     // Create zero and 2^bitwidth,
     type2tc unsignedbv(new unsignedbv_type2t(width));
 
-    constant_int2tc zero = zero_uint;
-    constant_int2tc the_width = gen_uint(result);
+    constant_int2tc zero = gen_uint(unsignedbv, 0);
+    constant_int2tc the_width = gen_uint(unsignedbv, result);
 
     // Ensure operand lies between those numbers.
     lessthan = lessthan2tc(oper, the_width);

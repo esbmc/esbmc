@@ -4669,11 +4669,20 @@ extern const constant_int2tc zero_int;
 extern const constant_int2tc one_int;
 
 inline expr2tc
-gen_uint(unsigned long val)
+gen_uint(const type2tc &type, unsigned long val)
 {
-  constant_int2tc v(type_pool.get_uint(config.ansi_c.int_width), BigInt(val));
+  constant_int2tc v(type, BigInt(val));
   return v;
 }
+
+inline expr2tc
+gen_ulong(unsigned long val)
+{
+  constant_int2tc v(type_pool.get_uint(config.ansi_c.word_size), BigInt(val));
+  return v;
+}
+
+
 
 inline const type2tc &
 get_uint8_type(void)

@@ -441,7 +441,7 @@ void goto_symext::symex_assign_concat(
   // Side2 rhs takes the lower bits, so just downcast the rhs to that num of bit
   expr2tc side2_rhs = typecast2tc(get_uint_type(side2_size), rhs);
   // Side1 needs to have that number of lower bits clipped off.
-  expr2tc shift_dist = gen_uint(side2_size);
+  expr2tc shift_dist = gen_uint(rhs->type, side2_size);
   expr2tc side1_rhs = lshr2tc(rhs->type, rhs, shift_dist);
   // Now downcast it to the desired number of bits.
   side1_rhs = typecast2tc(get_uint_type(side1_size), side1_rhs);
