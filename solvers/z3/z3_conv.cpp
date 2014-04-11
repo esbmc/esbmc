@@ -1131,9 +1131,12 @@ z3_convt::overflow_cast(const expr2tc &expr)
     unsigned int nums_width = (is_signedbv_type(ocast.operand))
                                ? width : width / 2;
     type2tc signedbv(new signedbv_type2t(nums_width));
+    type2tc unsignedbv(new unsignedbv_type2t(nums_width));
 
-    constant_int2tc result_val = gen_uint(result / 2);
-    constant_int2tc two = gen_uint(2);
+    constant_int2tc result_val =
+      constant_int2tc(unsignedbv, BigInt(result / 2));
+    constant_int2tc two =
+      constant_int2tc(unsignedbv, BigInt(2));
     constant_int2tc minus_one(signedbv, BigInt(-1));
 
     // Now produce numbers that bracket the selected bitwidth. So for 16 bis
