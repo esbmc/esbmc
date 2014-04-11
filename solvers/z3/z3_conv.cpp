@@ -661,7 +661,7 @@ smt_astt
 z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
                      const smt_sort *s)
 {
-
+  assert(high != low);
   return new_ast(z3::to_expr(ctx, Z3_mk_extract(ctx, high, low,
                                          z3_smt_downcast(a)->e)), s);
 }
