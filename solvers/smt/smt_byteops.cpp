@@ -139,6 +139,12 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     if (width_op0 > width_op2) {
       return convert_sign_ext(value, convert_sort(expr->type), width_op2,
                               width_op0 - width_op2);
+    } else if (width_op0 == width_op2 &&
+        to_constant_int2t(data.source_offset).constant_value.to_ulong() == 0) {
+      // Byte update at offset zero with value of same size. Just return update
+      // value. Ideally this shouldn't ever be encoded, but it needn't be fatal
+      // if it is, just unperformant.
+      return convert_ast(data.update_value);
     } else {
       std::cerr << "unsupported irep for conver_byte_update" << std::endl;
       abort();
