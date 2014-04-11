@@ -1113,7 +1113,7 @@ z3_convt::overflow_cast(const expr2tc &expr)
   }
 
   assert(ocast.bits <= 32 && ocast.bits != 0);
-  result = 1 << ocast.bits;
+  result = 1ULL << ocast.bits;
 
   expr2tc oper = ocast.operand;
 
