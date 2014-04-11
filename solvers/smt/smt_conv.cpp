@@ -1534,6 +1534,12 @@ smt_convt::flatten_array_type(const type2tc &type)
 {
   unsigned long arrbits = 0;
 
+  if (to_array_type(type).size_is_infinite)
+    // Don't touch these
+    return type;
+
+  // Otherwise, accumulate sufficient domain bits to represent all dimensions
+  // of the given array, in one dimension.
   type2tc type_rec = type;
   while (is_array_type(type_rec)) {
     arrbits += calculate_array_domain_width(to_array_type(type_rec));
@@ -1543,6 +1549,7 @@ smt_convt::flatten_array_type(const type2tc &type)
   // type_rec is now the base type.
   uint64_t arr_size = 1ULL << arrbits;
   constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
+
   return type2tc(new array_type2t(type_rec, arr_size_expr, false));
 }
 
