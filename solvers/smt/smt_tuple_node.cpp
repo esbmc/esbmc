@@ -408,9 +408,6 @@ smt_tuple_node_flattener::union_create(const expr2tc &unidef)
   forall_types(it, def.members) {
     if (base_type_eq(*it, init->type, ns)) {
       // Assign in.
-      smt_astt target_memb = result_ast->project(ctx, i);
-      ctx->assert_ast(target_memb->eq(ctx, init_ast));
-
       result_t_ast->elements[i] = init_ast;
     } else {
       // XXX indirection
