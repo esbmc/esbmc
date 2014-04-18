@@ -48,6 +48,11 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
 
     // Open a file, do nothing else.
     out_stream = fopen(cmd.c_str(), "w");
+    if (!out_stream) {
+      std::cerr << "Failed to open \"" << cmd << "\"" << std::endl;
+      abort();
+    }
+
     in_stream = NULL;
     solver_name = "Text output";
     solver_version = "";
