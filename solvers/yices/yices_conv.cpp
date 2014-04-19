@@ -475,6 +475,17 @@ yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   return;
 }
 
+smt_astt
+yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
+{
+  const yices_smt_sort *ysort = yices_sort_downcast(sort);
+  type2tc type = ysort->tuple_type;
+  const struct_union_data &data = ctx->get_type_def(type);
+  smt_sortt elemsort = ctx->convert_sort(data.members[elem]);
+
+  return new yices_smt_ast(ctx, elemsort, yices_select(elem, term));
+}
+
 smt_sortt
 yices_convt::mk_struct_sort(const type2tc &type)
 {

@@ -43,6 +43,7 @@ public:
   // Provide assign semantics for arrays. While yices will swallow array
   // equalities, it silently doesn't honour them. Apparently.
   virtual void assign(smt_convt *ctx, smt_astt sym) const;
+  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 
   term_t term;
   std::string symname;
