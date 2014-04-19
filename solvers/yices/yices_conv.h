@@ -94,6 +94,8 @@ public:
   virtual expr2tc tuple_get(const expr2tc &expr);
   virtual void add_tuple_constraints_for_solving();
 
+  virtual expr2tc tuple_get_rec(term_t term, const type2tc &type);
+
   expr2tc get_bool(smt_astt a);
   expr2tc get_bv(const type2tc &t, smt_astt a);
   expr2tc get_array_elem(smt_astt array, uint64_t index,

@@ -637,9 +637,57 @@ yices_convt::mk_tuple_array_symbol(const expr2tc &expr)
 }
 
 expr2tc
-yices_convt::tuple_get(const expr2tc &expr __attribute__((unused)))
+yices_convt::tuple_get(const expr2tc &expr)
 {
-  abort();
+  const symbol2t &sym = to_symbol2t(expr);
+  term_t t = yices_get_term_by_name(sym.get_symbol_name().c_str());
+  if (t == NULL_TERM) {
+    // This might be legitimate, could have been sliced or unassigned
+    return expr2tc();
+  }
+
+  return tuple_get_rec(t, expr->type);
+}
+
+expr2tc
+yices_convt::tuple_get_rec(term_t term, const type2tc &type)
+{
+  // Otherwise, select through building a tuple.
+  const struct_union_data &ref = get_type_def(type);
+  std::vector<expr2tc> members;
+  unsigned int i = 0;
+  forall_types(it, ref.members) {
+    expr2tc res;
+    term_t elem = yices_select(i, term);
+    smt_astt a = new_ast(convert_sort(*it), elem);
+
+    switch ((*it)->type_id) {
+    case type2t::bool_id:
+      res = get_bool(a);
+      break;
+    case type2t::struct_id:
+    case type2t::pointer_id:
+    case type2t::union_id:
+      res = tuple_get_rec(elem, *it);
+      break;
+    case type2t::array_id:
+      res = get_array(a, *it);
+      break;
+    case type2t::unsignedbv_id:
+    case type2t::signedbv_id:
+    case type2t::fixedbv_id:
+      res = get_bv(*it, a);
+      break;
+    default:
+      std::cerr << "Unexpected sort " << (*it)->type_id << " in tuple_get_rec"
+                << std::endl;
+      abort();
+    }
+
+    members.push_back(res);
+  }
+
+  return constant_struct2tc(type, members);
 }
 
 void
