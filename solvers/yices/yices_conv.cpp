@@ -545,10 +545,12 @@ yices_convt::union_create(const expr2tc &unidef)
 }
 
 smt_astt
-yices_convt::tuple_fresh(smt_sortt s __attribute__((unused)),
-            std::string name __attribute__((unused)))
+yices_convt::tuple_fresh(smt_sortt s, std::string name)
 {
-  abort();
+  const yices_smt_sort *sort = yices_sort_downcast(s);
+  term_t t = yices_new_uninterpreted_term(sort->type);
+  yices_set_term_name(t, name.c_str());
+  return new yices_smt_ast(this, s, t);
 }
 
 smt_astt
