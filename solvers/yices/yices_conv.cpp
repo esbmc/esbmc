@@ -9,11 +9,12 @@
 smt_convt *
 create_new_yices_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                               const optionst &opts __attribute__((unused)),
-                              tuple_iface **tuple_api __attribute__((unused)),
+                              tuple_iface **tuple_api,
                               array_iface **array_api)
 {
   yices_convt *conv = new yices_convt(int_encoding, ns, is_cpp);
   *array_api = static_cast<array_iface*>(conv);
+  *tuple_api = static_cast<tuple_iface*>(conv);
   return conv;
 }
 
