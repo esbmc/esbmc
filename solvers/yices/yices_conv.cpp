@@ -393,7 +393,7 @@ yices_convt::convert_array_of(const expr2tc &init_val,
 void
 yices_convt::add_array_constraints_for_solving()
 {
-  abort();
+  return;
 }
 
 expr2tc
