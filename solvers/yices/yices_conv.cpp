@@ -586,10 +586,40 @@ yices_convt::tuple_array_create(const type2tc &array_type,
 }
 
 smt_astt
-yices_convt::tuple_array_of(const expr2tc &init_value __attribute__((unused)),
-               unsigned long domain_width __attribute__((unused)))
+yices_convt::tuple_array_of(const expr2tc &init_value,
+                            unsigned long domain_width)
 {
-  abort();
+
+  smt_sortt subs = convert_sort(init_value->type);
+  const yices_smt_sort *subsort = yices_sort_downcast(subs);
+
+  type2tc domtype = type2tc(new unsignedbv_type2t(domain_width));
+  smt_sortt doms = convert_sort(domtype);
+  const yices_smt_sort *domsort = yices_sort_downcast(doms);
+
+  type_t domsort_type = domsort->type;
+  type_t tuplearr = yices_function_type(1, &domsort_type, subsort->type);
+  term_t theterm = yices_new_uninterpreted_term(tuplearr);
+
+  smt_astt a = convert_ast(init_value);
+  const yices_smt_ast *yast = yices_ast_downcast(a);
+
+  // Now repeatedly store Things into it
+  unsigned long elems =
+    to_constant_int2t(array_domain_to_width(domtype)).constant_value.to_ulong();
+  for (unsigned long i = 0; i < elems; i++) {
+    term_t idxterm;
+
+    if (int_encoding)
+      idxterm = yices_int64(i);
+    else
+      idxterm = yices_bvconst_uint64(domain_width, i);
+
+    theterm = yices_update(theterm, 1, &idxterm, yast->term);
+  }
+
+  smt_sortt retsort = new yices_smt_sort(SMT_SORT_STRUCT, tuplearr);
+  return new_ast(retsort, theterm);
 }
 
 smt_astt
