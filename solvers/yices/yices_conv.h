@@ -9,15 +9,19 @@ class yices_smt_sort : public smt_sort
 {
 public:
 #define yices_sort_downcast(x) static_cast<const yices_smt_sort *>(x)
-  yices_smt_sort(smt_sort_kind i, type_t _t) : smt_sort(i), type(_t) { }
+  yices_smt_sort(smt_sort_kind i, type_t _t)
+    : smt_sort(i), type(_t), tuple_type() { }
   yices_smt_sort(smt_sort_kind i, type_t _t, unsigned int w)
-    : smt_sort(i, w), type(_t) { }
+    : smt_sort(i, w), type(_t), tuple_type() { }
   yices_smt_sort(smt_sort_kind i, type_t _t, unsigned long w,
                  unsigned long d)
-    : smt_sort(i, w, d), type(_t) { }
+    : smt_sort(i, w, d), type(_t), tuple_type() { }
+  yices_smt_sort(smt_sort_kind i, type_t _t, const type2tc &s)
+    : smt_sort(i), type(_t), tuple_type(s) { }
   virtual ~yices_smt_sort() { }
 
   type_t type;
+  type2tc tuple_type; // Only valid for tuples
 };
 
 class yices_smt_ast : public smt_ast
