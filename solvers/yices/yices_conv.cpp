@@ -512,7 +512,7 @@ yices_convt::mk_struct_sort(const type2tc &type)
 
   // We now have an array of types, ready for sort creation
   type_t tuple_sort = yices_tuple_type(def.members.size(), sorts.data());
-  return new yices_smt_sort(SMT_SORT_STRUCT, tuple_sort);
+  return new yices_smt_sort(SMT_SORT_STRUCT, tuple_sort, type);
 }
 
 smt_sortt
@@ -529,7 +529,7 @@ yices_convt::mk_union_sort(const type2tc &type)
   }
 
   type_t tuple_sort = yices_tuple_type(def.members.size(), sorts.data());
-  return new yices_smt_sort(SMT_SORT_UNION, tuple_sort);
+  return new yices_smt_sort(SMT_SORT_UNION, tuple_sort, type);
 }
 
 smt_astt
