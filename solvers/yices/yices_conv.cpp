@@ -74,6 +74,7 @@ smt_convt::resultt
 yices_convt::dec_solve()
 {
   clear_model();
+  pre_solve();
 
   smt_status_t result = yices_check_context(yices_ctx, NULL);
 
