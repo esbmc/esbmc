@@ -623,15 +623,17 @@ yices_convt::tuple_array_of(const expr2tc &init_value,
 }
 
 smt_astt
-yices_convt::mk_tuple_symbol(const expr2tc &expr __attribute__((unused)))
+yices_convt::mk_tuple_symbol(const expr2tc &expr)
 {
-  abort();
+  const symbol2t &sym = to_symbol2t(expr);
+  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
 }
 
 smt_astt
-yices_convt::mk_tuple_array_symbol(const expr2tc &expr __attribute__((unused)))
+yices_convt::mk_tuple_array_symbol(const expr2tc &expr)
 {
-  abort();
+  const symbol2t &sym = to_symbol2t(expr);
+  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
 }
 
 expr2tc
