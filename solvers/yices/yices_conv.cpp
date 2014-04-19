@@ -554,12 +554,35 @@ yices_convt::tuple_fresh(smt_sortt s, std::string name)
 }
 
 smt_astt
-yices_convt::tuple_array_create(const type2tc &array_type __attribute__((unused)),
-                   smt_astt *inputargs __attribute__((unused)),
-                   bool const_array __attribute__((unused)),
+yices_convt::tuple_array_create(const type2tc &array_type,
+                   smt_astt *inputargs,
+                   bool const_array,
                    smt_sortt domain __attribute__((unused)))
 {
-  abort();
+  const array_type2t &arr_type = to_array_type(array_type);
+  const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
+  uint64_t sz = thesize.constant_value.to_ulong();
+
+  // We support both tuples and arrays of them, so just repeatedly store
+  smt_sortt sort = convert_sort(array_type);
+  std::string name = mk_fresh_name("yices_convt::tuple_array_create");
+  smt_astt a = tuple_fresh(sort, name);
+
+  if (const_array) {
+    smt_astt init = inputargs[0];
+    for (unsigned int i = 0; i < sz; i++) {
+      a = a->update(this, init, i);
+    }
+
+    return a;
+  } else {
+    // Repeatedly store operands into this.
+    for (unsigned int i = 0; i < sz; i++) {
+      a = a->update(this, inputargs[i], i);
+    }
+
+    return a;
+  }
 }
 
 smt_astt
