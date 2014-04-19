@@ -48,6 +48,9 @@ public:
   // equalities, it silently doesn't honour them. Apparently.
   virtual void assign(smt_convt *ctx, smt_astt sym) const;
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+  virtual smt_astt update(smt_convt *ctx, smt_astt value,
+                                unsigned int idx,
+                                expr2tc idx_expr = expr2tc()) const;
 
   term_t term;
   std::string symname;

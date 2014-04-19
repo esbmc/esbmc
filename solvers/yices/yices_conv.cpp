@@ -490,6 +490,22 @@ yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
   return new yices_smt_ast(ctx, elemsort, yices_select(elem, term));
 }
 
+smt_astt
+yices_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
+                      expr2tc idx_expr) const
+{
+  if (sort->id == SMT_SORT_ARRAY)
+    return smt_ast::update(ctx, value, idx, idx_expr);
+
+  // Otherwise, it's a struct
+  assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
+  assert(is_nil_expr(idx_expr) && "Tuple updates must be explicitly numbered");
+
+  const yices_smt_ast *yast = yices_ast_downcast(value);
+  term_t result = yices_tuple_update(term, idx, yast->term);
+  return new yices_smt_ast(ctx, sort, result);
+}
+
 smt_sortt
 yices_convt::mk_struct_sort(const type2tc &type)
 {
