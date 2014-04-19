@@ -476,15 +476,38 @@ yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 }
 
 smt_sortt
-yices_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
+yices_convt::mk_struct_sort(const type2tc &type)
 {
-  abort();
+  // Exactly the same as a normal yices sort, ish.
+
+  std::vector<type_t> sorts;
+  const struct_union_data &def = get_type_def(type);
+  forall_types(it, def.members) {
+    smt_sortt s = convert_sort(*it);
+    const yices_smt_sort *sort = yices_sort_downcast(s);
+    sorts.push_back(sort->type);
+  }
+
+  // We now have an array of types, ready for sort creation
+  type_t tuple_sort = yices_tuple_type(def.members.size(), sorts.data());
+  return new yices_smt_sort(SMT_SORT_STRUCT, tuple_sort);
 }
 
 smt_sortt
-yices_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
+yices_convt::mk_union_sort(const type2tc &type)
 {
-  abort();
+  // Like structs, but a union
+
+  std::vector<type_t> sorts;
+  const struct_union_data &def = get_type_def(type);
+  forall_types(it, def.members) {
+    smt_sortt s = convert_sort(*it);
+    const yices_smt_sort *sort = yices_sort_downcast(s);
+    sorts.push_back(sort->type);
+  }
+
+  type_t tuple_sort = yices_tuple_type(def.members.size(), sorts.data());
+  return new yices_smt_sort(SMT_SORT_UNION, tuple_sort);
 }
 
 smt_astt
