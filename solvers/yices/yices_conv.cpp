@@ -511,15 +511,37 @@ yices_convt::mk_union_sort(const type2tc &type)
 }
 
 smt_astt
-yices_convt::tuple_create(const expr2tc &structdef __attribute__((unused)))
+yices_convt::tuple_create(const expr2tc &structdef)
 {
-  abort();
+  const constant_struct2t &strct = to_constant_struct2t(structdef);
+  const struct_union_data &type = get_type_def(strct.type);
+
+  std::vector<term_t> terms;
+  forall_exprs(it, strct.datatype_members) {
+    smt_astt a = convert_ast(*it);
+    const yices_smt_ast *yast = yices_ast_downcast(a);
+    terms.push_back(yast->term);
+  }
+
+  term_t thetuple = yices_tuple(type.members.size(), terms.data());
+  return new_ast(convert_sort(strct.type), thetuple);
 }
 
 smt_astt
-yices_convt::union_create(const expr2tc &unidef __attribute__((unused)))
+yices_convt::union_create(const expr2tc &unidef)
 {
-  abort();
+  const constant_union2t &uni = to_constant_union2t(unidef);
+  const struct_union_data &type = get_type_def(uni.type);
+
+  std::vector<term_t> terms;
+  forall_exprs(it, uni.datatype_members) {
+    smt_astt a = convert_ast(*it);
+    const yices_smt_ast *yast = yices_ast_downcast(a);
+    terms.push_back(yast->term);
+  }
+
+  term_t thetuple = yices_tuple(type.members.size(), terms.data());
+  return new_ast(convert_sort(uni.type), thetuple);
 }
 
 smt_astt
