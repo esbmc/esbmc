@@ -16,8 +16,12 @@ public:
   yices_smt_sort(smt_sort_kind i, type_t _t, unsigned long w,
                  unsigned long d)
     : smt_sort(i, w, d), type(_t), tuple_type() { }
+
+  // Constructor for structs / unions. Bitwidth is set to 1 as an estople
+  // that... it's a valid domain sort. Uhu. Not the greatest design.
   yices_smt_sort(smt_sort_kind i, type_t _t, const type2tc &s)
-    : smt_sort(i), type(_t), tuple_type(s) { }
+    : smt_sort(i, 1), type(_t), tuple_type(s) { }
+
   virtual ~yices_smt_sort() { }
 
   type_t type;
