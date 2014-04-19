@@ -285,7 +285,7 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
   }
   case SMT_SORT_INT:
   {
-    return new yices_smt_sort(k, yices_int_type());
+    return new yices_smt_sort(k, yices_int_type(), 1);
   }
   case SMT_SORT_REAL:
   {
