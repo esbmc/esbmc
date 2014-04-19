@@ -487,7 +487,7 @@ yices_smt_ast::project(smt_convt *ctx, unsigned int elem) const
   const struct_union_data &data = ctx->get_type_def(type);
   smt_sortt elemsort = ctx->convert_sort(data.members[elem]);
 
-  return new yices_smt_ast(ctx, elemsort, yices_select(elem, term));
+  return new yices_smt_ast(ctx, elemsort, yices_select(elem + 1, term));
 }
 
 smt_astt
@@ -696,7 +696,7 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
   unsigned int i = 0;
   forall_types(it, ref.members) {
     expr2tc res;
-    term_t elem = yices_select(i, term);
+    term_t elem = yices_select(i + 1, term);
     smt_astt a = new_ast(convert_sort(*it), elem);
 
     switch ((*it)->type_id) {
