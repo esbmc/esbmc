@@ -370,18 +370,6 @@ yices_convt::mk_array_symbol(const std::string &name, smt_sortt s)
   return ast;
 }
 
-smt_sortt
-yices_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
-{
-  abort();
-}
-
-smt_sortt
-yices_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
-{
-  abort();
-}
-
 smt_astt
 yices_convt::mk_extract(smt_astt a, unsigned int high,
                             unsigned int low, smt_sortt s)
@@ -484,5 +472,76 @@ yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   } else {
     smt_ast::assign(ctx, sym);
   }
+  return;
+}
+
+smt_sortt
+yices_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
+{
+  abort();
+}
+
+smt_sortt
+yices_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
+{
+  abort();
+}
+
+smt_astt
+yices_convt::tuple_create(const expr2tc &structdef __attribute__((unused)))
+{
+  abort();
+}
+
+smt_astt
+yices_convt::union_create(const expr2tc &unidef __attribute__((unused)))
+{
+  abort();
+}
+
+smt_astt
+yices_convt::tuple_fresh(smt_sortt s __attribute__((unused)),
+            std::string name __attribute__((unused)))
+{
+  abort();
+}
+
+smt_astt
+yices_convt::tuple_array_create(const type2tc &array_type __attribute__((unused)),
+                   smt_astt *inputargs __attribute__((unused)),
+                   bool const_array __attribute__((unused)),
+                   smt_sortt domain __attribute__((unused)))
+{
+  abort();
+}
+
+smt_astt
+yices_convt::tuple_array_of(const expr2tc &init_value __attribute__((unused)),
+               unsigned long domain_width __attribute__((unused)))
+{
+  abort();
+}
+
+smt_astt
+yices_convt::mk_tuple_symbol(const expr2tc &expr __attribute__((unused)))
+{
+  abort();
+}
+
+smt_astt
+yices_convt::mk_tuple_array_symbol(const expr2tc &expr __attribute__((unused)))
+{
+  abort();
+}
+
+expr2tc
+yices_convt::tuple_get(const expr2tc &expr __attribute__((unused)))
+{
+  abort();
+}
+
+void
+yices_convt::add_tuple_constraints_for_solving()
+{
   return;
 }

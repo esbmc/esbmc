@@ -44,7 +44,7 @@ public:
   std::string symname;
 };
 
-class yices_convt : public smt_convt, public array_iface
+class yices_convt : public smt_convt, public array_iface, public tuple_iface
 {
 public:
   yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp);
@@ -67,8 +67,6 @@ public:
   virtual smt_astt mk_smt_bool(bool val);
   virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_astt mk_array_symbol(const std::string &name, const smt_sort *s);
-  virtual smt_sortt mk_struct_sort(const type2tc &type);
-  virtual smt_sortt mk_union_sort(const type2tc &type);
   virtual smt_astt mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
@@ -79,6 +77,22 @@ public:
                                   unsigned long domain_width);
 
   virtual void add_array_constraints_for_solving();
+
+  virtual smt_sortt mk_struct_sort(const type2tc &type);
+  virtual smt_sortt mk_union_sort(const type2tc &type);
+  virtual smt_astt tuple_create(const expr2tc &structdef);
+  virtual smt_astt union_create(const expr2tc &unidef);
+  virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "");
+  virtual smt_astt tuple_array_create(const type2tc &array_type,
+                              smt_astt *inputargs,
+                              bool const_array,
+                              smt_sortt domain);
+  virtual smt_astt tuple_array_of(const expr2tc &init_value,
+                                              unsigned long domain_width);
+  virtual smt_astt mk_tuple_symbol(const expr2tc &expr);
+  virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
+  virtual expr2tc tuple_get(const expr2tc &expr);
+  virtual void add_tuple_constraints_for_solving();
 
   expr2tc get_bool(smt_astt a);
   expr2tc get_bv(const type2tc &t, smt_astt a);
