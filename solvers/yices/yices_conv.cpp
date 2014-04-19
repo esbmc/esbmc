@@ -495,6 +495,13 @@ yices_convt::mk_struct_sort(const type2tc &type)
 {
   // Exactly the same as a normal yices sort, ish.
 
+  if (is_array_type(type)) {
+    const array_type2t &arrtype = to_array_type(type);
+    smt_sortt subtypesort = convert_sort(arrtype.subtype);
+    smt_sortt d = make_array_domain_sort(arrtype);
+    return mk_sort(SMT_SORT_ARRAY, d, subtypesort);
+  }
+
   std::vector<type_t> sorts;
   const struct_union_data &def = get_type_def(type);
   forall_types(it, def.members) {
