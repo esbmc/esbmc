@@ -298,7 +298,7 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
     yices_smt_sort *dom = va_arg(ap, yices_smt_sort*);
     yices_smt_sort *range = va_arg(ap, yices_smt_sort*);
     type_t t = yices_function_type(1, &dom->type, range->type);
-    return new yices_smt_sort(k, t, range->data_width, dom->data_width);
+    return new yices_smt_sort(k, t, range->data_width, dom->data_width, range);
   }
   case SMT_SORT_BV:
   {
