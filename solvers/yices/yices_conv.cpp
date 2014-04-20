@@ -502,7 +502,7 @@ yices_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   assert(is_nil_expr(idx_expr) && "Tuple updates must be explicitly numbered");
 
   const yices_smt_ast *yast = yices_ast_downcast(value);
-  term_t result = yices_tuple_update(term, idx, yast->term);
+  term_t result = yices_tuple_update(term, idx + 1, yast->term);
   return new yices_smt_ast(ctx, sort, result);
 }
 
