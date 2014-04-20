@@ -735,6 +735,7 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
     }
 
     members.push_back(res);
+    i++;
   }
 
   return constant_struct2tc(type, members);
