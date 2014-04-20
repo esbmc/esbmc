@@ -715,8 +715,8 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
     case type2t::bool_id:
       res = get_bool(a);
       break;
-    case type2t::struct_id:
     case type2t::pointer_id:
+    case type2t::struct_id:
     case type2t::union_id:
       res = tuple_get_rec(elem, *it);
       break;
@@ -738,7 +738,14 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
     i++;
   }
 
-  return constant_struct2tc(type, members);
+  if (type->type_id != type2t::pointer_id) {
+    return constant_struct2tc(type, members);
+  } else {
+    uint64_t num = to_constant_int2t(members[0]).constant_value.to_uint64();
+    uint64_t offs = to_constant_int2t(members[1]).constant_value.to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, type);
+  }
 }
 
 void
