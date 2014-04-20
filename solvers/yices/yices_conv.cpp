@@ -506,6 +506,18 @@ yices_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   return new yices_smt_ast(ctx, sort, result);
 }
 
+smt_astt
+yices_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+{
+  smt_astt idx_ast = ctx->convert_ast(idx);
+  term_t temp_term = yices_ast_downcast(idx_ast)->term;
+
+  const yices_smt_sort *ys = yices_sort_downcast(sort);
+
+  return new yices_smt_ast(ctx, ys->arr_range,
+                           yices_application(this->term, 1, &temp_term));
+}
+
 smt_sortt
 yices_convt::mk_struct_sort(const type2tc &type)
 {

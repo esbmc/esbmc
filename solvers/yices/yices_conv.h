@@ -53,6 +53,7 @@ public:
   virtual smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
                                 expr2tc idx_expr = expr2tc()) const;
+  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
 
   term_t term;
   std::string symname;
