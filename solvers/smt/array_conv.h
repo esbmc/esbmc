@@ -156,9 +156,18 @@ public:
   // Array equalities -- decomposed into selects when array constraints
   // are encoded.
   // Each vector element corresponds to an array, containing a list of
-  // equalities. Each equality is a pair: the identifier of the other array
-  // to make an equality with, and an ast of the literal for that equality.
-  std::vector<std::list<std::pair<unsigned int, smt_astt> > > array_equalities;
+  // equalities. Each equality has the current update number, the details
+  // of the other array, and the output ast.
+  struct array_equality {
+    unsigned int other_array_idx;
+
+    unsigned int this_array_update_num;
+    unsigned int other_array_update_num;
+
+    smt_astt result;
+  };
+
+  std::vector<std::list<struct array_equality> > array_equalities;
 
   // Update records: For each array, for each 'with' operation, we record
   // the index used and the AST representation of the value assigned. We
