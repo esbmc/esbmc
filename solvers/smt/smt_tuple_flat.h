@@ -127,6 +127,9 @@ extern inline
 array_node_smt_ast::array_node_smt_ast(smt_convt *ctx, smt_sortt s,
     const std::string &_name)
     : tuple_node_smt_ast(ctx, s, _name) {
+      std::cerr << "tuple array nodes shouldn't be created any more"
+        << std::endl;
+      abort();
   // A new array is inherently fresh; thus field each element slot with
   // a fresh new array.
 

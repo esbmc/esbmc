@@ -472,7 +472,7 @@ smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
   smt_sortt sort = ctx->convert_sort(sym.type);
-  return new array_node_smt_ast(ctx, sort, name);
+  return array_conv.mk_array_symbol(name, sort);
 }
 
 smt_astt 
@@ -488,7 +488,7 @@ smt_tuple_node_flattener::tuple_array_create(const type2tc &array_type,
   // XXX - probably more efficient to update each member array, but not now.
   smt_sortt sort = ctx->convert_sort(array_type);
   std::string name = ctx->mk_fresh_name("tuple_array_create::") + ".";
-  smt_astt newsym = new array_node_smt_ast(ctx, sort, name);
+  smt_astt newsym = array_conv.mk_array_symbol(name, sort);
 
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);
@@ -599,6 +599,8 @@ smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 smt_astt 
 smt_tuple_node_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 {
+
+  return array_conv.convert_array_of(init_val, array_size);
 
   // An array of tuples without tuple support: decompose into array_of's each
   // subtype.
