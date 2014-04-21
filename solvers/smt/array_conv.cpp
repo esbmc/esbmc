@@ -624,7 +624,7 @@ smt_astt
 array_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   const array_ast *o = array_downcast(other);
-  if (is_unbounded_array(sort))
+  if (!is_unbounded_array(sort))
     return eq_fixedsize(ctx, o);
 
   const std::set<expr2tc> &thisindexes =
