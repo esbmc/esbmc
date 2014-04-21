@@ -1,6 +1,8 @@
 #include "smt_conv.h"
 #include <namespace.h>
 
+#include <solvers/smt/array_conv.h>
+
 class tuple_node_smt_ast;
 class array_node_smt_ast;
 class tuple_sym_smt_ast;
@@ -158,7 +160,7 @@ class smt_tuple_node_flattener : public tuple_iface
 {
 public:
   smt_tuple_node_flattener(smt_convt *_ctx, const namespacet &_ns)
-    : tuple_iface(), ctx(_ctx), ns(_ns) { }
+    : tuple_iface(), ctx(_ctx), ns(_ns), array_conv(_ctx) { }
 
   virtual smt_sortt mk_struct_sort(const type2tc &type);
   virtual smt_sortt mk_union_sort(const type2tc &type);
@@ -181,6 +183,7 @@ public:
 
   smt_convt *ctx;
   const namespacet &ns;
+  array_convt array_conv;
 };
 
 class tuple_sym_smt_ast : public smt_ast {
