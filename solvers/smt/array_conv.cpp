@@ -673,7 +673,8 @@ array_ast::eq_fixedsize(smt_convt *ctx, const array_ast *other) const
 void
 array_ast::assign(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
 {
-  array_ctx->convert_array_assign(this, sym);
+  ctx->assert_ast(this->eq(ctx, sym));
+//  array_ctx->convert_array_assign(this, sym);
 }
 
 smt_astt
