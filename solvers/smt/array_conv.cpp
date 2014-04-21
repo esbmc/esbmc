@@ -1,3 +1,6 @@
+#include <algorithm>
+#include <set>
+
 #include "array_conv.h"
 #include <ansi-c/c_types.h>
 
@@ -61,7 +64,7 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms)
     w.idx = expr2tc();
     array_updates[mast->base_array_id].push_back(w);
 
-    array_subtypes.push_back(ms->data_width);
+    array_subtypes.push_back(ms);
 
     return mast;
   }
@@ -359,7 +362,7 @@ array_convt::get_array_elem(smt_astt a, uint64_t index,
 
   // We've found an index; pick its value out, convert back to expr.
   // First, what's it's type?
-  type2tc src_type = get_uint_type(array_subtypes[mast->base_array_id]);
+  type2tc src_type = get_uint_type(array_subtypes[mast->base_array_id]->data_width);
 
   const std::vector<smt_astt > &solver_values =
     array_valuation[mast->base_array_id][mast->array_update_num];
@@ -392,7 +395,7 @@ array_convt::add_array_constraints(unsigned int arr)
     array_valuation.back();
 
   // Subtype is thus
-  smt_sortt subtype = ctx->mk_sort(SMT_SORT_BV, array_subtypes[arr], false);
+  smt_sortt subtype = ctx->mk_sort(SMT_SORT_BV, array_subtypes[arr]->data_width, false);
 
   // Pre-allocate all the storage.
   real_array_values.resize(array_values[arr].size());
@@ -618,11 +621,53 @@ array_convt::add_initial_ackerman_constraints(
 }
 
 smt_astt
-array_ast::eq(smt_convt *ctx __attribute__((unused)),
-                        smt_astt other __attribute__((unused))) const
+array_ast::eq(smt_convt *ctx, smt_astt other) const
 {
-  std::cerr << "Array equality encoded -- should have become an array assign?" << std::endl;
-  abort();
+  const array_ast *o = array_downcast(other);
+  if (is_unbounded_array(sort))
+    return eq_fixedsize(ctx, o);
+
+  const std::set<expr2tc> &thisindexes =
+    array_ctx->array_indexes[base_array_id];
+  const std::set<expr2tc> &otherindexes =
+    array_ctx->array_indexes[o->base_array_id];
+
+  std::list<expr2tc> idxes;
+  std::vector<smt_astt> lits;
+
+  // Take the union of all these indexes
+  std::set_union(thisindexes.begin(), thisindexes.end(),
+                  otherindexes.begin(), otherindexes.end(),
+                  idxes.begin());
+
+  // Select each index from each array, and produce an equality.
+  smt_sortt type = array_ctx->array_subtypes[base_array_id];
+  for (const expr2tc &expr : idxes) {
+    smt_astt a = array_ctx->mk_unbounded_select(this, expr, type);
+    smt_astt b = array_ctx->mk_unbounded_select(o, expr, type);
+    lits.push_back(a->eq(array_ctx->ctx, b));
+  }
+
+  return array_ctx->ctx->make_conjunct(lits);
+}
+
+smt_astt
+array_ast::eq_fixedsize(smt_convt *ctx, const array_ast *other) const
+{
+  // Only allow equalities of arrays with the same domain width. Equalities
+  // between different sizes will lead to crazyness later, and there are no
+  // (AFAIK) circumstances where they should occur.
+  assert(array_fields.size() == other->array_fields.size() &&
+         "Array equality between different sizes of fixed-size arrays");
+
+  smt_convt::ast_vec lits;
+  std::vector<smt_astt>::const_iterator it1 = array_fields.begin(),
+                              it2 = other->array_fields.begin();
+  for (; it1 != array_fields.end(); it1++, it2++) {
+    lits.push_back((*it1)->eq(ctx, *it2));
+  }
+
+  return ctx->make_conjunct(lits);
 }
 
 void

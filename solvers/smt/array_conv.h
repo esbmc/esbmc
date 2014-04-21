@@ -49,6 +49,8 @@ public:
                                 expr2tc idx_expr = expr2tc()) const;
   virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
 
+  smt_astt eq_fixedsize(smt_convt *ctx, const array_ast *other) const;
+
   std::string symname; // Only if this was produced from mk_smt_symbol.
 
   std::vector<const smt_ast *> array_fields;
@@ -136,7 +138,7 @@ public:
   std::vector<std::set<expr2tc> > array_indexes;
 
   // Self explanatory. Contains bitwidth of subtypes
-  std::vector<unsigned int> array_subtypes;
+  std::vector<smt_sortt> array_subtypes;
 
   // Array /value/ tracking. For each array (outer vector) we have an inner
   // vector, each element of which corresponds to each 'with' operation
