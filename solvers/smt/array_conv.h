@@ -69,6 +69,15 @@ public:
   array_convt(smt_convt *_ctx);
   ~array_convt();
 
+  // Public api
+  smt_ast *mk_array_symbol(const std::string &name, const smt_sort *ms);
+  expr2tc get_array_elem(const smt_ast *a, uint64_t index,
+                         const type2tc &subtype);
+  virtual const smt_ast *convert_array_of(const expr2tc &init_val,
+                                          unsigned long domain_width);
+  void add_array_constraints_for_solving(void);
+
+  // Heavy lifters
   void convert_array_assign(const array_ast *src, smt_astt sym);
   const smt_ast *mk_select(const array_ast *array, const expr2tc &idx,
                                    const smt_sort *ressort);
@@ -76,17 +85,11 @@ public:
                                   const expr2tc &idx,
                                   smt_astt value,
                                   const smt_sort *ressort);
-  virtual const smt_ast *convert_array_of(const expr2tc &init_val,
-                                          unsigned long domain_width);
 
-  smt_ast *mk_array_symbol(const std::string &name, const smt_sort *ms);
   smt_astt array_ite(const smt_ast *cond,
                                    const array_ast *true_arr,
                                    const array_ast *false_arr,
                                    const smt_sort *thesort);
-  expr2tc get_array_elem(const smt_ast *a, uint64_t index,
-                         const type2tc &subtype);
-  void add_array_constraints_for_solving(void);
 
   // Internal funk:
 
