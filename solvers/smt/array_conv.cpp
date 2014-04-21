@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <set>
+#include <utility>
 
 #include "array_conv.h"
 #include <ansi-c/c_types.h>
@@ -621,7 +622,50 @@ array_convt::add_initial_ackerman_constraints(
 }
 
 smt_astt
-array_ast::eq(smt_convt *ctx, smt_astt other) const
+array_ast::eq(smt_convt *ctx __attribute__((unused)),
+              smt_astt sym __attribute__((unused))) const
+{
+  std::cerr << "Array equality encoded -- should have become an array assign?"
+            << std::endl;
+   abort();
+}
+
+void
+array_ast::assign(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
+{
+  array_ctx->convert_array_assign(this, sym);
+}
+
+smt_astt
+array_ast::update(smt_convt *ctx __attribute__((unused)), smt_astt value,
+                                unsigned int idx,
+                                expr2tc idx_expr) const
+{
+  if (is_nil_expr(idx_expr))
+    idx_expr = constant_int2tc(get_uint_type(sort->domain_width), BigInt(idx));
+
+  return array_ctx->mk_store(this, idx_expr, value, sort);
+}
+
+smt_astt
+array_ast::select(smt_convt *ctx __attribute__((unused)),
+                  const expr2tc &idx) const
+{
+  smt_sortt s = array_ctx->ctx->mk_sort(SMT_SORT_BV, sort->data_width, false);
+  return array_ctx->mk_select(this, idx, s);
+}
+
+smt_astt
+array_ast::ite(smt_convt *ctx __attribute__((unused)),
+               smt_astt cond, smt_astt falseop) const
+{
+
+  return array_ctx->array_ite(cond, this, array_downcast(falseop), sort);
+}
+
+#if 0
+smt_astt
+array_ast::encode_array_equality(smt_convt *ctx, smt_astt other) const
 {
   const array_ast *o = array_downcast(other);
   if (!is_unbounded_array(sort))
@@ -669,37 +713,5 @@ array_ast::eq_fixedsize(smt_convt *ctx, const array_ast *other) const
 
   return ctx->make_conjunct(lits);
 }
+#endif
 
-void
-array_ast::assign(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
-{
-  ctx->assert_ast(this->eq(ctx, sym));
-//  array_ctx->convert_array_assign(this, sym);
-}
-
-smt_astt
-array_ast::update(smt_convt *ctx __attribute__((unused)), smt_astt value,
-                                unsigned int idx,
-                                expr2tc idx_expr) const
-{
-  if (is_nil_expr(idx_expr))
-    idx_expr = constant_int2tc(get_uint_type(sort->domain_width), BigInt(idx));
-
-  return array_ctx->mk_store(this, idx_expr, value, sort);
-}
-
-smt_astt
-array_ast::select(smt_convt *ctx __attribute__((unused)),
-                  const expr2tc &idx) const
-{
-  smt_sortt s = array_ctx->ctx->mk_sort(SMT_SORT_BV, sort->data_width, false);
-  return array_ctx->mk_select(this, idx, s);
-}
-
-smt_astt
-array_ast::ite(smt_convt *ctx __attribute__((unused)),
-               smt_astt cond, smt_astt falseop) const
-{
-
-  return array_ctx->array_ite(cond, this, array_downcast(falseop), sort);
-}
