@@ -327,6 +327,21 @@ array_convt::convert_array_of(const expr2tc &init_val,
   return mast;
 }
 
+smt_astt
+array_convt::encode_array_equality(unsigned int array_id, unsigned int other_id)
+{
+  // Record an equality for this point in time.
+
+  struct array_equality e;
+  e.other_array_idx = other_id;
+  e.this_array_update_num = array_updates[array_id].size() - 1;
+  e.other_array_update_num = array_updates[other_id].size() - 1;
+  e.result = ctx->mk_fresh(ctx->boolean_sort, "");
+
+  array_equalities[array_id].push_back(e);
+  return e.result;
+}
+
 expr2tc
 array_convt::get_array_elem(smt_astt a, uint64_t index,
                             const type2tc &subtype __attribute__((unused)))

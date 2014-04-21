@@ -90,6 +90,7 @@ public:
 
   // Internal funk:
 
+  smt_astt encode_array_equality(unsigned int array_id, unsigned int other_id);
   const smt_ast *mk_unbounded_select(const array_ast *array,
                                      const expr2tc &idx,
                                      const smt_sort *ressort);
