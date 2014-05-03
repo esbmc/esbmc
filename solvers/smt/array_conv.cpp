@@ -251,14 +251,11 @@ array_convt::array_ite(smt_astt cond,
   assert(true_arr->array_fields.size() != 0 &&
          true_arr->array_fields.size() == false_arr->array_fields.size());
   array_ast *mast = new_ast(thesort);
-  smt_astt args[3];
-  args[0] = cond;
   unsigned long i;
   for (i = 0; i < true_arr->array_fields.size(); i++) {
     // One ite pls.
-    args[1] = true_arr->array_fields[i];
-    args[2] = false_arr->array_fields[i];
-    smt_astt res = ctx->mk_func_app(args[1]->sort, SMT_FUNC_ITE, args, 3);
+    smt_astt res = true_arr->array_fields[i]->ite(ctx, cond,
+                                                  false_arr->array_fields[i]);
     mast->array_fields.push_back(array_downcast(res));
   }
 
