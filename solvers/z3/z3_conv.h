@@ -101,7 +101,7 @@ private:
                                             bool const_array,
                                             const smt_sort *domain);
 
-  virtual smt_astt mk_tuple_symbol(const expr2tc &expr);
+  virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s);
   virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
   virtual smt_astt tuple_array_of(const expr2tc &init,
                                   unsigned long domain_width);

@@ -679,10 +679,9 @@ yices_convt::tuple_array_of(const expr2tc &init_value,
 }
 
 smt_astt
-yices_convt::mk_tuple_symbol(const expr2tc &expr)
+yices_convt::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
-  const symbol2t &sym = to_symbol2t(expr);
-  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
+  return mk_smt_symbol(name, s);
 }
 
 smt_astt

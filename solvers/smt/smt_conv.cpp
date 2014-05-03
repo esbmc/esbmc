@@ -1010,7 +1010,9 @@ smt_convt::convert_terminal(const expr2tc &expr)
   {
     // Special case for tuple symbols
     if (is_tuple_ast_type(expr)) {
-      return tuple_api->mk_tuple_symbol(expr);
+      const symbol2t &sym = to_symbol2t(expr);
+      return tuple_api->mk_tuple_symbol(sym.get_symbol_name(),
+                                        convert_sort(sym.type));
     } else if (is_array_type(expr)) {
       // Determine the range if we have arrays of arrays.
       const array_type2t &arr = to_array_type(expr->type);

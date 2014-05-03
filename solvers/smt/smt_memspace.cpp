@@ -251,8 +251,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
       obj_num = pointer_logic.back().get_null_object();
 
       type2tc t(new pointer_type2t(get_empty_type()));
-      symbol2tc sym(t, symbol);
-      a = tuple_api->mk_tuple_symbol(sym);
+      a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
 
       return a;
     }
@@ -271,8 +270,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 
   // Produce a symbol representing this.
   type2tc t(new pointer_type2t(get_empty_type()));
-  symbol2tc sym(t, symbol);
-  a = tuple_api->mk_tuple_symbol(sym);
+  a = tuple_api->mk_tuple_symbol(symbol, convert_sort(t));
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out

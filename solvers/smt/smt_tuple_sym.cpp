@@ -456,23 +456,18 @@ smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
 }
 
 smt_astt
-smt_tuple_sym_flattener::mk_tuple_symbol(const expr2tc &expr)
+smt_tuple_sym_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
-  // Assuming this is a symbol, convert it to being an ast with tuple type.
-  // That's done by creating the prefix for the names of all the contained
-  // variables, and storing it.
-  const symbol2t &sym = to_symbol2t(expr);
-  std::string name = sym.get_symbol_name();
 
   // We put a '.' on the end of all symbols to deliminate the rest of the
   // name. However, these names may become expressions again, then be converted
   // again, thus accumulating dots. So don't.
-  if (name[name.size() - 1] != '.')
-    name += ".";
+  std::string name2 = name;
+  if (name2[name2.size() - 1] != '.')
+    name2 += ".";
 
-  smt_sortt sort = ctx->convert_sort(sym.type);
-  assert(sort->id != SMT_SORT_ARRAY);
-  return new tuple_sym_smt_ast(ctx, sort, name);
+  assert(s->id != SMT_SORT_ARRAY);
+  return new tuple_sym_smt_ast(ctx, s, name2);
 }
 
 smt_astt

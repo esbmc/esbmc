@@ -104,7 +104,7 @@ public:
                               smt_sortt domain);
   virtual smt_astt tuple_array_of(const expr2tc &init_value,
                                               unsigned long domain_width);
-  virtual smt_astt mk_tuple_symbol(const expr2tc &expr);
+  virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s);
   virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
   virtual expr2tc tuple_get(const expr2tc &expr);
   virtual void add_tuple_constraints_for_solving();

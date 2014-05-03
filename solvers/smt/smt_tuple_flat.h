@@ -170,7 +170,7 @@ public:
   virtual smt_astt tuple_create(const expr2tc &structdef);
   virtual smt_astt union_create(const expr2tc &unidef);
   virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "");
-  virtual smt_astt mk_tuple_symbol(const expr2tc &expr);
+  virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s);
   virtual expr2tc tuple_get(const expr2tc &expr);
 
   expr2tc tuple_get_rec(tuple_node_smt_astt tuple);
@@ -262,7 +262,7 @@ public:
   virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "");
   virtual smt_astt tuple_array_of(const expr2tc &init_value,
                                             unsigned long domain_width);
-  virtual smt_astt mk_tuple_symbol(const expr2tc &expr);
+  virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s);
   virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
   virtual expr2tc tuple_get(const expr2tc &expr);
 

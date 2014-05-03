@@ -962,10 +962,9 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
 }
 
 smt_astt
-z3_convt::mk_tuple_symbol(const expr2tc &expr)
+z3_convt::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
-  const symbol2t &sym = to_symbol2t(expr);
-  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
+  return mk_smt_symbol(name, s);
 }
 
 smt_astt

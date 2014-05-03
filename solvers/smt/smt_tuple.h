@@ -48,8 +48,8 @@ public:
   virtual smt_astt tuple_array_of(const expr2tc &init_value,
                                         unsigned long domain_width) = 0;
 
-  /** Convert a symbol2tc to a tuple_smt_ast */
-  virtual smt_astt mk_tuple_symbol(const expr2tc &expr) = 0;
+  /** Convert a symbol to a tuple_smt_ast */
+  virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) = 0;
 
   /** Like mk_tuple_symbol, but for arrays */
   virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr) = 0;
