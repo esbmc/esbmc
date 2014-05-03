@@ -379,11 +379,6 @@ bitblast_convt::mk_smt_symbol(const std::string &name, smt_sortt sort)
       a->bv.push_back(sat_api->new_variable());
     break;
   }
-  case SMT_SORT_ARRAY:
-  {
-    result = array_api->mk_array_symbol(name, s);
-    break;
-  }
   default:
     std::cerr << "Unimplemented symbol type " << sort->id
               << " in bitblast symbol creation" << std::endl;

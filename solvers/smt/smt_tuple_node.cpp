@@ -467,7 +467,8 @@ smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
   smt_sortt sort = ctx->convert_sort(sym.type);
-  return array_conv.mk_array_symbol(name, sort);
+  smt_sortt subtype = ctx->convert_sort(get_array_subtype(sym.type));
+  return array_conv.mk_array_symbol(name, sort, subtype);
 }
 
 smt_astt 
@@ -482,8 +483,9 @@ smt_tuple_node_flattener::tuple_array_create(const type2tc &array_type,
   // index. Ignore infinite arrays, they're "not for you".
   // XXX - probably more efficient to update each member array, but not now.
   smt_sortt sort = ctx->convert_sort(array_type);
+  smt_sortt subtype = ctx->convert_sort(get_array_subtype(array_type));
   std::string name = ctx->mk_fresh_name("tuple_array_create::") + ".";
-  smt_astt newsym = array_conv.mk_array_symbol(name, sort);
+  smt_astt newsym = array_conv.mk_array_symbol(name, sort, subtype);
 
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);

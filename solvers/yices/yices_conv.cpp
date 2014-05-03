@@ -371,7 +371,8 @@ yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
 }
 
 smt_astt
-yices_convt::mk_array_symbol(const std::string &name, smt_sortt s)
+yices_convt::mk_array_symbol(const std::string &name, smt_sortt s,
+                             smt_sortt array_subtype __attribute__((unused)))
 {
   // For array symbols, store the symbol name in the ast to implement
   // assign semantics

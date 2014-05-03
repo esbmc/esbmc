@@ -663,7 +663,8 @@ public:
 
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
-  virtual smt_astt mk_fresh(smt_sortt s, const std::string &tag);
+  virtual smt_astt mk_fresh(smt_sortt s, const std::string &tag,
+                            smt_sortt st = NULL);
   /** Create a previously un-used variable name with the prefix given in tag */
   std::string mk_fresh_name(const std::string &tag);
 

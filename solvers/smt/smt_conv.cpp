@@ -1032,10 +1032,12 @@ smt_convt::convert_terminal(const expr2tc &expr)
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
     smt_sortt sort = convert_sort(sym.type);
-    if (is_array_type(expr))
-      return array_api->mk_array_symbol(name, sort);
-    else
+    if (is_array_type(expr)) {
+      smt_sortt subtype = convert_sort(get_array_subtype(sym.type));
+      return array_api->mk_array_symbol(name, sort, subtype);
+    } else {
       return mk_smt_symbol(name, sort);
+    }
   }
   default:
     std::cerr << "Converting unrecognized terminal expr to SMT" << std::endl;
@@ -1054,14 +1056,16 @@ smt_convt::mk_fresh_name(const std::string &tag)
 }
 
 smt_astt
-smt_convt::mk_fresh(smt_sortt s, const std::string &tag)
+smt_convt::mk_fresh(smt_sortt s, const std::string &tag,
+                    smt_sortt array_subtype)
 {
   std::string newname = mk_fresh_name(tag);
 
   if (s->id == SMT_SORT_UNION || s->id == SMT_SORT_STRUCT) {
     return tuple_api->mk_tuple_symbol(newname, s);
   } else if (s->id == SMT_SORT_ARRAY) {
-    return array_api->mk_array_symbol(newname, s);
+    assert(array_subtype != NULL && "Must call mk_fresh for arrays with a subtype");
+    return array_api->mk_array_symbol(newname, s, array_subtype);
   } else {
     return mk_smt_symbol(newname, s);
   }

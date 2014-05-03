@@ -4762,4 +4762,10 @@ get_pointer_type(const typet &val)
   return type_pool.get_pointer(val);
 }
 
+inline const type2tc &
+get_array_subtype(const type2tc &type)
+{
+  return to_array_type(type).subtype;
+}
+
 #endif /* _UTIL_IREP2_H_ */

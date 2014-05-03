@@ -13,7 +13,8 @@ public:
   array_iface(bool _b, bool inf) : supports_bools_in_arrays(_b),
                                    can_init_infinite_arrays(inf) { }
 
-  virtual smt_astt mk_array_symbol(const std::string &name, smt_sortt sort) = 0;
+  virtual smt_astt mk_array_symbol(const std::string &name, smt_sortt sort,
+                                   smt_sortt subtype) = 0;
 
   /** Extract an element from the model of an array, at an explicit index.
    *  @param array AST representing the array we are extracting from

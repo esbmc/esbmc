@@ -49,7 +49,8 @@ public:
                                 unsigned int w);
   virtual smt_ast *mk_smt_bool(bool val);
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
-  virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s);
+  virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s,
+                                   smt_sortt array_subtype);
   virtual smt_sort *mk_struct_sort(const type2tc &type);
   virtual smt_sort *mk_union_sort(const type2tc &type);
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
