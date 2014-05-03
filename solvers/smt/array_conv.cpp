@@ -108,7 +108,6 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
   // everything.
   smt_astt fresh = ctx->mk_fresh(ressort, "array_mk_select::");
   smt_astt real_idx = ctx->convert_ast(idx);
-  smt_astt impargs[2];
   unsigned long dom_width = ma->sort->domain_width;
   smt_sortt bool_sort = ctx->boolean_sort;
 
@@ -117,10 +116,8 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
     smt_astt idx_eq = real_idx->eq(ctx, tmp_idx);
     smt_astt val_eq = fresh->eq(ctx, ma->array_fields[i]);
 
-    impargs[0] = idx_eq;
-    impargs[1] = val_eq;
-
-    ctx->assert_ast(ctx->mk_func_app(bool_sort, SMT_FUNC_IMPLIES, impargs, 2));
+    ctx->assert_ast(ctx->mk_func_app(bool_sort, SMT_FUNC_IMPLIES,
+                                     idx_eq, val_eq));
   }
 
   return fresh;
