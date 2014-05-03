@@ -1056,7 +1056,15 @@ smt_convt::mk_fresh_name(const std::string &tag)
 smt_astt
 smt_convt::mk_fresh(smt_sortt s, const std::string &tag)
 {
-  return mk_smt_symbol(mk_fresh_name(tag), s);
+  std::string newname = mk_fresh_name(tag);
+
+  if (s->id == SMT_SORT_UNION || s->id == SMT_SORT_STRUCT) {
+    return tuple_api->mk_tuple_symbol(newname, s);
+  } else if (s->id == SMT_SORT_ARRAY) {
+    return array_api->mk_array_symbol(newname, s);
+  } else {
+    return mk_smt_symbol(newname, s);
+  }
 }
 
 smt_astt 
