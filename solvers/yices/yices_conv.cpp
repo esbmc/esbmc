@@ -361,7 +361,10 @@ yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
     // No: create a new one.
     const yices_smt_sort *sort = yices_sort_downcast(s);
     term = yices_new_uninterpreted_term(sort->type);
-    yices_set_term_name(term, name.c_str());
+
+    // If that wasn't the error term, set it's name.
+    if (term != NULL_TERM)
+      yices_set_term_name(term, name.c_str());
   }
 
   return new yices_smt_ast(this, s, term);
