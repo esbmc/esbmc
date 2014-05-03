@@ -66,7 +66,10 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
     w.idx = expr2tc();
     array_updates[mast->base_array_id].push_back(w);
 
-    array_subtypes.push_back(subtype);
+    if (subtype->id != SMT_SORT_BOOL)
+      array_subtypes.push_back(subtype);
+    else
+      array_subtypes.push_back(ctx->mk_sort(SMT_SORT_BV, 1, false));
 
     return mast;
   }
