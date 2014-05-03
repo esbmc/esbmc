@@ -78,6 +78,9 @@ tuple_node_smt_ast::make_free(smt_convt *ctx)
       elements[i] = ctx->tuple_api->tuple_fresh(newsort, fieldname);
     } else if (is_tuple_array_ast_type(*it)) {
       elements[i] = new array_node_smt_ast(ctx, newsort, fieldname);
+    } else if (is_array_type(*it)) {
+      elements[i] = ctx->mk_fresh(newsort, fieldname,
+                                  ctx->convert_sort(get_array_subtype(*it)));
     } else {
       elements[i] = ctx->mk_fresh(newsort, fieldname);
     }
