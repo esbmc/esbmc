@@ -656,7 +656,14 @@ smt_astt
 array_ast::select(smt_convt *ctx __attribute__((unused)),
                   const expr2tc &idx) const
 {
-  smt_sortt s = array_ctx->ctx->mk_sort(SMT_SORT_BV, sort->data_width, false);
+  // Look up the array subtype sort. If we're unbounded, use the base array id
+  // to do that, otherwise pull the subtype out of an element.
+  smt_sortt s;
+  if (!array_fields.empty())
+    s = array_fields[0]->sort;
+  else
+    s = array_ctx->array_subtypes[base_array_id];
+
   return array_ctx->mk_select(this, idx, s);
 }
 
