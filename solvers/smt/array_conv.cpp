@@ -536,7 +536,7 @@ array_convt::execute_array_trans(
     smt_astt updated_value = w.u.w.val;
 
     // Assign in its value.
-    fixup_idx_read_write(update_idx_expr, arr, idx+1, data[idx][updated_idx]);
+    fixup_idx_read_write(updated_value, update_idx_expr, arr, idx+1);
     dest_data[updated_idx] = updated_value;
 
     // Check all the values selected out of this instance; if any have the same
@@ -625,8 +625,9 @@ array_convt::collate_array_values(std::vector<smt_astt > &vals,
 }
 
 void
-array_convt::fixup_idx_read_write(const expr2tc &idx_expr, unsigned int arr_num,
-                                  unsigned int update_num, smt_astt prev_value)
+array_convt::fixup_idx_read_write(smt_astt updated_value,
+                                  const expr2tc &idx_expr, unsigned int arr_num,
+                                  unsigned int update_num)
 {
 
   assert(update_num != 0);
@@ -637,7 +638,7 @@ array_convt::fixup_idx_read_write(const expr2tc &idx_expr, unsigned int arr_num,
       // In this case, a select _and_ an update have occurred at the same
       // 'time'. The update is about to overwrite the select, so encode an
       // assertion constraining it's value to the previous update.
-      ctx->assert_ast(sel.val->eq(ctx, prev_value));
+      ctx->assert_ast(sel.val->eq(ctx, updated_value));
     }
   }
 
