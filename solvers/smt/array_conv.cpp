@@ -178,22 +178,13 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
   // array.
   smt_astt real_idx = ctx->convert_ast(idx);
   smt_astt real_value = value;
-  smt_astt iteargs[3], idxargs[2];
   unsigned long dom_width = mast->sort->domain_width;
-  smt_sortt bool_sort = ctx->boolean_sort;
-
-  idxargs[0] = real_idx;
-  iteargs[1] = real_value;
 
   for (unsigned long i = 0; i < mast->array_fields.size(); i++) {
-    idxargs[1] = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
-    smt_astt idx_eq = ctx->mk_func_app(bool_sort, SMT_FUNC_EQ, idxargs, 2);
+    smt_astt this_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
+    smt_astt idx_eq = real_idx->eq(ctx, this_idx);
 
-    iteargs[0] = idx_eq;
-    iteargs[2] = mast->array_fields[i];
-
-    smt_astt new_val =
-      ctx->mk_func_app(iteargs[1]->sort, SMT_FUNC_ITE, iteargs, 3);
+    smt_astt new_val = real_value->ite(ctx, idx_eq, mast->array_fields[i]);
     mast->array_fields[i] = new_val;
   }
 
