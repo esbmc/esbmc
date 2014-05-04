@@ -560,10 +560,7 @@ array_convt::execute_array_trans(
     for (typename std::list<struct array_select>::const_iterator it = sels.begin();
          it != sels.end(); it++) {
       if (it->idx == update_idx_expr) {
-        smt_astt args[2];
-        args[0] = updated_value;
-        args[1] = it->val;
-        ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
+        ctx->assert_ast(it->val->eq(ctx, updated_value));
       }
     }
 
