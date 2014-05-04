@@ -87,6 +87,7 @@ public:
                                   const expr2tc &idx,
                                   smt_astt value,
                                   const smt_sort *ressort);
+  smt_astt mk_bounded_array_equality(const array_ast *a1, const array_ast *a2);
 
   smt_astt array_ite(const smt_ast *cond,
                                    const array_ast *true_arr,

@@ -383,6 +383,19 @@ array_convt::encode_array_equality(unsigned int array_id, unsigned int other_id)
   return e.result;
 }
 
+smt_astt
+array_convt::mk_bounded_array_equality(const array_ast *a1, const array_ast *a2)
+{
+  assert(a1->array_fields.size() == a2->array_fields.size());
+
+  smt_convt::ast_vec eqs;
+  for (unsigned int i = 0; i < a1->array_fields.size(); i++) {
+    eqs.push_back(a1->array_fields[i]->eq(ctx, a2->array_fields[i]));
+  }
+
+  return ctx->make_conjunct(eqs);
+}
+
 expr2tc
 array_convt::get_array_elem(smt_astt a, uint64_t index,
                             const type2tc &subtype __attribute__((unused)))
@@ -690,12 +703,17 @@ array_convt::add_initial_ackerman_constraints(
 }
 
 smt_astt
-array_ast::eq(smt_convt *ctx __attribute__((unused)),
-              smt_astt sym __attribute__((unused))) const
+array_ast::eq(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
 {
-  std::cerr << "Array equality encoded -- should have become an array assign?"
-            << std::endl;
-   abort();
+
+  // Allow array equalities for bounded arrays, but not unbounded ones.
+  if (is_unbounded_array(sort)) {
+    std::cerr << "Array equality encoded -- should have become an array assign?"
+              << std::endl;
+    abort();
+  }
+
+  return array_ctx->mk_bounded_array_equality(this, array_downcast(sym));
 }
 
 void
