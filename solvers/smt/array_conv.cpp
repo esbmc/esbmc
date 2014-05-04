@@ -41,8 +41,6 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
   // Create either a new bounded or unbounded array.
   unsigned long domain_width = ms->domain_width;
   unsigned long array_size = 1UL << domain_width;
-  // XXX - wrong, use subtype
-  smt_sortt range_sort = ctx->mk_sort(SMT_SORT_BV, ms->data_width, false);
 
   // Create new AST storage
   array_ast *mast = new_ast(ms);
@@ -93,7 +91,7 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
 
   unsigned long i;
   for (i = 0; i < array_size; i++) {
-    smt_astt a = ctx->mk_fresh(range_sort, "array_fresh_array::");
+    smt_astt a = ctx->mk_fresh(subtype, "array_fresh_array::");
     mast->array_fields.push_back(a);
   }
 
