@@ -471,15 +471,13 @@ array_convt::add_array_constraints(unsigned int arr)
   // are ordered by how std::set orders them, not by history or anything. Or
   // even the element index.
   std::map<expr2tc, unsigned> idx_map;
-  for (std::set<expr2tc>::const_iterator it = indexes.begin();
-       it != indexes.end(); it++)
-    idx_map.insert(std::pair<expr2tc, unsigned>(*it, idx_map.size()));
+  for (auto it = indexes.begin(); it != indexes.end(); it++)
+    idx_map.insert(std::make_pair(*it, idx_map.size()));
 
   assert(idx_map.size() == indexes.size());
 
   // Initialize the first set of elements.
-  std::map<unsigned, const smt_ast*>::const_iterator it =
-    array_of_vals.find(arr);
+  auto it = array_of_vals.find(arr);
   if (it != array_of_vals.end()) {
     collate_array_values(real_array_values[0], idx_map, array_values[arr][0],
         subtype, it->second);
@@ -556,8 +554,7 @@ array_convt::execute_array_trans(
     // differing index exprs that evaluate to the same location they'll be
     // caught by code later.
     const std::list<struct array_select> &sels = array_values[arr][idx+1];
-    for (typename std::list<struct array_select>::const_iterator it = sels.begin();
-         it != sels.end(); it++) {
+    for (auto it = sels.begin(); it != sels.end(); it++) {
       if (it->idx == update_idx_expr) {
         ctx->assert_ast(it->val->eq(ctx, updated_value));
       }
@@ -569,8 +566,7 @@ array_convt::execute_array_trans(
       data[w.u.w.src_array_update_num];
 
     unsigned int i = 0;
-    for (std::map<expr2tc, unsigned>::const_iterator it2 = idx_map.begin();
-         it2 != idx_map.end(); it2++, i++) {
+    for (auto it2 = idx_map.begin(); it2 != idx_map.end(); it2++, i++) {
       if (it2->second == updated_idx)
         continue;
 
@@ -610,9 +606,8 @@ array_convt::collate_array_values(std::vector<smt_astt > &vals,
     *it = NULL;
 
   // Now assign in all free variables created as a result of selects.
-  for (typename std::list<struct array_select>::const_iterator it = idxs.begin();
-       it != idxs.end(); it++) {
-    std::map<expr2tc, unsigned>::const_iterator it2 = idx_map.find(it->idx);
+  for (auto it = idxs.begin(); it != idxs.end(); it++) {
+    auto it2 = idx_map.find(it->idx);
     assert(it2 != idx_map.end());
     vals[it2->second] = it->val;
   }
@@ -620,16 +615,14 @@ array_convt::collate_array_values(std::vector<smt_astt > &vals,
   // Initialize everything else to either a free variable or the initial value.
   if (init_val == NULL) {
     // Free variables, except where free variables tied to selects have occurred
-    for (std::vector<smt_astt >::iterator it = vals.begin();
-         it != vals.end(); it++) {
+    for (auto it = vals.begin(); it != vals.end(); it++) {
       if (*it == NULL)
         *it = ctx->mk_fresh(subtype, "collate_array_vals::");
     }
   } else {
     // We need to assign the initial value in, except where there's already
     // a select/index, in which case we assert that the values are equal.
-    for (std::vector<smt_astt >::iterator it = vals.begin();
-         it != vals.end(); it++) {
+    for (auto it = vals.begin(); it != vals.end(); it++) {
       if (*it == NULL) {
         *it = init_val;
       } else {
@@ -651,11 +644,9 @@ array_convt::add_initial_ackerman_constraints(
   // elements are equivalent. The cost is quadratic, alas.
 
   smt_sortt boolsort = ctx->boolean_sort;
-  for (std::map<expr2tc, unsigned>::const_iterator it = idx_map.begin();
-       it != idx_map.end(); it++) {
+  for (auto it = idx_map.begin(); it != idx_map.end(); it++) {
     smt_astt outer_idx = ctx->convert_ast(it->first);
-    for (std::map<expr2tc, unsigned>::const_iterator it2 = idx_map.begin();
-         it2 != idx_map.end(); it2++) {
+    for (auto it2 = idx_map.begin(); it2 != idx_map.end(); it2++) {
       smt_astt inner_idx = ctx->convert_ast(it2->first);
 
       // If they're the same idx, they're the same value.
