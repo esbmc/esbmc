@@ -1033,7 +1033,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
     std::string name = sym.get_symbol_name();
     smt_sortt sort = convert_sort(sym.type);
     if (is_array_type(expr)) {
-      smt_sortt subtype = convert_sort(get_array_subtype(sym.type));
+      smt_sortt subtype = convert_sort(get_flattened_array_subtype(sym.type));
       return array_api->mk_array_symbol(name, sort, subtype);
     } else {
       return mk_smt_symbol(name, sort);
@@ -1565,6 +1565,21 @@ smt_convt::flatten_array_type(const type2tc &type)
   constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
 
   return type2tc(new array_type2t(type_rec, arr_size_expr, false));
+}
+
+type2tc
+smt_convt::get_flattened_array_subtype(const type2tc &type)
+{
+  // Get the subtype of an array, ensuring that any intermediate arrays have
+  // been flattened.
+
+  type2tc type_rec = type;
+  while (is_array_type(type_rec)) {
+    type_rec = to_array_type(type_rec).subtype;
+  }
+
+  // type_rec is now the base type.
+  return type_rec;
 }
 
 std::string
