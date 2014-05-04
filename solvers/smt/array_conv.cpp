@@ -15,10 +15,15 @@ array_convt::~array_convt()
 }
 
 void
-array_convt::convert_array_assign(const array_ast *src,
-                                            smt_astt sym)
+array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
 {
 
+  // Implement array assignments by simply making the destination AST track the
+  // same array. No new variables need be introduced, saving lots of searching
+  // hopefully. This works because we're working with an SSA program where the
+  // source array will never be modified.
+
+  // Get a mutable reference to the destination
   array_ast *destination = const_cast<array_ast*>(array_downcast(sym));
   const array_ast *source = src;
 
@@ -33,20 +38,27 @@ smt_ast *
 array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
                              smt_sortt subtype)
 {
-  // No solver representation for this.
+  // Create either a new bounded or unbounded array.
   unsigned long domain_width = ms->domain_width;
   unsigned long array_size = 1UL << domain_width;
-  smt_sortt range_sort =
-    ctx->mk_sort(SMT_SORT_BV, ms->data_width, false);
+  // XXX - wrong, use subtype
+  smt_sortt range_sort = ctx->mk_sort(SMT_SORT_BV, ms->data_width, false);
 
+  // Create new AST storage
   array_ast *mast = new_ast(ms);
   mast->symname = name;
 
   if (is_unbounded_array(mast->sort)) {
-    // Don't attempt to initialize. Store the fact that we've allocated a
-    // fresh new array.
+    // Don't attempt to initialize: this array is of unbounded size. Instead,
+    // record a fresh new array.
+
+    // Array ID: identifies an array at a level that corresponds to 'level1'
+    // renaming, or having storage in C. Accumulates a history of selects and
+    // updates.
     mast->base_array_id = array_indexes.size();
     mast->array_update_num = 0;
+
+    // Pouplate tracking data with empt containers
     std::set<expr2tc> tmp_set;
     array_indexes.push_back(tmp_set);
 
@@ -66,6 +78,7 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
     w.idx = expr2tc();
     array_updates[mast->base_array_id].push_back(w);
 
+    // Fix bools-in-arrays situation
     if (subtype->id != SMT_SORT_BOOL)
       array_subtypes.push_back(subtype);
     else
@@ -74,9 +87,10 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
     return mast;
   }
 
+  // For bounded arrays, populate it's storage vector with a bunch of fresh bvs
+  // of the correct sort.
   mast->array_fields.reserve(array_size);
 
-  // Populate that array with a bunch of fresh bvs of the correct sort.
   unsigned long i;
   for (i = 0; i < array_size; i++) {
     smt_astt a = ctx->mk_fresh(range_sort, "array_fresh_array::");
@@ -91,12 +105,14 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
                          smt_sortt ressort)
 {
 
+  // Create a select: either hand off to the unbounded implementation, or
+  // continue for bounded-size arrays
   if (is_unbounded_array(ma->sort))
     return mk_unbounded_select(ma, idx, ressort);
 
   assert(ma->array_fields.size() != 0);
 
-  // If this is a constant index, simple. If not, not.
+  // If this is a constant index, then simply access the designated element.
   if (is_constant_int2t(idx)) {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned long intval = intref.constant_value.to_ulong();
@@ -108,8 +124,7 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
     return ma->array_fields[intval];
   }
 
-  // What we have here is a nondeterministic index. Alas, compare with
-  // everything.
+  // For undetermined indexes, create a large case switch across all values.
   smt_astt fresh = ctx->mk_fresh(ressort, "array_mk_select::");
   smt_astt real_idx = ctx->convert_ast(idx);
   unsigned long dom_width = ma->sort->domain_width;
@@ -132,6 +147,8 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
                                 smt_astt value, smt_sortt ressort)
 {
 
+  // Create a store: initially, consider whether to hand off to the unbounded
+  // implementation.
   if (is_unbounded_array(ma->sort))
     return mk_unbounded_store(ma, idx, value, ressort);
 
@@ -139,7 +156,7 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
 
   array_ast *mast = new_ast(ressort, ma->array_fields);
 
-  // If this is a constant index, simple. If not, not.
+  // If this is a constant index, simply update that particular field.
   if (is_constant_int2t(idx)) {
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned long intval = intref.constant_value.to_ulong();
@@ -151,7 +168,8 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
     return mast;
   }
 
-  // Oh dear. We need to update /all the fields/ :(
+  // For undetermined indexes, conditionally update each element of the bounded
+  // array.
   smt_astt real_idx = ctx->convert_ast(idx);
   smt_astt real_value = value;
   smt_astt iteargs[3], idxargs[2];
@@ -181,6 +199,10 @@ array_convt::mk_unbounded_select(const array_ast *ma,
                                    const expr2tc &real_idx,
                                    smt_sortt ressort)
 {
+  // Store everything about this select, and return a free variable, that then
+  // gets constrained at the end of conversion to tie up with the correct
+  // value.
+
   // Record that we've accessed this index.
   array_indexes[ma->base_array_id].insert(real_idx);
 
@@ -206,6 +228,9 @@ array_convt::mk_unbounded_store(const array_ast *ma,
                                   const expr2tc &idx, smt_astt value,
                                   smt_sortt ressort)
 {
+  // Store everything about this store, and suitably adjust all fields in the
+  // array at the end of conversion so that they're all consistent.
+
   // Record that we've accessed this index.
   array_indexes[ma->base_array_id].insert(idx);
 
@@ -241,6 +266,7 @@ array_convt::array_ite(smt_astt cond,
                          smt_sortt thesort)
 {
 
+  // As ever, switch between ite's of unbounded arrays or bounded ones.
   if (is_unbounded_array(true_arr->sort))
     return unbounded_array_ite(cond, true_arr, false_arr, thesort);
 
@@ -265,8 +291,15 @@ array_convt::unbounded_array_ite(smt_astt cond,
                                    const array_ast *false_arr,
                                    smt_sortt thesort)
 {
-  // Precondition for a lot of goo: that the two arrays are the same, at
-  // different points in time.
+  // Record everything about this ite, and have its operation implemented
+  // at a later date, after conversion. One precondition for everything working,
+  // is that we can only perform ite's between arrays with the same array_id.
+  // The meaning of this is that one cannot ite between arrays with different
+  // storage at the C level (such as two different global arrays), only
+  // between two arrays with the same storage.
+  // This is fine, because you can't represent this operation in any native
+  // language anyway, it only occurs during nondeterministic phi's, and then
+  // it can only ever apply to arrays with the same storage.
   assert(true_arr->base_array_id == false_arr->base_array_id &&
          "ITE between two arrays with different bases are unsupported");
 
@@ -293,9 +326,11 @@ smt_astt
 array_convt::convert_array_of(const expr2tc &init_val,
                                 unsigned long domain_width)
 {
+  // Create a new array, initialized with init_val
   smt_sortt dom_sort = ctx->mk_sort(SMT_SORT_BV, domain_width, false);
   smt_sortt idx_sort = ctx->convert_sort(init_val->type);
 
+  // Fix bools-in-arrays situation
   if (is_bool_type(init_val))
     idx_sort = ctx->mk_sort(SMT_SORT_BV, 1, false);
 
@@ -308,11 +343,16 @@ array_convt::convert_array_of(const expr2tc &init_val,
     init = ctx->make_bool_bit(init);
 
   if (is_unbounded_array(arr_sort)) {
+    // If this is an unbounded array, simply store the value of the initializer
+    // and constraint values at a later date. Heavy lifting is performed by
+    // mk_array_symbol.
     std::string name = ctx->mk_fresh_name("array_of_unbounded::");
     mast = static_cast<array_ast*>(mk_array_symbol(name, arr_sort, idx_sort));
     array_of_vals.insert(std::pair<unsigned, smt_astt >
                                   (mast->base_array_id, init));
   } else {
+    // For bounded arrays, simply store the initializer in the explicit vector
+    // of elements, x times.
     unsigned long array_size = 1UL << domain_width;
     for (unsigned long i = 0; i < array_size; i++)
       mast->array_fields.push_back(init);
@@ -324,7 +364,8 @@ array_convt::convert_array_of(const expr2tc &init_val,
 smt_astt
 array_convt::encode_array_equality(unsigned int array_id, unsigned int other_id)
 {
-  // Record an equality for this point in time.
+  // Record an equality between two arrays at this point in time. To be
+  // implemented at constraint time.
 
   struct array_equality e;
   e.other_array_idx = other_id;
@@ -340,6 +381,8 @@ expr2tc
 array_convt::get_array_elem(smt_astt a, uint64_t index,
                             const type2tc &subtype __attribute__((unused)))
 {
+  // During model building: get the value of an array at a particular, explicit,
+  // index.
   const array_ast *mast = array_downcast(a);
 
   if (mast->base_array_id >= array_valuation.size()) {
@@ -384,6 +427,7 @@ void
 array_convt::add_array_constraints_for_solving(void)
 {
 
+  // Add constraints for each array with unique storage.
   for (unsigned int i = 0; i < array_indexes.size(); i++) {
     add_array_constraints(i);
   }
@@ -449,6 +493,8 @@ array_convt::execute_array_trans(
                                    const std::map<expr2tc, unsigned> &idx_map,
                                    smt_sortt subtype)
 {
+  // Encode the constraints for a particular array update.
+
   // Steps: First, fill the destination vector with either free variables, or
   // the free variables that resulted for selects corresponding to that item.
   // Then apply update or ITE constraints.
@@ -555,6 +601,10 @@ array_convt::collate_array_values(std::vector<smt_astt > &vals,
                                     smt_sortt subtype,
                                     smt_astt init_val)
 {
+  // IIRC, this translates the history of an array + any selects applied to it,
+  // into a vector mapping a particular index to the variable representing the
+  // element at that index. XXX more docs.
+
   // So, the value vector should be allocated but not initialized,
   assert(vals.size() == idx_map.size());
 
@@ -604,7 +654,10 @@ array_convt::add_initial_ackerman_constraints(
                                   const std::vector<smt_astt > &vals,
                                   const std::map<expr2tc,unsigned> &idx_map)
 {
-  // Lolquadratic,
+  // Add ackerman constraints: these state that for each element of an array,
+  // where the indexes are equivalent (in the solver), then the value of the
+  // elements are equivalent. The cost is quadratic, alas.
+
   smt_sortt boolsort = ctx->boolean_sort;
   for (std::map<expr2tc, unsigned>::const_iterator it = idx_map.begin();
        it != idx_map.end(); it++) {
