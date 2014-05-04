@@ -34,6 +34,34 @@ array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
   return;
 }
 
+unsigned int
+array_convt::new_array_id(void)
+{
+  unsigned int new_base_array_id = array_indexes.size();
+
+  // Pouplate tracking data with empt containers
+  std::set<expr2tc> tmp_set;
+  array_indexes.push_back(tmp_set);
+
+  std::vector<std::list<struct array_select> > tmp2;
+  array_values.push_back(tmp2);
+
+  std::list<struct array_select> tmp25;
+  array_values[new_base_array_id].push_back(tmp25);
+
+  std::vector<struct array_with> tmp3;
+  array_updates.push_back(tmp3);
+
+  // Aimless piece of data, just to keep indexes in iarray_updates and
+  // array_values in sync.
+  struct array_with w;
+  w.is_ite = false;
+  w.idx = expr2tc();
+  array_updates[new_base_array_id].push_back(w);
+
+  return new_base_array_id;
+}
+
 smt_ast *
 array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
                              smt_sortt subtype)
@@ -53,28 +81,8 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
     // Array ID: identifies an array at a level that corresponds to 'level1'
     // renaming, or having storage in C. Accumulates a history of selects and
     // updates.
-    mast->base_array_id = array_indexes.size();
+    mast->base_array_id = new_array_id();
     mast->array_update_num = 0;
-
-    // Pouplate tracking data with empt containers
-    std::set<expr2tc> tmp_set;
-    array_indexes.push_back(tmp_set);
-
-    std::vector<std::list<struct array_select> > tmp2;
-    array_values.push_back(tmp2);
-
-    std::list<struct array_select> tmp25;
-    array_values[mast->base_array_id].push_back(tmp25);
-
-    std::vector<struct array_with> tmp3;
-    array_updates.push_back(tmp3);
-
-    // Aimless piece of data, just to keep indexes in iarray_updates and
-    // array_values in sync.
-    struct array_with w;
-    w.is_ite = false;
-    w.idx = expr2tc();
-    array_updates[mast->base_array_id].push_back(w);
 
     // Fix bools-in-arrays situation
     if (subtype->id != SMT_SORT_BOOL)
