@@ -627,16 +627,12 @@ array_convt::collate_array_values(std::vector<smt_astt > &vals,
   } else {
     // We need to assign the initial value in, except where there's already
     // a select/index, in which case we assert that the values are equal.
-    smt_sortt boolsort = ctx->boolean_sort;
     for (std::vector<smt_astt >::iterator it = vals.begin();
          it != vals.end(); it++) {
       if (*it == NULL) {
         *it = init_val;
       } else {
-        smt_astt args[2];
-        args[0] = *it;
-        args[1] = init_val;
-        ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
+        ctx->assert_ast((*it)->eq(ctx, init_val));
       }
     }
   }
