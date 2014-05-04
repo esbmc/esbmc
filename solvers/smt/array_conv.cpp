@@ -5,7 +5,7 @@
 #include "array_conv.h"
 #include <ansi-c/c_types.h>
 
-array_convt::array_convt(smt_convt *_ctx) : array_iface(false, true),
+array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true),
   array_indexes(), array_values(), array_updates(), ctx(_ctx)
 {
 }
@@ -87,11 +87,7 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
     mast->base_array_id = new_array_id();
     mast->array_update_num = 0;
 
-    // Fix bools-in-arrays situation
-    if (subtype->id != SMT_SORT_BOOL)
-      array_subtypes.push_back(subtype);
-    else
-      array_subtypes.push_back(ctx->mk_sort(SMT_SORT_BV, 1, false));
+    array_subtypes.push_back(subtype);
 
     return mast;
   }
@@ -329,16 +325,9 @@ array_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   smt_sortt dom_sort = ctx->mk_sort(SMT_SORT_BV, domain_width, false);
   smt_sortt idx_sort = init_val->sort;
 
-  // Fix bools-in-arrays situation
-  if (idx_sort->id == SMT_SORT_BOOL)
-    idx_sort = ctx->mk_sort(SMT_SORT_BV, 1, false);
-
   smt_sortt arr_sort = ctx->mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
 
   array_ast *mast = new_ast(arr_sort);
-
-  if (idx_sort->id == SMT_SORT_BOOL)
-    init_val = ctx->make_bool_bit(init_val);
 
   if (is_unbounded_array(arr_sort)) {
     // If this is an unbounded array, simply store the value of the initializer
