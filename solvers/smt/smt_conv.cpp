@@ -470,7 +470,8 @@ expr_handle_table:
       if (is_tuple_ast_type(arr.subtype))
         a = tuple_api->tuple_fresh(sort);
       else
-        a = mk_fresh(sort, "inf_array");
+        a = mk_fresh(sort, "inf_array",
+                     convert_sort(get_flattened_array_subtype(expr->type)));
       break;
     }
 
