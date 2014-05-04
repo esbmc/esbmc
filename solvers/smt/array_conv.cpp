@@ -513,8 +513,6 @@ array_convt::execute_array_trans(
   std::vector<smt_astt > &dest_data = data[idx+1];
   collate_array_values(dest_data, idx_map, array_values[arr][idx+1], subtype);
 
-  smt_sortt boolsort = ctx->boolean_sort;
-
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
   const array_with &w = array_updates[arr][idx+1];
@@ -569,7 +567,6 @@ array_convt::execute_array_trans(
     const std::vector<smt_astt > &source_data =
       data[w.u.w.src_array_update_num];
 
-    smt_astt args[3];
     unsigned int i = 0;
     for (std::map<expr2tc, unsigned>::const_iterator it2 = idx_map.begin();
          it2 != idx_map.end(); it2++, i++) {
@@ -581,14 +578,10 @@ array_convt::execute_array_trans(
       // This departs from the CBMC implementation, in that they explicitly
       // use implies and ackerman constraints.
       // FIXME: benchmark the two approaches. For now, this is shorter.
-      args[0] = update_idx_ast;
-      args[1] = ctx->convert_ast(it2->first);
-      args[0] = ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      args[1] = updated_value;
-      args[2] = source_data[i];
-      args[0] = ctx->mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
-      args[1] = dest_data[i];
-      ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
+      smt_astt cond = update_idx_ast->eq(ctx, ctx->convert_ast(it2->first));
+      smt_astt dest_ite = updated_value->ite(ctx, cond, source_data[i]);
+      ctx->assert_ast(dest_data[i]->eq(ctx, dest_ite));
+
       // The latter part of this could be replaced with more complex logic,
       // that only asserts an equality between selected values, and just stores
       // the result of the ITE for all other values. FIXME: try this.
