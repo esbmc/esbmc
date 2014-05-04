@@ -228,7 +228,6 @@ public:
   smt_sort(smt_sort_kind i, unsigned long rwidth, unsigned long domwidth)
     : id(i), data_width(rwidth), domain_width(domwidth) {
       assert(id == SMT_SORT_ARRAY);
-      assert(data_width != 0);
       assert(domain_width != 0);
     }
 
