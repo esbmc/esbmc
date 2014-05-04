@@ -66,6 +66,9 @@ smt_ast *
 array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
                              smt_sortt subtype)
 {
+  assert(subtype->id != SMT_SORT_ARRAY && "Can't create array of arrays with "
+         "array flattener. Should be flattened elsewhere");
+
   // Create either a new bounded or unbounded array.
   unsigned long domain_width = ms->domain_width;
   unsigned long array_size = 1UL << domain_width;
