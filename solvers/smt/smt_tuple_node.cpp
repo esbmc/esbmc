@@ -478,7 +478,7 @@ smt_astt
 smt_tuple_node_flattener::tuple_array_create(const type2tc &array_type,
                               smt_astt *inputargs,
                               bool const_array,
-                              smt_sortt domain __attribute__((unused)))
+                              smt_sortt domain)
 {
   // Create a tuple array from a constant representation. This means that
   // either we have an array_of or a constant_array. Handle this by creating
@@ -487,6 +487,12 @@ smt_tuple_node_flattener::tuple_array_create(const type2tc &array_type,
   // XXX - probably more efficient to update each member array, but not now.
   smt_sortt sort = ctx->convert_sort(array_type);
   smt_sortt subtype = ctx->convert_sort(get_array_subtype(array_type));
+
+  // Optimise the creation of a const array.
+  if (const_array)
+    return array_conv.convert_array_of(inputargs[0], domain->data_width);
+
+  // Otherwise, we'll need to create a new array, and update data into it.
   std::string name = ctx->mk_fresh_name("tuple_array_create::") + ".";
   smt_astt newsym = array_conv.mk_array_symbol(name, sort, subtype);
 
@@ -504,23 +510,12 @@ smt_tuple_node_flattener::tuple_array_create(const type2tc &array_type,
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
   uint64_t sz = thesize.constant_value.to_ulong();
 
-  if (const_array) {
-    // Repeatedly store the same value into this at all the demanded
-    // indexes.
-    smt_astt init = inputargs[0];
-    for (unsigned int i = 0; i < sz; i++) {
-      newsym = newsym->update(ctx, init, i);
-    }
-
-    return newsym;
-  } else {
-    // Repeatedly store operands into this.
-    for (unsigned int i = 0; i < sz; i++) {
-      newsym = newsym->update(ctx, inputargs[i], i);
-    }
-
-    return newsym;
+  // Repeatedly store operands into this.
+  for (unsigned int i = 0; i < sz; i++) {
+    newsym = newsym->update(ctx, inputargs[i], i);
   }
+
+  return newsym;
 }
 
 expr2tc
