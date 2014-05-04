@@ -532,14 +532,9 @@ array_convt::execute_array_trans(
     smt_astt cond = w.u.i.cond;
 
     // Each index value becomes an ITE between each source value.
-    smt_astt args[3], eq[2];
-    args[0] = cond;
     for (unsigned int i = 0; i < idx_map.size(); i++) {
-      args[1] = true_vals[i];
-      args[2] = false_vals[i];
-      eq[0] = ctx->mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
-      eq[1] = dest_data[i];
-      ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_EQ, eq, 2));
+      smt_astt updated_elem = true_vals[i]->ite(ctx, cond, false_vals[i]);
+      ctx->assert_ast(dest_data[i]->eq(ctx, updated_elem));
     }
   } else {
     // Place a constraint on the updated variable; add equality constraints
