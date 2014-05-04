@@ -656,5 +656,6 @@ smt_tuple_node_flattener::mk_union_sort(const type2tc &type)
 void
 smt_tuple_node_flattener::add_tuple_constraints_for_solving()
 {
+  array_conv.add_array_constraints_for_solving();
   return;
 }
