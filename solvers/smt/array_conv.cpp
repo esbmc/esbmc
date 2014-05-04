@@ -462,7 +462,7 @@ array_convt::add_array_constraints(unsigned int arr)
     array_valuation.back();
 
   // Subtype is thus
-  smt_sortt subtype = ctx->mk_sort(SMT_SORT_BV, array_subtypes[arr]->data_width, false);
+  smt_sortt subtype = array_subtypes[arr];
 
   // Pre-allocate all the storage.
   real_array_values.resize(array_values[arr].size());
