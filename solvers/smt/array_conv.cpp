@@ -323,24 +323,22 @@ array_convt::unbounded_array_ite(smt_astt cond,
 }
 
 smt_astt 
-array_convt::convert_array_of(const expr2tc &init_val,
-                                unsigned long domain_width)
+array_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   // Create a new array, initialized with init_val
   smt_sortt dom_sort = ctx->mk_sort(SMT_SORT_BV, domain_width, false);
-  smt_sortt idx_sort = ctx->convert_sort(init_val->type);
+  smt_sortt idx_sort = init_val->sort;
 
   // Fix bools-in-arrays situation
-  if (is_bool_type(init_val))
+  if (idx_sort->id == SMT_SORT_BOOL)
     idx_sort = ctx->mk_sort(SMT_SORT_BV, 1, false);
 
   smt_sortt arr_sort = ctx->mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
 
   array_ast *mast = new_ast(arr_sort);
 
-  smt_astt init = ctx->convert_ast(init_val);
-  if (is_bool_type(init_val))
-    init = ctx->make_bool_bit(init);
+  if (idx_sort->id == SMT_SORT_BOOL)
+    init_val = ctx->make_bool_bit(init_val);
 
   if (is_unbounded_array(arr_sort)) {
     // If this is an unbounded array, simply store the value of the initializer
@@ -349,13 +347,13 @@ array_convt::convert_array_of(const expr2tc &init_val,
     std::string name = ctx->mk_fresh_name("array_of_unbounded::");
     mast = static_cast<array_ast*>(mk_array_symbol(name, arr_sort, idx_sort));
     array_of_vals.insert(std::pair<unsigned, smt_astt >
-                                  (mast->base_array_id, init));
+                                  (mast->base_array_id, init_val));
   } else {
     // For bounded arrays, simply store the initializer in the explicit vector
     // of elements, x times.
     unsigned long array_size = 1UL << domain_width;
     for (unsigned long i = 0; i < array_size; i++)
-      mast->array_fields.push_back(init);
+      mast->array_fields.push_back(init_val);
   }
 
   return mast;

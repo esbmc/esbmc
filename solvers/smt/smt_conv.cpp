@@ -1951,25 +1951,30 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
   else if (is_pointer_type(base_init->type))
     return pointer_array_of(base_init, array_size);
   else
-    return array_api->convert_array_of(base_init, array_size);
+    return array_api->convert_array_of(convert_ast(base_init), array_size);
 }
 
 smt_astt 
-array_iface::default_convert_array_of(const expr2tc &init_val,
+array_iface::default_convert_array_of(smt_astt init_val,
                                           unsigned long array_size,
                                           smt_convt *ctx)
 {
   // We now an initializer, and a size of array to build. So:
+  // Repeatedly store things into this.
+  // XXX int mode
+  smt_sortt domwidth = (ctx->int_encoding)
+    ? ctx->mk_sort(SMT_SORT_INT)
+    : ctx->mk_sort(SMT_SORT_BV, array_size, false);
+  smt_sortt arrsort = ctx->mk_sort(SMT_SORT_ARRAY, domwidth, init_val->sort);
+  smt_astt newsym_ast =
+    ctx->mk_fresh(arrsort, "default_array_of::", init_val->sort);
 
-  std::vector<expr2tc> array_of_inits;
-  for (unsigned long i = 0; i < (1ULL << array_size); i++)
-    array_of_inits.push_back(init_val);
+  unsigned long sz = 1ULL << array_size;
+  for (unsigned long i = 0; i < sz; i++) {
+    newsym_ast = newsym_ast->update(ctx, init_val, i);
+  }
 
-  constant_int2tc real_arr_size(index_type2(), BigInt(1ULL << array_size));
-  type2tc newtype(new array_type2t(init_val->type, real_arr_size, false));
-
-  expr2tc res(new constant_array2t(newtype, array_of_inits));
-  return ctx->convert_ast(res);
+  return newsym_ast;
 }
 
 smt_astt 

@@ -79,7 +79,7 @@ public:
 
   virtual void add_array_constraints_for_solving();
 
-  const smt_ast *convert_array_of(const expr2tc &init_val,
+  const smt_ast *convert_array_of(smt_astt init_val,
                                   unsigned long domain_width);
 
   virtual expr2tc get_bool(const smt_ast *a);

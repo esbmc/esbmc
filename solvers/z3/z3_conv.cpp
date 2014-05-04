@@ -885,15 +885,15 @@ z3_convt::tuple_fresh(const smt_sort *s, std::string name)
 }
 
 const smt_ast *
-z3_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
+z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   z3::sort dom_sort =
     (int_encoding)? ctx.int_sort() : ctx.bv_sort(domain_width);
-  const z3_smt_sort *range = z3_sort_downcast(convert_sort(init_val->type));
+  const z3_smt_sort *range = z3_sort_downcast(init_val->sort);
   z3::sort range_sort = range->s;
   z3::sort array_sort = ctx.array_sort(dom_sort, range_sort);
 
-  z3::expr val = z3_smt_downcast(convert_ast(init_val))->e;
+  z3::expr val = z3_smt_downcast(init_val)->e;
   z3::expr output = z3::to_expr(ctx, Z3_mk_const_array(ctx, dom_sort, val));
 
   long unsigned int range_width = range->data_width;
@@ -978,7 +978,7 @@ z3_convt::mk_tuple_array_symbol(const expr2tc &expr)
 smt_astt
 z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
 {
-  return convert_array_of(init, domain_width);
+  return convert_array_of(convert_ast(init), domain_width);
 }
 
 expr2tc

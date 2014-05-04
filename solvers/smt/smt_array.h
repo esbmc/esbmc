@@ -36,10 +36,10 @@ public:
    *  @param init_val The value to initialize each element with.
    *  @param domain_width The size of the array to create, in domain bits.
    *  @return An AST representing the created constant array. */
-  virtual const smt_ast *convert_array_of(const expr2tc &init_val,
+  virtual const smt_ast *convert_array_of(smt_astt init_val,
                                            unsigned long domain_width) = 0;
 
-  static const smt_ast *default_convert_array_of(const expr2tc &init_val,
+  static const smt_ast *default_convert_array_of(smt_astt init_val,
                                           unsigned long domain_width,
                                           smt_convt *ctx);
 

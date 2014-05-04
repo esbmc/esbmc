@@ -107,7 +107,7 @@ private:
   virtual smt_astt tuple_array_of(const expr2tc &init,
                                   unsigned long domain_width);
 
-  virtual const smt_ast *convert_array_of(const expr2tc &init_val,
+  virtual const smt_ast *convert_array_of(smt_astt init_val,
                                           unsigned long domain_width);
 
   virtual const smt_ast *overflow_arith(const expr2tc &expr);

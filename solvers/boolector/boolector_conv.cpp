@@ -504,8 +504,7 @@ boolector_convt::overflow_arith(const expr2tc &expr)
 }
 
 const smt_ast *
-boolector_convt::convert_array_of(const expr2tc &init_val,
-    unsigned long domain_width)
+boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
 }

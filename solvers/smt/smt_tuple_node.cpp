@@ -600,7 +600,7 @@ smt_astt
 smt_tuple_node_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 {
 
-  return array_conv.convert_array_of(init_val, array_size);
+  return array_conv.convert_array_of(ctx->convert_ast(init_val), array_size);
 
   // An array of tuples without tuple support: decompose into array_of's each
   // subtype.

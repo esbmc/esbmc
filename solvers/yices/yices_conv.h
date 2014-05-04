@@ -89,8 +89,7 @@ public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
 
-  smt_astt convert_array_of(const expr2tc &init_val,
-                                  unsigned long domain_width);
+  smt_astt convert_array_of(smt_astt init_val, unsigned long domain_width);
 
   virtual void add_array_constraints_for_solving();
 

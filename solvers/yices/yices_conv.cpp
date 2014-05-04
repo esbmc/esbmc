@@ -391,8 +391,7 @@ yices_convt::mk_extract(smt_astt a, unsigned int high,
 }
 
 smt_astt
-yices_convt::convert_array_of(const expr2tc &init_val,
-                                unsigned long domain_width)
+yices_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
 }

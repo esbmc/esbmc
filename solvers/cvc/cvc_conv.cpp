@@ -363,7 +363,7 @@ cvc_convt::mk_extract(const smt_ast *a, unsigned int high,
 }
 
 const smt_ast *
-cvc_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
+cvc_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
 }
