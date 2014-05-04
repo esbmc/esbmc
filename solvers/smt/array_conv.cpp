@@ -658,18 +658,12 @@ array_convt::add_initial_ackerman_constraints(
       smt_astt inner_idx = ctx->convert_ast(it2->first);
 
       // If they're the same idx, they're the same value.
-      smt_astt args[2];
-      args[0] = outer_idx;
-      args[1] = inner_idx;
-      smt_astt idxeq = ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      smt_astt idxeq = outer_idx->eq(ctx, inner_idx);
 
-      args[0] = vals[it->second];
-      args[1] = vals[it2->second];
-      smt_astt valeq = ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      smt_astt valeq = vals[it->second]->eq(ctx, vals[it2->second]);
 
-      args[0] = idxeq;
-      args[1] = valeq;
-      ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2));
+      ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_IMPLIES,
+                                       idxeq, valeq));
     }
   }
 }
