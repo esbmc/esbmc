@@ -824,6 +824,13 @@ public:
   type2tc get_flattened_array_subtype(const type2tc &type);
   /** Fetch the number of elements in an array (the domain). */
   expr2tc array_domain_to_width(const type2tc &type);
+  /** Create an array domain sort */
+  smt_sortt mk_int_bv_sort(unsigned int width) {
+    if (int_encoding)
+      return mk_sort(SMT_SORT_INT);
+    else
+      return mk_sort(SMT_SORT_BV, width, false);
+  }
 
   /** When dealing with multi-dimensional arrays, and selecting one element
    *  out of several dimensions, reduce it to an expression on a single

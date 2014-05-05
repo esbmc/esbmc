@@ -832,7 +832,6 @@ smt_convt::assert_expr(const expr2tc &e)
 smt_sortt
 smt_convt::convert_sort(const type2tc &type)
 {
-  bool is_signed = true;
 
   smt_sort_cachet::const_iterator it = sort_cache.find(type);
   if (it != sort_cache.end()) {
@@ -855,15 +854,11 @@ smt_convt::convert_sort(const type2tc &type)
     result = tuple_api->mk_struct_sort(pointer_struct);
     break;
   case type2t::unsignedbv_id:
-    is_signed = false;
     /* FALLTHROUGH */
   case type2t::signedbv_id:
   {
     unsigned int width = type->get_width();
-    if (int_encoding)
-      result = mk_sort(SMT_SORT_INT, is_signed);
-    else
-      result = mk_sort(SMT_SORT_BV, width, is_signed);
+    result = mk_int_bv_sort(width);
   }
   break;
   case type2t::fixedbv_id:
@@ -908,8 +903,7 @@ smt_convt::convert_sort(const type2tc &type)
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sortt r;
     if (is_bool_type(range) && !array_api->supports_bools_in_arrays) {
-      r = (int_encoding) ? mk_sort(SMT_SORT_INT)
-                         : mk_sort(SMT_SORT_BV, 1, false);
+      r = mk_int_bv_sort(1);
     } else {
       r = convert_sort(range);
     }
@@ -1332,10 +1326,8 @@ smt_convt::make_array_domain_sort(const array_type2t &arr)
   // Start special casing if this is an array of arrays.
   if (!is_array_type(arr.subtype)) {
     // Normal array, work out what the domain sort is.
-    if (int_encoding)
-      return mk_sort(SMT_SORT_INT);
-    else
-      return mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+    unsigned int domain_width = calculate_array_domain_width(arr);
+    return mk_int_bv_sort(domain_width);
   } else {
     // This is an array of arrays -- we're going to convert this into a single
     // array that has an extended domain. Work out that width. Firstly, how
@@ -1963,9 +1955,7 @@ array_iface::default_convert_array_of(smt_astt init_val,
   // We now an initializer, and a size of array to build. So:
   // Repeatedly store things into this.
   // XXX int mode
-  smt_sortt domwidth = (ctx->int_encoding)
-    ? ctx->mk_sort(SMT_SORT_INT)
-    : ctx->mk_sort(SMT_SORT_BV, array_size, false);
+  smt_sortt domwidth = ctx->mk_int_bv_sort(array_size);
   smt_sortt arrsort = ctx->mk_sort(SMT_SORT_ARRAY, domwidth, init_val->sort);
   smt_astt newsym_ast =
     ctx->mk_fresh(arrsort, "default_array_of::", init_val->sort);
@@ -2080,10 +2070,8 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   smt_sortt range_sort = NULL;
   if (sort->data_width == 1 && ctx->array_api->supports_bools_in_arrays)
     range_sort = ctx->boolean_sort;
-  else if (!ctx->int_encoding)
-    range_sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); //XXX sign?
   else
-    range_sort = ctx->mk_sort(SMT_SORT_INT);
+    range_sort = ctx->mk_int_bv_sort(sort->data_width);
 
   return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT,
                           this, ctx->convert_ast(idx));
