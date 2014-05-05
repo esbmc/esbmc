@@ -490,7 +490,8 @@ smt_tuple_node_flattener::tuple_array_create(const type2tc &array_type,
 
   // Optimise the creation of a const array.
   if (const_array)
-    return array_conv.convert_array_of(inputargs[0], domain->data_width);
+    return array_conv.convert_array_of_wsort(inputargs[0],
+                                             domain->data_width, sort);
 
   // Otherwise, we'll need to create a new array, and update data into it.
   std::string name = ctx->mk_fresh_name("tuple_array_create::") + ".";
@@ -595,7 +596,13 @@ smt_astt
 smt_tuple_node_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 {
 
-  return array_conv.convert_array_of(ctx->convert_ast(init_val), array_size);
+  uint64_t elems = 1ULL << array_size;
+  type2tc array_type =
+    type2tc(new array_type2t(init_val->type, gen_ulong(elems), false));
+  smt_sortt array_sort = new tuple_smt_sort(array_type, 1, array_size);
+
+  return array_conv.convert_array_of_wsort(ctx->convert_ast(init_val),
+    array_size, array_sort);
 
   // An array of tuples without tuple support: decompose into array_of's each
   // subtype.
