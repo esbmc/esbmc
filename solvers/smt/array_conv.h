@@ -79,6 +79,8 @@ public:
   void add_array_constraints_for_solving(void);
 
   // Heavy lifters
+  virtual const smt_ast *convert_array_of_wsort(
+      smt_astt init_val, unsigned long domain_width, smt_sortt arr_sort);
   unsigned int new_array_id(void);
   void convert_array_assign(const array_ast *src, smt_astt sym);
   const smt_ast *mk_select(const array_ast *array, const expr2tc &idx,
