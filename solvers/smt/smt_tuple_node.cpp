@@ -435,10 +435,14 @@ smt_tuple_node_flattener::tuple_fresh(smt_sortt s, std::string name)
   if (name == "")
     name = ctx->mk_fresh_name("tuple_fresh::") + ".";
 
-  if (s->id == SMT_SORT_ARRAY)
-    return new array_node_smt_ast(ctx, s, name);
-  else
+  if (s->id == SMT_SORT_ARRAY) {
+    tuple_smt_sortt sort = to_tuple_sort(s);
+    assert(is_array_type(sort->thetype));
+    smt_sortt subtype = ctx->convert_sort(to_array_type(sort->thetype).subtype);
+    return array_conv.mk_array_symbol(name, s, subtype);
+  } else {
     return new tuple_node_smt_ast(ctx, s, name);
+  }
 }
 
 smt_astt
