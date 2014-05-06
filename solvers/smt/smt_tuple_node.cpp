@@ -607,35 +607,6 @@ smt_tuple_node_flattener::tuple_array_of(const expr2tc &init_val, unsigned long 
 
   return array_conv.convert_array_of_wsort(ctx->convert_ast(init_val),
     array_size, array_sort);
-
-  // An array of tuples without tuple support: decompose into array_of's each
-  // subtype.
-  const struct_union_data &subtype = ctx->get_type_def(init_val->type);
-  const constant_datatype_data &data =
-    static_cast<const constant_datatype_data &>(*init_val.get());
-
-  constant_int2tc arrsize(index_type2(), BigInt(array_size));
-  type2tc arrtype(new array_type2t(init_val->type, arrsize, false));
-  std::string name = ctx->mk_fresh_name("tuple_array_of::") + ".";
-  symbol2tc tuple_arr_of_sym(arrtype, irep_idt(name));
-
-  smt_sortt sort = ctx->convert_sort(arrtype);
-  smt_astt newsym = new array_node_smt_ast(ctx, sort, name);
-
-  assert(subtype.members.size() == data.datatype_members.size());
-  for (unsigned long i = 0; i < subtype.members.size(); i++) {
-    const expr2tc &val = data.datatype_members[i];
-    type2tc subarr_type = type2tc(new array_type2t(val->type, arrsize, false));
-    constant_array_of2tc sub_array_of(subarr_type, val);
-
-    smt_astt tuple_arr_of_sym_ast = ctx->convert_ast(tuple_arr_of_sym);
-    smt_astt target_array = tuple_arr_of_sym_ast->project(ctx, i);
-
-    smt_astt sub_array_of_ast = ctx->convert_ast(sub_array_of);
-    ctx->assert_ast(target_array->eq(ctx, sub_array_of_ast));
-  }
-
-  return newsym;
 }
 
 smt_sortt
