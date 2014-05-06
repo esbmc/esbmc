@@ -124,8 +124,6 @@ public:
                             const std::list<struct array_select> &idxs,
                             const smt_sort *subtype,
                             const smt_ast *init_val = NULL);
-  void fixup_idx_read_write(smt_astt updated_value, const expr2tc &idx_expr,
-                            unsigned int arr_num, unsigned int update_num);
   void add_initial_ackerman_constraints(
                                     const std::vector<const smt_ast *> &vals,
                                     const std::map<expr2tc,unsigned> &idx_map);

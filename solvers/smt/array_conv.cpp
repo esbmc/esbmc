@@ -202,6 +202,14 @@ array_convt::mk_unbounded_select(const array_ast *ma,
   // Record that we've accessed this index.
   array_indexes[ma->base_array_id].insert(real_idx);
 
+  // Corner case: if the idx we're selecting is the last one updated, just
+  // use that piece of AST. This simplifies things later.
+  const array_with &w = array_updates[ma->base_array_id][ma->array_update_num];
+  if (ma->array_update_num != 0 && !w.is_ite){
+    if (real_idx == w.idx)
+      return w.u.w.val;
+  }
+
   // Generate a new free variable
   smt_astt a = ctx->mk_fresh(ressort, "mk_unbounded_select");
 
@@ -542,8 +550,9 @@ array_convt::execute_array_trans(
     unsigned int updated_idx = it->second;
     smt_astt updated_value = w.u.w.val;
 
-    // Assign in its value.
-    fixup_idx_read_write(updated_value, update_idx_expr, arr, idx+1);
+    // Assign in its value. Note that no selects occur agains this data index,
+    // they will have been replaced with the update ast when the select was
+    // encoded.
     dest_data[updated_idx] = updated_value;
 
     // Check all the values selected out of this instance; if any have the same
@@ -629,27 +638,6 @@ array_convt::collate_array_values(std::vector<smt_astt > &vals,
   }
 
   // Fin.
-}
-
-void
-array_convt::fixup_idx_read_write(smt_astt updated_value,
-                                  const expr2tc &idx_expr, unsigned int arr_num,
-                                  unsigned int update_num)
-{
-
-  assert(update_num != 0);
-
-  std::list<struct array_select> &selects = array_values[arr_num][update_num];
-  for (const auto &sel : selects) {
-    if (sel.idx == idx_expr) {
-      // In this case, a select _and_ an update have occurred at the same
-      // 'time'. The update is about to overwrite the select, so encode an
-      // assertion constraining it's value to the previous update.
-      ctx->assert_ast(sel.val->eq(ctx, updated_value));
-    }
-  }
-
-  return;
 }
 
 void
