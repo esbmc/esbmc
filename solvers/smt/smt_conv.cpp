@@ -1782,6 +1782,9 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
 void
 smt_convt::pre_solve()
 {
+  // NB: always perform tuple constraint adding first, as it covers tuple
+  // arrays too, and might end up generating more ASTs to be encoded in
+  // the array api class.
   tuple_api->add_tuple_constraints_for_solving();
   array_api->add_array_constraints_for_solving();
   return;
