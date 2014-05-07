@@ -6,7 +6,8 @@
 #include <ansi-c/c_types.h>
 
 array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true),
-  array_indexes(), array_values(), array_updates(), ctx(_ctx)
+  array_indexes(), array_values(), array_updates(), ctx(_ctx),
+  constraint_progress(0)
 {
 }
 
@@ -444,8 +445,11 @@ array_convt::add_array_constraints_for_solving(void)
 
   // Add constraints for each array with unique storage.
   for (unsigned int i = 0; i < array_indexes.size(); i++) {
+    constraint_progress = i;
     add_array_constraints(i);
   }
+
+  constraint_progress = 0;
 
   return;
 }

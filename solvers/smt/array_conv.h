@@ -213,6 +213,10 @@ public:
   std::vector<std::vector<std::vector<const smt_ast *> > > array_valuation;
 
   smt_convt *ctx;
+
+  // Counter that, during the constraining of arrays, counts which we're
+  // currently in the process of constraining.
+  unsigned int constraint_progress;
 };
 
 #endif /* _ESBMC_SOLVERS_SMT_ARRAY_SMT_CONV_H_ */
