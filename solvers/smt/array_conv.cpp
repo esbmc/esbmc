@@ -397,10 +397,7 @@ smt_astt
 array_convt::mk_unbounded_array_equality(const array_ast *a1,
     const array_ast *a2)
 {
-  // Permit unbounded array equalities _only_ during the array constraint
-  // process.
-  assert(constraint_progress != 0 && "Unbounded array equality encoded at an "
-         "unexpected stage; should only be during array constraining");
+#if 0
 
   // This only ever occurs in the context of an ITE having been encoded
   // against something that contained an array, after which the result of
@@ -409,6 +406,7 @@ array_convt::mk_unbounded_array_equality(const array_ast *a1,
   // this:
   assert(constraint_progress < a1->base_array_id);
   assert(constraint_progress < a2->base_array_id);
+#endif
 
   // Right. We need to ensure that both of these arrays have the same set of
   // indexes, as we're about to equality them. Make the union,
