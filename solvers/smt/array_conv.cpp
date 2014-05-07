@@ -393,6 +393,46 @@ array_convt::mk_bounded_array_equality(const array_ast *a1, const array_ast *a2)
   return ctx->make_conjunct(eqs);
 }
 
+smt_astt
+array_convt::mk_unbounded_array_equality(const array_ast *a1,
+    const array_ast *a2)
+{
+  // Permit unbounded array equalities _only_ during the array constraint
+  // process.
+  assert(constraint_progress != 0 && "Unbounded array equality encoded at an "
+         "unexpected stage; should only be during array constraining");
+
+  // This only ever occurs in the context of an ITE having been encoded
+  // against something that contained an array, after which the result of
+  // the ITE is equalitied into another array. When that happens, the arrays
+  // being equalitied here should not have been constraint yet. We rely on
+  // this:
+  assert(constraint_progress < a1->base_array_id);
+  assert(constraint_progress < a2->base_array_id);
+
+  // Right. We need to ensure that both of these arrays have the same set of
+  // indexes, as we're about to equality them. Make the union,
+  std::list<expr2tc> idxes;
+  const std::set<expr2tc> &this_indexes = array_indexes[a1->base_array_id];
+  const std::set<expr2tc> &other_indexes = array_indexes[a2->base_array_id];
+  std::set_union(this_indexes.begin(), this_indexes.end(),
+                  other_indexes.begin(), other_indexes.end(),
+                  idxes.begin());
+
+  // Select each index from each array, and produce an equality. This
+  // implicitly means that both arrays get each others set of indexes as well.
+  smt_convt::ast_vec lits;
+  smt_sortt type = array_subtypes[a1->base_array_id];
+  for (const expr2tc &expr : idxes) {
+    smt_astt a = mk_unbounded_select(a1, expr, type);
+    smt_astt b = mk_unbounded_select(a2, expr, type);
+    lits.push_back(a->eq(ctx, b));
+  }
+
+  // No further steps
+  return ctx->make_conjunct(lits);
+}
+
 expr2tc
 array_convt::get_array_elem(smt_astt a, uint64_t index,
                             const type2tc &subtype __attribute__((unused)))
@@ -673,14 +713,12 @@ array_convt::add_initial_ackerman_constraints(
 smt_astt
 array_ast::eq(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
 {
+  const array_ast *other = array_downcast(sym);
 
-  // Allow array equalities for bounded arrays, but not unbounded ones.
   if (is_unbounded_array(sort)) {
-    std::cerr << "Array equality encoded -- should have become an array assign?"
-              << std::endl;
-    abort();
+    return array_ctx->mk_unbounded_array_equality(this, other);
   } else {
-    return array_ctx->mk_bounded_array_equality(this, array_downcast(sym));
+    return array_ctx->mk_bounded_array_equality(this, other);
   }
 }
 
