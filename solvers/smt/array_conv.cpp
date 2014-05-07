@@ -679,9 +679,9 @@ array_ast::eq(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
     std::cerr << "Array equality encoded -- should have become an array assign?"
               << std::endl;
     abort();
+  } else {
+    return array_ctx->mk_bounded_array_equality(this, array_downcast(sym));
   }
-
-  return array_ctx->mk_bounded_array_equality(this, array_downcast(sym));
 }
 
 void
