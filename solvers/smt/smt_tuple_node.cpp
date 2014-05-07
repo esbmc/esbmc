@@ -77,7 +77,10 @@ tuple_node_smt_ast::make_free(smt_convt *ctx)
     if (is_tuple_ast_type(*it)) {
       elements[i] = ctx->tuple_api->tuple_fresh(newsort, fieldname);
     } else if (is_tuple_array_ast_type(*it)) {
-      elements[i] = new array_node_smt_ast(ctx, newsort, fieldname);
+      std::cerr << "XXX make_free of array nodes?" << std::endl;
+      abort();
+      // XXX installing a fresh new array here repeatedly is going to be
+      // massively inefficient. Also, leads to array equalities?
     } else if (is_array_type(*it)) {
       elements[i] = ctx->mk_fresh(newsort, fieldname,
                                   ctx->convert_sort(get_array_subtype(*it)));
@@ -119,38 +122,6 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 
     result_sym->elements[i] = result_ast;
 
-    i++;
-  }
-
-  return result_sym;
-}
-
-smt_astt 
-array_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
-{
-  // Similar to tuple ite's, but the leafs are arrays.
-  array_node_smt_astt false_val = to_array_node_ast(falseop);
-  tuple_smt_sortt thissort = to_tuple_sort(sort);
-  assert(is_array_type(thissort->thetype));
-  const array_type2t &array_type = to_array_type(thissort->thetype);
-
-  std::string name = ctx->mk_fresh_name("tuple_array_ite::") + ".";
-  array_node_smt_ast *result_sym = new array_node_smt_ast(ctx, thissort, name);
-
-  const struct_union_data &data = ctx->get_type_def(array_type.subtype);
-
-  // Iterate through each field and encode an ite.
-  unsigned int i = 0;
-  forall_types(it, data.members) {
-    type2tc arrtype(new array_type2t(*it, array_type.array_size,
-          array_type.size_is_infinite));
-
-    smt_astt truepart = elements[i];
-    smt_astt falsepart = false_val->elements[i];
-
-    smt_astt result_ast = truepart->ite(ctx, cond, falsepart);
-
-    result_sym->elements[i] = result_ast;
     i++;
   }
 
@@ -202,51 +173,6 @@ tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   return ctx->make_conjunct(eqs);
 }
 
-void
-array_node_smt_ast::assign(smt_convt *ctx __attribute__((unused)),
-                           smt_astt sym) const
-{
-  array_node_smt_astt target = to_array_node_ast(sym);
-
-  assert(target->is_still_free && "Non-free array ast assigned");
-  array_node_smt_ast *destination = const_cast<array_node_smt_ast *>(target);
-
-  // Just copy across element data.
-  destination->elements = elements;
-  destination->is_still_free = false;
-}
-
-smt_astt 
-array_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
-{
-
-  // We have two tuple_node_smt_asts and need to create a boolean ast representing
-  // their equality: iterate over all their members, compute an equality for
-  // each of them, and then combine that into a final ast.
-  array_node_smt_astt tb = to_array_node_ast(other);
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  assert(is_array_type(ts->thetype));
-  const array_type2t &arrtype = to_array_type(ts->thetype);
-  const struct_union_data &data = ctx->get_type_def(arrtype.subtype);
-
-  smt_convt::ast_vec eqs;
-  eqs.reserve(data.members.size());
-
-  // Iterate through each field and encode an equality.
-  unsigned int i = 0;
-  forall_types(it, data.members) {
-    type2tc tmparrtype(new array_type2t(*it, arrtype.array_size,
-          arrtype.size_is_infinite));
-    smt_astt side1 = elements[i];
-    smt_astt side2 = tb->elements[i];
-    eqs.push_back(side1->eq(ctx, side2));
-    i++;
-  }
-
-  // Create an ast representing the fact that all the members are equal.
-  return ctx->make_conjunct(eqs);
-}
-
 smt_astt 
 tuple_node_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
     expr2tc idx_expr) const
@@ -265,74 +191,11 @@ tuple_node_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
 }
 
 smt_astt 
-array_node_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
-    expr2tc idx_expr) const
-{
-
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const array_type2t array_type = to_array_type(ts->thetype);
-  const struct_union_data &data = ctx->get_type_def(array_type.subtype);
-
-  expr2tc index;
-  if (is_nil_expr(idx_expr)) {
-    index = constant_int2tc(ctx->make_array_domain_sort_exp(array_type),
-                            BigInt(idx));
-  } else {
-    index = idx_expr;
-  }
-
-  std::string name = ctx->mk_fresh_name("tuple_array_update::") + ".";
-  array_node_smt_ast *result = new array_node_smt_ast(ctx, sort, name);
-
-  // Iterate over all members. They are _all_ indexed and updated.
-  unsigned int i = 0;
-  forall_types(it, data.members) {
-    type2tc arrtype(new array_type2t(*it, array_type.array_size,
-          array_type.size_is_infinite));
-
-    // Project and update a field in 'this'
-    smt_astt field = elements[i];
-    smt_astt resval = value->project(ctx, i);
-    smt_astt updated = field->update(ctx, resval, 0, index);
-
-    result->elements[i] = updated;
-
-    i++;
-  }
-
-  return result;
-}
-
-smt_astt 
 tuple_node_smt_ast::select(smt_convt *ctx __attribute__((unused)),
     const expr2tc &idx __attribute__((unused))) const
 {
   std::cerr << "Select operation applied to tuple" << std::endl;
   abort();
-}
-
-smt_astt 
-array_node_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
-{
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const array_type2t &array_type = to_array_type(ts->thetype);
-  const struct_union_data &data = ctx->get_type_def(array_type.subtype);
-  smt_sortt result_sort = ctx->convert_sort(array_type.subtype);
-
-  std::string name = ctx->mk_fresh_name("tuple_array_select::") + ".";
-  tuple_node_smt_ast *result = new tuple_node_smt_ast(ctx, result_sort, name);
-  result->elements.resize(data.members.size());
-
-  unsigned int i = 0;
-  forall_types(it, data.members) {
-    smt_astt sub_array = elements[i];
-    smt_astt selected = sub_array->select(ctx, idx);
-    result->elements[i] = selected;
-
-    i++;
-  }
-
-  return result;
 }
 
 smt_astt 
@@ -354,15 +217,6 @@ tuple_node_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   return elements[idx];
 }
 
-smt_astt 
-array_node_smt_ast::project(smt_convt *ctx __attribute__((unused)),
-                       unsigned int idx) const
-{
-
-  assert(idx < elements.size() && "Out-of-bounds tuple-array element accessed");
-  return elements[idx];
-}
-
 smt_astt
 smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
 {
@@ -373,7 +227,7 @@ smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
   name += ".";
 
   tuple_node_smt_ast *result =
-    new tuple_node_smt_ast(ctx, ctx->convert_sort(structdef->type),name);
+    new tuple_node_smt_ast(ctx, ctx->convert_sort(structdef->type), name);
   result->elements.resize(structdef->get_num_sub_exprs());
 
   for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++) {
@@ -418,9 +272,8 @@ smt_tuple_node_flattener::union_create(const expr2tc &unidef)
         result_t_ast->elements[i] = ctx->tuple_api->tuple_fresh(ctx->convert_sort(*it));
       } else if (is_tuple_array_ast_type(*it)) {
         // XXX XXX XXX fresh array method?
-        std::string name = ctx->mk_fresh_name("union_create_elem");
-        smt_sortt sort = ctx->convert_sort(*it);
-        result_t_ast->elements[i] = new array_node_smt_ast(ctx, sort, name);
+        std::cerr << "XXX unimplemented union array funk" << std::endl;
+        abort();
       }
     }
     i++;

@@ -4,12 +4,10 @@
 #include <solvers/smt/array_conv.h>
 
 class tuple_node_smt_ast;
-class array_node_smt_ast;
 class tuple_sym_smt_ast;
 class array_sym_smt_ast;
 class tuple_smt_sort;
 typedef const tuple_node_smt_ast *tuple_node_smt_astt;
-typedef const array_node_smt_ast *array_node_smt_astt;
 typedef const tuple_sym_smt_ast *tuple_sym_smt_astt;
 typedef const array_sym_smt_ast *array_sym_smt_astt;
 typedef const tuple_smt_sort *tuple_smt_sortt;
@@ -94,69 +92,6 @@ to_tuple_sort(smt_sortt a)
   tuple_smt_sortt ta = dynamic_cast<tuple_smt_sortt >(a);
   assert(ta != NULL && "Tuple AST mismatch");
   return ta;
-}
-
-class array_node_smt_ast : public tuple_node_smt_ast
-{
-public:
-  array_node_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name);
-  virtual ~array_node_smt_ast() { }
-
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
-      smt_astt falseop) const;
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual void assign(smt_convt *ctx, smt_astt sym) const;
-  virtual smt_astt update(smt_convt *ctx, smt_astt value,
-                                unsigned int idx,
-                                expr2tc idx_expr = expr2tc()) const;
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
-  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
-
-  bool is_still_free;
-};
-
-inline array_node_smt_astt
-to_array_node_ast(smt_astt a)
-{
-  array_node_smt_astt ta = dynamic_cast<array_node_smt_astt>(a);
-  assert(ta != NULL && "Tuple-Array AST mismatch");
-  return ta;
-}
-
-extern inline
-array_node_smt_ast::array_node_smt_ast(smt_convt *ctx, smt_sortt s,
-    const std::string &_name)
-    : tuple_node_smt_ast(ctx, s, _name) {
-      std::cerr << "tuple array nodes shouldn't be created any more"
-        << std::endl;
-      abort();
-  // A new array is inherently fresh; thus field each element slot with
-  // a fresh new array.
-
-  is_still_free = true;
-
-  tuple_smt_sortt ts = to_tuple_sort(s);
-  const array_type2t &array_type = to_array_type(ts->thetype);
-  const struct_union_data &strct = ctx->get_type_def(array_type.subtype);
-
-  unsigned int i = 0;
-  elements.resize(strct.members.size());
-  forall_types(it, strct.members) {
-    type2tc new_arrtype(new array_type2t(*it, array_type.array_size,
-                                         array_type.size_is_infinite));
-    smt_sortt newsort = ctx->convert_sort(new_arrtype);
-
-    // Normal elements are just normal arrays. Everything else requires
-    // a recursive array_node_smt_ast.
-    if (is_tuple_ast_type(*it)) {
-      elements[i] = new array_node_smt_ast(ctx, newsort,
-                              _name + "." + strct.member_names[i].as_string());
-    } else {
-      elements[i] = ctx->mk_fresh(newsort, "array_node_smt_ast");
-    }
-
-    i++;
-  }
 }
 
 class smt_tuple_node_flattener : public tuple_iface
