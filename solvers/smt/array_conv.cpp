@@ -410,12 +410,11 @@ array_convt::mk_unbounded_array_equality(const array_ast *a1,
 
   // Right. We need to ensure that both of these arrays have the same set of
   // indexes, as we're about to equality them. Make the union,
-  std::list<expr2tc> idxes;
+  std::set<expr2tc> idxes;
   const std::set<expr2tc> &this_indexes = array_indexes[a1->base_array_id];
   const std::set<expr2tc> &other_indexes = array_indexes[a2->base_array_id];
-  std::set_union(this_indexes.begin(), this_indexes.end(),
-                  other_indexes.begin(), other_indexes.end(),
-                  idxes.begin());
+  idxes.insert(this_indexes.begin(), this_indexes.end());
+  idxes.insert(other_indexes.begin(), other_indexes.end());
 
   // Select each index from each array, and produce an equality. This
   // implicitly means that both arrays get each others set of indexes as well.
