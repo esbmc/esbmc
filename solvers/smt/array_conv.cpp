@@ -405,8 +405,7 @@ array_convt::mk_bounded_array_equality(const array_ast *a1, const array_ast *a2)
 }
 
 expr2tc
-array_convt::get_array_elem(smt_astt a, uint64_t index,
-                            const type2tc &subtype __attribute__((unused)))
+array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
 {
   // During model building: get the value of an array at a particular, explicit,
   // index.
@@ -441,13 +440,11 @@ array_convt::get_array_elem(smt_astt a, uint64_t index,
     return expr2tc();
 
   // We've found an index; pick its value out, convert back to expr.
-  // First, what's it's type?
-  type2tc src_type = get_uint_type(array_subtypes[mast->base_array_id]->data_width);
 
   const std::vector<smt_astt > &solver_values =
     array_valuation[mast->base_array_id][mast->array_update_num];
   assert(i < solver_values.size());
-  return ctx->get_bv(src_type, solver_values[i]);
+  return ctx->get_bv(subtype, solver_values[i]);
 }
 
 void
