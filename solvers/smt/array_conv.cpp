@@ -307,15 +307,6 @@ array_convt::unbounded_array_ite(smt_astt cond,
                                    const array_ast *false_arr,
                                    smt_sortt thesort)
 {
-  // Record everything about this ite, and have its operation implemented
-  // at a later date, after conversion. One precondition for everything working,
-  // is that we can only perform ite's between arrays with the same array_id.
-  // The meaning of this is that one cannot ite between arrays with different
-  // storage at the C level (such as two different global arrays), only
-  // between two arrays with the same storage.
-  // This is fine, because you can't represent this operation in any native
-  // language anyway, it only occurs during nondeterministic phi's, and then
-  // it can only ever apply to arrays with the same storage.
   assert(true_arr->base_array_id == false_arr->base_array_id &&
          "ITE between two arrays with different bases are unsupported");
 
