@@ -6,8 +6,7 @@
 #include <ansi-c/c_types.h>
 
 array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true),
-  array_indexes(), array_values(), array_updates(), ctx(_ctx),
-  constraint_progress(0)
+  array_indexes(), array_values(), array_updates(), ctx(_ctx)
 {
 }
 
@@ -421,16 +420,6 @@ smt_astt
 array_convt::mk_unbounded_array_equality(const array_ast *a1,
     const array_ast *a2)
 {
-#if 0
-
-  // This only ever occurs in the context of an ITE having been encoded
-  // against something that contained an array, after which the result of
-  // the ITE is equalitied into another array. When that happens, the arrays
-  // being equalitied here should not have been constraint yet. We rely on
-  // this:
-  assert(constraint_progress < a1->base_array_id);
-  assert(constraint_progress < a2->base_array_id);
-#endif
 
   // Right. We need to ensure that both of these arrays have the same set of
   // indexes, as we're about to equality them. Make the union,
@@ -506,11 +495,8 @@ array_convt::add_array_constraints_for_solving(void)
 
   // Add constraints for each array with unique storage.
   for (unsigned int i = 0; i < array_indexes.size(); i++) {
-    constraint_progress = i;
     add_array_constraints(i);
   }
-
-  constraint_progress = 0;
 
   return;
 }
