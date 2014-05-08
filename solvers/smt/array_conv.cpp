@@ -745,10 +745,6 @@ array_convt::execute_array_trans(
       smt_astt cond = update_idx_ast->eq(ctx, ctx->convert_ast(it2->first));
       smt_astt dest_ite = updated_value->ite(ctx, cond, source_data[i]);
       ctx->assert_ast(dest_data[i]->eq(ctx, dest_ite));
-
-      // The latter part of this could be replaced with more complex logic,
-      // that only asserts an equality between selected values, and just stores
-      // the result of the ITE for all other values. FIXME: try this.
     }
   }
 }
