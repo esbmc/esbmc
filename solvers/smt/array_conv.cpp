@@ -404,33 +404,6 @@ array_convt::mk_bounded_array_equality(const array_ast *a1, const array_ast *a2)
   return ctx->make_conjunct(eqs);
 }
 
-smt_astt
-array_convt::mk_unbounded_array_equality(const array_ast *a1,
-    const array_ast *a2)
-{
-
-  // Right. We need to ensure that both of these arrays have the same set of
-  // indexes, as we're about to equality them. Make the union,
-  std::set<expr2tc> idxes;
-  const std::set<expr2tc> &this_indexes = array_indexes[a1->base_array_id];
-  const std::set<expr2tc> &other_indexes = array_indexes[a2->base_array_id];
-  idxes.insert(this_indexes.begin(), this_indexes.end());
-  idxes.insert(other_indexes.begin(), other_indexes.end());
-
-  // Select each index from each array, and produce an equality. This
-  // implicitly means that both arrays get each others set of indexes as well.
-  smt_convt::ast_vec lits;
-  smt_sortt type = array_subtypes[a1->base_array_id];
-  for (const expr2tc &expr : idxes) {
-    smt_astt a = mk_unbounded_select(a1, expr, type);
-    smt_astt b = mk_unbounded_select(a2, expr, type);
-    lits.push_back(a->eq(ctx, b));
-  }
-
-  // No further steps
-  return ctx->make_conjunct(lits);
-}
-
 expr2tc
 array_convt::get_array_elem(smt_astt a, uint64_t index,
                             const type2tc &subtype __attribute__((unused)))
