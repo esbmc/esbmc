@@ -34,19 +34,20 @@ public:
   }
 
   array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s,
-                    const std::vector<const smt_ast *> &_a)
+            const std::vector<const smt_ast *> &_a)
     : smt_ast(ctx, _s), symname(""), array_fields(_a), array_ctx(actx)
   {
   }
 
-  virtual ~array_ast(void) { }
+  virtual
+  ~array_ast(void) {
+  }
 
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const;
   virtual void assign(smt_convt *ctx, smt_astt sym) const;
-  virtual smt_astt update(smt_convt *ctx, smt_astt value,
-                                unsigned int idx,
-                                expr2tc idx_expr = expr2tc()) const;
+  virtual smt_astt update(smt_convt *ctx, smt_astt value, unsigned int idx,
+                          expr2tc idx_expr = expr2tc()) const;
   virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
 
   smt_astt eq_fixedsize(smt_convt *ctx, const array_ast *other) const;
@@ -80,36 +81,31 @@ public:
 
   // Heavy lifters
   virtual const smt_ast *convert_array_of_wsort(
-      smt_astt init_val, unsigned long domain_width, smt_sortt arr_sort);
+    smt_astt init_val, unsigned long domain_width, smt_sortt arr_sort);
   unsigned int new_array_id(void);
   void convert_array_assign(const array_ast *src, smt_astt sym);
   const smt_ast *mk_select(const array_ast *array, const expr2tc &idx,
-                                   const smt_sort *ressort);
-  virtual smt_astt mk_store(const array_ast *array,
-                                  const expr2tc &idx,
-                                  smt_astt value,
-                                  const smt_sort *ressort);
+                           const smt_sort *ressort);
+  virtual smt_astt mk_store(const array_ast *array, const expr2tc &idx,
+                            smt_astt value,
+                            const smt_sort *ressort);
   smt_astt mk_bounded_array_equality(const array_ast *a1, const array_ast *a2);
 
-  smt_astt array_ite(const smt_ast *cond,
-                                   const array_ast *true_arr,
-                                   const array_ast *false_arr,
-                                   const smt_sort *thesort);
+  smt_astt array_ite(const smt_ast *cond, const array_ast *true_arr,
+                     const array_ast *false_arr,
+                     const smt_sort *thesort);
 
   // Internal funk:
 
   smt_astt encode_array_equality(const array_ast *a1, const array_ast *a2);
-  const smt_ast *mk_unbounded_select(const array_ast *array,
-                                     const expr2tc &idx,
+  const smt_ast *mk_unbounded_select(const array_ast *array, const expr2tc &idx,
                                      const smt_sort *ressort);
-  const smt_ast *mk_unbounded_store(const array_ast *array,
-                                    const expr2tc &idx,
+  const smt_ast *mk_unbounded_store(const array_ast *array, const expr2tc &idx,
                                     const smt_ast *value,
                                     const smt_sort *ressort);
-  smt_astt unbounded_array_ite(smt_astt cond,
-                                       const array_ast *true_arr,
-                                       const array_ast *false_arr,
-                                       const smt_sort *thesort);
+  smt_astt unbounded_array_ite(smt_astt cond, const array_ast *true_arr,
+                               const array_ast *false_arr,
+                               const smt_sort *thesort);
 
   // Array constraint beating
 
@@ -117,25 +113,26 @@ public:
   void join_array_indexes(void);
   void add_array_equalities(void);
   void execute_array_trans(std::vector<std::vector<const smt_ast *> > &data,
-                           unsigned int arr,
-                           unsigned int idx,
+                           unsigned int arr, unsigned int idx,
                            const std::map<expr2tc, unsigned> &idx_map,
                            const smt_sort *subtype);
   void collate_array_values(std::vector<const smt_ast *> &vals,
-                            const std::map<expr2tc, unsigned> &idx_map,
+                            const std::map<expr2tc,
+                                           unsigned> &idx_map,
                             const std::list<struct array_select> &idxs,
                             const smt_sort *subtype,
                             const smt_ast *init_val = NULL);
   void add_initial_ackerman_constraints(
-                                    const std::vector<const smt_ast *> &vals,
-                                    const std::map<expr2tc,unsigned> &idx_map);
+    const std::vector<const smt_ast *> &vals,
+    const std::map<expr2tc, unsigned> &idx_map);
 
-  inline array_ast *new_ast(smt_sortt _s) {
+  inline array_ast *
+  new_ast(smt_sortt _s) {
     return new array_ast(this, ctx, _s);
   }
 
-  inline array_ast *new_ast(smt_sortt _s,
-      const std::vector<const smt_ast *> &_a) {
+  inline array_ast *
+  new_ast(smt_sortt _s, const std::vector<const smt_ast *> &_a) {
     return new array_ast(this, ctx, _s, _a);
   }
 
@@ -171,7 +168,8 @@ public:
   // of the other array, and the output ast.
   struct array_equality {
     unsigned int arr1_id;
-    unsigned int arr2_id;;
+    unsigned int arr2_id;
+    ;
 
     unsigned int arr1_update_num;
     unsigned int arr2_update_num;
@@ -194,19 +192,22 @@ public:
     expr2tc idx;
     union {
       struct {
-        unsigned int src_array_update_num;
-        smt_astt val;
-      } w;
+	unsigned int src_array_update_num;
+	smt_astt val;
+      }
+      w;
       struct {
-        unsigned int src_array_id_true;
-        unsigned int src_array_update_true;
-        unsigned int src_array_id_false;
-        unsigned int src_array_update_false;
-        const array_ast *true_arr_ast; // yolo
-        const array_ast *false_arr_ast; // yolo
-        smt_astt cond;
-      } i;
-    } u;
+	unsigned int src_array_id_true;
+	unsigned int src_array_update_true;
+	unsigned int src_array_id_false;
+	unsigned int src_array_update_false;
+	const array_ast *true_arr_ast; // yolo
+	const array_ast *false_arr_ast; // yolo
+	smt_astt cond;
+      }
+      i;
+    }
+    u;
   };
   std::vector<std::vector<struct array_with> > array_updates;
 
