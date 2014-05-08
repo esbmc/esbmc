@@ -198,7 +198,9 @@ public:
       } w;
       struct {
         unsigned int src_array_update_true;
+        unsigned int src_array_id_false;
         unsigned int src_array_update_false;
+        const array_ast *false_arr_ast; // yolo
         smt_astt cond;
       } i;
     } u;

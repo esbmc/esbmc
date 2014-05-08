@@ -307,24 +307,46 @@ array_convt::unbounded_array_ite(smt_astt cond,
                                    const array_ast *false_arr,
                                    smt_sortt thesort)
 {
-  assert(true_arr->base_array_id == false_arr->base_array_id &&
-         "ITE between two arrays with different bases are unsupported");
+  // We can perform ite's between distinct array id's, however the precondition
+  // is that they must share the same set of array indexes, otherwise there's
+  // the potential for data loss.
+  const std::set<expr2tc> &true_idxes = array_indexes[true_arr->base_array_id];
+  const std::set<expr2tc> &false_idxes =array_indexes[false_arr->base_array_id];
+
+  // NB: expensive assertion
+  assert((true_arr->base_array_id == false_arr->base_array_id ||
+          true_idxes == false_idxes) &&
+         "Array ite must be between either the same base array ID, or between "
+         "two arrays that have identical sets of indexes");
+
+  // XXX assert that array id inequality only happens during constraining.
+  // XXX picking of the base array id is going to be a trainwreck and highly
+  //     coupled with the ordering of code elsewhere. Eye trumpets.
+  //     Actually, it doesn't matter as the resulting AST fully represents the
+  //     value of the array.
+
+  unsigned int new_arr_id =
+    std::min(true_arr->base_array_id, false_arr->base_array_id); // yolo
+  unsigned int false_arr_id =
+    std::max(true_arr->base_array_id, false_arr->base_array_id); // yolo
 
   array_ast *newarr = new_ast(thesort);
-  newarr->base_array_id = true_arr->base_array_id;
+  newarr->base_array_id = new_arr_id;
   newarr->array_update_num = array_updates[true_arr->base_array_id].size();
 
   struct array_with w;
   w.is_ite = true;
   w.idx = expr2tc();
   w.u.i.src_array_update_true = true_arr->array_update_num;
+  w.u.i.src_array_id_false = false_arr_id;
   w.u.i.src_array_update_false = false_arr->array_update_num;
+  w.u.i.false_arr_ast = false_arr;
   w.u.i.cond = cond;
-  array_updates[true_arr->base_array_id].push_back(w);
+  array_updates[new_arr_id].push_back(w);
 
   // Also file a new select record for this point in time.
   std::list<struct array_select> tmp;
-  array_values[true_arr->base_array_id].push_back(tmp);
+  array_values[new_arr_id].push_back(tmp);
 
   return newarr;
 }
@@ -563,6 +585,31 @@ array_convt::execute_array_trans(
   // an ite.
   const array_with &w = array_updates[arr][idx+1];
   if (w.is_ite) {
+    if (w.u.i.src_array_id_false != arr) {
+      // Due to decisions earlier, the false array should be the later one.
+      // yolo
+      assert(w.u.i.src_array_id_false > arr);
+
+      // Create one bajillion unbounded selects.
+      std::vector<smt_astt> selects;
+      selects.reserve(array_indexes[arr].size());
+      assert(array_indexes[arr] == array_indexes[w.u.i.src_array_id_false]);
+      for (const auto &elem : array_indexes[arr]) {
+        selects.push_back(mk_unbounded_select(w.u.i.false_arr_ast, elem, subtype));
+      }
+
+      const std::vector<smt_astt > &true_vals = data[w.u.i.src_array_update_true];
+
+      // And now, perform the ites.
+      smt_astt cond = w.u.i.cond;
+      for (unsigned int i = 0; i < idx_map.size(); i++) {
+        smt_astt updated_elem = true_vals[i]->ite(ctx, cond, selects[i]);
+        ctx->assert_ast(dest_data[i]->eq(ctx, updated_elem));
+      }
+
+      return; // yolo
+    }
+
     // Turn every index element into an ITE representing this operation. Every
     // single element is addressed and updated; no further constraints are
     // needed. Not even the ackerman ones, in fact, because instances of that
