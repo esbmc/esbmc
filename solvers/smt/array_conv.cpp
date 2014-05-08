@@ -863,38 +863,3 @@ array_ast::ite(smt_convt *ctx __attribute__((unused)),
 
   return array_ctx->array_ite(cond, this, array_downcast(falseop), sort);
 }
-
-#if 0
-smt_astt
-array_ast::encode_array_equality(smt_convt *ctx, smt_astt other) const
-{
-  const array_ast *o = array_downcast(other);
-  if (!is_unbounded_array(sort))
-    return eq_fixedsize(ctx, o);
-
-  const std::set<expr2tc> &thisindexes =
-    array_ctx->array_indexes[base_array_id];
-  const std::set<expr2tc> &otherindexes =
-    array_ctx->array_indexes[o->base_array_id];
-
-  std::list<expr2tc> idxes;
-  std::vector<smt_astt> lits;
-
-  // Take the union of all these indexes
-  std::set_union(thisindexes.begin(), thisindexes.end(),
-                  otherindexes.begin(), otherindexes.end(),
-                  idxes.begin());
-
-  // Select each index from each array, and produce an equality.
-  smt_sortt type = array_ctx->array_subtypes[base_array_id];
-  for (const expr2tc &expr : idxes) {
-    smt_astt a = array_ctx->mk_unbounded_select(this, expr, type);
-    smt_astt b = array_ctx->mk_unbounded_select(o, expr, type);
-    lits.push_back(a->eq(array_ctx->ctx, b));
-  }
-
-  return array_ctx->ctx->make_conjunct(lits);
-}
-
-#endif
-
