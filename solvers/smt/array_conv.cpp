@@ -561,12 +561,16 @@ array_convt::add_array_equalities(void)
 void
 array_convt::add_array_constraints(unsigned int arr)
 {
-  // Right: we need to tie things up regarding these bitvectors. We have a
-  // set of indexes...
+  // So: the plan here is that each array id has a record in 'array_valuation'.
+  // Within that is a vector with an element for each array update. Each of
+  // those elements is a vector again, its values being one smt_astt for each
+  // possible value of the array, at a particular expr index.
+  // This function builds up these vectors of values incrementally, from an
+  // initial state per array id, through each array update, tying values to
+  // selected elements.
   const std::set<expr2tc> &indexes = array_indexes[arr];
 
-  // What we're going to build is a two-dimensional vector ish of each element
-  // at each point in time. Expensive, but meh.
+  // Add a new vector for a new array.
   array_valuation.resize(array_valuation.size() + 1);
   std::vector<std::vector<smt_astt > > &real_array_values =
     array_valuation.back();
@@ -574,7 +578,8 @@ array_convt::add_array_constraints(unsigned int arr)
   // Subtype is thus
   smt_sortt subtype = array_subtypes[arr];
 
-  // Pre-allocate all the storage.
+  // Pre-allocate all the storage, for however many updates there are, for
+  // however many array indexes there are.
   real_array_values.resize(array_values[arr].size());
   for (unsigned int i = 0; i < real_array_values.size(); i++)
     real_array_values[i].resize(indexes.size());
@@ -588,7 +593,9 @@ array_convt::add_array_constraints(unsigned int arr)
 
   assert(idx_map.size() == indexes.size());
 
-  // Initialize the first set of elements.
+  // Initialize the first set of elements. If this array has an initializer,
+  // then all values recieve the initial value. Otherwise, they receive
+  // free values for each index.
   auto it = array_of_vals.find(arr);
   if (it != array_of_vals.end()) {
     collate_array_values(real_array_values[0], idx_map, array_values[arr][0],
@@ -598,6 +605,8 @@ array_convt::add_array_constraints(unsigned int arr)
         subtype);
   }
 
+  // Ensure initial consistency of the initial values: indexes that evaluate
+  // to the same concrete index should have the same value.
   add_initial_ackerman_constraints(real_array_values[0], idx_map);
 
   // Now repeatedly execute transitions between states.
@@ -617,11 +626,17 @@ array_convt::execute_array_trans(
   // Encode the constraints for a particular array update.
 
   // Steps: First, fill the destination vector with either free variables, or
-  // the free variables that resulted for selects corresponding to that item.
+  // the free variables from selects corresponding to that item.
   // Then apply update or ITE constraints.
   // Then apply equalities between the old and new values.
 
+  // The destination vector: representing the values of each element in the
+  // next updated state.
   std::vector<smt_astt > &dest_data = data[idx+1];
+
+  // Fill dest_data with ASTs: if a select has been applied for a particular
+  // index, then that value is inserted there. Otherwise, a free value is
+  // inserted.
   collate_array_values(dest_data, idx_map, array_values[arr][idx+1], subtype);
 
   // Two updates that could have occurred for this array: a simple with, or
