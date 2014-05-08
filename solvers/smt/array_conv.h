@@ -121,6 +121,11 @@ public:
                             const std::map<expr2tc, unsigned> &idx_map,
                             const expr2tc &idx,
                             smt_astt val);
+  void execute_array_ite(std::vector<smt_astt> &dest,
+                         const std::vector<smt_astt> &true_vals,
+                         const std::vector<smt_astt> &false_vals,
+                         const std::map<expr2tc, unsigned> &idx_map,
+                         smt_astt cond);
   void collate_array_values(std::vector<smt_astt> &vals,
                             const std::map<expr2tc, unsigned> &idx_map,
                             const std::list<struct array_select> &idxs,

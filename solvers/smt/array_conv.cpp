@@ -681,23 +681,11 @@ array_convt::execute_array_trans(
       return; // yolo
     }
 
-    // Turn every index element into an ITE representing this operation. Every
-    // single element is addressed and updated; no further constraints are
-    // needed. Not even the ackerman ones, in fact, because instances of that
-    // from previous array updates will feed through to here (speculation).
-
     unsigned int true_idx = w.u.i.src_array_update_true;
     unsigned int false_idx = w.u.i.src_array_update_false;
     assert(true_idx < idx + 1 && false_idx < idx + 1);
-    const std::vector<smt_astt > &true_vals = data[true_idx];
-    const std::vector<smt_astt > &false_vals = data[false_idx];
-    smt_astt cond = w.u.i.cond;
-
-    // Each index value becomes an ITE between each source value.
-    for (unsigned int i = 0; i < idx_map.size(); i++) {
-      smt_astt updated_elem = true_vals[i]->ite(ctx, cond, false_vals[i]);
-      ctx->assert_ast(dest_data[i]->eq(ctx, updated_elem));
-    }
+    execute_array_ite(dest_data, data[true_idx], data[false_idx], idx_map,
+                      w.u.i.cond);
   } else {
     execute_array_update(dest_data, data[w.u.w.src_array_update_num],
                          idx_map, w.idx, w.u.w.val);
@@ -739,6 +727,23 @@ array_convt::execute_array_update(std::vector<smt_astt> &dest_data,
     smt_astt cond = update_idx_ast->eq(ctx, ctx->convert_ast(it2->first));
     smt_astt dest_ite = updated_value->ite(ctx, cond, source_data[i]);
     ctx->assert_ast(dest_data[i]->eq(ctx, dest_ite));
+  }
+
+  return;
+}
+
+void
+array_convt::execute_array_ite(std::vector<smt_astt> &dest,
+    const std::vector<smt_astt> &true_vals,
+    const std::vector<smt_astt> &false_vals,
+    const std::map<expr2tc, unsigned> &idx_map,
+    smt_astt cond)
+{
+
+  // Each index value becomes an ITE between each source value.
+  for (unsigned int i = 0; i < idx_map.size(); i++) {
+    smt_astt updated_elem = true_vals[i]->ite(ctx, cond, false_vals[i]);
+    ctx->assert_ast(dest[i]->eq(ctx, updated_elem));
   }
 
   return;
