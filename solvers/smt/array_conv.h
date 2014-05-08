@@ -34,7 +34,7 @@ public:
   }
 
   array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s,
-            const std::vector<const smt_ast *> &_a)
+            const std::vector<smt_astt> &_a)
     : smt_ast(ctx, _s), symname(""), array_fields(_a), array_ctx(actx)
   {
   }
@@ -54,7 +54,7 @@ public:
 
   std::string symname; // Only if this was produced from mk_smt_symbol.
 
-  std::vector<const smt_ast *> array_fields;
+  std::vector<smt_astt> array_fields;
   unsigned int base_array_id;
   unsigned int array_update_num;
 
@@ -73,35 +73,35 @@ public:
   // Public api
   smt_ast *mk_array_symbol(const std::string &name, const smt_sort *ms,
                            smt_sortt subtype);
-  expr2tc get_array_elem(const smt_ast *a, uint64_t index,
+  expr2tc get_array_elem(smt_astt a, uint64_t index,
                          const type2tc &subtype);
-  virtual const smt_ast *convert_array_of(smt_astt init_val,
+  virtual smt_astt convert_array_of(smt_astt init_val,
                                           unsigned long domain_width);
   void add_array_constraints_for_solving(void);
 
   // Heavy lifters
-  virtual const smt_ast *convert_array_of_wsort(
+  virtual smt_astt convert_array_of_wsort(
     smt_astt init_val, unsigned long domain_width, smt_sortt arr_sort);
   unsigned int new_array_id(void);
   void convert_array_assign(const array_ast *src, smt_astt sym);
-  const smt_ast *mk_select(const array_ast *array, const expr2tc &idx,
+  smt_astt mk_select(const array_ast *array, const expr2tc &idx,
                            const smt_sort *ressort);
   virtual smt_astt mk_store(const array_ast *array, const expr2tc &idx,
                             smt_astt value,
                             const smt_sort *ressort);
   smt_astt mk_bounded_array_equality(const array_ast *a1, const array_ast *a2);
 
-  smt_astt array_ite(const smt_ast *cond, const array_ast *true_arr,
+  smt_astt array_ite(smt_astt cond, const array_ast *true_arr,
                      const array_ast *false_arr,
                      const smt_sort *thesort);
 
   // Internal funk:
 
   smt_astt encode_array_equality(const array_ast *a1, const array_ast *a2);
-  const smt_ast *mk_unbounded_select(const array_ast *array, const expr2tc &idx,
+  smt_astt mk_unbounded_select(const array_ast *array, const expr2tc &idx,
                                      const smt_sort *ressort);
-  const smt_ast *mk_unbounded_store(const array_ast *array, const expr2tc &idx,
-                                    const smt_ast *value,
+  smt_astt mk_unbounded_store(const array_ast *array, const expr2tc &idx,
+                                    smt_astt value,
                                     const smt_sort *ressort);
   smt_astt unbounded_array_ite(smt_astt cond, const array_ast *true_arr,
                                const array_ast *false_arr,
@@ -112,17 +112,17 @@ public:
   void add_array_constraints(unsigned int arr);
   void join_array_indexes(void);
   void add_array_equalities(void);
-  void execute_array_trans(std::vector<std::vector<const smt_ast *> > &data,
+  void execute_array_trans(std::vector<std::vector<smt_astt> > &data,
                            unsigned int arr, unsigned int idx,
                            const std::map<expr2tc, unsigned> &idx_map,
                            const smt_sort *subtype);
-  void collate_array_values(std::vector<const smt_ast *> &vals,
+  void collate_array_values(std::vector<smt_astt> &vals,
                             const std::map<expr2tc, unsigned> &idx_map,
                             const std::list<struct array_select> &idxs,
                             const smt_sort *subtype,
-                            const smt_ast *init_val = NULL);
+                            smt_astt init_val = NULL);
   void add_initial_ackerman_constraints(
-    const std::vector<const smt_ast *> &vals,
+    const std::vector<smt_astt> &vals,
     const std::map<expr2tc, unsigned> &idx_map);
 
   inline array_ast *
@@ -131,7 +131,7 @@ public:
   }
 
   inline array_ast *
-  new_ast(smt_sortt _s, const std::vector<const smt_ast *> &_a) {
+  new_ast(smt_sortt _s, const std::vector<smt_astt> &_a) {
     return new array_ast(this, ctx, _s, _a);
   }
 
@@ -212,12 +212,12 @@ public:
 
   // Map between base array identifiers and the value to initialize it with.
   // Only applicable to unbounded arrays.
-  std::map<unsigned, const smt_ast *> array_of_vals;
+  std::map<unsigned, smt_astt> array_of_vals;
 
   // Finally, for model building, we need all the past array values. Three
   // vectors, dimensions are arrays id's, historical point, array element,
   // respectively.
-  std::vector<std::vector<std::vector<const smt_ast *> > > array_valuation;
+  std::vector<std::vector<std::vector<smt_astt> > > array_valuation;
 
   smt_convt *ctx;
 };
