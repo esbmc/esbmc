@@ -327,8 +327,6 @@ array_convt::unbounded_array_ite(smt_astt cond,
 
   unsigned int new_arr_id =
     std::min(true_arr->base_array_id, false_arr->base_array_id); // yolo
-  unsigned int false_arr_id =
-    std::max(true_arr->base_array_id, false_arr->base_array_id); // yolo
 
   array_ast *newarr = new_ast(thesort);
   newarr->base_array_id = new_arr_id;
@@ -337,9 +335,11 @@ array_convt::unbounded_array_ite(smt_astt cond,
   struct array_with w;
   w.is_ite = true;
   w.idx = expr2tc();
+  w.u.i.src_array_id_true = true_arr->base_array_id;
   w.u.i.src_array_update_true = true_arr->array_update_num;
-  w.u.i.src_array_id_false = false_arr_id;
+  w.u.i.src_array_id_false = false_arr->base_array_id;
   w.u.i.src_array_update_false = false_arr->array_update_num;
+  w.u.i.true_arr_ast = true_arr;
   w.u.i.false_arr_ast = false_arr;
   w.u.i.cond = cond;
   array_updates[new_arr_id].push_back(w);
@@ -585,25 +585,38 @@ array_convt::execute_array_trans(
   // an ite.
   const array_with &w = array_updates[arr][idx+1];
   if (w.is_ite) {
-    if (w.u.i.src_array_id_false != arr) {
-      // Due to decisions earlier, the false array should be the later one.
-      // yolo
-      assert(w.u.i.src_array_id_false > arr);
+    if (w.u.i.src_array_id_false != w.u.i.src_array_id_true) {
+      // It's not guarenteed that the 'true' set of values, is the current array
+      // that we're converting.
+
+      bool cur_arr_vals_are_true = (w.u.i.src_array_id_true == arr);
+      unsigned int other_arr_id =
+        (cur_arr_vals_are_true)
+        ? w.u.i.src_array_id_false
+        : w.u.i.src_array_id_true;
+      const array_ast *other_arr_ast =
+        (cur_arr_vals_are_true)
+        ? w.u.i.false_arr_ast
+        : w.u.i.true_arr_ast;
 
       // Create one bajillion unbounded selects.
       std::vector<smt_astt> selects;
       selects.reserve(array_indexes[arr].size());
-      assert(array_indexes[arr] == array_indexes[w.u.i.src_array_id_false]);
+      assert(array_indexes[arr] == array_indexes[other_arr_id]);
       for (const auto &elem : array_indexes[arr]) {
-        selects.push_back(mk_unbounded_select(w.u.i.false_arr_ast, elem, subtype));
+        selects.push_back(mk_unbounded_select(other_arr_ast, elem, subtype));
       }
 
-      const std::vector<smt_astt > &true_vals = data[w.u.i.src_array_update_true];
+      // Now select which values are true or false
+      const std::vector<smt_astt > &true_vals = (cur_arr_vals_are_true)
+        ? data[idx] : selects;
+      const std::vector<smt_astt > &false_vals = (cur_arr_vals_are_true)
+        ? selects : data[idx];
 
       // And now, perform the ites.
       smt_astt cond = w.u.i.cond;
       for (unsigned int i = 0; i < idx_map.size(); i++) {
-        smt_astt updated_elem = true_vals[i]->ite(ctx, cond, selects[i]);
+        smt_astt updated_elem = true_vals[i]->ite(ctx, cond, false_vals[i]);
         ctx->assert_ast(dest_data[i]->eq(ctx, updated_elem));
       }
 

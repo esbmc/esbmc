@@ -197,9 +197,11 @@ public:
         smt_astt val;
       } w;
       struct {
+        unsigned int src_array_id_true;
         unsigned int src_array_update_true;
         unsigned int src_array_id_false;
         unsigned int src_array_update_false;
+        const array_ast *true_arr_ast; // yolo
         const array_ast *false_arr_ast; // yolo
         smt_astt cond;
       } i;
