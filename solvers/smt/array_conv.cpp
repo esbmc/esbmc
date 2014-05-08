@@ -905,23 +905,5 @@ array_ast::encode_array_equality(smt_convt *ctx, smt_astt other) const
   return array_ctx->ctx->make_conjunct(lits);
 }
 
-smt_astt
-array_ast::eq_fixedsize(smt_convt *ctx, const array_ast *other) const
-{
-  // Only allow equalities of arrays with the same domain width. Equalities
-  // between different sizes will lead to crazyness later, and there are no
-  // (AFAIK) circumstances where they should occur.
-  assert(array_fields.size() == other->array_fields.size() &&
-         "Array equality between different sizes of fixed-size arrays");
-
-  smt_convt::ast_vec lits;
-  std::vector<smt_astt>::const_iterator it1 = array_fields.begin(),
-                              it2 = other->array_fields.begin();
-  for (; it1 != array_fields.end(); it1++, it2++) {
-    lits.push_back((*it1)->eq(ctx, *it2));
-  }
-
-  return ctx->make_conjunct(lits);
-}
 #endif
 
