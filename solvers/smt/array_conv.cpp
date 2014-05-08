@@ -211,6 +211,17 @@ array_convt::mk_unbounded_select(const array_ast *ma,
       return w.u.w.val;
   }
 
+  // If the index has /already/ been selected for this particular array ast,
+  // then we should return the fresh variable representing that select,
+  // rather than adding another one.
+  // XXX: this is a list/vec. Bad.
+  for (const auto &sel : array_values[ma->base_array_id][ma->array_update_num]){
+    if (sel.idx == real_idx) {
+      // Aha.
+      return sel.val;
+    }
+  }
+
   // Generate a new free variable
   smt_astt a = ctx->mk_fresh(ressort, "mk_unbounded_select");
 
