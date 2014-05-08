@@ -309,20 +309,6 @@ array_convt::unbounded_array_ite(smt_astt cond,
   // We can perform ite's between distinct array id's, however the precondition
   // is that they must share the same set of array indexes, otherwise there's
   // the potential for data loss.
-  const std::set<expr2tc> &true_idxes = array_indexes[true_arr->base_array_id];
-  const std::set<expr2tc> &false_idxes =array_indexes[false_arr->base_array_id];
-
-  // NB: expensive assertion
-  assert((true_arr->base_array_id == false_arr->base_array_id ||
-          true_idxes == false_idxes) &&
-         "Array ite must be between either the same base array ID, or between "
-         "two arrays that have identical sets of indexes");
-
-  // XXX assert that array id inequality only happens during constraining.
-  // XXX picking of the base array id is going to be a trainwreck and highly
-  //     coupled with the ordering of code elsewhere. Eye trumpets.
-  //     Actually, it doesn't matter as the resulting AST fully represents the
-  //     value of the array.
 
   unsigned int new_arr_id =
     std::min(true_arr->base_array_id, false_arr->base_array_id); // yolo
