@@ -699,54 +699,49 @@ array_convt::execute_array_trans(
       ctx->assert_ast(dest_data[i]->eq(ctx, updated_elem));
     }
   } else {
-    // Place a constraint on the updated variable; add equality constraints
-    // between the older version and this version.
-
-    // So, the updated element,
-    std::map<expr2tc, unsigned>::const_iterator it = idx_map.find(w.idx);
-    assert(it != idx_map.end());
-
-    const expr2tc &update_idx_expr = it->first;
-    smt_astt update_idx_ast = ctx->convert_ast(update_idx_expr);
-    unsigned int updated_idx = it->second;
-    smt_astt updated_value = w.u.w.val;
-
-    // Assign in its value. Note that no selects occur agains this data index,
-    // they will have been replaced with the update ast when the select was
-    // encoded.
-    dest_data[updated_idx] = updated_value;
-
-    // Check all the values selected out of this instance; if any have the same
-    // index, tie the select's fresh variable to the updated value. If there are
-    // differing index exprs that evaluate to the same location they'll be
-    // caught by code later.
-    const std::list<struct array_select> &sels = array_values[arr][idx+1];
-    for (auto it = sels.begin(); it != sels.end(); it++) {
-      if (it->idx == update_idx_expr) {
-        ctx->assert_ast(it->val->eq(ctx, updated_value));
-      }
-    }
-
-    // Now look at all those other indexes...
-    assert(w.u.w.src_array_update_num < idx+1);
-    const std::vector<smt_astt > &source_data =
-      data[w.u.w.src_array_update_num];
-
-    unsigned int i = 0;
-    for (auto it2 = idx_map.begin(); it2 != idx_map.end(); it2++, i++) {
-      if (it2->second == updated_idx)
-        continue;
-
-      // Generate an ITE. If the index is nondeterministically equal to the
-      // current index, take the updated value, otherwise the original value.
-      // This departs from the CBMC implementation, in that they explicitly
-      // use implies and ackerman constraints.
-      // FIXME: benchmark the two approaches. For now, this is shorter.
-      smt_astt cond = update_idx_ast->eq(ctx, ctx->convert_ast(it2->first));
-      smt_astt dest_ite = updated_value->ite(ctx, cond, source_data[i]);
-      ctx->assert_ast(dest_data[i]->eq(ctx, dest_ite));
-    }
+    execute_array_update(dest_data, data[w.u.w.src_array_update_num],
+                         idx_map, w.idx, w.u.w.val);
   }
+}
+
+void
+array_convt::execute_array_update(std::vector<smt_astt> &dest_data,
+  std::vector<smt_astt> &source_data,
+  const std::map<expr2tc, unsigned> &idx_map,
+  const expr2tc &idx,
+  smt_astt updated_value)
+{
+  // Place a constraint on the updated variable; add equality constraints
+  // between the older version and this version.
+
+  // So, the updated element,
+  std::map<expr2tc, unsigned>::const_iterator it = idx_map.find(idx);
+  assert(it != idx_map.end());
+
+  smt_astt update_idx_ast = ctx->convert_ast(idx);
+  unsigned int updated_idx = it->second;
+
+  // Assign in its value. Note that no selects occur agains this data index,
+  // they will have been replaced with the update ast when the select was
+  // encoded.
+  dest_data[updated_idx] = updated_value;
+
+  unsigned int i = 0;
+  for (auto it2 = idx_map.begin(); it2 != idx_map.end(); it2++, i++) {
+    if (it2->second == updated_idx)
+      continue;
+
+    // Generate an ITE. If the index is nondeterministically equal to the
+    // current index, take the updated value, otherwise the original value.
+    // This departs from the CBMC implementation, in that they explicitly
+    // use implies and ackerman constraints.
+    // FIXME: benchmark the two approaches. For now, this is shorter.
+    smt_astt cond = update_idx_ast->eq(ctx, ctx->convert_ast(it2->first));
+    smt_astt dest_ite = updated_value->ite(ctx, cond, source_data[i]);
+    ctx->assert_ast(dest_data[i]->eq(ctx, dest_ite));
+  }
+
+  return;
 }
 
 void

@@ -116,6 +116,11 @@ public:
                            unsigned int arr, unsigned int idx,
                            const std::map<expr2tc, unsigned> &idx_map,
                            const smt_sort *subtype);
+  void execute_array_update(std::vector<smt_astt> &dest_data,
+                            std::vector<smt_astt> &src_data,
+                            const std::map<expr2tc, unsigned> &idx_map,
+                            const expr2tc &idx,
+                            smt_astt val);
   void collate_array_values(std::vector<smt_astt> &vals,
                             const std::map<expr2tc, unsigned> &idx_map,
                             const std::list<struct array_select> &idxs,
