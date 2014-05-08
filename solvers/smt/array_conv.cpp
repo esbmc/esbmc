@@ -493,11 +493,77 @@ void
 array_convt::add_array_constraints_for_solving(void)
 {
 
+  join_array_indexes();
+
   // Add constraints for each array with unique storage.
   for (unsigned int i = 0; i < array_indexes.size(); i++) {
     add_array_constraints(i);
   }
 
+  return;
+}
+
+void
+array_convt::join_array_indexes()
+{
+  // Identify the set of array ID's that, due to equalities and ITE's, are
+  // effectively joined into the same array. For each of these sets, join their
+  // indexes.
+  // This needs to support transitivity.
+
+  std::vector<std::set<unsigned int> > groupings;
+  groupings.resize(array_updates.size());
+
+  // Collect together the set of array id's touched by each array id.
+  unsigned int arrid = 0;
+  for (unsigned int arrid = 0; arrid < array_updates.size(); arrid++) {
+    std::set<unsigned int> &joined_array_ids = groupings[arrid];
+
+    for (const auto &update : array_updates[arrid]) {
+      if (update.is_ite) {
+        if (update.u.i.src_array_id_true != update.u.i.src_array_id_false) {
+          joined_array_ids.insert(update.u.i.src_array_id_true);
+          joined_array_ids.insert(update.u.i.src_array_id_false);
+        }
+      }
+    }
+    // XXX equalities
+
+    joined_array_ids.insert(arrid);
+  }
+
+  // K; now compute a fixedpoint joining the sets of things that touch each
+  // other.
+  bool modified = false;
+  do {
+    modified = false;
+
+    for (const auto &arrset : groupings) {
+      for (auto touched_arr_id : arrset) {
+        // It the other array recorded as touching all the arrays that this one
+        // does? Try inserting this set, and see if the size changes. Slightly
+        // ghetto, but avoids additional allocations.
+        unsigned int original_size = groupings[touched_arr_id].size();
+
+        groupings[touched_arr_id].insert(arrset.begin(), arrset.end());
+
+        if (original_size != groupings[touched_arr_id].size())
+          modified = true;
+      }
+    }
+  } while (modified);
+
+  // Right -- now join all ther indexes. This can be optimised, but not now.
+  for (arrid = 0; arrid < array_updates.size(); arrid++) {
+    const std::set<unsigned int> &arrset = groupings[arrid];
+    for (auto touched_arr_id : arrset) {
+      array_indexes[arrid].insert(
+          array_indexes[touched_arr_id].begin(),
+          array_indexes[touched_arr_id].end());
+    }
+  }
+
+  // Le fin
   return;
 }
 

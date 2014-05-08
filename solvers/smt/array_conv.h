@@ -116,6 +116,7 @@ public:
   // Array constraint beating
 
   void add_array_constraints(unsigned int arr);
+  void join_array_indexes(void);
   void execute_array_trans(std::vector<std::vector<const smt_ast *> > &data,
                            unsigned int arr,
                            unsigned int idx,
