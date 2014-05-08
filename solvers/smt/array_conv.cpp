@@ -388,18 +388,20 @@ array_convt::convert_array_of_wsort(smt_astt init_val,
 }
 
 smt_astt
-array_convt::encode_array_equality(unsigned int array_id, unsigned int other_id)
+array_convt::encode_array_equality(const array_ast *a1, const array_ast *a2)
 {
   // Record an equality between two arrays at this point in time. To be
   // implemented at constraint time.
 
   struct array_equality e;
-  e.other_array_idx = other_id;
-  e.this_array_update_num = array_updates[array_id].size() - 1;
-  e.other_array_update_num = array_updates[other_id].size() - 1;
+  e.arr1_id = a1->base_array_id;
+  e.arr2_id = a2->base_array_id;
+  e.arr1_update_num = a1->array_update_num;
+  e.arr2_update_num = a2->array_update_num;
+
   e.result = ctx->mk_fresh(ctx->boolean_sort, "");
 
-  array_equalities[array_id].push_back(e);
+  array_equalities.push_back(e);
   return e.result;
 }
 
@@ -500,6 +502,8 @@ array_convt::add_array_constraints_for_solving(void)
     add_array_constraints(i);
   }
 
+  add_array_equalities();
+
   return;
 }
 
@@ -527,9 +531,13 @@ array_convt::join_array_indexes()
         }
       }
     }
-    // XXX equalities
 
     joined_array_ids.insert(arrid);
+  }
+
+  for (const auto &equality : array_equalities) {
+    groupings[equality.arr1_id].insert(equality.arr2_id);
+    groupings[equality.arr2_id].insert(equality.arr1_id);
   }
 
   // K; now compute a fixedpoint joining the sets of things that touch each
@@ -565,6 +573,33 @@ array_convt::join_array_indexes()
 
   // Le fin
   return;
+}
+
+void
+array_convt::add_array_equalities(void)
+{
+  // Precondition: all constraints have already been added and constrained into
+  // the array_valuation vectors. Also that the array ID's being used all share
+  // the same indexes.
+
+  for (const auto &eq : array_equalities) {
+    assert(array_indexes[eq.arr1_id] == array_indexes[eq.arr2_id]);
+
+    // Simply get a handle on two vectors of valuations in array_valuation,
+    // and encode an equality.
+    const std::vector<smt_astt> &a1 =
+      array_valuation[eq.arr1_id][eq.arr1_update_num];
+    const std::vector<smt_astt> &a2 =
+      array_valuation[eq.arr2_id][eq.arr2_update_num];
+
+    smt_convt::ast_vec lits;
+    for (unsigned int i = 0; i < a1.size(); i++) {
+      lits.push_back(a1[i]->eq(ctx, a2[i]));
+    }
+
+    smt_astt result = ctx->make_conjunct(lits);
+    ctx->assert_ast(eq.result->eq(ctx, result));
+  }
 }
 
 void
@@ -827,7 +862,7 @@ array_ast::eq(smt_convt *ctx __attribute__((unused)), smt_astt sym) const
   const array_ast *other = array_downcast(sym);
 
   if (is_unbounded_array(sort)) {
-    return array_ctx->mk_unbounded_array_equality(this, other);
+    return array_ctx->encode_array_equality(this, other);
   } else {
     return array_ctx->mk_bounded_array_equality(this, other);
   }

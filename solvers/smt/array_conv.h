@@ -100,7 +100,7 @@ public:
 
   // Internal funk:
 
-  smt_astt encode_array_equality(unsigned int array_id, unsigned int other_id);
+  smt_astt encode_array_equality(const array_ast *a1, const array_ast *a2);
   const smt_ast *mk_unbounded_select(const array_ast *array,
                                      const expr2tc &idx,
                                      const smt_sort *ressort);
@@ -117,6 +117,7 @@ public:
 
   void add_array_constraints(unsigned int arr);
   void join_array_indexes(void);
+  void add_array_equalities(void);
   void execute_array_trans(std::vector<std::vector<const smt_ast *> > &data,
                            unsigned int arr,
                            unsigned int idx,
@@ -171,15 +172,16 @@ public:
   // equalities. Each equality has the current update number, the details
   // of the other array, and the output ast.
   struct array_equality {
-    unsigned int other_array_idx;
+    unsigned int arr1_id;
+    unsigned int arr2_id;;
 
-    unsigned int this_array_update_num;
-    unsigned int other_array_update_num;
+    unsigned int arr1_update_num;
+    unsigned int arr2_update_num;
 
     smt_astt result;
   };
 
-  std::vector<std::list<struct array_equality> > array_equalities;
+  std::list<struct array_equality> array_equalities;
 
   // Update records: For each array, for each 'with' operation, we record
   // the index used and the AST representation of the value assigned. We
