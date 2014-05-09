@@ -162,7 +162,26 @@ public:
   // we add the index to the set contained in the following object. This
   // obtains all the tracking data required for CBMC-like array
   // bitblasting.
-  std::vector<std::set<expr2tc> > array_indexes;
+  // Various technical jiggery pokery occurs to scope these indexes.
+
+  struct idx_record {
+    expr2tc idx;
+    unsigned int ctx_level;
+  };
+
+  typedef boost::multi_index_container<
+    idx_record,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(idx_record, expr2tc, idx)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(idx_record, unsigned int, ctx_level),
+        std::greater<unsigned int>
+      >
+    >
+  > idx_record_containert;
+  std::vector<idx_record_containert> array_indexes;
 
   // Self explanatory. Contains bitwidth of subtypes
   std::vector<smt_sortt> array_subtypes;

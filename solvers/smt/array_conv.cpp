@@ -5,6 +5,22 @@
 #include "array_conv.h"
 #include <ansi-c/c_types.h>
 
+static inline bool
+array_indexes_are_same(
+    const array_convt::idx_record_containert &a,
+    const array_convt::idx_record_containert &b)
+{
+  if (a.size() != b.size())
+    return false;
+
+  for (const auto &e : a) {
+    if (b.find(e.idx) == b.end())
+      return false;
+  }
+
+  return true;
+}
+
 array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true),
   array_indexes(), array_values(), array_updates(), ctx(_ctx)
 {
@@ -40,7 +56,7 @@ array_convt::new_array_id(void)
   unsigned int new_base_array_id = array_indexes.size();
 
   // Pouplate tracking data with empt containers
-  std::set<expr2tc> tmp_set;
+  idx_record_containert tmp_set;
   array_indexes.push_back(tmp_set);
 
   std::vector<std::list<struct array_select> > tmp2;
@@ -200,7 +216,8 @@ array_convt::mk_unbounded_select(const array_ast *ma,
   // value.
 
   // Record that we've accessed this index.
-  array_indexes[ma->base_array_id].insert(real_idx);
+  idx_record new_idx_rec = { real_idx, ctx->ctx_level };
+  array_indexes[ma->base_array_id].insert(new_idx_rec);
 
   // Corner case: if the idx we're selecting is the last one updated, just
   // use that piece of AST. This simplifies things later.
@@ -247,7 +264,8 @@ array_convt::mk_unbounded_store(const array_ast *ma,
   // array at the end of conversion so that they're all consistent.
 
   // Record that we've accessed this index.
-  array_indexes[ma->base_array_id].insert(idx);
+  idx_record new_idx_rec = { idx, ctx->ctx_level };
+  array_indexes[ma->base_array_id].insert(new_idx_rec);
 
   // More nuanced: allocate a new array representation.
   array_ast *newarr = new_ast(ressort);
@@ -413,14 +431,14 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
   }
 
   // Fetch all the indexes
-  const std::set<expr2tc> &indexes = array_indexes[mast->base_array_id];
+  const idx_record_containert &indexes = array_indexes[mast->base_array_id];
   unsigned int i = 0;
 
   // Basically, we have to do a linear search of all the indexes to find one
   // that matches the index argument.
-  std::set<expr2tc>::const_iterator it;
+  idx_record_containert::const_iterator it;
   for (it = indexes.begin(); it != indexes.end(); it++, i++) {
-    const expr2tc &e = *it;
+    const expr2tc &e = it->idx;
     expr2tc e2 = ctx->get(e);
     if (is_nil_expr(e2))
       continue;
@@ -535,7 +553,8 @@ array_convt::add_array_equalities(void)
   // the same indexes.
 
   for (const auto &eq : array_equalities) {
-    assert(array_indexes[eq.arr1_id] == array_indexes[eq.arr2_id]);
+    assert(array_indexes_are_same(array_indexes[eq.arr1_id],
+                                  array_indexes[eq.arr2_id]));
 
     // Simply get a handle on two vectors of valuations in array_valuation,
     // and encode an equality.
@@ -562,7 +581,7 @@ array_convt::add_array_constraints(unsigned int arr)
   // This function builds up these vectors of values incrementally, from an
   // initial state per array id, through each array update, tying values to
   // selected elements.
-  const std::set<expr2tc> &indexes = array_indexes[arr];
+  const idx_record_containert &indexes = array_indexes[arr];
 
   // Add a new vector for a new array.
   array_valuation.resize(array_valuation.size() + 1);
@@ -582,7 +601,7 @@ array_convt::add_array_constraints(unsigned int arr)
   // even the element index.
   idx_mapt idx_map;
   for (auto it = indexes.begin(); it != indexes.end(); it++)
-    idx_map.insert(std::make_pair(*it, idx_map.size()));
+    idx_map.insert(std::make_pair(it->idx, idx_map.size()));
 
   assert(idx_map.size() == indexes.size());
 
@@ -727,9 +746,11 @@ array_convt::execute_array_joining_ite(ast_vect &dest,
 
   ast_vect selects;
   selects.reserve(array_indexes[cur_id].size());
-  assert(array_indexes[cur_id] == array_indexes[remote_ast->base_array_id]);
+  assert(array_indexes_are_same(array_indexes[cur_id],
+                                array_indexes[remote_ast->base_array_id]));
+
   for (const auto &elem : array_indexes[remote_ast->base_array_id]) {
-    selects.push_back(mk_unbounded_select(remote_ast, elem, subtype));
+    selects.push_back(mk_unbounded_select(remote_ast, elem.idx, subtype));
   }
 
   // Now select which values are true or false
