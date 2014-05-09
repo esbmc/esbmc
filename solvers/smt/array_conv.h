@@ -266,8 +266,35 @@ public:
       i;
     }
     u;
+    unsigned int ctx_level;
+    unsigned int update_level;
   };
-  std::vector<std::vector<struct array_with> > array_updates;
+  typedef struct array_with array_witht;
+
+  typedef boost::multi_index_container<
+    array_witht,
+    boost::multi_index::indexed_by<
+      boost::multi_index::ordered_unique<
+        BOOST_MULTI_INDEX_MEMBER(array_witht, unsigned int, update_level),
+        std::greater<unsigned int>
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(array_witht, unsigned int, ctx_level),
+        std::greater<unsigned int>
+      >
+    >
+  > array_update_containert;
+
+  std::vector<array_update_containert> array_updates;
+
+  inline const array_with &get_array_update(unsigned int id, unsigned int up) {
+    array_update_containert::nth_index<0>::type &updated_idx =
+      array_updates[id].get<0>();
+    auto it = updated_idx.find(up);
+    assert(it != updated_idx.end());
+    return *it;
+  }
+
 
   // Map between base array identifiers and the value to initialize it with.
   // Only applicable to unbounded arrays.

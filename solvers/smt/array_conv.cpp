@@ -62,7 +62,7 @@ array_convt::new_array_id(void)
   array_select_containert tmp2;
   array_values.push_back(tmp2);
 
-  std::vector<struct array_with> tmp3;
+  array_update_containert tmp3;
   array_updates.push_back(tmp3);
 
   // Aimless piece of data, just to keep indexes in iarray_updates and
@@ -70,7 +70,9 @@ array_convt::new_array_id(void)
   struct array_with w;
   w.is_ite = false;
   w.idx = expr2tc();
-  array_updates[new_base_array_id].push_back(w);
+  w.ctx_level = ctx->ctx_level;
+  w.update_level = 0;
+  array_updates[new_base_array_id].insert(w);
 
   return new_base_array_id;
 }
@@ -218,7 +220,8 @@ array_convt::mk_unbounded_select(const array_ast *ma,
 
   // Corner case: if the idx we're selecting is the last one updated, just
   // use that piece of AST. This simplifies things later.
-  const array_with &w = array_updates[ma->base_array_id][ma->array_update_num];
+  const array_with &w = get_array_update(ma->base_array_id,
+                                         ma->array_update_num);
   if (ma->array_update_num != 0 && !w.is_ite){
     if (real_idx == w.idx)
       return w.u.w.val;
@@ -280,7 +283,9 @@ array_convt::mk_unbounded_store(const array_ast *ma,
   w.idx = idx;
   w.u.w.src_array_update_num = ma->array_update_num;
   w.u.w.val = value;
-  array_updates[ma->base_array_id].push_back(w);
+  w.ctx_level = ctx->ctx_level;
+  w.update_level = newarr->array_update_num;
+  array_updates[ma->base_array_id].insert(w);
 
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
@@ -339,7 +344,9 @@ array_convt::unbounded_array_ite(smt_astt cond,
   w.u.i.true_arr_ast = true_arr;
   w.u.i.false_arr_ast = false_arr;
   w.u.i.cond = cond;
-  array_updates[new_arr_id].push_back(w);
+  w.ctx_level = ctx->ctx_level;
+  w.update_level = newarr->array_update_num;
+  array_updates[new_arr_id].insert(w);
 
   return newarr;
 }
@@ -645,7 +652,7 @@ array_convt::execute_array_trans(array_update_vect &data,
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
   assert(idx+1 < array_updates[arr].size());
-  const array_with &w = array_updates[arr][idx+1];
+  const array_with &w = get_array_update(arr, idx+1);
   if (w.is_ite) {
     if (w.u.i.true_arr_ast->base_array_id !=
         w.u.i.false_arr_ast->base_array_id) {
