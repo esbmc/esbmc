@@ -237,6 +237,7 @@ public:
   // Finally, for model building, we need all the past array values. Three
   // vectors, dimensions are arrays id's, historical point, array element,
   // respectively.
+  // In reverse, these correspond to ast_vect and array_update_vect
   std::vector<std::vector<std::vector<smt_astt> > > array_valuation;
 
   smt_convt *ctx;
