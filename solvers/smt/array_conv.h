@@ -66,9 +66,29 @@ class array_convt : public array_iface
 public:
   struct array_select;
   struct array_with;
-  typedef std::map<expr2tc, unsigned> idx_mapt;
   typedef smt_convt::ast_vec ast_vect;
   typedef std::vector<ast_vect> array_update_vect;
+
+  // Fgasdf
+  struct index_map_rec {
+    expr2tc idx;
+    unsigned int vec_idx;
+    unsigned int ctx_level;
+  };
+  typedef struct index_map_rec index_map_rect;
+
+  typedef boost::multi_index_container<
+    index_map_rect,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(index_map_rect, expr2tc, idx)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(index_map_rect, unsigned int, ctx_level),
+        std::greater<unsigned int>
+      >
+    >
+  > index_map_containert;
 
   array_convt(smt_convt *_ctx);
   ~array_convt();
@@ -117,34 +137,31 @@ public:
   void add_array_equalities(void);
   void execute_array_trans(array_update_vect &data,
                            unsigned int arr, unsigned int idx,
-                           const idx_mapt &idx_map,
                            const smt_sort *subtype);
   void execute_array_update(ast_vect &dest_data,
                             ast_vect &src_data,
-                            const idx_mapt &idx_map,
+                            const index_map_containert &idx_map,
                             const expr2tc &idx,
                             smt_astt val);
   void execute_array_ite(ast_vect &dest,
                          const ast_vect &true_vals,
                          const ast_vect &false_vals,
-                         const idx_mapt &idx_map,
+                         const index_map_containert &idx_map,
                          smt_astt cond);
   void execute_array_joining_ite(ast_vect &dest,
                                  unsigned int cur_id,
                                  const array_ast *true_arr_ast,
                                  const array_ast *false_arr_ast,
-                                 const idx_mapt &idx_map,
+                                 const index_map_containert &idx_map,
                                  smt_astt cond, smt_sortt subtype);
 
   void collate_array_values(ast_vect &vals,
-                            const idx_mapt &idx_map,
                             unsigned int base_array_id,
                             unsigned int array_update_no,
                             const smt_sort *subtype,
                             smt_astt init_val = NULL);
-  void add_initial_ackerman_constraints(
-    const ast_vect &vals,
-    const idx_mapt &idx_map);
+  void add_initial_ackerman_constraints(const ast_vect &vals,
+      const index_map_containert &idx_map);
 
   inline array_ast *
   new_ast(smt_sortt _s) {
@@ -319,6 +336,10 @@ public:
   > array_of_val_containert;
 
   array_of_val_containert array_of_vals;
+
+  // Index map, between index expressions, and where the value for that index
+  // actually sits in ast vectors.
+  std::vector<index_map_containert> expr_index_map;
 
   // Finally, for model building, we need all the past array values. Three
   // vectors, dimensions are arrays id's, historical point, array element,
