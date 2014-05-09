@@ -126,6 +126,13 @@ public:
                          const std::vector<smt_astt> &false_vals,
                          const std::map<expr2tc, unsigned> &idx_map,
                          smt_astt cond);
+  void execute_array_joining_ite(std::vector<smt_astt> &dest,
+                                 unsigned int cur_id,
+                                 const array_ast *true_arr_ast,
+                                 const array_ast *false_arr_ast,
+                                 const std::map<expr2tc, unsigned> &idx_map,
+                                 smt_astt cond, smt_sortt subtype);
+
   void collate_array_values(std::vector<smt_astt> &vals,
                             const std::map<expr2tc, unsigned> &idx_map,
                             const std::list<struct array_select> &idxs,

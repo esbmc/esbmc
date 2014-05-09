@@ -644,48 +644,16 @@ array_convt::execute_array_trans(
   const array_with &w = array_updates[arr][idx+1];
   if (w.is_ite) {
     if (w.u.i.src_array_id_false != w.u.i.src_array_id_true) {
-      // It's not guarenteed that the 'true' set of values, is the current array
-      // that we're converting.
-
-      bool cur_arr_vals_are_true = (w.u.i.src_array_id_true == arr);
-      unsigned int other_arr_id =
-        (cur_arr_vals_are_true)
-        ? w.u.i.src_array_id_false
-        : w.u.i.src_array_id_true;
-      const array_ast *other_arr_ast =
-        (cur_arr_vals_are_true)
-        ? w.u.i.false_arr_ast
-        : w.u.i.true_arr_ast;
-
-      // Create one bajillion unbounded selects.
-      std::vector<smt_astt> selects;
-      selects.reserve(array_indexes[arr].size());
-      assert(array_indexes[arr] == array_indexes[other_arr_id]);
-      for (const auto &elem : array_indexes[arr]) {
-        selects.push_back(mk_unbounded_select(other_arr_ast, elem, subtype));
-      }
-
-      // Now select which values are true or false
-      const std::vector<smt_astt > &true_vals = (cur_arr_vals_are_true)
-        ? data[idx] : selects;
-      const std::vector<smt_astt > &false_vals = (cur_arr_vals_are_true)
-        ? selects : data[idx];
-
-      // And now, perform the ites.
-      smt_astt cond = w.u.i.cond;
-      for (unsigned int i = 0; i < idx_map.size(); i++) {
-        smt_astt updated_elem = true_vals[i]->ite(ctx, cond, false_vals[i]);
-        ctx->assert_ast(dest_data[i]->eq(ctx, updated_elem));
-      }
-
-      return; // yolo
+      execute_array_joining_ite(dest_data, arr, w.u.i.true_arr_ast,
+                                w.u.i.false_arr_ast, idx_map, w.u.i.cond,
+                                subtype);
+    } else {
+      unsigned int true_idx = w.u.i.src_array_update_true;
+      unsigned int false_idx = w.u.i.src_array_update_false;
+      assert(true_idx < idx + 1 && false_idx < idx + 1);
+      execute_array_ite(dest_data, data[true_idx], data[false_idx], idx_map,
+                        w.u.i.cond);
     }
-
-    unsigned int true_idx = w.u.i.src_array_update_true;
-    unsigned int false_idx = w.u.i.src_array_update_false;
-    assert(true_idx < idx + 1 && false_idx < idx + 1);
-    execute_array_ite(dest_data, data[true_idx], data[false_idx], idx_map,
-                      w.u.i.cond);
   } else {
     execute_array_update(dest_data, data[w.u.w.src_array_update_num],
                          idx_map, w.idx, w.u.w.val);
@@ -745,6 +713,47 @@ array_convt::execute_array_ite(std::vector<smt_astt> &dest,
     smt_astt updated_elem = true_vals[i]->ite(ctx, cond, false_vals[i]);
     ctx->assert_ast(dest[i]->eq(ctx, updated_elem));
   }
+
+  return;
+}
+
+void
+array_convt::execute_array_joining_ite(std::vector<smt_astt> &dest,
+    unsigned int cur_id, const array_ast *true_arr_ast,
+    const array_ast *false_arr_ast, const std::map<expr2tc, unsigned> &idx_map,
+    smt_astt cond, smt_sortt subtype)
+{
+
+  const array_ast *local_ast, *remote_ast;
+  bool local_arr_values_are_true = (true_arr_ast->base_array_id == cur_id);
+  if (local_arr_values_are_true) {
+    local_ast = true_arr_ast;
+    remote_ast = false_arr_ast;
+  } else {
+    local_ast = false_arr_ast;
+    remote_ast = true_arr_ast;
+  }
+
+  std::vector<smt_astt> selects;
+  selects.reserve(array_indexes[cur_id].size());
+  assert(array_indexes[cur_id] == array_indexes[remote_ast->base_array_id]);
+  for (const auto &elem : array_indexes[remote_ast->base_array_id]) {
+    selects.push_back(mk_unbounded_select(remote_ast, elem, subtype));
+  }
+
+  // Now select which values are true or false
+  const std::vector<smt_astt > *true_vals, *false_vals;
+  if (local_arr_values_are_true) {
+    true_vals =
+      &array_valuation[local_ast->base_array_id][local_ast->array_update_num];
+    false_vals = &selects;
+  } else {
+    false_vals =
+      &array_valuation[local_ast->base_array_id][local_ast->array_update_num];
+    true_vals = &selects;
+  }
+
+  execute_array_ite(dest, *true_vals, *false_vals, idx_map, cond);
 
   return;
 }
