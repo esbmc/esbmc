@@ -59,11 +59,8 @@ array_convt::new_array_id(void)
   idx_record_containert tmp_set;
   array_indexes.push_back(tmp_set);
 
-  std::vector<std::list<struct array_select> > tmp2;
+  array_select_containert tmp2;
   array_values.push_back(tmp2);
-
-  std::list<struct array_select> tmp25;
-  array_values[new_base_array_id].push_back(tmp25);
 
   std::vector<struct array_with> tmp3;
   array_updates.push_back(tmp3);
@@ -231,10 +228,14 @@ array_convt::mk_unbounded_select(const array_ast *ma,
   // then we should return the fresh variable representing that select,
   // rather than adding another one.
   // XXX: this is a list/vec. Bad.
-  for (const auto &sel : array_values[ma->base_array_id][ma->array_update_num]){
-    if (sel.idx == real_idx) {
+  array_select_containert::nth_index<0>::type &array_num_idx =
+    array_values[ma->base_array_id].get<0>();
+  auto pair = array_num_idx.equal_range(ma->array_update_num);
+
+  for (auto it = pair.first; it != pair.second; it++) {
+    if (it->idx == real_idx) {
       // Aha.
-      return sel.val;
+      return it->val;
     }
   }
 
@@ -245,8 +246,9 @@ array_convt::mk_unbounded_select(const array_ast *ma,
   sel.src_array_update_num = ma->array_update_num;
   sel.idx = real_idx;
   sel.val = a;
+  sel.ctx_level = ctx->ctx_level;
   // Record this index
-  array_values[ma->base_array_id][ma->array_update_num].push_back(sel);
+  array_values[ma->base_array_id].insert(sel);
 
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
@@ -283,10 +285,6 @@ array_convt::mk_unbounded_store(const array_ast *ma,
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
   ctx->convert_ast(idx);
-
-  // Also file a new select record for this point in time.
-  std::list<struct array_select> tmp;
-  array_values[ma->base_array_id].push_back(tmp);
 
   // Result is the new array id goo.
   return newarr;
@@ -342,10 +340,6 @@ array_convt::unbounded_array_ite(smt_astt cond,
   w.u.i.false_arr_ast = false_arr;
   w.u.i.cond = cond;
   array_updates[new_arr_id].push_back(w);
-
-  // Also file a new select record for this point in time.
-  std::list<struct array_select> tmp;
-  array_values[new_arr_id].push_back(tmp);
 
   return newarr;
 }
@@ -610,10 +604,10 @@ array_convt::add_array_constraints(unsigned int arr)
   // free values for each index.
   auto it = array_of_vals.find(arr);
   if (it != array_of_vals.end()) {
-    collate_array_values(real_array_values[0], idx_map, array_values[arr][0],
+    collate_array_values(real_array_values[0], idx_map, arr, 0,
         subtype, it->second);
   } else {
-    collate_array_values(real_array_values[0], idx_map, array_values[arr][0],
+    collate_array_values(real_array_values[0], idx_map, arr, 0,
         subtype);
   }
 
@@ -646,7 +640,7 @@ array_convt::execute_array_trans(array_update_vect &data,
   // Fill dest_data with ASTs: if a select has been applied for a particular
   // index, then that value is inserted there. Otherwise, a free value is
   // inserted.
-  collate_array_values(dest_data, idx_map, array_values[arr][idx+1], subtype);
+  collate_array_values(dest_data, idx_map, arr, idx+1, subtype);
 
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
@@ -772,7 +766,8 @@ array_convt::execute_array_joining_ite(ast_vect &dest,
 void
 array_convt::collate_array_values(ast_vect &vals,
                                     const idx_mapt &idx_map,
-                                    const std::list<struct array_select> &idxs,
+                                    unsigned int base_array_id,
+                                    unsigned int array_update_num,
                                     smt_sortt subtype,
                                     smt_astt init_val)
 {
@@ -788,8 +783,13 @@ array_convt::collate_array_values(ast_vect &vals,
        it != vals.end(); it++)
     *it = NULL;
 
+  // Get the range of values with this update array num.
+  array_select_containert &idxs = array_values[base_array_id];
+  array_select_containert::nth_index<0>::type &array_num_idx = idxs.get<0>();
+  auto pair = array_num_idx.equal_range(array_update_num);
+
   // Now assign in all free variables created as a result of selects.
-  for (auto it = idxs.begin(); it != idxs.end(); it++) {
+  for (auto it = pair.first; it != pair.second; it++) {
     auto it2 = idx_map.find(it->idx);
     assert(it2 != idx_map.end());
     vals[it2->second] = it->val;

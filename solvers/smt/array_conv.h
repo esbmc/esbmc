@@ -138,7 +138,8 @@ public:
 
   void collate_array_values(ast_vect &vals,
                             const idx_mapt &idx_map,
-                            const std::list<struct array_select> &idxs,
+                            unsigned int base_array_id,
+                            unsigned int array_update_no,
                             const smt_sort *subtype,
                             smt_astt init_val = NULL);
   void add_initial_ackerman_constraints(
@@ -196,8 +197,27 @@ public:
     unsigned int src_array_update_num;
     expr2tc idx;
     smt_astt val;
+    unsigned int ctx_level;
   };
-  std::vector<std::vector<std::list<struct array_select> > > array_values;
+  typedef struct array_select array_selectt;
+
+  typedef boost::multi_index_container<
+    array_selectt,
+    boost::multi_index::indexed_by<
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(array_selectt, unsigned int,
+                                 src_array_update_num),
+        std::greater<unsigned int>
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(array_selectt, unsigned int, ctx_level),
+        std::greater<unsigned int>
+      >
+    >
+  > array_select_containert;
+
+
+  std::vector<array_select_containert> array_values;
 
   // Array equalities -- decomposed into selects when array constraints
   // are encoded.
