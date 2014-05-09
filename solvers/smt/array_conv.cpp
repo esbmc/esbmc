@@ -610,12 +610,9 @@ array_convt::add_array_constraints(unsigned int arr)
 }
 
 void
-array_convt::execute_array_trans(
-                                   array_update_vect &data,
-                                   unsigned int arr,
-                                   unsigned int idx,
-                                   const idx_mapt &idx_map,
-                                   smt_sortt subtype)
+array_convt::execute_array_trans(array_update_vect &data,
+    unsigned int arr, unsigned int idx, const idx_mapt &idx_map,
+    smt_sortt subtype)
 {
   // Encode the constraints for a particular array update.
 
