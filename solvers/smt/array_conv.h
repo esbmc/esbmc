@@ -67,6 +67,7 @@ public:
   struct array_select;
   struct array_with;
   typedef std::map<expr2tc, unsigned> idx_mapt;
+  typedef smt_convt::ast_vec ast_vect;
 
   array_convt(smt_convt *_ctx);
   ~array_convt();
@@ -117,30 +118,30 @@ public:
                            unsigned int arr, unsigned int idx,
                            const idx_mapt &idx_map,
                            const smt_sort *subtype);
-  void execute_array_update(std::vector<smt_astt> &dest_data,
-                            std::vector<smt_astt> &src_data,
+  void execute_array_update(ast_vect &dest_data,
+                            ast_vect &src_data,
                             const idx_mapt &idx_map,
                             const expr2tc &idx,
                             smt_astt val);
-  void execute_array_ite(std::vector<smt_astt> &dest,
-                         const std::vector<smt_astt> &true_vals,
-                         const std::vector<smt_astt> &false_vals,
+  void execute_array_ite(ast_vect &dest,
+                         const ast_vect &true_vals,
+                         const ast_vect &false_vals,
                          const idx_mapt &idx_map,
                          smt_astt cond);
-  void execute_array_joining_ite(std::vector<smt_astt> &dest,
+  void execute_array_joining_ite(ast_vect &dest,
                                  unsigned int cur_id,
                                  const array_ast *true_arr_ast,
                                  const array_ast *false_arr_ast,
                                  const idx_mapt &idx_map,
                                  smt_astt cond, smt_sortt subtype);
 
-  void collate_array_values(std::vector<smt_astt> &vals,
+  void collate_array_values(ast_vect &vals,
                             const idx_mapt &idx_map,
                             const std::list<struct array_select> &idxs,
                             const smt_sort *subtype,
                             smt_astt init_val = NULL);
   void add_initial_ackerman_constraints(
-    const std::vector<smt_astt> &vals,
+    const ast_vect &vals,
     const idx_mapt &idx_map);
 
   inline array_ast *

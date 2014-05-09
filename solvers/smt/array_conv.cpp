@@ -437,7 +437,7 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
 
   // We've found an index; pick its value out, convert back to expr.
 
-  const std::vector<smt_astt > &solver_values =
+  const ast_vect &solver_values =
     array_valuation[mast->base_array_id][mast->array_update_num];
   assert(i < solver_values.size());
   return ctx->get_bv(subtype, solver_values[i]);
@@ -540,10 +540,8 @@ array_convt::add_array_equalities(void)
 
     // Simply get a handle on two vectors of valuations in array_valuation,
     // and encode an equality.
-    const std::vector<smt_astt> &a1 =
-      array_valuation[eq.arr1_id][eq.arr1_update_num];
-    const std::vector<smt_astt> &a2 =
-      array_valuation[eq.arr2_id][eq.arr2_update_num];
+    const ast_vect &a1 = array_valuation[eq.arr1_id][eq.arr1_update_num];
+    const ast_vect &a2 = array_valuation[eq.arr2_id][eq.arr2_update_num];
 
     smt_convt::ast_vec lits;
     for (unsigned int i = 0; i < a1.size(); i++) {
@@ -629,7 +627,7 @@ array_convt::execute_array_trans(
 
   // The destination vector: representing the values of each element in the
   // next updated state.
-  std::vector<smt_astt > &dest_data = data[idx+1];
+  ast_vect &dest_data = data[idx+1];
 
   // Fill dest_data with ASTs: if a select has been applied for a particular
   // index, then that value is inserted there. Otherwise, a free value is
@@ -659,8 +657,8 @@ array_convt::execute_array_trans(
 }
 
 void
-array_convt::execute_array_update(std::vector<smt_astt> &dest_data,
-  std::vector<smt_astt> &source_data,
+array_convt::execute_array_update(ast_vect &dest_data,
+  ast_vect &source_data,
   const idx_mapt &idx_map,
   const expr2tc &idx,
   smt_astt updated_value)
@@ -699,9 +697,9 @@ array_convt::execute_array_update(std::vector<smt_astt> &dest_data,
 }
 
 void
-array_convt::execute_array_ite(std::vector<smt_astt> &dest,
-    const std::vector<smt_astt> &true_vals,
-    const std::vector<smt_astt> &false_vals,
+array_convt::execute_array_ite(ast_vect &dest,
+    const ast_vect &true_vals,
+    const ast_vect &false_vals,
     const idx_mapt &idx_map,
     smt_astt cond)
 {
@@ -716,7 +714,7 @@ array_convt::execute_array_ite(std::vector<smt_astt> &dest,
 }
 
 void
-array_convt::execute_array_joining_ite(std::vector<smt_astt> &dest,
+array_convt::execute_array_joining_ite(ast_vect &dest,
     unsigned int cur_id, const array_ast *true_arr_ast,
     const array_ast *false_arr_ast, const idx_mapt &idx_map,
     smt_astt cond, smt_sortt subtype)
@@ -732,7 +730,7 @@ array_convt::execute_array_joining_ite(std::vector<smt_astt> &dest,
     remote_ast = true_arr_ast;
   }
 
-  std::vector<smt_astt> selects;
+  ast_vect selects;
   selects.reserve(array_indexes[cur_id].size());
   assert(array_indexes[cur_id] == array_indexes[remote_ast->base_array_id]);
   for (const auto &elem : array_indexes[remote_ast->base_array_id]) {
@@ -740,7 +738,7 @@ array_convt::execute_array_joining_ite(std::vector<smt_astt> &dest,
   }
 
   // Now select which values are true or false
-  const std::vector<smt_astt > *true_vals, *false_vals;
+  const ast_vect *true_vals, *false_vals;
   if (local_arr_values_are_true) {
     true_vals =
       &array_valuation[local_ast->base_array_id][local_ast->array_update_num];
@@ -757,7 +755,7 @@ array_convt::execute_array_joining_ite(std::vector<smt_astt> &dest,
 }
 
 void
-array_convt::collate_array_values(std::vector<smt_astt > &vals,
+array_convt::collate_array_values(ast_vect &vals,
                                     const idx_mapt &idx_map,
                                     const std::list<struct array_select> &idxs,
                                     smt_sortt subtype,
@@ -771,7 +769,7 @@ array_convt::collate_array_values(std::vector<smt_astt > &vals,
   assert(vals.size() == idx_map.size());
 
   // First, make everything null,
-  for (std::vector<smt_astt >::iterator it = vals.begin();
+  for (ast_vect::iterator it = vals.begin();
        it != vals.end(); it++)
     *it = NULL;
 
@@ -806,7 +804,7 @@ array_convt::collate_array_values(std::vector<smt_astt > &vals,
 
 void
 array_convt::add_initial_ackerman_constraints(
-                                  const std::vector<smt_astt > &vals,
+                                  const ast_vect &vals,
                                   const std::map<expr2tc,unsigned> &idx_map)
 {
   // Add ackerman constraints: these state that for each element of an array,
