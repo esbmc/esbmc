@@ -425,6 +425,14 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
   // index.
   const array_ast *mast = array_downcast(a);
 
+  if (!is_unbounded_array(a->sort)) {
+    if (index < mast->array_fields.size()) {
+      return ctx->get_bv(subtype, mast->array_fields[index]);
+    } else {
+      return expr2tc(); // Out of range
+    }
+  }
+
   if (mast->base_array_id >= array_valuation.size()) {
     // This is an array that was not previously converted, therefore doesn't
     // appear in the valuation table. Therefore, all its values are free.
