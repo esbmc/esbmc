@@ -217,7 +217,7 @@ public:
   > array_select_containert;
 
 
-  std::vector<array_select_containert> array_values;
+  std::vector<array_select_containert> array_selects;
 
   // Array equalities -- decomposed into selects when array constraints
   // are encoded.

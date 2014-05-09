@@ -22,7 +22,7 @@ array_indexes_are_same(
 }
 
 array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true),
-  array_indexes(), array_values(), array_updates(), ctx(_ctx)
+  array_indexes(), array_selects(), array_updates(), ctx(_ctx)
 {
 }
 
@@ -60,13 +60,13 @@ array_convt::new_array_id(void)
   array_indexes.push_back(tmp_set);
 
   array_select_containert tmp2;
-  array_values.push_back(tmp2);
+  array_selects.push_back(tmp2);
 
   array_update_containert tmp3;
   array_updates.push_back(tmp3);
 
   // Aimless piece of data, just to keep indexes in iarray_updates and
-  // array_values in sync.
+  // array_selects in sync.
   struct array_with w;
   w.is_ite = false;
   w.idx = expr2tc();
@@ -232,7 +232,7 @@ array_convt::mk_unbounded_select(const array_ast *ma,
   // rather than adding another one.
   // XXX: this is a list/vec. Bad.
   array_select_containert::nth_index<0>::type &array_num_idx =
-    array_values[ma->base_array_id].get<0>();
+    array_selects[ma->base_array_id].get<0>();
   auto pair = array_num_idx.equal_range(ma->array_update_num);
 
   for (auto it = pair.first; it != pair.second; it++) {
@@ -251,7 +251,7 @@ array_convt::mk_unbounded_select(const array_ast *ma,
   sel.val = a;
   sel.ctx_level = ctx->ctx_level;
   // Record this index
-  array_values[ma->base_array_id].insert(sel);
+  array_selects[ma->base_array_id].insert(sel);
 
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
@@ -811,7 +811,7 @@ array_convt::collate_array_values(ast_vect &vals,
     *it = NULL;
 
   // Get the range of values with this update array num.
-  array_select_containert &idxs = array_values[base_array_id];
+  array_select_containert &idxs = array_selects[base_array_id];
   array_select_containert::nth_index<0>::type &array_num_idx = idxs.get<0>();
   auto pair = array_num_idx.equal_range(array_update_num);
 
