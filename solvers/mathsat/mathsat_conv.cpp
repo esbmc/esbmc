@@ -487,3 +487,15 @@ mathsat_convt::add_array_constraints_for_solving()
 {
   return;
 }
+
+void
+mathsat_convt::push_array_ctx(void)
+{
+  return;
+}
+
+void
+mathsat_convt::pop_array_ctx(void)
+{
+  return;
+}

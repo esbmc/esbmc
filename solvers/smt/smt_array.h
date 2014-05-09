@@ -45,6 +45,9 @@ public:
 
   virtual void add_array_constraints_for_solving() = 0;
 
+  virtual void push_array_ctx(void) = 0;
+  virtual void pop_array_ctx(void) = 0;
+
   // And everything else goes through the ast methods!
 
   // Small piece of internal munging:

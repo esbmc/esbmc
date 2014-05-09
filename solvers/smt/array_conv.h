@@ -173,6 +173,9 @@ public:
     return new array_ast(this, ctx, _s, _a);
   }
 
+  void push_array_ctx(void);
+  void pop_array_ctx(void);
+
   // Members
 
   // Array tracking: each new root array (from fresh_array) gets its own

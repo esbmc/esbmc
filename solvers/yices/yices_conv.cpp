@@ -408,6 +408,18 @@ yices_convt::add_array_constraints_for_solving()
   return;
 }
 
+void
+yices_convt::push_array_ctx(void)
+{
+  return;
+}
+
+void
+yices_convt::pop_array_ctx(void)
+{
+  return;
+}
+
 expr2tc
 yices_convt::get_bool(smt_astt a)
 {

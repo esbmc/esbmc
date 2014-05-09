@@ -502,6 +502,18 @@ array_convt::add_array_constraints_for_solving(void)
 }
 
 void
+array_convt::push_array_ctx(void)
+{
+  return;
+}
+
+void
+array_convt::pop_array_ctx(void)
+{
+  return;
+}
+
+void
 array_convt::join_array_indexes()
 {
   // Identify the set of array ID's that, due to equalities and ITE's, are

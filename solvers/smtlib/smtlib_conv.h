@@ -81,6 +81,8 @@ public:
 
   const smt_ast *convert_array_of(smt_astt init_val,
                                   unsigned long domain_width);
+  void push_array_ctx(void);
+  void pop_array_ctx(void);
 
   virtual expr2tc get_bool(const smt_ast *a);
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);

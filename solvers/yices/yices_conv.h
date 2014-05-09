@@ -92,6 +92,8 @@ public:
   smt_astt convert_array_of(smt_astt init_val, unsigned long domain_width);
 
   virtual void add_array_constraints_for_solving();
+  void push_array_ctx(void);
+  void pop_array_ctx(void);
 
   virtual smt_sortt mk_struct_sort(const type2tc &type);
   virtual smt_sortt mk_union_sort(const type2tc &type);

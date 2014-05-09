@@ -514,3 +514,15 @@ boolector_convt::add_array_constraints_for_solving()
 {
   return;
 }
+
+void
+boolector_convt::push_array_ctx(void)
+{
+  return;
+}
+
+void
+boolector_convt::pop_array_ctx(void)
+{
+  return;
+}

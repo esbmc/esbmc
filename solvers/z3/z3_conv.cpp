@@ -1530,6 +1530,18 @@ z3_convt::add_array_constraints_for_solving()
 }
 
 void
+z3_convt::push_array_ctx(void)
+{
+  return;
+}
+
+void
+z3_convt::pop_array_ctx(void)
+{
+  return;
+}
+
+void
 z3_convt::add_tuple_constraints_for_solving()
 {
   return;

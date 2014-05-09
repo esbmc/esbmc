@@ -63,6 +63,8 @@ public:
                                   unsigned long domain_width);
 
   virtual void add_array_constraints_for_solving();
+  void push_array_ctx(void);
+  void pop_array_ctx(void);
 
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const type2tc &t, const smt_ast *a);

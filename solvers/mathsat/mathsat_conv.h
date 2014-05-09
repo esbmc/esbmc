@@ -75,6 +75,8 @@ public:
                                           unsigned long domain_width);
 
   virtual void add_array_constraints_for_solving();
+  void push_array_ctx(void);
+  void pop_array_ctx(void);
 
   // MathSAT data.
   msat_config cfg;
