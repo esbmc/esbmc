@@ -66,6 +66,7 @@ class array_convt : public array_iface
 public:
   struct array_select;
   struct array_with;
+  typedef std::map<expr2tc, unsigned> idx_mapt;
 
   array_convt(smt_convt *_ctx);
   ~array_convt();
@@ -114,33 +115,33 @@ public:
   void add_array_equalities(void);
   void execute_array_trans(std::vector<std::vector<smt_astt> > &data,
                            unsigned int arr, unsigned int idx,
-                           const std::map<expr2tc, unsigned> &idx_map,
+                           const idx_mapt &idx_map,
                            const smt_sort *subtype);
   void execute_array_update(std::vector<smt_astt> &dest_data,
                             std::vector<smt_astt> &src_data,
-                            const std::map<expr2tc, unsigned> &idx_map,
+                            const idx_mapt &idx_map,
                             const expr2tc &idx,
                             smt_astt val);
   void execute_array_ite(std::vector<smt_astt> &dest,
                          const std::vector<smt_astt> &true_vals,
                          const std::vector<smt_astt> &false_vals,
-                         const std::map<expr2tc, unsigned> &idx_map,
+                         const idx_mapt &idx_map,
                          smt_astt cond);
   void execute_array_joining_ite(std::vector<smt_astt> &dest,
                                  unsigned int cur_id,
                                  const array_ast *true_arr_ast,
                                  const array_ast *false_arr_ast,
-                                 const std::map<expr2tc, unsigned> &idx_map,
+                                 const idx_mapt &idx_map,
                                  smt_astt cond, smt_sortt subtype);
 
   void collate_array_values(std::vector<smt_astt> &vals,
-                            const std::map<expr2tc, unsigned> &idx_map,
+                            const idx_mapt &idx_map,
                             const std::list<struct array_select> &idxs,
                             const smt_sort *subtype,
                             smt_astt init_val = NULL);
   void add_initial_ackerman_constraints(
     const std::vector<smt_astt> &vals,
-    const std::map<expr2tc, unsigned> &idx_map);
+    const idx_mapt &idx_map);
 
   inline array_ast *
   new_ast(smt_sortt _s) {

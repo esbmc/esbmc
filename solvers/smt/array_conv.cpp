@@ -587,7 +587,7 @@ array_convt::add_array_constraints(unsigned int arr)
   // Compute a mapping between indexes and an element in the vector. These
   // are ordered by how std::set orders them, not by history or anything. Or
   // even the element index.
-  std::map<expr2tc, unsigned> idx_map;
+  idx_mapt idx_map;
   for (auto it = indexes.begin(); it != indexes.end(); it++)
     idx_map.insert(std::make_pair(*it, idx_map.size()));
 
@@ -620,7 +620,7 @@ array_convt::execute_array_trans(
                             std::vector<std::vector<smt_astt > > &data,
                                    unsigned int arr,
                                    unsigned int idx,
-                                   const std::map<expr2tc, unsigned> &idx_map,
+                                   const idx_mapt &idx_map,
                                    smt_sortt subtype)
 {
   // Encode the constraints for a particular array update.
@@ -663,7 +663,7 @@ array_convt::execute_array_trans(
 void
 array_convt::execute_array_update(std::vector<smt_astt> &dest_data,
   std::vector<smt_astt> &source_data,
-  const std::map<expr2tc, unsigned> &idx_map,
+  const idx_mapt &idx_map,
   const expr2tc &idx,
   smt_astt updated_value)
 {
@@ -671,7 +671,7 @@ array_convt::execute_array_update(std::vector<smt_astt> &dest_data,
   // between the older version and this version.
 
   // So, the updated element,
-  std::map<expr2tc, unsigned>::const_iterator it = idx_map.find(idx);
+  idx_mapt::const_iterator it = idx_map.find(idx);
   assert(it != idx_map.end());
 
   smt_astt update_idx_ast = ctx->convert_ast(idx);
@@ -704,7 +704,7 @@ void
 array_convt::execute_array_ite(std::vector<smt_astt> &dest,
     const std::vector<smt_astt> &true_vals,
     const std::vector<smt_astt> &false_vals,
-    const std::map<expr2tc, unsigned> &idx_map,
+    const idx_mapt &idx_map,
     smt_astt cond)
 {
 
@@ -720,7 +720,7 @@ array_convt::execute_array_ite(std::vector<smt_astt> &dest,
 void
 array_convt::execute_array_joining_ite(std::vector<smt_astt> &dest,
     unsigned int cur_id, const array_ast *true_arr_ast,
-    const array_ast *false_arr_ast, const std::map<expr2tc, unsigned> &idx_map,
+    const array_ast *false_arr_ast, const idx_mapt &idx_map,
     smt_astt cond, smt_sortt subtype)
 {
 
@@ -760,7 +760,7 @@ array_convt::execute_array_joining_ite(std::vector<smt_astt> &dest,
 
 void
 array_convt::collate_array_values(std::vector<smt_astt > &vals,
-                                    const std::map<expr2tc, unsigned> &idx_map,
+                                    const idx_mapt &idx_map,
                                     const std::list<struct array_select> &idxs,
                                     smt_sortt subtype,
                                     smt_astt init_val)
