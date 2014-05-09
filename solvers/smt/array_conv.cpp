@@ -649,6 +649,7 @@ array_convt::execute_array_trans(array_update_vect &data,
 
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
+  assert(idx+1 < array_updates[arr].size());
   const array_with &w = array_updates[arr][idx+1];
   if (w.is_ite) {
     if (w.u.i.true_arr_ast->base_array_id !=
