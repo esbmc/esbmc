@@ -297,7 +297,28 @@ public:
 
   // Map between base array identifiers and the value to initialize it with.
   // Only applicable to unbounded arrays.
-  std::map<unsigned, smt_astt> array_of_vals;
+  struct array_of_val_rec {
+    unsigned int array_id;
+    smt_astt value;
+    unsigned int ctx_level;
+  };
+  typedef struct array_of_val_rec array_of_val_rect;
+
+  typedef boost::multi_index_container<
+    array_of_val_rect,
+    boost::multi_index::indexed_by<
+      boost::multi_index::ordered_unique<
+        BOOST_MULTI_INDEX_MEMBER(array_of_val_rect, unsigned int, array_id),
+        std::greater<unsigned int>
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(array_of_val_rect, unsigned int, ctx_level),
+        std::greater<unsigned int>
+      >
+    >
+  > array_of_val_containert;
+
+  array_of_val_containert array_of_vals;
 
   // Finally, for model building, we need all the past array values. Three
   // vectors, dimensions are arrays id's, historical point, array element,

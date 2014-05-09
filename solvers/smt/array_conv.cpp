@@ -375,7 +375,13 @@ array_convt::convert_array_of_wsort(smt_astt init_val,
     // mk_array_symbol.
     std::string name = ctx->mk_fresh_name("array_of_unbounded::");
     mast = static_cast<array_ast*>(mk_array_symbol(name, arr_sort, idx_sort));
-    array_of_vals.insert(std::make_pair(mast->base_array_id, init_val));
+
+    struct array_of_val_rec v;
+    v.array_id = mast->base_array_id;
+    v.value = init_val;
+    v.ctx_level = ctx->ctx_level;
+
+    array_of_vals.insert(v);
   } else {
     // For bounded arrays, simply store the initializer in the explicit vector
     // of elements, x times.
@@ -619,13 +625,16 @@ array_convt::add_array_constraints(unsigned int arr)
   // Initialize the first set of elements. If this array has an initializer,
   // then all values recieve the initial value. Otherwise, they receive
   // free values for each index.
-  auto it = array_of_vals.find(arr);
-  if (it != array_of_vals.end()) {
-    collate_array_values(real_array_values[0], idx_map, arr, 0,
-        subtype, it->second);
+
+  array_of_val_containert::nth_index<0>::type &array_num_idx =
+    array_of_vals.get<0>();
+  auto it = array_num_idx.find(arr);
+
+  if (it != array_num_idx.end()) {
+    collate_array_values(real_array_values[0], idx_map, arr, 0, subtype,
+        it->value);
   } else {
-    collate_array_values(real_array_values[0], idx_map, arr, 0,
-        subtype);
+    collate_array_values(real_array_values[0], idx_map, arr, 0, subtype);
   }
 
   // Ensure initial consistency of the initial values: indexes that evaluate
