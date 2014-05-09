@@ -801,7 +801,7 @@ array_convt::collate_array_values(ast_vect &vals,
 void
 array_convt::add_initial_ackerman_constraints(
                                   const ast_vect &vals,
-                                  const std::map<expr2tc,unsigned> &idx_map)
+                                  const idx_mapt &idx_map)
 {
   // Add ackerman constraints: these state that for each element of an array,
   // where the indexes are equivalent (in the solver), then the value of the
