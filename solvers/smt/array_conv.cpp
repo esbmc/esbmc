@@ -74,6 +74,16 @@ array_convt::new_array_id(void)
   w.update_level = 0;
   array_updates[new_base_array_id].insert(w);
 
+  touched_array_sett touched;
+
+  // Insert self into 'touched' arrays
+  touched_arrayt t;
+  t.array_id = new_base_array_id;
+  t.ctx_level = ctx->ctx_level;
+  touched.insert(t);
+
+  array_relations.push_back(touched);
+
   return new_base_array_id;
 }
 
@@ -499,30 +509,43 @@ array_convt::join_array_indexes()
   // indexes.
   // This needs to support transitivity.
 
-  std::vector<std::set<unsigned int> > groupings;
-  groupings.resize(array_updates.size());
+  array_relations.resize(array_updates.size());
+
+  // Load the existing set of id's into the groupings vector.
 
   // Collect together the set of array id's touched by each array id.
   unsigned int arrid = 0;
   for (unsigned int arrid = 0; arrid < array_updates.size(); arrid++) {
-    std::set<unsigned int> &joined_array_ids = groupings[arrid];
+    touched_array_sett &joined_array_ids = array_relations[arrid];
 
     for (const auto &update : array_updates[arrid]) {
       if (update.is_ite) {
         if (update.u.i.true_arr_ast->base_array_id !=
             update.u.i.false_arr_ast->base_array_id) {
-          joined_array_ids.insert(update.u.i.true_arr_ast->base_array_id);
-          joined_array_ids.insert(update.u.i.false_arr_ast->base_array_id);
+          touched_arrayt t;
+
+          t.array_id = update.u.i.true_arr_ast->base_array_id;
+          t.ctx_level = ctx->ctx_level;
+          joined_array_ids.insert(t);
+
+          t.array_id = update.u.i.false_arr_ast->base_array_id;
+          t.ctx_level = ctx->ctx_level;
+          joined_array_ids.insert(t);
         }
       }
     }
-
-    joined_array_ids.insert(arrid);
   }
 
   for (const auto &equality : array_equalities) {
-    groupings[equality.second.arr1_id].insert(equality.second.arr2_id);
-    groupings[equality.second.arr2_id].insert(equality.second.arr1_id);
+    touched_arrayt t;
+
+    t.array_id = equality.second.arr2_id;
+    t.ctx_level = ctx->ctx_level;
+    array_relations[equality.second.arr1_id].insert(t);
+
+    t.array_id = equality.second.arr1_id;
+    t.ctx_level = ctx->ctx_level;
+    array_relations[equality.second.arr2_id].insert(t);
   }
 
   // K; now compute a fixedpoint joining the sets of things that touch each
@@ -531,16 +554,27 @@ array_convt::join_array_indexes()
   do {
     modified = false;
 
-    for (const auto &arrset : groupings) {
-      for (auto touched_arr_id : arrset) {
+    for (const auto &arrset : array_relations) {
+      for (const auto &touched_arr_rec : arrset) {
         // It the other array recorded as touching all the arrays that this one
         // does? Try inserting this set, and see if the size changes. Slightly
         // ghetto, but avoids additional allocations.
-        unsigned int original_size = groupings[touched_arr_id].size();
+        unsigned int original_size =
+          array_relations[touched_arr_rec.array_id].size();
 
-        groupings[touched_arr_id].insert(arrset.begin(), arrset.end());
+        // Attempt insertions, modfiying context level to the current one.
+        // This is necessary because this relation needs to not exist after a
+        // pop of this operation.
+        for (const auto &other_arr_rec : arrset) {
+          touched_arrayt t = other_arr_rec;
+          t.ctx_level = ctx->ctx_level;
 
-        if (original_size != groupings[touched_arr_id].size())
+          // As array_id index is unique, this will be rejected if it's already
+          // recorded, even if the context level is different.
+          array_relations[touched_arr_rec.array_id].insert(t);
+        }
+
+        if (original_size != array_relations[touched_arr_rec.array_id].size())
           modified = true;
       }
     }
@@ -548,11 +582,22 @@ array_convt::join_array_indexes()
 
   // Right -- now join all ther indexes. This can be optimised, but not now.
   for (arrid = 0; arrid < array_updates.size(); arrid++) {
-    const std::set<unsigned int> &arrset = groupings[arrid];
-    for (auto touched_arr_id : arrset) {
-      array_indexes[arrid].insert(
-          array_indexes[touched_arr_id].begin(),
-          array_indexes[touched_arr_id].end());
+    const auto &arrset = array_relations[arrid];
+    for (const auto &touched_arr_rec : arrset) {
+      // Only juggle indexes for relations that were just encoded
+      if (touched_arr_rec.ctx_level != ctx->ctx_level)
+        continue;
+
+      // Go through each index of the other array and bake it into the current
+      // selected one if it isn't already.
+      for (const auto &idx : array_indexes[touched_arr_rec.array_id]) {
+        if (array_indexes[arrid].find(idx.idx) == array_indexes[arrid].end()) {
+          idx_record r;
+          r.idx = idx.idx;
+          r.ctx_level = ctx->ctx_level;
+          array_indexes[arrid].insert(r);
+        }
+      }
     }
   }
 

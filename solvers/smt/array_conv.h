@@ -341,6 +341,28 @@ public:
   // actually sits in ast vectors.
   std::vector<index_map_containert> expr_index_map;
 
+  // Storage of the sets of arrays that other arrays interact with.
+  struct touched_array {
+    unsigned int array_id;
+    unsigned int ctx_level;
+  };
+  typedef struct touched_array touched_arrayt;
+
+  typedef boost::multi_index_container<
+    touched_arrayt,
+    boost::multi_index::indexed_by<
+      boost::multi_index::ordered_unique<
+        BOOST_MULTI_INDEX_MEMBER(touched_arrayt, unsigned int, array_id),
+        std::greater<unsigned int>
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(touched_arrayt, unsigned int, ctx_level),
+        std::greater<unsigned int>
+      >
+    >
+  > touched_array_sett;
+  std::vector<touched_array_sett> array_relations;
+
   // Finally, for model building, we need all the past array values. Three
   // vectors, dimensions are arrays id's, historical point, array element,
   // respectively.
