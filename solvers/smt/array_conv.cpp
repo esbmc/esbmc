@@ -356,8 +356,7 @@ array_convt::convert_array_of_wsort(smt_astt init_val,
     // mk_array_symbol.
     std::string name = ctx->mk_fresh_name("array_of_unbounded::");
     mast = static_cast<array_ast*>(mk_array_symbol(name, arr_sort, idx_sort));
-    array_of_vals.insert(std::pair<unsigned, smt_astt >
-                                  (mast->base_array_id, init_val));
+    array_of_vals.insert(std::make_pair(mast->base_array_id, init_val));
   } else {
     // For bounded arrays, simply store the initializer in the explicit vector
     // of elements, x times.
