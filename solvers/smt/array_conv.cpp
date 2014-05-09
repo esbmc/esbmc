@@ -567,8 +567,7 @@ array_convt::add_array_constraints(unsigned int arr)
 
   // Add a new vector for a new array.
   array_valuation.resize(array_valuation.size() + 1);
-  std::vector<std::vector<smt_astt > > &real_array_values =
-    array_valuation.back();
+  array_update_vect &real_array_values = array_valuation.back();
 
   // Subtype is thus
   smt_sortt subtype = array_subtypes[arr];
@@ -612,7 +611,7 @@ array_convt::add_array_constraints(unsigned int arr)
 
 void
 array_convt::execute_array_trans(
-                            std::vector<std::vector<smt_astt > > &data,
+                                   array_update_vect &data,
                                    unsigned int arr,
                                    unsigned int idx,
                                    const idx_mapt &idx_map,

@@ -68,6 +68,7 @@ public:
   struct array_with;
   typedef std::map<expr2tc, unsigned> idx_mapt;
   typedef smt_convt::ast_vec ast_vect;
+  typedef std::vector<ast_vect> array_update_vect;
 
   array_convt(smt_convt *_ctx);
   ~array_convt();
@@ -114,7 +115,7 @@ public:
   void add_array_constraints(unsigned int arr);
   void join_array_indexes(void);
   void add_array_equalities(void);
-  void execute_array_trans(std::vector<std::vector<smt_astt> > &data,
+  void execute_array_trans(array_update_vect &data,
                            unsigned int arr, unsigned int idx,
                            const idx_mapt &idx_map,
                            const smt_sort *subtype);
