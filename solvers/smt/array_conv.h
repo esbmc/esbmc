@@ -234,7 +234,7 @@ public:
     smt_astt result;
   };
 
-  std::list<struct array_equality> array_equalities;
+  std::multimap<unsigned int, struct array_equality> array_equalities;
 
   // Update records: For each array, for each 'with' operation, we record
   // the index used and the AST representation of the value assigned. We

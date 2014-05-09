@@ -401,7 +401,7 @@ array_convt::encode_array_equality(const array_ast *a1, const array_ast *a2)
 
   e.result = ctx->mk_fresh(ctx->boolean_sort, "");
 
-  array_equalities.push_back(e);
+  array_equalities.insert(std::make_pair(ctx->ctx_level, e));
   return e.result;
 }
 
@@ -507,8 +507,8 @@ array_convt::join_array_indexes()
   }
 
   for (const auto &equality : array_equalities) {
-    groupings[equality.arr1_id].insert(equality.arr2_id);
-    groupings[equality.arr2_id].insert(equality.arr1_id);
+    groupings[equality.second.arr1_id].insert(equality.second.arr2_id);
+    groupings[equality.second.arr2_id].insert(equality.second.arr1_id);
   }
 
   // K; now compute a fixedpoint joining the sets of things that touch each
@@ -554,13 +554,15 @@ array_convt::add_array_equalities(void)
   // the same indexes.
 
   for (const auto &eq : array_equalities) {
-    assert(array_indexes_are_same(array_indexes[eq.arr1_id],
-                                  array_indexes[eq.arr2_id]));
+    assert(array_indexes_are_same(array_indexes[eq.second.arr1_id],
+                                  array_indexes[eq.second.arr2_id]));
 
     // Simply get a handle on two vectors of valuations in array_valuation,
     // and encode an equality.
-    const ast_vect &a1 = array_valuation[eq.arr1_id][eq.arr1_update_num];
-    const ast_vect &a2 = array_valuation[eq.arr2_id][eq.arr2_update_num];
+    const ast_vect &a1 =
+      array_valuation[eq.second.arr1_id][eq.second.arr1_update_num];
+    const ast_vect &a2 =
+      array_valuation[eq.second.arr2_id][eq.second.arr2_update_num];
 
     smt_convt::ast_vec lits;
     for (unsigned int i = 0; i < a1.size(); i++) {
@@ -568,7 +570,7 @@ array_convt::add_array_equalities(void)
     }
 
     smt_astt result = ctx->make_conjunct(lits);
-    ctx->assert_ast(eq.result->eq(ctx, result));
+    ctx->assert_ast(eq.second.result->eq(ctx, result));
   }
 }
 
