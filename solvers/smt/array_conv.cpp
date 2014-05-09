@@ -320,10 +320,6 @@ array_convt::unbounded_array_ite(smt_astt cond,
   struct array_with w;
   w.is_ite = true;
   w.idx = expr2tc();
-  w.u.i.src_array_id_true = true_arr->base_array_id;
-  w.u.i.src_array_update_true = true_arr->array_update_num;
-  w.u.i.src_array_id_false = false_arr->base_array_id;
-  w.u.i.src_array_update_false = false_arr->array_update_num;
   w.u.i.true_arr_ast = true_arr;
   w.u.i.false_arr_ast = false_arr;
   w.u.i.cond = cond;
@@ -481,9 +477,10 @@ array_convt::join_array_indexes()
 
     for (const auto &update : array_updates[arrid]) {
       if (update.is_ite) {
-        if (update.u.i.src_array_id_true != update.u.i.src_array_id_false) {
-          joined_array_ids.insert(update.u.i.src_array_id_true);
-          joined_array_ids.insert(update.u.i.src_array_id_false);
+        if (update.u.i.true_arr_ast->base_array_id !=
+            update.u.i.false_arr_ast->base_array_id) {
+          joined_array_ids.insert(update.u.i.true_arr_ast->base_array_id);
+          joined_array_ids.insert(update.u.i.false_arr_ast->base_array_id);
         }
       }
     }
@@ -643,13 +640,14 @@ array_convt::execute_array_trans(
   // an ite.
   const array_with &w = array_updates[arr][idx+1];
   if (w.is_ite) {
-    if (w.u.i.src_array_id_false != w.u.i.src_array_id_true) {
+    if (w.u.i.true_arr_ast->base_array_id !=
+        w.u.i.false_arr_ast->base_array_id) {
       execute_array_joining_ite(dest_data, arr, w.u.i.true_arr_ast,
                                 w.u.i.false_arr_ast, idx_map, w.u.i.cond,
                                 subtype);
     } else {
-      unsigned int true_idx = w.u.i.src_array_update_true;
-      unsigned int false_idx = w.u.i.src_array_update_false;
+      unsigned int true_idx = w.u.i.true_arr_ast->array_update_num;
+      unsigned int false_idx = w.u.i.false_arr_ast->array_update_num;
       assert(true_idx < idx + 1 && false_idx < idx + 1);
       execute_array_ite(dest_data, data[true_idx], data[false_idx], idx_map,
                         w.u.i.cond);
