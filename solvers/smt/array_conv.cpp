@@ -504,7 +504,15 @@ array_convt::add_array_constraints_for_solving(void)
 void
 array_convt::push_array_ctx(void)
 {
-  return;
+  // The most important factor in this process is to make sure that new indexes
+  // in arrays are accounted for, as everything else is straightforwards. Thus,
+  // the procedure is as follows:
+  //  * Recompute array relations
+  //  * Update indexes accordingly
+  //  * Re-encode transitions for newly identified indexes
+  //  * Apply array updates
+  //  * Tie selects of historical array elements into unbounded selects
+  //  * Apply new equalities and update old ones
 }
 
 void
