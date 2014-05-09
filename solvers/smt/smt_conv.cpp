@@ -186,6 +186,8 @@ smt_convt::smt_post_init(void)
 void
 smt_convt::push_ctx(void)
 {
+  array_api->push_array_ctx();
+
   addr_space_data.push_back(addr_space_data.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   pointer_logic.push_back(pointer_logic.back());
@@ -218,6 +220,8 @@ smt_convt::pop_ctx(void)
   // And reset the storage back to that point.
   live_asts.resize(live_asts_sizes.back());
   live_asts_sizes.pop_back();
+
+  array_api->pop_array_ctx();
 }
 
 smt_astt 
