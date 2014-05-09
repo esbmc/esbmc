@@ -581,6 +581,11 @@ array_convt::add_array_constraints(unsigned int arr)
   array_valuation.resize(array_valuation.size() + 1);
   array_update_vect &real_array_values = array_valuation.back();
 
+  // Early bailout if this array isn't selected at any time: that means we don't
+  // need to perform... anything.
+  if (array_values[arr].size() == 0)
+    return;
+
   // Subtype is thus
   smt_sortt subtype = array_subtypes[arr];
 
