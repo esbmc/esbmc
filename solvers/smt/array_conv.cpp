@@ -581,18 +581,13 @@ array_convt::add_array_constraints(unsigned int arr)
   array_valuation.resize(array_valuation.size() + 1);
   array_update_vect &real_array_values = array_valuation.back();
 
-  // Early bailout if this array isn't selected at any time: that means we don't
-  // need to perform... anything.
-  if (array_values[arr].size() == 0)
-    return;
-
   // Subtype is thus
   smt_sortt subtype = array_subtypes[arr];
 
   // Pre-allocate all the storage, for however many updates there are, for
   // however many array indexes there are.
-  real_array_values.resize(array_values[arr].size());
-  for (unsigned int i = 0; i < real_array_values.size(); i++)
+  real_array_values.resize(array_updates[arr].size() + 1);
+  for (unsigned int i = 0; i < array_updates[arr].size() + 1; i++)
     real_array_values[i].resize(indexes.size());
 
   // Compute a mapping between indexes and an element in the vector. These
@@ -621,7 +616,7 @@ array_convt::add_array_constraints(unsigned int arr)
   add_initial_ackerman_constraints(real_array_values[0], idx_map);
 
   // Now repeatedly execute transitions between states.
-  for (unsigned int i = 0; i < real_array_values.size() - 1; i++)
+  for (unsigned int i = 0; i < array_updates[arr].size() - 1; i++)
     execute_array_trans(real_array_values, arr, i, idx_map, subtype);
 
 }
