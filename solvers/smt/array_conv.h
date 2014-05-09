@@ -227,7 +227,6 @@ public:
   struct array_equality {
     unsigned int arr1_id;
     unsigned int arr2_id;
-    ;
 
     unsigned int arr1_update_num;
     unsigned int arr2_update_num;
