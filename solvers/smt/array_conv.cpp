@@ -692,8 +692,7 @@ array_convt::execute_array_update(ast_vect &dest_data,
   // encoded.
   dest_data[updated_idx] = updated_value;
 
-  unsigned int i = 0;
-  for (auto it2 = idx_map.begin(); it2 != idx_map.end(); it2++, i++) {
+  for (auto it2 = idx_map.begin(); it2 != idx_map.end(); it2++) {
     if (it2->second == updated_idx)
       continue;
 
@@ -703,8 +702,8 @@ array_convt::execute_array_update(ast_vect &dest_data,
     // use implies and ackerman constraints.
     // FIXME: benchmark the two approaches. For now, this is shorter.
     smt_astt cond = update_idx_ast->eq(ctx, ctx->convert_ast(it2->first));
-    smt_astt dest_ite = updated_value->ite(ctx, cond, source_data[i]);
-    ctx->assert_ast(dest_data[i]->eq(ctx, dest_ite));
+    smt_astt dest_ite = updated_value->ite(ctx, cond, source_data[it2->second]);
+    ctx->assert_ast(dest_data[it2->second]->eq(ctx, dest_ite));
   }
 
   return;
