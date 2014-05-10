@@ -770,24 +770,25 @@ array_convt::add_array_constraints(unsigned int arr)
   auto it = array_num_idx.find(arr);
 
   if (it != array_num_idx.end()) {
-    collate_array_values(real_array_values[0], arr, 0, subtype, it->value);
+    collate_array_values(real_array_values[0], arr, 0, subtype, 0, it->value);
   } else {
-    collate_array_values(real_array_values[0], arr, 0, subtype);
+    collate_array_values(real_array_values[0], arr, 0, subtype, 0);
   }
 
   // Ensure initial consistency of the initial values: indexes that evaluate
   // to the same concrete index should have the same value.
-  add_initial_ackerman_constraints(real_array_values[0], idx_map);
+  add_initial_ackerman_constraints(real_array_values[0], idx_map, 0);
 
   // Now repeatedly execute transitions between states.
   for (unsigned int i = 0; i < array_updates[arr].size() - 1; i++)
-    execute_array_trans(real_array_values, arr, i, subtype);
+    execute_array_trans(real_array_values, arr, i, subtype, 0);
 
 }
 
 void
 array_convt::execute_array_trans(array_update_vect &data,
-    unsigned int arr, unsigned int idx, smt_sortt subtype)
+    unsigned int arr, unsigned int idx, smt_sortt subtype,
+    unsigned int start_point)
 {
   // Encode the constraints for a particular array update.
 
@@ -803,7 +804,7 @@ array_convt::execute_array_trans(array_update_vect &data,
   // Fill dest_data with ASTs: if a select has been applied for a particular
   // index, then that value is inserted there. Otherwise, a free value is
   // inserted.
-  collate_array_values(dest_data, arr, idx+1, subtype);
+  collate_array_values(dest_data, arr, idx+1, subtype, start_point);
 
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
@@ -816,17 +817,18 @@ array_convt::execute_array_trans(array_update_vect &data,
                                 w.u.i.false_arr_ast,
                                 expr_index_map[arr],
                                 w.u.i.cond,
-                                subtype);
+                                subtype,
+                                start_point);
     } else {
       unsigned int true_idx = w.u.i.true_arr_ast->array_update_num;
       unsigned int false_idx = w.u.i.false_arr_ast->array_update_num;
       assert(true_idx < idx + 1 && false_idx < idx + 1);
       execute_array_ite(dest_data, data[true_idx], data[false_idx],
-                        expr_index_map[arr], w.u.i.cond);
+                        expr_index_map[arr], w.u.i.cond, start_point);
     }
   } else {
     execute_array_update(dest_data, data[w.u.w.src_array_update_num],
-                         expr_index_map[arr], w.idx, w.u.w.val);
+                         expr_index_map[arr], w.idx, w.u.w.val, start_point);
   }
 }
 
@@ -835,7 +837,8 @@ array_convt::execute_array_update(ast_vect &dest_data,
   ast_vect &source_data,
   const index_map_containert &idx_map,
   const expr2tc &idx,
-  smt_astt updated_value)
+  smt_astt updated_value,
+  unsigned int start_point)
 {
   // Place a constraint on the updated variable; add equality constraints
   // between the older version and this version.
@@ -856,6 +859,9 @@ array_convt::execute_array_update(ast_vect &dest_data,
     if (it2->vec_idx == updated_idx)
       continue;
 
+    if (it2->vec_idx < start_point)
+      continue;
+
     // Generate an ITE. If the index is nondeterministically equal to the
     // current index, take the updated value, otherwise the original value.
     // This departs from the CBMC implementation, in that they explicitly
@@ -874,11 +880,12 @@ array_convt::execute_array_ite(ast_vect &dest,
     const ast_vect &true_vals,
     const ast_vect &false_vals,
     const index_map_containert &idx_map,
-    smt_astt cond)
+    smt_astt cond,
+    unsigned int start_point)
 {
 
   // Each index value becomes an ITE between each source value.
-  for (unsigned int i = 0; i < idx_map.size(); i++) {
+  for (unsigned int i = start_point; i < idx_map.size(); i++) {
     smt_astt updated_elem = true_vals[i]->ite(ctx, cond, false_vals[i]);
     ctx->assert_ast(dest[i]->eq(ctx, updated_elem));
   }
@@ -890,7 +897,7 @@ void
 array_convt::execute_array_joining_ite(ast_vect &dest,
     unsigned int cur_id, const array_ast *true_arr_ast,
     const array_ast *false_arr_ast, const index_map_containert &idx_map,
-    smt_astt cond, smt_sortt subtype)
+    smt_astt cond, smt_sortt subtype, unsigned int start_point)
 {
 
   const array_ast *local_ast, *remote_ast;
@@ -924,7 +931,8 @@ array_convt::execute_array_joining_ite(ast_vect &dest,
     true_vals = &selects;
   }
 
-  execute_array_ite(dest, *true_vals, *false_vals, idx_map, cond);
+  execute_array_ite(dest, *true_vals, *false_vals, idx_map, cond,
+      start_point);
 
   return;
 }
@@ -934,6 +942,7 @@ array_convt::collate_array_values(ast_vect &vals,
                                     unsigned int base_array_id,
                                     unsigned int array_update_num,
                                     smt_sortt subtype,
+                                    unsigned int start_point,
                                     smt_astt init_val)
 {
   // IIRC, this translates the history of an array + any selects applied to it,
@@ -946,9 +955,8 @@ array_convt::collate_array_values(ast_vect &vals,
   assert(vals.size() == idx_map.size());
 
   // First, make everything null,
-  for (ast_vect::iterator it = vals.begin();
-       it != vals.end(); it++)
-    *it = NULL;
+  for (unsigned int i = start_point; i < vals.size(); i++)
+    vals[i] = NULL;
 
   // Get the range of values with this update array num.
   array_select_containert &idxs = array_selects[base_array_id];
@@ -959,6 +967,10 @@ array_convt::collate_array_values(ast_vect &vals,
   for (auto it = pair.first; it != pair.second; it++) {
     auto it2 = idx_map.find(it->idx);
     assert(it2 != idx_map.end());
+
+    if (it2->vec_idx < start_point)
+      continue;
+
     vals[it2->vec_idx] = it->val;
   }
 
@@ -987,7 +999,8 @@ array_convt::collate_array_values(ast_vect &vals,
 void
 array_convt::add_initial_ackerman_constraints(
                                   const ast_vect &vals,
-                                  const index_map_containert &idx_map)
+                                  const index_map_containert &idx_map,
+                                  unsigned int start_point)
 {
   // Add ackerman constraints: these state that for each element of an array,
   // where the indexes are equivalent (in the solver), then the value of the
@@ -995,6 +1008,9 @@ array_convt::add_initial_ackerman_constraints(
 
   smt_sortt boolsort = ctx->boolean_sort;
   for (auto it = idx_map.begin(); it != idx_map.end(); it++) {
+     if (it->vec_idx < start_point)
+       continue;
+
     smt_astt outer_idx = ctx->convert_ast(it->idx);
     for (auto it2 = idx_map.begin(); it2 != idx_map.end(); it2++) {
       smt_astt inner_idx = ctx->convert_ast(it2->idx);

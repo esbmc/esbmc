@@ -137,31 +137,36 @@ public:
   void add_array_equalities(void);
   void execute_array_trans(array_update_vect &data,
                            unsigned int arr, unsigned int idx,
-                           const smt_sort *subtype);
+                           const smt_sort *subtype,
+                           unsigned int start_point);
   void execute_array_update(ast_vect &dest_data,
                             ast_vect &src_data,
                             const index_map_containert &idx_map,
                             const expr2tc &idx,
-                            smt_astt val);
+                            smt_astt val,
+                            unsigned int start_point);
   void execute_array_ite(ast_vect &dest,
                          const ast_vect &true_vals,
                          const ast_vect &false_vals,
                          const index_map_containert &idx_map,
-                         smt_astt cond);
+                         smt_astt cond,
+                         unsigned int start_point);
   void execute_array_joining_ite(ast_vect &dest,
                                  unsigned int cur_id,
                                  const array_ast *true_arr_ast,
                                  const array_ast *false_arr_ast,
                                  const index_map_containert &idx_map,
-                                 smt_astt cond, smt_sortt subtype);
+                                 smt_astt cond, smt_sortt subtype,
+                                 unsigned int start_point);
 
   void collate_array_values(ast_vect &vals,
                             unsigned int base_array_id,
                             unsigned int array_update_no,
                             const smt_sort *subtype,
+                            unsigned int start_point,
                             smt_astt init_val = NULL);
   void add_initial_ackerman_constraints(const ast_vect &vals,
-      const index_map_containert &idx_map);
+      const index_map_containert &idx_map, unsigned int start_point);
   void add_new_indexes();
 
   inline array_ast *
