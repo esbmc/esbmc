@@ -658,6 +658,7 @@ array_convt::add_new_indexes()
       // Nothing new in this ctx level
       re_execute.push_back(false);
       start_pos.push_back(0);
+      arrid++;
       continue;
     }
 
