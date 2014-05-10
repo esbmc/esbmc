@@ -88,6 +88,7 @@ array_convt::new_array_id(void)
   array_relations.push_back(touched);
 
   array_valuation.push_back(array_update_vect());
+  array_valuation.back().push_back(ast_vect());
 
   return new_base_array_id;
 }
@@ -302,6 +303,9 @@ array_convt::mk_unbounded_store(const array_ast *ma,
   w.update_level = newarr->array_update_num;
   array_updates[ma->base_array_id].insert(w);
 
+  // Add storage for the eventual collation of all these values
+  array_valuation[ma->base_array_id].push_back(ast_vect());
+
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
   ctx->convert_ast(idx);
@@ -362,6 +366,9 @@ array_convt::unbounded_array_ite(smt_astt cond,
   w.ctx_level = ctx->ctx_level;
   w.update_level = newarr->array_update_num;
   array_updates[new_arr_id].insert(w);
+
+  // Add storage for the eventual collation of all these values
+  array_valuation[new_arr_id].push_back(ast_vect());
 
   return newarr;
 }
@@ -989,7 +996,6 @@ array_convt::add_array_constraints(unsigned int arr)
 
   // Pre-allocate all the storage, for however many updates there are, for
   // however many array indexes there are.
-  real_array_values.resize(array_updates[arr].size() + 1);
   for (unsigned int i = 0; i < array_updates[arr].size() + 1; i++)
     real_array_values[i].resize(indexes.size());
 
