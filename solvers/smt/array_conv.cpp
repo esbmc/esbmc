@@ -502,12 +502,9 @@ array_convt::add_array_constraints_for_solving(void)
 {
 
   join_array_indexes();
-
-  // Add constraints for each array with unique storage.
-  for (unsigned int i = 0; i < array_indexes.size(); i++) {
-    add_array_constraints(i);
-  }
-
+  add_new_indexes();
+  execute_new_updates();
+  apply_new_selects();
   add_array_equalities();
 
   return;
@@ -976,68 +973,6 @@ array_convt::add_array_equality(unsigned int arr1_id, unsigned int arr2_id,
   smt_astt conj = ctx->make_conjunct(lits);
   ctx->assert_ast(result->eq(ctx, conj));
   return;
-}
-
-void
-array_convt::add_array_constraints(unsigned int arr)
-{
-
-  // So: the plan here is that each array id has a record in 'array_valuation'.
-  // Within that is a vector with an element for each array update. Each of
-  // those elements is a vector again, its values being one smt_astt for each
-  // possible value of the array, at a particular expr index.
-  // This function builds up these vectors of values incrementally, from an
-  // initial state per array id, through each array update, tying values to
-  // selected elements.
-  const idx_record_containert &indexes = array_indexes[arr];
-
-  array_update_vect &real_array_values = array_valuation[arr];
-
-  // Subtype is thus
-  smt_sortt subtype = array_subtypes[arr];
-
-  // Pre-allocate all the storage, for however many updates there are, for
-  // however many array indexes there are.
-  for (unsigned int i = 0; i < array_updates[arr].size(); i++)
-    real_array_values[i].resize(indexes.size());
-
-  // Compute a mapping between indexes and an element in the vector. These
-  // are ordered by how std::set orders them, not by history or anything. Or
-  // even the element index.
-  index_map_containert &idx_map = expr_index_map[arr];
-  for (auto it = indexes.begin(); it != indexes.end(); it++) {
-    struct index_map_rec rec;
-    rec.idx = it->idx;
-    rec.vec_idx = idx_map.size();
-    rec.ctx_level = ctx->ctx_level;
-
-    idx_map.insert(rec);
-  }
-
-  assert(idx_map.size() == indexes.size());
-
-  // Initialize the first set of elements. If this array has an initializer,
-  // then all values recieve the initial value. Otherwise, they receive
-  // free values for each index.
-
-  array_of_val_containert::nth_index<0>::type &array_num_idx =
-    array_of_vals.get<0>();
-  auto it = array_num_idx.find(arr);
-
-  if (it != array_num_idx.end()) {
-    collate_array_values(real_array_values[0], arr, 0, subtype, 0, it->value);
-  } else {
-    collate_array_values(real_array_values[0], arr, 0, subtype, 0);
-  }
-
-  // Ensure initial consistency of the initial values: indexes that evaluate
-  // to the same concrete index should have the same value.
-  add_initial_ackerman_constraints(real_array_values[0], idx_map, 0);
-
-  // Now repeatedly execute transitions between states.
-  for (unsigned int i = 0; i < array_updates[arr].size() - 1; i++)
-    execute_array_trans(real_array_values, arr, i, subtype, 0);
-
 }
 
 void

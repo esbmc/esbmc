@@ -132,7 +132,6 @@ public:
 
   // Array constraint beating
 
-  void add_array_constraints(unsigned int arr);
   void join_array_indexes(void);
   void add_array_equalities(void);
   void add_array_equality(unsigned int arr1_id, unsigned int arr2_id,
