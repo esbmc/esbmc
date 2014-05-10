@@ -998,7 +998,7 @@ array_convt::add_array_constraints(unsigned int arr)
 
   // Pre-allocate all the storage, for however many updates there are, for
   // however many array indexes there are.
-  for (unsigned int i = 0; i < array_updates[arr].size() + 1; i++)
+  for (unsigned int i = 0; i < array_updates[arr].size(); i++)
     real_array_values[i].resize(indexes.size());
 
   // Compute a mapping between indexes and an element in the vector. These
