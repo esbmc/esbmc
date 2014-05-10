@@ -843,6 +843,7 @@ array_convt::execute_new_updates(void)
     while (rit != update_index.rend()) {
       if (rit->ctx_level < ctx->ctx_level)
         break;
+      rit++;
     }
 
     // If either there are no updates (rit == rend), or none with the current
