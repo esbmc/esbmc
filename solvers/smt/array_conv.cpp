@@ -646,14 +646,23 @@ array_convt::add_new_indexes()
   // Happily we can just juggle some storage, then use existing functions to
   // operate only on the subset of new indexes.
 
+  // Vector with flags indicating whether we need to re-execute
+  std::vector<bool> re_execute;
+  std::vector<unsigned int> start_pos;
   unsigned int arrid = 0;
   for (const idx_record_containert &rec : array_indexes) {
     auto &ctx_index = rec.get<1>();
     auto pair = ctx_index.equal_range(ctx->ctx_level);
 
-    if (pair.first == pair.second)
+    if (pair.first == pair.second) {
       // Nothing new in this ctx level
+      re_execute.push_back(false);
+      start_pos.push_back(0);
       continue;
+    }
+
+    re_execute.push_back(true);
+    start_pos.push_back(expr_index_map[arrid].size());
 
     // We're guarenteed that each of these indexes are _new_ to this array.
     // Enumerate them, giving them a location in the expr_index_map.
@@ -686,9 +695,37 @@ array_convt::add_new_indexes()
   }
 
   // And now: perform the relevant transitions to populate those new indexes
-  // with valuations.
-  // XXX ENOTYET
-  abort();
+  // with valuations. Start by populating the initial set of values and applying
+  // the initial ackerman constraints to them.
+
+  for (arrid = 0; arrid < array_updates.size(); arrid++) {
+    if (!re_execute[arrid])
+      continue;
+
+    array_update_vect &array_values = array_valuation[arrid];
+    smt_sortt subtype = array_subtypes[arrid];
+
+    // Fill inital values with either free variables or the initialiser
+    array_of_val_containert::nth_index<0>::type &array_num_idx =
+      array_of_vals.get<0>();
+    auto it = array_num_idx.find(arrid);
+
+    if (it != array_num_idx.end()) {
+      collate_array_values(array_values[0], arrid, 0, subtype, start_pos[arrid],
+          it->value);
+    } else {
+      collate_array_values(array_values[0], arrid, 0, subtype,
+          start_pos[arrid]);
+    }
+
+    // Apply inital ackerman constraints
+    add_initial_ackerman_constraints(array_values[0], expr_index_map[arrid],
+        start_pos[arrid]);
+
+    // And finally, re-execute the relevant array transitions
+    for (unsigned int i = 0; i < array_updates[arrid].size() - 1; i++)
+      execute_array_trans(array_values, arrid, i, subtype, start_pos[arrid]);
+  }
 }
 
 
