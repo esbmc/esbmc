@@ -987,6 +987,7 @@ array_convt::execute_array_trans(array_update_vect &data,
 
   // The destination vector: representing the values of each element in the
   // next updated state.
+  assert(idx+1 < data.size());
   ast_vect &dest_data = data[idx+1];
 
   // Fill dest_data with ASTs: if a select has been applied for a particular
