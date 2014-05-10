@@ -162,6 +162,7 @@ public:
                             smt_astt init_val = NULL);
   void add_initial_ackerman_constraints(const ast_vect &vals,
       const index_map_containert &idx_map);
+  void add_new_indexes();
 
   inline array_ast *
   new_ast(smt_sortt _s) {

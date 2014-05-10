@@ -626,6 +626,73 @@ array_convt::join_array_indexes()
 }
 
 void
+array_convt::add_new_indexes()
+{
+  // In the context of a push/pop, we may have collected some new indexes in an
+  // array as the result of, well, any array operation. These make their way
+  // into the array_indexes store in the following ways:
+  //  * Selects: inserted directly by mk_unbounded_select
+  //  * Updates: like selects
+  //  * ITE's: for same-array-id ITE's, same as updates. However for cross array
+  //    id's, join_array_indexes must be called again to re-collate array
+  //    relations and join array indexes
+  //  * Equalities: like cross-array ITE's
+  //
+  // So, fetch a list of any new array indexes, and perform the relevant
+  // computations for them. We need to apply all the historical operations:
+  // ackerman constraints, ite's and updates, as the index might be the same
+  // concrete index as another symbolic one.
+  //
+  // Happily we can just juggle some storage, then use existing functions to
+  // operate only on the subset of new indexes.
+
+  unsigned int arrid = 0;
+  for (const idx_record_containert &rec : array_indexes) {
+    auto &ctx_index = rec.get<1>();
+    auto pair = ctx_index.equal_range(ctx->ctx_level);
+
+    if (pair.first == pair.second)
+      // Nothing new in this ctx level
+      continue;
+
+    // We're guarenteed that each of these indexes are _new_ to this array.
+    // Enumerate them, giving them a location in the expr_index_map.
+    index_map_containert &idx_map = expr_index_map[arrid];
+    for (auto it = pair.first; it != pair.second; it++) {
+      struct index_map_rec r;
+      r.idx = it->idx;
+      r.vec_idx = idx_map.size();
+      r.ctx_level = ctx->ctx_level;
+      idx_map.insert(r);
+    }
+
+    arrid++;
+  }
+
+  // Now that we've allocated vector index locations, resize the array valuation
+  // vector(s) to have storage for that many ast members.
+  arrid = 0;
+  for (array_update_vect &valuation : array_valuation) {
+    unsigned int num_indexes = array_indexes[arrid].size();
+
+    if (valuation.size() != num_indexes) {
+      assert(valuation.size() < num_indexes &&
+             "Array valuations should only ever increase in size in a push");
+
+      for (ast_vect &vec : valuation) {
+        vec.resize(num_indexes);
+      }
+    }
+  }
+
+  // And now: perform the relevant transitions to populate those new indexes
+  // with valuations.
+  // XXX ENOTYET
+  abort();
+}
+
+
+void
 array_convt::add_array_equalities(void)
 {
   // Precondition: all constraints have already been added and constrained into
