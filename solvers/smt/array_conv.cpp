@@ -850,7 +850,7 @@ array_convt::execute_new_updates(void)
     // We've identified where to start encoding transitions -- from rit back
     // to the beginning. Go backwards through the iterator, encoding them.
     for (auto ptr : withs) {
-      execute_array_trans(array_valuation[arrid], arrid, ptr->update_level,
+      execute_array_trans(array_valuation[arrid], arrid, ptr->update_level - 1,
           subtype, 0);
     }
   }
