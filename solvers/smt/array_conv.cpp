@@ -534,7 +534,74 @@ array_convt::push_array_ctx(void)
 void
 array_convt::pop_array_ctx(void)
 {
-  return;
+  // Order of service:
+  //  * Erase old array IDs
+  //  * Erase old operations
+  //  * Erase old indexes
+  //  * Erase variable storage
+
+  // CTX level will already have been decremented, we want to erase everything
+  // to do with the previous context
+  unsigned int target_ctx = ctx->ctx_level + 1;
+
+  // Identify how many arrays we had at the last push, and reset back to that
+  // number.
+  unsigned int num_arrays = num_arrays_history[ctx->ctx_level];
+  num_arrays_history.pop_back();
+
+  // Demolish /all the things/
+  array_subtypes.resize(num_arrays);
+  array_selects.resize(num_arrays);
+  array_updates.resize(num_arrays);
+  array_indexes.resize(num_arrays);
+  expr_index_map.resize(num_arrays);
+  array_relations.resize(num_arrays);
+  array_valuation.resize(num_arrays); // terrible terrible damage
+
+  array_equalities.erase(target_ctx); // Erase everything with that idx
+  auto &ctx_idx = array_of_vals.get<1>();
+  ctx_idx.erase(target_ctx); // Similar
+
+  // Now go through each storage Thing erasing any operations, indexes, or
+  // whatever that were added in the old context level.
+  for (auto &selects : array_selects) {
+    auto &ctx_level_idx = selects.get<1>();
+    ctx_level_idx.erase(target_ctx);
+  }
+
+  for (auto &updates : array_updates) {
+    auto &ctx_level_idx = updates.get<1>();
+    ctx_level_idx.erase(target_ctx);
+  }
+
+  for (auto &indexes : array_indexes) {
+    auto &ctx_level_idx = indexes.get<1>();
+    ctx_level_idx.erase(target_ctx);
+  }
+
+  for (auto &indexes : expr_index_map) {
+    auto &ctx_level_idx = indexes.get<1>();
+    ctx_level_idx.erase(target_ctx);
+  }
+
+  for (auto &relation : array_relations) {
+    auto &ctx_level_idx = relation.get<1>();
+    ctx_level_idx.erase(target_ctx);
+  }
+
+  // And now, in an intensely expensive operation, resize all the array value
+  // vectors if they've had a change in number of indexes.
+  for (unsigned int arrid = 0; arrid < array_updates.size(); arrid++) {
+    unsigned int num_indexes = array_indexes[arrid].size();
+    if (array_valuation[arrid][0].size() != num_indexes) {
+      // Index size has changed. Resize /all the things/
+      for (ast_vect &vec : array_valuation[arrid]) {
+        vec.resize(num_indexes);
+      }
+    }
+  }
+
+  // Uh. Fini?
 }
 
 void
