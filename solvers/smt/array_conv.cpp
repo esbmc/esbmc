@@ -24,7 +24,6 @@ array_indexes_are_same(
 array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true),
   array_indexes(), array_selects(), array_updates(), ctx(_ctx)
 {
-  array_id_history.push_back(std::set<unsigned int>());
 }
 
 array_convt::~array_convt()
@@ -84,8 +83,6 @@ array_convt::new_array_id(void)
   touched.insert(t);
 
   array_relations.push_back(touched);
-
-  array_id_history.back().insert(new_base_array_id);
 
   return new_base_array_id;
 }
@@ -530,8 +527,8 @@ array_convt::push_array_ctx(void)
   // Bind new selects into existing history in array valuations
   apply_new_selects();
 
-  // Add new storage to collect which array ids are allocated when
-  array_id_history.push_back(std::set<unsigned int>());
+  // Record how many arrays we had when this push occurred.
+  num_arrays_history.push_back(array_valuation.size());
 }
 
 void

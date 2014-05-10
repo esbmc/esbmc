@@ -379,7 +379,7 @@ public:
 
   // History of when different array IDs were allocated. For a change,
   // indexed by the context level.
-  std::vector<std::set<unsigned int> > array_id_history;
+  std::vector<unsigned int> num_arrays_history;
 
   // Finally, for model building, we need all the past array values. Three
   // vectors, dimensions are arrays id's, historical point, array element,
