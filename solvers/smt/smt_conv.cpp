@@ -186,6 +186,7 @@ smt_convt::smt_post_init(void)
 void
 smt_convt::push_ctx(void)
 {
+  tuple_api->push_tuple_ctx();
   array_api->push_array_ctx();
 
   addr_space_data.push_back(addr_space_data.back());
@@ -225,6 +226,7 @@ smt_convt::pop_ctx(void)
   live_asts_sizes.pop_back();
 
   array_api->pop_array_ctx();
+  tuple_api->pop_tuple_ctx();
 }
 
 smt_astt 
