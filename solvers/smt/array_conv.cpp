@@ -777,7 +777,8 @@ array_convt::add_new_indexes()
   // Now that we've allocated vector index locations, resize the array valuation
   // vector(s) to have storage for that many ast members.
   arrid = 0;
-  for (array_update_vect &valuation : array_valuation) {
+  for (arrid = 0; arrid < array_valuation.size(); arrid++ ) {
+    array_update_vect &valuation = array_valuation[arrid];
     unsigned int num_indexes = array_indexes[arrid].size();
 
     if (valuation[0].size() != num_indexes) {
