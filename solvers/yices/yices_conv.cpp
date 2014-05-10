@@ -776,3 +776,15 @@ yices_convt::add_tuple_constraints_for_solving()
 {
   return;
 }
+
+void
+yices_convt::push_tuple_ctx()
+{
+  return;
+}
+
+void
+yices_convt::pop_tuple_ctx()
+{
+  return;
+}

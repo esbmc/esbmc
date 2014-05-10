@@ -119,6 +119,8 @@ public:
                                             smt_sortt domain);
 
   virtual void add_tuple_constraints_for_solving();
+  virtual void push_tuple_ctx();
+  virtual void pop_tuple_ctx();
 
   smt_convt *ctx;
   const namespacet &ns;
@@ -208,6 +210,8 @@ public:
                                             smt_sortt domain);
 
   virtual void add_tuple_constraints_for_solving();
+  virtual void push_tuple_ctx();
+  virtual void pop_tuple_ctx();
 
   smt_convt *ctx;
   const namespacet &ns;

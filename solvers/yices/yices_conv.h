@@ -110,6 +110,8 @@ public:
   virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
   virtual expr2tc tuple_get(const expr2tc &expr);
   virtual void add_tuple_constraints_for_solving();
+  virtual void push_tuple_ctx();
+  virtual void pop_tuple_ctx();
 
   virtual expr2tc tuple_get_rec(term_t term, const type2tc &type);
 

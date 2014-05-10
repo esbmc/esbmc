@@ -628,3 +628,15 @@ smt_tuple_sym_flattener::add_tuple_constraints_for_solving()
 {
   return;
 }
+
+void
+smt_tuple_sym_flattener::push_tuple_ctx()
+{
+  return;
+}
+
+void
+smt_tuple_sym_flattener::pop_tuple_ctx()
+{
+  return;
+}

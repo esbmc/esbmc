@@ -1547,3 +1547,14 @@ z3_convt::add_tuple_constraints_for_solving()
   return;
 }
 
+void
+z3_convt::push_tuple_ctx()
+{
+  return;
+}
+
+void
+z3_convt::pop_tuple_ctx()
+{
+  return;
+}

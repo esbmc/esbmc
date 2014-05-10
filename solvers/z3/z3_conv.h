@@ -120,6 +120,8 @@ private:
   virtual void add_tuple_constraints_for_solving();
   void push_array_ctx(void);
   void pop_array_ctx(void);
+  void push_tuple_ctx();
+  void pop_tuple_ctx();
 
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
