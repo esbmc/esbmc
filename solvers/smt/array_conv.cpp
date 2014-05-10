@@ -830,28 +830,29 @@ array_convt::execute_new_updates(void)
     auto &update_index = updates.get<0>();
 
     // We need to execute the updates in order. So, use the array update index,
-    // walk backwards to the point where the updates in this context start.
-    // Then, walk forwards, encoding each transition.
+    // walk backwards to the point where the updates in this context start,
+    // storing pointers to any updates we find along the way with this context
+    // level.
 
+    std::list<const array_witht *> withs;
     auto rit = update_index.rbegin();
     while (rit != update_index.rend()) {
-      if (rit->ctx_level < ctx->ctx_level)
+      if (rit->ctx_level == ctx->ctx_level)
+        withs.push_back(&(*rit));
+      else
         break;
       rit++;
     }
 
-    // If either there are no updates (rit == rend), or none with the current
-    // ctx level (rit == rbegin), then continue around the loop.
-    if (rit == update_index.rend() || rit == update_index.rbegin())
+    if (withs.size() == 0)
       continue;
 
-    // Otherwise, we've identified where to start encoding transitions. Go
-    // backwards through the iterator, encoding them.
-    do {
-      rit--;
-      execute_array_trans(array_valuation[arrid], arrid, rit->update_level,
+    // We've identified where to start encoding transitions -- from rit back
+    // to the beginning. Go backwards through the iterator, encoding them.
+    for (auto ptr : withs) {
+      execute_array_trans(array_valuation[arrid], arrid, ptr->update_level,
           subtype, 0);
-    } while (rit != update_index.rbegin());
+    }
   }
 }
 
