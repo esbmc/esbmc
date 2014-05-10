@@ -729,6 +729,81 @@ array_convt::add_new_indexes()
   }
 }
 
+void
+array_convt::execute_new_updates(void)
+{
+  // Identify new array updates, and execute them.
+
+  for (unsigned int arrid = 0; arrid < array_updates.size(); arrid++) {
+    smt_sortt subtype = array_subtypes[arrid];
+    array_update_containert &updates = array_updates[arrid];
+    auto &update_index = updates.get<0>();
+
+    // We need to execute the updates in order. So, use the array update index,
+    // walk backwards to the point where the updates in this context start.
+    // Then, walk forwards, encoding each transition.
+
+    auto rit = update_index.rbegin();
+    while (rit != update_index.rend()) {
+      if (rit->ctx_level < ctx->ctx_level)
+        break;
+    }
+
+    // If either there are no updates (rit == rend), or none with the current
+    // ctx level (rit == rbegin), then continue around the loop.
+    if (rit == update_index.rend() || rit == update_index.rbegin())
+      continue;
+
+    // Otherwise, we've identified where to start encoding transitions. Go
+    // backwards through the iterator, encoding them.
+    do {
+      rit--;
+      execute_array_trans(array_valuation[arrid], arrid, rit->update_level,
+          subtype, 0);
+    } while (rit != update_index.rbegin());
+  }
+}
+
+void
+array_convt::apply_new_selects(void)
+{
+  // In the push context procedure, two kinds of new selects have already been
+  // encoded. They're ones that either apply to a new index expr (through the
+  // use of collate_array_values), and those that apply to new update indexes
+  // (through execute_new_updates).
+  // That then leaves new selects that apply to previously encoded array
+  // values. We can just pick those straight out of the array valuation vector.
+  // This could be optimised, but not now.
+
+  for (unsigned int arrid = 0; arrid < array_selects.size(); arrid++) {
+    array_select_containert &selects = array_selects[arrid];
+    // Look up selects by context level
+    auto &ctx_level_index = selects.get<1>();
+    auto pair = ctx_level_index.equal_range(ctx->ctx_level);
+
+    // No selects?
+    if (pair.first == pair.second)
+      continue;
+
+    // Go through each of these selects.
+    for (auto it = pair.first; it != pair.second; it++) {
+      // Look up where in the valuation this is.
+      auto index_rec = expr_index_map[arrid].find(it->idx);
+      smt_astt &dest =
+        array_valuation[arrid][it->src_array_update_num][index_rec->vec_idx];
+
+      // OK. We can know that one of the two already-done cases described above
+      // have happened, if the current AST pointer is the one from this select.
+      // If it isn't one of those cases, it will have been filled with a free
+      // value, then constrained as appropriate
+      if (dest == it->val)
+        continue;
+
+      // OK, bind this select in through an equality.
+      ctx->assert_ast(dest->eq(ctx, it->val));
+    }
+  }
+}
 
 void
 array_convt::add_array_equalities(void)

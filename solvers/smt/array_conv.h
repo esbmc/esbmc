@@ -168,6 +168,8 @@ public:
   void add_initial_ackerman_constraints(const ast_vect &vals,
       const index_map_containert &idx_map, unsigned int start_point);
   void add_new_indexes();
+  void execute_new_updates();
+  void apply_new_selects();
 
   inline array_ast *
   new_ast(smt_sortt _s) {
