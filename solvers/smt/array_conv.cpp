@@ -73,7 +73,7 @@ array_convt::new_array_id(void)
   struct array_with w;
   w.is_ite = false;
   w.idx = expr2tc();
-  w.ctx_level = ctx->ctx_level;
+  w.ctx_level = UINT_MAX; // ahem
   w.update_level = 0;
   array_updates[new_base_array_id].insert(w);
 
@@ -839,7 +839,7 @@ array_convt::execute_new_updates(void)
     while (rit != update_index.rend()) {
       if (rit->ctx_level == ctx->ctx_level)
         withs.push_back(&(*rit));
-      else
+      else if (rit->ctx_level != UINT_MAX) // ahem
         break;
       rit++;
     }
