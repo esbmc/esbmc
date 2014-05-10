@@ -201,8 +201,9 @@ smt_convt::push_ctx(void)
 void
 smt_convt::pop_ctx(void)
 {
-  ctx_level--;
 
+  // Erase everything in caches added in the current context level. Everything
+  // before the push is going to disappear.
   union_varst::nth_index<1>::type &union_numindex = union_vars.get<1>();
   union_numindex.erase(ctx_level);
   smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
@@ -211,6 +212,8 @@ smt_convt::pop_ctx(void)
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
   renumber_map.pop_back();
+
+  ctx_level--;
 
   // Go through all the asts created since the last push and delete them.
 
