@@ -780,8 +780,8 @@ array_convt::add_new_indexes()
   for (array_update_vect &valuation : array_valuation) {
     unsigned int num_indexes = array_indexes[arrid].size();
 
-    if (valuation.size() != num_indexes) {
-      assert(valuation.size() < num_indexes &&
+    if (valuation[0].size() != num_indexes) {
+      assert(valuation[0].size() < num_indexes &&
              "Array valuations should only ever increase in size in a push");
 
       for (ast_vect &vec : valuation) {
