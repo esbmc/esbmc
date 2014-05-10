@@ -812,30 +812,79 @@ array_convt::add_array_equalities(void)
   // the array_valuation vectors. Also that the array ID's being used all share
   // the same indexes.
 
-  for (const auto &eq : array_equalities) {
-    assert(array_indexes_are_same(array_indexes[eq.second.arr1_id],
-                                  array_indexes[eq.second.arr2_id]));
+  // Pick only equalities that have been encoded in the current ctx.
+  auto pair = array_equalities.equal_range(ctx->ctx_level);
 
-    // Simply get a handle on two vectors of valuations in array_valuation,
-    // and encode an equality.
-    const ast_vect &a1 =
-      array_valuation[eq.second.arr1_id][eq.second.arr1_update_num];
-    const ast_vect &a2 =
-      array_valuation[eq.second.arr2_id][eq.second.arr2_update_num];
+  for (auto it = pair.first; it != pair.second; it++) {
+    assert(array_indexes_are_same(array_indexes[it->second.arr1_id],
+                                  array_indexes[it->second.arr2_id]));
 
-    smt_convt::ast_vec lits;
-    for (unsigned int i = 0; i < a1.size(); i++) {
-      lits.push_back(a1[i]->eq(ctx, a2[i]));
-    }
-
-    smt_astt result = ctx->make_conjunct(lits);
-    ctx->assert_ast(eq.second.result->eq(ctx, result));
+    add_array_equality(it->second.arr1_id, it->second.arr2_id,
+                       it->second.arr1_update_num, it->second.arr2_update_num,
+                       it->second.result);
   }
+
+  // Second phase: look at all past equalities to see whether or not they need
+  // to be extended to account for new indexes.
+  for (auto it = array_equalities.begin(); it != array_equalities.end(); it++) {
+    // Don't touch equalities we've already done
+    if (it->first == ctx->ctx_level)
+      continue;
+
+    idx_record_containert &idxs = array_indexes[it->second.arr1_id];
+    idx_record_containert::nth_index<1>::type &ctx_level_idx = idxs.get<1>();
+    auto pair = ctx_level_idx.equal_range(ctx->ctx_level);
+
+    if (pair.first == pair.second)
+      // No indexes added in this context level, no additional constraints
+      // required
+      continue;
+
+    // Ugh. We need to know how many new indexes there are, and where to start
+    // in the array valuation array. So, count them.
+    unsigned int ctx_count = 0;
+    for (auto it = pair.first; it != pair.second; it++)
+      ctx_count++;
+
+    // All the new indexes will have been appended to the vector, so the start
+    // pos is the number of elements, minus the ones on the end.
+    unsigned int start_pos =
+      array_indexes[it->second.arr1_id].size() - ctx_count;
+
+    // There are new indexes; apply equalities.
+    add_array_equality(it->second.arr1_id, it->second.arr2_id,
+        it->second.arr1_update_num, it->second.arr2_update_num,
+        it->second.result, start_pos);
+  }
+}
+
+void
+array_convt::add_array_equality(unsigned int arr1_id, unsigned int arr2_id,
+                                unsigned int arr1_update,
+                                unsigned int arr2_update,
+                                smt_astt result,
+                                unsigned int start_pos)
+{
+  // Simply get a handle on two vectors of valuations in array_valuation,
+  // and encode an equality.
+  const ast_vect &a1 = array_valuation[arr1_id][arr1_update];
+  const ast_vect &a2 = array_valuation[arr2_id][arr2_update];
+
+  smt_convt::ast_vec lits;
+  assert(start_pos < a1.size());
+  for (unsigned int i = start_pos; i < a1.size(); i++) {
+    lits.push_back(a1[i]->eq(ctx, a2[i]));
+  }
+
+  smt_astt conj = ctx->make_conjunct(lits);
+  ctx->assert_ast(result->eq(ctx, conj));
+  return;
 }
 
 void
 array_convt::add_array_constraints(unsigned int arr)
 {
+
   // So: the plan here is that each array id has a record in 'array_valuation'.
   // Within that is a vector with an element for each array update. Each of
   // those elements is a vector again, its values being one smt_astt for each

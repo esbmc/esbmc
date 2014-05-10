@@ -135,6 +135,9 @@ public:
   void add_array_constraints(unsigned int arr);
   void join_array_indexes(void);
   void add_array_equalities(void);
+  void add_array_equality(unsigned int arr1_id, unsigned int arr2_id,
+                          unsigned int arr1_update, unsigned int arr2_update,
+                          smt_astt result, unsigned int start_pos = 0);
   void execute_array_trans(array_update_vect &data,
                            unsigned int arr, unsigned int idx,
                            const smt_sort *subtype,
