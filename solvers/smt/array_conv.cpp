@@ -65,6 +65,9 @@ array_convt::new_array_id(void)
   array_update_containert tmp3;
   array_updates.push_back(tmp3);
 
+  index_map_containert tmp4;
+  expr_index_map.push_back(tmp4);
+
   // Aimless piece of data, just to keep indexes in iarray_updates and
   // array_selects in sync.
   struct array_with w;
@@ -993,7 +996,6 @@ array_convt::add_array_constraints(unsigned int arr)
   // Compute a mapping between indexes and an element in the vector. These
   // are ordered by how std::set orders them, not by history or anything. Or
   // even the element index.
-  expr_index_map.resize(arr+1);
   index_map_containert &idx_map = expr_index_map[arr];
   for (auto it = indexes.begin(); it != indexes.end(); it++) {
     struct index_map_rec rec;
