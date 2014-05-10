@@ -208,6 +208,7 @@ public:
   std::list<smt_convt::ast_vec> assert_vec_list;
   std::list<const smt_ast *> assumpt_chain;
   std::list<SSA_stepst::iterator> scoped_end_points;
+  SSA_stepst::iterator cvt_progress;
 };
 
 extern inline bool operator<(

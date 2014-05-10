@@ -354,35 +354,40 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
 {
   assert_vec_list.push_back(smt_convt::ast_vec());
   assumpt_chain.push_back(conv.convert_ast(true_expr));
+  cvt_progress = SSA_steps.end();
 }
 
 void
 runtime_encoded_equationt::flush_latest_instructions(void)
 {
-  if (scoped_end_points.size() == 0)
-    return;
-
-  SSA_stepst::iterator run_it = scoped_end_points.back();
 
   if (SSA_steps.size() == 0)
     return;
 
-  // The start-of-run iterator is set to end() when a push occurs, and the SSA
-  // list is empty. This is because the end iterator is the only stable
-  // iterator at that point. When this happens, we need to start conversion
-  // from the start of the list.
-  // Otherwise, it's set to the last insn to be converted, so we have to start
-  // from one instruction further up.
-
-  if (run_it == SSA_steps.end())
+  SSA_stepst::iterator run_it = cvt_progress;
+  // Scenarios:
+  // * We're at the start of running, in which case cvt_progress == end
+  // * We're in the middle, but nothing is left to push, so run_it + 1 == end
+  // * We're in the middle, and there's more to convert.
+  if (run_it == SSA_steps.end()) {
     run_it = SSA_steps.begin();
-  else
+  } else {
     run_it++;
+    if (run_it == SSA_steps.end()) {
+      // There is in fact, nothing to do
+      return;
+    } else {
+      // Just roll on
+    }
+  }
 
   // Now iterate from the start insn to convert, to the end of the list.
-  for (; run_it != SSA_steps.end(); run_it++)
+  for (; run_it != SSA_steps.end(); ++run_it)
     convert_internal_step(conv, assumpt_chain.back(), assert_vec_list.back(),
                           *run_it);
+
+  run_it--;
+  cvt_progress = run_it;
 }
 
 void
@@ -391,15 +396,10 @@ runtime_encoded_equationt::push_ctx(void)
 
   flush_latest_instructions();
 
-  SSA_stepst::iterator it = SSA_steps.end();
-
-  if (SSA_steps.size() != 0)
-    --it;
-
   // And push everything back.
   assumpt_chain.push_back(assumpt_chain.back());
   assert_vec_list.push_back(assert_vec_list.back());
-  scoped_end_points.push_back(it);
+  scoped_end_points.push_back(cvt_progress);
   conv.push_ctx();
 }
 
@@ -408,6 +408,7 @@ runtime_encoded_equationt::pop_ctx(void)
 {
 
   SSA_stepst::iterator it = scoped_end_points.back();
+  cvt_progress = it;
 
   if (SSA_steps.size() != 0)
     ++it;
@@ -446,7 +447,9 @@ runtime_encoded_equationt::clone(void) const
   // sets up a new exploration.
   assert(SSA_steps.size() == 0 && "runtime_encoded_equationt shouldn't be "
          "cloned when it contains data");
-  return new runtime_encoded_equationt(*this);
+  runtime_encoded_equationt *nthis = new runtime_encoded_equationt(*this);
+  nthis->cvt_progress = nthis->SSA_steps.end();
+  return nthis;
 }
 
 tvt
