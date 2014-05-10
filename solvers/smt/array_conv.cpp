@@ -513,6 +513,19 @@ array_convt::push_array_ctx(void)
   //  * Apply array updates
   //  * Tie selects of historical array elements into unbounded selects
   //  * Apply new equalities and update old ones
+
+  // Recomputes array relations, only for the current context level.
+  join_array_indexes();
+
+  // Allocate storage for new indexes, populate with variables, and add
+  // historical constraints.
+  add_new_indexes();
+
+  // Obvious
+  execute_new_updates();
+
+  // Bind new selects into existing history in array valuations
+  apply_new_selects();
 }
 
 void
