@@ -87,6 +87,8 @@ array_convt::new_array_id(void)
 
   array_relations.push_back(touched);
 
+  array_valuation.push_back(array_update_vect());
+
   return new_base_array_id;
 }
 
@@ -980,9 +982,7 @@ array_convt::add_array_constraints(unsigned int arr)
   // selected elements.
   const idx_record_containert &indexes = array_indexes[arr];
 
-  // Add a new vector for a new array.
-  array_valuation.resize(array_valuation.size() + 1);
-  array_update_vect &real_array_values = array_valuation.back();
+  array_update_vect &real_array_values = array_valuation[arr];
 
   // Subtype is thus
   smt_sortt subtype = array_subtypes[arr];
