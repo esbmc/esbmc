@@ -1232,9 +1232,9 @@ array_convt::collate_array_values(ast_vect &vals,
   // Initialize everything else to either a free variable or the initial value.
   if (init_val == NULL) {
     // Free variables, except where free variables tied to selects have occurred
-    for (auto it = vals.begin(); it != vals.end(); it++) {
-      if (*it == NULL)
-        *it = ctx->mk_fresh(subtype, "collate_array_vals::");
+    for (unsigned int vec_idx = 0; vec_idx < vals.size(); vec_idx++) {
+      if (vals[vec_idx] == NULL)
+        vals[vec_idx] = ctx->mk_fresh(subtype, "collate_array_vals::");
     }
   } else {
     // We need to assign the initial value in, except where there's already
