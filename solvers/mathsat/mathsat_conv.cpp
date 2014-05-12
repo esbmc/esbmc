@@ -99,8 +99,8 @@ mathsat_convt::get_bv(const type2tc &_t __attribute__((unused)),
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_get_model_value(env, mast->t);
-  assert(msat_term_is_number(env, t) && "Model value of bool isn't "
-         "a bool");
+  assert(msat_term_is_number(env, t) && "Model value of bitvector isn't "
+         "a bitvector");
 
   // GMP rational value object. Mildly irritating that we need to use GMP
   // directly; particularly seeing how a version incompatibility between
