@@ -384,7 +384,7 @@ smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
 void
 smt_convt::finalize_pointer_chain(unsigned int objnum)
 {
-  type2tc inttype = machine_uint;
+  type2tc inttype = machine_ptr;
   unsigned int num_ptrs = addr_space_data.back().size();
   if (num_ptrs == 0)
     return;
