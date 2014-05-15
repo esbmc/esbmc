@@ -272,9 +272,10 @@ smt_tuple_node_flattener::union_create(const expr2tc &unidef)
       if (is_tuple_ast_type(*it)) {
         result_t_ast->elements[i] = ctx->tuple_api->tuple_fresh(ctx->convert_sort(*it));
       } else if (is_tuple_array_ast_type(*it)) {
-        // XXX XXX XXX fresh array method?
-        std::cerr << "XXX unimplemented union array funk" << std::endl;
-        abort();
+        std::string newname = ctx->mk_fresh_name("");
+        smt_sortt subsort = ctx->convert_sort(get_array_subtype(*it));
+        result_t_ast->elements[i] =
+          array_conv.mk_array_symbol(newname, ctx->convert_sort(*it), subsort);
       }
     }
     i++;
