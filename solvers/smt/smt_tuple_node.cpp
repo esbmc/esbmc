@@ -77,10 +77,9 @@ tuple_node_smt_ast::make_free(smt_convt *ctx)
     if (is_tuple_ast_type(*it)) {
       elements[i] = ctx->tuple_api->tuple_fresh(newsort, fieldname);
     } else if (is_tuple_array_ast_type(*it)) {
-      std::cerr << "XXX make_free of array nodes?" << std::endl;
-      abort();
-      // XXX installing a fresh new array here repeatedly is going to be
-      // massively inefficient. Also, leads to array equalities?
+      std::string newname = ctx->mk_fresh_name(fieldname);
+      smt_sortt subsort = ctx->convert_sort(get_array_subtype(*it));
+      elements[i] = flat.array_conv.mk_array_symbol(newname, newsort, subsort);
     } else if (is_array_type(*it)) {
       elements[i] = ctx->mk_fresh(newsort, fieldname,
                                   ctx->convert_sort(get_array_subtype(*it)));
