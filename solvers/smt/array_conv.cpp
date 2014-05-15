@@ -935,7 +935,7 @@ array_convt::add_array_equalities(void)
     // Ugh. We need to know how many new indexes there are, and where to start
     // in the array valuation array. So, count them.
     unsigned int ctx_count = 0;
-    for (auto it = pair.first; it != pair.second; it++)
+    for (auto it2 = pair.first; it2 != pair.second; it2++)
       ctx_count++;
 
     // All the new indexes will have been appended to the vector, so the start
