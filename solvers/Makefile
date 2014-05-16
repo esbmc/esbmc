@@ -55,8 +55,8 @@ dirs:
 	    fi \
 	done
 
-$(OBJDIR)/solvers.o: $(OBJS)
-	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
+$(OBJDIR)/solvers.o: $(OBJS) $(ESBMCDIR)/config.inc
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $(OBJS) $(PARTLINKOPTS)
 
 clean:
 	-rm $(OBJDIR)/solvers.o
@@ -66,7 +66,8 @@ clean:
 	done
 	-rm $(OBJDIR)/.depends
 
-$(OBJDIR)/solve.o: solve.cpp
+$(OBJDIR)/solve.o: solve.cpp $(ESBMCDIR)/config.inc
+	$(CXX) $(CXXFLAGS) -c solve.cpp -o $@
 
 STRICTCOMPILE=1
 
