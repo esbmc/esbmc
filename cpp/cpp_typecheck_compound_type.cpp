@@ -152,11 +152,11 @@ cpp_typecheckt::fetch_compound_name(
 
     if(identifier!=base_name)
     {
-      err_location(cpp_name.location());
+      //err_location(cpp_name.location());
       throw "no namespaces allowed in compound names";
     }
 
-    dest_scope=&tag_scope(base_name, has_body, tag_only_declaration);
+    dest_scope=&const_cast<cpp_typecheckt*>(this)->tag_scope(base_name, has_body, tag_only_declaration);
   }
 
   // See: typecheck_compound_type for full details.

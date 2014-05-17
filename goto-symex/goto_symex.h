@@ -25,6 +25,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex_state.h"
 #include "symex_target.h"
 
+#ifdef EIGEN_LIB
+#include <unsupported/Eigen/Polynomials>
+#endif
+
 class reachability_treet; // Forward dec
 class execution_statet; // Forward dec
 
@@ -399,6 +403,21 @@ protected:
   void intrinsic_register_monitor(const code_function_call2t &call, reachability_treet &art);
   /** Terminate the monitor thread */
   void intrinsic_kill_monitor(reachability_treet &art);
+
+#ifdef EIGEN_LIB
+  // Digital system stability related functions
+  typedef Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootType RootType;
+  typedef Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType RootsType;
+#endif
+
+  /** Check digital filter stability */
+  void intrinsic_check_stability(const code_function_call2t &call,
+                                 reachability_treet &art);
+
+#ifdef EIGEN_LIB
+  /** Get roots of a polynomial */
+  int get_roots(expr2tc array_element, std::vector<RootType>& roots);
+#endif
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();

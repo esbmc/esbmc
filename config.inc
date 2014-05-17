@@ -28,6 +28,9 @@ USE_SOLVER_YICES=1
 
 endif #EXTERN_ESBMC_CONFIG
 
+# Use eigen lib for digital filters verification
+USE_EIGEN_LIB=1
+
 # If no OS or patform was specified, try to guess
 include $(ESBMCDIR)/scripts/os_detect.inc
 

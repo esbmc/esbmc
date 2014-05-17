@@ -118,6 +118,9 @@ static void internal_additions(std::string &code)
     "unsigned char nondet_uchar();\n"
     "signed char nondet_schar();\n"
 
+    // Digital filters code
+    "_Bool __ESBMC_check_stability(float den[], float num[]);\n"
+
     // And again, for TACAS VERIFIER versions,
     "int __VERIFIER_nondet_int();\n"
     "unsigned int __VERIFIER_nondet_uint();\n"
