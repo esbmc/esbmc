@@ -363,7 +363,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   smt_astt args[expr->get_num_sub_exprs()];
   smt_sortt sort;
   smt_astt a;
-  unsigned int num_args, used_sorts = 0;
+  unsigned int used_sorts = 0;
   bool seen_signed_operand = false;
   bool make_ints_reals = false;
   bool special_cases = true;
@@ -405,8 +405,6 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
 nocvt:
 
-  num_args = i;
-
   sort = convert_sort(expr->type);
 
   const expr_op_convert *cvt = &smt_convert_table[expr->expr_id];
@@ -420,7 +418,7 @@ nocvt:
 
   if ((int_encoding && cvt->int_mode_func > SMT_FUNC_INVALID) ||
       (!int_encoding && cvt->bv_mode_func_signed > SMT_FUNC_INVALID)) {
-    assert(cvt->args == num_args);
+    assert(cvt->args == i);
     // An obvious check, but catches cases where we add a field to a future expr
     // and then fail to update the SMT layer, leading to an ignored field.
 
@@ -1981,14 +1979,18 @@ array_iface::default_convert_array_of(smt_astt init_val,
 }
 
 smt_astt 
-smt_convt::pointer_array_of(const expr2tc &init_val, unsigned long array_width)
+smt_convt::pointer_array_of(const expr2tc &init_val __attribute__((unused)),
+    unsigned long array_width)
 {
   // Actually a tuple, but the operand is going to be a symbol, null.
   assert(is_symbol2t(init_val) && "Pointer type'd array_of can only be an "
          "array of null");
+
+#ifndef NDEBUG
   const symbol2t &sym = to_symbol2t(init_val);
   assert(sym.thename == "NULL" && "Pointer type'd array_of can only be an "
          "array of null");
+#endif
 
   // Well known value; zero and zero.
   constant_int2tc zero_val(machine_ptr, BigInt(0));
