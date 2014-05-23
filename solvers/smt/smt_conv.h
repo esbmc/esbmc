@@ -222,13 +222,14 @@ public:
   smt_sort(smt_sort_kind i, unsigned long width)
     : id(i), data_width(width), domain_width(0)
   {
-    assert(width != 0);
+    assert(width != 0 || i == SMT_SORT_INT);
     assert(id != SMT_SORT_ARRAY);
   }
   smt_sort(smt_sort_kind i, unsigned long rwidth, unsigned long domwidth)
     : id(i), data_width(rwidth), domain_width(domwidth) {
       assert(id == SMT_SORT_ARRAY);
-      assert(domain_width != 0);
+      //assert(domain_width != 0);
+      // XXX not applicable during int mode?
     }
 
   virtual ~smt_sort() { }
