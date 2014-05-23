@@ -14,6 +14,7 @@
 #include <boost/crc.hpp>
 #include <boost/utility/enable_if.hpp>
 #include <boost/fusion/include/equal_to.hpp>
+#include <boost/functional/hash_fwd.hpp>
 
 #include <config.h>
 #include <irep.h>
@@ -125,31 +126,6 @@
   unsigned int idx; \
   for (idx = 0, ptr = theexpr.get()->get_sub_expr_nc(0); ptr != 0; \
        idx++, ptr = theexpr.get()->get_sub_expr_nc(idx))
-
-/** Hash calculating class for irep2 data.
- *  This class takes lumps of data from irep2's internal types and munges them
- *  into a hash. This exists because the crc32 being used before was rather
- *  slow. The implementation behind this (just an xor and a roll) is very simple
- *  and probably doesn't have any nice distribution properties, but improved
- *  regression test speeds by a couple of seconds, and one test I was worried
- *  about by 25%.
- */
-class hacky_hash
-{
-public:
-  hacky_hash() : val(0), pos(0) { }
-
-  void ingest(uint8_t b);
-  void ingest(uint16_t b);
-  void ingest(uint32_t b);
-  void ingest(uint64_t b);
-  void ingest(void *bs, unsigned int sz);
-
-  uint16_t result(void) const;
-
-  uint16_t val;
-  unsigned int pos;
-};
 
 class prop_convt;
 class type2t;
@@ -436,9 +412,10 @@ public:
    *  Performs the operation of the crc method, but overridden to be specific to
    *  a particular type. Accumulates data into the hash object parameter.
    *  @see cmp
-   *  @param hash Object to accumulate hash data into.
+   *  @param seed Hash to accumulate hash data into.
+   *  @return Hash value
    */
-  virtual void do_crc(hacky_hash &hash) const;
+  virtual size_t do_crc(size_t seed) const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
@@ -711,9 +688,10 @@ public:
   /** Perform digest/hash function on expr object.
    *  Takes all fields in this exprs and adds them to the passed in hash object
    *  to compute an expression-hash. Overridden by subclasses.
-   *  @param hash Hash object to accumulate expression data into.
+   *  @param seed Hash to accumulate expression data into.
+   *  @return Hash value
    */
-  virtual void do_crc(hacky_hash &hash) const;
+  virtual size_t do_crc(size_t seed) const;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
@@ -1033,7 +1011,7 @@ namespace esbmct {
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const expr2t &ref) const;
     virtual int lt(const expr2t &ref) const;
-    virtual void do_crc(hacky_hash &hash) const;
+    virtual size_t do_crc(size_t seed) const;
     virtual void hash(crypto_hash &hash) const;
     virtual void list_operands(std::list<const expr2tc*> &inp) const;
     virtual const expr2tc *get_sub_expr(unsigned int i) const;
@@ -1129,7 +1107,7 @@ namespace esbmct {
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const type2t &ref) const;
     virtual int lt(const type2t &ref) const;
-    virtual void do_crc(hacky_hash &hash) const;
+    virtual size_t do_crc(size_t seed) const;
     virtual void hash(crypto_hash &hash) const;
   };
 
