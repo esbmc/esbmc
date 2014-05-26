@@ -1988,7 +1988,7 @@ esbmct::expr_methods<derived, subclass,
   return tmp;
 }
 
-typedef uint32_t lolnoop;
+typedef std::size_t lolnoop;
 inline std::size_t
 hash_value(lolnoop val)
 {
@@ -2020,14 +2020,29 @@ esbmct::expr_methods<derived, subclass,
     return seed;
   }
 
-  this->crc_val = derived_this->expr2t::do_crc(this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field1_ptr, this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field2_ptr,this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field3_ptr,this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field4_ptr,this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field5_ptr,this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field6_ptr,this->crc_val);
 
+
+  // Starting from 0, pass a crc value through all the sub-fields of this
+  // expression. Store it into crc_val. Don't allow the input seed to affect
+  // this calculation, as the crc value needs to uniquely identify _this_
+  // expression.
+  assert(this->crc_val == 0);
+  size_t tmp = derived_this->expr2t::do_crc(0);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field1_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field2_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field3_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field4_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field5_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field6_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+
+  // Finally, combine the crc of this expr with the input seed, and return
   boost::hash_combine(seed, (lolnoop)this->crc_val);
   return seed;
 }
@@ -2410,14 +2425,27 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
     return seed;
   }
 
-  this->crc_val = derived_this->type2t::do_crc(this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field1_ptr, this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field2_ptr, this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field3_ptr, this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field4_ptr, this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field5_ptr, this->crc_val);
-  this->crc_val = do_type_crc(derived_this->*field6_ptr, this->crc_val);
+  // Starting from 0, pass a crc value through all the sub-fields of this
+  // expression. Store it into crc_val. Don't allow the input seed to affect
+  // this calculation, as the crc value needs to uniquely identify _this_
+  // expression.
+  assert(this->crc_val == 0);
+  size_t tmp = derived_this->type2t::do_crc(0);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field1_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field2_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field3_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field4_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field5_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+  tmp = do_type_crc(derived_this->*field6_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
 
+  // Finally, combine the crc of this expr with the input seed, and return
   boost::hash_combine(seed, (lolnoop)this->crc_val);
   return seed;
 }

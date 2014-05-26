@@ -245,9 +245,8 @@ public:
     if (foo->crc_val != 0)
       return foo->crc_val;
 
-    uint32_t crc = foo->crc();
-    foo->crc_val = crc;
-    return crc;
+    foo->do_crc(0);
+    return foo->crc_val;
   }
 };
 
@@ -436,7 +435,7 @@ public:
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
 
-  mutable uint32_t crc_val;
+  mutable size_t crc_val;
 };
 
 /** Fetch identifying name for a type.
@@ -790,7 +789,7 @@ public:
   /** Type of this expr. All exprs have a type. */
   type2tc type;
 
-  mutable uint32_t crc_val;
+  mutable size_t crc_val;
 };
 
 // For boost multi-index hashing,
