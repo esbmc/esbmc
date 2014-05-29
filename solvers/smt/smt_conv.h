@@ -819,6 +819,9 @@ public:
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
   type2tc flatten_array_type(const type2tc &type);
+  /** For a multi-dimensional constant array, flatten the actual definition of
+   *  it down to a single dimension */
+  expr2tc flatten_array_body(const expr2tc &expr);
   /** Get the base subtype of an array, delving through any intermediate
    *  multidimensional arrays. */
   type2tc get_flattened_array_subtype(const type2tc &type);

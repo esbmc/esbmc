@@ -490,11 +490,16 @@ expr_handle_table:
       domain = mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
     }
 
+    expr2tc flat_expr = expr;
+    if (is_array_type(get_array_subtype(expr->type)) &&
+        is_constant_array2t(expr))
+      flat_expr = flatten_array_body(expr);
+
     if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
         is_pointer_type(arr.subtype))
-      a = tuple_array_create_despatch(expr, domain);
+      a = tuple_array_create_despatch(flat_expr, domain);
     else
-      a = array_create(expr);
+      a = array_create(flat_expr);
     break;
   }
   case expr2t::add_id:
@@ -1565,6 +1570,37 @@ smt_convt::flatten_array_type(const type2tc &type)
   constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
 
   return type2tc(new array_type2t(type_rec, arr_size_expr, false));
+}
+
+expr2tc
+smt_convt::flatten_array_body(const expr2tc &expr)
+{
+  assert(is_constant_array2t(expr));
+  const constant_array2t &the_array = to_constant_array2t(expr);
+
+  for (const auto &elem : the_array.datatype_members)
+    // Must only contain constant arrays, for now. No indirection should be
+    // expressable at this level.
+    assert(is_constant_array2t(elem) && "Sub-member of constant array must be "
+        "constant array");
+
+  std::vector<expr2tc> sub_expr_list;
+  for (const auto &elem : the_array.datatype_members) {
+    expr2tc tmp_container;
+    const constant_array2t *sub_array = &to_constant_array2t(elem);
+
+    // Possibly flatten an inner layer
+    if (is_array_type(get_array_subtype(elem->type))) {
+      tmp_container = flatten_array_body(elem);
+      sub_array = &to_constant_array2t(tmp_container);
+    }
+
+    sub_expr_list.insert(sub_expr_list.end(),
+                         sub_array->datatype_members.begin(),
+                         sub_array->datatype_members.end());
+  }
+
+  return constant_array2tc(expr->type, sub_expr_list);
 }
 
 type2tc
