@@ -309,16 +309,20 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 
   // First cast it to an unsignedbv
   type2tc int_type = machine_ptr;
+  smt_sortt int_sort = convert_sort(int_type);
   typecast2tc cast_to_unsigned(int_type, cast.from);
-  expr2tc target = cast_to_unsigned;
+  smt_astt target = convert_ast(cast_to_unsigned);
 
   // Construct array for all possible object outcomes
-  std::vector<expr2tc> is_in_range;
-  std::vector<expr2tc> obj_ids;
-  std::vector<expr2tc> obj_starts;
+  std::vector<smt_astt> is_in_range;
+  std::vector<smt_astt> obj_ids;
+  std::vector<smt_astt> obj_starts;
   is_in_range.resize(addr_space_data.back().size());
   obj_ids.resize(addr_space_data.back().size());
   obj_starts.resize(addr_space_data.back().size());
+
+  smt_func_kind gek = (int_encoding) ? SMT_FUNC_GTE : SMT_FUNC_BVUGTE;
+  smt_func_kind lek = (int_encoding) ? SMT_FUNC_LTE : SMT_FUNC_BVULTE;
 
   std::map<unsigned, unsigned>::const_iterator it;
   unsigned int i;
@@ -326,19 +330,19 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
        it != addr_space_data.back().end(); it++, i++)
   {
     unsigned id = it->first;
-    obj_ids[i] = constant_int2tc(int_type, BigInt(id));
+    obj_ids[i] = convert_terminal(constant_int2tc(int_type, BigInt(id)));
 
     std::stringstream ss1, ss2;
     ss1 << "__ESBMC_ptr_obj_start_" << id;
-    symbol2tc ptr_start(int_type, ss1.str());
+    smt_astt ptr_start = mk_smt_symbol(ss1.str(), int_sort);
     ss2 << "__ESBMC_ptr_obj_end_" << id;
-    symbol2tc ptr_end(int_type, ss2.str());
+    smt_astt ptr_end = mk_smt_symbol(ss2.str(), int_sort);
 
     obj_starts[i] = ptr_start;
 
-    greaterthanequal2tc ge(target, ptr_start);
-    lessthanequal2tc le(target, ptr_end);
-    and2tc theand(ge, le);
+    smt_astt ge = mk_func_app(boolean_sort, gek, target, ptr_start);
+    smt_astt le = mk_func_app(boolean_sort, lek, target, ptr_end);
+    smt_astt theand = mk_func_app(boolean_sort, SMT_FUNC_AND, ge, le);
     is_in_range[i] = theand;
   }
 
@@ -353,19 +357,21 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   smt_astt output_obj = output->project(this, 0);
   smt_astt output_offs = output->project(this, 1);
 
+  smt_func_kind subk = (int_encoding) ? SMT_FUNC_SUB : SMT_FUNC_BVSUB;
+
   ast_vec guards;
   for (i = 0; i < addr_space_data.back().size(); i++) {
     // Calculate ptr offset were it this
-    expr2tc offs = sub2tc(int_type, target, obj_starts[i]);
+    smt_astt offs = mk_func_app(int_sort, subk, target, obj_starts[i]);
 
-    smt_astt this_obj = convert_ast(obj_ids[i]);
-    smt_astt this_offs = convert_ast(offs);
+    smt_astt this_obj = obj_ids[i];
+    smt_astt this_offs = offs;
 
     smt_astt obj_eq = this_obj->eq(this, output_obj);
     smt_astt offs_eq = this_offs->eq(this, output_offs);
     smt_astt is_eq = mk_func_app(boolean_sort, SMT_FUNC_AND, obj_eq, offs_eq);
 
-    smt_astt in_range = convert_ast(is_in_range[i]);
+    smt_astt in_range = is_in_range[i];
     guards.push_back(in_range);
     smt_astt imp = mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, in_range, is_eq);
     assert_ast(imp);
@@ -375,11 +381,14 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   smt_astt was_matched = make_disjunct(guards);
   smt_astt not_matched = mk_func_app(boolean_sort, SMT_FUNC_NOT, was_matched);
 
-  expr2tc id, offs;
-  id = constant_int2tc(int_type, pointer_logic.back().get_invalid_object());
-  offs = sub2tc(int_type, target, constant_int2tc(int_type, BigInt(1)));
-  smt_astt inv_obj = convert_ast(id);
-  smt_astt inv_offs = convert_ast(offs);
+  smt_astt id =
+    convert_terminal(
+        constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
+
+  smt_astt one = convert_terminal(one_ulong);
+  smt_astt offs = mk_func_app(int_sort, subk, target, one);
+  smt_astt inv_obj = id;
+  smt_astt inv_offs = offs;
 
   smt_astt obj_eq = inv_obj->eq(this, output_obj);
   smt_astt offs_eq = inv_offs->eq(this, output_offs);
