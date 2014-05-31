@@ -361,6 +361,9 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 
   ast_vec guards;
   for (i = 0; i < addr_space_data.back().size(); i++) {
+    if (i == 1)
+      continue; // Skip invalid, it contains everything.
+
     // Calculate ptr offset were it this
     smt_astt offs = mk_func_app(int_sort, subk, target, obj_starts[i]);
 
