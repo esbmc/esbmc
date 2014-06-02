@@ -18,6 +18,8 @@ Date: June 2003
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
 #include "remove_skip.h"
+#include "i2string.h"
+#include "ansi-c/c_types.h"
 
 /*******************************************************************\
 
@@ -75,6 +77,9 @@ Function: goto_convert_functionst::goto_convert
 
 void goto_convert_functionst::goto_convert()
 {
+  // If it is the inductive step, it will add the global variables to the statet
+  add_global_variable_to_state();
+
   // warning! hash-table iterators are not stable
 
   typedef std::list<irep_idt> symbol_listt;
@@ -95,6 +100,9 @@ void goto_convert_functionst::goto_convert()
   }
 
   functions.compute_location_numbers();
+
+  // If it is the inductive step, it will add the new variables to context
+  add_new_variables_to_context();
 }
 
 /*******************************************************************\
@@ -529,9 +537,6 @@ goto_convert_functionst::wallop_type(irep_idt name,
 void
 goto_convert_functionst::thrash_type_symbols(void)
 {
-  // If it is the inductive step, it will add the global variables to the statet
-  add_global_variable_to_state();
-
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and
   // replacing it with the value of the type name. However, if we have a pointer

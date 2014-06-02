@@ -26,6 +26,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 
+#ifdef EIGEN_LIB
+bool isApprox(double a, double b)
+{
+  return (std::abs(a-b) <= Eigen::NumTraits<double>::dummy_precision());
+}
+#endif
+
 expr2tc
 goto_symext::symex_malloc(
   const expr2tc &lhs,
@@ -674,3 +681,191 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
   execution_statet &ex_state = art.get_cur_state();
   ex_state.kill_monitor_thread();
 }
+
+void
+goto_symext::intrinsic_check_stability(const code_function_call2t &call,
+                                       reachability_treet &art __attribute__((unused)))
+{
+  // This will check a given system's stability based on its poles and zeros.
+  bool is_stable=true;
+
+  // We can only check stability if ESBMC was compiled with eigen lib
+#ifdef EIGEN_LIB
+  std::vector<expr2tc> args = call.operands;
+  assert(args.size()==2);
+
+  // Denominator roots
+  std::vector<RootType> denominator_roots;
+  int denominator_has_roots = get_roots(args.at(0), denominator_roots);
+  if(denominator_has_roots == 2)
+  {
+    std::cerr << "**** WARNING: No practical filter if the denominator roots are zero." << std::endl;
+    is_stable=false;
+  }
+
+  std::vector<RootType> numerator_roots;
+  int numerator_has_roots = get_roots(args.at(1), numerator_roots);
+  if(numerator_has_roots == 2)
+  {
+    std::cerr << "**** WARNING: No practical filter if the numerator roots are zero." << std::endl;
+    is_stable=false;
+  }
+
+  if(!denominator_has_roots)
+  {
+    // Remove duplicate roots if there is numerator roots
+    if(!numerator_has_roots)
+    {
+      std::vector<RootType>::iterator it=denominator_roots.begin();
+
+      while(it != denominator_roots.end())
+      {
+        bool is_duplicated=false;
+        std::vector<RootType>::iterator it1=numerator_roots.begin();
+
+        // Flag when we find duplicate roots
+        while (it1 != numerator_roots.end())
+        {
+          // We don't actually check if the roots are equal, most of the
+          // time, they are not. Instead, we check if they are approx the
+          // same, using 1e-12, the precision used by eigen to search for
+          // roots. Check eigen3/Eigen/src/Core/NumTraits.h:99
+          if(isApprox(it->real(), it1->real()) && isApprox(it->real(), it1->real()) )
+          {
+            is_duplicated=true;
+            break;
+          }
+          ++it1;
+        }
+
+        // Erase returns an iterator point to element to the left
+        // of the one erased, so no need to increment it
+        if(is_duplicated)
+        {
+          it = denominator_roots.erase(it);
+          it1 = numerator_roots.erase(it1);
+        }
+        else
+          ++it;
+      }
+    }
+
+    // Check stability
+    // TODO: the conjugate has the same modulo, why check its modulo then?
+    for(unsigned int i=0; i<denominator_roots.size(); ++i)
+    {
+      double root_abs = std::abs(denominator_roots[i]);
+      if(root_abs>=1.0 or isApprox(root_abs, 1.0))
+      {
+        is_stable=false;
+        break;
+      }
+    }
+  }
+  else
+    is_stable=false;
+#else
+  is_stable=false;
+#endif
+
+  // Final result
+  constant_bool2tc result(is_stable);
+  code_assign2tc assign(call.ret, result);
+  symex_assign(assign);
+
+  return;
+}
+
+#ifdef EIGEN_LIB
+int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
+{
+  // This code will get an irep2 of an array and return the roots of the
+  // polynomial created by the values on the array
+  // Possible results:
+  // 0 - Roots found
+  // 1 - QR didn't converge (Roots not found) TODO
+  // 2 - No polynomial generated, for example, an array = [ 0 0 0 0 0 ]
+
+  exprt element;
+
+  // Run through the irep2 object to get its values from the symbol
+  if (is_address_of2t(array_element))
+  {
+    const address_of2t &addrof = to_address_of2t(array_element);
+    if (is_index2t(addrof.ptr_obj))
+    {
+      const index2t &idx = to_index2t(addrof.ptr_obj);
+      if(is_symbol2t(idx.source_value))
+      {
+        const symbol2t &symbol = to_symbol2t(idx.source_value);
+        element = ns.lookup(symbol.thename).value;
+      }
+      else
+        assert(0);
+    }
+    else
+      assert(0);
+  }
+  else
+    assert(0);
+
+  assert(element.operands().size());
+
+  unsigned int size=element.operands().size();
+
+  // Get the coefficients
+  std::vector<double> coefficients_vector;
+  for(unsigned int i=0; i<size; ++i)
+  {
+    double value=0;
+
+    // The following code is necessary because #cformat does not have signal information
+    if(element.operands()[i].id()=="unary+")
+      value=atof(element.operands()[i].op0().get_string("#cformat").c_str());
+    else if(element.operands()[i].id()=="unary-")
+      value=atof(element.operands()[i].op0().get_string("#cformat").c_str())*(-1);
+    else
+      value=atof(element.operands()[i].get_string("#cformat").c_str());
+
+    coefficients_vector.push_back(value);
+  }
+
+  // Remove leading zeros
+  std::vector<double>::iterator it=coefficients_vector.begin();
+  while(it != coefficients_vector.end())
+  {
+    if(*it != 0.0)
+      break;
+    it=coefficients_vector.erase(it);
+  }
+
+  size=coefficients_vector.size();
+
+  // Check if there is any element left on the vector
+  if(!size)
+    return 2;
+
+  Eigen::VectorXd coefficients(coefficients_vector.size());
+
+  // Copy elements from the list to the array
+  // Insert in reverse order
+  unsigned int i=0;
+  for(it=coefficients_vector.begin();
+      it!=coefficients_vector.end();
+      ++it, ++i)
+    coefficients[size-i-1] = *it;
+
+  // Eigen solver object
+  Eigen::PolynomialSolver<double, Eigen::Dynamic> solver;
+
+  // Solve denominator using QR decomposition
+  // TODO: As pointed it out by Renato, we should know if the algorithm converges
+  solver.compute(coefficients);
+
+  RootsType solver_roots = solver.roots();
+  for(unsigned int i=0; i<solver_roots.rows(); ++i)
+    roots.push_back(solver_roots[i]);
+
+  return 0;
+}
+#endif

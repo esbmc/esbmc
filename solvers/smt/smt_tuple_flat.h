@@ -7,6 +7,7 @@ class tuple_node_smt_ast;
 class tuple_sym_smt_ast;
 class array_sym_smt_ast;
 class tuple_smt_sort;
+class smt_tuple_node_flattener;
 typedef const tuple_node_smt_ast *tuple_node_smt_astt;
 typedef const tuple_sym_smt_ast *tuple_sym_smt_astt;
 typedef const array_sym_smt_ast *array_sym_smt_astt;
@@ -55,14 +56,16 @@ public:
    *  @param s The sort of the tuple, of type tuple_smt_sort.
    *  @param _name The symbol prefix of the variables representing this tuples
    *               value. */
-  tuple_node_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
-    : smt_ast(ctx, s), name(_name) { }
+  tuple_node_smt_ast (smt_tuple_node_flattener &f, smt_convt *ctx, smt_sortt s,
+                      const std::string &_name)
+    : smt_ast(ctx, s), name(_name), flat(f) { }
   virtual ~tuple_node_smt_ast() { }
 
   /** The symbol prefix of the variables representing this tuples value, as a
    *  string (i.e., no associated type). */
   const std::string name;
 
+  smt_tuple_node_flattener &flat;
   std::vector<smt_astt> elements;
 
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
@@ -76,6 +79,7 @@ public:
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 
   void make_free(smt_convt *ctx);
+  void pre_ite(smt_convt *ctx, smt_astt cond, smt_astt falseop);
 };
 
 inline tuple_node_smt_astt

@@ -77,10 +77,9 @@ tuple_node_smt_ast::make_free(smt_convt *ctx)
     if (is_tuple_ast_type(*it)) {
       elements[i] = ctx->tuple_api->tuple_fresh(newsort, fieldname);
     } else if (is_tuple_array_ast_type(*it)) {
-      std::cerr << "XXX make_free of array nodes?" << std::endl;
-      abort();
-      // XXX installing a fresh new array here repeatedly is going to be
-      // massively inefficient. Also, leads to array equalities?
+      std::string newname = ctx->mk_fresh_name(fieldname);
+      smt_sortt subsort = ctx->convert_sort(get_array_subtype(*it));
+      elements[i] = flat.array_conv.mk_array_symbol(newname, newsort, subsort);
     } else if (is_array_type(*it)) {
       elements[i] = ctx->mk_fresh(newsort, fieldname,
                                   ctx->convert_sort(get_array_subtype(*it)));
@@ -104,7 +103,8 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   tuple_node_smt_astt false_val = to_tuple_node_ast(falseop);
   tuple_smt_sortt thissort = to_tuple_sort(sort);
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
-  tuple_node_smt_ast *result_sym = new tuple_node_smt_ast(ctx, sort, name);
+  tuple_node_smt_ast *result_sym =
+    new tuple_node_smt_ast(flat, ctx, sort, name);
 
   const_cast<tuple_node_smt_ast*>(true_val)->make_free(ctx);
   const_cast<tuple_node_smt_ast*>(false_val)->make_free(ctx);
@@ -182,7 +182,7 @@ tuple_node_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
          "structure");
 
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
-  tuple_node_smt_ast *result = new tuple_node_smt_ast(ctx, sort, name);
+  tuple_node_smt_ast *result = new tuple_node_smt_ast(flat, ctx, sort, name);
   result->elements = elements;
   result->make_free(ctx);
   result->elements[idx] = value;
@@ -227,7 +227,8 @@ smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
   name += ".";
 
   tuple_node_smt_ast *result =
-    new tuple_node_smt_ast(ctx, ctx->convert_sort(structdef->type), name);
+    new tuple_node_smt_ast(*this, ctx, ctx->convert_sort(structdef->type),
+                           name);
   result->elements.resize(structdef->get_num_sub_exprs());
 
   for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++) {
@@ -271,15 +272,17 @@ smt_tuple_node_flattener::union_create(const expr2tc &unidef)
       if (is_tuple_ast_type(*it)) {
         result_t_ast->elements[i] = ctx->tuple_api->tuple_fresh(ctx->convert_sort(*it));
       } else if (is_tuple_array_ast_type(*it)) {
-        // XXX XXX XXX fresh array method?
-        std::cerr << "XXX unimplemented union array funk" << std::endl;
-        abort();
+        std::string newname = ctx->mk_fresh_name("");
+        smt_sortt subsort = ctx->convert_sort(get_array_subtype(*it));
+        result_t_ast->elements[i] =
+          array_conv.mk_array_symbol(newname, ctx->convert_sort(*it), subsort);
       }
     }
     i++;
   }
 
-  return new tuple_node_smt_ast(ctx, ctx->convert_sort(unidef->type), name);
+  return new tuple_node_smt_ast(*this, ctx, ctx->convert_sort(unidef->type),
+                                name);
 }
 
 smt_astt
@@ -294,7 +297,7 @@ smt_tuple_node_flattener::tuple_fresh(smt_sortt s, std::string name)
     smt_sortt subtype = ctx->convert_sort(to_array_type(sort->thetype).subtype);
     return array_conv.mk_array_symbol(name, s, subtype);
   } else {
-    return new tuple_node_smt_ast(ctx, s, name);
+    return new tuple_node_smt_ast(*this, ctx, s, name);
   }
 }
 
@@ -317,7 +320,7 @@ smt_tuple_node_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
     name2 += ".";
 
   assert(s->id != SMT_SORT_ARRAY);
-  return new tuple_node_smt_ast(ctx, s, name2);
+  return new tuple_node_smt_ast(*this, ctx, s, name2);
 }
 
 smt_astt

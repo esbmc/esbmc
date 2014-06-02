@@ -439,7 +439,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   if(new_decl.type().id()=="struct")
   {
-    convert_non_template_declaration(new_decl);
+    convert(new_decl);
 
     symbolt &new_symb=
       const_cast<symbolt&>(lookup(new_decl.type().identifier()));

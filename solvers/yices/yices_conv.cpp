@@ -152,7 +152,15 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
       return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
 
   case SMT_FUNC_NOTEQ:
-    return new_ast(s, yices_neq(asts[0]->term, asts[1]->term));
+    if (asts[0]->sort->id == SMT_SORT_BV && !int_encoding) {
+      term_t comp = yices_redcomp(asts[0]->term, asts[1]->term);
+      term_t zero = yices_bvconst_uint64(1, 0);
+      return new_ast(s, yices_bveq_atom(comp, zero));
+    }
+    else if (asts[0]->sort->id == SMT_SORT_BV && int_encoding)
+      return new_ast(s, yices_arith_neq_atom(asts[0]->term, asts[1]->term));
+    else
+      return new_ast(s, yices_neq(asts[0]->term, asts[1]->term));
 
   case SMT_FUNC_GT:
     return new_ast(s, yices_arith_gt_atom(asts[0]->term, asts[1]->term));

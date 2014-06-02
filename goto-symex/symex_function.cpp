@@ -514,7 +514,7 @@ goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 
       if (frame.return_value->type != value->type) {
         typecast2tc cast(frame.return_value->type, value);
-        code_assign2tc assign(frame.return_value, cast);
+        assign = code_assign2tc(frame.return_value, cast);
       }
 
       return true;

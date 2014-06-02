@@ -51,6 +51,11 @@ CXXFLAGS+= -DYICES -I $(YICES)/include
 SOLVER_LIBS += -L$(YICES)/lib -lyices
 endif
 
+ifdef USE_EIGEN_LIB
+INCLUDES += -I/usr/include/eigen3/
+CXXFLAGS+= -DEIGEN_MPL2_ONLY -DEIGEN_LIB
+endif
+
 # Other goo
 
 ifdef TARGET32

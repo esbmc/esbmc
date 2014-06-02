@@ -11,6 +11,8 @@
 #include <vector>
 #include <set>
 
+#include <boost/functional/hash.hpp>
+
 #include <guard.h>
 #include <expr_util.h>
 #include <std_expr.h>
@@ -134,12 +136,12 @@ namespace renaming {
         : base_name(sym.thename), lev(sym.rlevel), l1_num(sym.level1_num),
           t_num(sym.thread_num)
       {
-        hacky_hash h;
-        h.ingest(base_name.get_no());
-        h.ingest((uint8_t)lev);
-        h.ingest(l1_num);
-        h.ingest(t_num);
-        hash = h.result();
+        size_t seed = 0;
+        boost::hash_combine(seed, base_name.get_no());
+        boost::hash_combine(seed, (uint8_t)lev);
+        boost::hash_combine(seed, l1_num);
+        boost::hash_combine(seed, t_num);
+        hash = seed;
       }
 
       int compare(const name_record &ref) const
