@@ -108,7 +108,8 @@ public:
       }
     }
 
-    explicit objectt(bool offset_set, const mp_integer &_offset):
+    explicit objectt(bool offset_set __attribute__((unused)),
+        const mp_integer &_offset):
       offset(_offset),
       offset_is_set(true)
     {

@@ -2288,6 +2288,7 @@ migrate_expr_back(const expr2tc &ref)
     codeexpr.statement("asm");
     // Don't actually set a piece of assembly as the operand here; it serves
     // no purpose.
+    codeexpr.operands().resize(1);
     codeexpr.op0() = exprt("string-constant");
     return codeexpr;
   }

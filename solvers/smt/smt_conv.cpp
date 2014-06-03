@@ -363,7 +363,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   smt_astt args[expr->get_num_sub_exprs()];
   smt_sortt sort;
   smt_astt a;
-  unsigned int num_args, used_sorts = 0;
+  unsigned int used_sorts = 0;
   bool seen_signed_operand = false;
   bool make_ints_reals = false;
   bool special_cases = true;
@@ -405,8 +405,6 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
 nocvt:
 
-  num_args = i;
-
   sort = convert_sort(expr->type);
 
   const expr_op_convert *cvt = &smt_convert_table[expr->expr_id];
@@ -420,7 +418,7 @@ nocvt:
 
   if ((int_encoding && cvt->int_mode_func > SMT_FUNC_INVALID) ||
       (!int_encoding && cvt->bv_mode_func_signed > SMT_FUNC_INVALID)) {
-    assert(cvt->args == num_args);
+    assert(cvt->args == i);
     // An obvious check, but catches cases where we add a field to a future expr
     // and then fail to update the SMT layer, leading to an ignored field.
 
@@ -492,11 +490,16 @@ expr_handle_table:
       domain = mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
     }
 
+    expr2tc flat_expr = expr;
+    if (is_array_type(get_array_subtype(expr->type)) &&
+        is_constant_array2t(expr))
+      flat_expr = flatten_array_body(expr);
+
     if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
         is_pointer_type(arr.subtype))
-      a = tuple_array_create_despatch(expr, domain);
+      a = tuple_array_create_despatch(flat_expr, domain);
     else
-      a = array_create(expr);
+      a = array_create(flat_expr);
     break;
   }
   case expr2t::add_id:
@@ -1569,6 +1572,37 @@ smt_convt::flatten_array_type(const type2tc &type)
   return type2tc(new array_type2t(type_rec, arr_size_expr, false));
 }
 
+expr2tc
+smt_convt::flatten_array_body(const expr2tc &expr)
+{
+  assert(is_constant_array2t(expr));
+  const constant_array2t &the_array = to_constant_array2t(expr);
+
+  for (const auto &elem : the_array.datatype_members)
+    // Must only contain constant arrays, for now. No indirection should be
+    // expressable at this level.
+    assert(is_constant_array2t(elem) && "Sub-member of constant array must be "
+        "constant array");
+
+  std::vector<expr2tc> sub_expr_list;
+  for (const auto &elem : the_array.datatype_members) {
+    expr2tc tmp_container;
+    const constant_array2t *sub_array = &to_constant_array2t(elem);
+
+    // Possibly flatten an inner layer
+    if (is_array_type(get_array_subtype(elem->type))) {
+      tmp_container = flatten_array_body(elem);
+      sub_array = &to_constant_array2t(tmp_container);
+    }
+
+    sub_expr_list.insert(sub_expr_list.end(),
+                         sub_array->datatype_members.begin(),
+                         sub_array->datatype_members.end());
+  }
+
+  return constant_array2tc(expr->type, sub_expr_list);
+}
+
 type2tc
 smt_convt::get_flattened_array_subtype(const type2tc &type)
 {
@@ -1981,14 +2015,18 @@ array_iface::default_convert_array_of(smt_astt init_val,
 }
 
 smt_astt 
-smt_convt::pointer_array_of(const expr2tc &init_val, unsigned long array_width)
+smt_convt::pointer_array_of(const expr2tc &init_val __attribute__((unused)),
+    unsigned long array_width)
 {
   // Actually a tuple, but the operand is going to be a symbol, null.
   assert(is_symbol2t(init_val) && "Pointer type'd array_of can only be an "
          "array of null");
+
+#ifndef NDEBUG
   const symbol2t &sym = to_symbol2t(init_val);
   assert(sym.thename == "NULL" && "Pointer type'd array_of can only be an "
          "array of null");
+#endif
 
   // Well known value; zero and zero.
   constant_int2tc zero_val(machine_ptr, BigInt(0));

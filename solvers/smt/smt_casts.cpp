@@ -309,16 +309,20 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 
   // First cast it to an unsignedbv
   type2tc int_type = machine_ptr;
+  smt_sortt int_sort = convert_sort(int_type);
   typecast2tc cast_to_unsigned(int_type, cast.from);
-  expr2tc target = cast_to_unsigned;
+  smt_astt target = convert_ast(cast_to_unsigned);
 
   // Construct array for all possible object outcomes
-  std::vector<expr2tc> is_in_range;
-  std::vector<expr2tc> obj_ids;
-  std::vector<expr2tc> obj_starts;
+  std::vector<smt_astt> is_in_range;
+  std::vector<smt_astt> obj_ids;
+  std::vector<smt_astt> obj_starts;
   is_in_range.resize(addr_space_data.back().size());
   obj_ids.resize(addr_space_data.back().size());
   obj_starts.resize(addr_space_data.back().size());
+
+  smt_func_kind gek = (int_encoding) ? SMT_FUNC_GTE : SMT_FUNC_BVUGTE;
+  smt_func_kind lek = (int_encoding) ? SMT_FUNC_LTE : SMT_FUNC_BVULTE;
 
   std::map<unsigned, unsigned>::const_iterator it;
   unsigned int i;
@@ -326,61 +330,78 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
        it != addr_space_data.back().end(); it++, i++)
   {
     unsigned id = it->first;
-    obj_ids[i] = constant_int2tc(int_type, BigInt(id));
+    obj_ids[i] = convert_terminal(constant_int2tc(int_type, BigInt(id)));
 
     std::stringstream ss1, ss2;
     ss1 << "__ESBMC_ptr_obj_start_" << id;
-    symbol2tc ptr_start(int_type, ss1.str());
+    smt_astt ptr_start = mk_smt_symbol(ss1.str(), int_sort);
     ss2 << "__ESBMC_ptr_obj_end_" << id;
-    symbol2tc ptr_end(int_type, ss2.str());
+    smt_astt ptr_end = mk_smt_symbol(ss2.str(), int_sort);
 
     obj_starts[i] = ptr_start;
 
-    greaterthanequal2tc ge(target, ptr_start);
-    lessthanequal2tc le(target, ptr_end);
-    and2tc theand(ge, le);
+    smt_astt ge = mk_func_app(boolean_sort, gek, target, ptr_start);
+    smt_astt le = mk_func_app(boolean_sort, lek, target, ptr_end);
+    smt_astt theand = mk_func_app(boolean_sort, SMT_FUNC_AND, ge, le);
     is_in_range[i] = theand;
   }
 
-  // Generate a big ITE chain, selecing a particular pointer offset. A
-  // significant question is what happens when it's neither; in which case I
-  // suggest the ptr becomes invalid_object. However, this needs frontend
-  // support to check for invalid_object after all dereferences XXXjmorse.
+  // Create a fresh new variable; encode implications that if the integer is
+  // in the relevant range, that the value is the relevant id / offset. If none
+  // are matched, match the invalid pointer.
+  // Technically C doesn't allow for any variable to hold an invalid pointer,
+  // except through initialization.
 
-  // So, what's the default value going to be if it doesn't match any existing
-  // pointers? Answer, it's going to be the invalid object identifier, but with
-  // an offset that calculates to the integer address of this object.
-  // That's so that we can store an invalid pointer in a pointer type, that
-  // eventually can be converted back via some mechanism to a valid pointer.
-  expr2tc id, offs;
-  id = constant_int2tc(int_type, pointer_logic.back().get_invalid_object());
+  smt_sortt s = convert_sort(cast.type);
+  smt_astt output = mk_fresh(s, "smt_convt::int_to_ptr");
+  smt_astt output_obj = output->project(this, 0);
+  smt_astt output_offs = output->project(this, 1);
 
-  // Calculate ptr offset - target minus start of invalid range, ie 1
-  offs = sub2tc(int_type, target, constant_int2tc(int_type, BigInt(1)));
+  smt_func_kind subk = (int_encoding) ? SMT_FUNC_SUB : SMT_FUNC_BVSUB;
 
-  std::vector<expr2tc> membs;
-  membs.push_back(id);
-  membs.push_back(offs);
-  expr2tc prev_in_chain = constant_struct2tc(pointer_struct, membs);
-
-  // Now that big ite chain,
+  ast_vec guards;
   for (i = 0; i < addr_space_data.back().size(); i++) {
-    membs.clear();
+    if (i == 1)
+      continue; // Skip invalid, it contains everything.
 
     // Calculate ptr offset were it this
-    offs = sub2tc(int_type, target, obj_starts[i]);
+    smt_astt offs = mk_func_app(int_sort, subk, target, obj_starts[i]);
 
-    membs.push_back(obj_ids[i]);
-    membs.push_back(offs);
-    constant_struct2tc selected_tuple(pointer_struct, membs);
+    smt_astt this_obj = obj_ids[i];
+    smt_astt this_offs = offs;
 
-    prev_in_chain = if2tc(pointer_struct, is_in_range[i],
-                          selected_tuple, prev_in_chain);
+    smt_astt obj_eq = this_obj->eq(this, output_obj);
+    smt_astt offs_eq = this_offs->eq(this, output_offs);
+    smt_astt is_eq = mk_func_app(boolean_sort, SMT_FUNC_AND, obj_eq, offs_eq);
+
+    smt_astt in_range = is_in_range[i];
+    guards.push_back(in_range);
+    smt_astt imp = mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, in_range, is_eq);
+    assert_ast(imp);
   }
 
-  // Finally, we're now at the point where prev_in_chain represents a pointer
-  // object. Hurrah.
-  return convert_ast(prev_in_chain);
+  // If none of the above, match invalid.
+  smt_astt was_matched = make_disjunct(guards);
+  smt_astt not_matched = mk_func_app(boolean_sort, SMT_FUNC_NOT, was_matched);
+
+  smt_astt id =
+    convert_terminal(
+        constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
+
+  smt_astt one = convert_terminal(one_ulong);
+  smt_astt offs = mk_func_app(int_sort, subk, target, one);
+  smt_astt inv_obj = id;
+  smt_astt inv_offs = offs;
+
+  smt_astt obj_eq = inv_obj->eq(this, output_obj);
+  smt_astt offs_eq = inv_offs->eq(this, output_offs);
+  smt_astt is_inv = mk_func_app(boolean_sort, SMT_FUNC_AND, obj_eq, offs_eq);
+
+  smt_astt imp =
+    mk_func_app(boolean_sort, SMT_FUNC_IMPLIES, not_matched, is_inv);
+  assert_ast(imp);
+
+  return output;
 }
 
 smt_astt
