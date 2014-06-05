@@ -18,3 +18,4 @@ libutil_a_SOURCES = \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
       pointer_arithmetic.cpp ieee_float.cpp signal_catcher.cpp \
       bv_arithmetic.cpp irep2.cpp migrate.cpp
+libutil_a_CXXFLAGS = -I$(top_srcdir) -I$(top_srcdir)/utils
