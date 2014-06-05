@@ -494,7 +494,11 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
   const ast_vect &solver_values =
     array_valuation[mast->base_array_id][mast->array_update_num];
   assert(i < solver_values.size());
-  return ctx->get_bv(subtype, solver_values[i]);
+
+  if (array_subtypes[mast->base_array_id]->id == SMT_SORT_BOOL)
+    return ctx->get_bool(solver_values[i]);
+  else
+    return ctx->get_bv(subtype, solver_values[i]);
 }
 
 void
