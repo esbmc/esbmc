@@ -1,4 +1,5 @@
 AC_INIT([ESBMC], [1.22], [esbmc@ecs.soton.ac.uk])
+AC_CONFIG_HEADER(config.h)
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 LT_INIT
@@ -28,6 +29,8 @@ if test -z "$Z3PATH"; then
   echo "You must set Z3PATH. Or else.";
   exit 1;
 fi
+
+AC_HEADER_STDC
 
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile esbmc/Makefile])
 AC_OUTPUT
