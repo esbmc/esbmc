@@ -15,7 +15,7 @@ libansic_a_SOURCES = \
       preprocessor_line.cpp convert_character_literal.cpp \
       convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 
 noinst_PROGRAMS = c2goto
 c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp $(libansic_a_SOURCES) -I$(top_srcdir)/utils
