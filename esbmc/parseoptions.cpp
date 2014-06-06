@@ -1347,22 +1347,6 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
     symbol2t &thesym = to_symbol2t(e);
     std::string sym = thesym.get_symbol_name();
 
-// Originally this piece of code renamed all the symbols in the property
-// expression to ones specified by the user. However, there's no easy way of
-// working out what the full name of a particular symbol you're looking for
-// is, so it's unused for the moment.
-#if 0
-    // Remove leading "c::"
-    sym = sym.substr(3, sym.size() - 3);
-
-    sym = prefix + "_" + sym;
-    if (strings.find(sym) == strings.end())
-      assert(0 && "Missing symbol mapping for property monitor");
-
-    sym = strings[sym];
-    e.identifier(sym);
-#endif
-
     used_syms.insert(sym);
   } else {
     Forall_operands2(it, idx, e)
@@ -1552,28 +1536,6 @@ bool cbmc_parseoptionst::read_goto_binary(
 
   return false;
 }
-
-#if 0
-static void
-relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
-{
-
-  if (is_nil_expr(irep))
-    return;
-
-   if (is_symbol2t(irep)) {
-    if (to_symbol2t(irep).get_symbol_name() == from_name.as_string())
-      irep = symbol2tc(irep->type, to_name);
-
-    return;
-  } else {
-    Forall_operands2(it, idx, irep)
-      relink_calls_from_to(*it, from_name, to_name);
-  }
-
-  return;
-}
-#endif
 
 bool cbmc_parseoptionst::process_goto_program(
   optionst &options,
