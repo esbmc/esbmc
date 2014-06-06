@@ -446,62 +446,31 @@ goto_checkt::check_rec(
 
     if (expr.type().id() == "signedbv") {
       overflow_check(expr, guard);
-      if (expr.id() == "typecast" && expr.op0().type().id() != "signedbv") {
-	if (!options.get_bool_option("boolector-bv") &&
-	    !options.get_bool_option("z3-bv")
-	    && !options.get_bool_option("z3-ir")) {
-	  options.set_option("int-encoding", false);
-	}
-      }
-    } else if (expr.type().id() == "floatbv")
+    } else if (expr.type().id() == "floatbv") {
       nan_check(expr, guard);
+    }
   } else if (expr.id() == "<=" || expr.id() == "<" ||
              expr.id() == ">=" || expr.id() == ">") {
     pointer_rel_check(expr, guard);
-  }
-
-  if (expr.id() == "ashr" || expr.id() == "lshr" ||
-      expr.id() == "shl") {
-    if (!options.get_bool_option("z3-bv")
-        && !options.get_bool_option("z3-ir")) {
-      options.set_option("int-encoding", false);
-    }
-  } else if (expr.id() == "bitand" || expr.id() == "bitor" ||
-             expr.id() == "bitxor" || expr.id() == "bitnand" ||
-             expr.id() == "bitnor" || expr.id() == "bitnxor") {
-    if (!options.get_bool_option("z3-bv")
-        && !options.get_bool_option("z3-ir")) {
-      options.set_option("int-encoding", false);
-    }
   } else if (expr.id() == "mod")   {
     div_by_zero_check(expr, guard);
     nan_check(expr, guard);
-
-    if (!options.get_bool_option("z3-bv")
-        && !options.get_bool_option("z3-ir")) {
-      options.set_option("int-encoding", false);
-    }
   } else if (expr.id() == "struct" || expr.id() == "union"
              || expr.type().id() == "pointer" || expr.id() == "member" ||
              (expr.type().is_array() && expr.type().subtype().is_array())) {
     options.set_option("z3", true);     //activate Z3 for solving the VCs
   } else if (expr.type().id() == "fixedbv")     {
     options.set_option("z3", true);
-
-    if (!options.get_bool_option("z3-ir"))
-      options.set_option("int-encoding", false);
   }
 
   if (options.get_bool_option("qf_aufbv")) {
     options.set_option("z3", true); //activate Z3 to generate the file in SMT
 		                    // lib format
-    options.set_option("int-encoding", false);
   }
 
   if (options.get_bool_option("qf_auflira")) {
     options.set_option("z3", true); //activate Z3 to generate the file in SMT
 		                    // lib format
-    options.set_option("int-encoding", true);
   }
 }
 
