@@ -18,3 +18,6 @@ extern unsigned int pthreadtypes_buf_size;
 
 extern char digitalfilter_buf[];
 extern unsigned int digitalfilter_buf_size;
+
+extern char limits_buf[];
+extern unsigned int limits_buf_size;

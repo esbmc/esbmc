@@ -49,8 +49,8 @@ void c_typecheck_baset::typecheck_code(codet &code)
 
   const irep_idt &statement=code.statement();
 
-  //std::cout << "statement: " << statement << std::endl;
-  //std::cout << "typecheck_code::code.pretty(): " << code.pretty() << std::endl;
+//  std::cout << "statement: " << statement << std::endl;
+//  std::cout << "typecheck_code::code.pretty(): " << code.pretty() << std::endl;
 
   if(statement=="expression")
     typecheck_expression(code);
@@ -438,6 +438,8 @@ Function: c_typecheck_baset::typecheck_for
 
 void c_typecheck_baset::typecheck_for(codet &code)
 {
+  is_loop=true;
+
   if(code.operands().size()!=4)
     throw "for expected to have four operands";
 
@@ -492,6 +494,8 @@ void c_typecheck_baset::typecheck_for(codet &code)
     code.swap(code_block);
     typecheck_code(code); // recursive call
   }
+
+  is_loop=false;
 }
 
 /*******************************************************************\
@@ -716,6 +720,8 @@ Function: c_typecheck_baset::typecheck_while
 
 void c_typecheck_baset::typecheck_while(codet &code)
 {
+  is_loop=true;
+
   if(code.operands().size()!=2)
     throw "while expected to have two operands";
 
@@ -733,4 +739,6 @@ void c_typecheck_baset::typecheck_while(codet &code)
   // restore flags
   break_is_allowed=old_break_is_allowed;
   continue_is_allowed=old_continue_is_allowed;
+
+  is_loop=false;
 }

@@ -23,6 +23,7 @@ public:
   objectst objects;
   typedef std::vector<expr2tc> obj_lookupt;
   obj_lookupt lookup;
+  unsigned int obj_num_offset;
 
   struct pointert
   {
@@ -61,6 +62,10 @@ public:
     return invalid_object;
   }
   
+  unsigned get_free_obj_num() {
+    return objects.size() - 1 + ++obj_num_offset;
+  }
+
 protected:
   unsigned null_object, invalid_object;  
 

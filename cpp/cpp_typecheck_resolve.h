@@ -69,6 +69,10 @@ protected:
     resolve_identifierst &identifiers,
     const wantt want);
 
+  void filter(
+    cpp_scopest::id_sett &id_set,
+    const wantt want);
+
   const symbolt &disambiguate_template_classes(
     const irep_idt &base_name,
     const cpp_scopest::id_sett &id_set,
@@ -97,11 +101,14 @@ protected:
   void remove_duplicates(
     resolve_identifierst &identifiers);
 
+  void disambiguate_copy_constructor(
+    resolve_identifierst &identifiers);
+
   exprt guess_function_template_args(
     const exprt &expr,
     const cpp_typecheck_fargst &fargs);
 
-  void guess_template_args(
+  bool guess_template_args(
     const typet &template_parameter,
     const typet &desired_type);
 
@@ -109,9 +116,13 @@ protected:
     const exprt &template_parameter,
     const exprt &desired_expr);
 
+  bool is_conversion_type_exact_match(
+    const typet &source_type,
+    const typet &dest_type);
+
   bool disambiguate_functions(
     const exprt &expr,
-    unsigned &args_distance,
+    cpp_typecast_rank &args_distance,
     const cpp_typecheck_fargst &fargs);
 
   exprt do_builtin(
@@ -152,24 +163,6 @@ protected:
   {
     return m1.cost<m2.cost;
   }
-
-  #ifdef CPP_SYSTEMC_EXTENSION
-  exprt do_builtin_sc_uint_extension(
-    const cpp_namet &cpp_name,
-    const cpp_template_args_non_tct &template_args);
-
-  exprt do_builtin_sc_int_extension(
-    const cpp_namet &cpp_name,
-    const cpp_template_args_non_tct &template_args);
-
-  exprt do_builtin_sc_logic_extension(
-    const cpp_namet &cpp_name,
-    const cpp_template_args_non_tct &template_args);
-
-  exprt do_builtin_sc_lv_extension(
-    const cpp_namet &cpp_name,
-    const cpp_template_args_non_tct &template_args);
-  #endif
 };
 
 #endif

@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <i2string.h>
-#include <identifier.h>
 #include <ansi-c/c_qualifiers.h>
 #include <expr_util.h>
 
@@ -115,6 +114,15 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
 {
   code_typet &function_type=
     to_code_type(template_subtype(symbol.type));
+
+  // Is this a template that was instantiated for a function overload, but isn't
+  // referred to? If so, don't attempt to convert it, because the template
+  // itself would never be instantiated in a real compilation. This is the tail
+  // end of SFINAE, but instead of discarding compilation errors in unused
+  // templates, we just don't convert them.
+  if (symbol.value.get("#speculative_template") == "1" &&
+      symbol.value.get("#template_in_use") != "1")
+    return;
 
   // only a prototype?
   if(symbol.value.is_nil())

@@ -19,6 +19,8 @@
 
 #include <ansi-c/c_types.h>
 
+#include <langapi/language_util.h>
+
 #include "goto_symex.h"
 #include "execution_state.h"
 
@@ -162,20 +164,24 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     abort();
   }
 
-  const goto_functionst::goto_functiont &goto_function = it->second;
+  const goto_functiont &goto_function = it->second;
 
   unsigned &unwinding_counter = cur_state->function_unwind[identifier];
 
   // see if it's too much
   if (get_unwind_recursion(identifier, unwinding_counter)) {
-    bool base_case=
-      options.get_bool_option("base-case");
-
-    if (!options.get_bool_option("no-unwinding-assertions"))
+    if (!no_unwinding_assertions)
       claim(false_expr,
             "recursion unwinding assertion");
     else if (base_case)
 			unwinding_recursion_assumption=true;
+    else {
+      // Add an unwinding assumption.
+      expr2tc now_guard = cur_state->guard.as_expr();
+      not2tc not_now(now_guard);
+      target->assumption(now_guard, not_now, cur_state->source);
+    }
+
 
     cur_state->source.pc++;
     return;
@@ -328,12 +334,20 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
 
     goto_functionst::function_mapt::const_iterator fit =
       goto_functions.function_map.find(it->second->thename);
-    if (fit == goto_functions.function_map.end() ||
-        !fit->second.body_available) {
+    if (fit == goto_functions.function_map.end()) {
       std::cerr << "Couldn't find symbol " << it->second->get_symbol_name();
       std::cerr << " or body not available, during function ptr dereference";
       std::cerr << std::endl;
       abort();
+    } else if (!fit->second.body_available) {
+      if (body_warnings.insert(it->second->thename).second) {
+        std::string msg = "**** WARNING: no body for function " + id2string(
+          it->second->thename);
+        std::cerr << msg << std::endl;
+      }
+
+      // XXX -- put a nondet value into return values?
+      continue;
     }
 
     // Set up a merge of the current state into the target function.
@@ -357,7 +371,8 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
   cur_state->top().function_ptr_combine_target++;
   cur_state->top().orig_func_ptr_call = expr;
 
-  run_next_function_ptr_target(true);
+  if (!run_next_function_ptr_target(true))
+    cur_state->source.pc++;
 }
 
 bool
@@ -451,7 +466,7 @@ goto_symext::symex_end_of_function()
 }
 
 void
-goto_symext::locality(const goto_functionst::goto_functiont &goto_function)
+goto_symext::locality(const goto_functiont &goto_function)
 {
   goto_programt::local_variablest local_identifiers;
 

@@ -1969,7 +1969,14 @@ unary_identifier_declarator:
 	    *$2 = d;
 	  } else  {
 	    merge_types(*$2, (typet&)*$3);
-	    move_decl_info_upwards((typet&)*$2, ((typet&)*$2).subtypes().back());
+            // This declaration may be a set of merged types -- if that's the
+            // case, we need to move the declaration data (i.e., the ident name)
+            // up from the bottommost type to the top.
+            // However it might also be a 'code' type, in which case we're
+            // storing all the types in the 'subtype' field, so leave the decl
+            // information where it is.
+	    if ($2->id() == "merged_type")
+              move_decl_info_upwards((typet&)*$2, ((typet&)*$2).subtypes().back());
 	  }
 	  $$ = (exprt*)$2;
 	  do_pointer((typet&)*$1, (typet&)*$2);

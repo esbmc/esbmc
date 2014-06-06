@@ -38,11 +38,15 @@ Function: main
 
 \*******************************************************************/
 
+void dereference_handlers_init(void);
+
 int main(int argc, const char **argv)
 {
   // To avoid the static initialization order fiasco:
-  type_pool = type_poolt(true);
+  type_poolt bees(true);
+  type_pool = bees;
   init_expr_constants();
+  dereference_handlers_init();
 
   cbmc_parseoptionst parseoptions(argc, argv);
   return parseoptions.main();
@@ -61,5 +65,5 @@ const mode_table_et mode_table[] =
   LANGAPI_HAVE_MODE_END
 };
 
-extern "C" uint8_t *buildidstring_buf;
+extern "C" uint8_t buildidstring_buf[1];
 uint8_t *version_string = buildidstring_buf;

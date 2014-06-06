@@ -10,23 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*******************************************************************\
 
-Function: typet::copy_to_subtypes
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void typet::copy_to_subtypes(const typet &type)
-{
-  subtypes().push_back(type);
-}
-
-/*******************************************************************\
-
 Function: typet::move_to_subtypes
 
   Inputs:

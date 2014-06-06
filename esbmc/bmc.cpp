@@ -36,7 +36,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/slice.h>
-#include <goto-symex/slice_by_trace.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <goto-symex/reachability_tree.h>
 
@@ -328,6 +327,12 @@ void bmct::show_program(symex_target_equationt &equation)
       std::cout << "(" << count << ") " << "(assume)" << string_value << std::endl;
       count++;
     }
+    else if (it->is_renumber())
+    {
+      std::cout << "(" << count << ") " << "renumber: " <<
+                   from_expr(ns, "", it->lhs) << std::endl;
+      count++;
+    }
 #
 #endif
   }
@@ -395,11 +400,12 @@ bool bmct::run(void)
 
     do
     {
-      if(!options.get_bool_option("k-induction"))
+      if(!options.get_bool_option("k-induction")
+        && !options.get_bool_option("k-induction-parallel"))
         if (++interleaving_number>1) {
-    	  print(8, "*** Thread interleavings "+
-    	           i2string((unsigned long)interleaving_number)+
-    	           " ***");
+          print(8, "*** Thread interleavings "+
+            i2string((unsigned long)interleaving_number)+
+            " ***");
         }
 
       fine_timet bmc_start = current_time();
@@ -471,6 +477,7 @@ bool bmct::run_thread()
   symex_target_equationt *equation;
   bool ret;
 
+  fine_timet symex_start = current_time();
   try
   {
     if(options.get_bool_option("schedule"))
@@ -497,6 +504,14 @@ bool bmct::run_thread()
     return true;
   }
 
+  fine_timet symex_stop = current_time();
+
+  std::ostringstream str;
+  str << "Symex completed in: ";
+  output_time(symex_stop - symex_start, str);
+  str << "s";
+  status(str.str());
+
   equation = dynamic_cast<symex_target_equationt*>(result->target);
 
   print(8, "size of program expression: "+
@@ -509,13 +524,8 @@ bool bmct::run_thread()
 
   try
   {
-    if(options.get_option("slice-by-trace")!="")
-    {
-      symex_slice_by_tracet symex_slice_by_trace;
-      symex_slice_by_trace.slice_by_trace
-      (options.get_option("slice-by-trace"), *equation);
-    }
 
+    fine_timet slice_start = current_time();
     if(!options.get_bool_option("no-slice"))
     {
       slice(*equation);
@@ -524,6 +534,13 @@ bool bmct::run_thread()
     {
       simple_slice(*equation);
     }
+    fine_timet slice_stop = current_time();
+
+    std::ostringstream str;
+    str << "Slicing time: ";
+    output_time(slice_stop - slice_start, str);
+    str << "s";
+    status(str.str());
 
     if (options.get_bool_option("program-only") ||
         options.get_bool_option("program-too"))

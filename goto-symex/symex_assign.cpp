@@ -37,7 +37,18 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   cur_state(NULL),
   last_throw(NULL),
   inside_unexpected(false),
-  unwinding_recursion_assumption(false)
+  unwinding_recursion_assumption(false),
+  depth_limit(atol(options.get_option("depth").c_str())),
+  break_insn(atol(options.get_option("break-at").c_str())),
+  memory_leak_check(options.get_bool_option("memory-leak-check")),
+  deadlock_check(options.get_bool_option("deadlock-check")),
+  no_assertions(options.get_bool_option("no-assertions")),
+  no_simplify(options.get_bool_option("no-simplify")),
+  no_unwinding_assertions(options.get_bool_option("no-unwinding-assertions")),
+  partial_loops(options.get_bool_option("partial-loops")),
+  k_induction(options.get_bool_option("k-induction")),
+  base_case(options.get_bool_option("base-case")),
+  forward_condition(options.get_bool_option("forward-condition"))
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -70,6 +81,12 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
     deallocd_arr_name = "cpp::__ESBMC_deallocated";
     dyn_info_arr_name = "cpp::__ESBMC_is_dynamic";
   }
+
+  symbolt sym;
+  sym.name = "symex_throw::thrown_obj";
+  sym.base_name = "thrown_obj";
+  // Type left deliberately undefined. XXX, is this wise?
+  new_context.move(sym);
 }
 
 goto_symext::goto_symext(const goto_symext &sym) :
@@ -93,6 +110,17 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
   guard_identifier_s = sym.guard_identifier_s;
+  depth_limit = sym.depth_limit;
+  break_insn = sym.break_insn;
+  memory_leak_check = sym.memory_leak_check;
+  deadlock_check = sym.deadlock_check;
+  no_assertions = sym.no_assertions;
+  no_simplify = sym.no_simplify;
+  no_unwinding_assertions = sym.no_unwinding_assertions;
+  partial_loops = sym.partial_loops;
+  k_induction = sym.k_induction;
+  base_case = sym.base_case;
+  forward_condition = sym.forward_condition;
 
   valid_ptr_arr_name = sym.valid_ptr_arr_name;
   alloc_size_arr_name = sym.alloc_size_arr_name;
@@ -113,13 +141,13 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
 
 void goto_symext::do_simplify(exprt &expr)
 {
-  if(!options.get_bool_option("no-simplify"))
+  if(!no_simplify)
     simplify(expr);
 }
 
 void goto_symext::do_simplify(expr2tc &expr)
 {
-  if(!options.get_bool_option("no-simplify")) {
+  if(!no_simplify) {
     expr2tc tmp = expr->simplify();
     if (!is_nil_expr(tmp))
       expr = tmp;
@@ -132,6 +160,17 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
   //replace_dynamic_allocation(state, rhs);
 
   const code_assign2t &code = to_code_assign2t(code_assign);
+
+  // Sanity check: if the target has zero size, then we've ended up assigning
+  // to/from a C++ POD class with no fields. The rest of the model checker isn't
+  // rated for dealing with this concept; perform a NOP.
+  try {
+    if (is_struct_type(code.target->type) &&
+        type_byte_size(*code.target->type) == 0)
+      return;
+  } catch (array_type2t::dyn_sized_array_excp*foo) {
+    delete foo;
+  }
 
   expr2tc lhs = code.target;
   expr2tc rhs = code.source;
@@ -170,24 +209,28 @@ void goto_symext::symex_assign_rec(
 
   if (is_symbol2t(lhs)) {
     symex_assign_symbol(lhs, rhs, guard);
-  } else if (is_index2t(lhs))
+  } else if (is_index2t(lhs)) {
     symex_assign_array(lhs, rhs, guard);
-  else if (is_member2t(lhs))
+  } else if (is_member2t(lhs)) {
     symex_assign_member(lhs, rhs, guard);
-  else if (is_if2t(lhs))
+  } else if (is_if2t(lhs)) {
     symex_assign_if(lhs, rhs, guard);
-  else if (is_typecast2t(lhs))
+  } else if (is_typecast2t(lhs)) {
     symex_assign_typecast(lhs, rhs, guard);
-  else if (is_constant_string2t(lhs) ||
+   } else if (is_constant_string2t(lhs) ||
            is_null_object2t(lhs) ||
            is_zero_string2t(lhs))
   {
     // ignore
-  }
-  else if (is_byte_extract2t(lhs))
+  } else if (is_byte_extract2t(lhs)) {
     symex_assign_byte_extract(lhs, rhs, guard);
-  else
-    throw "assignment to " + get_expr_id(lhs) + " not handled";
+  } else if (is_concat2t(lhs)) {
+    symex_assign_concat(lhs, rhs, guard);
+  } else {
+    std::cerr <<  "assignment to " << get_expr_id(lhs) << " not handled"
+              << std::endl;
+    abort();
+  }
 }
 
 void goto_symext::symex_assign_symbol(
@@ -346,12 +389,66 @@ void goto_symext::symex_assign_byte_extract(
   // we have byte_extract_X(l, b)=r
   // turn into l=byte_update_X(l, b, r)
 
+  // Grief: multi dimensional arrays.
   const byte_extract2t &extract = to_byte_extract2t(lhs);
-  byte_update2tc new_rhs(extract.source_value->type, extract.source_value,
-                         extract.source_offset, rhs,
-                         extract.big_endian);
 
-  symex_assign_rec(extract.source_value, new_rhs, guard);
+  if (is_multi_dimensional_array(extract.source_value)) {
+    const array_type2t &arr_type = to_array_type(extract.source_value->type);
+    assert(!is_multi_dimensional_array(arr_type.subtype) &&
+           "Can't currently byte extract through more than two dimensions of "
+           "array right now, sorry");
+    constant_int2tc subtype_sz(index_type2(),
+                               type_byte_size(*arr_type.subtype));
+    expr2tc div = div2tc(index_type2(), extract.source_offset, subtype_sz);
+    expr2tc mod = modulus2tc(index_type2(), extract.source_offset, subtype_sz);
+    do_simplify(div);
+    do_simplify(mod);
+
+    index2tc idx(arr_type.subtype, extract.source_value, div);
+    byte_update2tc be2(arr_type.subtype, idx, mod, rhs, extract.big_endian);
+    with2tc store(extract.source_value->type, extract.source_value, div, be2);
+    symex_assign_rec(extract.source_value, store, guard);
+  } else {
+    byte_update2tc new_rhs(extract.source_value->type, extract.source_value,
+                           extract.source_offset, rhs,
+                           extract.big_endian);
+
+    symex_assign_rec(extract.source_value, new_rhs, guard);
+  }
+}
+
+void goto_symext::symex_assign_concat(
+  const expr2tc &lhs,
+  expr2tc &rhs,
+  guardt &guard)
+{
+  // Right: generate a series of symex assigns.
+  const concat2t &cat = to_concat2t(lhs);
+  assert(cat.type->get_width() > 8);
+  assert(is_scalar_type(rhs));
+
+  // Ensure we're dealing with a bitvector.
+  if (!is_bv_type(rhs))
+    rhs = typecast2tc(get_uint_type(rhs->type->get_width()), rhs);
+
+  // Right. To split this up, work out the size that should be being assigned
+  // to each part of the contact, and cut up the rhs appropriately.
+  unsigned int side1_size = cat.side_1->type->get_width();
+  unsigned int side2_size = cat.side_2->type->get_width();
+
+  // Position to split it is side2_size bits up from the zero position. Now,
+  // perform this split.
+  // Side2 rhs takes the lower bits, so just downcast the rhs to that num of bit
+  expr2tc side2_rhs = typecast2tc(get_uint_type(side2_size), rhs);
+  // Side1 needs to have that number of lower bits clipped off.
+  expr2tc shift_dist = gen_uint(side2_size);
+  expr2tc side1_rhs = lshr2tc(rhs->type, rhs, shift_dist);
+  // Now downcast it to the desired number of bits.
+  side1_rhs = typecast2tc(get_uint_type(side1_size), side1_rhs);
+
+  // And now, perform the new assignments.
+  symex_assign_rec(cat.side_1, side1_rhs, guard);
+  symex_assign_rec(cat.side_2, side2_rhs, guard);
 }
 
 void goto_symext::replace_nondet(expr2tc &expr)

@@ -25,7 +25,7 @@ Function: goto_function_serializationt::convert
 \*******************************************************************/
 
 void goto_function_serializationt::convert( 
-  const goto_functionst::goto_functiont& function, 
+  const goto_functiont& function, 
   std::ostream &out)
 {
   if (function.body_available)

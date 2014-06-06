@@ -1206,17 +1206,6 @@ void cpp_typecheckt::typecheck_expr_member(
     return;
   }
 
-  #ifdef CPP_SYSTEMC_EXTENSION
-  if(expr.op0().type().id() == "signedbv" ||
-     expr.op0().type().id() == "unsignedbv" ||
-     expr.op0().type().id() == "verilogbv")
-  {
-    // might be a SystemC expression
-    typecheck_expr_sc_member(expr, fargs);
-    return;
-  }
-  #endif
-
   if(op0.type().id()!="symbol")
   {
     err_location(expr);
@@ -1226,8 +1215,13 @@ void cpp_typecheckt::typecheck_expr_member(
     throw 0;
   }
 
+  typet op_type = op0.type();
+  // Follow symbolic types up until the last one.
+  while (lookup(op_type.identifier()).type.id() == "symbol")
+    op_type = lookup(op_type.identifier()).type;
+
   const irep_idt &struct_identifier=
-    to_symbol_type(op0.type()).get_identifier();
+    to_symbol_type(op_type).get_identifier();
 
   const symbolt &struct_symbol=lookup(struct_identifier);
 
@@ -1852,7 +1846,15 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   }
 
   // now do the function -- this has been postponed
-  typecheck_function_expr(expr.function(), cpp_typecheck_fargst(expr));
+  cpp_typecheck_fargst fargs(expr);
+  // If the expression is decorated with what the 'this' object is, add it to
+  // the fargst record. If it isn't available, name resolution will still work,
+  // it just won't take the 'this' argument into account when overloading. (NB:
+  // this is bad).
+  if (expr.find("#this_expr").is_not_nil())
+    fargs.add_object(static_cast<const exprt &>(expr.find("#this_expr")));
+
+  typecheck_function_expr(expr.function(), fargs);
 
   if(expr.function().id()=="type")
   {
@@ -1898,15 +1900,6 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
     return;
   }
-
-  #ifdef CPP_SYSTEMC_EXTENSION
-  if(expr.function().id() == "sc_extension")
-  {
-    exprt tmp = expr.function().op0();
-    expr.swap(tmp);
-    return;
-  }
-  #endif
 
   if(expr.function().id()=="cast_expression")
   {
@@ -2365,167 +2358,6 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
 
   if(cpp_is_pod(type0))
   {
-    #ifdef CPP_SYSTEMC_EXTENSION
-    if(expr.op0().id()=="extractbits")
-    {
-       if(!expr.op0().op0().cmt_lvalue())
-       {
-         err_location(expr.op0().op0());
-         str << "assignment error: `" << to_string(expr.op0().op0())
-             << "' not an lvalue";
-         throw 0;
-       }
-
-      expr.op0().set("#lvalue",true);
-      c_typecheck_baset::typecheck_side_effect_assignment(expr);
-      expr.op0().remove("#lvalue");
-
-      const exprt& extractbits = expr.op0();
-
-      int width = atoi(extractbits.op0().type().width().c_str());
-      int left  = atoi(extractbits.op1().cformat().c_str());
-      int right = atoi(extractbits.op2().cformat().c_str());
-
-      std::string mask;
-
-      for(int i = 0; i < right; i++)
-        mask = "1" + mask;
-
-      for(int i = right; i <= left ; i++)
-        mask = "0" + mask;
-
-      for(int i = left+1; i < width; i++)
-        mask = "1" + mask;
-
-       // `a.range(left,right) = b' is converted to
-       //  a =  (mask & a) |  ((typecast)b) << right
-
-      exprt expr_mask("constant", extractbits.op0().type());
-      expr_mask.value(mask);
-
-      exprt and_expr("bitand", expr_mask.type());
-      and_expr.copy_to_operands(expr_mask, extractbits.op0());
-
-      exprt expr_typecast(expr.op1());
-      expr_typecast.make_typecast(extractbits.op0().type());
-
-      exprt shl("shl", expr_typecast.type());
-      shl.copy_to_operands(expr_typecast, extractbits.op2());
-
-      exprt or_expr("bitor", and_expr.type());
-      or_expr.copy_to_operands(and_expr, shl);
-
-      // TODO: cbmc: simplify(or_expr, *this);
-      simplify(or_expr);
-
-      codet assign(expr.statement());
-      assign.type() = extractbits.op0().type();
-      assign.copy_to_operands(extractbits.op0(), or_expr);
-      assign.location() = expr.location();
-
-      code_expressiont code_expr;
-      code_expr.type() = extractbits.type();
-      code_expr.copy_to_operands(extractbits);
-
-      code_blockt block;
-      block.location() = expr.location();
-      block.copy_to_operands(assign, code_expr);
-
-      side_effect_exprt statement_expr("statement_expression");
-      statement_expr.type() = code_expr.type();
-      statement_expr.copy_to_operands(block);
-
-      expr = statement_expr;
-      return;
-    }
-    else if(expr.op0().id()=="extractbit")
-    {
-      if(!expr.op0().op0().cmt_lvalue())
-      {
-        err_location(expr.op0().op0());
-        str << "assignment error: `" << to_string(expr.op0().op0())
-            << "' not an lvalue";
-        throw 0;
-      }
-
-      expr.op0().set("#lvalue",true);
-      c_typecheck_baset::typecheck_side_effect_assignment(expr);
-      expr.op0().remove("#lvalue");
-
-      const exprt& extractbit = expr.op0();
-
-      int width = atoi(extractbit.op0().type().width().c_str());
-      int index  = atoi(extractbit.op1().cformat().c_str());
-
-      std::string mask;
-
-      for(int i = 0; i < index; i++)
-        mask = "1" + mask;
-
-      mask = "0" + mask;
-
-      for(int i = index+1; i < width; i++)
-        mask = "1" + mask;
-
-       // `a.range(left,right) = b' is converted to
-       //  a =  (mask & a) |  ((typecast)b) << right
-
-      exprt expr_mask("constant", extractbit.op0().type());
-      expr_mask.value(mask);
-
-      exprt and_expr("bitand", extractbit.op0().type());
-      and_expr.copy_to_operands(expr_mask, extractbit.op0());
-
-      exprt expr_typecast(expr.op1());
-      expr_typecast.make_typecast(extractbit.op0().type());
-
-      exprt shl("shl", expr_typecast.type());
-      shl.copy_to_operands(expr_typecast, extractbit.op1());
-
-      exprt or_expr("bitor", and_expr.type());
-      or_expr.copy_to_operands(and_expr, shl);
-
-      // TODO: cbmc: simplify(or_expr, *this);
-      simplify(or_expr);
-
-      codet assign(expr.statement());
-      assign.type() = extractbit.op0().type();
-      assign.copy_to_operands(extractbit.op0(), or_expr);
-      assign.location() = expr.location();
-
-      code_expressiont code_expr;
-      code_expr.type() = extractbit.type();
-      code_expr.copy_to_operands(extractbit);
-
-      code_blockt block;
-      block.location() = expr.location();
-      block.copy_to_operands(assign, code_expr);
-
-      side_effect_exprt statement_expr("statement_expression");
-      statement_expr.type() = code_expr.type();
-      statement_expr.copy_to_operands(block);
-
-      expr = statement_expr;
-      return;
-    }
-
-    if(expr.op0().type().id() == "verilogbv")
-    {
-      if(expr.id()=="assign+" ||
-         expr.id()=="assign-" ||
-         expr.id()=="assign*" ||
-         expr.id()=="assign/")
-      {
-        err_location(expr);
-        str << "assignment operator '" << id2string(expr.statement())
-            << "' not defined for types `" << type2cpp(expr.op0().type(),*this)
-            << "' and `" << type2cpp(expr.op1().type(),*this) <<"'";
-      }
-      implicit_typecast(expr.op1(),expr.op0().type());
-      expr.type() = expr.op0().type();
-      return;
-    }
-    #endif
 
     // for structs we use the 'implicit assignment operator',
     // and therefore, it is allowed to assign to a rvalue struct.
@@ -2922,25 +2754,6 @@ void cpp_typecheckt::typecheck_expr_binary_arithmetic(exprt &expr)
   add_implicit_dereference(expr.op0());
   add_implicit_dereference(expr.op1());
 
-  #ifdef CPP_SYSTEMC_EXTENSION
-  if(expr.id() == "bitnot" || expr.id() == "bitand" ||
-     expr.id() == "bitor"  || expr.id() == "bitxor")
-  {
-    if(expr.op0().type().id()=="verilogbv")
-    {
-      implicit_typecast(expr.op1(), expr.op0().type());
-      expr.type() = expr.op0().type();
-      return;
-    }
-    else if(expr.op1().type().id()=="verilogbv")
-    {
-      implicit_typecast(expr.op0(), expr.op1().type());
-      expr.type() = expr.op1().type();
-      return;
-    }
-  }
-  #endif
-
   c_typecheck_baset::typecheck_expr_binary_arithmetic(expr);
 }
 
@@ -2958,49 +2771,9 @@ Purpose:
 
 void cpp_typecheckt::typecheck_expr_index(exprt &expr)
 {
-  #ifdef CPP_SYSTEMC_EXTENSION
-  if(expr.operands().size()!=2)
-  {
-    err_location(expr);
-    str << "operator `" << expr.id_string()
-        << "' expects two operands";
-    throw 0;
-  }
-
-  if(expr.op0().type().id() == "signedbv" ||
-     expr.op0().type().id() == "unsignedbv")
-  {
-    typecheck_expr_sc_index(expr);
-    return;
-  }
-  #endif
 
   c_typecheck_baset::typecheck_expr_index(expr);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_expr_sc_index
-
-Inputs:
-
-Outputs:
-
-Purpose:
-
-\*******************************************************************/
-
-#ifdef CPP_SYSTEMC_EXTENSION
-void cpp_typecheckt::typecheck_expr_sc_index(exprt &expr)
-{
-  exprt &index_expr=expr.op1();
-
-  make_index_type(index_expr);
-
-  expr.id("extractbit");
-  expr.type()=typet("bool");
-}
-#endif
 
 /*******************************************************************\
 
@@ -3028,42 +2801,6 @@ void cpp_typecheckt::typecheck_expr_comma(exprt &expr)
     // TODO: check if the comma operator has been overloaded!
   }
 
-  #ifdef CPP_SYSTEMC_EXTENSION
-  if(expr.op0().type().id() == "verilogbv" ||
-     expr.op0().type().id() == "signedbv" ||
-     expr.op0().type().id() == "unsignedbv" ||
-     expr.op0().type().id() == "bool")
-  {
-    // do concatenation
-
-    int width0 = expr.op0().type().id() == "bool" ? 1 :
-              atoi(expr.op0().type().width().c_str());
-
-    int width1 = expr.op1().type().id() == "bool" ? 1 :
-              atoi(expr.op1().type().width().c_str());
-
-    irep_idt type_id=
-      (expr.op0().type().id() == "verilogbv" ||
-       expr.op1().type().id() == "verilogbv")? "verilogbv": "unsignedbv";
-
-    typet new_type0(type_id);
-    new_type0.width(width0);
-    implicit_typecast(expr.op0(), new_type0);
-
-    typet new_type1(type_id);
-    new_type1.width(width1);
-    implicit_typecast(expr.op1(), new_type1);
-
-    expr.id("concatenation");
-
-    typet new_type(type_id);
-    new_type.width(width0 + width1);
-    expr.type()=new_type;
-
-    return;
-  }
-  #endif
-
   c_typecheck_baset::typecheck_expr_comma(expr);
 }
 
@@ -3089,116 +2826,5 @@ void cpp_typecheckt::typecheck_expr_rel(exprt &expr)
     throw 0;
   }
 
-  #ifdef CPP_SYSTEMC_EXTENSION
-  if(expr.op0().type().id()=="verilogbv")
-  {
-
-    if(expr.id()=="=" || expr.id()=="notequal")
-    {
-      implicit_typecast(expr.op1(), expr.op0().type());
-      expr.type()=typet("bool");
-      return;
-    }
-  }
-  #endif
-
   c_typecheck_baset::typecheck_expr_rel(expr);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_expr_sc_member
-
-Inputs:
-
-Outputs:
-
-Purpose:
-
-\*******************************************************************/
-
-#ifdef CPP_SYSTEMC_EXTENSION
-void cpp_typecheckt::typecheck_expr_sc_member(
-  exprt &expr,
-  const cpp_typecheck_fargst &fargs)
-{
-  cpp_namet cpp_name=
-    to_cpp_name(expr.find("component_cpp_name"));
-
-  if(cpp_name.get_sub().size()!=1 &&
-     cpp_name.get_sub()[0].id()!="name")
-  {
-    err_location(expr);
-    str << "error: bad SystemC member expression";
-    throw 0;
-  }
-
-  irep_idt name=cpp_name.get_sub()[0].identifier();
-
-  if(name=="range")
-  {
-    if(fargs.operands.size()!=2)
-    {
-      err_location(expr);
-      str << "error: `range' expects two arguments";
-      throw 0;
-    }
-
-    exprt arg0=fargs.operands[0];
-    exprt arg1=fargs.operands[1];
-
-    make_constant_index(arg0);
-    make_constant_index(arg1);
-
-    mp_integer o0, o1;
-
-    if(to_integer(arg0, o0))
-    {
-      err_location(arg0);
-      str << "failed to convert index 0";
-      throw 0;
-    }
-
-    if(o0<0)
-    {
-      err_location(arg1);
-      str << "index 1 out of range";
-      throw 0;
-    }
-
-    if(to_integer(arg1, o1))
-    {
-      err_location(arg1);
-      str << "failed to convert index 2";
-      throw 0;
-    }
-
-    if(o1<0)
-    {
-      err_location(arg1);
-      str << "index 2 out of range";
-      throw 0;
-    }
-
-    if(o1>o0)
-    {
-      err_location(expr);
-      str << "index 2 greater than index 1";
-    }
-
-    exprt extractbits("extractbits", expr.op0().type());
-    extractbits.type().width(integer2string(o0-o1+1));
-    extractbits.copy_to_operands(expr.op0(), arg0, arg1);
-
-    expr=exprt("sc_extension");
-    expr.copy_to_operands(extractbits);
-    return;
-  }
-  else
-  {
-//     ps_irep("sc_expr",expr);
-    std::cout << "MEMBER: " << expr.pretty() << std::endl;
-    assert(0);
-  }
-}
-#endif

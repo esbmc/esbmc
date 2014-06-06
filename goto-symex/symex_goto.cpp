@@ -10,6 +10,7 @@
 #include <irep2.h>
 #include <migrate.h>
 #include <assert.h>
+#include <prefix.h>
 
 #include <expr_util.h>
 #include <std_expr.h>
@@ -234,57 +235,53 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     if (it->base_name == guard_identifier_s)
       continue;  // just a guard
 
-    try
-    {
-      // changed!
-      const symbolt &symbol = ns.lookup(it->base_name);
-
-      type2tc type;
-      typet old_type = symbol.type;
-      migrate_type(symbol.type, type);
-
-      expr2tc rhs;
-
-      if (cur_state->guard.is_false()) {
-        rhs = symbol2tc(type, symbol.name);
-        cur_state->current_name(goto_state, rhs);
-      } else if (goto_state.guard.is_false())    {
-        rhs = symbol2tc(type, symbol.name);
-        cur_state->current_name(goto_state, rhs);
-      } else   {
-	guardt tmp_guard(goto_state.guard);
-
-	// this gets the diff between the guards
-	tmp_guard -= cur_state->guard;
-
-	symbol2tc true_val(type, symbol.name);
-	symbol2tc false_val(type, symbol.name);
-        cur_state->current_name(goto_state, true_val);
-        cur_state->current_name(false_val);
-        rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
-      }
-
-      exprt tmp_lhs(symbol_expr(symbol));
-      expr2tc lhs;
-      migrate_expr(tmp_lhs, lhs);
-      expr2tc new_lhs = lhs;
-
-      cur_state->assignment(new_lhs, rhs, false);
-
-      guardt true_guard;
-
-      target->assignment(
-        true_guard.as_expr(),
-        new_lhs, lhs,
-        rhs,
-        cur_state->source,
-        cur_state->gen_stack_trace(),
-        symex_targett::HIDDEN);
-    }
-    catch (const std::string e)
-    {
+    if (has_prefix(it->base_name.as_string(),"symex::invalid_object"))
       continue;
+
+    // changed!
+    const symbolt &symbol = ns.lookup(it->base_name);
+
+    type2tc type;
+    typet old_type = symbol.type;
+    migrate_type(symbol.type, type);
+
+    expr2tc rhs;
+
+    if (cur_state->guard.is_false()) {
+      rhs = symbol2tc(type, symbol.name);
+      cur_state->current_name(goto_state, rhs);
+    } else if (goto_state.guard.is_false())    {
+      rhs = symbol2tc(type, symbol.name);
+      cur_state->current_name(goto_state, rhs);
+    } else   {
+      guardt tmp_guard(goto_state.guard);
+
+      // this gets the diff between the guards
+      tmp_guard -= cur_state->guard;
+
+      symbol2tc true_val(type, symbol.name);
+      symbol2tc false_val(type, symbol.name);
+      cur_state->current_name(goto_state, true_val);
+      cur_state->current_name(false_val);
+      rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
     }
+
+    exprt tmp_lhs(symbol_expr(symbol));
+    expr2tc lhs;
+    migrate_expr(tmp_lhs, lhs);
+    expr2tc new_lhs = lhs;
+
+    cur_state->assignment(new_lhs, rhs, false);
+
+    guardt true_guard;
+
+    target->assignment(
+      true_guard.as_expr(),
+      new_lhs, lhs,
+      rhs,
+      cur_state->source,
+      cur_state->gen_stack_trace(),
+      symex_targett::HIDDEN);
   }
 }
 
@@ -300,18 +297,6 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   } else {
     negated_cond = not2tc(guard);
   }
-
-  bool unwinding_assertions =
-    !options.get_bool_option("no-unwinding-assertions");
-
-  bool partial_loops =
-    options.get_bool_option("partial-loops");
-
-  bool base_case=
-    options.get_bool_option("base-case");
-
-  bool forward_condition=
-    options.get_bool_option("forward-condition");
 
   if (base_case)
   {
@@ -334,7 +319,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   }
   else if(!partial_loops)
   {
-    if(unwinding_assertions)
+    if(!no_unwinding_assertions)
     {
       // generate unwinding assertion
       claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
@@ -361,15 +346,16 @@ goto_symext::get_unwind(
   if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
 
-  #if 1
+  if (!options.get_bool_option("quiet"))
   {
     std::string msg =
       "Unwinding loop " + i2string(id) + " iteration " + i2string(unwind) +
       " " + source.pc->location.as_string();
     std::cout << msg << std::endl;
   }
-  #endif
 
   return this_loop_max_unwind != 0 &&
          unwind >= this_loop_max_unwind;
 }
+
+hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;

@@ -22,7 +22,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "goto_symex_state.h"
 #include "goto_symex.h"
-#include "crypto_hash.h"
 
 goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
                                      const namespacet &_ns)
@@ -178,7 +177,6 @@ void goto_symex_statet::assignment(
   const expr2tc &rhs,
   bool record_value)
 {
-  crypto_hash hash;
   assert(is_symbol2t(lhs));
   symbol2t &lhs_sym = to_symbol2t(lhs);
 
@@ -206,7 +204,7 @@ void goto_symex_statet::assignment(
     expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
     level2.get_original_name(l1_rhs);
 
-    value_set.assign(l1_lhs, l1_rhs, ns);
+    value_set.assign(l1_lhs, l1_rhs);
   }
 }
 
@@ -217,10 +215,18 @@ void goto_symex_statet::rename(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
+  if (is_array_type(expr)) {
+    // Expr size might need to be renamed.
+    array_type2t &arr_type = to_array_type(expr.get()->type);
+    rename(arr_type.array_size);
+  }
+
   if (is_symbol2t(expr))
   {
+    type2tc origtype = expr->type;
     top().level1.rename(expr);
     level2.rename(expr);
+    fixup_renamed_type(expr, origtype);
   }
   else if (is_address_of2t(expr))
   {
@@ -230,8 +236,9 @@ void goto_symex_statet::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, idx, expr)
+    Forall_operands2(it, idx, expr) {
       rename(*it);
+    }
   }
 }
 
@@ -243,10 +250,28 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   {
     return;
   }
-  else if(is_symbol2t(expr))
+
+  if (is_array_type(expr)) {
+    // Expr size might need to be renamed.
+    array_type2t &arr_type = to_array_type(expr.get()->type);
+    rename(arr_type.array_size);
+  }
+
+  if(is_symbol2t(expr))
   {
     // only do L1
+    type2tc origtype = expr->type;
     top().level1.rename(expr);
+    fixup_renamed_type(expr, origtype);
+
+    // Realloc hacks: The l1 name may need to change slightly when we realloc
+    // a pointer, so that l2 renaming still points at the same piece of data,
+    // but so that the address compares differently to previous address-of's.
+    // Do this by bumping the l2 number in the l1 name, if it's been realloc'd.
+    if (realloc_map.find(expr) != realloc_map.end()) {
+      symbol2t &sym = to_symbol2t(expr);
+      sym.level2_num = realloc_map[expr];
+    }
   }
   else if (is_index2t(expr))
   {
@@ -257,8 +282,75 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, idx, expr)
+    Forall_operands2(it, idx, expr) {
       rename_address(*it);
+    }
+  }
+}
+
+void goto_symex_statet::fixup_renamed_type(expr2tc &expr,
+                                           const type2tc &orig_type)
+{
+  if (is_code_type(orig_type)) {
+    return;
+  } else if (is_pointer_type(orig_type)) {
+    assert(is_pointer_type(expr));
+
+    // Grab pointer types
+    const pointer_type2t &orig = to_pointer_type(orig_type);
+    const pointer_type2t &newtype = to_pointer_type(expr->type);
+
+    type2tc origsubtype = orig.subtype;
+    type2tc newsubtype = newtype.subtype;
+
+    // Handle symbol subtypes -- we can't rename these, because there are (some)
+    // pointers to incomplete types, that here we end up trying to get a
+    // concrete type for. Which is incorrect.
+    // So instead, if one of the subtypes is a symbol type, and it isn't
+    // identical to the other type, insert a typecast. This might lead to some
+    // needless casts, but what the hell.
+    if (is_symbol_type(origsubtype) || is_symbol_type(newsubtype)) {
+      if (origsubtype != newsubtype) {
+        expr = typecast2tc(orig_type, expr);
+      }
+      return;
+    }
+
+    // Cease caring about anything that points at code types: pointer arithmetic
+    // applied to this is already broken.
+    if (is_code_type(origsubtype) || is_code_type(newsubtype))
+      return;
+
+    if (origsubtype == newsubtype)
+      return;
+
+    // Fetch the (bit) size of the pointer subtype.
+    unsigned int origsize, newsize;
+
+    if (is_empty_type(origsubtype))
+      origsize = 8;
+    else
+      origsize = origsubtype->get_width();
+
+    if (is_empty_type(newsubtype))
+      newsize = 8;
+    else
+      newsize = newsubtype->get_width();
+
+    // If the renaming process has changed the size of the pointer subtype, this
+    // will break all kinds of pointer arith; insert a cast.
+    if (origsize != newsize) {
+      expr = typecast2tc(orig_type, expr);
+    }
+  } else if (is_scalar_type(orig_type) && is_scalar_type(expr->type)) {
+    // If we're a BV and have changed size, then we're quite likely to cause
+    // an SMT problem later on. Immediately cast. Also if we've gratuitously
+    // changed sign.
+    if (orig_type->get_width() != expr->type->get_width() ||
+                    (is_bv_type(orig_type) && is_bv_type(expr->type) &&
+                    orig_type->type_id != expr->type->type_id)) {
+      expr = typecast2tc(orig_type, expr);
+    }
   }
 }
 
@@ -297,7 +389,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
       std::cout << spaces << it->function_identifier.as_string();
       std::cout << " at " << src.pc->location.get_file();
       std::cout << " line " << src.pc->location.get_line();
-      std::cout << std::endl << std::endl;
+      std::cout << std::endl;
     }
 
     src = it->calling_location;

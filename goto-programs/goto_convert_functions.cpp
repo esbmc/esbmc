@@ -13,10 +13,13 @@ Date: June 2003
 #include <base_type.h>
 #include <prefix.h>
 #include <std_code.h>
+#include <std_expr.h>
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
 #include "remove_skip.h"
+#include "i2string.h"
+#include "ansi-c/c_types.h"
 
 /*******************************************************************\
 
@@ -74,6 +77,9 @@ Function: goto_convert_functionst::goto_convert
 
 void goto_convert_functionst::goto_convert()
 {
+  // If it is the inductive step, it will add the global variables to the statet
+  add_global_variable_to_state();
+
   // warning! hash-table iterators are not stable
 
   typedef std::list<irep_idt> symbol_listt;
@@ -94,6 +100,9 @@ void goto_convert_functionst::goto_convert()
   }
 
   functions.compute_location_numbers();
+
+  // If it is the inductive step, it will add the new variables to context
+  add_new_variables_to_context();
 }
 
 /*******************************************************************\
@@ -141,7 +150,7 @@ Function: goto_convert_functionst::add_return
 \*******************************************************************/
 
 void goto_convert_functionst::add_return(
-  goto_functionst::goto_functiont &f,
+  goto_functiont &f,
   const locationt &location)
 {
   if(!f.body.instructions.empty() &&
@@ -184,8 +193,13 @@ Function: goto_convert_functionst::convert_function
 
 void goto_convert_functionst::convert_function(const irep_idt &identifier)
 {
-  goto_functionst::goto_functiont &f=functions.function_map[identifier];
+  goto_functiont &f=functions.function_map[identifier];
   const symbolt &symbol=ns.lookup(identifier);
+
+  // Apply a SFINAE test: discard unused C++ templates.
+  if (symbol.value.get("#speculative_template") == "1" &&
+      symbol.value.get("#template_in_use") != "1")
+    return;
 
   // make tmp variables local to function
   tmp_symbol_prefix=id2string(symbol.name)+"::$tmp::";
@@ -222,7 +236,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
       arg.remove("#base_name");
       arg.remove("#location");
 
-      get_struct_components(arg, state);
+      get_struct_components(arg);
     }
 
     const irep_idt &identifier=it->get_identifier();
@@ -523,7 +537,6 @@ goto_convert_functionst::wallop_type(irep_idt name,
 void
 goto_convert_functionst::thrash_type_symbols(void)
 {
-
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and
   // replacing it with the value of the type name. However, if we have a pointer

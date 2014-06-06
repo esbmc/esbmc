@@ -16,7 +16,6 @@ const char *extensions_ansi_c  []={ "c", "i", NULL };
 const char *extensions_intrep  []={ NULL };
 const char *extensions_pvs     []={ "pvs", NULL };
 const char *extensions_vhdl    []={ "vhdl", NULL };
-const char *extensions_verilog []={ "v", NULL };
 const char *extensions_smv     []={ "smv", "flat_smv", NULL };
 const char *extensions_csp     []={ "csp", NULL };
 const char *extensions_netlist []={ "ntl", NULL };

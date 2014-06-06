@@ -22,3 +22,5 @@ if test -z "`git status -s | grep -v "^??" | grep -v config.inc`"; then
 else
   echo -n " (dirty tree)" >> $SFILE;
 fi
+
+echo "0x00" | xxd -r >> $SFILE;

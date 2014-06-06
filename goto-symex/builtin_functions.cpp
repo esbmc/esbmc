@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <sstream>
+
 #include <irep2.h>
 #include <migrate.h>
 
@@ -24,13 +26,21 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 
-void goto_symext::symex_malloc(
+#ifdef EIGEN_LIB
+bool isApprox(double a, double b)
+{
+  return (std::abs(a-b) <= Eigen::NumTraits<double>::dummy_precision());
+}
+#endif
+
+expr2tc
+goto_symext::symex_malloc(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
 
   if (is_nil_expr(lhs))
-    return; // ignore
+    return expr2tc(); // ignore
 
   // size
   type2tc type = code.alloctype;
@@ -101,6 +111,15 @@ void goto_symext::symex_malloc(
   }
 
   expr2tc rhs = rhs_addrof;
+
+  symbol2tc null_sym(rhs->type, "NULL");
+  sideeffect2tc choice(get_bool_type(), expr2tc(), expr2tc(), std::vector<expr2tc>(), type2tc(), sideeffect2t::nondet);
+
+  rhs = if2tc(rhs->type, choice, rhs, null_sym);
+  replace_nondet(rhs);
+
+  expr2tc ptr_rhs = rhs;
+
   if (rhs->type != lhs->type)
     rhs = typecast2tc(lhs->type, rhs);
 
@@ -110,25 +129,90 @@ void goto_symext::symex_malloc(
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
 
+  pointer_object2tc ptr_obj(int_type2(), ptr_rhs);
+  track_new_pointer(ptr_obj, new_type);
+
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+
+  return rhs_addrof->ptr_obj;
+}
+
+void
+goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
+                               expr2tc size)
+{
+  guardt guard;
+
+  // Also update all the accounting data.
+
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  symbol2tc sym(sym_type, "c::__ESBMC_is_dynamic");
+  symbol2tc sym(sym_type, dyn_info_arr_name);
 
-  pointer_object2tc ptr_obj(int_type2(), lhs);
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = true_expr;
   symex_assign_rec(idx, truth, guard);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+  symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
+  index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
+  truth = true_expr;
+  symex_assign_rec(valid_index_expr, truth, guard);
+
+  symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
+  index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
+  expr2tc falseity = false_expr;
+  symex_assign_rec(dealloc_index_expr, falseity, guard);
+
+  type2tc sz_sym_type = type2tc(new array_type2t(uint_type2(), expr2tc(),true));
+  symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
+  index2tc sz_index_expr(get_bool_type(), sz_sym, ptr_obj);
+
+  expr2tc object_size_exp;
+  if (is_nil_expr(size)) {
+    try {
+      mp_integer object_size = type_byte_size(*new_type);
+      object_size_exp = gen_uint(object_size.to_ulong());
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      object_size_exp = e->size;
+    }
+  } else {
+    object_size_exp = size;
+  }
+
+  symex_assign_rec(sz_index_expr, object_size_exp, guard);
+
+  return;
 }
 
-void goto_symext::symex_free(const code_free2t &code)
+void goto_symext::symex_free(const expr2tc &expr)
 {
+  const code_free2t &code = to_code_free2t(expr);
 
-  pointer_offset2tc ptr_obj(uint_type2(), code.operand);
-  equality2tc eq(ptr_obj, zero_uint);
+  // Trigger 'free'-mode dereference of this pointer. Should generate various
+  // dereference failure callbacks.
+  expr2tc tmp = code.operand;
+  dereference(tmp, false, true);
+
+  pointer_offset2tc ptr_offs(uint_type2(), tmp);
+  equality2tc eq(ptr_offs, zero_uint);
   claim(eq, "Operand of free must have zero pointer offset");
+
+  // Clear the alloc bit, and set the deallocated bit.
+  guardt guard;
+  type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
+                                              expr2tc(), true));
+  pointer_object2tc ptr_obj(uint_type2(), code.operand);
+
+  symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
+  index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
+  expr2tc truth = true_expr;
+  symex_assign_rec(dealloc_index_expr, truth, guard);
+
+  symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
+  index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
+  expr2tc falsity = false_expr;
+  symex_assign_rec(valid_index_expr, falsity, guard);
 }
 
 void goto_symext::symex_printf(
@@ -153,8 +237,11 @@ void goto_symext::symex_printf(
           to_constant_string2t(idx.source_value).value.as_string();
 
         std::list<expr2tc> args; 
-        forall_operands2(it, idx, new_rhs)
-          args.push_back(*it);
+        forall_operands2(it, idx, new_rhs) {
+          expr2tc tmp = *it;
+          do_simplify(tmp);
+          args.push_back(tmp);
+        }
 
         target->output(cur_state->guard.as_expr(), cur_state->source, fmt,args);
       }
@@ -242,10 +329,83 @@ void goto_symext::symex_cpp_delete(const expr2tc &code __attribute__((unused)))
 }
 
 void
+goto_symext::intrinsic_realloc(const code_function_call2t &call,
+                               reachability_treet &arg __attribute__((unused)))
+{
+  assert(call.operands.size() == 2);
+  expr2tc src_ptr = call.operands[0];
+  expr2tc realloc_size = call.operands[1];
+
+  internal_deref_items.clear();
+  dereference2tc deref(get_empty_type(), src_ptr);
+  dereference(deref, false, false, true);
+  // src_ptr is now invalidated.
+
+  // Free the given pointer. This just uses the pointer object from the pointer
+  // variable that's the argument to realloc. It also leads to pointer validity
+  // checking, and checks that the offset is zero.
+  code_free2tc fr(call.operands[0]);
+  symex_free(fr);
+
+  // We now have a list of things to work on. Recurse into them, build a result,
+  // and then switch between those results afterwards.
+  // Result list is the address of the reallocated piece of data, and the guard.
+  std::list<std::pair<expr2tc,expr2tc> > result_list;
+  for (auto &item : internal_deref_items) {
+    expr2tc guard = item.guard;
+    cur_state->rename_address(item.object);
+    cur_state->guard.guard_expr(guard);
+    target->renumber(guard, item.object, realloc_size, cur_state->source);
+    type2tc new_ptr = type2tc(new pointer_type2t(item.object->type));
+    address_of2tc addrof(new_ptr, item.object);
+    result_list.push_back(std::pair<expr2tc,expr2tc>(addrof, item.guard));
+
+    // Bump the realloc-numbering of the object. This ensures that, after
+    // renaming, the address_of we just generated compares differently to
+    // previous address_of's before the realloc.
+    unsigned int cur_num = 0;
+    if (cur_state->realloc_map.find(item.object) !=
+        cur_state->realloc_map.end()) {
+      cur_num = cur_state->realloc_map[item.object];
+    }
+
+    cur_num++;
+    std::map<expr2tc, unsigned>::value_type v(item.object, cur_num);
+    cur_state->realloc_map.insert(v);
+  }
+
+  // Rebuild a gigantic if-then-else chain from the result list.
+  expr2tc result;
+  if (result_list.size() == 0) {
+    // Nothing happened; there was nothing, or only null, to point at.
+    // In this case, just return right now and leave the pointer free. The
+    // symex_free that occurred above should trigger a dereference failure.
+    return;
+  } else {
+    result = expr2tc();
+    for (auto it = result_list.begin(); it != result_list.end(); it++) {
+      if (is_nil_expr(result))
+        result = it->first;
+      else
+        result = if2tc(result->type, it->second, it->first, result);
+    }
+  }
+
+  // Install pointer modelling data into the relevant arrays.
+  pointer_object2tc ptr_obj(int_type2(), result);
+  track_new_pointer(ptr_obj, type2tc(), realloc_size);
+
+  // Assign the result to the left hand side.
+  code_assign2tc eq(call.ret, result);
+  symex_assign(eq);
+  return;
+}
+
+void
 goto_symext::intrinsic_yield(reachability_treet &art)
 {
 
-  art.force_cswitch_point();
+  art.get_cur_state().force_cswitch();
   return;
 }
 
@@ -279,7 +439,7 @@ goto_symext::intrinsic_switch_from(reachability_treet &art)
   art.get_cur_state().DFS_traversed[art.get_cur_state().get_active_state_number()] = true;
 
   // And force a context switch.
-  art.force_cswitch_point();
+  art.get_cur_state().force_cswitch();
   return;
 }
 
@@ -294,7 +454,7 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
   thread_id = art.get_cur_state().get_active_state_number();
   constant_int2tc tid(uint_type2(), BigInt(thread_id));
 
-  state.value_set.assign(call.ret, tid, ns);
+  state.value_set.assign(call.ret, tid);
 
   code_assign2tc assign(call.ret, tid);
   assert(call.ret->type == tid->type);
@@ -312,6 +472,9 @@ goto_symext::intrinsic_set_thread_data(const code_function_call2t &call,
 
   state.rename(threadid);
   state.rename(startdata);
+
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
 
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
@@ -332,6 +495,9 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
 
   state.level2.rename(threadid);
 
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
+
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
     std::cerr << std::endl;
@@ -344,7 +510,7 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   code_assign2tc assign(call.ret, startdata);
   assert(base_type_eq(call.ret->type, startdata->type, ns));
 
-  state.value_set.assign(call.ret, startdata, ns);
+  state.value_set.assign(call.ret, startdata);
   symex_assign(assign);
   return;
 }
@@ -354,7 +520,8 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
 
-  if (options.get_bool_option("k-induction")) {
+  if (k_induction
+      || options.get_bool_option("k-induction-parallel")) {
     std::cerr << "Sorry, can't perform k-induction on multithreaded code";
     std::cerr  << std::endl;
     abort();
@@ -389,14 +556,14 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
   constant_int2tc thread_id_exp(int_type2(), BigInt(thread_id));
 
   code_assign2tc assign(call.ret, thread_id_exp);
-  state.value_set.assign(call.ret, thread_id_exp, ns);
+  state.value_set.assign(call.ret, thread_id_exp);
 
   symex_assign(assign);
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.
   // Otherwise, this will cause the required context switch.
-  art.force_cswitch_point();
+  art.get_cur_state().force_cswitch();
 
   return;
 }
@@ -417,6 +584,9 @@ goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reacha
   statet &state = art.get_cur_state().get_active_state();
   expr2tc threadid = call.operands[0];
   state.level2.rename(threadid);
+
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
 
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
@@ -487,6 +657,9 @@ goto_symext::intrinsic_register_monitor(const code_function_call2t &call, reacha
   expr2tc threadid = call.operands[0];
   state.level2.rename(threadid);
 
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
+
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_register_monitor received nonconstant thread id";
     std::cerr << std::endl;
@@ -505,3 +678,191 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
   execution_statet &ex_state = art.get_cur_state();
   ex_state.kill_monitor_thread();
 }
+
+void
+goto_symext::intrinsic_check_stability(const code_function_call2t &call,
+                                       reachability_treet &art __attribute__((unused)))
+{
+  // This will check a given system's stability based on its poles and zeros.
+  bool is_stable=true;
+
+  // We can only check stability if ESBMC was compiled with eigen lib
+#ifdef EIGEN_LIB
+  std::vector<expr2tc> args = call.operands;
+  assert(args.size()==2);
+
+  // Denominator roots
+  std::vector<RootType> denominator_roots;
+  int denominator_has_roots = get_roots(args.at(0), denominator_roots);
+  if(denominator_has_roots == 2)
+  {
+    std::cerr << "**** WARNING: No practical filter if the denominator roots are zero." << std::endl;
+    is_stable=false;
+  }
+
+  std::vector<RootType> numerator_roots;
+  int numerator_has_roots = get_roots(args.at(1), numerator_roots);
+  if(numerator_has_roots == 2)
+  {
+    std::cerr << "**** WARNING: No practical filter if the numerator roots are zero." << std::endl;
+    is_stable=false;
+  }
+
+  if(!denominator_has_roots)
+  {
+    // Remove duplicate roots if there is numerator roots
+    if(!numerator_has_roots)
+    {
+      std::vector<RootType>::iterator it=denominator_roots.begin();
+
+      while(it != denominator_roots.end())
+      {
+        bool is_duplicated=false;
+        std::vector<RootType>::iterator it1=numerator_roots.begin();
+
+        // Flag when we find duplicate roots
+        while (it1 != numerator_roots.end())
+        {
+          // We don't actually check if the roots are equal, most of the
+          // time, they are not. Instead, we check if they are approx the
+          // same, using 1e-12, the precision used by eigen to search for
+          // roots. Check eigen3/Eigen/src/Core/NumTraits.h:99
+          if(isApprox(it->real(), it1->real()) && isApprox(it->real(), it1->real()) )
+          {
+            is_duplicated=true;
+            break;
+          }
+          ++it1;
+        }
+
+        // Erase returns an iterator point to element to the left
+        // of the one erased, so no need to increment it
+        if(is_duplicated)
+        {
+          it = denominator_roots.erase(it);
+          it1 = numerator_roots.erase(it1);
+        }
+        else
+          ++it;
+      }
+    }
+
+    // Check stability
+    // TODO: the conjugate has the same modulo, why check its modulo then?
+    for(unsigned int i=0; i<denominator_roots.size(); ++i)
+    {
+      double root_abs = std::abs(denominator_roots[i]);
+      if(root_abs>=1.0 or isApprox(root_abs, 1.0))
+      {
+        is_stable=false;
+        break;
+      }
+    }
+  }
+  else
+    is_stable=false;
+#else
+  is_stable=false;
+#endif
+
+  // Final result
+  constant_bool2tc result(is_stable);
+  code_assign2tc assign(call.ret, result);
+  symex_assign(assign);
+
+  return;
+}
+
+#ifdef EIGEN_LIB
+int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
+{
+  // This code will get an irep2 of an array and return the roots of the
+  // polynomial created by the values on the array
+  // Possible results:
+  // 0 - Roots found
+  // 1 - QR didn't converge (Roots not found) TODO
+  // 2 - No polynomial generated, for example, an array = [ 0 0 0 0 0 ]
+
+  exprt element;
+
+  // Run through the irep2 object to get its values from the symbol
+  if (is_address_of2t(array_element))
+  {
+    const address_of2t &addrof = to_address_of2t(array_element);
+    if (is_index2t(addrof.ptr_obj))
+    {
+      const index2t &idx = to_index2t(addrof.ptr_obj);
+      if(is_symbol2t(idx.source_value))
+      {
+        const symbol2t &symbol = to_symbol2t(idx.source_value);
+        element = ns.lookup(symbol.thename).value;
+      }
+      else
+        assert(0);
+    }
+    else
+      assert(0);
+  }
+  else
+    assert(0);
+
+  assert(element.operands().size());
+
+  unsigned int size=element.operands().size();
+
+  // Get the coefficients
+  std::vector<double> coefficients_vector;
+  for(unsigned int i=0; i<size; ++i)
+  {
+    double value=0;
+
+    // The following code is necessary because #cformat does not have signal information
+    if(element.operands()[i].id()=="unary+")
+      value=atof(element.operands()[i].op0().get_string("#cformat").c_str());
+    else if(element.operands()[i].id()=="unary-")
+      value=atof(element.operands()[i].op0().get_string("#cformat").c_str())*(-1);
+    else
+      value=atof(element.operands()[i].get_string("#cformat").c_str());
+
+    coefficients_vector.push_back(value);
+  }
+
+  // Remove leading zeros
+  std::vector<double>::iterator it=coefficients_vector.begin();
+  while(it != coefficients_vector.end())
+  {
+    if(*it != 0.0)
+      break;
+    it=coefficients_vector.erase(it);
+  }
+
+  size=coefficients_vector.size();
+
+  // Check if there is any element left on the vector
+  if(!size)
+    return 2;
+
+  Eigen::VectorXd coefficients(coefficients_vector.size());
+
+  // Copy elements from the list to the array
+  // Insert in reverse order
+  unsigned int i=0;
+  for(it=coefficients_vector.begin();
+      it!=coefficients_vector.end();
+      ++it, ++i)
+    coefficients[size-i-1] = *it;
+
+  // Eigen solver object
+  Eigen::PolynomialSolver<double, Eigen::Dynamic> solver;
+
+  // Solve denominator using QR decomposition
+  // TODO: As pointed it out by Renato, we should know if the algorithm converges
+  solver.compute(coefficients);
+
+  RootsType solver_roots = solver.roots();
+  for(unsigned int i=0; i<solver_roots.rows(); ++i)
+    roots.push_back(solver_roots[i]);
+
+  return 0;
+}
+#endif

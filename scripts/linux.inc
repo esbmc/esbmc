@@ -20,6 +20,11 @@ MINISAT = $(SATDIR)/MiniSat-p_v1.14
 CXXFLAGS+= -DMINISAT
 endif
 
+ifdef USE_EIGEN_LIB
+INCLUDES += -I/usr/include/eigen3/
+CXXFLAGS+= -DEIGEN_MPL2_ONLY -DEIGEN_LIB
+endif
+
 # Other goo
 
 ifdef TARGET32
@@ -36,24 +41,12 @@ FINLINKTAIL+= -static
 FINLINKBIN=g++
 endif
 
-ifdef LINUXCOMPAT
-CC=gcc34
-CXX=g++34
-FINLINKBIN=g++
-FINLINKTAIL+= -Wl,--defsym=memcpy=memmove
-STATICLIBCPPPATH:=$(shell g++ $(CXXFLAGS) -print-file-name=libstdc++.a)
-LIBS+= $(STATICLIBCPPPATH)
-
 # Link statically against Z3.
 ifdef USE_SOLVER_Z3
 Z3_SOLVER_LIBS= $(Z3)/lib/libz3.a
 endif
 
-else
-# If not in compat mode, link against libgomp. Can't do it with g++34 for
-# an unknown reason.
 PLATLIBS+= -lgomp -pthread -lrt -lpthread
-endif
 
 SOLVER_LIBS+=$(Z3_SOLVER_LIBS)
 

@@ -20,8 +20,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/goto_functions.h>
 
+#include <pointer-analysis/dereference.h>
+
 #include "goto_symex_state.h"
 #include "symex_target.h"
+
+#ifdef EIGEN_LIB
+#include <unsupported/Eigen/Polynomials>
+#endif
 
 class reachability_treet; // Forward dec
 class execution_statet; // Forward dec
@@ -69,6 +75,7 @@ public:
 
   friend class symex_dereference_statet;
   friend class bmct;
+  friend class reachability_treet;
 
   typedef goto_symex_statet statet;
 
@@ -155,21 +162,10 @@ protected:
    *  if-then-else list of concrete references that it might point at.
    *  @param expr Expression to eliminate dereferences from.
    *  @param write Whether or not we're writing into this object.
+   *  @param free Whether we're freeing this pointer.
    */
-  void dereference(expr2tc &expr, const bool write);
-
-  /**
-   *  Recursive implementation of dereference method.
-   *  @param expr Expression to eliminate dereferences from.
-   *  @param guard Some guard (defunct?).
-   *  @param dereference Dereferencet object to operate with.
-   *  @param write Whether or not we're writing to this object.
-   */
-  void dereference_rec(
-    expr2tc &expr,
-    guardt &guard,
-    class dereferencet &dereference,
-    const bool write);
+  void dereference(expr2tc &expr, const bool write, bool free = false,
+                   bool internal = false);
 
   // symex
 
@@ -346,7 +342,7 @@ protected:
    *  a function and declaring variables does).
    *  @param goto_function The function we're working upon.
    */
-  void locality(const goto_functionst::goto_functiont &goto_function);
+  void locality(const goto_functiont &goto_function);
 
   /**
    *  Setup next function in a chain of func ptr calls.
@@ -367,6 +363,10 @@ protected:
    */
   void run_intrinsic(const code_function_call2t &call, reachability_treet &art,
                      const std::string symname);
+
+  /** Implementation of realloc. */
+  void intrinsic_realloc(const code_function_call2t &call,
+                         reachability_treet &arg);
 
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
@@ -403,6 +403,21 @@ protected:
   void intrinsic_register_monitor(const code_function_call2t &call, reachability_treet &art);
   /** Terminate the monitor thread */
   void intrinsic_kill_monitor(reachability_treet &art);
+
+#ifdef EIGEN_LIB
+  // Digital system stability related functions
+  typedef Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootType RootType;
+  typedef Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType RootsType;
+#endif
+
+  /** Check digital filter stability */
+  void intrinsic_check_stability(const code_function_call2t &call,
+                                 reachability_treet &art);
+
+#ifdef EIGEN_LIB
+  /** Get roots of a polynomial */
+  int get_roots(expr2tc array_element, std::vector<RootType>& roots);
+#endif
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
@@ -537,10 +552,25 @@ protected:
   void symex_assign_byte_extract(const expr2tc &lhs, expr2tc &rhs,
                                  guardt &guard);
 
+  /**
+   *  Assign through a 'concat' operation. These are generated when we fail to
+   *  dereference something correctly, and generate a series of byte operations
+   *  that we then stitch back together. When that's on the left hand side of an
+   *  expression, this means that we have to decompose the right hand side into
+   *  a series of byte assignments.
+   *  @param lhs Concat to assign to
+   *  @param rhs Value to assign to lhs
+   *  @param guard Assignment guard.
+   */
+  void symex_assign_concat(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+
   /** Symbolic implementation of malloc. */
-  void symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  /** Pointer modelling update function */
+  void track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
+                         expr2tc size = expr2tc());
   /** Symbolic implementation of free */
-  void symex_free(const code_free2t &code);
+  void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const expr2tc &code);
   /** Symbolic implementation of c++'s new. */
@@ -583,8 +613,6 @@ protected:
   unsigned remaining_claims;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
-  /** Names of functions that we've complained about missing bodies of. */
-  hash_set_cont<irep_idt, irep_id_hash> body_warnings;
   /** Unwind bounds, loop number -> max unwinds. */
   std::map<unsigned, long> unwind_set;
   /** Global maximum number of unwinds. */
@@ -636,6 +664,46 @@ protected:
 
   /** Flag to indicate if we have an unwinding recursion assumption. */
   bool unwinding_recursion_assumption;
+
+  /** Depth limit, as given by the --depth option */
+  unsigned long depth_limit;
+  /** Instruction number we are to break at -- that is, trap, to the debugger.
+   *  Zero means no trap; there is a zero instruction, but there are better
+   *  ways of trapping at the start of symbolic execution to get at that. */
+  unsigned long break_insn;
+  /** Flag as to whether we're performing memory leak checks. Corresponds to
+   *  the option --memory-leak-check */
+  bool memory_leak_check;
+  /** Flag as to whether we're performing deadlock checking. Corresponds to
+   *  the option --deadlock-check */
+  bool deadlock_check;
+  /** Flag as to whether we're checking user assertions. Corresponds to
+   *  the option --no-assertions */
+  bool no_assertions;
+  /** Flag as to whether we're not simplifying exprs. Corresponds to
+   *  the option --no-simplify */
+  bool no_simplify;
+  /** Flag as to whether we're inserting unwinding assertions. Corresponds to
+   *  the option --no-unwinding-assertions */
+  bool no_unwinding_assertions;
+  /** Flag as to whether we're not enabling partial loops. Corresponds to
+   *  the option --partial-loops */
+  bool partial_loops;
+  /** Flag as to whether we're doing a k-induction. Corresponds to
+   *  the option --k-induction */
+  bool k_induction;
+  /** Flag as to whether we're doing a k-induction base case. Corresponds to
+   *  the option --base-case */
+  bool base_case;
+  /** Flag as to whether we're doing a k-induction forward condition.
+   *  Corresponds to the option --forward-condition */
+  bool forward_condition;
+  /** Names of functions that we've complained about missing bodies of. */
+  static hash_set_cont<irep_idt, irep_id_hash> body_warnings;
+  /** Set of dereference state records; this field is used as a mailbox between
+   *  the dereference code and the caller, who will inspect the contents after
+   *  a call to dereference (in INTERNAL mode) completes. */
+  std::list<dereference_callbackt::internal_item> internal_deref_items;
 };
 
 #endif

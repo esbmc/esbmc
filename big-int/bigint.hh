@@ -69,22 +69,8 @@
 #define true 1
 #endif
 
-// Minor optimization for gcc on some intel platforms.
-#if !defined _fast
-# if defined __GNUC__ && defined __i386__ && defined NDEBUG
-#  if defined _WIN32
-#   define _fast
-#   define _fasta			// Mingw-gcc crashes when alloca is used
-#  else					// inside a function declared regparm
-#   define _fasta _fast			// or stdcall (don't know which).
-#   define _fast __attribute__ ((__regparm__ (3),__stdcall__))
-#  endif
-# else
-#  define _fast
-#  define _fasta
-# endif
-#endif
-
+#define _fast
+#define _fasta
 
 class BigInt
 {

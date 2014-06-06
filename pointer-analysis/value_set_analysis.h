@@ -70,7 +70,7 @@ public:
     const expr2tc &expr,
     value_setst::valuest &dest)
   {
-    (*this)[l].value_set.get_value_set(expr, dest, ns);
+    (*this)[l].value_set->get_value_set(expr, dest);
   }  
 };
 

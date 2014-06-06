@@ -42,7 +42,7 @@ goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
   // first try simplifier on it
   do_simplify(new_expr);
 
-  if (is_true(new_expr) && !options.get_bool_option("all-assertions"))
+  if (is_true(new_expr))
     return;
 
   cur_state->guard.guard_expr(new_expr);
@@ -79,12 +79,9 @@ goto_symext::symex_step(reachability_treet & art)
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
-  merge_gotos();
-
   // depth exceeded?
   {
-    unsigned max_depth = atoi(options.get_option("depth").c_str());
-    if (max_depth != 0 && cur_state->depth > max_depth)
+    if (depth_limit != 0 && cur_state->depth > depth_limit)
       cur_state->guard.add(false_expr);
     cur_state->depth++;
   }
@@ -109,10 +106,10 @@ goto_symext::symex_step(reachability_treet & art)
   case GOTO:
   {
     expr2tc tmp(instruction.guard);
-    replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
 
     dereference(tmp, false);
+    replace_dynamic_allocation(tmp);
 
     symex_goto(tmp);
   }
@@ -121,10 +118,10 @@ goto_symext::symex_step(reachability_treet & art)
   case ASSUME:
     if (!cur_state->guard.is_false()) {
       expr2tc tmp = instruction.guard;
-      replace_dynamic_allocation(tmp);
       replace_nondet(tmp);
 
       dereference(tmp, false);
+      replace_dynamic_allocation(tmp);
 
       cur_state->rename(tmp);
       do_simplify(tmp);
@@ -145,18 +142,18 @@ goto_symext::symex_step(reachability_treet & art)
 
   case ASSERT:
     if (!cur_state->guard.is_false()) {
-      if (!options.get_bool_option("no-assertions") ||
+      if (!no_assertions ||
           !cur_state->source.pc->location.user_provided()
-          || options.get_bool_option("deadlock-check")) {
+          || deadlock_check) {
 
 	std::string msg = cur_state->source.pc->location.comment().as_string();
 	if (msg == "") msg = "assertion";
 
         expr2tc tmp = instruction.guard;
-	replace_dynamic_allocation(tmp);
 	replace_nondet(tmp);
 
 	dereference(tmp, false);
+	replace_dynamic_allocation(tmp);
 
         claim(tmp, msg);
       }
@@ -187,13 +184,13 @@ goto_symext::symex_step(reachability_treet & art)
         thrown_obj_map.erase(cur_state->source.pc);
       }
 
-      replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
 
       code_assign2t &assign = to_code_assign2t(deref_code); 
 
       dereference(assign.target, true);
       dereference(assign.source, false);
+      replace_dynamic_allocation(deref_code);
 
       symex_assign(deref_code);
     }
@@ -202,35 +199,51 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case FUNCTION_CALL:
-    if (!cur_state->guard.is_false()) {
-      expr2tc deref_code = instruction.code;
-      replace_dynamic_allocation(deref_code);
-      replace_nondet(deref_code);
+  {
+    expr2tc deref_code = instruction.code;
+    replace_nondet(deref_code);
 
-      code_function_call2t &call = to_code_function_call2t(deref_code);
+    code_function_call2t &call = to_code_function_call2t(deref_code);
 
-      if (!is_nil_expr(call.ret))
-	dereference(call.ret, true);
+    if (!is_nil_expr(call.ret)) {
+      dereference(call.ret, true);
+    }
 
-      for (std::vector<expr2tc>::iterator it = call.operands.begin();
-           it != call.operands.end(); it++)
-        if (!is_nil_expr(*it))
-          dereference(*it, false);
+    replace_dynamic_allocation(deref_code);
 
-      if (is_symbol2t(call.function) &&
-        has_prefix(to_symbol2t(call.function).thename.as_string(),
-          "c::__ESBMC")){
-	cur_state->source.pc++;
-	run_intrinsic(call, art,
-                      to_symbol2t(call.function).thename.as_string());
-	return;
+    for (std::vector<expr2tc>::iterator it = call.operands.begin();
+         it != call.operands.end(); it++)
+      if (!is_nil_expr(*it))
+        dereference(*it, false);
+
+    // Always run intrinsics, whether guard is false or not. This is due to the
+    // unfortunate circumstance where a thread starts with false guard due to
+    // decision taken in another thread in this trace. In that case the
+    // terminate intrinsic _has_ to run, or we explode.
+    if (is_symbol2t(call.function)) {
+      const irep_idt &id = to_symbol2t(call.function).thename;
+      if (has_prefix(id.as_string(), "c::__ESBMC")) {
+        cur_state->source.pc++;
+        std::string name = id.as_string().substr(3);
+        run_intrinsic(call, art, name);
+        return;
+      } else if (has_prefix(id.as_string(), "cpp::__ESBMC")) {
+        cur_state->source.pc++;
+        std::string name = id.as_string().substr(5);
+        name = name.substr(0, name.find("("));
+        run_intrinsic(call, art, name);
+        return;
       }
+    }
 
+    // Don't run a function call if the guard is false.
+    if (!cur_state->guard.is_false()) {
       symex_function_call(deref_code);
     } else {
       cur_state->source.pc++;
     }
-    break;
+  }
+  break;
 
   case OTHER:
     if (!cur_state->guard.is_false()) {
@@ -283,36 +296,40 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
                            reachability_treet &art, const std::string symname)
 {
 
-  if (symname == "c::__ESBMC_yield") {
+  if (symname == "__ESBMC_yield") {
     intrinsic_yield(art);
-  } else if (symname == "c::__ESBMC_switch_to") {
+  } else if (symname == "__ESBMC_switch_to") {
     intrinsic_switch_to(func_call, art);
-  } else if (symname == "c::__ESBMC_switch_away_from") {
+  } else if (symname == "__ESBMC_switch_away_from") {
     intrinsic_switch_from(art);
-  } else if (symname == "c::__ESBMC_get_thread_id") {
+  } else if (symname == "__ESBMC_get_thread_id") {
     intrinsic_get_thread_id(func_call, art);
-  } else if (symname == "c::__ESBMC_set_thread_internal_data") {
+  } else if (symname == "__ESBMC_set_thread_internal_data") {
     intrinsic_set_thread_data(func_call, art);
-  } else if (symname == "c::__ESBMC_get_thread_internal_data") {
+  } else if (symname == "__ESBMC_get_thread_internal_data") {
     intrinsic_get_thread_data(func_call, art);
-  } else if (symname == "c::__ESBMC_spawn_thread") {
+  } else if (symname == "__ESBMC_spawn_thread") {
     intrinsic_spawn_thread(func_call, art);
-  } else if (symname == "c::__ESBMC_terminate_thread") {
+  } else if (symname == "__ESBMC_terminate_thread") {
     intrinsic_terminate_thread(art);
-  } else if (symname == "c::__ESBMC_get_thread_state") {
+  } else if (symname == "__ESBMC_get_thread_state") {
     intrinsic_get_thread_state(func_call, art);
-  } else if (symname == "c::__ESBMC_really_atomic_begin") {
+  } else if (symname == "__ESBMC_really_atomic_begin") {
     intrinsic_really_atomic_begin(art);
-  } else if (symname == "c::__ESBMC_really_atomic_end") {
+  } else if (symname == "__ESBMC_really_atomic_end") {
     intrinsic_really_atomic_end(art);
-  } else if (symname == "c::__ESBMC_switch_to_monitor") {
+  } else if (symname == "__ESBMC_switch_to_monitor") {
     intrinsic_switch_to_monitor(art);
-  } else if (symname == "c::__ESBMC_switch_from_monitor") {
+  } else if (symname == "__ESBMC_switch_from_monitor") {
     intrinsic_switch_from_monitor(art);
-  } else if (symname == "c::__ESBMC_register_monitor") {
+  } else if (symname == "__ESBMC_register_monitor") {
     intrinsic_register_monitor(func_call, art);
-  } else if (symname == "c::__ESBMC_kill_monitor") {
+  } else if (symname == "__ESBMC_kill_monitor") {
     intrinsic_kill_monitor(art);
+  } else if (symname == "__ESBMC_realloc") {
+    intrinsic_realloc(func_call, art);
+  } else if (symname == "__ESBMC_check_stability") {
+    intrinsic_check_stability(func_call, art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
     std::cerr << std::endl << "The name in question: " << symname << std::endl;
@@ -329,7 +346,7 @@ void
 goto_symext::finish_formula(void)
 {
 
-  if (!options.get_bool_option("memory-leak-check"))
+  if (!memory_leak_check)
     return;
 
   std::list<allocated_obj>::const_iterator it;

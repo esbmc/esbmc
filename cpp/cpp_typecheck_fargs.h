@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <std_code.h>
 class cpp_typecheckt;
+class cpp_typecast_rank;
 
 class cpp_typecheck_fargst // for function overloading
 {
@@ -38,7 +39,7 @@ public:
 
   bool match(
     const code_typet &code_type,
-    unsigned &distance,
+    cpp_typecast_rank &distance,
     cpp_typecheckt &cpp_typecheck) const;
 
   void add_object(const exprt &expr)

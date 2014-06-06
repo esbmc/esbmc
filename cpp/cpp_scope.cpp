@@ -140,12 +140,12 @@ void cpp_scopet::lookup(
       it != using_set.end(); it++)
   {
     cpp_idt& using_id = **it;
-    if(using_id.base_name == base_name)
+    if(using_id.base_name == base_name && using_id.id_class == id_class)
       id_set.insert(*it);
 
     if(using_id.is_scope)
     {
-      ((cpp_scopet&)using_id).lookup(base_name,id_set);
+      ((cpp_scopet&)using_id).lookup(base_name, id_class, id_set);
     }
   }
 }

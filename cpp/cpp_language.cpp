@@ -155,6 +155,10 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "void pthread_start_main_hook(void);" << std::endl;
   out << "void pthread_end_main_hook(void);" << std::endl;
 
+  //  Empty __FILE__ and __LINE__ definitions.
+  out << "const char *__FILE__ = \"\";" << std::endl;
+  out << "unsigned int __LINE__ = 0;" << std::endl;
+
   out << "}" << std::endl;
 }
 

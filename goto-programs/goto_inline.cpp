@@ -15,6 +15,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_expr.h>
 #include <expr_util.h>
 
+#include <langapi/language_util.h>
+
 #include "remove_skip.h"
 #include "goto_inline.h"
 
@@ -285,7 +287,7 @@ void goto_inlinet::expand_function_call(
     throw 0;
   }
   
-  goto_functionst::goto_functiont &f=m_it->second;
+  goto_functiont &f=m_it->second;
 
   // see if we need to inline this  
   if(!full)

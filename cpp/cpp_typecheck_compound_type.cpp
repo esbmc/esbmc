@@ -127,6 +127,47 @@ cpp_scopet &cpp_typecheckt::tag_scope(
   return cpp_scopes.current_scope();
 }
 
+std::string
+cpp_typecheckt::fetch_compound_name(
+  const typet &type) const
+{
+  // get the tag name
+  bool anonymous=type.find("tag").is_nil();
+  std::string identifier, base_name;
+  cpp_scopet *dest_scope=NULL;
+  bool has_body=type.body().is_not_nil();
+  bool tag_only_declaration=type.get_bool("#tag_only_declaration");
+
+  if(anonymous)
+  {
+    // Name is unpredictable until it's actually made, sorry.
+    return "";
+  }
+  else
+  {
+    const cpp_namet &cpp_name=
+      to_cpp_name(type.find("tag"));
+
+    cpp_name.convert(identifier, base_name);
+
+    if(identifier!=base_name)
+    {
+      //err_location(cpp_name.location());
+      throw "no namespaces allowed in compound names";
+    }
+
+    dest_scope=&const_cast<cpp_typecheckt*>(this)->tag_scope(base_name, has_body, tag_only_declaration);
+  }
+
+  // See: typecheck_compound_type for full details.
+  const std::string symbol_name=
+    cpp_identifier_prefix("C++")+"::"+
+    dest_scope->prefix+
+    "tag."+identifier;
+
+  return symbol_name;
+}
+
 /*******************************************************************\
 
 Function: cpp_typecheckt::typecheck_compound_type
@@ -181,8 +222,12 @@ void cpp_typecheckt::typecheck_compound_type(
     dest_scope=&tag_scope(base_name, has_body, tag_only_declaration);
   }
 
+  // All types are dumped in the 'cpp' namespace. Types declared in a piece of
+  // code with 'c' linkage are no different from C++ types, and otherwise this
+  // leads to type conflicts when calling code with a different linkage. (i.e.,
+  // a cpp::foo pointer isn't compatible with a c::foo pointer).
   const irep_idt symbol_name=
-    cpp_identifier_prefix(current_mode)+"::"+
+    cpp_identifier_prefix("C++")+"::"+
     dest_scope->prefix+
     "tag."+identifier;
 
@@ -225,7 +270,7 @@ void cpp_typecheckt::typecheck_compound_type(
     symbol.base_name=base_name;
     symbol.value.make_nil();
     symbol.location=type.location();
-    symbol.mode=current_mode;
+    symbol.mode="C++"; // All types are cpp types
     symbol.module=module;
     symbol.type.swap(type);
     symbol.is_type=true;
@@ -311,6 +356,15 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
   cpp_namet cpp_name;
   cpp_name.swap(declarator.name());
+
+  // Ugly hack
+  if(declaration.is_destructor()
+     || declaration.is_constructor())
+  {
+    // Construtors and destructors can have names with template args
+    if(cpp_name.has_template_args())
+      cpp_name.get_sub().erase(cpp_name.get_sub().end());
+  }
 
   std::string full_name, base_name;
   cpp_name.convert(full_name, base_name);
@@ -409,8 +463,12 @@ void cpp_typecheckt::typecheck_compound_declarator(
   if(is_cast_operator)
     component.set("is_cast_operator", true);
 
-  if(declaration.member_spec().is_explicit())
+  if(declaration.member_spec().is_explicit()) {
     component.set("is_explicit", true);
+    // Decorate type with it too; it tends to be more accessible than component
+    // records during cpp name resolving.
+    component.type().set("is_explicit", true);
+  }
 
   // either blank, const, volatile, or const volatile
   const typet &method_qualifier=
@@ -789,18 +847,29 @@ void cpp_typecheckt::put_compound_into_scope(
 
   if(compound.type().id()=="code")
   {
-    // put the symbol into scope
-    cpp_idt &id=cpp_scopes.current_scope().insert(base_name);
+    // put the symbol into scope. Template methods need to be put into the
+    // class scope, rather than the template, though. Unfortunately, we can't
+    // discover that from our argument. So instead attempt to match the scopes
+    // in this context to a template mthods.
+    cpp_scopet *target_scope = &cpp_scopes.current_scope();
+    if (target_scope->id_class == cpp_idt::UNKNOWN &&
+        target_scope->parents_size() &&
+        target_scope->get_parent(0).id_class == cpp_idt::TEMPLATE_SCOPE &&
+        target_scope->get_parent(0).get_parent(0).id_class == cpp_idt::CLASS)
+      target_scope = &target_scope->get_parent(0).get_parent(0);
+
+    cpp_idt &id=target_scope->insert(base_name);
     id.id_class=compound.is_type()?cpp_idt::TYPEDEF:cpp_idt::SYMBOL;
     id.identifier=name;
-    id.class_identifier=cpp_scopes.current_scope().identifier;
+    id.class_identifier=target_scope->identifier;
     id.is_member = true;
     id.is_constructor =
       compound.type().get("return_type") == "constructor";
     id.is_method = true;
     id.is_static_member=compound.get_bool("is_static");
 
-    // create function block-scope in the scope
+    // create function block-scope in the scope. Put that in the current scope
+    // rather than the class scope.
     cpp_idt &id_block=
       cpp_scopes.current_scope().insert(
         irep_idt(std::string("$block:") + base_name.c_str()));
@@ -1006,7 +1075,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
     typecheck_compound_bases(type);
   }
 
-  exprt &body=(exprt &)type.add("body");
+  exprt &body=static_cast<exprt &>(type.add("body"));
   struct_typet::componentst &components=type.components();
 
   symbol.type.set("name", symbol.name);
@@ -1032,6 +1101,12 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         typecheck_friend_declaration(symbol, declaration);
         continue; // done
       }
+
+      if(declaration.is_destructor())
+        found_dtor=true;
+
+      if(declaration.is_constructor())
+        found_ctor=true;
 
       if(declaration.is_template())
       {
@@ -1095,14 +1170,8 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
         // Skip the constructors until all the data members
         // are discovered
-        if(declaration.is_destructor())
-          found_dtor=true;
-
         if(declaration.is_constructor())
-        {
-          found_ctor=true;
           continue;
-        }
 
         typecheck_compound_declarator(
           symbol,
@@ -1141,6 +1210,12 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
     {
     }
   }
+
+  // If we've seen a constructor, flag this type as not being a POD. This is
+  // only useful when we might not be able to work that out later, such as a
+  // constructor that gets deleted, or something.
+  if (found_ctor || found_dtor)
+    type.set("is_not_pod", "1");
 
   // Add the default dtor, if needed
   // (we have to do the destructor before building the virtual tables,
@@ -1193,8 +1268,10 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       {
         cpp_declaratort &declarator=*d_it;
 
+        #if 0
         std::string ctor_full_name, ctor_base_name;
         declarator.name().convert(ctor_full_name, ctor_base_name);
+        #endif
 
         if(declarator.find("value").is_not_nil())
         {
@@ -1450,7 +1527,7 @@ void cpp_typecheckt::adjust_method_type(
 
   arguments.get_sub().insert(arguments.get_sub().begin(), irept("argument"));
 
-  exprt &argument=(exprt &)arguments.get_sub().front();
+  exprt &argument=static_cast<exprt &>(arguments.get_sub().front());
   argument.type()=typet("pointer");
 
   argument.type().subtype()=typet("symbol");
@@ -1568,8 +1645,9 @@ void cpp_typecheckt::convert_compound_ano_union(
   // produce an anonymous member
   irep_idt base_name="#anon_member"+i2string((unsigned long)components.size());
 
+  // All types are in 'cpp' mode.
   irep_idt identifier=
-    cpp_identifier_prefix(current_mode)+"::"+
+    cpp_identifier_prefix("C++")+"::"+
     cpp_scopes.current_scope().prefix+
     base_name.c_str();
 
@@ -1643,11 +1721,13 @@ bool cpp_typecheckt::get_component(
         }
         else
         {
+          #if 0
           err_location(location);
           str << "error: member `" << component_name
               << "' is not accessible (" << component.get("access").c_str() <<")";
           str << "\nstruct name: " << final_type.name();
           throw 0;
+          #endif
         }
       }
 
@@ -1747,12 +1827,12 @@ bool cpp_typecheckt::check_component_access(
   // check friendship
   forall_irep(f_it, struct_type.find("#friends").get_sub())
   {
-    const irept& friend_symb = *f_it;
+    const irept &friend_symb = *f_it;
 
-    const cpp_scopet& friend_scope =
+    const cpp_scopet &friend_scope =
       cpp_scopes.get_scope(friend_symb.identifier());
 
-    cpp_scopet* pscope = &(cpp_scopes.current_scope());
+    cpp_scopet *pscope = &(cpp_scopes.current_scope());
 
     while(!(pscope->is_root_scope()))
     {

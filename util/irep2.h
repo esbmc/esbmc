@@ -21,6 +21,8 @@
 #include <big-int/bigint.hh>
 #include <dstring.h>
 
+#include <crypto_hash.h>
+
 // XXXjmorse - abstract, access modifies, need consideration
 
 /** Iterate over all expr2tc's in a vector.
@@ -179,71 +181,71 @@ class constant_array2t;
  *  boosts shared_ptr.
  */
 template <class T>
-class irep_container : public boost::shared_ptr<T>
+class irep_container : public std::shared_ptr<T>
 {
 public:
-  irep_container() : boost::shared_ptr<T>() {}
+  irep_container() : std::shared_ptr<T>() {}
 
   template<class Y>
-  explicit irep_container(Y *p) : boost::shared_ptr<T>(p)
+  explicit irep_container(Y *p) : std::shared_ptr<T>(p)
     { }
 
   template<class Y>
-  explicit irep_container(const Y *p) : boost::shared_ptr<T>(const_cast<Y *>(p))
+  explicit irep_container(const Y *p) : std::shared_ptr<T>(const_cast<Y *>(p))
     { }
 
   irep_container(const irep_container &ref)
-    : boost::shared_ptr<T>(ref) {}
+    : std::shared_ptr<T>(ref) {}
 
   template <class Y>
   irep_container(const irep_container<Y> &ref)
-    : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref))
+    : std::shared_ptr<T>(static_cast<const std::shared_ptr<Y> &>(ref))
   {
-    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+    assert(dynamic_cast<const std::shared_ptr<T> &>(ref) != NULL);
   }
 
   irep_container &operator=(irep_container const &ref)
   {
-    boost::shared_ptr<T>::operator=(ref);
+    std::shared_ptr<T>::operator=(ref);
     return *this;
   }
 
   template<class Y>
-  irep_container & operator=(boost::shared_ptr<Y> const & r)
+  irep_container & operator=(std::shared_ptr<Y> const & r)
   {
-    boost::shared_ptr<T>::operator=(r);
-    T *p = boost::shared_ptr<T>::operator->();
+    std::shared_ptr<T>::operator=(r);
+    T *p = std::shared_ptr<T>::operator->();
     return *this;
   }
 
   template <class Y>
   irep_container &operator=(const irep_container<Y> &ref)
   {
-    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+    assert(dynamic_cast<const std::shared_ptr<T> &>(ref) != NULL);
     *this = boost::static_pointer_cast<T, Y>
-            (static_cast<const boost::shared_ptr<Y> &>(ref));
+            (static_cast<const std::shared_ptr<Y> &>(ref));
     return *this;
   }
 
   const T &operator*() const
   {
-    return *boost::shared_ptr<T>::get();
+    return *std::shared_ptr<T>::get();
   }
 
   const T * operator-> () const // never throws
   {
-    return boost::shared_ptr<T>::operator->();
+    return std::shared_ptr<T>::operator->();
   }
 
   const T * get() const // never throws
   {
-    return boost::shared_ptr<T>::get();
+    return std::shared_ptr<T>::get();
   }
 
   T * get() // never throws
   {
     detach();
-    T *tmp = boost::shared_ptr<T>::get();
+    T *tmp = std::shared_ptr<T>::get();
     tmp->crc_val = 0;
     return tmp;
   }
@@ -256,14 +258,14 @@ public:
     // Assign-operate ourself into containing a fresh copy of the data. This
     // creates a new reference counted object, and assigns it to ourself,
     // which causes the existing reference to be decremented.
-    const T *foo = boost::shared_ptr<T>::get();
+    const T *foo = std::shared_ptr<T>::get();
     *this = foo->clone();
     return;
   }
 
   uint32_t crc(void) const
   {
-    const T *foo = boost::shared_ptr<T>::get();
+    const T *foo = std::shared_ptr<T>::get();
     if (foo->crc_val != 0)
       return foo->crc_val;
 
@@ -273,7 +275,7 @@ public:
   }
 };
 
-typedef boost::shared_ptr<type2t> type2tc;
+typedef irep_container<type2t> type2tc;
 typedef irep_container<expr2t> expr2tc;
 
 typedef std::pair<std::string,std::string> member_entryt;
@@ -344,6 +346,10 @@ public:
    *  itself. May throw various exceptions depending on whether this operation
    *  is viable - for example, for symbol types, infinite sized or dynamically
    *  sized arrays.
+   *
+   *  Note that the bit width is _not_ the same as the ansi-c byte model
+   *  representation of this type.
+   *
    *  @throws symbolic_type_excp
    *  @throws array_type2t::inf_sized_array_excp
    *  @throws array_type2t::dyn_sized_array_excp
@@ -434,12 +440,27 @@ public:
    */
   virtual void do_crc(hacky_hash &hash) const;
 
+  /** Perform hash operation accumulating into parameter.
+   *  Feeds data as appropriate to the type of the expression into the
+   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
+   *  of hash scenario.
+   *  @see cmp
+   *  @see crc
+   *  @see do_crc
+   *  @param hash Object to accumulate hash data into.
+   */
+  virtual void hash(crypto_hash &hash) const;
+
+  /** Clone method. Self explanatory.
+   *  @return New container, containing a duplicate of this object.
+   */
+  virtual type2tc clone(void) const = 0;
+
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
 
   mutable uint32_t crc_val;
 };
-
 
 /** Fetch identifying name for a type.
  *  I.E., this is the class of the type, what you'd get if you called type.id()
@@ -560,6 +581,7 @@ public:
     code_cpp_throw_decl_end_id,
     isinf_id,
     isnormal_id,
+    concat_id,
     end_expr_id
   };
 
@@ -692,6 +714,17 @@ public:
    *  @param hash Hash object to accumulate expression data into.
    */
   virtual void do_crc(hacky_hash &hash) const;
+
+  /** Perform hash operation accumulating into parameter.
+   *  Feeds data as appropriate to the type of the expression into the
+   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
+   *  of hash scenario.
+   *  @see cmp
+   *  @see crc
+   *  @see do_crc
+   *  @param hash Object to accumulate hash data into.
+   */
+  virtual void hash(crypto_hash &hash) const;
 
   /** Generate a list of expr operands.
    *  Use forall_operands2 instead; this method is overridden by subclasses and
@@ -859,7 +892,7 @@ namespace esbmct {
    *
    *  In fact, we can make type generic implementations of all the following
    *  methods in expr2t: convert_smt, clone, tostring, cmp, lt, do_crc,
-   *  list_operands.
+   *  list_operands, hash.
    *
    *  So, that's what this template provides; an expr2t class can be made by
    *  inheriting from this template, telling it what class it'll end up with,
@@ -1001,6 +1034,7 @@ namespace esbmct {
     virtual bool cmp(const expr2t &ref) const;
     virtual int lt(const expr2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
+    virtual void hash(crypto_hash &hash) const;
     virtual void list_operands(std::list<const expr2tc*> &inp) const;
     virtual const expr2tc *get_sub_expr(unsigned int i) const;
     virtual expr2tc *get_sub_expr_nc(unsigned int i);
@@ -1096,6 +1130,7 @@ namespace esbmct {
     virtual bool cmp(const type2t &ref) const;
     virtual int lt(const type2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
+    virtual void hash(crypto_hash &hash) const;
   };
 
   // Meta goo
@@ -1821,6 +1856,26 @@ inline bool is_number_type(const type2tc &t) \
 inline bool is_number_type(const expr2tc &e)
 { return is_number_type(e->type); }
 
+inline bool is_scalar_type(const type2tc &t)
+{ return is_number_type(t) || is_pointer_type(t) || is_bool_type(t) ||
+         is_empty_type(t) || is_code_type(t); }
+
+inline bool is_scalar_type(const expr2tc &e)
+{ return is_scalar_type(e->type); }
+
+inline bool is_multi_dimensional_array(const type2tc &t) {
+  if (is_array_type(t)) {
+    const array_type2t &arr_type = to_array_type(t);
+    return is_array_type(arr_type.subtype);
+  } else {
+    return false;
+  }
+}
+
+inline bool is_multi_dimensional_array(const expr2tc &e) {
+  return is_multi_dimensional_array(e->type);
+}
+
 /** Pool for caching converted types.
  *  Various common types (bool, empty for example) needn't be reallocated
  *  every time we need a new one; it's better to have some global constants
@@ -1841,16 +1896,16 @@ public:
   const type2tc &get_empty() const { return empty_type; }
 
   // For other types, have a pool of them for quick lookup.
-  std::map<const typet, type2tc> struct_map;
-  std::map<const typet, type2tc> union_map;
-  std::map<const typet, type2tc> array_map;
-  std::map<const typet, type2tc> pointer_map;
-  std::map<const typet, type2tc> unsignedbv_map;
-  std::map<const typet, type2tc> signedbv_map;
-  std::map<const typet, type2tc> fixedbv_map;
-  std::map<const typet, type2tc> string_map;
-  std::map<const typet, type2tc> symbol_map;
-  std::map<const typet, type2tc> code_map;
+  std::map<typet, type2tc> struct_map;
+  std::map<typet, type2tc> union_map;
+  std::map<typet, type2tc> array_map;
+  std::map<typet, type2tc> pointer_map;
+  std::map<typet, type2tc> unsignedbv_map;
+  std::map<typet, type2tc> signedbv_map;
+  std::map<typet, type2tc> fixedbv_map;
+  std::map<typet, type2tc> string_map;
+  std::map<typet, type2tc> symbol_map;
+  std::map<typet, type2tc> code_map;
 
   // And refs to some of those for /really/ quick lookup;
   const type2tc *uint8;
@@ -1980,6 +2035,7 @@ class code_cpp_throw_decl2t;
 class code_cpp_throw_decl_end2t;
 class isinf2t;
 class isnormal2t;
+class concat2t;
 
 // Data definitions.
 
@@ -2544,13 +2600,15 @@ class object_desc_data : public expr2t
 {
   public:
     object_desc_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
-                     const expr2tc &offs)
-      : expr2t(t, id), object(o), offset(offs) { }
+                     const expr2tc &offs, unsigned int align)
+      : expr2t(t, id), object(o), offset(offs), alignment(align) { }
     object_desc_data(const object_desc_data &ref)
-      : expr2t(ref), object(ref.object), offset(ref.offset) { }
+      : expr2t(ref), object(ref.object), offset(ref.offset),
+        alignment(ref.alignment) { }
 
     expr2tc object;
     expr2tc offset;
+    unsigned int alignment;
 };
 
 class code_funccall_data : public code_base
@@ -2869,7 +2927,8 @@ irep_typedefs(code_goto, code_goto_data, esbmct::notype,
               irep_idt, code_goto_data, &code_goto_data::target);
 irep_typedefs(object_descriptor, object_desc_data, esbmct::takestype,
               expr2tc, object_desc_data, &object_desc_data::object,
-              expr2tc, object_desc_data, &object_desc_data::offset);
+              expr2tc, object_desc_data, &object_desc_data::offset,
+              unsigned int, object_desc_data, &object_desc_data::alignment);
 irep_typedefs(code_function_call, code_funccall_data, esbmct::notype,
               expr2tc, code_funccall_data, &code_funccall_data::ret,
               expr2tc, code_funccall_data, &code_funccall_data::function,
@@ -2905,6 +2964,9 @@ irep_typedefs(isinf, arith_1op, esbmct::notype,
               expr2tc, arith_1op, &arith_1op::value);
 irep_typedefs(isnormal, arith_1op, esbmct::notype,
               expr2tc, arith_1op, &arith_1op::value);
+irep_typedefs(concat, bit_2ops, esbmct::takestype,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4207,8 +4269,10 @@ public:
 class object_descriptor2t : public object_descriptor_expr_methods
 {
 public:
-  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs)
-    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs) {}
+  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs,
+                      unsigned int alignment)
+    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs,
+                                     alignment) {}
   object_descriptor2t(const object_descriptor2t &ref)
     : object_descriptor_expr_methods(ref) {}
 
@@ -4369,22 +4433,35 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+class concat2t : public concat_expr_methods
+{
+public:
+  concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
+    : concat_expr_methods(type, concat_id, forward, aft) { }
+  concat2t(const concat2t &ref)
+    : concat_expr_methods(ref) { }
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+inline bool operator==(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
 }
 
-inline bool operator!=(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+inline bool operator!=(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
 {
   return !(a == b);
 }
 
-inline bool operator<(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+inline bool operator<(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
 {
   return (*a.get() < *b.get());
 }
 
-inline bool operator>(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+inline bool operator>(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
 {
   return (*b.get() < *a.get());
 }
@@ -4526,6 +4603,7 @@ expr_macros(code_cpp_throw_decl);
 expr_macros(code_cpp_throw_decl_end);
 expr_macros(isinf);
 expr_macros(isnormal);
+expr_macros(concat);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast

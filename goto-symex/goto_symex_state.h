@@ -124,7 +124,7 @@ public:
 
     goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
     {
-      assert(0);
+      abort();
     }
 
   public:
@@ -299,6 +299,7 @@ public:
    */
   inline void
   pop_frame() {
+    assert(call_stack.back().goto_state_map.size() == 0);
     call_stack.pop_back();
   }
 
@@ -395,6 +396,20 @@ public:
    */
   std::vector<dstring> gen_stack_trace(void) const;
 
+  /**
+   *  Fixup types after renaming: we might rename a symbol that we
+   *  believe to be a uint32_t ptr, to be what it statically is, the address
+   *  of a byte array. Or something. Either way, the renaming process changes
+   *  the ptr type of the expression, making all subsequent pointer arithmetic
+   *  croak.
+   *  This used to be just for pointers, but is now for everything in general,
+   *  because a variety of code (01_cbmc_Pointer7 for example) is renaming
+   *  symbols to differently sized constants, which leads to Problems.
+   *  @param expr The expression that's just been renamed
+   *  @param orig_type The original type of the expression, before renaming.
+   */
+  void fixup_renamed_type(expr2tc &expr, const type2tc &orig_type);
+
   // Members
 
   /** Number of instructions executed in this thread. */
@@ -433,6 +448,11 @@ public:
 
   /** Namespace to work with. */
   const namespacet &ns;
+
+  /** Map of what pointer values have been realloc'd, and what their new
+   *  realloc number is. No need for special consideration when merging states
+   *  at phi nodes: the renumbering update itself is guarded at the SMT layer.*/
+  std::map<expr2tc, unsigned> realloc_map;
 };
 
 #endif

@@ -16,11 +16,13 @@ int main()
 //  head = NULL;
 
   curr = (item *)malloc(sizeof(item));
+  __ESBMC_assume(curr);
   curr->val = 1;
   curr->next  = head;
   head = curr;
 
   curr = (item *)malloc(sizeof(item));
+  __ESBMC_assume(curr);
   curr->val = 2;
   curr->next  = head;
   head = curr;

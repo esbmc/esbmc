@@ -17,8 +17,8 @@ if test $# != 3; then
   exit 1
 fi
 
-stat $1 > /dev/null 2>&1
-if test $? == 0; then
+stat $2 > /dev/null 2>&1
+if test $? = 0; then
   # It already exists.
   exit 0;
 fi

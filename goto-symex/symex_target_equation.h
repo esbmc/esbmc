@@ -77,6 +77,12 @@ public:
     std::vector<dstring> stack_trace,
     const sourcet &source);
 
+  virtual void renumber(
+    const expr2tc &guard,
+    const expr2tc &symbol,
+    const expr2tc &size,
+    const sourcet &source);
+
   virtual void convert(prop_convt &prop_conv);
   void convert_internal_step(prop_convt &prop_conv, literalt &assumpt_lit,
                              bvt &assertions, SSA_stept &s);
@@ -97,6 +103,7 @@ public:
     bool is_assume() const     { return type==goto_trace_stept::ASSUME; }
     bool is_assignment() const { return type==goto_trace_stept::ASSIGNMENT; }
     bool is_output() const     { return type==goto_trace_stept::OUTPUT; }
+    bool is_renumber() const   { return type==goto_trace_stept::RENUMBER; }
     
     expr2tc guard;
 
@@ -160,6 +167,8 @@ public:
     SSA_steps.clear();
   }
   
+  unsigned int clear_assertions();
+
   virtual symex_targett *clone(void) const
   {
     // No pointers or anything that requires ownership modification, can just
