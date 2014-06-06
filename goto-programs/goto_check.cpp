@@ -39,7 +39,6 @@ protected:
   void bounds_check(const exprt &expr, const guardt &guard);
   void div_by_zero_check(const exprt &expr, const guardt &guard);
   void pointer_rel_check(const exprt &expr, const guardt &guard);
-  //void array_size_check(const exprt &expr);
   void overflow_check(const exprt &expr, const guardt &guard);
   void nan_check(const exprt &expr, const guardt &guard);
   std::string array_name(const exprt &expr);
@@ -311,39 +310,6 @@ void goto_checkt::bounds_check(
     }
   }
 }
-
-#if 0
-void goto_checkt::array_size_check(
-  const exprt &expr,
-  const irept &location)
-{
-  if(expr.type().is_array())
-  {
-    const exprt &size=(exprt &)expr.type().size_irep();
-
-    if(size.type().id()=="unsignedbv")
-    {
-      // nothing to do
-    }
-    else
-    {
-      exprt zero=gen_zero(size.type());
-
-      if(zero.is_nil())
-        throw "no zero constant of index type "+
-          size.type().to_string();
-
-      exprt inequality(">=", bool_typet());
-      inequality.copy_to_operands(size, zero);
-
-      std::string name=array_name(expr);
-
-      guardt guard;
-      add_guarded_claim(inequality, name+" size", location, guard);
-    }
-  }
-}
-#endif
 
 void goto_checkt::add_guarded_claim(
   const exprt &_expr,
