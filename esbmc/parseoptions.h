@@ -52,6 +52,9 @@ protected:
 
   void set_verbosity_msg(messaget &message);
 
+  uint64_t read_time_spec(const char *str);
+  uint64_t read_mem_spec(const char *str);
+
   void preprocessing();
 
   void add_property_monitors(goto_functionst &goto_functions, namespacet &ns);

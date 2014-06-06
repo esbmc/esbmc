@@ -117,6 +117,69 @@ void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
 
 extern "C" uint8_t *version_string;
 
+uint64_t cbmc_parseoptionst::read_time_spec(const char *str)
+{
+  uint64_t mult;
+  int len = strlen(str);
+  if (!isdigit(str[len-1])) {
+    switch (str[len-1]) {
+    case 's':
+      mult = 1;
+      break;
+    case 'm':
+      mult = 60;
+      break;
+    case 'h':
+      mult = 3600;
+      break;
+    case 'd':
+      mult = 86400;
+      break;
+    default:
+      std::cerr << "Unrecognized timeout suffix" << std::endl;
+      abort();
+    }
+  } else {
+    mult = 1;
+  }
+
+  uint64_t timeout = strtol(str, NULL, 10);
+  timeout *= mult;
+  return timeout;
+}
+
+uint64_t cbmc_parseoptionst::read_mem_spec(const char *str)
+{
+
+  uint64_t mult;
+  int len = strlen(str);
+  if (!isdigit(str[len-1])) {
+    switch (str[len-1]) {
+    case 'b':
+      mult = 1;
+      break;
+    case 'k':
+      mult = 1024;
+      break;
+    case 'm':
+      mult = 1024*1024;
+      break;
+    case 'g':
+      mult = 1024*1024*1024;
+      break;
+    default:
+      std::cerr << "Unrecognized memlimit suffix" << std::endl;
+      abort();
+    }
+  } else {
+    mult = 1024*1024;
+  }
+
+  uint64_t size = strtol(str, NULL, 10);
+  size *= mult;
+  return size;
+}
+
 void cbmc_parseoptionst::get_command_line_options(optionst &options)
 {
   if(config.set(cmdline))
@@ -262,34 +325,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     std::cerr << "Timeout unimplemented on Windows, sorry" << std::endl;
     abort();
 #else
-    int len, mult, timeout;
-
     const char *time = cmdline.getval("timeout");
-    len = strlen(time);
-    if (!isdigit(time[len-1])) {
-      switch (time[len-1]) {
-      case 's':
-        mult = 1;
-        break;
-      case 'm':
-        mult = 60;
-        break;
-      case 'h':
-        mult = 3600;
-        break;
-      case 'd':
-        mult = 86400;
-        break;
-      default:
-        std::cerr << "Unrecognized timeout suffix" << std::endl;
-        abort();
-      }
-    } else {
-      mult = 1;
-    }
-
-    timeout = strtol(time, NULL, 10);
-    timeout *= mult;
+    uint64_t timeout = read_time_spec(time);
     signal(SIGALRM, timeout_handler);
     alarm(timeout);
 #endif
@@ -300,34 +337,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     std::cerr << "Can't memlimit on Windows, sorry" << std::endl;
     abort();
 #else
-    unsigned long len, mult, size;
-
-    const char *limit = cmdline.getval("memlimit");
-    len = strlen(limit);
-    if (!isdigit(limit[len-1])) {
-      switch (limit[len-1]) {
-      case 'b':
-        mult = 1;
-        break;
-      case 'k':
-        mult = 1024;
-        break;
-      case 'm':
-        mult = 1024*1024;
-        break;
-      case 'g':
-        mult = 1024*1024*1024;
-        break;
-      default:
-        std::cerr << "Unrecognized memlimit suffix" << std::endl;
-        abort();
-      }
-    } else {
-      mult = 1024*1024;
-    }
-
-    size = strtol(limit, NULL, 10);
-    size *= mult;
+    uint64_t size = read_mem_spec(cmdline.getval("memlimit"));
 
     struct rlimit lim;
     lim.rlim_cur = size;
