@@ -55,18 +55,6 @@ protected:
   std::set<exprt> assertions;
 };
 
-/*******************************************************************\
-
-Function: goto_checkt::div_by_zero_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_checkt::div_by_zero_check(
   const exprt &expr,
   const guardt &guard)
@@ -94,18 +82,6 @@ void goto_checkt::div_by_zero_check(
     expr.find_location(),
     guard);
 }
-
-/*******************************************************************\
-
-Function: goto_checkt::overflow_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_checkt::overflow_check(
   const exprt &expr,
@@ -149,18 +125,6 @@ void goto_checkt::overflow_check(
     guard);
 }
 
-/*******************************************************************\
-
-Function: goto_checkt::nan_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_checkt::nan_check(
   const exprt &expr,
   const guardt &guard)
@@ -193,18 +157,6 @@ void goto_checkt::nan_check(
     guard);
 }
 
-/*******************************************************************\
-
-Function: goto_checkt::pointer_rel_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_checkt::pointer_rel_check(
   const exprt &expr,
   const guardt &guard)
@@ -231,34 +183,10 @@ void goto_checkt::pointer_rel_check(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_checkt::array_name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string goto_checkt::array_name(const exprt &expr)
 {
   return ::array_name(ns, expr);
 }
-
-/*******************************************************************\
-
-Function: goto_checkt::bounds_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static bool
 has_dereference(const exprt &expr)
@@ -384,18 +312,6 @@ void goto_checkt::bounds_check(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_checkt::array_size_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 #if 0
 void goto_checkt::array_size_check(
   const exprt &expr,
@@ -428,18 +344,6 @@ void goto_checkt::array_size_check(
   }
 }
 #endif
-
-/*******************************************************************\
-
-Function: goto_checkt::add_guarded_claim
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_checkt::add_guarded_claim(
   const exprt &_expr,
@@ -487,18 +391,6 @@ void goto_checkt::add_guarded_claim(
     t->location.property(property);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_checkt::check_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_checkt::check_rec(
   const exprt &expr,
@@ -716,35 +608,11 @@ void goto_checkt::check_rec(
 #endif
 }
 
-/*******************************************************************\
-
-Function: goto_checkt::check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_checkt::check(const exprt &expr)
 {
   guardt guard;
   check_rec(expr, guard, false);
 }
-
-/*******************************************************************\
-
-Function: goto_checkt::goto_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_checkt::goto_check(goto_programt &goto_program)
 {
@@ -808,18 +676,6 @@ void goto_checkt::goto_check(goto_programt &goto_program)
   }
 }
 
-/*******************************************************************\
-
-Function: goto_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_check(
   const namespacet &ns,
   optionst &options,
@@ -828,18 +684,6 @@ void goto_check(
   goto_checkt goto_check(ns, options);
   goto_check.goto_check(goto_program);
 }
-
-/*******************************************************************\
-
-Function: goto_check
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_check(
   const namespacet &ns,
