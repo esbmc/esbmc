@@ -443,8 +443,6 @@ goto_checkt::check_rec(
              expr.id() == "*" ||
              expr.id() == "unary-" ||
              expr.id() == "typecast") {
-    //if (expr.id()=="typecast")
-    //options.set_option("int-encoding", false);
 
     if (expr.type().id() == "signedbv") {
       overflow_check(expr, guard);
@@ -505,15 +503,6 @@ goto_checkt::check_rec(
 		                    // lib format
     options.set_option("int-encoding", true);
   }
-#if 0
-  if (options.get_bool_option("k-induction")) {
-    if (options.get_bool_option("z3-ir")) {
-      options.set_option("int-encoding", true);
-    } else {
-      options.set_option("int-encoding", false);
-    }
-  }
-#endif
 }
 
 void
