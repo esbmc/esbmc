@@ -1121,7 +1121,6 @@ bool cbmc_parseoptionst::get_goto_program(
 
       if(parse()) return true;
       if(typecheck()) return true;
-      //if(get_modules()) return true;
       if(final()) return true;
 
       if(cmdline.isset("show-symbol-table"))
