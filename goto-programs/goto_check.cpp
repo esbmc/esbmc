@@ -147,13 +147,6 @@ void goto_checkt::overflow_check(
     "overflow",
     expr.find_location(),
     guard);
-
-//  if (expr.id()=="*")
-//    options.set_option("no-assume-guarantee", true);
-
-  //options.set_option("int-encoding", false);
-  if (!options.get_bool_option("eager"))
-    options.set_option("no-assume-guarantee", false);
 }
 
 /*******************************************************************\
@@ -699,9 +692,6 @@ void goto_checkt::check_rec(
 
   if (!options.get_bool_option("z3-ir"))
     options.set_option("int-encoding", false);
-
-  if (!options.get_bool_option("eager"))
-	  options.set_option("no-assume-guarantee", false);
   }
 
   if (options.get_bool_option("qf_aufbv"))

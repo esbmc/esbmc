@@ -138,16 +138,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", false);
   }
 
-  if (cmdline.isset("lazy"))
-    options.set_option("no-assume-guarantee", false);
-  else
-	options.set_option("no-assume-guarantee", true);
-
-  if (cmdline.isset("eager"))
-    options.set_option("no-assume-guarantee", true);
-  else
-  	options.set_option("no-assume-guarantee", false);
-
   if(cmdline.isset("btor"))
   {
     options.set_option("btor", true);
