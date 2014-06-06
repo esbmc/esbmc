@@ -25,9 +25,9 @@ libclib_a_SOURCES = cprover_library.cpp
 libclib_a_LIBADD = clib32.o clib64.o
 
 clib32.o: c2goto
-	./c2goto library/*.c --output clib32.goto --no-lock-check
+	./c2goto $(srcdir)/library/*.c --output clib32.goto --no-lock-check
 	./headers/flail.sh clib32 clib32.goto | $(CC) $(CFLAGS) -x c - -c -o $@
 
 clib64.o: c2goto
-	./c2goto library/*.c --output clib64.goto --no-lock-check
+	./c2goto $(srcdir)/library/*.c --output clib64.goto --no-lock-check
 	./headers/flail.sh clib64 clib64.goto | $(CC) $(CFLAGS) -x c - -c -o $@
