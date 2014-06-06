@@ -131,13 +131,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     exit(0);
   }
 
-  if(cmdline.isset("arrays-uf-always"))
-    options.set_option("arrays-uf", "always");
-  else if(cmdline.isset("arrays-uf-never"))
-    options.set_option("arrays-uf", "never");
-  else
-    options.set_option("arrays-uf", "auto");
-
   if(cmdline.isset("z3-bv"))
   {
     options.set_option("z3", true);
@@ -1786,10 +1779,6 @@ void cbmc_parseoptionst::help()
     #endif
     #endif
 //    " --no-arch                    don't set up an architecture\n"
-#if 0
-    " --arrays-uf-never            never turn arrays into uninterpreted functions\n"
-    " --arrays-uf-always           always turn arrays into uninterpreted functions\n"
-#endif
 #if 0
     " --xml-ui                     use XML-formatted output\n"
     " --int-encoding               encode variables as integers\n"
