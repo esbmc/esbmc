@@ -19,7 +19,7 @@ AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 
 noinst_PROGRAMS = c2goto
 c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp $(libansic_a_SOURCES) -I$(top_srcdir)/utils
-c2goto_LDADD = ../big-int/libbigint.a ../goto-programs/libgotoprograms.a ../langapi/liblangapi.a ../util/libutil.a cpp/libcpp.a ./headers/.objs/headers.o
+c2goto_LDADD = ../big-int/libbigint.a ../goto-programs/libgotoprograms.a ../langapi/liblangapi.a ../util/libutil.a cpp/libcpp.a ./headers/libheaders.a
 
 libclib_a_SOURCES = cprover_library.cpp
 libclib_a_LIBADD = clib32.o clib64.o
