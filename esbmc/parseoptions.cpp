@@ -145,7 +145,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", true);
   }
 
-  options.set_option("string-abstraction", true);
   options.set_option("fixedbv", true);
 
   if (!options.get_bool_option("z3"))
