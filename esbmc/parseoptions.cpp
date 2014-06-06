@@ -183,11 +183,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    else
      options.set_option("uw-model", false);
 
-   if(cmdline.isset("no-lock-check"))
-     options.set_option("no-lock-check", true);
-   else
-     options.set_option("no-lock-check", false);
-
    if(cmdline.isset("deadlock-check"))
    {
      options.set_option("deadlock-check", true);
@@ -201,9 +196,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("smtlib-ileave-num", cmdline.getval("smtlib-ileave-num"));
   else
     options.set_option("smtlib-ileave-num", "1");
-
-  if(cmdline.isset("no-inlining"))
-    options.set_option("no-inlining", true);
 
   if (cmdline.isset("smt-during-symex")) {
     std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
@@ -262,11 +254,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-unwinding-assertions", true);
     options.set_option("partial-loops", true);
     options.set_option("unwind", i2string(k_step));
-  }
-
-  if(cmdline.isset("show-counter-example"))
-  {
-	options.set_option("show-counter-example", true);
   }
 
   // jmorse
