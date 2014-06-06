@@ -138,11 +138,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", false);
   }
 
-  if(cmdline.isset("btor"))
-  {
-    options.set_option("btor", true);
-  }
-
   if(cmdline.isset("z3-ir"))
   {
     options.set_option("z3", true);
@@ -1713,7 +1708,6 @@ void cbmc_parseoptionst::help()
     " --z3-ir                      use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"
     " --lazy                       use lazy instantiation with Z3 (default)\n"
-    " --btor                       output VCCs in BTOR format (experimental)\n"
     " --qf_aufbv                   output VCCs in QF_AUFBV format (experimental)\n"
     " --qf_auflira                 output VCCs in QF_AUFLIRA format (experimental)\n"
     " --outfile Filename           output VCCs in SMT lib format to given file\n\n"

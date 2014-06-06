@@ -79,7 +79,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"round-to-zero",	switc,		""	},
 { 0,	"qf_aufbv",		switc,		""	},
 { 0,	"qf_auflira",		switc,		""	},
-{ 0,	"btor",			switc,		""	},
 { 0,	"context-switch",	number,		"-1"	},
 { 0,	"time-slice",   	number,		"1"	},
 { 0,	"k-step",   	number,		"50"	},

@@ -147,7 +147,7 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   else
     logic = "integer/real arithmetic";
 
-  if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
+  if (!options.get_bool_option("smt"))
     std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
 
   prop_conv.set_message_handler(message_handler);
@@ -157,7 +157,7 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   do_cbmc(prop_conv, equation);
   fine_timet encode_stop = current_time();
 
-  if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
+  if (!options.get_bool_option("smt"))
   {
     std::ostringstream str;
     str << "Encoding to solver time: ";
@@ -171,7 +171,7 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   fine_timet sat_stop=current_time();
 
   // output runtime
-  if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
+  if (!options.get_bool_option("smt"))
   {
     std::ostringstream str;
     str << "Runtime decision procedure: ";
