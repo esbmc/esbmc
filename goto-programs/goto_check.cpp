@@ -455,12 +455,6 @@ goto_checkt::check_rec(
   } else if (expr.id() == "mod")   {
     div_by_zero_check(expr, guard);
     nan_check(expr, guard);
-  } else if (expr.id() == "struct" || expr.id() == "union"
-             || expr.type().id() == "pointer" || expr.id() == "member" ||
-             (expr.type().is_array() && expr.type().subtype().is_array())) {
-    options.set_option("z3", true);     //activate Z3 for solving the VCs
-  } else if (expr.type().id() == "fixedbv")     {
-    options.set_option("z3", true);
   }
 
   if (options.get_bool_option("qf_aufbv")) {
