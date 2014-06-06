@@ -99,18 +99,6 @@ timeout_handler(int dummy __attribute__((unused)))
 }
 #endif
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::set_verbosity_msg
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
 {
   int v=8;
@@ -126,18 +114,6 @@ void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
 
   message.set_verbosity(v);
 }
-
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::get_command_line_options
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 extern "C" uint8_t *version_string;
 
@@ -424,18 +400,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   config.options = options;
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::doit
-
-  Inputs:
-
- Outputs:
-
- Purpose: invoke main modules
-
-\*******************************************************************/
-
 int cbmc_parseoptionst::doit()
 {
   if(cmdline.isset("version"))
@@ -494,18 +458,6 @@ int cbmc_parseoptionst::doit()
   set_verbosity_msg(bmc);
   return do_bmc(bmc);
 }
-
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::doit_k_induction
-
-  Inputs:
-
- Outputs:
-
- Purpose: invoke main modules
-
-\*******************************************************************/
 
 int cbmc_parseoptionst::doit_k_induction()
 {
@@ -1150,18 +1102,6 @@ int cbmc_parseoptionst::doit_k_induction()
   return 0;
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::set_claims
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
 {
   try
@@ -1189,18 +1129,6 @@ bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::get_goto_program
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cbmc_parseoptionst::get_goto_program(
   optionst &options,
@@ -1291,18 +1219,6 @@ bool cbmc_parseoptionst::get_goto_program(
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::preprocessing
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cbmc_parseoptionst::preprocessing()
 {
@@ -1617,18 +1533,6 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
   return;
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::read_goto_binary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cbmc_parseoptionst::read_goto_binary(
   goto_functionst &goto_functions)
 {
@@ -1648,18 +1552,6 @@ bool cbmc_parseoptionst::read_goto_binary(
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::process_goto_program
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 #if 0
 static void
@@ -1809,18 +1701,6 @@ bool cbmc_parseoptionst::process_goto_program(
   return false;
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::do_bmc
-
-  Inputs:
-
- Outputs:
-
- Purpose: invoke main modules
-
-\*******************************************************************/
-
 int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 {
   bmc1.set_ui(get_ui());
@@ -1841,19 +1721,6 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 
   return res;
 }
-
-
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::help
-
-  Inputs:
-
- Outputs:
-
- Purpose: display command line help
-
-\*******************************************************************/
 
 void cbmc_parseoptionst::help()
 {
