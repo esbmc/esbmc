@@ -1732,11 +1732,6 @@ void cbmc_parseoptionst::help()
     " --control-flow-test          enable context switch before control flow tests\n"
     " --no-lock-check              do not do lock acquisition ordering check\n"
     " --no-por                     do not do partial order reduction\n"
-#if 0
-    " --unsigned-char              make \"char\" unsigned by default\n"
-    " --show-symbol-table          show symbol table\n"
-    " --ppc-macos                  set MACOS/PPC architecture\n"
-#endif
     #ifdef _WIN32
     " --i386-macos                 set MACOS/I386 architecture\n"
     " --i386-linux                 set Linux/I386 architecture\n"
@@ -1747,19 +1742,8 @@ void cbmc_parseoptionst::help()
     " --i386-linux                 set Linux/I386 architecture\n"
     " --i386-win32                 set Windows/I386 architecture\n"
     #else
-#if 0
-    " --i386-macos                 set MACOS/I386 architecture\n"
-    " --i386-linux                 set Linux/I386 architecture (default)\n"
-    " --i386-win32                 set Windows/I386 architecture\n"
-#endif
     #endif
     #endif
-//    " --no-arch                    don't set up an architecture\n"
-#if 0
-    " --int-encoding               encode variables as integers\n"
-
-    " --ecp                        perform equivalence checking of programs\n"
-#endif
     "\n --- Miscellaneous options -----------------------------------------------------\n\n"
     " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
     " --timeout                    configure time limit, integer followed by {s,m,h}\n"
