@@ -8,4 +8,4 @@ libsymex_a_SOURCES = \
       dynamic_allocation.cpp symex_catch.cpp renaming.cpp \
       execution_state.cpp reachability_tree.cpp read_write_set.cpp \
       crypto_hash.cpp VarMap.cpp
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util

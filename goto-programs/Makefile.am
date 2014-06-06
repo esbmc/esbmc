@@ -11,4 +11,4 @@ libgotoprograms_a_SOURCES = \
       flow_insensitive_analysis.cpp \
       format_strings.cpp loop_numbers.cpp \
       goto_program_template.cpp write_goto_binary.cpp
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
