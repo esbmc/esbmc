@@ -1525,11 +1525,7 @@ bool cbmc_parseoptionst::process_goto_program(
     if (!cmdline.isset("no-inlining"))
       goto_partial_inline(goto_functions, ns, ui_message_handler);
 
-    if(!cmdline.isset("show-features"))
-    {
-      // add generic checks
-      goto_check(ns, options, goto_functions);
-    }
+    goto_check(ns, options, goto_functions);
 
     if(cmdline.isset("string-abstraction"))
     {
@@ -1589,13 +1585,6 @@ bool cbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("show-loops"))
     {
       show_loop_numbers(get_ui(), goto_functions);
-      return true;
-    }
-
-    if(cmdline.isset("show-features"))
-    {
-      // add generic checks
-      goto_check(ns, options, goto_functions);
       return true;
     }
 
@@ -1676,7 +1665,6 @@ void cbmc_parseoptionst::help()
     " --show-loops                 show the loops in the program\n"
     " --show-claims                only show claims\n"
     " --show-vcc                   show the verification conditions\n"
-    " --show-features              only show features\n"
     " --document-subgoals          generate subgoals documentation\n"
     " --no-library                 disable built-in abstract C library\n"
 //    " --binary                     read goto program instead of source code\n"
