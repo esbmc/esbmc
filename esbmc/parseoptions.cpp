@@ -1756,12 +1756,7 @@ void cbmc_parseoptionst::help()
     #endif
 //    " --no-arch                    don't set up an architecture\n"
 #if 0
-    " --xml-ui                     use XML-formatted output\n"
     " --int-encoding               encode variables as integers\n"
-    " --round-to-nearest           IEEE floating point rounding mode (default)\n"
-    " --round-to-plus-inf          IEEE floating point rounding mode\n"
-    " --round-to-minus-inf         IEEE floating point rounding mode\n"
-    " --round-to-zero              IEEE floating point rounding mode\n"
 
     " --ecp                        perform equivalence checking of programs\n"
 #endif
