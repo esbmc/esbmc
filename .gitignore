@@ -15,3 +15,5 @@ aclocal.m4
 autom4te.cache
 install-sh
 missing
+ac_config.h.in
+build-aux
