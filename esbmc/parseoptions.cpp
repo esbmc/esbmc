@@ -145,9 +145,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("int-encoding", true);
   }
 
-  if(cmdline.isset("no-slice"))
-    options.set_option("no-assume-guarantee", false);
-
   options.set_option("string-abstraction", true);
   options.set_option("fixedbv", true);
 
