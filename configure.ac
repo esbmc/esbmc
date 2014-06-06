@@ -23,7 +23,7 @@ AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp])
 
 LT_LIB_DLLOAD
 
-AC_SUBST([AM_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x -I `pwd` -I `pwd`/util"]])
+AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x"]])
 
 if test -z "$Z3PATH"; then
   echo "You must set Z3PATH. Or else.";

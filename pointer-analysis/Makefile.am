@@ -3,4 +3,4 @@ libpointeranalysis_a_SOURCES = \
           value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp \
           dereference.cpp add_failed_symbols.cpp \
           show_value_sets.cpp value_set_domain.cpp
-libpointeranalysis_a_CXXFLAGS = -I$(top_srcdir) -I$(top_srcdir)/utils
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils

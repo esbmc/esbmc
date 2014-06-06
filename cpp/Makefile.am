@@ -20,4 +20,4 @@ libcxx_a_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck_enum_type.cpp cpp_typecheck_bases.cpp \
       cpp_typecheck_constructor.cpp cpp_typecheck_virtual_table.cpp \
       lex.yy.cpp
-libcxx_a_CXXFLAGS = -I$(top_srcdir) -I$(top_srcdir)/utils
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils
