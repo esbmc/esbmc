@@ -54,7 +54,7 @@ extern "C" {
 
 #include "parseoptions.h"
 #include "bmc.h"
-#include "version.h"
+#include <ac_config.h>
 
 #include "kinduction_parallel.h"
 

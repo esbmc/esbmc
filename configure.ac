@@ -1,4 +1,6 @@
-AC_INIT([ESBMC], [1.22], [esbmc@ecs.soton.ac.uk])
+AC_INIT([ESBMC], [1.23.99], [esbmc@ecs.soton.ac.uk])
+AC_DEFINE([ESBMC_VERSION], ["1.23.99"], [ESBMC version number])
+
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADER(ac_config.h)
 AC_CONFIG_AUX_DIR([build-aux])
