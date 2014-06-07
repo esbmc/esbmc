@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <memory>
 
+#include <ac_config.h>
+
 #ifndef _WIN32
 extern "C" {
 #include <ctype.h>
@@ -17,10 +19,10 @@ extern "C" {
 #include <signal.h>
 #include <unistd.h>
 
-#include <sys/resource.h>
-#ifndef ONAMAC
+#ifdef HAVE_SENDFILE
 #include <sys/sendfile.h>
 #endif
+#include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
 }
@@ -1831,7 +1833,7 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 
   bool res = bmc1.run();
 
-#if !defined(_WIN32) && !defined(ONAMAC)
+#ifdef HAVE_SENDFILE
   if (bmc1.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, NULL, 100000);
