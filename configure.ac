@@ -5,7 +5,6 @@ AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADER(ac_config.h)
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
-LT_INIT
 AC_CONFIG_MACRO_DIR([build-aux/m4])
 
 AC_ARG_VAR([Z3PATH], [Path to Z3 installation directory])
@@ -22,6 +21,8 @@ AC_PROG_RANLIB
 
 AM_PROG_AR
 AM_PROG_LEX
+
+LT_INIT
 
 AC_LANG(C++)
 
