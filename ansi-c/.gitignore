@@ -6,3 +6,7 @@ y.tab.h
 c2goto
 Makefile
 Makefile.in
+parser.cpp
+parser.hpp
+scanner.cpp
+scanner.hpp
