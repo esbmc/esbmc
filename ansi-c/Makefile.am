@@ -19,9 +19,10 @@ AM_CFLAGS = $(ESBMC_CFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 AM_YFLAGS = -d -pyyansi_c
 AM_LFLAGS = --header-file=scanner.hpp -Pyyansi_c
 BUILT_SOURCES = parser.hpp scanner.hpp
+
+# So, lex will build lex.yyansi_c.c (on macs?). Symlink it to the
+# right place, as automake expects scanner.cpp to turn up. Ugh.
 scanner.hpp: scanner.cpp
-	# So, lex will build lex.yyansi_c.c (on macs?). Symlink it to the
-	# right place, as automake expects scanner.cpp to turn up. Ugh.
 	ln -s lex.yyansi_c.c scanner.cpp
 
 noinst_PROGRAMS = c2goto
