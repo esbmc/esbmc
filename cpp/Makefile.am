@@ -23,3 +23,7 @@ libcxx_a_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 AM_YFLAGS = -d -pyycpp
 AM_LFLAGS = --header-file=scanner.hpp -Pyycpp -o scanner.cpp
+
+clean-local:
+	-rm scanner.cpp scanner.hpp
+.PHONY: clean-local
