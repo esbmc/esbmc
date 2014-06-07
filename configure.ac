@@ -20,15 +20,18 @@ AC_PROG_LEX
 AC_PROG_MAKE_SET
 AC_PROG_RANLIB
 
+AM_PROG_AR
+AM_PROG_LEX
+
 AC_LANG(C++)
 
 AC_CHECK_LIB([m], [fabs])
 
-AC_CHECK_HEADERS([boost/mpl/if.hpp])
-AC_CHECK_HEADERS([boost/shared_ptr.hpp])
-AC_CHECK_HEADERS([boost/crc.hpp])
-AC_CHECK_HEADERS([boost/utility/enable_if.hpp])
-AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp])
+AC_CHECK_HEADERS([boost/mpl/if.hpp], [], [AC_MSG_ERROR([No boost mpl found])])
+AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], [AC_MSG_ERROR([No boost shared ptr found])])
+AC_CHECK_HEADERS([boost/crc.hpp], [], [AC_MSG_ERROR([No boost CRC library found])])
+AC_CHECK_HEADERS([boost/utility/enable_if.hpp], [], [AC_MSG_ERROR([No boost enable_if utility found])])
+AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], [AC_MSG_ERROR([No boost fusion library found])])
 
 AC_HEADER_STDBOOL
 AC_TYPE_UID_T
@@ -71,9 +74,13 @@ AC_FUNC_STRNLEN
 AC_FUNC_STRTOD
 AC_CHECK_FUNCS([alarm atexit bzero clock_gettime dup2 euidaccess fchdir fdatasync fesetround floor ftruncate getcwd getdelim gethostname getpagesize getpass gettimeofday getusershell isascii lchown localeconv localtime_r mblen memchr memmove mempcpy memset mkdir mkfifo modf munmap pathconf pow putenv realpath rint rmdir rpmatch select setenv sethostname setlocale sqrt stime stpcpy strcasecmp strchr strcspn strdup strerror strncasecmp strndup strpbrk strrchr strspn strstr strtol strtoul strtoull strverscmp tzset])
 
+AC_CHECK_FUNC(strlcat, [AC_DEFINE([HAVE_STRLCAT], [true], [strlcat present])], [])
+AC_CHECK_FUNC(strlcpy, [AC_DEFINE([HAVE_STRLCPY], [true], [strlcpy present])], [])
+
 LT_LIB_DLLOAD
 
 AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x"]])
+AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W"]])
 
 if test -z "$Z3PATH"; then
   echo "You must set Z3PATH. Or else.";

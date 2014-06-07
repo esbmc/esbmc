@@ -25,13 +25,15 @@ static int isatty(int) { return 0; }
 #include <ansi-c/convert_character_literal.h>
 #include <ansi-c/convert_string_literal.h>
 #include <config.h>
+#include "ansi_c_declaration.h"
+#include <parser.hpp>
 
 #define PARSER ansi_c_parser
 #undef	ECHO
 #define ECHO
 
 #include "ansi_c_parser.h"
-#include "y.tab.h"
+#include "parser.h"
 
 static void init(exprt **e)
 {

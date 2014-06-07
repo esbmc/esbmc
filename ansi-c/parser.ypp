@@ -12,14 +12,18 @@
 
 #define PARSER ansi_c_parser
 
+#include "ansi_c_declaration.h"
 #include "ansi_c_parser.h"
 
 int yyansi_clex();
 extern char *yyansi_ctext;
 
+#define yylval yyansi_clval
+
 #include "parser_static.inc"
 
-#include "y.tab.h"
+#include "parser.h"
+#include "scanner.hpp"
 
 %}
 

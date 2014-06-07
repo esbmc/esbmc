@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 symname=$1
 symname=`basename $symname`
