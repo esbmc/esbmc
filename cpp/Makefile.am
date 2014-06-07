@@ -22,9 +22,5 @@ libcxx_a_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       scanner.lpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 AM_YFLAGS = -d -pyycpp
-AM_LFLAGS = --header-file=scanner.hpp -Pyycpp
+AM_LFLAGS = --header-file=scanner.hpp -Pyycpp -o scanner.cpp
 BUILT_SOURCES = scanner.hpp
-
-# Play silly buggers with automake:
-scanner.hpp: scanner.cpp
-	ln -s lex.yycpp.c scanner.cpp

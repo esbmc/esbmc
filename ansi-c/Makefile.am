@@ -1,6 +1,6 @@
 SUBDIRS = cpp headers
 noinst_LIBRARIES = libansic.a libclib.a
-libansic_a_SOURCES = parser.ypp scanner.lpp \
+libansic_a_SOURCES = scanner.lpp parser.ypp \
       c_typecast.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \
       c_types.cpp c_final.cpp trans_unit.cpp ansi_c_typecheck.cpp \
@@ -17,13 +17,8 @@ libansic_a_SOURCES = parser.ypp scanner.lpp \
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 AM_CFLAGS = $(ESBMC_CFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 AM_YFLAGS = -d -pyyansi_c
-AM_LFLAGS = --header-file=scanner.hpp -Pyyansi_c
-BUILT_SOURCES = parser.hpp scanner.hpp
-
-# So, lex will build lex.yyansi_c.c (on macs?). Symlink it to the
-# right place, as automake expects scanner.cpp to turn up. Ugh.
-scanner.hpp: scanner.cpp
-	ln -s lex.yyansi_c.c scanner.cpp
+AM_LFLAGS = --header-file=scanner.hpp -Pyyansi_c -o scanner.cpp
+BUILT_SOURCES = parser.hpp
 
 noinst_PROGRAMS = c2goto
 c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp $(libansic_a_SOURCES) -I$(top_srcdir)/utils
