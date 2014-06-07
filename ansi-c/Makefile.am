@@ -34,3 +34,8 @@ clib32.o: c2goto
 clib64.o: c2goto
 	./c2goto $(srcdir)/library/*.c --output clib64.goto --no-lock-check
 	$(srcdir)/headers/flail.sh clib64 clib64.goto | $(CC) $(CFLAGS) -x c - -c -o $@
+
+clean-local:
+	-rm scanner.cpp scanner.hpp parser.hpp parser.cpp
+	-rm clib64.goto clib32.goto
+.PHONY: clean-local
