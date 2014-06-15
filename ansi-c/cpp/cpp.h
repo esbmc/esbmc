@@ -199,4 +199,4 @@ void getcmnt(void);
 void xwrite(int, const void *, unsigned int);
 
 /* ESBMC */
-int handle_hooked_header(usch *name);
+int handle_hooked_header(const usch *name);

@@ -35,7 +35,7 @@ struct hooked_header headers[] = {
 #undef p
 
 int
-handle_hooked_header(usch *name)
+handle_hooked_header(const usch *name)
 {
 	struct includ buf;
 	struct hooked_header *h;
