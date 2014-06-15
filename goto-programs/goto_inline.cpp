@@ -205,6 +205,8 @@ void goto_inlinet::replace_return(
         it++;
       }
 #warning XXX jmorse, dunno what this does.
+#warning This evaluates the rhs, even if the result isn't used
+#warning Thus, should be re-enabled
 #if 0
       else if(!it->code.operands().empty())
       {
