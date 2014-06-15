@@ -1101,7 +1101,7 @@ Function: expr2ct::convert_norep
 
 std::string expr2ct::convert_norep(
   const exprt &src,
-  unsigned &precedence)
+  unsigned &precedence __attribute__((unused)))
 {
   return src.pretty(0);
 }
@@ -1229,7 +1229,7 @@ Function: expr2ct::convert_nondet_bool
 \*******************************************************************/
 
 std::string expr2ct::convert_nondet_bool(
-  const exprt &src,
+  const exprt &src __attribute__((unused)),
   unsigned &precedence __attribute__((unused)))
 {
   return "nondet_bool()";
@@ -2380,7 +2380,7 @@ Function: expr2ct::convert_code_function_call
 
 std::string expr2ct::convert_code_function_call(
   const code_function_callt &src __attribute__((unused)),
-  unsigned indent)
+  unsigned indent __attribute__((unused)))
 {
   if(src.operands().size()!=3)
   {
