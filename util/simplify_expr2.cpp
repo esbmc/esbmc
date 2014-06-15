@@ -115,10 +115,10 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     tmp_bv.round(fixedbv_spect(bits*2, bits));
 
     // If we're converting to a signedbv, the top bit being set means negative.
-    if (is_signedbv_type(type)) {
+    if (is_signedbv_type(type) && !tmp.is_negative()) {
       assert(type->get_width() <= 64);
       uint64_t top_bit = 1ULL << (type->get_width()-1);
-      int64_t cur_val = tmp_bv.to_integer().to_int64();
+      uint64_t cur_val = tmp_bv.to_integer().to_uint64();
       if (cur_val >= top_bit) {
         // Construct some bit mask gumpf as a sign extension
         int64_t large_int = -1;
@@ -126,6 +126,9 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
         large_int |= cur_val;
         tmp_bv.from_integer(large_int);
       }
+    } else if (is_signedbv_type(type)) {
+      int64_t theval = tmp.to_int64();
+      tmp_bv.from_integer(theval);
     } else if (is_unsignedbv_type(type) && tmp_bv.to_integer().is_negative()) {
       // Need to switch this number to being an unsigned representation of the
       // same bit vector.
