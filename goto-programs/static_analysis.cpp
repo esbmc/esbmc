@@ -370,8 +370,7 @@ bool static_analysis_baset::visit(
     if(to_l==goto_program.instructions.end())
       continue;
 
-    std::auto_ptr<statet> tmp_state(
-      make_temporary_state(current));
+    std::unique_ptr<statet> tmp_state(make_temporary_state(current));
   
     statet &new_values=*tmp_state;
 
@@ -541,7 +540,7 @@ void static_analysis_baset::do_function_call_rec(
   else if (is_if2t(function))
   {
     const if2t ifval = to_if2t(function);
-    std::auto_ptr<statet> n2(make_temporary_state(new_state));
+    std::unique_ptr<statet> n2(make_temporary_state(new_state));
     
     do_function_call_rec(
       l_call,
@@ -565,7 +564,7 @@ void static_analysis_baset::do_function_call_rec(
     std::list<expr2tc> values;
     get_reference_set(l_call, function, values);
 
-    std::auto_ptr<statet> state_from(make_temporary_state(new_state));
+    std::unique_ptr<statet> state_from(make_temporary_state(new_state));
 
     // now call all of these
     for(std::list<expr2tc>::const_iterator it=values.begin();
@@ -574,7 +573,7 @@ void static_analysis_baset::do_function_call_rec(
       if (is_object_descriptor2t(*it))
       {
         const object_descriptor2t &obj = to_object_descriptor2t(*it);
-        std::auto_ptr<statet> n2(make_temporary_state(new_state));    
+        std::unique_ptr<statet> n2(make_temporary_state(new_state));
         do_function_call_rec(l_call, obj.object, arguments, *n2, goto_functions);
         merge(new_state, *n2);
       }
