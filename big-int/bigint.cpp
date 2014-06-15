@@ -607,11 +607,13 @@ BigInt::as_string (char *p, unsigned l, onedig_t b) const
     }
   while (len);
   // Maybe attach sign.
-  if (!positive)
-    if (l == 0)
+  if (!positive) {
+    if (l == 0) {
       return 0;
-    else
+    } else {
       p[--l] = '-';
+    }
+  }
   // Return pointer to start of number.
   return p + l;
 }
