@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "message.h"
 #include "i2string.h"
 
-/*******************************************************************\
-
-Function: message_handlert::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void message_handlert::print(
   unsigned level,
   const std::string &message,
@@ -45,36 +33,12 @@ void message_handlert::print(
   print(level, dest);
 }
 
-/*******************************************************************\
-
-Function: messaget::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void messaget::print(unsigned level, const std::string &message)
 {
   if(message_handler!=NULL && verbosity>=level)
     message_handler->print(level, message);
 }
   
-/*******************************************************************\
-
-Function: messaget::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void messaget::print(
   unsigned level,
   const std::string &message,
@@ -86,18 +50,6 @@ void messaget::print(
                            location);
 }
   
-/*******************************************************************\
-
-Function: messaget::set_message_handler
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void messaget::set_message_handler(message_handlert *_message_handler)
 {
   message_handler=_message_handler;
