@@ -1440,7 +1440,7 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   if (!is_bv_type(new_operand))
     return expr2tc(new overflow2t(new_operand));
 
-#if 0
+  /*
   XXXjmorse - the following code:
 
   int main()
@@ -1455,7 +1455,7 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   attempt to detect overflows, because it would appear that the integer width
   of how the result is going to be used falls by the wayside somewhere.
   It's safer to just not simplify these things.
-#endif
+  */
   return expr2tc(new overflow2t(new_operand));
 
 
