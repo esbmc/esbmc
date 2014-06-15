@@ -693,7 +693,11 @@ BigInt::is_long() const
     return true;
   if (length > small)
     return false;
-  const onedig_t max = onedig_t (1) << single_bits - 1;
+
+  // jmorse: will truncate to whatever size full of bits onedig_t is.
+  // More ideally, this code would pre-define what the maximum is.
+  onedig_t max = (onedig_t)0xFFFFFFFFFFFFFFFFULL;
+
   if (digit[small - 1] < max)
     return true;
   if (positive || digit[small - 1] > max)
