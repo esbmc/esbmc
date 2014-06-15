@@ -821,8 +821,10 @@ type_poolt::type_poolt(bool yolo __attribute__((unused)))
   return;
 }
 
+// XXX why did I disable this cache?
 static const type2tc &
-get_type_from_pool(const typet &val, std::map<typet, type2tc> &map)
+get_type_from_pool(const typet &val,
+    std::map<typet, type2tc> &map __attribute__((unused)))
 {
 #if 0
   std::map<const typet, type2tc>::const_iterator it = map.find(val);
