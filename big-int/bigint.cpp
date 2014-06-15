@@ -809,7 +809,7 @@ BigInt::add (onedig_t const *dig, unsigned len, bool pos)
   onedig_t const *d2;
   unsigned l1, l2;
   bool gt = (length > len ||
-	     length == len && digit_cmp (digit, dig, len) >= 0);
+	    (length == len && digit_cmp (digit, dig, len) >= 0));
   if (gt)
     {
       d1 = digit;
