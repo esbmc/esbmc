@@ -668,9 +668,9 @@ Function: goto_convertt::remove_temporary_object
 
 void goto_convertt::remove_temporary_object(
   exprt &expr,
-  guardt &guard,
+  guardt &guard __attribute__((unused)),
   goto_programt &dest,
-  bool result_is_used)
+  bool result_is_used __attribute__((unused)))
 {
   if(expr.operands().size()!=1 &&
      expr.operands().size()!=0)
