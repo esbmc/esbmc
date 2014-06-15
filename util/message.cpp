@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 void message_handlert::print(
   unsigned level,
   const std::string &message,
-  int sequence_number,
   const locationt &location)
 {
   std::string dest;
@@ -42,12 +41,10 @@ void messaget::print(unsigned level, const std::string &message)
 void messaget::print(
   unsigned level,
   const std::string &message,
-  int sequence_number,
   const locationt &location)
 {
   if(message_handler!=NULL && verbosity>=level)
-    message_handler->print(level, message, sequence_number,
-                           location);
+    message_handler->print(level, message, location);
 }
   
 void messaget::set_message_handler(message_handlert *_message_handler)

@@ -60,6 +60,6 @@ void parsert::parse_error(
   location.set_line(i2string(line_no));
   std::string tmp=message;
   if(before!="") tmp+=" before `"+before+"'";
-  print(1, tmp, -1, location);
+  print(1, tmp, location);
 }
 

@@ -132,7 +132,7 @@ void message_streamt::error_parse_line(
   }
 
   message_handler.print(
-    level, error_msg, sequence_number++, saved_error_location);
+    level, error_msg, saved_error_location);
 }
 
 /*******************************************************************\
