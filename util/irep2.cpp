@@ -732,6 +732,9 @@ symbol_data::get_symbol_name(void) const
     // Global name with l2 details
     return thename.as_string() + "&" + i2string(node_num)
                                + "#" + i2string(level2_num);
+  default:
+    std::cerr << "Unrecognized renaming level enum" << std::endl;
+    abort();
   }
 }
 
@@ -984,6 +987,9 @@ type_to_string(const symbol_data::renaming_level &theval,
     return "Level 1 (global)";
   case symbol_data::level2_global:
     return "Level 2 (global)";
+  default:
+    std::cerr << "Unrecognized renaming level enum" << std::endl;
+    abort();
   }
 }
 
@@ -1103,13 +1109,15 @@ type_to_string(const irep_idt &theval, int indent __attribute__((unused)))
 }
 
 static inline __attribute__((always_inline)) std::string
-type_to_string(const type2t::type_ids &id, int indent __attribute__((unused)))
+type_to_string(const type2t::type_ids &id __attribute__((unused)),
+               int indent __attribute__((unused)))
 {
   return "";
 }
 
 static inline __attribute__((always_inline)) std::string
-type_to_string(const expr2t::expr_ids &id, int indent __attribute__((unused)))
+type_to_string(const expr2t::expr_ids &id __attribute__((unused)),
+               int indent __attribute__((unused)))
 {
   return "";
 }
@@ -1209,13 +1217,15 @@ do_type_cmp(const irep_idt &side1, const irep_idt &side2)
 }
 
 static inline __attribute__((always_inline)) bool
-do_type_cmp(const type2t::type_ids &id, const type2t::type_ids &id2)
+do_type_cmp(const type2t::type_ids &id __attribute__((unused)),
+            const type2t::type_ids &id2 __attribute__((unused)))
 {
   return true; // Dummy field comparison.
 }
 
 static inline __attribute__((always_inline)) bool
-do_type_cmp(const expr2t::expr_ids &id, const expr2t::expr_ids &id2)
+do_type_cmp(const expr2t::expr_ids &id __attribute__((unused)),
+            const expr2t::expr_ids &id2 __attribute__((unused)))
 {
   return true; // Dummy field comparison.
 }
@@ -1373,13 +1383,15 @@ do_type_lt(const irep_idt &side1, const irep_idt &side2)
 }
 
 static inline __attribute__((always_inline)) int
-do_type_lt(const type2t::type_ids &id, const type2t::type_ids &id2)
+do_type_lt(const type2t::type_ids &id __attribute__((unused)),
+           const type2t::type_ids &id2 __attribute__((unused)))
 {
   return 0; // Dummy field comparison
 }
 
 static inline __attribute__((always_inline)) int
-do_type_lt(const expr2t::expr_ids &id, const expr2t::expr_ids &id2)
+do_type_lt(const expr2t::expr_ids &id __attribute__((unused)),
+           const expr2t::expr_ids &id2 __attribute__((unused)))
 {
   return 0; // Dummy field comparison
 }
@@ -1629,25 +1641,29 @@ do_type_hash(const irep_idt &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const type2t::type_ids &i, hacky_hash &hash)
+do_type_crc(const type2t::type_ids &i __attribute__((unused)),
+            hacky_hash &hash __attribute__((unused)))
 {
   return; // Dummy field crc
 }
 
 static inline __attribute__((always_inline)) void
-do_type_hash(const type2t::type_ids &i, crypto_hash &hash)
+do_type_hash(const type2t::type_ids &i __attribute__((unused)),
+             crypto_hash &hash __attribute__((unused)))
 {
   return; // Dummy field crc
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const expr2t::expr_ids &i, hacky_hash &hash)
+do_type_crc(const expr2t::expr_ids &i __attribute__((unused)),
+            hacky_hash &hash __attribute__((unused)))
 {
   return; // Dummy field crc
 }
 
 static inline __attribute__((always_inline)) void
-do_type_hash(const expr2t::expr_ids &i, crypto_hash &hash)
+do_type_hash(const expr2t::expr_ids &i __attribute__((unused)),
+             crypto_hash &hash __attribute__((unused)))
 {
   return; // Dummy field crc
 }
@@ -1730,20 +1746,24 @@ do_type2string(const T &thething, unsigned int idx,
 
 template <>
 void
-do_type2string<type2t::type_ids>(const type2t::type_ids &thething,
-                                 unsigned int idx,
-                                 std::string (&names)[esbmct::num_type_fields],
-                                 list_of_memberst &vec, unsigned int indent)
+do_type2string<type2t::type_ids>(
+    const type2t::type_ids &thething __attribute__((unused)),
+    unsigned int idx __attribute__((unused)),
+    std::string (&names)[esbmct::num_type_fields] __attribute__((unused)),
+    list_of_memberst &vec __attribute__((unused)),
+    unsigned int indent __attribute__((unused)))
 {
   // Do nothing; this is a dummy member.
 }
 
 template <>
 void
-do_type2string<const expr2t::expr_ids>(const expr2t::expr_ids &thething,
-                                 unsigned int idx,
-                                 std::string (&names)[esbmct::num_type_fields],
-                                 list_of_memberst &vec, unsigned int indent)
+do_type2string<const expr2t::expr_ids>(
+    const expr2t::expr_ids &thething __attribute__((unused)),
+    unsigned int idx __attribute__((unused)),
+    std::string (&names)[esbmct::num_type_fields] __attribute__((unused)),
+    list_of_memberst &vec __attribute__((unused)),
+    unsigned int indent __attribute__((unused)))
 {
   // Do nothing; this is a dummy member.
 }
