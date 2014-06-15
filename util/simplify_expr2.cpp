@@ -791,8 +791,11 @@ index2t::do_simplify(bool second __attribute__((unused))) const
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
     // model. We don't have to think about this now though.
-    long the_idx = idx.as_long();
-    if (the_idx >= arr.datatype_members.size() || the_idx < 0)
+    if (idx.constant_value.is_negative())
+      return expr2tc();
+
+    unsigned long the_idx = idx.as_ulong();
+    if (the_idx >= arr.datatype_members.size())
       return expr2tc();
 
     return arr.datatype_members[the_idx];
