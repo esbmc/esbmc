@@ -518,7 +518,7 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 expr2tc
-neg2t::do_simplify(bool second) const
+neg2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (!is_constant_expr(value))
@@ -1057,7 +1057,7 @@ bitnxor2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 static int64_t
-do_bitnot_op(int64_t op1, int64_t op2)
+do_bitnot_op(int64_t op1, int64_t op2 __attribute__((unused)))
 {
   return ~op1;
 }
