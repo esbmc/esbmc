@@ -156,7 +156,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
   } else if (type.id() == typet::t_union) {
     std::vector<type2tc> members;
     std::vector<irep_idt> names;
-    const struct union_typet &strct = to_union_type(type);
+    const struct_union_typet &strct = to_union_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
     for (struct_union_typet::componentst::const_iterator it = comps.begin();
