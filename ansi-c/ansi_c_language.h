@@ -65,8 +65,8 @@ public:
   virtual languaget *new_language()
   { return new ansi_c_languaget; }
    
-  virtual std::string id() { return "C"; }
-  virtual std::string description() { return "ANSI-C 99"; }
+  virtual std::string id() const { return "C"; }
+  virtual std::string description() const { return "ANSI-C 99"; }
 
   virtual void modules_provided(std::set<std::string> &modules);  
   
