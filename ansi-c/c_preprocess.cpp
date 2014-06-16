@@ -390,8 +390,7 @@ configure_and_run_cpp(const char *out_file_buf, std::string path,
     exit(1);
   }
 
-  const unsigned char *ourpath = (const unsigned char *)path.c_str();
-  ret = pushfile2(ourpath, ourpath, 0, NULL);
+  ret = pushfile2(path.c_str(), path.c_str(), 0, NULL);
   fin();
 
   return ret;
