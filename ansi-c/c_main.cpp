@@ -85,7 +85,7 @@ Function: c_main
 
 bool c_main(
   contextt &context,
-  const std::string &default_prefix,
+  const std::string &default_prefix __attribute__((unused)),
   const std::string &standard_main,
   message_handlert &message_handler)
 {
