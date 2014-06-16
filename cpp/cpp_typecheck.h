@@ -494,6 +494,7 @@ protected:
   // for function overloading
   irep_idt function_identifier(const typet &type);
 
+  using c_typecheck_baset::zero_initializer;
   void zero_initializer(
     const exprt &object,
     const typet &type,
