@@ -1,6 +1,14 @@
 SUBDIRS = cpp headers
 noinst_LTLIBRARIES = libansicscanner.la libansic.la libclib.la
+
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
+AM_CFLAGS = $(ESBMC_CFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
+AM_YFLAGS = -d -pyyansi_c
+AM_LFLAGS = --header-file=scanner.hpp -Pyyansi_c -o scanner.cpp
+
 libansicscanner_la_SOURCES = scanner.lpp
+libansicscanner_la_CXXFLAGS = -Wno-error $(AM_CXXFLAGS)
+
 libansic_la_SOURCES = parser.ypp \
       c_typecast.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \
@@ -16,10 +24,6 @@ libansic_la_SOURCES = parser.ypp \
       convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp
 libansic_la_LIBADD = libansicscanner.la
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
-AM_CFLAGS = $(ESBMC_CFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
-AM_YFLAGS = -d -pyyansi_c
-AM_LFLAGS = --header-file=scanner.hpp -Pyyansi_c -o scanner.cpp
 BUILT_SOURCES = parser.hpp
 
 
