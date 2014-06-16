@@ -55,8 +55,8 @@ public:
 
   // language id / description
 
-  virtual std::string id() { return ""; }
-  virtual std::string description() { return ""; }
+  virtual std::string id() const { return ""; }
+  virtual std::string description() const { return ""; }
 
   // show parse tree
 
