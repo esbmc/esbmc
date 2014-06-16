@@ -204,25 +204,24 @@ void goto_inlinet::replace_return(
         dest.insert_swap(it, *assignment);
         it++;
       }
-#warning XXX jmorse, dunno what this does.
-#warning This evaluates the rhs, even if the result isn't used
-#warning Thus, should be re-enabled
-#if 0
-      else if(!it->code.operands().empty())
+      else if(!is_nil_expr(it->code))
       {
+        // Encode evaluation of return expr, so that returns with pointer
+        // derefs in them still get dereferenced, even when the result is
+        // discarded.
         goto_programt tmp;
         goto_programt::targett expression=tmp.add_instruction(OTHER);
         
-        expression->code=codet("expression");
-        expression->code.move_to_operands(it->code.op0());
+        expression->make_other();
         expression->location=it->location;
         expression->function=it->location.get_function();
         expression->local_variables=it->local_variables;
-        
+        const code_return2t &ret = to_code_return2t(it->code);
+        expression->code = code_expression2tc(ret.operand);
+
         dest.insert_swap(it, *expression);
         it++;
       }
-#endif
 
       it->make_goto(--dest.instructions.end());
     }
