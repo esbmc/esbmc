@@ -1318,15 +1318,15 @@ void cbmc_parseoptionst::preprocessing()
 
     std::string filename=cmdline.args[0];
 
+    // To test that the file exists,
     std::ifstream infile(filename.c_str());
-
     if(!infile)
     {
       error("failed to open input file");
       return;
     }
 
-    if (c_preprocess(infile, filename, std::cout, false, *get_message_handler()))
+    if (c_preprocess(filename, std::cout, false, *get_message_handler()))
       error("PREPROCESSING ERROR");
   }
 

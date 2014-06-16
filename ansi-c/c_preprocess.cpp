@@ -217,7 +217,6 @@ void setup_cpp_defs(const char **defs)
 #include <sys/wait.h>
 
 bool c_preprocess(
-  std::istream &instream,
   const std::string &path,
   std::ostream &outstream,
   bool is_cpp,
@@ -296,7 +295,6 @@ bool c_preprocess(
 #include <io.h>
 
 bool c_preprocess(
-  std::istream &instream,
   const std::string &path,
   std::ostream &outstream,
   bool is_cpp,

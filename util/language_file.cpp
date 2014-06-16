@@ -82,7 +82,7 @@ bool language_filest::parse()
   for(filemapt::iterator it=filemap.begin();
       it!=filemap.end(); it++)
   {
-    // open file
+    // Check that file exists
 
     std::ifstream infile(it->first.c_str());
 
@@ -96,7 +96,7 @@ bool language_filest::parse()
 
     languaget &language=*(it->second.language);
 
-    if(language.parse(infile, it->first, *get_message_handler()))
+    if(language.parse(it->first, *get_message_handler()))
     {
       error("Parsing of "+it->first+" failed");
       return true;

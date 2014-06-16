@@ -83,13 +83,12 @@ Function: cpp_languaget::preprocess
 \*******************************************************************/
 
 bool cpp_languaget::preprocess(
-  std::istream &instream,
   const std::string &path,
   std::ostream &outstream,
   message_handlert &message_handler)
 {
   if(path=="")
-    return c_preprocess(instream, "", outstream, true, message_handler);
+    return c_preprocess("", outstream, true, message_handler);
 
   // check extension
 
@@ -106,7 +105,7 @@ bool cpp_languaget::preprocess(
     return false;
   }
 
-  return c_preprocess(instream, path, outstream, true, message_handler);
+  return c_preprocess(path, outstream, true, message_handler);
 }
 
 /*******************************************************************\
@@ -175,7 +174,6 @@ Function: cpp_languaget::parse
 \*******************************************************************/
 
 bool cpp_languaget::parse(
-  std::istream &instream,
   const std::string &path,
   message_handlert &message_handler)
 {
@@ -189,7 +187,7 @@ bool cpp_languaget::parse(
 
   internal_additions(o_preprocessed);
 
-  if(preprocess(instream, path, o_preprocessed, message_handler))
+  if(preprocess(path, o_preprocessed, message_handler))
     return true;
 
   std::istringstream i_preprocessed(o_preprocessed.str());

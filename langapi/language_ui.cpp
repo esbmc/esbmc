@@ -119,8 +119,8 @@ bool language_uit::parse(const std::string &filename)
     return true;
   }
 
+  // Check that it opens
   std::ifstream infile(filename.c_str());
-
   if(!infile)
   {
     error("failed to open input file", filename);
@@ -140,7 +140,7 @@ bool language_uit::parse(const std::string &filename)
 
   status("Parsing", filename);
 
-  if(language.parse(infile, filename, *get_message_handler()))
+  if(language.parse(filename, *get_message_handler()))
   {
     if(get_ui()==ui_message_handlert::PLAIN)
       std::cerr << "PARSING ERROR" << std::endl;

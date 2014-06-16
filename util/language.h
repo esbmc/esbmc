@@ -23,7 +23,6 @@ public:
   virtual bool preprocess() { return false; }
 
   virtual bool parse(
-    std::istream &instream,
     const std::string &path,
     message_handlert &message_handler)=0;
 
