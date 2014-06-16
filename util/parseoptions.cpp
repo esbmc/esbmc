@@ -19,51 +19,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "parseoptions.h"
 #include "signal_catcher.h"
 
-/*******************************************************************\
-
-Function: parseoptions_baset::parseoptions_baset
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 parseoptions_baset::parseoptions_baset(
   const struct opt_templ *opts, int argc, const char **argv)
 {
   parse_result = cmdline.parse(argc, argv, opts);
 }
 
-/*******************************************************************\
-
-Function: parseoptions_baset::help
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void parseoptions_baset::help()
 {
 }
-
-/*******************************************************************\
-
-Function: parseoptions_baset::main
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 int parseoptions_baset::main()
 {

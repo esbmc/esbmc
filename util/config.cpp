@@ -12,18 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 configt config;
 
-/*******************************************************************\
-
-Function: configt::ansi_ct::set_16
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void configt::ansi_ct::set_16()
 {
   int_width=2*8;
@@ -41,18 +29,6 @@ void configt::ansi_ct::set_16()
   wchar_t_width=2*8;
   alignment=2;
 }
-
-/*******************************************************************\
-
-Function: configt::ansi_ct::set_32
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void configt::ansi_ct::set_32()
 {
@@ -72,18 +48,6 @@ void configt::ansi_ct::set_32()
   alignment=4;
 }
 
-/*******************************************************************\
-
-Function: configt::ansi_ct::set_64
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void configt::ansi_ct::set_64()
 {
   int_width=4*8;
@@ -101,18 +65,6 @@ void configt::ansi_ct::set_64()
   wchar_t_width=2*8;
   alignment=4;
 }
-
-/*******************************************************************\
-
-Function: configt::ansi_ct::set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool configt::set(const cmdlinet &cmdline)
 {

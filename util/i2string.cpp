@@ -23,18 +23,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #endif
 
-/*******************************************************************\
-
-Function: i2string
-
-  Inputs: signed integer
-
- Outputs: string class
-
- Purpose: convert signed integer to string class
-
-\*******************************************************************/
-
 std::string i2string(int i)
 {
   #ifdef USE_SPRINTF
@@ -50,18 +38,6 @@ std::string i2string(int i)
   return str;
   #endif
 }
-
-/*******************************************************************\
-
-Function: i2string
-
-  Inputs: signed long integer
-
- Outputs: string class
-
- Purpose: convert signed integer to string class
-
-\*******************************************************************/
 
 std::string i2string(signed long int i)
 {
@@ -79,18 +55,6 @@ std::string i2string(signed long int i)
   #endif
 }
 
-/*******************************************************************\
-
-Function: i2string
-
-  Inputs: unsigned integer
-
- Outputs: string class
-
- Purpose: convert unsigned integer to string class
-
-\*******************************************************************/
-
 std::string i2string(unsigned i)
 {
   #ifdef USE_SPRINTF
@@ -106,18 +70,6 @@ std::string i2string(unsigned i)
   return str; 
   #endif
 }
-
-/*******************************************************************\
-
-Function: i2string
-
-  Inputs: unsigned long integer
-
- Outputs: string class
-
- Purpose: convert unsigned integer to string class
-
-\*******************************************************************/
 
 std::string i2string(unsigned long int i)
 {

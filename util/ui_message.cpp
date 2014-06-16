@@ -14,18 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "ui_message.h"
 
-/*******************************************************************\
-
-Function: ui_message_handlert::level_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const char *ui_message_handlert::level_string(unsigned level)
 {
   if(level==1)
@@ -35,18 +23,6 @@ const char *ui_message_handlert::level_string(unsigned level)
   else
     return "STATUS-MESSAGE";
 }
-
-/*******************************************************************\
-
-Function: ui_message_handlert::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ui_message_handlert::print(
   unsigned level,
@@ -66,18 +42,6 @@ void ui_message_handlert::print(
       std::cout << message << std::endl;
   }
 }
-
-/*******************************************************************\
-
-Function: ui_message_handlert::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ui_message_handlert::print(
   unsigned level,
@@ -101,18 +65,6 @@ void ui_message_handlert::print(
   }
 }
 
-/*******************************************************************\
-
-Function: ui_message_handlert::old_gui_msg
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ui_message_handlert::old_gui_msg(
   const std::string &type,
   const std::string &msg1,
@@ -125,18 +77,6 @@ void ui_message_handlert::old_gui_msg(
             << location.get_column() << std::endl;
 }
 
-/*******************************************************************\
-
-Function: ui_message_handlert::ui_msg
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ui_message_handlert::ui_msg(
   const std::string &type,
   const std::string &msg1,
@@ -147,18 +87,6 @@ void ui_message_handlert::ui_msg(
   else
     xml_ui_msg(type, msg1, location);
 }
-
-/*******************************************************************\
-
-Function: ui_message_handlert::xml_ui_msg
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ui_message_handlert::xml_ui_msg(
   const std::string &type,

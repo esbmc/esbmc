@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "std_code.h"
 
-/*******************************************************************\
-
-Function: codet::make_block
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 code_blockt &codet::make_block()
 {
   if(get_statement()=="block") return (code_blockt &)*this;
@@ -33,18 +21,6 @@ code_blockt &codet::make_block()
   
   return (code_blockt &)*this;
 }
-
-/*******************************************************************\
-
-Function: codet::first_statement
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 codet &codet::first_statement()
 {
@@ -61,18 +37,6 @@ codet &codet::first_statement()
   return *this;
 }
 
-/*******************************************************************\
-
-Function: first_statement
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const codet &codet::first_statement() const
 {
   const irep_idt &statement=get_statement();
@@ -88,18 +52,6 @@ const codet &codet::first_statement() const
   return *this;
 }
 
-/*******************************************************************\
-
-Function: codet::last_statement
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 codet &codet::last_statement()
 {
   const irep_idt &statement=get_statement();
@@ -114,18 +66,6 @@ codet &codet::last_statement()
 
   return *this;
 }
-
-/*******************************************************************\
-
-Function: codet::last_statement
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 const codet &codet::last_statement() const
 {

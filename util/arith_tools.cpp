@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "arith_tools.h"
 #include "bitvector.h"
 
-/*******************************************************************\
-
-Function: to_integer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool to_integer(const exprt &expr, mp_integer &int_value)
 {
   if(!expr.is_constant()) return true;
@@ -58,18 +46,6 @@ bool to_integer(const exprt &expr, mp_integer &int_value)
 
   return true;
 }
-
-/*******************************************************************\
-
-Function: from_integer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt from_integer(
   const mp_integer &int_value,
@@ -116,18 +92,6 @@ exprt from_integer(
   expr.make_nil();
   return expr;
 }
-
-/*******************************************************************\
-
-Function: power
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 mp_integer power(const mp_integer &base,
                  const mp_integer &exponent)

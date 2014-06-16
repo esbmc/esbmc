@@ -13,18 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "mp_arith.h"
 
-/*******************************************************************\
-
-Function: >>
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 mp_integer operator>>(const mp_integer &a, unsigned int b)
 {
   mp_integer result=a;
@@ -34,18 +22,6 @@ mp_integer operator>>(const mp_integer &a, unsigned int b)
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: <<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 mp_integer operator<<(const mp_integer &a, unsigned int b)
 {
@@ -57,36 +33,11 @@ mp_integer operator<<(const mp_integer &a, unsigned int b)
   return result;
 }
 
-/*******************************************************************\
-
-Function: <<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::ostream& operator<<(std::ostream& out, const mp_integer &n)
 {
   out << integer2string(n);
   return out;
 }
-
-/*******************************************************************\
-
-Function: string2integer
-
-  Inputs: string of '0'-'9' etc. most significant digit first
-          base of number representation
-
- Outputs: mp_integer
-
- Purpose:
-
-\*******************************************************************/
 
 const mp_integer string2integer(const std::string &n, unsigned base)
 {
@@ -96,18 +47,6 @@ const mp_integer string2integer(const std::string &n, unsigned base)
 
   return mp_integer(n.c_str(), base);
 }
-
-/*******************************************************************\
-
-Function: integer2binary
-
-  Inputs:
-
- Outputs: string of '0'/'1', most significant bit first
-
- Purpose:
-
-\*******************************************************************/
 
 const std::string integer2binary(const mp_integer &n, unsigned width)
 {
@@ -147,18 +86,6 @@ const std::string integer2binary(const mp_integer &n, unsigned width)
   return result;
 }
 
-/*******************************************************************\
-
-Function: integer2string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const std::string integer2string(const mp_integer &n, unsigned base)
 {
   unsigned len = n.digits(base) + 2;
@@ -171,18 +98,6 @@ const std::string integer2string(const mp_integer &n, unsigned base)
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: binary2integer
-
-  Inputs: string of '0'/'1', most significant bit first
-
- Outputs: mp_integer
-
- Purpose: convert binary string representation to mp_integer
-
-\*******************************************************************/
 
 const mp_integer binary2integer(const std::string &n, bool is_signed)
 {
@@ -216,18 +131,6 @@ const mp_integer binary2integer(const std::string &n, bool is_signed)
   return result;
 }
 
-/*******************************************************************\
-
-Function: extract_fraction
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const mp_integer extract_fraction(const std::string &n, bool is_signed, u_int from, u_int to)
 {
   if(n.size()==0) return 0;
@@ -256,18 +159,6 @@ const mp_integer extract_fraction(const std::string &n, bool is_signed, u_int fr
 
   return result;
 }
-
-/*******************************************************************\
-
-Function:
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 unsigned long integer2long(const mp_integer &n)
 {

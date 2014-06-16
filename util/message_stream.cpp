@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "message_stream.h"
 
-/*******************************************************************\
-
-Function: message_streamt::error_parse_line
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void message_streamt::error_parse_line(
   unsigned level,
   const std::string &line)
@@ -134,18 +122,6 @@ void message_streamt::error_parse_line(
   message_handler.print(
     level, error_msg, saved_error_location);
 }
-
-/*******************************************************************\
-
-Function: message_streamt::error_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void message_streamt::error_parse(
   unsigned level,

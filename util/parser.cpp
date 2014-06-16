@@ -16,18 +16,6 @@ int isatty(int f)
 }
 #endif
 
-/*******************************************************************\
-
-Function: _newstack
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt &_newstack(parsert &parser, unsigned &x)
 {
   x=parser.stack.size();
@@ -38,18 +26,6 @@ exprt &_newstack(parsert &parser, unsigned &x)
   parser.stack.push_back(static_cast<const exprt &>(get_nil_irep()));
   return parser.stack.back();
 }
-
-/*******************************************************************\
-
-Function:
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void parsert::parse_error(
   const std::string &message,

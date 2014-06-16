@@ -12,51 +12,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "language.h"
 #include "language_file.h"
 
-/*******************************************************************\
-
-Function: language_filet::~language_filet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 language_filet::~language_filet()
 {
   if(language!=NULL) delete language;
 }
 
-/*******************************************************************\
-
-Function: language_filet::get_modules
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void language_filet::get_modules()
 {
   language->modules_provided(modules);
 }
-
-/*******************************************************************\
-
-Function: language_filest::show_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void language_filest::show_parse(std::ostream &out)
 {
@@ -64,18 +28,6 @@ void language_filest::show_parse(std::ostream &out)
       it!=filemap.end(); it++)
     it->second.language->show_parse(out);
 }
-
-/*******************************************************************\
-
-Function: language_filest::parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool language_filest::parse()
 {
@@ -109,18 +61,6 @@ bool language_filest::parse()
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: language_filest::typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool language_filest::typecheck(contextt &context)
 {
@@ -174,18 +114,6 @@ bool language_filest::typecheck(contextt &context)
   return false;
 }
 
-/*******************************************************************\
-
-Function: language_filest::final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool language_filest::final(
   contextt &context)
 {
@@ -204,18 +132,6 @@ bool language_filest::final(
   return false;
 }
 
-/*******************************************************************\
-
-Function: language_filest::interfaces
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool language_filest::interfaces(
   contextt &context __attribute__((unused)))
 {
@@ -229,18 +145,6 @@ bool language_filest::interfaces(
 #endif
   return false;
 }
-
-/*******************************************************************\
-
-Function: language_filest::typecheck_module
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool language_filest::typecheck_module(
   contextt &context,
@@ -258,18 +162,6 @@ bool language_filest::typecheck_module(
 
   return typecheck_module(context, it->second);
 }
-
-/*******************************************************************\
-
-Function: language_filest::typecheck_module
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool language_filest::typecheck_module(
   contextt &context,
@@ -323,18 +215,6 @@ bool language_filest::typecheck_module(
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: language_filest::typecheck_virtual_methods
-
-  Inputs: contextt&
-
- Outputs:
-
- Purpose: Check if virtual methods have implementation or are pure virtual
-
-\*******************************************************************/
 
 void language_filest::typecheck_virtual_methods(contextt &context)
 {

@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "location.h"
 
-/*******************************************************************\
-
-Function: locationt::as_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string locationt::as_string() const
 {
   std::string dest;
@@ -38,18 +26,6 @@ std::string locationt::as_string() const
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: operator<<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::ostream &operator << (std::ostream &out, const locationt &location)
 {
