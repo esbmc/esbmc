@@ -1,5 +1,13 @@
-noinst_LIBRARIES = libcxx.a
-libcxx_a_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
+noinst_LTLIBRARIES = libcxxscanner.la libcxx.la
+
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
+AM_YFLAGS = -d -pyycpp
+AM_LFLAGS = --header-file=scanner.hpp -Pyycpp -o scanner.cpp
+
+libcxxscanner_la_SOURCES = scanner.lpp
+libcxxscanner_la_CXXFLAGS = -Wno-error $(AM_CXXFLAGS)
+
+libcxx_la_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck.cpp cpp_convert_type.cpp \
       cpp_typecheck_expr.cpp cpp_typecheck_code.cpp \
       cpp_typecheck_type.cpp parse.cpp cpp_parse_tree.cpp \
@@ -18,11 +26,8 @@ libcxx_a_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_declaration.cpp cpp_namespace_spec.cpp \
       cpp_typecheck_using.cpp cpp_exception_id.cpp \
       cpp_typecheck_enum_type.cpp cpp_typecheck_bases.cpp \
-      cpp_typecheck_constructor.cpp cpp_typecheck_virtual_table.cpp \
-      scanner.lpp
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
-AM_YFLAGS = -d -pyycpp
-AM_LFLAGS = --header-file=scanner.hpp -Pyycpp -o scanner.cpp
+      cpp_typecheck_constructor.cpp cpp_typecheck_virtual_table.cpp
+libcxx_la_LIBADD = libcxxscanner.la
 
 clean-local:
 	-rm scanner.cpp scanner.hpp
