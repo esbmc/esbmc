@@ -10,4 +10,4 @@ libgotoprograms_a_SOURCES = \
       read_bin_goto_object.cpp goto_program_irep.cpp \
       format_strings.cpp loop_numbers.cpp \
       write_goto_binary.cpp
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util -Wno-unused-private-field
