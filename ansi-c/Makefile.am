@@ -1,6 +1,7 @@
 SUBDIRS = cpp headers
-noinst_LIBRARIES = libansic.a libclib.a
-libansic_a_SOURCES = scanner.lpp parser.ypp \
+noinst_LTLIBRARIES = libansicscanner.la libansic.la libclib.la
+libansicscanner_la_SOURCES = scanner.lpp
+libansic_la_SOURCES = parser.ypp \
       c_typecast.cpp ansi_c_parser.cpp \
       expr2c.cpp ansi_c_language.cpp c_sizeof.cpp c_main.cpp \
       c_types.cpp c_final.cpp trans_unit.cpp ansi_c_typecheck.cpp \
@@ -14,18 +15,20 @@ libansic_a_SOURCES = scanner.lpp parser.ypp \
       preprocessor_line.cpp convert_character_literal.cpp \
       convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp
+libansic_la_LIBADD = libansicscanner.la
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 AM_CFLAGS = $(ESBMC_CFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 AM_YFLAGS = -d -pyyansi_c
 AM_LFLAGS = --header-file=scanner.hpp -Pyyansi_c -o scanner.cpp
 BUILT_SOURCES = parser.hpp
 
-noinst_PROGRAMS = c2goto
-c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp $(libansic_a_SOURCES) -I$(top_srcdir)/utils
-c2goto_LDADD = ../big-int/libbigint.a ../goto-programs/libgotoprograms.a ../langapi/liblangapi.a ../util/libutil.a cpp/libcpp.a ./headers/libheaders.a
 
-libclib_a_SOURCES = cprover_library.cpp
-libclib_a_LIBADD = clib32.o clib64.o
+noinst_PROGRAMS = c2goto
+c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp -I$(top_srcdir)/utils
+c2goto_LDADD = libansic.la libansicscanner.la ../big-int/libbigint.a ../goto-programs/libgotoprograms.a ../langapi/liblangapi.a ../util/libutil.a cpp/libcpp.a ./headers/libheaders.a
+
+libclib_la_SOURCES = cprover_library.cpp
+libclib_la_LIBADD = clib32.o clib64.o
 
 clib32.o: c2goto
 	./c2goto $(srcdir)/library/*.c --output clib32.goto --no-lock-check
