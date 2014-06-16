@@ -88,7 +88,8 @@ timeout_handler(int dummy __attribute__((unused)))
     else
       r.step=INDUCTIVE_STEP;
 
-    write(commPipe[1], &r, sizeof(r));
+    unsigned int len = write(commPipe[1], &r, sizeof(r));
+    assert(len == sizeof(r) && "short write");
   }
 
   std::cout << "Timed out" << std::endl;
@@ -512,6 +513,7 @@ Function: cbmc_parseoptionst::doit_k_induction
 int cbmc_parseoptionst::doit_k_induction()
 {
   _k_induction=true;
+  unsigned int len = 0;
 
   if(cmdline.isset("version"))
   {
@@ -825,13 +827,15 @@ int cbmc_parseoptionst::doit_k_induction()
           r = bc.startSolving();
 
           // Write result
-          write(commPipe[1], &r, sizeof(r));
+          len = write(commPipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
 
           if(r.result) return r.result;
         }
 
         r.finished=true;
-        write(commPipe[1], &r, sizeof(r));
+        len = write(commPipe[1], &r, sizeof(r));
+        assert(len == sizeof(r) && "short write");
 
         std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
 
@@ -893,13 +897,15 @@ int cbmc_parseoptionst::doit_k_induction()
           r = fc.startSolving();
 
           // Write result
-          write(commPipe[1], &r, sizeof(r));
+          len = write(commPipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
 
           if(!r.result) return r.result;
         }
 
         r.finished=true;
-        write(commPipe[1], &r, sizeof(r));
+        len = write(commPipe[1], &r, sizeof(r));
+        assert(len == sizeof(r) && "short write");
 
         std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
 
@@ -957,13 +963,15 @@ int cbmc_parseoptionst::doit_k_induction()
           r = is.startSolving();
 
           // Write result
-          write(commPipe[1], &r, sizeof(r));
+          len = write(commPipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
 
           if(!r.result) return r.result;
         }
 
         r.finished=true;
-        write(commPipe[1], &r, sizeof(r));
+        len = write(commPipe[1], &r, sizeof(r));
+        assert(len == sizeof(r) && "short write");
 
         std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
 
