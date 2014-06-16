@@ -208,7 +208,6 @@ protected:
 
   void check_template_restrictions(
     const irept &cpp_name,
-    const irep_idt &final_identifier,
     const typet &final_type);
 
   void convert_template_declaration(cpp_declarationt &declaration);

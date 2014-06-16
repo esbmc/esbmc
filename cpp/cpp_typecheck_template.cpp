@@ -61,9 +61,9 @@ Function: cpp_typecheckt::check_template_restrictions
 
 \*******************************************************************/
 
+// XXX jmorse -- this method is unused.
 void cpp_typecheckt::check_template_restrictions(
   const irept &cpp_name,
-  const irep_idt &final_identifier,
   const typet &final_type)
 {
   if(final_type.id()=="template")
