@@ -118,13 +118,21 @@ ingest_symbol(irep_idt name, std::multimap<irep_idt, irep_idt> &deps, std::list<
   return;
 }
 
+#ifdef NO_CPROVER_LIBRARY
+void
+add_cprover_library(
+  contextt &context __attribute__((unused)),
+  message_handlert &message_handler __attribute__((unused)))
+{
+  return;
+}
+
+#else
+
 void add_cprover_library(
   contextt &context,
   message_handlert &message_handler)
 {
-#ifdef NO_CPROVER_LIBRARY
-  return;
-#else
   contextt new_ctx, store_ctx;
   goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;
@@ -233,5 +241,5 @@ void add_cprover_library(
   ansi_c_language.merge_context(
       context, store_ctx, message_handler, "<built-in-library>");
 
-#endif
 }
+#endif
