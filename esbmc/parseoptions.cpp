@@ -40,7 +40,6 @@ extern "C" {
 #include <goto-programs/set_claims.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/string_abstraction.h>
-#include <goto-programs/string_instrumentation.h>
 #include <goto-programs/loop_numbers.h>
 
 #include <goto-programs/add_race_assertions.h>
@@ -1699,12 +1698,6 @@ bool cbmc_parseoptionst::process_goto_program(
 {
   try
   {
-    if(cmdline.isset("string-abstraction"))
-    {
-      string_instrumentation(
-        context, *get_message_handler(), goto_functions);
-    }
-
     namespacet ns(context);
 
     // do partial inlining
