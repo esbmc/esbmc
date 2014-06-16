@@ -83,8 +83,10 @@ AC_CHECK_FUNC(strlcpy, [AC_DEFINE([HAVE_STRLCPY], [true], [strlcpy present])], [
 
 LT_LIB_DLLOAD
 
-AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x"]])
+AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -Werror -std=c++0x"]])
 AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W"]])
+
+AC_SUBST([ESBMC_CXXFLAGS_WARNINGS],[["-Wall -Wextra -W -std=c++0x"]])
 
 if test -z "$Z3PATH"; then
   echo "You must set Z3PATH. Or else.";
