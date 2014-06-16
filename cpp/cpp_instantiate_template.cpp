@@ -275,7 +275,6 @@ const symbolt &cpp_typecheckt::instantiate_template(
   const cpp_template_args_tct &full_template_args,
   const typet &specialization)
 {
-  symbolt *output_new_symbol = NULL;
 
   if(instantiation_stack.size()==50)
   {
