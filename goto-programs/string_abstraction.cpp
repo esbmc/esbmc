@@ -497,7 +497,9 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
 
   // However, don't assign to NULL - which will have been passed in if the
   // caller discards the return value
-  label = irep_idt("strabs_ret_str_" + func_return_num++);
+  std::stringstream ss;
+  ss << "strabs_ret_str_" << func_return_num++;
+  label = irep_idt(ss.str());
   it->labels.push_back(label);
 
   goto_programt tmp;
