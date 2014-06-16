@@ -168,6 +168,7 @@ static const char *cpp_linux_defs[] = {
 NULL
 };
 
+#ifdef ONAMAC
 static const char *cpp_mac_defs[] = {
 "__APPLE__",
 "__GNUC__",
@@ -175,13 +176,16 @@ static const char *cpp_mac_defs[] = {
 "_FORTIFY_SOURCE=0",
 NULL,
 };
+#endif
 
+#ifdef WIN32
 static const char *cpp_windows_defs[] = {
 "_WIN32",
 "__restrict__=/**/",
 "__restrict=/**/",
 NULL
 };
+#endif
 
 static const char *cpp_ansic_defs[] = {
 "__STDC_VERSION__=199901L",
