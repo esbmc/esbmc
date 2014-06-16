@@ -1088,20 +1088,6 @@ type_to_string(const irep_idt &theval, int indent __attribute__((unused)))
   return theval.as_string();
 }
 
-static inline __attribute__((always_inline)) std::string
-type_to_string(const type2t::type_ids &id __attribute__((unused)),
-               int indent __attribute__((unused)))
-{
-  return "";
-}
-
-static inline __attribute__((always_inline)) std::string
-type_to_string(const expr2t::expr_ids &id __attribute__((unused)),
-               int indent __attribute__((unused)))
-{
-  return "";
-}
-
 static inline __attribute__((always_inline)) bool
 do_type_cmp(const bool &side1, const bool &side2)
 {
