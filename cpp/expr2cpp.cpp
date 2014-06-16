@@ -353,8 +353,8 @@ Function: expr2cppt::convert_cpp_this
 \*******************************************************************/
 
 std::string expr2cppt::convert_cpp_this(
-  const exprt &src,
-  unsigned precedence)
+  const exprt &src __attribute__((unused)),
+  unsigned precedence __attribute__((unused)))
 {
   return "this";
 }
@@ -373,7 +373,7 @@ Function: expr2cppt::convert_cpp_new
 
 std::string expr2cppt::convert_cpp_new(
   const exprt &src,
-  unsigned precedence)
+  unsigned precedence __attribute__((unused)))
 {
   std::string dest;
 
