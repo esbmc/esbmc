@@ -18,7 +18,6 @@ Date: July 2006
 class goto_program_serializationt {
   private:
     irep_serializationt irepconverter;
-    std::list<irept> irepcache;
     
   public:
     goto_program_serializationt(irep_serializationt::ireps_containert &ic) : 
