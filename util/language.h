@@ -20,8 +20,6 @@ class languaget
 public:
   // parse file
 
-  virtual bool preprocess() { return false; }
-
   virtual bool parse(
     const std::string &path,
     message_handlert &message_handler)=0;
@@ -54,13 +52,6 @@ public:
     contextt &context,
     const std::string &module,
     message_handlert &message_handler)=0;
-
-  // merge two contextt's
-
-  virtual bool merge_context() const
-  {
-    throw "Language front-end does not support context merging";
-  }
 
   // language id / description
 
