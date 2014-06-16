@@ -1064,26 +1064,6 @@ type_to_string(const std::vector<irep_idt> &theval,
 }
 
 static inline __attribute__((always_inline)) std::string
-type_to_string(const std::vector<unsigned int> &theval,
-               int indent __attribute__((unused)))
-{
-  char buffer[64];
-  std::string astring = "\n";
-  int i;
-
-  i = 0;
-  for (std::vector<unsigned int>::const_iterator it = theval.begin();
-       it != theval.end(); it++) {
-    snprintf(buffer, 63, "%d", i);
-    buffer[63] = '\0';
-    astring += indent_str(indent) + std::string(buffer) + ": " + i2string(*it) + "\n";
-    i++;
-  }
-
-  return astring;
-}
-
-static inline __attribute__((always_inline)) std::string
 type_to_string(const expr2tc &theval, int indent)
 {
 
@@ -1178,13 +1158,6 @@ do_type_cmp(const std::vector<type2tc> &side1,
 static inline __attribute__((always_inline)) bool
 do_type_cmp(const std::vector<irep_idt> &side1,
             const std::vector<irep_idt> &side2)
-{
-  return (side1 == side2);
-}
-
-static inline __attribute__((always_inline)) bool
-do_type_cmp(const std::vector<unsigned int> &side1,
-            const std::vector<unsigned int> &side2)
 {
   return (side1 == side2);
 }
@@ -1327,17 +1300,6 @@ do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
 static inline __attribute__((always_inline)) int
 do_type_lt(const std::vector<irep_idt> &side1,
            const std::vector<irep_idt> &side2)
-{
-  if (side1 < side2)
-    return -1;
-  else if (side2 < side1)
-    return 1;
-  return 0;
-}
-
-static inline __attribute__((always_inline)) int
-do_type_lt(const std::vector<unsigned int> &side1,
-           const std::vector<unsigned int> &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1573,22 +1535,6 @@ do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const std::vector<unsigned int> &theval, hacky_hash &hash)
-{
-  for (std::vector<unsigned int>::const_iterator it = theval.begin();
-       it != theval.end(); it++)
-    hash.ingest((void*)&(*it), sizeof(unsigned int));
-}
-
-static inline __attribute__((always_inline)) void
-do_type_hash(const std::vector<unsigned int> &theval, crypto_hash &hash)
-{
-  for (std::vector<unsigned int>::const_iterator it = theval.begin();
-       it != theval.end(); it++)
-    hash.ingest((void*)&(*it), sizeof(unsigned int));
-}
-
-static inline __attribute__((always_inline)) void
 do_type_crc(const expr2tc &theval, hacky_hash &hash)
 {
 
@@ -1670,7 +1616,6 @@ do_type_hash(const expr2t::expr_ids &i __attribute__((unused)),
 
 static inline __attribute__((always_inline)) void do_type_list_operands(const symbol_data::renaming_level &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<unsigned int> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const std::list<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const bool &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1684,7 +1629,6 @@ static inline __attribute__((always_inline)) void do_type_list_operands(const st
 
 static inline __attribute__((always_inline)) void do_type_list_operands(symbol_data::renaming_level &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<unsigned int> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(std::list<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(bool &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
