@@ -1379,7 +1379,7 @@ Function: string_abstractiont::abstract_function_call
 \*******************************************************************/
 
 void string_abstractiont::abstract_function_call(
-  goto_programt &dest,
+  goto_programt &dest __attribute__((unused)),
   goto_programt::targett target)
 {
   std::vector<expr2tc> new_args;
