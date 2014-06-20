@@ -114,8 +114,6 @@ private:
   virtual smt_ast *overflow_cast(const expr2tc &expr);
   virtual const smt_ast *overflow_neg(const expr2tc &expr);
 
-  virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
-
   virtual void add_array_constraints_for_solving();
   virtual void add_tuple_constraints_for_solving();
   void push_array_ctx(void);

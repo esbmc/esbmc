@@ -1010,13 +1010,6 @@ z3_convt::tuple_get(const expr2tc &expr)
   return outstruct;
 }
 
-smt_ast *
-z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
-{
-  const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(sort);
-  return new_ast(ctx.fresh_const(tag.c_str(), zs->s), sort);
-}
-
 const smt_ast *
 z3_convt::overflow_arith(const expr2tc &expr)
 {
