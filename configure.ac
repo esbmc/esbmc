@@ -9,6 +9,8 @@ AC_CONFIG_MACRO_DIR([build-aux/m4])
 
 AC_ARG_VAR([Z3PATH], [Path to Z3 installation directory])
 
+AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
+
 AC_PROG_CC
 AC_PROG_CXX
 AC_PROG_AWK
