@@ -9,10 +9,8 @@ AC_CONFIG_MACRO_DIR([build-aux/m4])
 
 AC_ARG_VAR([Z3PATH], [Path to Z3 installation directory])
 
-AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
-
-AC_PROG_CC
-AC_PROG_CXX
+AC_PROG_CC(clang gcc)
+AC_PROG_CXX(clang++ g++)
 AC_PROG_AWK
 AC_PROG_CPP
 AC_PROG_SED
@@ -20,6 +18,8 @@ AC_PROG_YACC
 AC_PROG_LEX
 AC_PROG_MAKE_SET
 AC_PROG_RANLIB
+
+AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
 
 AM_PROG_AR
 AM_PROG_LEX
