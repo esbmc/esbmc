@@ -97,5 +97,30 @@ fi
 
 AC_HEADER_STDC
 
+findsolver () {
+  dirs=$1
+  files=$2
+  output=""
+  for dir in dirs; do
+    if ! test -d $dir; then
+      continue
+    fi
+
+    succ=1
+    for file in files; do
+      if ! test -f $dir/$file; then
+        succ=0;
+        break;
+      fi
+    done
+
+    if test $succ = 1; then
+      output="$output $dir"
+    fi
+  done
+
+  return $output
+}
+
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile])
 AC_OUTPUT
