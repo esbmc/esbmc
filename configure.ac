@@ -98,9 +98,13 @@ fi
 AC_HEADER_STDC
 
 findsolver () {
-  dirs=$1
-  files=$2
+  solvername=$1
+  dirs=$2
+  files=$3
   output=""
+
+  AC_MSG_CHECKING([location of $solvername])
+
   for dir in dirs; do
     if ! test -d $dir; then
       continue
@@ -119,8 +123,26 @@ findsolver () {
     fi
   done
 
+  if test -z "$output"; then
+    AC_MSG_RESULT([not found])
+  else
+    for loc in "$output"; do
+      AC_MSG_RESULT([$loc]);
+      break;
+    done
+  fi
+
   return $output
 }
+
+# XXX -- switch between correct satdirs.
+
+# Library changes place between macs and other platforms :/
+z3files="include/z3_api.h include/z3.h include/z3++.h"
+z3dirs="$SATDIR64 $HOME"
+
+findsolver "z3" $z3files $z3dirs
+z3=$?
 
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile])
 AC_OUTPUT
