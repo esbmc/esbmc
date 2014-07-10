@@ -12,10 +12,10 @@ INCLUDES+= -I $(Z3)/include
 endif
 
 ifdef USE_SOLVER_BOOLECTOR
-BOOLECTOR = $(SATDIR)/boolector
+BOOLECTOR = $(SATDIR)/boolector-1.6.0-with-sat-solvers
 CXXFLAGS+= -DBOOLECTOR
-SOLVER_LIBS+= -L$(BOOLECTOR) -lboolector
-INCLUDES+= -I $(BOOLECTOR)
+SOLVER_LIBS+= -L$(BOOLECTOR)/boolector -lboolector -L$(BOOLECTOR)/minisat/build/release/lib -lminisat
+INCLUDES+= -I $(BOOLECTOR)/boolector
 endif
 
 ifdef USE_SOLVER_MINISAT
