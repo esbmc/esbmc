@@ -97,52 +97,29 @@ fi
 
 AC_HEADER_STDC
 
-findsolver () {
-  solvername=$1
-  dirs=$2
-  files=$3
-  output=""
+m4_define(ESBMC_FINDSOLVER_ADDPREFIX,
+  dnl $1 = prefix
+  dnl $2 = list of filenames
+  m4_combine(", ", 
+    [m4_foreach(thevar, $2, "$1,")] dnl List of prefix, len($2) times
+    "/",
+    $2)
+  )
 
-  AC_MSG_CHECKING([location of $solvername])
-
-  for dir in dirs; do
-    if ! test -d $dir; then
-      continue
-    fi
-
-    succ=1
-    for file in files; do
-      if ! test -f $dir/$file; then
-        succ=0;
-        break;
-      fi
-    done
-
-    if test $succ = 1; then
-      output="$output $dir"
-    fi
-  done
-
-  if test -z "$output"; then
-    AC_MSG_RESULT([not found])
-  else
-    for loc in "$output"; do
-      AC_MSG_RESULT([$loc]);
-      break;
-    done
-  fi
-
-  return $output
-}
-
+m4_define(ESBMC_FINDSOLVER, [
+  dnl $1 = list of locations
+  dnl $2 = list of files that make up the solver
+  dnl $3 = name of solver
+  dnl Returns list of solvers that do actually exist.
+  AC_MSG_CHECKING([location of $3])
+  m4_foreach(thisloc, $1,
+    AC_CHECK_FILES(ESBMC_FINDSOLVER_ADDPREFIX(thisloc, $2), thisloc, []))])
+    
 # XXX -- switch between correct satdirs.
 
 # Library changes place between macs and other platforms :/
 z3files="include/z3_api.h include/z3.h include/z3++.h"
 z3dirs="$SATDIR64 $HOME"
-
-findsolver "z3" $z3files $z3dirs
-z3=$?
 
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile])
 AC_OUTPUT
