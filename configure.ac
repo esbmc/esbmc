@@ -90,11 +90,6 @@ AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W"]])
 
 AC_SUBST([ESBMC_CXXFLAGS_WARNINGS],[["-Wall -Wextra -W -std=c++0x"]])
 
-if test -z "$Z3PATH"; then
-  echo "You must set Z3PATH. Or else.";
-  exit 1;
-fi
-
 AC_HEADER_STDC
 
 AC_DEFUN([ESBMC_FINDSOLVER_ADDPREFIX], [m4_foreach(thevar, [$2], [$1/thevar$3])]dnl
