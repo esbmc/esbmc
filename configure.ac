@@ -114,7 +114,46 @@ AC_DEFUN([ESBMC_CHECK_FILES], [
   ]
 )
 
+dnl Yes, I know
+AC_DEFUN([ESBMC_CHECK_HEADERS], [
+  dnl $1 = Path prefix
+  dnl $2 = File list
+  dnl $3 = output var to set
+  AC_CHECK_HEADERS(ESBMC_FINDSOLVER_ADDPREFIX($1, [$2], [ ]))
+  $3=yes
+  for fname in ESBMC_FINDSOLVER_ADDPREFIX($1, [$2], [ ]); do
+    goodfname=AS_TR_SH($fname)
+    AS_VAR_COPY([var], [ac_cv_header_$goodfname])
+    AS_IF([test $var = no], [$3=no;])
+  done
+  ]
+)
+
+AC_DEFUN([ESBMC_CHECK_SOLVER], [
+  dnl $1 = Paths
+  dnl $2 = Headers
+  dnl $3 = solvername
+  dnl $4 = The base solver library file, i.e. z3 for -lz3
+  dnl $5 = A function in the library to test for presence of
+  dnl XXX output
+  m4_foreach(path, [$1], [
+    $esbmc_path_name=AS_TR_SH($path)
+    AS_VAR_SET(esbmc_check_solver_${esbmc_path_name}, no)
+    ESBMC_CHECK_FILES(path, [$2], has_files)
+    AS_IF([test $has_files = yes], [
+    ESBMC_CHECK_HEADERS(path, [$2], has_headers)
+    AS_IF([test $has_headers = yes], [
+    AC_CHECK_LIB($4, $5, [
+                          echo "Do something here"
+                          echo "Also, need to mess with linker path"
+    ], [], [])
+    ])
+    ])
+  ])
+])
+
 m4_define(z3_build_headers, [include/z3_api.h, include/z3.h, include/z3++.h])
+m4_define(z3_possible_locs, [$SATDIR64, $SATDIR, $HOME, $Z3DIR])
 
 ESBMC_CHECK_FILES($SATDIR64/z3, z3_build_headers, beardvar)
 
