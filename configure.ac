@@ -114,7 +114,9 @@ AC_DEFUN([ESBMC_CHECK_FILES], [
   ]
 )
 
-ESBMC_CHECK_FILES($SATDIR64/z3, [include/z3_api.h, include/z3.h, include/z3++.h], beardvar)
+m4_define(z3_build_headers, [include/z3_api.h, include/z3.h, include/z3++.h])
+
+ESBMC_CHECK_FILES($SATDIR64/z3, z3_build_headers, beardvar)
 
 # XXX -- switch between correct satdirs.
 
