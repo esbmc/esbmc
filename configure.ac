@@ -97,30 +97,30 @@ fi
 
 AC_HEADER_STDC
 
-AC_DEFUN([ESBMC_FINDSOLVER_ADDPREFIX],
+AC_DEFUN([ESBMC_FINDSOLVER_ADDPREFIX], [m4_foreach(thevar, [$2], [$1/thevar$3])]dnl
   dnl $1 = prefix
-  dnl $2 = list of filenames
-  [dnl
-    m4_define(prefix, [$1])dnl
-    m4_foreach(thevar, [$2], [prefix/thevar, ])dnl
-    m4_undefine([prefix])dnl
-  ]dnl
+  dnl $2 = list of filenames, comma separated
+  dnl $3 = separator
+  dnl evaluates to list of files, not comma separated
+  dnl
 )
 
-AC_DEFUN([ESBMC_CHECK_FILES],
-  dnl $1 = file list, comma separated
-  dnl $2 = output var to set
-  AC_CHECK_FILES($1)
-  $2=yes
-  for file in $1; do
-    pathname=`AS_ECHO_N($file) | sed s#/#_#`
-    pathname="ac_cv_file_${pathname}"
-    AS_IF([test $pathname = no], $2=no;)
+AC_DEFUN([ESBMC_CHECK_FILES], [
+  dnl $1 = Path prefix
+  dnl $2 = File list
+  dnl $3 = output var to set
+  AC_CHECK_FILES(ESBMC_FINDSOLVER_ADDPREFIX($1, [$2], [ ]))
+  $3=yes
+  for fname in ESBMC_FINDSOLVER_ADDPREFIX($1, [$2], [ ]); do
+    goodfname=AS_TR_SH($fname)
+    AS_VAR_COPY([var], [ac_cv_file_$goodfname])
+    AS_IF([test $var = no], [$3=no;])
   done
+  ]
 )
 
-ESBMC_CHECK_FILES([ESBMC_FINDSOLVER_ADDPREFIX($SATDIR64, [include/z3_api.h, include/z3.h, include/z3++.h])], beardvar)
-    
+ESBMC_CHECK_FILES($SATDIR64/z3, [include/z3_api.h, include/z3.h, include/z3++.h], beardvar)
+
 # XXX -- switch between correct satdirs.
 
 # Library changes place between macs and other platforms :/
