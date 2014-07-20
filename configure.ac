@@ -100,26 +100,53 @@ AC_HEADER_STDC
 m4_define(ESBMC_FINDSOLVER_ADDPREFIX,
   dnl $1 = prefix
   dnl $2 = list of filenames
-  m4_combine(", ", 
-    [m4_foreach(thevar, $2, "$1,")] dnl List of prefix, len($2) times
-    "/",
-    $2)
-  )
+  [
+    define(prefix, [$1])
+    m4_foreach(thevar, [$2], [prefix/thevar, ] )
+    m4_undefine([prefix])
+  ]
+)
 
-m4_define(ESBMC_FINDSOLVER, [
+m4_define(ESBMC_FINDSOLVER1,
   dnl $1 = list of locations
   dnl $2 = list of files that make up the solver
   dnl $3 = name of solver
   dnl Returns list of solvers that do actually exist.
-  AC_MSG_CHECKING([location of $3])
   m4_foreach(thisloc, $1,
-    AC_CHECK_FILES(ESBMC_FINDSOLVER_ADDPREFIX(thisloc, $2), thisloc, []))])
+    AC_CHECK_FILES(ESBMC_FINDSOLVER_ADDPREFIX(thisloc, $2), thisloc, [])))
+
+m4_define(ESBMC_FINDSOLVER, [
+  AC_MSG_CHECKING([location of $3])
+  ESBMC_FINDSOLVER1($1, $2, $3)
+  m4_if(findsolver_res, [],
+    dnl If no solvers found
+    AC_MSG_RESULT(Could not find any instance of $3)
+  ,
+  [
+    dnl If solvers found,
+     m4_if(m4_count(findsolver_res), 1,
+      [
+        dnl Single solver, just return it,
+        AC_MSG_RESULT(Found instance of $3 at findsolver_res),
+        findsolver_res
+      ],
+      [
+        dnl Multiple solvers, pick first one.
+        AC_MSG_RESULT(Found multiple instances of $3 at [findsolver_res], picking the first one. )
+        m4_warn(all, You should explicitly specify the path to $3 on the command line if you want to use a different instance of it)
+        car(findsolver_res)
+      ])
+    ]
+  )
+  ]
+)
+
+
     
 # XXX -- switch between correct satdirs.
 
 # Library changes place between macs and other platforms :/
-z3files="include/z3_api.h include/z3.h include/z3++.h"
-z3dirs="$SATDIR64 $HOME"
+ESBMC_FINDSOLVER([$SATDIR64 $HOME], [include/z3_api.h include/z3.h include/z3++.h], Z3)
 
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile])
 AC_OUTPUT
