@@ -100,11 +100,11 @@ AC_HEADER_STDC
 AC_DEFUN([ESBMC_FINDSOLVER_ADDPREFIX],
   dnl $1 = prefix
   dnl $2 = list of filenames
-  [
-    m4_define(prefix, [$1])
-    m4_foreach(thevar, [$2], [prefix/thevar, ])
-    m4_undefine([prefix])
-  ]
+  [dnl
+    m4_define(prefix, [$1])dnl
+    m4_foreach(thevar, [$2], [prefix/thevar, ])dnl
+    m4_undefine([prefix])dnl
+  ]dnl
 )
 
 AC_DEFUN([ESBMC_CHECK_FILES],
