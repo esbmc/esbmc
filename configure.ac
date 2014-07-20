@@ -107,8 +107,19 @@ AC_DEFUN([ESBMC_FINDSOLVER_ADDPREFIX],
   ]
 )
 
-ESBMC_FINDSOLVER_ADDPREFIX(beards, [include/z3_api.h include/z3.h include/z3++.h])
+AC_DEFUN([ESBMC_CHECK_FILES],
+  dnl $1 = file list, comma separated
+  dnl $2 = output var to set
+  AC_CHECK_FILES($1)
+  $2=yes
+  for file in $1; do
+    pathname=`AS_ECHO_N($file) | sed s#/#_#`
+    pathname="ac_cv_file_${pathname}"
+    AS_IF([test $pathname = no], $2=no;)
+  done
+)
 
+ESBMC_CHECK_FILES([ESBMC_FINDSOLVER_ADDPREFIX($SATDIR64, [include/z3_api.h, include/z3.h, include/z3++.h])], beardvar)
     
 # XXX -- switch between correct satdirs.
 
