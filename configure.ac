@@ -97,7 +97,7 @@ fi
 
 AC_HEADER_STDC
 
-m4_define(ESBMC_FINDSOLVER_ADDPREFIX,
+AC_DEFUN([ESBMC_FINDSOLVER_ADDPREFIX],
   dnl $1 = prefix
   dnl $2 = list of filenames
   [
