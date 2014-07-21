@@ -138,7 +138,12 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
   dnl $6 = include subpath
   dnl $7 = list of potential library subpaths
   dnl XXX output
+  AS_VAR_SET(esbmc_found_solver_$3, no)
   m4_foreach(path, [$1], [
+    dnl Skip if we already have one
+    AS_VAR_COPY(alreadygotone, esbmc_found_solver_$3)
+    AS_IF([test $alreadygotone = "no"], [
+
     esbmc_path_name=AS_TR_SH($3_$path)
     AS_VAR_SET(esbmc_check_solver_${esbmc_path_name}, no)
     ESBMC_CHECK_FILES(path, [$2], has_files)
@@ -163,6 +168,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     AC_CHECK_LIB($4, $5, [
       AS_VAR_SET(esbmc_check_solver_libthere_${esbmc_path_name}, yes)
       AS_VAR_SET(esbmc_check_solver_libdir_${esbmc_path_name}, libdir)
+      AS_VAR_SET(esbmc_found_solver_$3, yes)
       AS_ECHO("Found solver at path/libdir")
     ], [
       dnl Reset LIBS if not found
@@ -173,6 +179,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     unset ac_cv_lib_$4_$5
 
 
+    ])
     ])
     ])
     ])
