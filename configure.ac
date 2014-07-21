@@ -153,6 +153,11 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     AS_VAR_SET(esbmc_check_solver_libthere_${esbmc_path_name}, no)
     AS_VAR_SET(esbmc_check_solver_libdir_${esbmc_path_name}, "")
     m4_foreach(libdir, [$7], [
+
+    # Only test if we haven't found something
+    AS_VAR_COPY(alreadydone, esbmc_check_solver_libthere_${esbmc_path_name})
+    AS_IF([test $alreadydone = "no"], [
+
     esbmc_check_solver_old_libs=$LIBS
     AS_VAR_APPEND(LIBS, " -L path/libdir ")
     AC_CHECK_LIB($4, $5, [
@@ -166,6 +171,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
 
     AS_VAR_SET(LIBS, $esbmc_check_solver_old_libs)
 
+    ])
     ])
     ])
     ])
