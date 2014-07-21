@@ -197,8 +197,5 @@ ESBMC_CHECK_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context
 
 # XXX -- switch between correct satdirs.
 
-# Library changes place between macs and other platforms :/
-dnl ESBMC_FINDSOLVER([$SATDIR64 $HOME], [include/z3_api.h include/z3.h include/z3++.h], Z3)
-
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile])
 AC_OUTPUT
