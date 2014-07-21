@@ -152,7 +152,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
   ])
 ])
 
-m4_define(z3_build_headers, [include/z3_api.h, include/z3.h, include/z3++.h])
+m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64, $SATDIR, $HOME, $Z3DIR])
 
 ESBMC_CHECK_SOLVER([$SATDIR64/z3], [z3_build_headers], z3, z3, Z3_mk_context)
