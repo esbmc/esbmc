@@ -190,10 +190,10 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
 ])
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
-m4_define(z3_possible_locs, [$SATDIR64, $SATDIR, $HOME, $Z3DIR])
+m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
 m4_define(z3_possible_libdirs, [lib, bin, x64])
 
-ESBMC_CHECK_SOLVER([$SATDIR64/z3], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs])
+ESBMC_CHECK_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs])
 
 # XXX -- switch between correct satdirs.
 
