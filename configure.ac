@@ -136,6 +136,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
   dnl $4 = The base solver library file, i.e. z3 for -lz3
   dnl $5 = A function in the library to test for presence of
   dnl $6 = include subpath
+  dnl $7 = list of potential library subpaths
   dnl XXX output
   m4_foreach(path, [$1], [
     esbmc_path_name=AS_TR_SH($3_$path)
@@ -148,10 +149,24 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     AS_VAR_APPEND(CXXFLAGS, " -I path/$6 ")
     ESBMC_CHECK_HEADERS(path, [$2], has_headers)
     AS_IF([test $has_headers = yes], [
+
+    AS_VAR_SET(esbmc_check_solver_libthere_${esbmc_path_name}, no)
+    AS_VAR_SET(esbmc_check_solver_libdir_${esbmc_path_name}, "")
+    m4_foreach(libdir, [$7], [
+    esbmc_check_solver_old_libs=$LIBS
+    AS_VAR_APPEND(LIBS, " -L path/libdir ")
     AC_CHECK_LIB($4, $5, [
-      AS_VAR_SET(esbmc_check_solver_${esbmc_path_name}, yes)
-      AS_ECHO("Found solver at path")
+      AS_VAR_SET(esbmc_check_solver_libthere_${esbmc_path_name}, yes)
+      AS_VAR_SET(esbmc_check_solver_libdir_${esbmc_path_name}, libdir)
+      AS_ECHO("Found solver at path/libdir")
     ], [], [])
+
+    # Don't cache the library check, seeing how we're changing the env.
+    unset ac_cv_lib_$4_$5
+
+    AS_VAR_SET(LIBS, $esbmc_check_solver_old_libs)
+
+    ])
     ])
     ])
     CXXFLAGS=$esbmc_check_solver_old_cxxflags
@@ -161,8 +176,9 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64, $SATDIR, $HOME, $Z3DIR])
+m4_define(z3_possible_libdirs, [lib, bin, x64])
 
-ESBMC_CHECK_SOLVER([$SATDIR64/z3], [z3_build_headers], z3, z3, Z3_mk_context, include)
+ESBMC_CHECK_SOLVER([$SATDIR64/z3], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs])
 
 # XXX -- switch between correct satdirs.
 
