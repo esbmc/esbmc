@@ -164,12 +164,14 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
       AS_VAR_SET(esbmc_check_solver_libthere_${esbmc_path_name}, yes)
       AS_VAR_SET(esbmc_check_solver_libdir_${esbmc_path_name}, libdir)
       AS_ECHO("Found solver at path/libdir")
-    ], [], [])
+    ], [
+      dnl Reset LIBS if not found
+      AS_VAR_SET(LIBS, $esbmc_check_solver_old_libs)
+    ], [])
 
     # Don't cache the library check, seeing how we're changing the env.
     unset ac_cv_lib_$4_$5
 
-    AS_VAR_SET(LIBS, $esbmc_check_solver_old_libs)
 
     ])
     ])
