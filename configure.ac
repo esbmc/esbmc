@@ -182,10 +182,10 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     ])
     ])
     ])
-    ])
-    ])
     CXXFLAGS=$esbmc_check_solver_old_cxxflags
     CPPFLAGS=$esbmc_check_solver_old_cppflags
+    ])
+    ])
   ])
 ])
 
