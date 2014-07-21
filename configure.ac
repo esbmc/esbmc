@@ -135,12 +135,17 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
   dnl $3 = solvername
   dnl $4 = The base solver library file, i.e. z3 for -lz3
   dnl $5 = A function in the library to test for presence of
+  dnl $6 = include subpath
   dnl XXX output
   m4_foreach(path, [$1], [
-    $esbmc_path_name=AS_TR_SH($3_$path)
+    esbmc_path_name=AS_TR_SH($3_$path)
     AS_VAR_SET(esbmc_check_solver_${esbmc_path_name}, no)
     ESBMC_CHECK_FILES(path, [$2], has_files)
     AS_IF([test $has_files = yes], [
+    esbmc_check_solver_old_cppflags=$CPPFLAGS
+    esbmc_check_solver_old_cxxflags=$CXXFLAGS
+    AS_VAR_APPEND(CPPFLAGS, " -I path/$6 ")
+    AS_VAR_APPEND(CXXFLAGS, " -I path/$6 ")
     ESBMC_CHECK_HEADERS(path, [$2], has_headers)
     AS_IF([test $has_headers = yes], [
     AC_CHECK_LIB($4, $5, [
@@ -149,13 +154,15 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     ], [], [])
     ])
     ])
+    CXXFLAGS=$esbmc_check_solver_old_cxxflags
+    CPPFLAGS=$esbmc_check_solver_old_cppflags
   ])
 ])
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64, $SATDIR, $HOME, $Z3DIR])
 
-ESBMC_CHECK_SOLVER([$SATDIR64/z3], [z3_build_headers], z3, z3, Z3_mk_context)
+ESBMC_CHECK_SOLVER([$SATDIR64/z3], [z3_build_headers], z3, z3, Z3_mk_context, include)
 
 # XXX -- switch between correct satdirs.
 
