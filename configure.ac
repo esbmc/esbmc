@@ -137,15 +137,15 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
   dnl $5 = A function in the library to test for presence of
   dnl XXX output
   m4_foreach(path, [$1], [
-    $esbmc_path_name=AS_TR_SH($path)
+    $esbmc_path_name=AS_TR_SH($3_$path)
     AS_VAR_SET(esbmc_check_solver_${esbmc_path_name}, no)
     ESBMC_CHECK_FILES(path, [$2], has_files)
     AS_IF([test $has_files = yes], [
     ESBMC_CHECK_HEADERS(path, [$2], has_headers)
     AS_IF([test $has_headers = yes], [
     AC_CHECK_LIB($4, $5, [
-                          echo "Do something here"
-                          echo "Also, need to mess with linker path"
+      AS_VAR_SET(esbmc_check_solver_${esbmc_path_name}, yes)
+      AS_ECHO("Found solver at path")
     ], [], [])
     ])
     ])
