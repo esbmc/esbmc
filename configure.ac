@@ -193,7 +193,20 @@ m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
 m4_define(z3_possible_libdirs, [lib, bin, x64])
 
-ESBMC_CHECK_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs])
+AC_ARG_WITH([z3], [AS_HELP_STRING([--with-z3], [Enable Z3 solver])], [],
+            [with_z3=yes])
+
+AS_IF([test "x$with_z3" != xno], [
+
+  AS_IF([test "x$with_z3" != xyes], [
+    ESBMC_CHECK_SOLVER([$with_z3], [z3_build_headers], z3, z3,dnl
+                        Z3_mk_context, include, [z3_possible_libdirs])
+    ], [
+      ESBMC_CHECK_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3,dnl
+                          Z3_mk_context, include, [z3_possible_libdirs])
+      ]
+    )
+  ])
 
 # XXX -- switch between correct satdirs.
 
