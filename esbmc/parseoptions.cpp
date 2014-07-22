@@ -157,6 +157,12 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     exit(0);
   }
 
+  if (cmdline.isset("list-solvers")) {
+    // Generated for us by autoconf,
+    std::cout << "Available solvers: " << ESBMC_AVAILABLE_SOLVERS << std::endl;
+    exit(0);
+  }
+
   if(cmdline.isset("arrays-uf-always"))
     options.set_option("arrays-uf", "always");
   else if(cmdline.isset("arrays-uf-never"))
@@ -1978,5 +1984,6 @@ void cbmc_parseoptionst::help()
     " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
     " --timeout                    configure time limit, integer followed by {s,m,h}\n"
     " --enable-core-dump           don't disable core dump output\n"
+    " --list-solvers               List available solvers and exit\n"
     "\n";
 }
