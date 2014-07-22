@@ -193,22 +193,33 @@ m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
 m4_define(z3_possible_libdirs, [lib, bin, x64])
 
-AC_ARG_WITH([z3], [AS_HELP_STRING([--with-z3], [Enable Z3 solver])], [],
-            [with_z3=yes])
+m4_define(ESBMC_OPTIONAL_SOLVER, [
+  dnl $1 = Paths
+  dnl $2 = Headers
+  dnl $3 = solvername
+  dnl $4 = The base solver library file, i.e. z3 for -lz3
+  dnl $5 = A function in the library to test for presence of
+  dnl $6 = include subpath
+  dnl $7 = list of potential library subpaths
+  dnl XXX output
+  AC_ARG_WITH([$3], [AS_HELP_STRING([--with-$3], [Enable $3 solver])], [],
+              [with_$3=yes])
 
-AS_IF([test "x$with_z3" != xno], [
+  AS_IF([test "x$with_$3" != xno], [
 
-  AS_IF([test "x$with_z3" != xyes], [
-    ESBMC_CHECK_SOLVER([$with_z3], [z3_build_headers], z3, z3,dnl
-                        Z3_mk_context, include, [z3_possible_libdirs])
-    AS_IF([test "$esbmc_found_solver_z3" != "yes"],
-          [ AC_MSG_ERROR(["Path to z3 given on command line (with --with-z3), but can't use Z3 installation there"])])
-    ], [
-      ESBMC_CHECK_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3,dnl
-                          Z3_mk_context, include, [z3_possible_libdirs])
+    AS_IF([test "x$with_$3" != xyes], [
+      AS_VAR_SET(esbmc_with_dir_path, "$with_$3")
+      ESBMC_CHECK_SOLVER([$esbmc_with_dir_path], [$2], $3, $4, $5, $6, [$7])
+      AS_IF([test "$esbmc_found_solver_$3" != "yes"],
+            [ AC_MSG_ERROR(["Path to $3 given on command line (with --with-$3), but can't use $3 installation there"])])
+      ], [
+        ESBMC_CHECK_SOLVER([$1], [$2], $3, $4, $5, $6, [$7])
       ]
-    )
+      )
+    ])
   ])
+
+ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs])
 
 # XXX -- switch between correct satdirs.
 
