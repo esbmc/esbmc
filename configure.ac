@@ -177,7 +177,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     ], [])
 
     # Don't cache the library check, seeing how we're changing the env.
-    unset ac_cv_lib_$4_$5
+    AS_UNSET(ac_cv_lib_$4_$5)
 
 
     ])
