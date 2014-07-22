@@ -231,9 +231,18 @@ AC_OUTPUT
 AS_ECHO(["---------------------------------"])
 AS_ECHO(["Your solver configuration is thus"])
 AS_ECHO(["---------------------------------"])
+esbmc_found_a_solver=no
 m4_foreach(thesolver, [esbmc_all_solvers], [
   AS_IF([test "$[esbmc_found_solver_]thesolver" = "yes"], [
+    esbmc_found_a_solver=yes
     AS_ECHO("AS_HELP_STRING([thesolver], $[esbmc_found_solver_]thesolver[_path])")
   ]
   )
 ])
+AS_IF([test "$esbmc_found_a_solver" = "no"], [
+   AS_ECHO("WARNING: No solvers found. It's quite likely that this isn't what you want.")
+   AS_ECHO("")
+   AS_ECHO(["Configure \$[]SATDIR to point at a directory containing sat solvers, set an appropriate environmental variable, or pass a path to a solver to configure with --with-solvername=path"])
+   AS_ECHO("")
+   AS_ECHO(["You can still use ESBMC using the SMTLIB printer, however you only be able to output formulae to a file, or connect the SMTLIB printer to a solver process."])
+   ])
