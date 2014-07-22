@@ -9,6 +9,8 @@
 
 #include <vector>
 
+#include <ac_config.h>
+
 #include <boost/mpl/if.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/crc.hpp>
