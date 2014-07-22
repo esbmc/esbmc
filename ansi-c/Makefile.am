@@ -31,18 +31,17 @@ noinst_PROGRAMS = c2goto
 c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp -I$(top_srcdir)/utils
 c2goto_LDADD = libansic.la libansicscanner.la ../big-int/libbigint.a ../goto-programs/libgotoprograms.a ../langapi/liblangapi.a ../util/libutil.a cpp/libcpp.a ./headers/libheaders.a
 
-libclib_la_SOURCES = cprover_library.cpp
-libclib_la_LIBADD = clib32.o clib64.o
+libclib_la_SOURCES = cprover_library.cpp clib32.c clib64.c
 
-clib32.o: c2goto
+clib32.c: c2goto
 	./c2goto $(srcdir)/library/*.c --output clib32.goto --no-lock-check
-	$(srcdir)/headers/flail.sh clib32 clib32.goto | $(CC) $(CFLAGS) -x c - -c -o $@
+	$(srcdir)/headers/flail.sh clib32 clib32.goto > $@
 
-clib64.o: c2goto
+clib64.c: c2goto
 	./c2goto $(srcdir)/library/*.c --output clib64.goto --no-lock-check
-	$(srcdir)/headers/flail.sh clib64 clib64.goto | $(CC) $(CFLAGS) -x c - -c -o $@
+	$(srcdir)/headers/flail.sh clib64 clib64.goto > $@
 
 clean-local:
 	-rm scanner.cpp scanner.hpp parser.hpp parser.cpp
-	-rm clib64.goto clib32.goto
+	-rm clib64.goto clib32.goto clib64.c clib32.c
 .PHONY: clean-local
