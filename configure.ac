@@ -228,9 +228,10 @@ ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_cont
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile])
 AC_OUTPUT
 
-AS_ECHO(["---------------------------------"])
-AS_ECHO(["Your solver configuration is thus"])
-AS_ECHO(["---------------------------------"])
+AS_ECHO(["----------------------------------------"])
+AS_ECHO(["Your solver configuration is below"])
+AS_ECHO(["To override, pass --with-solvername=path"])
+AS_ECHO(["----------------------------------------"])
 esbmc_found_a_solver=no
 m4_foreach(thesolver, [esbmc_all_solvers], [
   AS_IF([test "$[esbmc_found_solver_]thesolver" = "yes"], [
