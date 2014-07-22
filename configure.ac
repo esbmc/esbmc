@@ -201,6 +201,8 @@ AS_IF([test "x$with_z3" != xno], [
   AS_IF([test "x$with_z3" != xyes], [
     ESBMC_CHECK_SOLVER([$with_z3], [z3_build_headers], z3, z3,dnl
                         Z3_mk_context, include, [z3_possible_libdirs])
+    AS_IF([test "$esbmc_found_solver_z3" != "yes"],
+          [ AC_MSG_ERROR(["Path to z3 given on command line (with --with-z3), but can't use Z3 installation there"])])
     ], [
       ESBMC_CHECK_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3,dnl
                           Z3_mk_context, include, [z3_possible_libdirs])
