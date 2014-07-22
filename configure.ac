@@ -170,6 +170,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
       AS_VAR_SET(esbmc_check_solver_libdir_${esbmc_path_name}, libdir)
       AS_VAR_SET(esbmc_found_solver_$3_path, path)
       AS_VAR_SET(esbmc_found_solver_$3, yes)
+      AS_VAR_APPEND(esbmc_list_of_solvers, " $3")
       AS_ECHO("Found solver at path/libdir")
     ], [
       dnl Reset LIBS if not found
@@ -227,7 +228,12 @@ m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
 m4_define(z3_possible_libdirs, [lib, bin, x64])
 
 
+esbmc_list_of_solvers="smtlib";
+
 ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs])
+
+# Define a list of solvers that we have
+AC_DEFINE_UNQUOTED([ESBMC_AVAILABLE_SOLVERS], ["$esbmc_list_of_solvers"], [List of ESBMC headers available to us])
 
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile])
 AC_OUTPUT
