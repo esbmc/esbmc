@@ -168,6 +168,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     AC_CHECK_LIB($4, $5, [
       AS_VAR_SET(esbmc_check_solver_libthere_${esbmc_path_name}, yes)
       AS_VAR_SET(esbmc_check_solver_libdir_${esbmc_path_name}, libdir)
+      AS_VAR_SET(esbmc_found_solver_$3_path, path)
       AS_VAR_SET(esbmc_found_solver_$3, yes)
       AS_ECHO("Found solver at path/libdir")
     ], [
@@ -227,10 +228,10 @@ ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_cont
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile])
 AC_OUTPUT
 
-AS_ECHO([Solver configuration:])
-m4_foreach(solver, [esbmc_all_solvers], [
-  AS_IF([test "$esbmc_found_[[solver]]_solver" = "yes"], [
-    AS_ECHO(AS_HELP_STRING([solver], [$esbmc_found_[[solver]]_solver]))
+AS_ECHO(["Solver configuration"])
+m4_foreach(thesolver, [esbmc_all_solvers], [
+  AS_IF([test "$[esbmc_found_solver_]thesolver" = "yes"], [
+    AS_ECHO("AS_HELP_STRING([thesolver], $[esbmc_found_solver_]thesolver[_path])")
   ]
   )
 ])
