@@ -104,7 +104,9 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   check_ltl = false;
   mon_thread_warning = false;
 
-  thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
+  bool ltl_mode =
+    (options.get_bool_option("ltl") || options.get_bool_option("ltl-dummy"));
+  thread_cswitch_threshold = (ltl_mode) ? 3 : 2;
 }
 
 execution_statet::execution_statet(const execution_statet &ex) :

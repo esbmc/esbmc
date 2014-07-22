@@ -123,6 +123,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"smt-thread-guard",	switc,		""	},
 { 0,	"smt-symex-guard",	switc,		""	},
 { 0,	"ltl",			switc,		""	},
+{ 0,	"ltl-dummy",            switc,		""	},
 { 0,	"symex-ssa-trace",	switc,		""	},
 { 0,	"double-assign-check",	switc,		""	},
 { 0,	"git-hash",		switc,		""	},
