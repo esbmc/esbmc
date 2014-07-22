@@ -183,8 +183,12 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     ])
     ])
     ])
-    CXXFLAGS=$esbmc_check_solver_old_cxxflags
-    CPPFLAGS=$esbmc_check_solver_old_cppflags
+
+     # Unset flags if no solver found yet
+    AS_IF([test "$[esbmc_found_solver_]$3" != "yes"], [
+      CXXFLAGS=$esbmc_check_solver_old_cxxflags
+      CPPFLAGS=$esbmc_check_solver_old_cppflags
+      ])
     ])
     ])
   ])
