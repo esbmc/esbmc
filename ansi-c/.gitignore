@@ -10,3 +10,5 @@ parser.cpp
 parser.hpp
 scanner.cpp
 scanner.hpp
+clib32.c
+clib64.c
