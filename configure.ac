@@ -3,9 +3,9 @@ AC_DEFINE([ESBMC_VERSION], ["1.23.99"], [ESBMC version number])
 
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADER(ac_config.h)
-AC_CONFIG_AUX_DIR([build-aux])
+AC_CONFIG_AUX_DIR([scripts/build-aux])
 AM_INIT_AUTOMAKE([1.13 -Wall -Werror foreign])
-AC_CONFIG_MACRO_DIR([build-aux/m4])
+AC_CONFIG_MACRO_DIR([scripts/build-aux/m4])
 
 AC_ARG_VAR([Z3PATH], [Path to Z3 installation directory])
 
