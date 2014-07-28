@@ -12,3 +12,5 @@ libtoolize
 automake --add-missing --foreign
 
 autoconf
+
+rm -rf autom4te.cache
