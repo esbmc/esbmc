@@ -16,6 +16,7 @@ Makefile.in
 aclocal.m4
 autom4te.cache
 install-sh
+libtool
 ac_config.h*
 *.a
 stamp-h1
