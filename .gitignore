@@ -2,6 +2,7 @@
 *.o
 *.lo
 *.swp
+*.la
 .deps
 .depends
 .project
