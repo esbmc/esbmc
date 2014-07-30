@@ -1456,7 +1456,6 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
     idx = static_cast<const z3_smt_ast*>(mk_smt_bvint(BigInt(index), false, bv_size));
 
   z3::expr e = select(za->e, idx->e);
-  delete idx;
   try {
     e = model.eval(e, false);
   } catch (z3::exception &e) {
@@ -1467,7 +1466,6 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
   z3_smt_ast *value = new_ast(e, convert_sort(subtype));
   type2tc res_type = (int_encoding) ? get_int_type(64) : get_uint_type(bv_size);
   expr2tc result = get_bv(res_type, value);
-  delete value;
 
   return result;
 }
