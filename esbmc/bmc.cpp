@@ -560,6 +560,13 @@ bool bmct::run_thread()
           (unsigned int) strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
         return false;
 
+    if (!options.get_bool_option("smt-during-symex")) {
+      delete runtime_solver;
+      runtime_solver = create_solver_factory("", is_cpp,
+                                             options.get_bool_option("int-encoding"),
+                                             ns, options);
+    }
+
     ret = run_solver(*equation, runtime_solver);
     return ret;
   }
