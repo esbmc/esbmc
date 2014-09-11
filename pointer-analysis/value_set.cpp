@@ -142,7 +142,7 @@ void value_sett::get_value_set_rec(
 
   if (is_unknown2t(expr) || is_invalid2t(expr))
   {
-    insert(dest, unknown2tc(original_type));
+    insert(dest, unknown2tc(original_type), mp_integer(0));
     return;
   }
   else if (is_index2t(expr))

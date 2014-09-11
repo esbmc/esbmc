@@ -376,7 +376,7 @@ public:
    *         it points to.
    *  @param dest A list to store pointed-at object expressions into.
    *  */
-  void get_value_set(const expr2tc &expr, value_setst::valuest &dest) const;
+  void get_value_set(const expr2tc &expr, value_setst::valuest &dest, const namespacet &ns) const;
 
   /** Clear all value records from this value set. */
   void clear()
@@ -505,7 +505,7 @@ public:
    *  @param expr The expression to evaluate the reference set for.
    *  @param dest The expression list to store the results into.
    */
-  void get_reference_set(const expr2tc &expr, value_setst::valuest &dest) const;
+  void get_reference_set(const expr2tc &expr, value_setst::valuest &dest, const namespacet &ns) const;
 
 protected:
   /** Recursive body of get_value_set.
@@ -524,7 +524,7 @@ protected:
     const expr2tc &expr,
     object_mapt &dest,
     const std::string &suffix,
-    const type2tc &original_type) const;
+    const type2tc &original_type, const namespacet &ns) const;
 
   /** Internal get_value_set method. Just the same as the other get_value_set
    *  method, but collects into an object_mapt instead of a list of exprs.
@@ -532,7 +532,7 @@ protected:
    *  @param dest Destination value set object map to store the result into. */
   void get_value_set(
     const expr2tc &expr,
-    object_mapt &dest) const;
+    object_mapt &dest, const namespacet &ns) const;
 
   /** Internal get_reference_set method. Just the same as the other
    *  get_reference_set method, but collects into an object_mapt instead of a
