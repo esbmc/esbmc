@@ -1128,6 +1128,7 @@ namespace esbmct {
     virtual void hash(crypto_hash &hash) const;
   };
 
+#if 0
   // Meta goo
   class takestype;
   class notype;
@@ -1338,6 +1339,7 @@ namespace esbmct {
       : expr2tc(ref) { }
   };
 
+#endif
   // Meta goo
   class takestype;
   class notype;
