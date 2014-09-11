@@ -341,8 +341,8 @@ z3_convt::init_addr_space_array(void)
   assert_formula(constraint);
 
   // Record the fact that we've registered these objects
-  addr_space_data.back().insert(std::pair<unsigned,z3::expr>(0, ctx.esbmc_int_val(0)));
-  addr_space_data.back().insert(std::pair<unsigned,z3::expr>(1, ctx.esbmc_int_val(0)));
+  addr_space_data.back().insert(std::pair<unsigned,unsigned>(0, 0));
+  addr_space_data.back().insert(std::pair<unsigned,unsigned>(1, 0));
 
   return;
 }
