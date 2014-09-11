@@ -77,7 +77,7 @@ void goto_symext::symex_other(void)
           cur_state->top().declaration_history.end())
     {
       unsigned &index = cur_state->variable_instance_nums[identifier];
-      cur_state->top().level1.rename(l1_sym, ++index);
+      cur_state->top().level1.rename_to(l1_sym, ++index);
       l1_symbol.level1_num = index;
     }
 
