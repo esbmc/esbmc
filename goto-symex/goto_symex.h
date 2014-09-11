@@ -681,10 +681,6 @@ protected:
   bool forward_condition;
   /** Names of functions that we've complained about missing bodies of. */
   static hash_set_cont<irep_idt, irep_id_hash> body_warnings;
-  /** Set of dereference state records; this field is used as a mailbox between
-   *  the dereference code and the caller, who will inspect the contents after
-   *  a call to dereference (in INTERNAL mode) completes. */
-  std::list<dereference_callbackt::internal_item> internal_deref_items;
 };
 
 #endif
