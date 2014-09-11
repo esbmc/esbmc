@@ -3159,7 +3159,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   obj_ids.resize(addr_space_data.back().size());
   obj_starts.resize(addr_space_data.back().size());
 
-  std::map<unsigned,z3::expr>::const_iterator it;
+  std::map<unsigned,unsigned>::const_iterator it;
   unsigned int i;
   for (it = addr_space_data.back().begin(), i = 0;
        it != addr_space_data.back().end(); it++, i++)
