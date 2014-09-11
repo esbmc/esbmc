@@ -375,29 +375,11 @@ void goto_symext::symex_assign_byte_extract(
   // Grief: multi dimensional arrays.
   const byte_extract2t &extract = to_byte_extract2t(lhs);
 
-  if (is_multi_dimensional_array(extract.source_value)) {
-    const array_type2t &arr_type = to_array_type(extract.source_value->type);
-    assert(!is_multi_dimensional_array(arr_type.subtype) &&
-           "Can't currently byte extract through more than two dimensions of "
-           "array right now, sorry");
-    constant_int2tc subtype_sz(index_type2(),
-                               type_byte_size(*arr_type.subtype));
-    expr2tc div = div2tc(index_type2(), extract.source_offset, subtype_sz);
-    expr2tc mod = modulus2tc(index_type2(), extract.source_offset, subtype_sz);
-    do_simplify(div);
-    do_simplify(mod);
-
-    index2tc idx(arr_type.subtype, extract.source_value, div);
-    byte_update2tc be2(arr_type.subtype, idx, mod, rhs, extract.big_endian);
-    with2tc store(extract.source_value->type, extract.source_value, div, be2);
-    symex_assign_rec(extract.source_value, store, guard);
-  } else {
     byte_update2tc new_rhs(extract.source_value->type, extract.source_value,
-                           extract.source_offset, rhs,
-                           extract.big_endian);
+                                 extract.source_offset, rhs, guard.as_expr(),
+                                                          extract.big_endian);
 
-    symex_assign_rec(extract.source_value, new_rhs, guard);
-  }
+      symex_assign_rec(extract.source_value, new_rhs, guard);
 }
 
 void goto_symext::symex_assign_concat(
