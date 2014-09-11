@@ -511,7 +511,7 @@ execution_statet::execute_guard(void)
   state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
 
   // Truth of this guard implies the parent is true.
-  state_level2->rename(parent_guard);
+  cur_state->rename(parent_guard);
   do_simplify(parent_guard);
   implies2tc assumpt(guard_expr, parent_guard);
 
