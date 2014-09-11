@@ -250,14 +250,9 @@ void goto_symex_statet::rename(expr2tc &expr)
   else
   {
     // do this recursively
-<<<<<<< HEAD
-    Forall_operands2(it, idx, expr)
-      rename(*it);
-=======
     Forall_operands2(it, idx, expr) {
       rename(*it);
     }
->>>>>>> origin/irep2
   }
 }
 
@@ -269,9 +264,6 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   {
     return;
   }
-<<<<<<< HEAD
-  else if(is_symbol2t(expr))
-=======
 
   if (is_array_type(expr)) {
     // Expr size might need to be renamed.
@@ -280,7 +272,6 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   }
 
   if(is_symbol2t(expr))
->>>>>>> origin/irep2
   {
     // only do L1
     type2tc origtype = expr->type;
@@ -305,10 +296,6 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else
   {
     // do this recursively
-<<<<<<< HEAD
-    Forall_operands2(it, idx, expr)
-      rename_address(*it);
-=======
     Forall_operands2(it, idx, expr) {
       rename_address(*it);
     }
@@ -378,7 +365,6 @@ void goto_symex_statet::fixup_renamed_type(expr2tc &expr,
                     orig_type->type_id != expr->type->type_id)) {
       expr = typecast2tc(orig_type, expr);
     }
->>>>>>> origin/irep2
   }
 }
 
