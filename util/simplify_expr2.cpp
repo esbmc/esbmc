@@ -6,6 +6,7 @@
 
 #include <ansi-c/c_types.h>
 #include <base_type.h>
+#include <type_byte_size.h>
 
 expr2tc
 expr2t::do_simplify(bool second __attribute__((unused))) const
@@ -67,6 +68,11 @@ static void
 to_fixedbv(const expr2tc &op, fixedbvt &bv)
 {
 
+  // XXX XXX XXX -- this would appear to be broken in a couple of cases.
+  // Take a look at the typecast cvt code -- where we're taking the target
+  // type, fetching the fixedbv spec from that, and constructing from there.
+  // Which turns out not to break test cases like 01_cbmc_Fixedbv8
+
   switch (op->expr_id) {
   case expr2t::constant_int_id:
     bv.spec = fixedbv_spect(128, 64); // XXX
@@ -111,7 +117,7 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     // If we're converting to a signedbv, the top bit being set means negative.
     if (is_signedbv_type(type)) {
       assert(type->get_width() <= 64);
-      int64_t top_bit = 1ULL << (type->get_width()-1);
+      uint64_t top_bit = 1ULL << (type->get_width()-1);
       int64_t cur_val = tmp_bv.to_integer().to_int64();
       if (cur_val >= top_bit) {
         // Construct some bit mask gumpf as a sign extension
@@ -674,6 +680,9 @@ expr2tc
 pointer_offset2t::do_simplify(bool second) const
 {
 
+  // XXX - this could be better. But the current implementation catches most
+  // cases that ESBMC produces internally.
+
   if (second && is_address_of2t(ptr_obj)) {
     const address_of2t &addrof = to_address_of2t(ptr_obj);
     return pointer_offs_simplify_2(addrof.ptr_obj, type);
@@ -707,31 +716,42 @@ pointer_offset2t::do_simplify(bool second) const
     assert(!(is_pointer_type(add.side_1) &&
              is_pointer_type(add.side_2)));
 
-    const expr2tc ptr_op = (is_pointer_type(add.side_1))
-                           ? add.side_1 : add.side_2;
-    const expr2tc non_ptr_op = (is_pointer_type(add.side_1))
-                               ? add.side_2 : add.side_1;
+    expr2tc ptr_op = (is_pointer_type(add.side_1)) ? add.side_1 : add.side_2;
+    expr2tc non_ptr_op =
+      (is_pointer_type(add.side_1)) ? add.side_2 : add.side_1;
+
+    // Can't do any kind of simplification if the ptr op has a symbolic type.
+    // Let the SMT layer handle this. In the future, can we pass around a
+    // namespace?
+    if (is_symbol_type(to_pointer_type(ptr_op->type).subtype))
+      return expr2tc();
 
     // Turn the pointer one into pointer_offset.
     expr2tc new_ptr_op = expr2tc(new pointer_offset2t(type, ptr_op));
+    // And multiply the non pointer one by the type size.
+    type2tc ptr_int_type = get_int_type(config.ansi_c.pointer_width);
+    type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
+    mp_integer thesize = (is_empty_type(ptr_subtype)) ? 1
+                          : type_byte_size(*ptr_subtype.get());
+#if 0
+    constant_int2tc type_size(ptr_int_type, thesize);
+#endif
+    constant_int2tc type_size(type, thesize);
 
-    // The non pointer op has to take into account pointer arithmetic though,
-    // so multiply it by the pointer size of the operand. If we can't get that,
-    // abort.
-    unsigned int width;
-    try {
-      const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
-      width = ptr_type.subtype->get_width() / 8;
-    } catch (type2t::symbolic_type_excp *e) {
-      // Type isn't renamed enough to let this happen; give up now.
-      return expr2tc();
-    }
+#if 0
+    if (non_ptr_op->type->get_width() != config.ansi_c.pointer_width)
+      non_ptr_op = typecast2tc(ptr_int_type, non_ptr_op);
+#endif
+    // Herp derp tacas
+    if (non_ptr_op->type->get_width() != type->get_width())
+      non_ptr_op = typecast2tc(type, non_ptr_op);
 
-    expr2tc ptr_subtype_sz(new constant_int2t(uint_type2(), BigInt(width)));
-    expr2tc muled_non_ptr(new mul2t(uint_type2(), non_ptr_op, ptr_subtype_sz));
+#if 0
+    mul2tc new_non_ptr_op(ptr_int_type, non_ptr_op, type_size);
+#endif
+    mul2tc new_non_ptr_op(type, non_ptr_op, type_size);
 
-    // And recombine.
-    expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, muled_non_ptr));
+    expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, new_non_ptr_op));
 
     // So, this add is a valid simplification. We may be able to simplify
     // further though.
@@ -1107,8 +1127,31 @@ typecast2t::do_simplify(bool second) const
     // Use of strings here is inefficient XXX jmorse
     return from;
   } else if (is_pointer_type(type) && is_pointer_type(from)) {
-    // Casting from one pointer to another is meaningless
-    return from;
+    // Casting from one pointer to another is meaningless... except when there's
+    // pointer arithmetic about to be applied to it. So, only nurk typecasts
+    // that don't change the subtype width.
+    const pointer_type2t &ptr_to = to_pointer_type(type);
+    const pointer_type2t &ptr_from = to_pointer_type(from->type);
+
+    if (is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype) ||
+        is_code_type(ptr_to.subtype) || is_code_type(ptr_from.subtype))
+      return expr2tc(); // Not worth thinking about
+
+    try {
+      unsigned int to_width = (is_empty_type(ptr_to.subtype)) ? 8
+                              : ptr_to.subtype->get_width();
+      unsigned int from_width = (is_empty_type(ptr_from.subtype)) ? 8
+                              : ptr_from.subtype->get_width();
+
+      if (to_width == from_width)
+        return from;
+      else
+        return expr2tc();
+    } catch (array_type2t::dyn_sized_array_excp*e) {
+      // Something crazy, and probably C++ based, occurred. Don't attempt to
+      // simplify.
+      return expr2tc();
+    }
   } else if (is_constant_expr(from)) {
     // Casts from constant operands can be done here.
     if (is_constant_bool2t(from) && is_bv_type(type)) {
@@ -1126,6 +1169,21 @@ typecast2t::do_simplify(bool second) const
       } else {
         return true_expr;
       }
+    } else if (is_bv_type(from) && is_fixedbv_type(type)) {
+      fixedbvt f;
+      f.spec = to_fixedbv_type(migrate_type_back(type)); // Dodgy.
+      f.from_integer(to_constant_int2t(from).constant_value);
+      exprt ref = f.to_expr();
+      expr2tc cvt;
+      migrate_expr(ref, cvt);
+      return cvt;
+    } else if (is_fixedbv_type(from) && is_fixedbv_type(type)) {
+      fixedbvt f(to_constant_fixedbv2t(from).value);
+      f.round(to_fixedbv_type(migrate_type_back(type)));
+      exprt ref = f.to_expr();
+      expr2tc cvt;
+      migrate_expr(ref, cvt);
+      return cvt;
     } else if ((is_bv_type(type) || is_fixedbv_type(type)) &&
                 (is_bv_type(from) || is_fixedbv_type(from))) {
       fixedbvt bv;
@@ -1178,6 +1236,8 @@ typecast2t::do_simplify(bool second) const
   } else {
     return expr2tc();
   }
+
+  assert(0 && "Fell through typecast2t::do_simplify");
 }
 
 expr2tc
@@ -1190,6 +1250,7 @@ address_of2t::do_simplify(bool second __attribute__((unused))) const
   // we can't simplify away the symbol.
   if (is_index2t(ptr_obj)) {
     const index2t &idx = to_index2t(ptr_obj);
+    const pointer_type2t &ptr_type = to_pointer_type(type);
 
     // Don't simplify &a[0]
     if (is_constant_int2t(idx.index) &&
@@ -1202,8 +1263,7 @@ address_of2t::do_simplify(bool second __attribute__((unused))) const
 
     expr2tc zero = expr2tc(new constant_int2t(index_type2(), BigInt(0)));
     expr2tc new_idx = expr2tc(new index2t(idx.type, idx.source_value, zero));
-    const type2tc &subtype = to_pointer_type(type).subtype;
-    expr2tc sub_addr_of = expr2tc(new address_of2t(subtype, new_idx));
+    expr2tc sub_addr_of = expr2tc(new address_of2t(ptr_type.subtype, new_idx));
 
     return expr2tc(new add2t(type, sub_addr_of, new_index));
   } else {
@@ -1445,6 +1505,12 @@ obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
   } else if (is_member2t(a) && is_member2t(b)) {
     return obj_equals_addr_of(to_member2t(a).source_value,
                               to_member2t(b).source_value);
+  } else if (is_constant_string2t(a) && is_constant_string2t(b)) {
+    bool val = (to_constant_string2t(a).value == to_constant_string2t(b).value);
+    if (val)
+      return true_expr;
+    else
+      return false_expr;
   }
 
   return expr2tc();

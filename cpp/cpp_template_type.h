@@ -24,7 +24,7 @@ public:
     return static_cast<const exprt &>(find("#default"));
   }
 
-  bool has_default_parameter() const
+  bool has_default_parameter() const //default has value?
   {
     return find("#default").is_not_nil();
   }

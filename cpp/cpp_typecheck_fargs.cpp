@@ -15,6 +15,23 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_typecheck_fargs.h"
 #include "cpp_typecheck.h"
 
+std::ostream &operator<<(std::ostream &out,
+  const cpp_typecheck_fargst &fargs)
+{
+  out << "cpp_typecheck_fargst" << std::endl;
+  out << "* in_use: " << fargs.in_use << std::endl;
+  out << "* has_object: " << fargs.has_object << std::endl;
+
+  if(fargs.operands.size())
+  {
+    out << "* operands: " << std::endl;
+    for(unsigned i=0; i<fargs.operands.size(); ++i)
+      out << "  " << i << ": " << fargs.operands[i] << std::endl;
+  }
+
+  return out;
+}
+
 /*******************************************************************\
 
 Function: cpp_typecheck_fargst::has_class_type
@@ -158,6 +175,8 @@ bool cpp_typecheck_fargst::match(
     if(cpp_typecheck.implicit_conversion_sequence(
         operand, argument.type(), new_expr, rank))
     {
+      operand.swap(new_expr);
+
       // ok
       distance+=rank;
       #if 0

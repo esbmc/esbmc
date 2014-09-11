@@ -6,10 +6,10 @@
 using namespace std;
 
 int main () {
-  int myints[] = { 10, 20, 30, 30, 20, 10, 10, 20 };
-  vector<int> myvector (myints, myints+8);            // 10 20 30 30 20 10 10 20
+  int myints[] = { 10, 20, 30 };
+  vector<int> myvector (myints, myints+3);            // 10 20 30 
 
-  replace (myvector.begin(), myvector.end(), 20, 99); // 10 99 30 30 99 10 10 99
+  replace (myvector.begin(), myvector.end(), 20, 99); // 10 99 30 
 
   assert(myvector[1] != 99);
   cout << "myvector contains:";

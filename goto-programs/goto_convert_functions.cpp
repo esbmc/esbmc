@@ -13,6 +13,7 @@ Date: June 2003
 #include <base_type.h>
 #include <prefix.h>
 #include <std_code.h>
+#include <std_expr.h>
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
@@ -38,10 +39,10 @@ goto_convert_functionst::goto_convert_functionst(
   goto_convertt(_context, _options, _message_handler),
   functions(_functions)
 {
-	if (options.get_bool_option("inlining"))
-	  inlining=true;
-	else
+	if (options.get_bool_option("no-inlining"))
 	  inlining=false;
+	else
+	  inlining=true;
 }
 
 /*******************************************************************\
@@ -94,14 +95,6 @@ void goto_convert_functionst::goto_convert()
   }
 
   functions.compute_location_numbers();
-
-  // inline those functions marked as "inlined"
-  if (!inlining) {
-    goto_partial_inline(
-      functions,
-      ns,
-      get_message_handler());
-  }
 }
 
 /*******************************************************************\
@@ -149,7 +142,7 @@ Function: goto_convert_functionst::add_return
 \*******************************************************************/
 
 void goto_convert_functionst::add_return(
-  goto_functionst::goto_functiont &f,
+  goto_functiont &f,
   const locationt &location)
 {
   if(!f.body.instructions.empty() &&
@@ -192,7 +185,7 @@ Function: goto_convert_functionst::convert_function
 
 void goto_convert_functionst::convert_function(const irep_idt &identifier)
 {
-  goto_functionst::goto_functiont &f=functions.function_map[identifier];
+  goto_functiont &f=functions.function_map[identifier];
   const symbolt &symbol=ns.lookup(identifier);
 
   // make tmp variables local to function
@@ -220,6 +213,19 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
       it!=arguments.end();
       it++)
   {
+    if(inductive_step)
+    {
+      // Fix for of arguments
+      exprt arg=*it;
+      arg.identifier(arg.find("#identifier").id());
+      arg.id("symbol");
+      arg.remove("#identifier");
+      arg.remove("#base_name");
+      arg.remove("#location");
+
+      get_struct_components(arg);
+    }
+
     const irep_idt &identifier=it->get_identifier();
     assert(identifier!="");
     arg_ids.push_back(identifier);
@@ -518,6 +524,8 @@ goto_convert_functionst::wallop_type(irep_idt name,
 void
 goto_convert_functionst::thrash_type_symbols(void)
 {
+  // If it is the inductive step, it will add the global variables to the statet
+  add_global_variable_to_state();
 
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and
@@ -534,7 +542,7 @@ goto_convert_functionst::thrash_type_symbols(void)
     collect_expr(it->second.type, names);
   }
 
-  // Try to compute their dependancies.
+  // Try to compute their dependencies.
 
   typename_mapt typenames;
 

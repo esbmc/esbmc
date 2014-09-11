@@ -2,6 +2,7 @@
 // Demonstrating function objects.
 #include <iostream>
 #include <iterator>
+#include <string>
 using std::cout;
 using std::endl;
 

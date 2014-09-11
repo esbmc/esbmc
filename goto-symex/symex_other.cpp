@@ -22,7 +22,17 @@ void goto_symext::symex_other(void)
 
   if (is_code_expression2t(code2))
   {
-    // ignore
+    // This is some kind of expression, that gets evaluated. Given the GOTO
+    // transformation, it can't contain any function calls, or have any other
+    // side effects, so it's essentially a no-op.
+    // However, it /might/ contain a dereference. And that dereference might
+    // trigger an assertion failure due to an invalid access. And that kind of
+    // tests is /definitely/ in the regression test suite (01_cmbc_String2).
+    // So, dereference the expression here to collect any assertions it may
+    // cause.
+    const code_expression2t &expr = to_code_expression2t(code2);
+    expr2tc operand = expr.operand;
+    dereference(operand, false, false);
   }
   else if (is_code_cpp_del_array2t(code2) || is_code_cpp_delete2t(code2))
   {
@@ -36,7 +46,7 @@ void goto_symext::symex_other(void)
   }
   else if (is_code_free2t(code2))
   {
-    symex_free(to_code_free2t(code2));
+    symex_free(code2);
   }
   else if (is_code_printf2t(code2))
   {
@@ -66,9 +76,9 @@ void goto_symext::symex_other(void)
     while(cur_state->top().declaration_history.find(renaming::level2t::name_record(l1_symbol))!=
           cur_state->top().declaration_history.end())
     {
-      unsigned index = cur_state->top().level1.current_number(identifier);
-      cur_state->top().level1.rename_to(l1_sym, index+1);
-      l1_symbol.level1_num = index + 1;
+      unsigned &index = cur_state->variable_instance_nums[identifier];
+      cur_state->top().level1.rename(l1_sym, ++index);
+      l1_symbol.level1_num = index;
     }
 
     renaming::level2t::name_record tmp_name(l1_symbol);

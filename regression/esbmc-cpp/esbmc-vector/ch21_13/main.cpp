@@ -2,7 +2,7 @@
 // Standard library algorithms fill, fill_n, generate
 // and generate_n.
 #include <iostream>
-
+#include <string>
 using std::cout;
 using std::endl;
 

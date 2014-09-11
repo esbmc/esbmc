@@ -6,21 +6,15 @@
 using namespace std;
 
 int main () {
-  int myints[]={10,20,30,40,50,60,70};
-  vector<int> myvector;
+  int myints[]={10,20,30,40,50};
+  vector<int> myvector;	
   vector<int>::iterator it;
 
-  myvector.resize(7);   // allocate space for 7 elements
+  myvector.resize(5);   // allocate space for 7 elements
 
-  copy ( myints, myints+7, myvector.begin() );
+  copy ( myints, myints+5, myvector.begin() );
 
   assert(myvector[4] != 50);
-
-  cout << "myvector contains:";
-  for (it=myvector.begin(); it!=myvector.end(); ++it)
-    cout << " " << *it;
-
-  cout << endl;
 
   return 0;
 }

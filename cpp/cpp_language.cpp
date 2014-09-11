@@ -160,8 +160,6 @@ void cpp_languaget::internal_additions(std::ostream &out)
 
 /*******************************************************************\
 
-/*******************************************************************\
-
 Function: cpp_languaget::parse
 
   Inputs:

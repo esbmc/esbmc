@@ -72,9 +72,9 @@ template <class T>
 std::string
 pretty_print_func(unsigned int indent, std::string ident, T obj)
 {
-  list_of_memberst memb = obj.tostring(indent);
+  list_of_memberst memb = obj.tostring(indent+2);
 
-  std::string indentstr = indent_str(indent + 2);
+  std::string indentstr = indent_str(indent);
   std::string exprstr = ident;
 
   for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
@@ -116,12 +116,14 @@ get_type_id(const type2t &type)
 
 
 type2t::type2t(type_ids id)
-  : type_id(id)
+  : type_id(id),
+    crc_val(0)
 {
 }
 
 type2t::type2t(const type2t &ref)
-  : type_id(ref.type_id)
+  : type_id(ref.type_id),
+    crc_val(ref.crc_val)
 {
 }
 
@@ -201,6 +203,15 @@ void
 type2t::do_crc(hacky_hash &hash) const
 {
   hash.ingest((uint8_t)type_id);
+  return;
+}
+
+void
+type2t::hash(crypto_hash &hash) const
+{
+  BOOST_STATIC_ASSERT(type2t::end_type_id < 256);
+  uint8_t tid = type_id;
+  hash.ingest(&tid, sizeof(tid));
   return;
 }
 
@@ -354,13 +365,14 @@ struct_union_data::get_component_number(const irep_idt &name) const
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)
-  : expr_id(id), type(_type)
+  : expr_id(id), type(_type), crc_val(0)
 {
 }
 
 expr2t::expr2t(const expr2t &ref)
   : expr_id(ref.expr_id),
-    type(ref.type)
+    type(ref.type),
+    crc_val(ref.crc_val)
 {
 }
 
@@ -474,6 +486,16 @@ expr2t::do_crc(hacky_hash &hash) const
 {
   hash.ingest((uint8_t)expr_id);
   type->do_crc(hash);
+  return;
+}
+
+void
+expr2t::hash(crypto_hash &hash) const
+{
+  BOOST_STATIC_ASSERT(expr2t::end_expr_id < 256);
+  uint8_t eid = expr_id;
+  hash.ingest(&eid, sizeof(eid));
+  type->hash(hash);
   return;
 }
 
@@ -634,7 +656,11 @@ static const char *expr_names[] = {
   "cpp_delete",
   "cpp_catch",
   "cpp_throw",
-  "cpp_throw_decl"
+  "cpp_throw_decl",
+  "cpp_throw_decl_end",
+  "isinf",
+  "isnormal",
+  "concat",
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -656,7 +682,7 @@ expr2t::pretty(unsigned int indent) const
                                                      *this);
   // Dump the type on the end.
   ret += std::string("\n") + indent_str(indent) + "  * type : "
-         + type->pretty(indent + 2);
+         + type->pretty(indent+2);
   return ret;
 }
 
@@ -768,6 +794,11 @@ object_descriptor2t::get_root_object(void) const
 }
 
 type_poolt::type_poolt(void)
+{
+  // This space is deliberately left blank
+}
+
+type_poolt::type_poolt(bool yolo __attribute__((unused)))
 {
   bool_type = type2tc(new bool_type2t());
   empty_type = type2tc(new empty_type2t());
@@ -915,7 +946,7 @@ type_poolt::get_int(unsigned int size)
   }
 }
 
-type_poolt type_pool __attribute__((init_priority(102)));
+type_poolt type_pool;
 
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr
@@ -1376,7 +1407,29 @@ do_type_crc(const bool &thebool, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const bool &thebool, crypto_hash &hash)
+{
+
+  if (thebool) {
+    uint8_t tval = 1;
+    hash.ingest(&tval, sizeof(tval));
+  } else {
+    uint8_t tval = 0;
+    hash.ingest(&tval, sizeof(tval));
+  }
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const unsigned int &theval, hacky_hash &hash)
+{
+
+  hash.ingest((void*)&theval, sizeof(theval));
+  return;
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const unsigned int &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)&theval, sizeof(theval));
@@ -1392,7 +1445,23 @@ do_type_crc(const sideeffect_data::allockind &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
+{
+
+  hash.ingest((void*)&theval, sizeof(theval));
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const symbol_data::renaming_level &theval, hacky_hash &hash)
+{
+
+  hash.ingest((void*)&theval, sizeof(theval));
+  return;
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)&theval, sizeof(theval));
@@ -1406,10 +1475,35 @@ do_type_crc(const BigInt &theint, hacky_hash &hash)
 
   if (theint.dump(buffer, sizeof(buffer))) {
     // Zero has no data in bigints.
-    if (theint.is_zero())
+    if (theint.is_zero()) {
       hash.ingest((uint8_t)0);
-    else
+    } else {
+      unsigned int thelen = theint.get_len();
+      thelen *= 4; // words -> bytes
+      hash.ingest(&buffer[256-thelen], thelen);
+    }
+  } else {
+    // bigint is too large to fit in that static buffer. This is insane; but
+    // rather than wasting time heap allocing we'll just skip recording data,
+    // at the price of possible crc collisions.
+    ;
+  }
+  return;
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const BigInt &theint, crypto_hash &hash)
+{
+  unsigned char buffer[256];
+
+  if (theint.dump(buffer, sizeof(buffer))) {
+    // Zero has no data in bigints.
+    if (theint.is_zero()) {
+      uint8_t val = 0;
+      hash.ingest(&val, sizeof(val));
+    } else {
       hash.ingest(buffer, theint.get_len());
+    }
   } else {
     // bigint is too large to fit in that static buffer. This is insane; but
     // rather than wasting time heap allocing we'll just skip recording data,
@@ -1428,10 +1522,25 @@ do_type_crc(const fixedbvt &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const fixedbvt &theval, crypto_hash &hash)
+{
+
+  do_type_hash(theval.to_integer(), hash);
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const std::vector<expr2tc> &theval, hacky_hash &hash)
 {
   forall_exprs(it, theval)
     (*it)->do_crc(hash);
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash)
+{
+  forall_exprs(it, theval)
+    (*it)->hash(hash);
 }
 
 static inline __attribute__((always_inline)) void
@@ -1442,6 +1551,13 @@ do_type_crc(const std::vector<type2tc> &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
+{
+  forall_types(it, theval)
+    (*it)->hash(hash);
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const std::vector<irep_idt> &theval, hacky_hash &hash)
 {
   forall_names(it, theval)
@@ -1449,7 +1565,22 @@ do_type_crc(const std::vector<irep_idt> &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
+{
+  forall_names(it, theval)
+    hash.ingest((void*)(*it).as_string().c_str(), (*it).as_string().size());
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const std::vector<unsigned int> &theval, hacky_hash &hash)
+{
+  for (std::vector<unsigned int>::const_iterator it = theval.begin();
+       it != theval.end(); it++)
+    hash.ingest((void*)&(*it), sizeof(unsigned int));
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const std::vector<unsigned int> &theval, crypto_hash &hash)
 {
   for (std::vector<unsigned int>::const_iterator it = theval.begin();
        it != theval.end(); it++)
@@ -1466,6 +1597,15 @@ do_type_crc(const expr2tc &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const expr2tc &theval, crypto_hash &hash)
+{
+
+  if (theval.get() != NULL)
+    theval->hash(hash);
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const type2tc &theval, hacky_hash &hash)
 {
 
@@ -1475,7 +1615,24 @@ do_type_crc(const type2tc &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const type2tc &theval, crypto_hash &hash)
+{
+
+  if (theval.get() != NULL)
+    theval->hash(hash);
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const irep_idt &theval, hacky_hash &hash)
+{
+
+  hash.ingest((void*)theval.as_string().c_str(), theval.as_string().size());
+  return;
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const irep_idt &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)theval.as_string().c_str(), theval.as_string().size());
@@ -1489,7 +1646,19 @@ do_type_crc(const type2t::type_ids &i, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const type2t::type_ids &i, crypto_hash &hash)
+{
+  return; // Dummy field crc
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const expr2t::expr_ids &i, hacky_hash &hash)
+{
+  return; // Dummy field crc
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const expr2t::expr_ids &i, crypto_hash &hash)
 {
   return; // Dummy field crc
 }
@@ -1925,6 +2094,36 @@ esbmct::expr_methods<derived, subclass,
   field4_type, field4_class, field4_ptr,
   field5_type, field5_class, field5_ptr,
   field6_type, field6_class, field6_ptr>
+  ::hash
+          (crypto_hash &hash) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+
+  derived_this->expr2t::hash(hash);
+  do_type_hash(derived_this->*field1_ptr, hash);
+  do_type_hash(derived_this->*field2_ptr, hash);
+  do_type_hash(derived_this->*field3_ptr, hash);
+  do_type_hash(derived_this->*field4_ptr, hash);
+  do_type_hash(derived_this->*field5_ptr, hash);
+  do_type_hash(derived_this->*field6_ptr, hash);
+  return;
+}
+
+template <class derived, class subclass,
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
+void
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
   ::list_operands
           (std::list<const expr2tc *> &inp) const
 {
@@ -2263,10 +2462,59 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   return;
 }
 
-const expr2tc true_expr __attribute__((init_priority(103)))
-  = expr2tc(new constant_bool2t(true));
-const expr2tc false_expr __attribute__((init_priority(103)))
-  = expr2tc(new constant_bool2t(false));
+template <class derived, class subclass,
+  class field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+  class field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+  class field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+  class field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+  class field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+  class field6_type, class field6_class, field6_type field6_class::*field6_ptr>
+void
+esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
+                                        field2_type, field2_class, field2_ptr,
+                                        field3_type, field3_class, field3_ptr,
+                                        field4_type, field4_class, field4_ptr,
+                                        field5_type, field5_class, field5_ptr,
+                                        field6_type, field6_class, field6_ptr>
+      ::hash(crypto_hash &hash) const
+{
+
+  const derived *derived_this = static_cast<const derived*>(this);
+
+  derived_this->type2t::hash(hash);
+  do_type_hash(derived_this->*field1_ptr, hash);
+  do_type_hash(derived_this->*field2_ptr, hash);
+  do_type_hash(derived_this->*field3_ptr, hash);
+  do_type_hash(derived_this->*field4_ptr, hash);
+  do_type_hash(derived_this->*field5_ptr, hash);
+  do_type_hash(derived_this->*field6_ptr, hash);
+  return;
+}
+
+const expr2tc true_expr;
+const expr2tc false_expr;
+
+const constant_int2tc zero_uint;
+const constant_int2tc one_uint;
+const constant_int2tc zero_int;
+const constant_int2tc one_int;
+
+// More avoidance of static initialization order fiasco
+void
+init_expr_constants(void)
+{
+  const_cast<expr2tc&>(true_expr) = expr2tc(new constant_bool2t(true));
+  const_cast<expr2tc&>(false_expr) = expr2tc(new constant_bool2t(false));
+
+  const_cast<constant_int2tc&>(zero_uint)
+    = constant_int2tc(type_pool.get_uint(32), BigInt(0));
+  const_cast<constant_int2tc&>(one_uint)
+    = constant_int2tc(type_pool.get_uint(32), BigInt(1));
+  const_cast<constant_int2tc&>(zero_int)
+    = constant_int2tc(type_pool.get_int(32), BigInt(0));
+  const_cast<constant_int2tc&>(one_int)
+    = constant_int2tc(type_pool.get_int(32), BigInt(1));
+}
 
 const constant_int2tc zero_uint __attribute__((init_priority(103)))
   = constant_int2tc(type_pool.get_uint(32), BigInt(0));
@@ -2453,7 +2701,7 @@ std::string code_free2t::field_names [esbmct::num_type_fields]  =
 std::string code_goto2t::field_names [esbmct::num_type_fields]  =
 { "target", "", "", "", ""};
 std::string object_descriptor2t::field_names [esbmct::num_type_fields]  =
-{ "object", "offset", "", "", ""};
+{ "object", "offset", "alignment", "", ""};
 std::string code_function_call2t::field_names [esbmct::num_type_fields]  =
 { "return", "function", "operands", "", ""};
 std::string code_comma2t::field_names [esbmct::num_type_fields]  =
@@ -2474,6 +2722,14 @@ std::string code_cpp_throw2t::field_names [esbmct::num_type_fields]  =
 { "operand", "exception_list", "", "", ""};
 std::string code_cpp_throw_decl2t::field_names [esbmct::num_type_fields]  =
 { "exception_list", "", "", "", ""};
+std::string code_cpp_throw_decl_end2t::field_names [esbmct::num_type_fields]  =
+{ "", "", "", "", ""};
+std::string isinf2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", "", ""};
+std::string isnormal2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", "", ""};
+std::string concat2t::field_names [esbmct::num_type_fields]  =
+{ "forward", "aft", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2714,7 +2970,8 @@ template class esbmct::expr_methods<code_goto2t, code_goto_data,
     irep_idt, code_goto_data, &code_goto_data::target>;
 template class esbmct::expr_methods<object_descriptor2t, object_desc_data,
     expr2tc, object_desc_data, &object_desc_data::object,
-    expr2tc, object_desc_data, &object_desc_data::offset>;
+    expr2tc, object_desc_data, &object_desc_data::offset,
+    unsigned int, object_desc_data, &object_desc_data::alignment>;
 template class esbmct::expr_methods<code_function_call2t, code_funccall_data,
     expr2tc, code_funccall_data, &code_funccall_data::ret,
     expr2tc, code_funccall_data, &code_funccall_data::function,
@@ -2743,3 +3000,13 @@ template class esbmct::expr_methods<code_cpp_throw_decl2t,
          code_cpp_throw_decl_data,
     std::vector<irep_idt>, code_cpp_throw_decl_data,
     &code_cpp_throw_decl_data::exception_list>;
+template class esbmct::expr_methods<code_cpp_throw_decl_end2t,
+    code_cpp_throw_decl_data, std::vector<irep_idt>, code_cpp_throw_decl_data,
+    &code_cpp_throw_decl_data::exception_list>;
+template class esbmct::expr_methods<isinf2t,
+    arith_1op, expr2tc, arith_1op, &arith_1op::value>;
+template class esbmct::expr_methods<isnormal2t,
+    arith_1op, expr2tc, arith_1op, &arith_1op::value>;
+template class esbmct::expr_methods<concat2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;

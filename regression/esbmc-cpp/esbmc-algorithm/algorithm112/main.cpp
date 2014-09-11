@@ -17,7 +17,7 @@ int main () {
   it=set_intersection (first, first+5, second, second+5, v.begin());
                                                // 10 20 0  0  0  0  0  0  0  0
   assert(v[1] != 20);
-  cout << "intersection has " << int(it - v.begin()) << " elements.\n";
+//  cout << "intersection has " << int(it - v.begin()) << " elements.\n";
 
   return 0;
 }

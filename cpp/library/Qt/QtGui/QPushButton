@@ -1,0 +1,19 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: November 2012
+
+\*******************************************************************/
+
+#include "../QtCore/QString"
+//#include "QWidget"
+
+class QWidget;
+
+class QPushButton{
+public:
+	QPushButton ( QWidget * parent = 0 ){}
+	QPushButton ( const QString & text, QWidget * parent = 0 ){}
+};

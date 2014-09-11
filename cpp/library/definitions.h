@@ -1,7 +1,7 @@
 #ifndef STL_DEFINITIONS
 #define STL_DEFINITIONS
 
-#include <cstddef>
+#include "cstddef"
 
 //#ifndef EOF
 //#define EOF (-1)
@@ -15,6 +15,11 @@
 //#endif
 
 #define SIGINT  2
+
+#define SEEK_SET 0
+#define SEEK_CUR 1
+#define SEEK_END 2
+
 
 //#define EXIT_SUCCESS 0
 

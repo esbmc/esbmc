@@ -26,7 +26,7 @@ class goto_function_serializationt {
       ireps_container(ic), gpconverter(ic) {};
       
   void convert(std::istream&, irept&);
-  void convert(const goto_functionst::goto_functiont&, std::ostream& );
+  void convert(const goto_functiont&, std::ostream& );
 };
 
 #endif /*GOTO_FUNCTION_SERIALIZATION_H_*/

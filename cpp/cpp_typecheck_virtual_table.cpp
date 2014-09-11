@@ -15,13 +15,13 @@ Purpose:
 #include <expr_util.h>
 #include "cpp_typecheck.h"
 
-void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
+void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
 {
 
   // builds virtual-table value maps: (class x virtual_name x value)
   std::map<irep_idt, std::map<irep_idt,exprt> > vt_value_maps;
 
-  const struct_typet& struct_type = to_struct_type(symbol.type);
+  const struct_typet &struct_type = to_struct_type(symbol.type);
   for(unsigned i = 0; i < struct_type.components().size(); i++)
   {
     const struct_typet::componentt& compo = struct_type.components()[i];
@@ -76,7 +76,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
     vt_symb_var.static_lifetime = true;
 
     // do the values
-    const struct_typet& vt_type = to_struct_type(vt_symb_type.type);
+    const struct_typet &vt_type = to_struct_type(vt_symb_type.type);
     exprt values("struct",symbol_typet(vt_symb_type.name));
     for(unsigned i=0; i < vt_type.components().size(); i++)
     {

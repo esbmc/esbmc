@@ -3,6 +3,7 @@
 // equal_range for a sorted sequence of values.
 #include <iostream>
 #include <iterator> //Foi adicionada a biblioteca "iterator".
+#include <string>
 using std::cout;
 using std::endl;
 

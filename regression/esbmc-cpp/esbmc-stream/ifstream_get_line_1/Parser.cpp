@@ -10,6 +10,7 @@
 #include <cstdlib>
 #include <cctype>
 #include <sstream>
+#include <string>
 
 Parser::Parser(const char* inFile)
   : num_of_vars(-1),

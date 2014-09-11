@@ -169,7 +169,7 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
 
     // Make a number that's 2^integer_bits
     BigInt aval(2);
-    aval = pow(aval, new_integer_bits);
+    aval = power(aval, new_integer_bits);
     tmp.from_integer(aval);
 
     // Now modulus that up.
@@ -301,7 +301,7 @@ std::string fixedbvt::format(
   unsigned fraction_bits=spec.get_fraction_bits();
 
   mp_integer int_value=v;
-  mp_integer factor=mp_integer(1)<<fraction_bits;
+  mp_integer factor=power(2, fraction_bits);//mp_integer(1)<<fraction_bits;
 
   if(int_value.is_negative())
   {

@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_ENUM_TYPE_H
 #define CPROVER_CPP_ENUM_TYPE_H
 
-#include <assert.h>
+#include <cassert>
 
 #include <config.h>
 #include <type.h>

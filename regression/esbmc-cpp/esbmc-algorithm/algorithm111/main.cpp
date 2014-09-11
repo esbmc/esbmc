@@ -1,8 +1,9 @@
-// set_union example
+// set_union example 
+
 #include <cassert>
 #include <iostream>
 #include <algorithm>
-#include <vector>
+#include <vector> 
 using namespace std;
 
 int main () {
@@ -17,7 +18,7 @@ int main () {
   it=set_union (first, first+5, second, second+5, v.begin());
                                                // 5 10 15 20 25 30 40 50  0  0
   assert(v[5] != 30);
-  cout << "union has " << int(it - v.begin()) << " elements.\n";
+//  cout << "union has " << int(it - v.begin()) << " elements.\n";
 
   return 0;
 }

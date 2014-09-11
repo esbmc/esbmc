@@ -6,15 +6,17 @@
 using namespace std;
 
 int main () {
-  int first[] = {5,10,15,20,25};
-  int second[] = {50,40,30,20,10};
-  vector<int> v(10);
+  int first[] = {5,20,25};
+  int second[] = {50,10,30};
+  vector<int> v(6);
   vector<int>::iterator it;
-
-  sort (first,first+5);
-  sort (second,second+5);
-  merge (first,first+5,second,second+5,v.begin());
-  assert(v[3] != 15);
+// 5 10 20 25 30
+  sort (first,first+3);
+  sort (second,second+3);
+  merge (first,first+3,second,second+3,v.begin());
+  assert(v[0] == 5);
+  assert(v[5] != 50);
+  
   cout << "The resulting vector contains:";
   for (it=v.begin(); it!=v.end(); ++it)
     cout << " " << *it;

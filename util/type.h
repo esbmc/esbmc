@@ -43,8 +43,6 @@ class typet:public irept
 
   void move_to_subtypes(typet &type); // destroys expr
 
-  void copy_to_subtypes(const typet &type);
-
   const locationt &location() const
   {
     return (const locationt &)find(f_location);

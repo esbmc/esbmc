@@ -221,9 +221,9 @@ void goto_program_dereferencet::dereference_expr(
 
   if(checks_only) {
     expr2tc tmp = expr;
-    dereference_rec(tmp, guard, mode);
+    dereference.dereference_expr(tmp, guard, mode);
   } else {
-    dereference_rec(expr, guard, mode);
+    dereference.dereference_expr(expr, guard, mode);
   }
 }
 
@@ -339,7 +339,10 @@ void goto_program_dereferencet::dereference_instruction(
       expr2tc operand = free.operand;
 
       guardt guard;
-      dereference.dereference(operand, guard, dereferencet::FREE);
+      // Result discarded
+      std::list<expr2tc> scalar_step_list;
+      dereference.dereference(operand, operand->type, guard, dereferencet::FREE,
+                              &scalar_step_list);
     }
   }
 }
@@ -410,12 +413,12 @@ void pointer_checks(
 void pointer_checks(
   goto_functionst &goto_functions,
   const namespacet &ns,
+  contextt &context,
   const optionst &options,
   value_setst &value_sets)
 {
-  contextt new_context;
   goto_program_dereferencet
-    goto_program_dereference(ns, new_context, options, value_sets);
+    goto_program_dereference(ns, context, options, value_sets);
   goto_program_dereference.pointer_checks(goto_functions);
 }
 

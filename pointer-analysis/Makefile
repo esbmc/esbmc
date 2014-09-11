@@ -1,11 +1,10 @@
+all: realall
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
-MAINOBJ= $(OBJDIR)/pointer-analysis.o
-all: $(OBJDIR)/.deps $(MAINOBJ)
+MAINOBJNAME=pointer-analysis.o
 
 SRCS= value_set.cpp goto_program_dereference.cpp value_set_analysis.cpp \
-      dereference.cpp add_failed_symbols.cpp \
-      show_value_sets.cpp value_set_domain.cpp
+      dereference.cpp show_value_sets.cpp value_set_domain.cpp
 
 clean:
 	-rm -f $(OBJS) $(OBJDIR)/.deps $(MAINOBJ)
@@ -13,3 +12,5 @@ clean:
 STRICTCOMPILE=1
 
 include $(ESBMCDIR)/common
+
+realall: $(OBJDIR)/.deps $(MAINOBJ)

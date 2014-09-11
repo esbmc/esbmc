@@ -16,6 +16,7 @@ SRCS= c_typecast.cpp ansi_c_parser.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp \
 
 OBJS= $(OBJDIR)/y.tab.o $(OBJDIR)/lex.yy.o
+HOSTOBJS= $(HOSTOBJDIR)/y.tab.o $(HOSTOBJDIR)/lex.yy.o
 
 INCLUDES= -I .. -I ../util
 
@@ -41,35 +42,36 @@ $(OBJDIR)/lex.yy.o: lex.yy.cpp  $(OBJDIR)/y.tab.o
 
 ###############################################################################
 
-C2GOTO_DEPS= $(OBJS) ../util/$(OBJDIR)/util.o ../langapi/$(OBJDIR)/langapi.o \
-	     ../big-int/$(OBJDIR)/bigint.o \
-	     ../big-int/$(OBJDIR)/bigint-func.o \
-	     ../goto-programs/$(OBJDIR)/goto-programs.o \
-	     ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \
-	     cpp/$(OBJDIR)/preproc.o headers/$(OBJDIR)/headers.o
-
-$(OBJDIR)/c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
-	$(FINLINKBIN) $(CXXFLAGS) $^ $(FINLINKOUT) $@ $(C2GOTO_DEPS) $(FINLINKTAIL)
-
-$(OBJDIR)/clib32.o: $(OBJDIR)/c2goto library/*.c
-	./$(OBJDIR)/c2goto library/*.c $(CLIB32FLAG) --output clib32.goto --no-lock-check $(C2GOTO_INCS)
-	$(BLOBGENLD) $(LDFLAGS) -b binary clib32.goto -o $(OBJDIR)/clib32.o -r
-
-$(OBJDIR)/clib64.o: $(OBJDIR)/c2goto library/*.c
-	./$(OBJDIR)/c2goto library/*.c $(CLIB64FLAG) --output clib64.goto --no-lock-check $(C2GOTO_INCS)
-	$(BLOBGENLD) $(LDFLAGS) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
-
-$(OBJDIR)/clib.o: $(OBJDIR)/c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
-	$(PARTLINKLD) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(PARTLINKOUT)$(OBJDIR)/clib.o $(PARTLINKOPTS)
-
-###############################################################################
-
 include $(ESBMCDIR)/common
 
 ###############################################################################
 
+C2GOTO_OBJS= $(HOSTOBJS)
+
+C2GOTO_DEPS= ../util/$(HOSTOBJDIR)/util.o ../langapi/$(HOSTOBJDIR)/langapi.o \
+	     ../big-int/$(HOSTOBJDIR)/bigint.o \
+	     ../goto-programs/$(HOSTOBJDIR)/goto-programs.o \
+	     ../pointer-analysis/$(HOSTOBJDIR)/pointer-analysis.o \
+	     cpp/$(HOSTOBJDIR)/preproc.o headers/$(HOSTOBJDIR)/headers.o
+
+$(HOSTOBJDIR)/c2goto: c2goto.cpp $(HOSTOBJDIR)/cprover_blank_library.o | $(C2GOTO_OBJS)
+	$(HOSTFINLINKBIN) $(HOSTCXXFLAGS) $^ $(HOSTFINLINKOUT) $@ $(C2GOTO_OBJS) $(C2GOTO_DEPS) $(HOSTFINLINKTAIL)
+
+$(OBJDIR)/clib32.o: $(HOSTOBJDIR)/c2goto library/*.c
+	./$(HOSTOBJDIR)/c2goto library/*.c $(CLIB32FLAG) --output clib32.goto --no-lock-check $(C2GOTO_INCS)
+	./headers/flail.sh clib32_buf clib32.goto | $(CC) $(CFLAGS) -x c - -c -o $@
+
+$(OBJDIR)/clib64.o: $(HOSTOBJDIR)/c2goto library/*.c
+	./$(HOSTOBJDIR)/c2goto library/*.c $(CLIB64FLAG) --output clib64.goto --no-lock-check $(C2GOTO_INCS)
+	./headers/flail.sh clib64_buf clib64.goto | $(CC) $(CFLAGS) -x c - -c -o $@
+
+$(OBJDIR)/clib.o: $(HOSTOBJDIR)/c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
+	$(PARTLINKLD) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(PARTLINKOUT) $(OBJDIR)/clib.o $(PARTLINKOPTS)
+
+###############################################################################
+
 $(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/$(OBJDIR)/preproc.o headers/$(OBJDIR)/headers.o
-	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
 
 clean:
 	$(MAKE) -C cpp clean

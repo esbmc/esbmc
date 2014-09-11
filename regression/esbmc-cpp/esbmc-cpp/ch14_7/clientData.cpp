@@ -1,7 +1,7 @@
 // Fig. 14.11: ClientData.cpp
 // Class ClientData stores customer's credit information.
 #include <iostream>
-
+#include <string>
 using std::string;
 
 #include <cstring>

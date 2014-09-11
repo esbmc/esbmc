@@ -1,5 +1,10 @@
+#include <stdio.h>
+#include <wchar.h>
+
 #include <ostream>
 #include <fstream>
+
+#include <irep2.h>
 
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/write_goto_binary.h>
@@ -54,11 +59,15 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
     return 0;
   }
 
-  int doit_k_induction(){};
+  int doit_k_induction(){ return 0; };
 };
 
 int main(int argc, const char **argv)
 {
+  // To avoid the static initialization fiasco,
+  type_pool = type_poolt(true);
+  init_expr_constants();
+
   c2goto_parseopt parseopt(argc, argv);
   return parseopt.main();
 }

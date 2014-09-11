@@ -4,11 +4,11 @@
 
 ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
 
-LINUX=1
-#WIN_MSVC=1
+# These should be autodetected; one can also override them if needed.
+#LINUX=1
 #WIN_MINGW32=1
-
-# 32 or 64 bits? If left unset, default to whatever your host machine is.
+#ONAMAC
+#
 #TARGET64=1
 #TARGET32=1
 
@@ -26,24 +26,8 @@ USE_SOLVER_Z3=1
 
 endif #EXTERN_ESBMC_CONFIG
 
-# Might need to guess what bitwidth target to build.
-ifndef TARGET64
-ifndef TARGET32
-THEMACHINE:=$(shell uname -m)
-ifeq ($(THEMACHINE),x86_64)
-  TARGET64=1
-else
-  TARGET32=1
-endif
-endif
-endif
-
-# Detect cygwin
-
-AMONCYGWIN:= $(shell uname -a | grep -o CYGWIN)
-ifeq "$(AMONCYGWIN)" "CYGWIN"
-ONCYGWIN=1
-endif
+# If no OS or patform was specified, try to guess
+include $(ESBMCDIR)/scripts/os_detect.inc
 
 # Defaults:
 
@@ -76,11 +60,6 @@ else
 CLIB64FLAG=--32
 CLIB32FLAG=--32
 endif
-
-# Unless someone else has set OBJDIR, default to `pwd`/.objs
-OBJDIR?= .objs
-# Danger: evaluating expression creates directory :o
-CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
 
 # Extract a sat solver location from {SATDIR64,SATDIR32,HOME}, depending on
 # which mode we're in {64,32} and what the user has defined.
@@ -116,10 +95,24 @@ ifdef LINUX
 include $(ESBMCDIR)/scripts/linux.inc
 endif
 
-ifdef WIN_MINGW32 
+ifdef WIN_MINGW32
 include $(ESBMCDIR)/scripts/mingw.inc
 endif
 
-ifdef WIN_MSVC
-include $(ESBMCDIR)/scripts/msvc.inc
+ifdef ONAMAC
+include $(ESBMCDIR)/scripts/mac.inc
 endif
+
+# Unless someone else has set OBJDIR, default to `pwd`/.objs
+OBJDIR?= .objs
+
+# If we're cross compiling, we need a different hostobjdir.
+ifdef CROSSCOMPILE
+HOSTOBJDIR= .hostobjs
+else
+HOSTOBJDIR= $(OBJDIR)
+endif
+
+# Danger: evaluating expression creates directory :o
+CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
+CREATEOBJDIR2 := $(shell mkdir $(HOSTOBJDIR) 2>/dev/null)

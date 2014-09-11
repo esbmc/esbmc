@@ -19,7 +19,9 @@ Account *newAccount(char nm, double amt) {
     int err;
 
     Account *tmp = (Account *) malloc(sizeof(Account));
+    __ESBMC_assume(tmp);
     tmp->lock = (pthread_mutex_t *) malloc(sizeof(pthread_mutex_t));
+    __ESBMC_assume(tmp->lock);
     tmp->name = nm;
     tmp->amount = amt;
     if (0 != (err = pthread_mutex_init(tmp->lock, NULL))) {
@@ -35,6 +37,7 @@ int main()
 	char names[ACCTS] = {'A','B','C','D','E'};
     for (i = 0; i < ACCTS; i++) {
         accounts[i] = (Account *) malloc(sizeof(Account));
+        __ESBMC_assume(accounts[i]);
         accounts[i] = newAccount(names[i], 100);
     }
 

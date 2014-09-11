@@ -15,6 +15,7 @@ int main()
 {
     struct rec *p;
     p=(struct rec *) malloc (sizeof(struct rec));
+    __ESBMC_assume(p);
     (*p).i=10;
 //    (*p).f=3.14;
 //    (*p).c='a';

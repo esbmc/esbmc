@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 
 SRCS = main.cpp parseoptions.cpp bmc.cpp  \
-      document_subgoals.cpp  show_vcc.cpp options.cpp
+      document_subgoals.cpp show_vcc.cpp options.cpp kinduction_parallel.cpp
 
 # additional objects for esbmc binary
 OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
@@ -29,6 +29,7 @@ export LD LDFLAGS
 ifndef STATICLINK
 esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
+	$(ESBMCDIR)/ansi-c/headers/flail.sh buildidstring $(OBJDIR)/buildidobj.txt | $(CC) $(CFLAGS) -x c - -c -o $(OBJDIR)/buildidobj.o
 	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL)
 
 else
@@ -38,8 +39,9 @@ else
 # linked up into esbmc to produce a library that /should/ work everywhere.
 esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
+	$(ESBMCDIR)/ansi-c/headers/flail.sh buildidstring $(OBJDIR)/buildidobj.txt | $(CC) $(CFLAGS) -x c - -c -o $(OBJDIR)/buildidobj.o
 	$(ESBMCDIR)/scripts/fetchlibc.sh libc${BITWIDTH_STR}.a .libc${BITWIDTH_STR}.a $(ESBMCDIR)/scripts/gpg-keyring
-	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(CXX) $(CXXFLAGS) -print-file-name=libstdc++.a` -lm -ldl `$(CXX) $(CXXFLAGS) -print-file-name=libgcc.a` `$(CXX) $(CXXFLAGS) -print-file-name=libgcc_eh.a` ./.libc${BITWIDTH_STR}.a
+	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(FINLINKBIN) $(CXXFLAGS) -print-file-name=libstdc++.a` -lm `$(FINLINKBIN) $(CXXFLAGS) -print-file-name=libgcc.a` `$(FINLINKBIN) $(CXXFLAGS) -print-file-name=libgcc_eh.a` ./.libc${BITWIDTH_STR}.a
 
 endif
 

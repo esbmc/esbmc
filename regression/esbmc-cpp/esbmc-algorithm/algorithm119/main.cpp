@@ -11,6 +11,6 @@ int main () {
   cout << "max('a','z')==" << max('a','z') << endl;
   assert(max('a','z') == 'z');
   cout << "max(3.14,2.73)==" << max(3.14,2.73) << endl;
-  assert(max(3.14,2.73) == 2.73);
+  assert(max(3.14,2.73) != 3.14);
   return 0;
 }

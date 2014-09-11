@@ -137,7 +137,7 @@ Function: cpp_typecheckt::convert
 void cpp_typecheckt::convert(cpp_declarationt &declaration)
 {
   // see if the declaration is empty
-  if(declaration.type().is_nil() &&
+  if(declaration.find("type").is_nil() &&
      !declaration.has_operands())
     return;
 
@@ -181,7 +181,7 @@ void cpp_typecheckt::convert_non_template_declaration(
 
   typecheck_type(type);
 
-  // special treatment for anonymous unions
+  // Special treatment for anonymous unions
   if(declaration.declarators().empty() &&
      follow(declaration.type()).get_bool("#is_anonymous"))
   {

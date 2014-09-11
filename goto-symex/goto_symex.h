@@ -12,12 +12,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <irep2.h>
 
 #include <map>
+#include <stack>
 #include <std_types.h>
 #include <i2string.h>
 #include <hash_cont.h>
 #include <options.h>
 
 #include <goto-programs/goto_functions.h>
+
+#include <pointer-analysis/dereference.h>
 
 #include "goto_symex_state.h"
 #include "symex_target.h"
@@ -68,6 +71,7 @@ public:
 
   friend class symex_dereference_statet;
   friend class bmct;
+  friend class reachability_treet;
 
   typedef goto_symex_statet statet;
 
@@ -154,21 +158,10 @@ protected:
    *  if-then-else list of concrete references that it might point at.
    *  @param expr Expression to eliminate dereferences from.
    *  @param write Whether or not we're writing into this object.
+   *  @param free Whether we're freeing this pointer.
    */
-  void dereference(expr2tc &expr, const bool write);
-
-  /**
-   *  Recursive implementation of dereference method.
-   *  @param expr Expression to eliminate dereferences from.
-   *  @param guard Some guard (defunct?).
-   *  @param dereference Dereferencet object to operate with.
-   *  @param write Whether or not we're writing to this object.
-   */
-  void dereference_rec(
-    expr2tc &expr,
-    guardt &guard,
-    class dereferencet &dereference,
-    const bool write);
+  void dereference(expr2tc &expr, const bool write, bool free = false,
+                   bool internal = false);
 
   // symex
 
@@ -339,14 +332,13 @@ protected:
 
   /**
    *  Fill goto_symex_statet::framet with renamed local variable names.
-   *  These names are all the names of local variables, renamed to level 1, so
-   *  that we have a list of all variables that are in fact local to this
-   *  particular function call.
-   *  @param frame_counter The function frame invocation number.
+   *  These names are all the names of local variables, renamed to level 1.
+   *  We also bump up the level 1 renaming number, effectively making all the
+   *  local variables new instances of those variables (which is what entering
+   *  a function and declaring variables does).
    *  @param goto_function The function we're working upon.
    */
-  void locality(unsigned frame_counter,
-    const goto_functionst::goto_functiont &goto_function);
+  void locality(const goto_functiont &goto_function);
 
   /**
    *  Setup next function in a chain of func ptr calls.
@@ -367,6 +359,10 @@ protected:
    */
   void run_intrinsic(const code_function_call2t &call, reachability_treet &art,
                      const std::string symname);
+
+  /** Implementation of realloc. */
+  void intrinsic_realloc(const code_function_call2t &call,
+                         reachability_treet &arg);
 
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
@@ -389,9 +385,23 @@ protected:
                               reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
+  /** Perform get_thead_state... defunct. */
+  void intrinsic_get_thread_state(const code_function_call2t &call, reachability_treet &art);
+  /** Really atomic start/end - atomic blocks that just disable ileaves. */
+  void intrinsic_really_atomic_begin(reachability_treet &art);
+  /** Really atomic start/end - atomic blocks that just disable ileaves. */
+  void intrinsic_really_atomic_end(reachability_treet &art);
+  /** Context switch to the monitor thread. */
+  void intrinsic_switch_to_monitor(reachability_treet &art);
+  /** Context switch from the monitor thread. */
+  void intrinsic_switch_from_monitor(reachability_treet &art);
+  /** Register which thread is the monitor thread. */
+  void intrinsic_register_monitor(const code_function_call2t &call, reachability_treet &art);
+  /** Terminate the monitor thread */
+  void intrinsic_kill_monitor(reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
-  void symex_throw();
+  bool symex_throw();
 
   /** Register exception handler on stack. */
   void symex_catch();
@@ -400,21 +410,31 @@ protected:
   void symex_throw_decl();
 
   /** Update throw target. */
-  void update_throw_target(goto_symex_statet::framet* frame,
-    goto_symex_statet::framet::catch_mapt::const_iterator c_it);
+  void update_throw_target(goto_symex_statet::exceptiont* except,
+    goto_programt::const_targett target, const expr2tc &code);
 
   /** Check if we can rethrow an exception:
    *  if we can then update the target.
    *  if we can't then gives a error.
    */
-  bool handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
-    const goto_programt::instructiont instruction);
+  bool handle_rethrow(const expr2tc &operand,
+    const goto_programt::instructiont &instruction);
 
   /** Check if we can throw an exception:
    *  if we can't then gives a error.
    */
-  void handle_throw_decl(goto_symex_statet::framet* frame,
+  int handle_throw_decl(goto_symex_statet::exceptiont* frame,
     const irep_idt &id);
+
+  /**
+   * Call terminate function handler when needed.
+   */
+  bool terminate_handler();
+
+  /**
+   * Call unexpected function handler when needed.
+   */
+  bool unexpected_handler();
 
   /**
    *  Replace ireps regarding dynamic allocations with code.
@@ -513,10 +533,25 @@ protected:
   void symex_assign_byte_extract(const expr2tc &lhs, expr2tc &rhs,
                                  guardt &guard);
 
+  /**
+   *  Assign through a 'concat' operation. These are generated when we fail to
+   *  dereference something correctly, and generate a series of byte operations
+   *  that we then stitch back together. When that's on the left hand side of an
+   *  expression, this means that we have to decompose the right hand side into
+   *  a series of byte assignments.
+   *  @param lhs Concat to assign to
+   *  @param rhs Value to assign to lhs
+   *  @param guard Assignment guard.
+   */
+  void symex_assign_concat(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+
   /** Symbolic implementation of malloc. */
-  void symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  /** Pointer modelling update function */
+  void track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
+                         expr2tc size = expr2tc());
   /** Symbolic implementation of free */
-  void symex_free(const code_free2t &code);
+  void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const expr2tc &code);
   /** Symbolic implementation of c++'s new. */
@@ -559,8 +594,6 @@ protected:
   unsigned remaining_claims;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
-  /** Names of functions that we've complained about missing bodies of. */
-  hash_set_cont<irep_idt, irep_id_hash> body_warnings;
   /** Unwind bounds, loop number -> max unwinds. */
   std::map<unsigned, long> unwind_set;
   /** Global maximum number of unwinds. */
@@ -589,8 +622,69 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
-  // exception
+  /* Exception Handling.
+   * This will stack the try-catch blocks, so we always know which catch
+   * we should jump.
+   */
+  typedef std::stack<goto_symex_statet::exceptiont> stack_catcht;
+
+  /** Stack of try-catch blocks. */
+  stack_catcht stack_catch;
+
+  /** Pointer to last thrown exception. */
   goto_programt::instructiont *last_throw;
+
+  /** Map of currently active exception targets, i.e. instructions where an
+   *  exception is going to be merged in in the future. Keys are iterators to
+   *  the instruction catching the object; domain is a symbol that the thrown
+   *  piece of data has been assigned to. */
+  std::map<goto_programt::const_targett, symbol2tc> thrown_obj_map;
+
+  /** Flag to indicate if we are go into the unexpected flow. */
+  bool inside_unexpected;
+
+  /** Flag to indicate if we have an unwinding recursion assumption. */
+  bool unwinding_recursion_assumption;
+
+  /** Depth limit, as given by the --depth option */
+  unsigned long depth_limit;
+  /** Instruction number we are to break at -- that is, trap, to the debugger.
+   *  Zero means no trap; there is a zero instruction, but there are better
+   *  ways of trapping at the start of symbolic execution to get at that. */
+  unsigned long break_insn;
+  /** Flag as to whether we're performing memory leak checks. Corresponds to
+   *  the option --memory-leak-check */
+  bool memory_leak_check;
+  /** Flag as to whether we're performing deadlock checking. Corresponds to
+   *  the option --deadlock-check */
+  bool deadlock_check;
+  /** Flag as to whether we're checking user assertions. Corresponds to
+   *  the option --no-assertions */
+  bool no_assertions;
+  /** Flag as to whether we're not simplifying exprs. Corresponds to
+   *  the option --no-simplify */
+  bool no_simplify;
+  /** Flag as to whether we're inserting unwinding assertions. Corresponds to
+   *  the option --no-unwinding-assertions */
+  bool no_unwinding_assertions;
+  /** Flag as to whether we're not enabling partial loops. Corresponds to
+   *  the option --partial-loops */
+  bool partial_loops;
+  /** Flag as to whether we're doing a k-induction. Corresponds to
+   *  the option --k-induction */
+  bool k_induction;
+  /** Flag as to whether we're doing a k-induction base case. Corresponds to
+   *  the option --base-case */
+  bool base_case;
+  /** Flag as to whether we're doing a k-induction forward condition.
+   *  Corresponds to the option --forward-condition */
+  bool forward_condition;
+  /** Names of functions that we've complained about missing bodies of. */
+  static hash_set_cont<irep_idt, irep_id_hash> body_warnings;
+  /** Set of dereference state records; this field is used as a mailbox between
+   *  the dereference code and the caller, who will inspect the contents after
+   *  a call to dereference (in INTERNAL mode) completes. */
+  std::list<dereference_callbackt::internal_item> internal_deref_items;
 };
 
 #endif

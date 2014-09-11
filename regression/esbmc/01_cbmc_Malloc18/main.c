@@ -22,10 +22,12 @@ item* search_list(item* i, int k) {
 void insert_list(item* i, int k) {
 	if(i==NULL){
 		i=(item*)malloc(sizeof(item));
+                __ESBMC_assume(i);
 		i->val=k;
 		i->next=NULL;
 	}else{
 		i=(item *)malloc(sizeof(item));
+                __ESBMC_assume(i);
 		i->val=k;
 		i->next=NULL;
 		head=i;
@@ -38,6 +40,7 @@ int main(void) {
 
   for(i=1;i<=2;i++) {
     curr = (item *)malloc(sizeof(item));
+    __ESBMC_assume(curr);
     curr->val = i;
     curr->next  = head;
     head = curr;

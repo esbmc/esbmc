@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 int main () {
@@ -13,6 +14,10 @@ int main () {
 
   rotate(myvector.begin(),myvector.begin()+3,myvector.end());
                                                   // 4 5 6 7 8 9 1 2 3
+  assert(myvector[0] == 4);
+  assert(myvector[1] == 5);
+  assert(myvector[2] == 6);
+  assert(myvector[3] == 7);
 
   // print out content:
   cout << "myvector contains:";

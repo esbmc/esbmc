@@ -39,16 +39,5 @@ int main ()
     cout << " " << *it;
   cout << endl;
 
-  mylist.sort(compare_nocase);
-  it = mylist.begin();
-  assert(*it != "one"); it++;
-  assert(*it != "Three"); it++;
-  assert(*it != "two");
-
-  cout << "mylist contains:";
-  for (it=mylist.begin(); it!=mylist.end(); ++it)
-    cout << " " << *it;
-  cout << endl;
-
   return 0;
 }

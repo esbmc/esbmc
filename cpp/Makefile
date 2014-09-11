@@ -1,7 +1,7 @@
+all: realall
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
-MAINOBJ= $(OBJDIR)/cpp.o
-all: $(OBJDIR)/.deps $(MAINOBJ)
+MAINOBJNAME=cpp.o
 
 SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck.cpp cpp_convert_type.cpp \
@@ -39,3 +39,5 @@ clean:
 	-rm -f $(OBJS) lex.yy.cpp y.tab.cpp.output $(OBJDIR)/.deps $(MAINOBJ)
 
 include $(ESBMCDIR)/common
+
+realall: $(OBJDIR)/.deps $(MAINOBJ)

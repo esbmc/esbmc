@@ -1,0 +1,10 @@
+These tests are from the gcc/testsuite/g++.dg/template directory of gcc-4.8.1.
+
+I have retained only the tests that were designed to be run (not just compiled)
+and do not use any external libraries. They should execute without error in a C++98 
+environment. All report failure through assert(0).
+
+(for i in *.C; do g++ -std=c++98 -o t $i; ./t ; done ) 2>&1 | less
+
+Denis Nicole.
+2013-10-09

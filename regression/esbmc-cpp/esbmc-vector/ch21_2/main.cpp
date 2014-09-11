@@ -1,6 +1,7 @@
 // Fig. 23.14: Fig23_14.cpp
 // Demonstrating Standard Library vector class template.
 #include <iostream>
+#include <string>
 using std::cout;
 using std::endl;
 

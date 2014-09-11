@@ -55,7 +55,6 @@ public:
   bool simplify_inequality_not_constant(exprt &expr, modet mode);
   bool simplify_relation(exprt &expr, modet mode);
   bool simplify_ieee_float_relation(exprt &expr);
-  bool simplify_lambda(exprt &expr);
   bool simplify_with(exprt &expr);
   bool simplify_index(index_exprt &expr, modet mode);
   bool simplify_member(member_exprt &expr);

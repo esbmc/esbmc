@@ -20,11 +20,11 @@
 #include <list>
 #include <algorithm>
 #include <std_expr.h>
+#include <message.h>
 
 #include "symex_target.h"
 #include "goto_symex_state.h"
 #include "goto_symex.h"
-#include "read_write_set.h"
 #include "renaming.h"
 
 class reachability_treet;
@@ -71,13 +71,15 @@ class execution_statet : public goto_symext
    *  @param context Context we'll be working in.
    *  @param l2init Initial level2t state (blank).
    *  @param options Options we're going to operate with.
+   *  @param message_handler Message object to collect errors/warnings
    */
   execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
                    reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
                    ex_state_level2t *l2init,
-                   const optionst &options);
+                   const optionst &options,
+                   message_handlert &message_handler);
 
   /**
    *  Default copy constructor.
@@ -93,10 +95,6 @@ class execution_statet : public goto_symext
   virtual ~execution_statet();
 
   // Types
-
-  typedef std::string (*serialise_fxn)(execution_statet &ex_state,
-                                       const exprt &rhs);
-  typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
 
   /**
    *  execution_statet specific level2t.
@@ -368,14 +366,6 @@ class execution_statet : public goto_symext
   bool check_if_ileaves_blocked(void);
 
   /**
-   *  Apply a partial order reduction.
-   *  @param expr Assignment or read to consider in this analysis.
-   *  @param i Thread id of the currently executing thread.
-   *  @return False if we should skip this interleaving.
-   */
-  bool apply_static_por(const expr2tc &expr, unsigned int i) const;
-
-  /**
    *  Create a new thread.
    *  Creates and initializes a new thread, running at the start of the GOTO
    *  program prog.
@@ -395,19 +385,83 @@ class execution_statet : public goto_symext
   void end_thread(void);
 
   /**
-   *  Get number of globals written by expr.
+   *  Perform any necessary steps after a context switch point. Whether or not
+   *  it was taken. Resets DFS record, POR records, executes thread guard.
+   */
+  void update_after_switch_point(void);
+
+  /**
+   *  Analyze the contents of an assignment for threading.
+   *  If the assignment touches any kind of shared state, we track the accessed
+   *  variables for POR decisions made in the future, and also ask the RT obj
+   *  whether or not it wants to generate an interleaving.
+   *  @param assign Container of code_assign2t object.
+   */
+  void analyze_assign(const expr2tc &assign);
+
+  /**
+   *  Analyze the contents of a read for threading.
+   *  If the read touches any kind of shared state, we track the accessed
+   *  variables for POR decisions made in the future, and also ask the RT obj
+   *  whether or not it wants to generate an interleaving.
+   *  @param expr Container of expression possibly touching global state.
+   */
+  void analyze_read(const expr2tc &expr);
+
+  /**
+   *  Get list of globals accessed by expr.
    *  Exactly how this works, I do not know.
    *  @param ns Namespace to work under.
    *  @expr Expression to count global writes in.
    *  @return Number of global refs in this expression.
    */
-  unsigned int get_expr_write_globals(const namespacet &ns,
-                                      const expr2tc &expr);
+  void get_expr_globals(const namespacet &ns, const expr2tc &expr,
+                        std::set<expr2tc> &global_list);
 
   /**
-   *  See get_expr_write_globals.
+   *  Check for scheduling dependancies. Whether it exists between the variables
+   *  accessed by the last transition of thread j and the last transition of
+   *  thread l.
+   *  @param j Most recently executed thread id
+   *  @param l Other thread id to check dependancy with
+   *  @return True if scheduling dependancy exists between threads j and l
    */
-  unsigned int get_expr_read_globals(const namespacet &ns, const expr2tc &expr);
+  bool check_mpor_dependancy(unsigned int j, unsigned int l) const;
+
+  /**
+   *  Calculate MPOR schedulable threads. I.E. what threads we can schedule
+   *  right now without violating the "quasi-monotonic" property.
+   */
+  void calculate_mpor_constraints(void);
+
+  /** Accessor method for mpor_schedulable. Ensures its access is within bounds
+   *  and is read-only. */
+  bool is_transition_blocked_by_mpor(void) const
+  {
+    return mpor_says_no;
+  }
+
+  /** Accessor method for cswitch_forced. Sets it to true. */
+  void force_cswitch(void)
+  {
+    cswitch_forced = true;
+  }
+
+  /**
+   *  Has a context switch point occured.
+   *  Four things can justify this:
+   *   1. cswitch forced by atomic end or yield.
+   *   2. Global data read/written.
+   *  @return True if context switch is now triggered
+   */
+  bool has_cswitch_point_occured(void) const;
+
+  /**
+   *  Can execution continue in this thread?
+   *  Answer is no if the thread has ended or there's nothing on the call stack
+   *  @return False if there are no further instructions to execute.
+   */
+  bool can_execution_continue(void) const;
 
   /**
    *  Generate hash of entire execution state.
@@ -424,14 +478,7 @@ class execution_statet : public goto_symext
    *  @param rhs Expression to hash.
    *  @return Hash of passed in expression.
    */
-  crypto_hash update_hash_for_assignment(const exprt &rhs);
-
-  /**
-   *  Serialise expressions contents into a string.
-   *  @param rhs Expresson to serialise
-   *  @return String, serialised version of rhs.
-   */
-  std::string serialise_expr(const exprt &rhs);
+  crypto_hash update_hash_for_assignment(const expr2tc &rhs);
 
   /**
    *  Print stack trace of each thread to stdout.
@@ -441,6 +488,26 @@ class execution_statet : public goto_symext
    *  @param indent Indentation to print each stack trace with
    */
   void print_stack_traces(unsigned int indent = 0) const;
+
+  /** Switch to registered monitor thread.
+   *  Switches the currently executing thread to the monitor thread that's been
+   *  previously registered. This does not result in the context switch counter
+   *  being incremented. Stores which thread ID we switched from for a future
+   *  switch back. */
+  void switch_to_monitor(void);
+
+  /** Switch away from registered monitor thread.
+   *  Switches away from the registered monitor thread, to whatever thread
+   *  caused switch_to_monitor to be called in the past
+   *  @see switch_to_monitor
+   */
+  void switch_away_from_monitor(void);
+
+  /** Makr registered monitor thread as ended. Designed to be used by ltl2ba
+   *  produced code when the monitor is to be ended. */
+  void kill_monitor_thread(void);
+
+  void init_property_monitors(void);
 
   public:
 
@@ -458,15 +525,11 @@ class execution_statet : public goto_symext
    *  Every time a context switch is taken, the bool in this vector is set to
    *  true at the corresponding thread IDs index. */
   std::vector<bool> DFS_traversed;
-  /** Unknown, something POR related. */
-  std::vector<read_write_set> exprs_read_write;
   /** Storage for threading libraries thread start data. See version history
    *  of when this was introduced to fully understand why; essentially this
    *  is a workaround to prevent too much nondeterminism entering into the
    *  thread starting process. */
   std::vector<expr2tc> thread_start_data;
-  /** Unknown, Something POR related. */
-  read_write_set last_global_read_write;
   /** Last active thread's ID. */
   unsigned int last_active_thread;
   /** Global L2 state of this execution_statet. It's also copied as a reference
@@ -495,17 +558,65 @@ class execution_statet : public goto_symext
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */
   expr2tc pre_goto_guard;
+  /** TID of monitor thread, for monitor intrinsics. */
+  unsigned int monitor_tid;
+  /** Whether monitor_tid is set. */
+  bool tid_is_set;
+  /** TID of thread that switched to monitor */
+  unsigned int monitor_from_tid;
+  /** Whether monitor_from_tid is set */
+  bool mon_from_tid;
+  /** Are we performing LTL monitor checking? */
+  bool check_ltl;
+  /** Have we warned of an ended monitor thread already?. */
+  bool mon_thread_warning;
+  /** List of monitored properties. */
+  std::map<std::string, exprt> property_monitor_strings;
+  /** Message handler object */
+  message_handlert &message_handler;
+  /** Minimum number of threads to exist to consider a context switch.
+   *  In certain special cases, such as LTL checking, various pieces of
+   *  code and information are bunged into seperate threads which aren't
+   *  necessarily scheduled. In these cases we don't want to consider
+   *  cswitches, because even though they're not taken, they'll heavily
+   *  inflate memory size.
+   *  So, instead of considering context switches where more than one thread
+   *  exists, compare the number of threads against this threshold. */
+  unsigned int thread_cswitch_threshold;
 
   protected:
   /** Number of context switches performed by this ex_state */
   int CS_number;
+  /** For each thread, a set of symbols that were read by the thread in the
+   *  last transition (run). Renamed to level1, as that identifies each piece of
+   *  data that could have storage in C. */
+  std::vector<std::set<expr2tc> > thread_last_reads;
+  /** For each thread, a set of symbols that were written by the thread in the
+   *  last transition (run). Renamed to level1, as that identifies each piece of
+   *  data that could have storage in C. */
+  std::vector<std::set<expr2tc> > thread_last_writes;
+  /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
+   *  to dependancy_chain[i][j] here. */
+  std::vector<std::vector<int> > dependancy_chain;
+  /** MPOR scheduling outcome. If we've just taken a transition that MPOR
+   *  rejects, this becomes true. For various reasons, we can't tell whether or
+   *  not MPOR rejects a transition in advance. */
+  bool mpor_says_no;
+  /** Indicates a manatory context switch should occur. Can happen when an
+   *  atomic_end instruction has occured, or when a __ESBMC_yield(); runs */
+  bool cswitch_forced;
+
+  /** Are we tracing / printing symex instructions? */
+  bool symex_trace;
+  /** Are we encoding SMT during exploration? */
+  bool smt_during_symex;
+  /** Are we evaluating the thread guard in the SMT solver during context
+   *  switching? */
+  bool smt_thread_guard;
 
   // Static stuff:
 
   public:
-  static expr_id_map_t init_expr_id_map();
-  static bool expr_id_map_initialized;
-  static expr_id_map_t expr_id_map;
   static unsigned int node_count;
 };
 
@@ -528,12 +639,13 @@ class dfs_execution_statet : public execution_statet
                    reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
-                   const optionst &options)
+                   const optionst &options,
+                   message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
                          options.get_bool_option("state-hashing")
                              ? new state_hashing_level2t(*this)
                              : new ex_state_level2t(*this),
-                             options)
+                             options, _message_handler)
   {
   };
 
@@ -559,9 +671,10 @@ class schedule_execution_statet : public execution_statet
                    contextt &context,
                    const optionst &options,
                    unsigned int *ptotal_claims,
-                   unsigned int *premaining_claims)
+                   unsigned int *premaining_claims,
+                   message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
-                         new ex_state_level2t(*this), options)
+                         new ex_state_level2t(*this), options, _message_handler)
   {
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;

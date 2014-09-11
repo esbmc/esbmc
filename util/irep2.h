@@ -21,6 +21,8 @@
 #include <big-int/bigint.hh>
 #include <dstring.h>
 
+#include <crypto_hash.h>
+
 // XXXjmorse - abstract, access modifies, need consideration
 
 /** Iterate over all expr2tc's in a vector.
@@ -197,7 +199,10 @@ public:
 
   template <class Y>
   irep_container(const irep_container<Y> &ref)
-    : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref), boost::detail::polymorphic_cast_tag()) {}
+    : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref))
+  {
+    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+  }
 
   irep_container &operator=(irep_container const &ref)
   {
@@ -216,7 +221,8 @@ public:
   template <class Y>
   irep_container &operator=(const irep_container<Y> &ref)
   {
-    *this = boost::shared_polymorphic_cast<T, Y>
+    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+    *this = boost::static_pointer_cast<T, Y>
             (static_cast<const boost::shared_ptr<Y> &>(ref));
     return *this;
   }
@@ -239,7 +245,9 @@ public:
   T * get() // never throws
   {
     detach();
-    return boost::shared_ptr<T>::get();
+    T *tmp = boost::shared_ptr<T>::get();
+    tmp->crc_val = 0;
+    return tmp;
   }
 
   void detach(void)
@@ -253,6 +261,17 @@ public:
     const T *foo = boost::shared_ptr<T>::get();
     *this = foo->clone();
     return;
+  }
+
+  uint32_t crc(void) const
+  {
+    const T *foo = boost::shared_ptr<T>::get();
+    if (foo->crc_val != 0)
+      return foo->crc_val;
+
+    uint32_t crc = foo->crc();
+    foo->crc_val = crc;
+    return crc;
   }
 };
 
@@ -307,6 +326,8 @@ protected:
   type2t(const type2t &ref);
 
 public:
+  virtual ~type2t() { };
+
   /** Despatcher for SMT conversion.
    *  Each subclass of type2t overrides this method, and provides a routine
    *  that will invoke a method in the class prop_convt that will convert it
@@ -325,6 +346,10 @@ public:
    *  itself. May throw various exceptions depending on whether this operation
    *  is viable - for example, for symbol types, infinite sized or dynamically
    *  sized arrays.
+   *
+   *  Note that the bit width is _not_ the same as the ansi-c byte model
+   *  representation of this type.
+   *
    *  @throws symbolic_type_excp
    *  @throws array_type2t::inf_sized_array_excp
    *  @throws array_type2t::dyn_sized_array_excp
@@ -415,10 +440,22 @@ public:
    */
   virtual void do_crc(hacky_hash &hash) const;
 
+  /** Perform hash operation accumulating into parameter.
+   *  Feeds data as appropriate to the type of the expression into the
+   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
+   *  of hash scenario.
+   *  @see cmp
+   *  @see crc
+   *  @see do_crc
+   *  @param hash Object to accumulate hash data into.
+   */
+  virtual void hash(crypto_hash &hash) const;
+
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
-};
 
+  mutable uint32_t crc_val;
+};
 
 /** Fetch identifying name for a type.
  *  I.E., this is the class of the type, what you'd get if you called type.id()
@@ -536,6 +573,10 @@ public:
     code_cpp_catch_id,
     code_cpp_throw_id,
     code_cpp_throw_decl_id,
+    code_cpp_throw_decl_end_id,
+    isinf_id,
+    isnormal_id,
+    concat_id,
     end_expr_id
   };
 
@@ -554,6 +595,8 @@ protected:
   expr2t(const expr2t &ref);
 
 public:
+  virtual ~expr2t() { };
+
   /** Clone method. Self explanatory. */
   virtual expr2tc clone(void) const = 0;
 
@@ -667,6 +710,17 @@ public:
    */
   virtual void do_crc(hacky_hash &hash) const;
 
+  /** Perform hash operation accumulating into parameter.
+   *  Feeds data as appropriate to the type of the expression into the
+   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
+   *  of hash scenario.
+   *  @see cmp
+   *  @see crc
+   *  @see do_crc
+   *  @param hash Object to accumulate hash data into.
+   */
+  virtual void hash(crypto_hash &hash) const;
+
   /** Generate a list of expr operands.
    *  Use forall_operands2 instead; this method is overridden by subclasses and
    *  when invoked fills the inp list with pointers to any exprs that make up
@@ -752,13 +806,15 @@ public:
 
   /** Type of this expr. All exprs have a type. */
   type2tc type;
+
+  mutable uint32_t crc_val;
 };
 
 // For boost multi-index hashing,
 inline std::size_t
 hash_value(const expr2tc &expr)
 {
-  return expr->crc();
+  return expr.crc();
 }
 
 /** Fetch string identifier for an expression.
@@ -831,7 +887,7 @@ namespace esbmct {
    *
    *  In fact, we can make type generic implementations of all the following
    *  methods in expr2t: convert_smt, clone, tostring, cmp, lt, do_crc,
-   *  list_operands.
+   *  list_operands, hash.
    *
    *  So, that's what this template provides; an expr2t class can be made by
    *  inheriting from this template, telling it what class it'll end up with,
@@ -973,6 +1029,7 @@ namespace esbmct {
     virtual bool cmp(const expr2t &ref) const;
     virtual int lt(const expr2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
+    virtual void hash(crypto_hash &hash) const;
     virtual void list_operands(std::list<const expr2tc*> &inp) const;
     virtual const expr2tc *get_sub_expr(unsigned int i) const;
     virtual expr2tc *get_sub_expr_nc(unsigned int i);
@@ -1068,6 +1125,217 @@ namespace esbmct {
     virtual bool cmp(const type2t &ref) const;
     virtual int lt(const type2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
+    virtual void hash(crypto_hash &hash) const;
+  };
+
+  // Meta goo
+  class takestype;
+  class notype;
+
+  // So that we can write such things as:
+  //
+  //   constant_int2tc bees(type, val);
+  //
+  // We need a class derived from expr2tc that takes the correct set of
+  // constructor arguments, which means yet more template goo.
+  template <class contained, unsigned int expid, class superclass,class hastype,
+     typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
+     field1_type field1_class::*field1_ptr = &field1_class::expr_id,
+     typename field2_type = const expr2t::expr_ids, class field2_class = expr2t,
+     field2_type field2_class::*field2_ptr = &field2_class::expr_id,
+     typename field3_type = const expr2t::expr_ids, class field3_class = expr2t,
+     field3_type field3_class::*field3_ptr = &field3_class::expr_id,
+     typename field4_type = const expr2t::expr_ids, class field4_class = expr2t,
+     field4_type field4_class::*field4_ptr = &field4_class::expr_id,
+     typename field5_type = const expr2t::expr_ids, class field5_class = expr2t,
+     field5_type field5_class::*field5_ptr = &field5_class::expr_id,
+     typename field6_type = const expr2t::expr_ids, class field6_class = expr2t,
+     field6_type field6_class::*field6_ptr = &field6_class::expr_id>
+  class something2tc : public expr2tc {
+    public:
+    // Blank initialization of a container class -> store NULL
+    something2tc() : expr2tc() { }
+
+    // Initialize container from a non-type-committed container. Encode an
+    // assertion that the type is what we expect.
+    //
+    // Don't do this though if this'll conflict with a later consructor though.
+    // For example if we have not2tc, not2tc(expr) could be copying it or
+    // constructing a new not2t irep. In the face of this ambiguity, pick the
+    // latter, and the end user can worry about how to cast up to a not2tc.
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const expr2tc &init,
+                 typename boost::lazy_disable_if<boost::mpl::and_<boost::fusion::result_of::equal_to<field1_type,expr2tc>,boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids> >, arbitary>::type* = NULL
+                 ) : expr2tc(init)
+    {
+      assert(init->expr_id == expid);
+    }
+
+    // Quick hack for symbol2t: it has a form of constructor where it only takes
+    // the type and the (name-munged) symbol name, and extracts the correct
+    // pieces of info from the name. However that requries the container
+    // constructor to support this.
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const irep_idt &arg1,
+                 typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<contained,symbol2t>, arbitary >::type* = NULL)
+          : expr2tc(new contained(t, arg1)) { }
+
+    const contained &operator*() const
+    {
+      return static_cast<const contained&>(*expr2tc::get());
+    }
+
+    const contained * operator-> () const // never throws
+    {
+      return static_cast<const contained*>(expr2tc::operator->());
+    }
+
+    const contained * get() const // never throws
+    {
+      return static_cast<const contained*>(expr2tc::get());
+    }
+
+    contained * get() // never throws
+    {
+      detach();
+      return static_cast<contained*>(expr2tc::get());
+    }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const type2tc &t,
+                 disable_if_eq(arbitary,hastype,notype),
+                 disable_if_not_eq(arbitary,field1_type,expr2t::expr_ids))
+      : expr2tc(new contained(t)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 disable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field1_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field2_type,expr2t::expr_ids))
+      : expr2tc(new contained(t, arg1)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 const field2_type &arg2,
+                 disable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field2_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field3_type,expr2t::expr_ids))
+      : expr2tc(new contained(t, arg1, arg2)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 disable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field3_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field4_type,expr2t::expr_ids))
+      : expr2tc(new contained(t, arg1, arg2, arg3)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 disable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field4_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field5_type,expr2t::expr_ids))
+      : expr2tc(new contained(t, arg1, arg2, arg3, arg4)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 const field5_type &arg5,
+                 disable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field5_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field6_type,expr2t::expr_ids))
+      : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 const field5_type &arg5,
+                 const field6_type &arg6,
+                 disable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field6_type,expr2t::expr_ids))
+      : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6)) { }
+
+    // Duplicate set of constructors, but without the type argument.
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field1_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field2_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 const field2_type &arg2,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field2_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field3_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1, arg2)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field3_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field4_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1, arg2, arg3)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field4_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field5_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1, arg2, arg3, arg4)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 const field5_type &arg5,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field5_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field6_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 const field5_type &arg5,
+                 const field6_type &arg6,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field6_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5, arg6)) { }
+
+    something2tc(const something2tc<contained, expid, superclass, hastype,
+                                    field1_type, field1_class, field1_ptr,
+                                    field2_type, field2_class, field2_ptr,
+                                    field3_type, field3_class, field3_ptr,
+                                    field4_type, field4_class, field4_ptr,
+                                    field5_type, field5_class, field5_ptr,
+                                    field6_type, field6_class, field6_ptr> &ref)
+      : expr2tc(ref) { }
   };
 
   // Meta goo
@@ -1793,6 +2061,26 @@ inline bool is_number_type(const type2tc &t) \
 inline bool is_number_type(const expr2tc &e)
 { return is_number_type(e->type); }
 
+inline bool is_scalar_type(const type2tc &t)
+{ return is_number_type(t) || is_pointer_type(t) || is_bool_type(t) ||
+         is_empty_type(t) || is_code_type(t); }
+
+inline bool is_scalar_type(const expr2tc &e)
+{ return is_scalar_type(e->type); }
+
+inline bool is_multi_dimensional_array(const type2tc &t) {
+  if (is_array_type(t)) {
+    const array_type2t &arr_type = to_array_type(t);
+    return is_array_type(arr_type.subtype);
+  } else {
+    return false;
+  }
+}
+
+inline bool is_multi_dimensional_array(const expr2tc &e) {
+  return is_multi_dimensional_array(e->type);
+}
+
 /** Pool for caching converted types.
  *  Various common types (bool, empty for example) needn't be reallocated
  *  every time we need a new one; it's better to have some global constants
@@ -1804,6 +2092,7 @@ inline bool is_number_type(const expr2tc &e)
 class type_poolt {
 public:
   type_poolt(void);
+  type_poolt(bool yolo);
 
   type2tc bool_type;
   type2tc empty_type;
@@ -1948,6 +2237,10 @@ class code_cpp_delete2t;
 class code_cpp_catch2t;
 class code_cpp_throw2t;
 class code_cpp_throw_decl2t;
+class code_cpp_throw_decl_end2t;
+class isinf2t;
+class isnormal2t;
+class concat2t;
 
 // Data definitions.
 
@@ -2056,8 +2349,8 @@ public:
   // So, let's pretend that this is private, even though it can't be enforced.
   irep_idt thename;
   renaming_level rlevel;
-  unsigned int level1_num;
-  unsigned int level2_num;
+  unsigned int level1_num; // Function activation record
+  unsigned int level2_num; // SSA variable number
   unsigned int thread_num;
   unsigned int node_num;
 };
@@ -2528,13 +2821,15 @@ class object_desc_data : public expr2t
 {
   public:
     object_desc_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
-                     const expr2tc &offs)
-      : expr2t(t, id), object(o), offset(offs) { }
+                     const expr2tc &offs, unsigned int align)
+      : expr2t(t, id), object(o), offset(offs), alignment(align) { }
     object_desc_data(const object_desc_data &ref)
-      : expr2t(ref), object(ref.object), offset(ref.offset) { }
+      : expr2t(ref), object(ref.object), offset(ref.offset),
+        alignment(ref.alignment) { }
 
     expr2tc object;
     expr2tc offset;
+    unsigned int alignment;
 };
 
 class code_funccall_data : public code_base
@@ -2855,7 +3150,8 @@ irep_typedefs(code_goto, code_goto_data, esbmct::notype,
               irep_idt, code_goto_data, &code_goto_data::target);
 irep_typedefs(object_descriptor, object_desc_data, esbmct::takestype,
               expr2tc, object_desc_data, &object_desc_data::object,
-              expr2tc, object_desc_data, &object_desc_data::offset);
+              expr2tc, object_desc_data, &object_desc_data::offset,
+              unsigned int, object_desc_data, &object_desc_data::alignment);
 irep_typedefs(code_function_call, code_funccall_data, esbmct::notype,
               expr2tc, code_funccall_data, &code_funccall_data::ret,
               expr2tc, code_funccall_data, &code_funccall_data::function,
@@ -2884,6 +3180,16 @@ irep_typedefs(code_cpp_throw, code_cpp_throw_data, esbmct::notype,
 irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data, esbmct::notype,
               std::vector<irep_idt>, code_cpp_throw_decl_data,
               &code_cpp_throw_decl_data::exception_list);
+irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data, esbmct::notype,
+              std::vector<irep_idt>, code_cpp_throw_decl_data,
+              &code_cpp_throw_decl_data::exception_list);
+irep_typedefs(isinf, arith_1op, esbmct::notype,
+              expr2tc, arith_1op, &arith_1op::value);
+irep_typedefs(isnormal, arith_1op, esbmct::notype,
+              expr2tc, arith_1op, &arith_1op::value);
+irep_typedefs(concat, bit_2ops, esbmct::takestype,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4189,8 +4495,10 @@ public:
 class object_descriptor2t : public object_descriptor_expr_methods
 {
 public:
-  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs)
-    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs) {}
+  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs,
+                      unsigned int alignment)
+    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs,
+                                     alignment) {}
   object_descriptor2t(const object_descriptor2t &ref)
     : object_descriptor_expr_methods(ref) {}
 
@@ -4317,6 +4625,51 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class code_cpp_throw_decl_end2t : public code_cpp_throw_decl_end_expr_methods
+{
+public:
+  code_cpp_throw_decl_end2t(const std::vector<irep_idt> &exl)
+    : code_cpp_throw_decl_end_expr_methods(type_pool.get_empty(),
+                                           code_cpp_throw_decl_end_id, exl) { }
+  code_cpp_throw_decl_end2t(const code_cpp_throw_decl_end2t &ref)
+    : code_cpp_throw_decl_end_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isinf2t : public isinf_expr_methods
+{
+public:
+  isinf2t(const expr2tc &val)
+    : isinf_expr_methods(type_pool.get_bool(), isinf_id, val) { }
+  isinf2t(const isinf2t &ref)
+    : isinf_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isnormal2t : public isnormal_expr_methods
+{
+public:
+  isnormal2t(const expr2tc &val)
+    : isnormal_expr_methods(type_pool.get_bool(), isnormal_id, val) { }
+  isnormal2t(const isnormal2t &ref)
+    : isnormal_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class concat2t : public concat_expr_methods
+{
+public:
+  concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
+    : concat_expr_methods(type, concat_id, forward, aft) { }
+  concat2t(const concat2t &ref)
+    : concat_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -4365,7 +4718,7 @@ inline std::ostream& operator<<(std::ostream &out, const expr2tc& a)
 
 struct irep2_hash
 {
-  size_t operator()(const expr2tc &ref) const { return ref->crc(); }
+  size_t operator()(const expr2tc &ref) const { return ref.crc(); }
 };
 
 struct type2_hash
@@ -4471,6 +4824,10 @@ expr_macros(code_cpp_delete);
 expr_macros(code_cpp_catch);
 expr_macros(code_cpp_throw);
 expr_macros(code_cpp_throw_decl);
+expr_macros(code_cpp_throw_decl_end);
+expr_macros(isinf);
+expr_macros(isnormal);
+expr_macros(concat);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -4541,6 +4898,9 @@ is_false(const expr2tc &expr)
   else
     return false;
 }
+
+// To initialize the below at a defined time...
+void init_expr_constants(void);
 
 extern const expr2tc true_expr;
 extern const expr2tc false_expr;

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 int main () {
@@ -11,6 +12,19 @@ int main () {
 
   swap_ranges(first.begin()+1, first.end()-1, second.begin());
 
+//first contains: 10 33 33 33 10
+//second contains: 10 10 10 33 33
+  assert(first[0] == 10);
+  assert(first[1] == 33);
+  assert(first[2] == 33);
+  assert(first[3] == 33);
+  assert(first[4] == 10);
+  
+  assert(second[0] == 10);
+  assert(second[1] == 10);
+  assert(second[2] == 10);
+  assert(second[3] == 33);
+  assert(second[4] == 33);
   // print out results of swap:
   cout << " first contains:";
   for (it=first.begin(); it!=first.end(); ++it)

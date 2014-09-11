@@ -15,7 +15,7 @@ int main ()
   assert(first[6] == 100);
 
   deque<int>::iterator it;
-  it=first.begin()+1;
+  it = first.begin() + 1;
 
   second.assign (it,first.end()-1); // the 5 central values of first
   assert(second.size() == 5);

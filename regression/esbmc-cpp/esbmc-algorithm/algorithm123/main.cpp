@@ -11,10 +11,12 @@ int main () {
 
   sort (myints,myints+3);
   reverse (myints,myints+3);
-  assert(myints[0] == 1);
+//  assert(myints[0] != 3);
   do {
     cout << myints[0] << " " << myints[1] << " " << myints[2] << endl;
+    assert(myints[0] == 1);
   } while ( prev_permutation (myints,myints+3) );
+  
 
   return 0;
 }

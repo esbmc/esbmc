@@ -119,27 +119,6 @@ exprt from_integer(
 
 /*******************************************************************\
 
-Function: address_bits
-
-  Inputs:
-
- Outputs:
-
- Purpose: ceil(log2(size))
-
-\*******************************************************************/
-
-mp_integer address_bits(const mp_integer &size)
-{
-  mp_integer result, x=2;
-
-  for(result=1; x<size; result+=1, x*=2);
-
-  return result;
-}
-
-/*******************************************************************\
-
 Function: power
 
   Inputs:
@@ -168,38 +147,4 @@ mp_integer power(const mp_integer &base,
   }
 
   return result;
-}
-
-/*******************************************************************\
-
-Function: mp_min
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void mp_min(mp_integer &a, const mp_integer &b)
-{
-  if(b<a) a=b;
-}
-
-/*******************************************************************\
-
-Function: mp_max
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void mp_max(mp_integer &a, const mp_integer &b)
-{
-  if(b>a) a=b;
 }

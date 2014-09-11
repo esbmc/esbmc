@@ -1,7 +1,7 @@
+all: realall
 ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
-MAINOBJ= $(OBJDIR)/propobj.o
-all: $(OBJDIR)/.deps $(MAINOBJ)
+MAINOBJNAME=propobj.o
 
 SRCS= prop_conv.cpp pointer_logic.cpp
 
@@ -11,3 +11,5 @@ clean:
 STRICTCOMPILE=1
 
 include $(ESBMCDIR)/common
+
+realall: $(OBJDIR)/.deps $(MAINOBJ)

@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <config.h>
 #include <i2string.h>
 #include <arith_tools.h>
-#include <pointer_offset_size.h>
+#include <type_byte_size.h>
 #include <std_expr.h>
 #include <prefix.h>
 
@@ -52,7 +52,7 @@ unsigned pointer_logict::add_object(const expr2tc &expr)
   ret.first->second = objects.size() - 1;
   lookup.push_back(expr);
   assert(lookup.size() == objects.size());
-  return objects.size() - 1;
+  return objects.size() - 1 + obj_num_offset;
 }
 
 /*******************************************************************\
@@ -137,7 +137,7 @@ expr2tc pointer_logict::object_rec(
   {
     const array_type2t &arrtype = dynamic_cast<const array_type2t&>
                                               (*src->type.get());
-    mp_integer size=pointer_offset_size(*arrtype.subtype.get());
+    mp_integer size=type_byte_size(*arrtype.subtype.get());
 
     if (size == 0)
       return src;
@@ -171,7 +171,7 @@ expr2tc pointer_logict::object_rec(
     forall_types(it, members) {
       assert(offset>=current_offset);
 
-      mp_integer sub_size=pointer_offset_size(**it);
+      mp_integer sub_size=type_byte_size(**it);
       
       if(sub_size==0)
         return src;
@@ -210,6 +210,7 @@ Function: pointer_logict::pointer_logict
 
 pointer_logict::pointer_logict()
 {
+  obj_num_offset = 0;
 
   type2tc type(new pointer_type2t(type2tc(new empty_type2t())));
   symbol2tc sym(type, "NULL");
@@ -220,6 +221,7 @@ pointer_logict::pointer_logict()
   // add INVALID
   symbol2tc invalid(type, "INVALID");
   invalid_object = add_object(invalid);
+
 }
 
 /*******************************************************************\

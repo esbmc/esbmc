@@ -180,7 +180,7 @@ protected:
   // the calling function.
   unsigned int func_return_num;
   
-  void abstract(irep_idt name, goto_function_templatet<goto_programt> &dest);
+  void abstract(irep_idt name, goto_functiont &dest);
 };
 
 /*******************************************************************\
@@ -251,8 +251,7 @@ Function: string_abstractiont::abstract
 
 \*******************************************************************/
 
-void string_abstractiont::abstract(irep_idt name,
-                                   goto_function_templatet<goto_programt> &dest)
+void string_abstractiont::abstract(irep_idt name, goto_functiont &dest)
 {
   locals.clear();
   func_return_num = 0;
@@ -1056,18 +1055,19 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
       new_symbol.value = migrate_expr_back(value);
     }
 
+    exprt new_sym = symbol_expr(new_symbol);
+    exprt new_sym_val = new_symbol.value;
+    context.move(new_symbol);
+
     if(symbol.static_lifetime)
     {
       // initialization
       goto_programt::targett assignment1=initialization.add_instruction(ASSIGN);
-      exprt new_sym = symbol_expr(new_symbol);
       expr2tc new_sym2, new_sym_value;
       migrate_expr(new_sym, new_sym2);
-      migrate_expr(new_symbol.value, new_sym_value);
+      migrate_expr(new_sym_val, new_sym_value);
       assignment1->code = code_assign2tc(new_sym2, new_sym_value);
     }
-
-    context.move(new_symbol);
   }
 
   const symbolt &str_symbol=ns.lookup(identifier);
@@ -1114,28 +1114,26 @@ expr2tc string_abstractiont::build_symbol_constant(const irep_idt &str)
     std::string basename = base.as_string().substr(endpos+2);
     new_symbol.base_name=base;
 
-    {
-      type2tc lentype, sizetype;
-      typet olentype = build_type(LENGTH);
-      typet osizetype = build_type(SIZE);
-      migrate_type(olentype, lentype);
-      migrate_type(osizetype, sizetype);
-
-      std::vector<expr2tc> operands;
-      operands.push_back(true_expr);
-      operands.push_back(constant_int2tc(lentype, l));
-      operands.push_back(constant_int2tc(sizetype, l+1));
-      constant_struct2tc value(string_struct, operands);
-
-      // initialization
-      goto_programt::targett assignment1=initialization.add_instruction(ASSIGN);
-      exprt new_sym = symbol_expr(new_symbol);
-      expr2tc new_sym2;
-      migrate_expr(new_sym, new_sym2);
-      assignment1->code = code_assign2tc(new_sym2, value);
-    }
-
+    exprt new_sym = symbol_expr(new_symbol);
     context.move(new_symbol);
+
+    type2tc lentype, sizetype;
+    typet olentype = build_type(LENGTH);
+    typet osizetype = build_type(SIZE);
+    migrate_type(olentype, lentype);
+    migrate_type(osizetype, sizetype);
+
+    std::vector<expr2tc> operands;
+    operands.push_back(true_expr);
+    operands.push_back(constant_int2tc(lentype, l));
+    operands.push_back(constant_int2tc(sizetype, l+1));
+    constant_struct2tc value(string_struct, operands);
+
+    // initialization
+    goto_programt::targett assignment1=initialization.add_instruction(ASSIGN);
+    expr2tc new_sym2;
+    migrate_expr(new_sym, new_sym2);
+    assignment1->code = code_assign2tc(new_sym2, value);
   }
 
   return symbol2tc(string_struct, identifier);

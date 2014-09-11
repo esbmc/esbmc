@@ -22,6 +22,8 @@ int main () {
   // using myfunction as comp:
   if ( includes(container,container+10,continent,continent+4, myfunction) )
     cout << "container includes continent!" << endl;
+    
+  assert(!(includes(container,container+10,continent,continent+4, myfunction)));
 
   return 0;
 }

@@ -11,6 +11,7 @@ int main() {
   __ESBMC_assume(n<10000000);
 
   p=malloc(sizeof(int)*n);
+  __ESBMC_assume(p);
   
   o=n-1;
 

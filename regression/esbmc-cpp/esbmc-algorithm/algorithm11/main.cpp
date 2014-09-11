@@ -19,6 +19,7 @@ int main () {
   // using default comparison:
   int match1[] = {40,50,60,70};
   it = search (myvector.begin(), myvector.end(), match1, match1+4);
+  assert(*it == 40);
 
   return 0;
 }

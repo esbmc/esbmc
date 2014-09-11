@@ -2,6 +2,7 @@
 // Mathematical algorithms of the standard library.
 #include <iostream>
 #include <iterator> 
+#include <string>
 using std::cout;
 using std::endl;
 

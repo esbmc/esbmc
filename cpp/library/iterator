@@ -25,11 +25,16 @@ public:
 	typedef Category iterator_category;
 };
 
+template<class charT> struct char_traits;
+
 ///  Marking input iterators.
 class input_iterator_tag { };
 
 ///  Marking output iterators.
 class output_iterator_tag { };
+
+// Marking random iterators
+class random_access_iterator_tag { };
 
 template<class Iterator> class iterator_traits {
 	typedef typename Iterator::difference_type difference_type;

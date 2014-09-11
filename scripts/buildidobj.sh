@@ -5,7 +5,7 @@ if test $# != 1; then
   exit 1;
 fi
 
-SFILE="$1/buildidobj.s"
+SFILE="$1/buildidobj.txt"
 
 echo -n "ESBMC built from " > $SFILE
 echo -n `git rev-parse HEAD` >> $SFILE
@@ -23,8 +23,4 @@ else
   echo -n " (dirty tree)" >> $SFILE;
 fi
 
-OFILE="$1/buildiobj.o"
-
-cd $1;
-$LD $LDFLAGS -b binary -r ./buildidobj.s -o buildidobj.o
-rm buildidobj.s
+echo "0x00" | xxd -r >> $SFILE;

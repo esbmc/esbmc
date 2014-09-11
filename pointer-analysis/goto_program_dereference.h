@@ -71,8 +71,6 @@ protected:
     bool checks_only=false);
 
 protected:
-  void dereference_rec(expr2tc &expr, guardt &guard,
-                       const dereferencet::modet mode);
   void dereference_expr(expr2tc &expr, const bool checks_only,
                         const dereferencet::modet mode);
   
@@ -111,6 +109,7 @@ void pointer_checks(
 void pointer_checks(
   goto_functionst &goto_functions,
   const namespacet &ns,
+  contextt &context,
   const optionst &options,
   value_setst &value_sets);
 

@@ -46,6 +46,7 @@ OutIt unique_copy_esbmc(InIt first, InIt last, OutIt dest, Pr pred) {
 
 int main () {
   int myints[] = {10,20,20,20,30,30,20,20,10};
+  int myints1[] = {10,10,20,20,30,0,0,0,0};
   vector<int> myvector (9);                            // 0  0  0  0  0  0  0  0  0
   vector<int>::iterator it;
 
@@ -53,7 +54,7 @@ int main () {
   it=unique_copy_esbmc (myints,myints+9,myvector.begin());   // 10 20 30 20 10 0  0  0  0
                                                        //                ^
   assert(*it == 0);
-  sort (myvector.begin(),it);                          // 10 10 20 20 30 0  0  0  0
+  myvector.assign(myints1, myints1+9);                          // 10 10 20 20 30 0  0  0  0
                                                        //                ^
 
   // using predicate comparison:

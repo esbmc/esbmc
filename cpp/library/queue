@@ -11,31 +11,80 @@ Date: September 2012
 #ifndef STL_QUEUE
 #define STL_QUEUE
 
-#include "vector"
+#include <vector>
+#include "deque"
+#include "list"
+#include "functional"
 
 namespace std
 {
 
-  #define QUEUE_CAPACITY 100
+  #define QUEUE_CAPACITY 1000
 
   template < class T, class Container = vector<T>,
 	class Compare = less<typename Container::value_type> >
   class priority_queue
 	{
+	    T buf[QUEUE_CAPACITY];
+	    int _size=0;
+	    T head=0;
+	    T tail=0;
 	public:
-	  priority_queue ( );
-	  explicit priority_queue ( const Compare& x, const Container& y );
-	  template <class InputIterator>
-	           priority_queue ( InputIterator first, InputIterator last,
-	                            const Compare& x, const Container& y );
-	  void push ( const float& x );
-	  bool empty ( ) const;
-	  size_t size ( ) const;
-	  const T& top ( ) const;
-	  void pop ( );
+	  priority_queue ( ):_size(0), head(0), tail(0){}
+	  priority_queue ( T& x, T& y ):_size(0), head(0), tail(0){}
+	  priority_queue ( T* x, T* y ):_size(0), head(0), tail(0){
+		  for (;x!=y;x++)
+			  this->push(*x);
+	  }
+	  priority_queue ( Compare& x ){}
+	  void push ( const T& x ){
+		  int i = 0;
+		  T tmp = x, y;
+		  while((x < this->buf[i]) && (i != this->_size)){
+			  i++;
+		  }
+		  if (i == 0)
+			  this->head = x;
+		  if (i == this->_size)
+			  this->tail = x;
+			  for (;i< this->_size;i++){
+				  y = tmp;
+				  tmp = this->buf[i];
+				  this->buf[i] = y;
+			  }
+			  this->buf[i] = tmp;
+			  this->_size++;
+	  }
+	  bool empty ( ) const{
+		  if (this->_size == 0)
+			  return true;
+		  return false;
+	  }
+	  size_t size ( ) const{
+		  return this->_size;
+	  }
+	  T top ( ) const{
+		  __ESBMC_assert(!(this->empty()), "the queue is empty");
+		  return this->head;
+	  }
+	  void pop ( ){
+		  __ESBMC_assert(!(this->empty()), "the queue is empty");
+		  int i;
+		  if (this->_size == 1){
+			  this->head = this->tail = this->buf[0] = NULL;
+			  this->_size--;
+			  return;
+		  }
+		  for (i = 0; i < this->_size; i++){
+			  this->buf[i] = this->buf[i+1];
+		  }
+		  this->head = this->buf[0];
+		  this->_size--;
+		  this->tail = this->buf[this->_size-1];
+	  }
 	};
 
-  template<class T> class queue
+  template<class T, class Container = deque<T> > class queue
   {
     T buf[QUEUE_CAPACITY];
     int _size=0;
@@ -45,6 +94,8 @@ namespace std
     public:
 
     queue():_size(0), head(0), tail(0){}
+    queue(std::deque<int>& x):_size(x.size()), head(0), tail(0){}
+    queue(std::list<int>& x):_size(x.size()), head(0), tail(0){}
 
     void push ( const T& t )
     {

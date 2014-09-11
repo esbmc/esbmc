@@ -68,6 +68,10 @@ private:
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
   void extract_global_vars(void);
+  virtual void renumber_symbol_address(const expr2tc &guard,
+                                       const expr2tc &addr_symbol,
+                                       const expr2tc &new_size);
+
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 
@@ -82,6 +86,8 @@ private:
 
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   z3::expr &output);
+  void init_pointer_obj(unsigned int obj_num, const expr2tc &size,
+                        z3::expr &output);
 
   typedef z3::expr (*ast_convert_calltype_new)(const z3::expr &op1,
                                            const z3::expr &op2,
@@ -92,6 +98,8 @@ private:
 
   typedef z3::expr (*ast_logic_convert)(const z3::expr &a,const z3::expr &b);
 
+  void convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
+                       ast_convert_calltype_new convert, z3::expr &output);
   void convert_rel(const expr2tc &side1, const expr2tc &side2,
                    ast_convert_calltype_new convert, void *_bv);
   void convert_logic_2ops(const expr2tc &side1, const expr2tc &side2,
@@ -169,6 +177,7 @@ private:
   virtual void convert_smt_expr(const overflow2t &overflow, void *bv);
   virtual void convert_smt_expr(const overflow_cast2t &ocast, void *arg);
   virtual void convert_smt_expr(const overflow_neg2t &neg, void *arg);
+  virtual void convert_smt_expr(const concat2t &cat, void *arg);
 
   virtual void convert_smt_type(const bool_type2t &type, void *bv);
   virtual void convert_smt_type(const unsignedbv_type2t &type, void *bv);
@@ -217,7 +226,7 @@ private:
 
   expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type);
 
-  std::string itos(int i);
+  std::string itos(long int i);
   std::string fixed_point(std::string v, unsigned width);
   std::string extract_magnitude(std::string v, unsigned width);
   std::string extract_fraction(std::string v, unsigned width);
@@ -337,12 +346,16 @@ public:
   std::list<z3::expr> assumpt;
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
 
+  // XXX - push-pop will break here.
+  typedef std::map<std::string, z3::expr> renumber_mapt;
+  renumber_mapt renumber_map;
+
   // Array of obj ID -> address range tuples
   std::list<unsigned int> addr_space_sym_num;
   z3::sort addr_space_tuple_sort;
   z3::sort addr_space_arr_sort;
   z3::func_decl addr_space_tuple_decl;
-  std::list<std::map<unsigned, z3::expr> > addr_space_data; // Obj id, size
+  std::list<std::map<unsigned, unsigned>> addr_space_data; // Obj id, size
 
   // Label map, for naming pieces of AST and auto-numbering them. Originally
   // for debugging, now I figure it's a useful tool for connecting pieces of

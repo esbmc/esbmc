@@ -11,6 +11,16 @@ OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 # Given the presence of OBJDIR, $(OBJS) can't now automatically infer
 # dependancies between .o's and .cpp's etc
 
+ifdef CROSSCOMPILE
+# Create a set of dependancies that build source files into HOSTOBJDIR using
+# the host compiler. A downside of c2goto and the like is that we have to build
+# almost everything for the host, and everything for the target too. Too bad.
+HOSTOBJS1 = $(SRCS:%.c=$(HOSTOBJDIR)/%.o)
+HOSTOBJS+= $(HOSTOBJS1:%.cpp=$(HOSTOBJDIR)/%.o)
+else
+HOSTOBJS=$(OBJS)
+endif
+
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 
@@ -22,32 +32,42 @@ INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 # which will result in additional strictness compile flags being used.
 
 ifndef STRICTCOMPILE
-EXTRACXXFLAGS+=-fpermissive -Wno-deprecated -Wall -Wextra -std=c++0x -fno-strict-aliasing
+CXXFLAGS+=-fpermissive -Wno-deprecated -Wall -Wextra -std=c++0x -fno-strict-aliasing
 else
-EXTRACXXFLAGS+= -W -Wall -Wextra -Werror -std=c++0x -fno-strict-aliasing
+CXXFLAGS+= -W -Wall -Wextra -Werror -std=c++0x -fno-strict-aliasing
 endif
 
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
 CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
 
-ifndef WIN_MSVC
 $(OBJDIR)/%.o : %.cpp
 	$(CXX) -c $(CXXFLAGS) -o $@ $<
 
 $(OBJDIR)/%.o : %.c
 	$(CC) -c $(CFLAGS) -o $@ $<
-else
-$(OBJDIR)/%.o : %.cpp
-	$(VCBINS)/cl.exe /TP /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" $(VCINCLUDES) /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
 
-$(OBJDIR)/%.o : %.c
-	$(VCBINS)/cl.exe /TC /I"$(WINESBMCDIR)\\util" /I"$(WINESBMCDIR)" $(VCINCLUDES) /Fo$@ $< /c $(INCLUDES) $(CXXFLAGS)
+ifdef CROSSCOMPILE
+$(HOSTOBJDIR)/%.o : %.cpp
+	$(HOSTCXX) -c $(HOSTCXXFLAGS) -o $@ $<
+
+$(HOSTOBJDIR)/%.o : %.c
+	$(HOSTCC) -c $(HOSTCFLAGS) -o $@ $<
 endif
 
 # A generic target; potentially not defined by the includer
 
-$(MAINOBJ): $(OBJS)
-	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
+MAINOBJ=$(OBJDIR)/$(MAINOBJNAME)
+
+ifdef CROSSCOMPILE
+HOSTOBJ=$(HOSTOBJDIR)/$(MAINOBJNAME)
+$(HOSTOBJ): $(HOSTOBJS)
+	$(HOSTPARTLINKLD) $(HOSTPARTLINKOUT) $@ $^ $(HOSTPARTLINKOPTS)
+else
+HOSTOBJ=
+endif
+
+$(MAINOBJ): $(OBJS) | $(HOSTOBJ)
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
 
 # Special purpose features,
 ifndef LINUX
@@ -70,13 +90,13 @@ $(OBJDIR)/.depends:
 	touch $(OBJDIR)/.depends
 
 $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS)):
-	$(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
+	unset CFLAGS && unset CXXFLAGS && $(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
 
 depend: $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS))
 else
 depend: $(SRCS)
 	@echo "Making dependancies in $(shell basename $(shell pwd))"
-	@truncate -s 0 $(OBJDIR)/.deps
+	@echo -n "" > $(OBJDIR)/.deps
 	@touch $(OBJDIR)/.deps
 	@for src in $(SRCS); do \
 		src1=$${src//\.cpp/}; \
@@ -93,13 +113,13 @@ endif
 # builds.
 
 debug:
-	env OBJDIR=.debugobjs OPTS=-O0 GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
+	env OBJDIR=.debugobjs HOSTOBJDIR=.hostdebugobjs OPTS=-O0 GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
 
 debugclean:
-	env OBJDIR=.debugobjs $(MAKE) clean
+	env OBJDIR=.debugobjs HOSTOBJDIR=.hostdebugobjs $(MAKE) clean
 
 debugfast:
-	env OBJDIR=.debugfastobjs GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
+	env OBJDIR=.debugfastobjs HOSTOBJDIR=.hostdebugfastobjs GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
 
 debugfastclean:
-	env OBJDIR=.debugfastobjs $(MAKE) clean
+	env OBJDIR=.debugfastobjs HOSTOBJDIR=.hostdebugfastobjs $(MAKE) clean

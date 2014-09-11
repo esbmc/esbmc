@@ -13,8 +13,8 @@ int main ()
   str3 += str1;
   str2 += str3;
   assert(str2 == "f(x) = x");
-  
-  cout << str2  << endl; 
-  
+
+  cout << str2  << endl;
+
   return 0;
 }

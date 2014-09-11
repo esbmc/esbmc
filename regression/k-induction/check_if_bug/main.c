@@ -13,6 +13,6 @@ int main() {
       x--;
       if(x==y) z=1; // assert(0);
   }
-  assert(z==1);
+  assert(z==0);
 }
 

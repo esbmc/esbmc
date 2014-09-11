@@ -41,7 +41,7 @@ public:
     return get_bool("is_template");
   }
 
-  inline bool is_template_class() const
+  inline bool is_class_template() const
   {
     return is_template() &&
            type().id()=="struct" &&

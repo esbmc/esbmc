@@ -31,58 +31,41 @@ void goto_symext::symex_catch()
   // there are two variants: 'push' and 'pop'
   const goto_programt::instructiont &instruction=*cur_state->source.pc;
 
-  if(instruction.targets.empty()) // pop
+  if(instruction.targets.empty()) // The second catch, pop from the stack
   {
-    if(cur_state->call_stack.empty())
-      throw "catch-pop on empty call stack";
+    // Copy the exception before pop
+    goto_symex_statet::exceptiont exception=stack_catch.top();
 
-    if(cur_state->top().catch_map.empty())
-      throw "catch-pop on function frame";
+    // Pop from the stack
+    stack_catch.pop();
 
-    // Copy the frame before pop
-    goto_symex_statet::framet frame=cur_state->call_stack.back();
-
-    // pop the stack frame
-    cur_state->call_stack.pop_back();
-
-    // Increase program counter
+    // Increase the program counter
     cur_state->source.pc++;
-
-    if(frame.has_throw_target)
-    {
-      // the next instruction is always a goto
-      const goto_programt::instructiont &tmp=*cur_state->source.pc;
-      goto_programt::instructiont &goto_instruction =
-        const_cast<goto_programt::instructiont &>(tmp);
-
-      // Update target
-      goto_instruction.targets.pop_back();
-      goto_instruction.targets.push_back(frame.throw_target);
-
-      frame.has_throw_target = false;
-    }
   }
-  else // push
+  else // The first catch, push it to the stack
   {
-    cur_state->call_stack.push_back(goto_symex_statet::framet(cur_state->source.thread_nr));
-    goto_symex_statet::framet &frame=cur_state->call_stack.back();
+    goto_symex_statet::exceptiont exception;
 
     // copy targets
     const code_cpp_catch2t &catch_ref = to_code_cpp_catch2t(instruction.code);
 
     assert(catch_ref.exception_list.size()==instruction.targets.size());
 
+    // Fill the map with the catch type and the target
     unsigned i=0;
     for(goto_programt::targetst::const_iterator
         it=instruction.targets.begin();
         it!=instruction.targets.end();
         it++, i++)
     {
-      frame.catch_map[catch_ref.exception_list[i]]=*it;
-      frame.catch_order[catch_ref.exception_list[i]]=i;
+      exception.catch_map[catch_ref.exception_list[i]]=*it;
+      exception.catch_order[catch_ref.exception_list[i]]=i;
     }
 
-    // Increase program counter
+    // Stack it
+    stack_catch.push(exception);
+
+    // Increase the program counter
     cur_state->source.pc++;
   }
 }
@@ -99,91 +82,243 @@ Function: goto_symext::symex_throw
 
 \*******************************************************************/
 
-void goto_symext::symex_throw()
+bool goto_symext::symex_throw()
 {
+  irep_idt catch_name = "missing";
+  const goto_programt::const_targett *catch_insn = NULL;
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
   // get the list of exceptions thrown
   const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(instruction.code);
+  const std::vector<irep_idt> exceptions_thrown = throw_ref.exception_list;
 
-  // go through the call stack, beginning with the top
-  for(goto_symex_statet::call_stackt::reverse_iterator
-      s_it=cur_state->call_stack.rbegin();
-      s_it!=cur_state->call_stack.rend();
-      s_it++)
+  // Handle rethrows
+  if(handle_rethrow(throw_ref.operand, instruction))
+    return true;
+
+  // Save the throw
+  last_throw = const_cast<goto_programt::instructiont*>(&instruction);
+
+  // Log
+  std::cout << "*** Exception thrown of type "
+    << exceptions_thrown.begin()->as_string()
+    << " at file " << instruction.location.file()
+    << " line " << instruction.location.line() << std::endl;
+
+  // We check before iterate over the throw list to save time:
+  // If there is no catch, we return an error
+  if(!stack_catch.size())
   {
-    goto_symex_statet::framet *frame=&(*s_it);
-
-    if(frame->catch_map.empty()) continue;
-
-    // Handle rethrows
-    if(!handle_rethrow(throw_ref.exception_list, instruction))
-      return;
-
-    // It'll be used for catch ordering when throwing
-    // a derived object with multiple inheritance
-    unsigned old_id_number=-1, new_id_number=0;
-
-    forall_names(e_it, throw_ref.exception_list)
+    if(!unexpected_handler())
     {
-      // Handle throw declarations
-      handle_throw_decl(frame, *e_it);
-
-      // We can throw! look on the map if we have a catch for the type thrown
-      goto_symex_statet::framet::catch_mapt::const_iterator
-        c_it=frame->catch_map.find(*e_it);
-
-      // Do we have a catch for it?
-      if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
+      if(!terminate_handler())
       {
-        // We do!
-
-        // Get current catch number and update if needed
-        new_id_number = (*frame->catch_order.find(*e_it)).second;
-
-        if(new_id_number < old_id_number)
-          update_throw_target(frame, c_it);
-
-        // Save old number id
-        old_id_number = new_id_number;
+        // An un-caught exception. Error
+        const std::string &msg="Throwing an exception of type " +
+            exceptions_thrown.begin()->as_string() +
+            " but there is not catch for it.";
+        claim(false_expr, msg);
+        return true;
       }
-      else // We don't have a catch for it
+    }
+    return false;
+  }
+
+  // Get the list of catchs
+  goto_symex_statet::exceptiont* except=&stack_catch.top();
+
+  // It'll be used for catch ordering when throwing
+  // a derived object with multiple inheritance
+  unsigned old_id_number=-1, new_id_number=0;
+
+  forall_names(e_it, throw_ref.exception_list)
+  {
+    // Handle throw declarations
+    switch(handle_throw_decl(except, *e_it))
+    {
+      case 0:
+        return true;
+        break;
+
+      case 1:
+        return false;
+        break;
+
+      case 2:
+        break;
+
+      default:
+        assert(0);
+        break;
+    }
+
+    // Search for a catch with a matching type
+    goto_symex_statet::exceptiont::catch_mapt::const_iterator
+      c_it=except->catch_map.find(*e_it);
+
+    // Do we have a catch for it?
+    if(c_it!=except->catch_map.end())
+    {
+      // We do!
+
+      // Get current catch number and update if needed
+      new_id_number = (*except->catch_order.find(*e_it)).second;
+
+      if(new_id_number < old_id_number)
       {
-        // If it's a pointer, we must look for a catch(void*)
-        if(e_it->as_string().find("_ptr") != std::string::npos)
+        update_throw_target(except,c_it->second,instruction.code);
+        catch_insn = &c_it->second;
+        catch_name = c_it->first;
+      }
+
+      // Save old number id
+      old_id_number = new_id_number;
+    }
+    else // We don't have a catch for it
+    {
+      // If it's a pointer, we must look for a catch(void*)
+      if(e_it->as_string().find("_ptr") != std::string::npos)
+      {
+        // It's a pointer!
+
+        // Do we have an void*?
+        c_it=except->catch_map.find("void_ptr");
+
+        if(c_it!=except->catch_map.end())
         {
-          // It's a pointer!
-
-          // Do we have an void*?
-          c_it=frame->catch_map.find("void_ptr");
-
-          if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
-            update_throw_target(frame, c_it); // Make the jump to void*
+          // Make the jump to void*
+          update_throw_target(except, c_it->second,instruction.code);
+          catch_insn = &c_it->second;
+          catch_name = c_it->first;
         }
-        else
-        {
-          // Do we have an ellipsis?
-          c_it=frame->catch_map.find("ellipsis");
+      }
+      else
+      {
+        // Do we have an ellipsis?
+        c_it=except->catch_map.find("ellipsis");
 
-          if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
-            update_throw_target(frame, c_it);
+        if(c_it!=except->catch_map.end())
+        {
+          update_throw_target(except,c_it->second,instruction.code);
+          catch_insn = &c_it->second;
+          catch_name = c_it->first;
         }
       }
     }
+  }
 
-    if(!frame->has_throw_target)
+  if (catch_insn == NULL) {
+    // No catch for type, void, or ellipsis
+    // Call terminate handler before showing error message
+    if(!terminate_handler())
     {
       // An un-caught exception. Error
       const std::string &msg="Throwing an exception of type " +
-          from_type(ns, "", throw_ref.operand->type) +
-          " but there is not catch for it.";
+        exceptions_thrown.begin()->as_string() + " but there is not catch for it.";
       claim(false_expr, msg);
+      // Ensure no further execution along this path.
+      cur_state->guard.make_false();
     }
 
-    // save last throw for rethrow handling
-    last_throw = const_cast<goto_programt::instructiont*>(&instruction);
-    return;
+    return false;
   }
+
+
+  // Log
+  std::cout << "*** Caught by catch("
+    << catch_name << ") at file "
+    << (*catch_insn)->location.file()
+    << " line " << (*catch_insn)->location.line() << std::endl;
+
+  return true;
+}
+
+/*******************************************************************\
+
+Function: goto_symext::terminate_handler
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool goto_symext::terminate_handler()
+{
+  // We must look on the context if the user included exception lib
+  const symbolt *tmp;
+  bool is_included=ns.lookup("cpp::std::terminate()",tmp);
+
+  // If it do, we must call the terminate function:
+  // It'll call the current function handler
+  if(!is_included) {
+    codet terminate_function=to_code(tmp->value.op0());
+
+    // We only call it if the user replaced the default one
+    if(terminate_function.op1().identifier()=="cpp::std::default_terminate()")
+      return false;
+
+    // Call the function
+    expr2tc da_funk;
+    migrate_expr(terminate_function, da_funk);
+    symex_function_call(da_funk);
+    return true;
+  }
+
+  // If it wasn't included, we do nothing. The error message will be
+  // shown to the user as there is a throw without catch.
+  return false;
+}
+
+/*******************************************************************\
+
+Function: goto_symext::unexpected
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool goto_symext::unexpected_handler()
+{
+  // Look if we already on the unexpected flow
+  // If true, we shouldn't call the unexpected handler again
+  if(inside_unexpected)
+    return false;
+
+  // We must look on the context if the user included exception lib
+  const symbolt *tmp;
+  bool is_included=ns.lookup("cpp::std::unexpected()",tmp);
+
+  // If it do, we must call the unexpected function:
+  // It'll call the current function handler
+  if(!is_included) {
+    expr2tc the_call;
+    code_function_callt unexpected_function;
+    unexpected_function.function()=symbol_expr(*tmp);
+    migrate_expr(unexpected_function, the_call);
+
+    // We only call it if the user replaced the default one
+    if (to_symbol2t(to_code_function_call2t(the_call).function).thename ==
+        "cpp::std::default_unexpected()")
+      return false;
+
+    // Indicate there we're inside the unexpected flow
+    inside_unexpected=true;
+
+    // Call the function
+    symex_function_call(the_call);
+    return true;
+  }
+
+  // If it wasn't included, we do nothing. The error message will be
+  // shown to the user as there is a throw without catch.
+  return false;
 }
 
 /*******************************************************************\
@@ -198,11 +333,58 @@ Function: goto_symext::update_throw_target
 
 \*******************************************************************/
 
-void goto_symext::update_throw_target(goto_symex_statet::framet* frame,
-  goto_symex_statet::framet::catch_mapt::const_iterator c_it)
+void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
+                                      __attribute__((unused)),
+                                      goto_programt::const_targett target,
+                                      const expr2tc &code)
 {
-  frame->throw_target = (*c_it).second;
-  frame->has_throw_target=true;
+
+  // Something is going to catch, therefore we need something to be caught.
+  // Assign that something to a variable and make records so that it's merged
+  // into the right place in the future.
+  assert(!is_nil_expr(code));
+  code_cpp_throw2tc throw_insn(code);
+
+  // Generate a name to assign this to.
+  symbol2tc thrown_obj(throw_insn->operand->type,
+                       irep_idt("symex_throw::thrown_obj"));
+  expr2tc operand(throw_insn->operand);
+  guardt g;
+  symex_assign_symbol(thrown_obj, operand, g);
+
+  // Now record that value for future reference.
+  cur_state->rename(thrown_obj);
+
+  // Target is, as far as I can tell, always a declaration of the variable
+  // that the thrown obj ends up in, and is followed by a (blank) assignment
+  // to it. So point at the next insn.
+  assert(is_code_decl2t(target->code));
+  target++;
+  assert(is_code_assign2t(target->code));
+
+  // Signal assignment code to fetch the thrown object and rewrite the
+  // assignment, assigning the thrown obj to the local variable.
+  thrown_obj_map[target] = thrown_obj;
+
+  if(!options.get_bool_option("extended-try-analysis"))
+  {
+    // Search backwards through stack frames, looking for the frame that
+    // contains the function containing the target instruction.
+    goto_symex_statet::call_stackt::reverse_iterator i;
+    for (i = cur_state->call_stack.rbegin();
+         i != cur_state->call_stack.rend(); i++) {
+      if (i->function_identifier == target->function) {
+        statet::goto_state_listt &goto_state_list = i->goto_state_map[target];
+
+        goto_state_list.push_back(statet::goto_statet(*cur_state));
+        cur_state->guard.make_false();
+        break;
+      }
+    }
+
+    assert(i != cur_state->call_stack.rend() && "Target instruction in throw "
+           "handler not in any function frame on the stack");
+  }
 }
 
 /*******************************************************************\
@@ -217,32 +399,39 @@ Function: goto_symext::handle_throw_decl
 
 \*******************************************************************/
 
-void goto_symext::handle_throw_decl(goto_symex_statet::framet* frame,
+int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
   const irep_idt &id)
 {
   // Check if we can throw the exception
-  if(frame->has_throw_decl)
+  if(except->has_throw_decl)
   {
-    goto_symex_statet::framet::throw_list_sett::const_iterator
-    s_it=frame->throw_list_set.find(id);
+    goto_symex_statet::exceptiont::throw_list_sett::const_iterator
+      s_it=except->throw_list_set.find(id);
 
-    if(s_it==frame->throw_list_set.end())
+    // Is it allowed?
+    if(s_it==except->throw_list_set.end())
     {
-      std::string msg=std::string("Trying to throw an exception ") +
+      if(!unexpected_handler())
+      {
+        std::string msg=std::string("Trying to throw an exception ") +
           std::string("but it's not allowed by declaration.\n\n");
-      msg += "  Exception type: " + id.as_string();
-      msg += "\n  Allowed exceptions:";
+        msg += "  Exception type: " + id.as_string();
+        msg += "\n  Allowed exceptions:";
 
-      for(goto_symex_statet::framet::throw_list_sett::iterator
-          s_it1=frame->throw_list_set.begin();
-          s_it1!=frame->throw_list_set.end();
-          ++s_it1)
-        msg+= "\n   - " + std::string((*s_it1).c_str());
+        for(goto_symex_statet::exceptiont::throw_list_sett::iterator
+            s_it1=except->throw_list_set.begin();
+            s_it1!=except->throw_list_set.end();
+            ++s_it1)
+          msg+= "\n   - " + std::string((*s_it1).c_str());
 
-      claim(false_expr, msg);
-      return;
+        claim(false_expr, msg);
+        return 0;
+      }
+      else
+        return 1;
     }
   }
+  return 2;
 }
 
 /*******************************************************************\
@@ -257,11 +446,11 @@ Function: goto_symext::handle_rethrow
 
 \*******************************************************************/
 
-bool goto_symext::handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
-  const goto_programt::instructiont instruction)
+bool goto_symext::handle_rethrow(const expr2tc &operand,
+  const goto_programt::instructiont &instruction)
 {
   // throw without argument, we must rethrow last exception
-  if(!exceptions_thrown.size())
+  if(is_nil_expr(operand))
   {
     if(last_throw != NULL && to_code_cpp_throw2t(last_throw->code).exception_list.size())
     {
@@ -280,10 +469,10 @@ bool goto_symext::handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
     {
       const std::string &msg="Trying to re-throw without last exception.";
       claim(false_expr, msg);
-      return false;
+      return true;
     }
   }
-  return true;
+  return false;
 }
 
 /*******************************************************************\
@@ -300,26 +489,27 @@ Function: goto_symext::symex_throw_decl
 
 void goto_symext::symex_throw_decl()
 {
-  const goto_programt::instructiont &instruction= *cur_state->source.pc;
+  // Check if we have a previous try-block catch
+  if(stack_catch.size())
+  {
+    const goto_programt::instructiont &instruction= *cur_state->source.pc; 
 
-  // Get throw list
-  const std::vector<irep_idt> &throw_decl_list =
-    to_code_cpp_throw_decl2t(instruction.code).exception_list;
+    // Get throw list
+    const std::vector<irep_idt> &throw_decl_list =
+      to_code_cpp_throw_decl2t(instruction.code).exception_list;
 
-  // Get to the correct try (always the most external)
-  goto_symex_statet::call_stackt::reverse_iterator
-    s_it=cur_state->call_stack.rbegin();
+    // Get to the correct try (always the last one)
+    goto_symex_statet::exceptiont* except=&stack_catch.top();
 
-  while(!(*s_it).catch_map.size()) ++s_it;
+    // Set the flag that this frame has throw list
+    // This is important because we can have empty throw lists
+    except->has_throw_decl=true;
 
-  // Set the flag that this frame has throw list
-  // This is important because we can have empty throw lists
-  (*s_it).has_throw_decl = true;
+    // Clear before insert new types
+    except->throw_list_set.clear();
 
-  // Clear before insert new types
-  (*s_it).throw_list_set.clear();
-
-  // Copy throw list to the set
-  for(unsigned i=0; i<throw_decl_list.size(); ++i)
-    (*s_it).throw_list_set.insert(throw_decl_list[i]);
+    // Copy throw list to the set
+    for(unsigned i=0; i<throw_decl_list.size(); ++i)
+      except->throw_list_set.insert(throw_decl_list[i]);
+  }
 }

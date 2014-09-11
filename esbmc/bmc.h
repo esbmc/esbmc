@@ -27,7 +27,7 @@ class bmct:public messaget
 {
 public:
   bmct(const goto_functionst &funcs, optionst &opts,
-      contextt &_context, message_handlert &_message_handler):
+      contextt &_context, message_handlert &_message_handler) :
     messaget(_message_handler),
     options(opts),
     context(_context),
@@ -45,6 +45,10 @@ public:
     else
       is_cpp = false;
 
+    ltl_results_seen[ltl_res_bad] = 0;
+    ltl_results_seen[ltl_res_failing] = 0;
+    ltl_results_seen[ltl_res_succeeding] = 0;
+    ltl_results_seen[ltl_res_good] = 0;
 
 #ifdef Z3
     runtime_z3_conv = new z3_convt(opts.get_bool_option("uw-model"),
@@ -58,12 +62,12 @@ public:
     if (options.get_bool_option("smt-during-symex")) {
       symex = new reachability_treet(funcs, ns, options,
                           new runtime_encoded_equationt(ns, *runtime_z3_conv),
-                          _context);
+                          _context, _message_handler);
     } else {
 #endif
       symex = new reachability_treet(funcs, ns, options,
                                      new symex_target_equationt(ns),
-                                     _context);
+                                     _context, _message_handler);
 #ifdef Z3
     }
 #endif
@@ -72,6 +76,13 @@ public:
   uint _unsat_core;
   uint _number_of_assumptions;
   optionst &options;
+  enum {
+    ltl_res_good,
+    ltl_res_succeeding,
+    ltl_res_failing,
+    ltl_res_bad
+  };
+  int ltl_results_seen[4];
 
   unsigned int interleaving_number;
   unsigned int interleaving_failed;
@@ -150,6 +161,7 @@ protected:
   virtual void error_trace(
     prop_convt &prop_conv, symex_target_equationt &equation);
     bool run_thread();
+    int ltl_run_thread(symex_target_equationt *equation);
 };
 
 #endif

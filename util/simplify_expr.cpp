@@ -16,14 +16,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "simplify_expr.h"
 #include "mp_arith.h"
 #include "arith_tools.h"
-#include "replace_expr.h"
 #include "std_types.h"
 #include "bitvector.h"
 #include "simplify_utils.h"
 #include "expr_util.h"
 #include "std_expr.h"
 #include "fixedbv.h"
-#include "ieee_float.h"
 
 //#define USE_CACHE
 
@@ -254,16 +252,8 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
 
       if(expr_type_id=="floatbv")
       {
-        // int to float
-        const floatbv_typet &f_expr_type=
-          to_floatbv_type(expr.type());
-
-        ieee_floatt f;
-        f.spec=f_expr_type;
-        f.from_integer(int_value);
-        expr=f.to_expr();
-
-        return false;
+        std::cerr << "floatbv currently unsupported, sorry" << std::endl;
+        abort();
       }
     }
     else if(op_type_id=="fixedbv")
@@ -287,22 +277,8 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
     }
     else if(op_type_id=="floatbv")
     {
-      if(expr_type_id=="unsignedbv" ||
-         expr_type_id=="signedbv")
-      {
-        // cast from float to int
-        ieee_floatt f(expr.op0());
-        expr=from_integer(f.to_integer(), expr.type());
-        return false;
-      }
-      else if(expr_type_id=="floatbv")
-      {
-        // float to double or double to float
-        ieee_floatt f(expr.op0());
-        f.change_spec(to_floatbv_type(expr.type()));
-        expr=f.to_expr();
-        return false;
-      }
+      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
+      abort();
     }
     else if(op_type_id=="bv")
     {
@@ -792,28 +768,8 @@ bool simplify_exprt::simplify_division(exprt &expr)
   }
   else if(expr.type().id()=="floatbv")
   {
-    // division by one?
-    if(expr.op1().is_constant() &&
-       expr.op1().is_one())
-    {
-      exprt tmp;
-      tmp.swap(expr.op0());
-      expr.swap(tmp);
-      return false;
-    }
-
-    if(expr.op0().is_constant() &&
-       expr.op1().is_constant())
-    {
-      ieee_floatt f0(expr.op0());
-      ieee_floatt f1(expr.op1());
-      if(!f1.is_zero())
-      {
-        f0/=f1;
-        expr=f0.to_expr();
-        return false;
-      }
-    }
+      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
+      abort();
   }
 
   return true;
@@ -2149,25 +2105,8 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
     }
     else if(expr.op0().type().id()=="floatbv")
     {
-      ieee_floatt f0(expr.op0());
-      ieee_floatt f1(expr.op1());
-
-      if(expr.id()=="notequal")
-        expr.make_bool(f0!=f1);
-      else if(expr.id()=="=")
-        expr.make_bool(f0==f1);
-      else if(expr.id()==">=")
-        expr.make_bool(f0>=f1);
-      else if(expr.id()=="<=")
-        expr.make_bool(f0<=f1);
-      else if(expr.id()==">")
-        expr.make_bool(f0>f1);
-      else if(expr.id()=="<")
-        expr.make_bool(f0<f1);
-      else
-        assert(false);
-
-      return false;
+      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
+      abort();
     }
     else
     {
@@ -2586,75 +2525,8 @@ Function: simplify_exprt::simplify_ieee_float_relation
 
 bool simplify_exprt::simplify_ieee_float_relation(exprt &expr)
 {
-  exprt::operandst &operands=expr.operands();
-
-  if(!expr.type().is_bool()) return true;
-
-  if(operands.size()!=2) return true;
-
-  // types must match
-  if(expr.op0().type()!=expr.op1().type())
-    return true;
-
-  if(expr.op0().type().id()!="floatbv")
-    return true;
-
-  // first see if we compare to a constant
-
-  if(expr.op0().is_constant() &&
-     expr.op1().is_constant())
-  {
-    ieee_floatt f0(expr.op0());
-    ieee_floatt f1(expr.op1());
-
-    if(expr.id()=="ieee_float_notequal")
-      expr.make_bool(ieee_not_equal(f0, f1));
-    else if(expr.id()=="ieee_float_equal")
-      expr.make_bool(ieee_equal(f0, f1));
-    else
-      assert(false);
-
-    return false;
-  }
-
-  if(expr.op0()==expr.op1())
-  {
-    // x!=x is the same as saying isnan(op)
-    exprt isnan("isnan", bool_typet());
-    isnan.copy_to_operands(expr.op0());
-
-    if(expr.id()=="ieee_float_notequal")
-    {
-    }
-    else if(expr.id()=="ieee_float_equal")
-      isnan.make_not();
-    else
-      assert(false);
-
-    expr.swap(isnan);
-    return false;
-  }
-
-  return true;
-}
-
-/*******************************************************************\
-
-Function: simplify_exprt::simplify_lambda
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool simplify_exprt::simplify_lambda(exprt &expr)
-{
-  bool result=true;
-
-  return result;
+  std::cerr << "floatbv currently unsupported, sorry" << std::endl;
+  abort();
 }
 
 /*******************************************************************\
@@ -2759,27 +2631,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
 {
   if(expr.operands().size()!=2) return true;
 
-  if(expr.op0().id()=="lambda")
-  {
-    // simplify (lambda i: e)(x) to e[i/x]
-
-    exprt &lambda_expr=expr.op0();
-
-    if(lambda_expr.operands().size()!=2) return true;
-
-    if(expr.op1().type()==lambda_expr.op0().type())
-    {
-      exprt tmp;
-
-      tmp.swap(lambda_expr.op1());
-
-      replace_expr(lambda_expr.op0(), expr.op1(), tmp);
-
-      expr.swap(tmp);
-      return false;
-    }
-  }
-  else if(expr.op0().id()=="with")
+  if(expr.op0().id()=="with")
   {
     exprt &with_expr=expr.op0();
 
@@ -3457,10 +3309,8 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
     }
     else if(type_id=="floatbv")
     {
-      ieee_floatt f(expr.op0());
-      f.negate();
-      expr=f.to_expr();
-      return false;
+      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
+      abort();
     }
   }
 
@@ -3495,8 +3345,6 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_relation(expr, mode) && result;
   else if(expr.id()=="if")
     result=simplify_if(expr) && result;
-  else if(expr.id()=="lambda")
-    result=simplify_lambda(expr) && result;
   else if(expr.id()=="with")
     result=simplify_with(expr) && result;
   else if(expr.id()=="index")

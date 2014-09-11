@@ -2,6 +2,7 @@
 // Standard library algorithms inplace_merge,
 // reverse_copy and unique_copy.
 #include <iostream>
+#include <string>
 
 using std::cout;
 using std::endl;

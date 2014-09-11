@@ -14,6 +14,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <set>
 #include <map>
 #include <options.h>
+#include <message.h>
 #include "goto_symex.h"
 #include "execution_state.h"
 #include "symex_target_equation.h"
@@ -68,13 +69,15 @@ public:
    *  @param ns Namespace to operate in
    *  @param target Target to listen in on assigns/asserts/assumes. Is cloned.
    *  @param context Context to operate in.
+   *  @param message_handler Message object for symex errors/warnings/info
    */
   reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
-    const optionst &opts,
+    optionst &opts,
     symex_targett *target,
-    contextt &context);
+    contextt &context,
+    message_handlert &message_handler);
 
   /**
    *  Default destructor.
@@ -125,19 +128,17 @@ public:
    *  states, their stack traces and the current instruction being executed.
    *  Then ask the user what thread to switch to; giving feedback and asking
    *  again if that switch is blocked somehow.
-   *  @param expr Expr causing context switch; Used for partial order analysis
    *  @return Thread ID user desires us to switch to
    */
-  int get_ileave_direction_from_user(const expr2tc &expr) const;
+  int get_ileave_direction_from_user(void) const;
 
   /**
    *  Decide context switch from --round-robin.
    *  Called when --round-robin scheduling is picked. Decides which context
    *  switch to take on that basis.
-   *  @param expr Expr causing context switch; Used for partial order analysis
    *  @return Thread ID to switch to according to scheduling
    */
-  int get_ileave_direction_from_scheduling(const expr2tc &expr) const;
+  int get_ileave_direction_from_scheduling(void) const;
 
   /**
    *  Determine if a thread can be run.
@@ -145,53 +146,27 @@ public:
    *  POR and so forth etc. Potentially prints a comment as to why the thread
    *  is blocked, for user feedback from get_ileave_direction_from_user
    *  @param tid Thread ID to switch to
-   *  @param expr Expr causing context switch; for POR analysis
    *  @param quiet If false, will print to stdout why this thread is blocked
    *  @return True if thread is viable; false otherwise.
    */
-  bool check_thread_viable(int tid, const expr2tc &expr, bool quiet) const;
+  bool check_thread_viable(unsigned int tid, bool quiet) const;
 
   /**
-   *  Analyze context switch point.
-   *  Inspects current state of execution, and whether or not a context switch
-   *  can be taken right now. If it can, pick a thread to switch to next.
-   *  Actual state switch isn't taken at this point in time, allowing whatever
-   *  caused it to complete.
-   *  @param expr Expression causing this context switch. For POR.
-   *  @return True if context switch is to be taken.
+   *  Check whether current ex_state is a state hash collision.
+   *  @return True if this state has already been visited
    */
-  bool analyse_for_cswitch_base(const expr2tc & expr);
+  bool check_for_hash_collision(void) const;
 
   /**
-   *  Force context switch, regardless of state.
-   *  Cause a context switch to happen, no matter what we're executing right
-   *  now. This prevents POR from rejecting a switch. Certain other factors can
-   *  still prohibit a context switch at this time, for example the code is in
-   *  an atomic block, or all threads have ended.
-   *  @return True if context switch is to be taken.
+   *  Perform various pieces of accounting after a hash collision - primarily,
+   *  ensuring that no further paths from this cswitch are explored.
    */
-  bool force_cswitch_point();
+  void post_hash_collision_cleanup(void);
 
   /**
-   *  Analyse context switch point cause by a read.
-   *  Inspect a read expression and decide whether or not to take a context
-   *  switch from this point. A read is something like a guarded branch, a
-   *  return, a function call argument assignment or something that. If the
-   *  thing being read is global state, or something otherwise that makes this
-   *  a visible instruction, a context switch is taken.
-   *  @param code Expression being read that might touch global state.
-   *  @return True if context switch is to be taken.
+   *  Update seen state hashes to contain current state.
    */
-  bool analyse_for_cswitch_after_read(const expr2tc &code);
-
-  /**
-   *  Analyse context switch point cause by an assign.
-   *  Same as analyse_for_cswitch_after_read, but also considers a potential
-   *  assignment to global (or otherwise) visible state.
-   *  @param code Assignment being made that might touch global state.
-   *  @return True if context switch is to be taken.
-   */
-  bool analyse_for_cswitch_after_assign(const expr2tc &code);
+  void update_hash_collision_set(void);
 
   /**
    *  Perform context switch operation triggered elsewhere.
@@ -220,11 +195,9 @@ public:
    *  scheduling method/option is enabled. Called internally by various
    *  analysis routines.
    *  @param ex_state Execution state to analyse for switch direction
-   *  @param expr Expression causing context switch. For POR  analysis.
    *  @return Thread ID of what thread to switch to next.
    */
-  unsigned int decide_ileave_direction(execution_statet &ex_state,
-                                       const expr2tc &expr);
+  unsigned int decide_ileave_direction(execution_statet &ex_state);
 
   /**
    *  Prints state of execution_statet stack.
@@ -234,15 +207,6 @@ public:
    *  interleaving of ex_state shas been reached.
    */
   void print_ileave_trace(void) const;
-
-  /**
-   *  Has a context switch been triggered.
-   *  If an analyze function has decided that a context switch has to occur at
-   *  this point, or if the current thread has ended, then a context switch has
-   *  been triggered.
-   *  @return True if context switch is now triggered
-   */
-  bool is_at_end_of_run();
 
   /**
    *  Have we generated a full program trace.
@@ -360,15 +324,16 @@ public:
    *  That is; for this particular interleaving. There may still be other
    *  interleavings to explore */
   bool has_complete_formula;
-  /** Flag indicating we've reached a context switch point.
-   *  A "run" is an stretch of symbolic execution between two context switch
-   *  points. */
-  bool at_end_of_run;
   /** State hashing is enabled */
   bool state_hashing;
   /** Functions dictate interleavings; perform no exploration.
    *  Used by --directed-interleavings */
   bool directed_interleavings;
+  /** Namespace we're operating in */
+  const namespacet &ns;
+  /** Options that are enabled */
+  optionst options;
+
 protected:
   /** Stack of execution states representing current interleaving.
    *  See reachability_treet algorithm for how this is used. Is initialized
@@ -398,12 +363,17 @@ protected:
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */
   bool por;
-  /** Namespace we're operating in */
-  const namespacet &ns;
   /** Set of state hashes we've discovered */
   std::set<crypto_hash>hit_hashes;
-  /** Options that are enabled */
-  const optionst &options;
+  /** Message handler reference. */
+  message_handlert &message_handler;
+  /** Flag as to whether we're picking interleaving directions explicitly.
+   *  Corresponds to the --interactive-ileaves option. */
+  bool interactive_ileaves;
+  /** Flag as to whether we're scheduling using round-robin. */
+  bool round_robin;
+  /** Are we using the --schedule scheduling method? */
+  bool schedule;
 
   friend class execution_statet;
 };

@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include "language.h"
-#include "strstream2string.h"
 
 /*******************************************************************\
 

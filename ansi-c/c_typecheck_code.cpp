@@ -49,8 +49,8 @@ void c_typecheck_baset::typecheck_code(codet &code)
 
   const irep_idt &statement=code.statement();
 
-  //std::cout << "statement: " << statement << std::endl;
-  //std::cout << "typecheck_code::code.pretty(): " << code.pretty() << std::endl;
+//  std::cout << "statement: " << statement << std::endl;
+//  std::cout << "typecheck_code::code.pretty(): " << code.pretty() << std::endl;
 
   if(statement=="expression")
     typecheck_expression(code);
@@ -88,10 +88,6 @@ void c_typecheck_baset::typecheck_code(codet &code)
     typecheck_asm(code);
   else if(statement=="start_thread")
     typecheck_start_thread(code);
-  else if(statement=="cpp-try")
-  {
-    typecheck_cpptry(code);
-  }
   else if(statement=="msc_try_finally")
   {
     assert(code.operands().size()==2);
@@ -132,25 +128,6 @@ Function: c_typecheck_baset::typecheck_asm
 
 void c_typecheck_baset::typecheck_asm(codet &code __attribute__((unused)))
 {
-}
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_cpptry
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void c_typecheck_baset::typecheck_cpptry(codet &code)
-{
-    Forall_operands(it, code) {
-      typecheck_code(to_code(*it));
-    }
 }
 
 /*******************************************************************\
@@ -461,6 +438,8 @@ Function: c_typecheck_baset::typecheck_for
 
 void c_typecheck_baset::typecheck_for(codet &code)
 {
+  is_loop=true;
+
   if(code.operands().size()!=4)
     throw "for expected to have four operands";
 
@@ -515,6 +494,8 @@ void c_typecheck_baset::typecheck_for(codet &code)
     code.swap(code_block);
     typecheck_code(code); // recursive call
   }
+
+  is_loop=false;
 }
 
 /*******************************************************************\
@@ -739,6 +720,8 @@ Function: c_typecheck_baset::typecheck_while
 
 void c_typecheck_baset::typecheck_while(codet &code)
 {
+  is_loop=true;
+
   if(code.operands().size()!=2)
     throw "while expected to have two operands";
 
@@ -756,4 +739,6 @@ void c_typecheck_baset::typecheck_while(codet &code)
   // restore flags
   break_is_allowed=old_break_is_allowed;
   continue_is_allowed=old_continue_is_allowed;
+
+  is_loop=false;
 }

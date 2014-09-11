@@ -72,7 +72,7 @@ renaming::level2t::get_ident_name(expr2tc &sym) const
   return;
 }
 
-void renaming::level1t::rename(expr2tc &expr, bool no_const_prop) const
+void renaming::level1t::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
@@ -107,11 +107,11 @@ void renaming::level1t::rename(expr2tc &expr, bool no_const_prop) const
   {
     // do this recursively
     Forall_operands2(it, idx, expr)
-      rename(*it, no_const_prop);
+      rename(*it);
   }
 }
 
-void renaming::level2t::rename(expr2tc &expr, bool no_const_prop) const
+void renaming::level2t::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
@@ -173,7 +173,7 @@ void renaming::level2t::rename(expr2tc &expr, bool no_const_prop) const
     // do this recursively
     Forall_operands2(it, idx, expr)
       if (!is_nil_expr(*it))
-        rename(*it, no_const_prop);
+        rename(*it);
   }
 }
 
@@ -186,6 +186,7 @@ void renaming::level2t::coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned
 #endif
 
   valuet &entry=current_names[name_record(to_symbol2t(lhs_sym))];
+  assert(entry.count <= count);
   entry.count=count;
   entry.node_id = node_id;
 }

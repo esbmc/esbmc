@@ -27,10 +27,15 @@ char *strncpy(char *dst, const char *src, size_t n)
 {
   __ESBMC_HIDE:;
   size_t i=0;
-  for( ; i<n && src[i]!=0; i++)
-    dst[i]=src[i];
-  for( ; i<n ; i++)
-    dst[i]=0;
+  char ch;
+  _Bool end;
+
+  for(end=0; i<n; i++)
+  {
+    ch=end?0:src[i];
+    dst[i]=ch;
+    end=end || ch==(char)0;
+  }
   return dst;
 }
 
@@ -175,7 +180,10 @@ char *strdup_strabs(const char *str)
 void *memcpy(void *dst, const void *src, size_t n)
 {
   __ESBMC_HIDE:
-  for(size_t i=0; i<n ; i++) ((char*)dst)[i]=((char*)src)[i];
+  char *cdst = dst;
+  const char *csrc = src;
+  for(size_t i=0; i<n ; i++)
+    cdst[i] = csrc[i];
   return dst;
 }
 
@@ -233,13 +241,17 @@ void *memset_strabs(void *s, int c, size_t n)
 void *memmove(void *dest, const void *src, size_t n)
 {
   __ESBMC_HIDE:
+  char *cdest = dest;
+  const char *csrc = src;
   if (dest-src >= n)
   {
-    for(size_t i=0; i<n ; i++) dest[i]=src[i];
+    for(size_t i=0; i<n ; i++)
+      cdest[i] = csrc[i];
   }
   else
   {
-    for(size_t i=n; i>0 ; i--) dest[i-1]=src[i-1];
+    for(size_t i=n; i>0 ; i--)
+      cdest[i-1] = csrc[i-1];
   }
   return dest;
 }
@@ -267,7 +279,7 @@ int memcmp(const void *s1, const void *s2, size_t n)
   const unsigned char *sc1=s1, *sc2=s2;
   for(; n!=0; n--)
   {
-    res = (s1++) - (s2++);
+    res = (sc1++) - (sc2++);
     if (res != 0)
       return res;
   }

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 bool myfunction (int i,int j) { return (i<j); }
@@ -15,8 +16,14 @@ int main () {
   partial_sort_copy (myints, myints+9, myvector.begin(), myvector.end());
 
   // using function as comp
-  partial_sort_copy (myints, myints+9, myvector.begin(), myvector.end(), myfunction);
-
+ // partial_sort_copy (myints, myints+9, myvector.begin(), myvector.end(), myfunction);
+  
+  assert(myvector[0] == 1);
+  assert(myvector[1] == 2);
+  assert(myvector[2] == 3);
+  assert(myvector[3] == 4);
+  assert(myvector[4] > 4);
+  
   // print out content:
   cout << "myvector contains:";
   for (it=myvector.begin(); it!=myvector.end(); ++it)
