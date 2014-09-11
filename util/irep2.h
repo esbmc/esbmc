@@ -2824,14 +2824,12 @@ class object_desc_data : public expr2t
   public:
     object_desc_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
                      const expr2tc &offs, unsigned int align)
-      : expr2t(t, id), object(o), offset(offs), alignment(align) { }
+      : expr2t(t, id), object(o), offset(offs) { }
     object_desc_data(const object_desc_data &ref)
-      : expr2t(ref), object(ref.object), offset(ref.offset),
-        alignment(ref.alignment) { }
+      : expr2t(ref), object(ref.object), offset(ref.offset) { }
 
     expr2tc object;
     expr2tc offset;
-    unsigned int alignment;
 };
 
 class code_funccall_data : public code_base
@@ -3152,8 +3150,7 @@ irep_typedefs(code_goto, code_goto_data, esbmct::notype,
               irep_idt, code_goto_data, &code_goto_data::target);
 irep_typedefs(object_descriptor, object_desc_data, esbmct::takestype,
               expr2tc, object_desc_data, &object_desc_data::object,
-              expr2tc, object_desc_data, &object_desc_data::offset,
-              unsigned int, object_desc_data, &object_desc_data::alignment);
+              expr2tc, object_desc_data, &object_desc_data::offset);
 irep_typedefs(code_function_call, code_funccall_data, esbmct::notype,
               expr2tc, code_funccall_data, &code_funccall_data::ret,
               expr2tc, code_funccall_data, &code_funccall_data::function,
@@ -4497,10 +4494,8 @@ public:
 class object_descriptor2t : public object_descriptor_expr_methods
 {
 public:
-  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs,
-                      unsigned int alignment)
-    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs,
-                                     alignment) {}
+  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs)
+    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs) {}
   object_descriptor2t(const object_descriptor2t &ref)
     : object_descriptor_expr_methods(ref) {}
 
