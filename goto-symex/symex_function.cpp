@@ -485,7 +485,7 @@ goto_symext::locality(const goto_functiont &goto_function)
     symbol2tc tmp_sym(get_empty_type(), *it);
 
     unsigned int &frame_nr = cur_state->variable_instance_nums[*it];
-    frame.level1.rename(tmp_sym, ++frame_nr);
+    frame.level1.rename_to(tmp_sym, ++frame_nr);
     frame.level1.get_ident_name(tmp_sym);
     frame.local_variables.insert(renaming::level2t::name_record(to_symbol2t(tmp_sym)));
   }

@@ -681,6 +681,12 @@ protected:
   bool forward_condition;
   /** Names of functions that we've complained about missing bodies of. */
   static hash_set_cont<irep_idt, irep_id_hash> body_warnings;
+
+void dereference_rec(
+  expr2tc &expr,
+  guardt &guard,
+  dereferencet &dereference,
+  const bool write);
 };
 
 #endif

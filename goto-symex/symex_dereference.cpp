@@ -90,7 +90,7 @@ void symex_dereference_statet::get_value_set(
   value_setst::valuest &value_set)
 {
 
-  state.value_set.get_value_set(expr, value_set, goto_symex.ns);
+  state.value_set.get_value_set(expr, value_set);
 }
 
 void goto_symext::dereference_rec(
@@ -154,9 +154,12 @@ void goto_symext::dereference_rec(
   }
 }
 
-void goto_symext::dereference(expr2tc &expr, const bool write)
+void goto_symext::dereference(expr2tc &expr, const bool write, bool free, bool internal)
 {
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
+
+if (free || internal)
+  return;
 
   dereferencet dereference(
     ns,
