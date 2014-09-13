@@ -363,7 +363,12 @@ void value_sett::get_value_set_rec(
           } else {
             // Potentially rename,
             const type2tc renamed = ns.follow(subtype);
-            mp_integer elem_size = type_byte_size(*renamed);
+            mp_integer elem_size;
+            if (is_empty_type(renamed))
+             elem_size = 1;
+            else
+             elem_size = type_byte_size(*renamed);
+
             const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
             total_offs = val * elem_size;
             if (is_sub2t(expr))
