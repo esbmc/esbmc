@@ -25,7 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <prefix.h>
 #include <std_code.h>
 #include <arith_tools.h>
-#include <pointer_offset_size.h>
+#include <type_byte_size.h>
 
 #include <langapi/language_util.h>
 #include <ansi-c/c_types.h>
@@ -363,7 +363,7 @@ void value_sett::get_value_set_rec(
           } else {
             // Potentially rename,
             const type2tc renamed = ns.follow(subtype);
-            mp_integer elem_size = pointer_offset_size(*renamed);
+            mp_integer elem_size = type_byte_size(*renamed);
             const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
             total_offs = val * elem_size;
             if (is_sub2t(expr))
