@@ -26,7 +26,7 @@ void value_set_domaint::transform(
 
   case END_FUNCTION:    
   {
-    value_set->do_end_function(get_return_lhs(to_l));
+    value_set->do_end_function(get_return_lhs(to_l), ns);
   }
   break;
 
@@ -35,7 +35,7 @@ void value_set_domaint::transform(
   case ASSIGN:
     {
       expr2tc code = from_l->code;
-      value_set->apply_code(code);
+      value_set->apply_code(code, ns);
     }
     break;
 
@@ -45,7 +45,7 @@ void value_set_domaint::transform(
       const symbolt &symbol = ns.lookup(to_l->function);
 
       const std::vector<expr2tc> &arguments = code.operands;
-      value_set->do_function_call(symbol, arguments);
+      value_set->do_function_call(symbol.name, arguments, ns);
     }
     break;
 

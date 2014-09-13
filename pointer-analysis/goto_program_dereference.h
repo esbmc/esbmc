@@ -36,6 +36,8 @@ public:
     goto_functionst &goto_functions,
     bool checks_only=false);
 
+void dereference_rec( expr2tc &expr, guardt &guard, const dereferencet::modet mode);
+
   void pointer_checks(goto_programt &goto_program);
   void pointer_checks(goto_functionst &goto_functions);
 

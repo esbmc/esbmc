@@ -50,7 +50,7 @@ public:
     const namespacet &ns __attribute__((unused)),
     std::ostream &out) const
   {
-    value_set->output(out);
+    value_set->output(ns, out);
   }
     
   virtual void initialize(
@@ -72,7 +72,7 @@ public:
     const expr2tc &expr,
     value_setst::valuest &dest)
   {
-    value_set->get_reference_set(expr, dest);
+    value_set->get_reference_set(expr, dest, ns);
   }
   
 };
