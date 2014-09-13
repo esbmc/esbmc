@@ -2823,7 +2823,7 @@ class object_desc_data : public expr2t
 {
   public:
     object_desc_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
-                     const expr2tc &offs, unsigned int align)
+                     const expr2tc &offs)
       : expr2t(t, id), object(o), offset(offs) { }
     object_desc_data(const object_desc_data &ref)
       : expr2t(ref), object(ref.object), offset(ref.offset) { }
