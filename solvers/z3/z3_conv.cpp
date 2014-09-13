@@ -89,6 +89,8 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 
+  label_map.push_back(std::map<std::string, unsigned>());
+
   init_addr_space_array();
 
   // Pick a modelling array to shoehorn initialization data into. Because
