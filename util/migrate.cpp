@@ -458,6 +458,7 @@ sym_name_to_symbol(irep_idt init, type2tc type)
   } else if (init.as_string().compare(0, 3, "cs$") == 0 ||
              init.as_string().compare(0, 8, "kindice$") == 0 ||
              init.as_string().compare(0, 2, "s$") == 0 ||
+             init.as_string().compare(0, 21, "symex::invalid_object") == 0 ||
              init.as_string().compare(0, 5, "c::i$") == 0) {
     // This is part of k-induction, where the type is slowly accumulated over
     // time, and the symbol never makes its way into the symbol table :|
