@@ -25,7 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <prefix.h>
 #include <std_code.h>
 #include <arith_tools.h>
-#include <type_byte_size.h>
+#include <pointer_offset_size.h>
 
 #include <langapi/language_util.h>
 #include <ansi-c/c_types.h>
@@ -34,6 +34,92 @@ Author: Daniel Kroening, kroening@kroening.com
 
 const value_sett::object_map_dt value_sett::object_map_dt::empty;
 object_numberingt value_sett::object_numbering;
+
+void value_sett::output(
+  const namespacet &ns,
+  std::ostream &out) const
+{
+  for(valuest::const_iterator
+      v_it=values.begin();
+      v_it!=values.end();
+      v_it++)
+  {
+    std::string identifier, display_name;
+    
+    const entryt &e=v_it->second;
+  
+    if(has_prefix(e.identifier, "value_set::dynamic_object"))
+    {
+      display_name=e.identifier + e.suffix;
+      identifier="";
+    }
+    else if(e.identifier=="value_set::return_value")
+    {
+      display_name="RETURN_VALUE"+e.suffix;
+      identifier="";
+    }
+    else
+    {
+      #if 0
+      const symbolt &symbol=ns.lookup(e.identifier);
+      display_name=symbol.display_name()+e.suffix;
+      identifier=symbol.name;
+      #else
+      identifier = e.identifier;
+      display_name = identifier + e.suffix;
+      #endif
+    }
+    
+    out << display_name;
+
+    out << " = { ";
+
+    const object_map_dt &object_map=e.object_map.read();
+    
+    unsigned width=0;
+    
+    for(object_map_dt::const_iterator
+        o_it=object_map.begin();
+        o_it!=object_map.end();
+        o_it++)
+    {
+      const expr2tc &o = object_numbering[o_it->first];
+    
+      std::string result;
+
+      if (is_invalid2t(o) || is_unknown2t(o))
+        result=from_expr(ns, identifier, o);
+      else
+      {
+        result="<"+from_expr(ns, identifier, o)+", ";
+      
+        if(o_it->second.offset_is_set)
+          result+=integer2string(o_it->second.offset)+"";
+        else
+          result+="*";
+        
+        result += ", "+from_type(ns, identifier, o->type);
+      
+        result+=">";
+      }
+
+      out << result;
+
+      width+=result.size();
+    
+      object_map_dt::const_iterator next(o_it);
+      next++;
+
+      if(next!=object_map.end())
+      {
+        out << ", ";
+        if(width>=40) out << "\n      ";
+      }
+    }
+
+    out << " } " << std::endl;
+  }
+}
 
 expr2tc
 value_sett::to_expr(object_map_dt::const_iterator it) const
@@ -277,7 +363,7 @@ void value_sett::get_value_set_rec(
           } else {
             // Potentially rename,
             const type2tc renamed = ns.follow(subtype);
-            mp_integer elem_size = type_byte_size(*renamed);
+            mp_integer elem_size = pointer_offset_size(*renamed);
             const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
             total_offs = val * elem_size;
             if (is_sub2t(expr))
