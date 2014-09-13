@@ -1028,6 +1028,12 @@ execution_statet::ex_state_level2t::rename(expr2tc &lhs_sym, unsigned count)
   renaming::level2t::coveredinbees(lhs_sym, count, owner->node_id);
 }
 
+void
+execution_statet::ex_state_level2t::rename_to(expr2tc &lhs_sym, unsigned count)
+{
+  rename(lhs_sym, count);
+}
+
 dfs_execution_statet::~dfs_execution_statet(void)
 {
 
