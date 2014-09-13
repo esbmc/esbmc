@@ -434,10 +434,10 @@ public:
 
   /** Dump the value set's textual representation to the given iostream.
    *  @param out Output stream to write the textual representation too. */
-  void output(std::ostream &out) const;
+  void output(const namespacet &ns, std::ostream &out) const;
 
   /** Write a textual representation of the value set to stderr. */
-  void dump(void) const;
+  void dump(const namespacet &ns) const;
 
   /** Join the two given object maps. Takes all the pointer records from src
    *  and stores them into the dest object map.
@@ -462,7 +462,7 @@ public:
   /** When using value_sett for static analysis, takes a code statement and
    *  sends any assignments contained within to the assign method. 
    *  @param code The statement to interpret. */
-  void apply_code(const expr2tc &code);
+  void apply_code(const expr2tc &code, const namespacet &ns);
 
   /** Interpret an assignment, and update value sets to reflect it.
    *  @param lhs Assignment target expression.
@@ -474,6 +474,7 @@ public:
   void assign(
     const expr2tc &lhs,
     const expr2tc &rhs,
+    const namespacet &ns,
     bool add_to_sets=false);
 
   /** Interpret a function call during static analysis. Looks up the given
@@ -484,13 +485,14 @@ public:
    *         tracking values merged into the corresponding argument variables
    *         in the target function. */
   void do_function_call(
-    const symbolt &symbol,
-    const std::vector<expr2tc> &arguments);
+    const irep_idt &function,
+    const std::vector<expr2tc> &arguments,
+    const namespacet &ns);
 
   /** During static analysis, simulate the return values assignment to the
    *  given lhs at the end of the function execution.
    *  @param lhs Variable to take the (pointer) values of the returned value. */
-  void do_end_function(const expr2tc &lhs);
+  void do_end_function(const expr2tc &lhs, const namespacet &ns);
 
   /** Determine the set of variables that expr refers to. The difference between
    *  this and get_value_set, is that this accumulates the set of variables
@@ -539,16 +541,16 @@ protected:
    *  list of exprs.
    *  @param expr The expression to evaluate the reference set of.
    *  @param dest Destination value set object map to store results into. */
-  void get_reference_set(const expr2tc &expr, object_mapt &dest) const
+  void get_reference_set(const expr2tc &expr, object_mapt &dest, const namespacet &ns) const
   {
-    get_reference_set_rec(expr, dest);
+    get_reference_set_rec(expr, dest, ns);
   }
 
   /** Recursive implementation of get_reference_set.
    *  @param expr The (portion of the) expression we're evaluating the reference
    *         set of.
    *  @param dest Destination value set map to store results into. */
-  void get_reference_set_rec(const expr2tc &expr, object_mapt &dest) const;
+  void get_reference_set_rec(const expr2tc &expr, object_mapt &dest, const namespacet &ns) const;
 
   /** Recursive assign method implementation -- descends through the left hand
    *  side looking for symbols to assign values to.
@@ -563,13 +565,14 @@ protected:
     const expr2tc &lhs,
     const object_mapt &values_rhs,
     const std::string &suffix,
+    const namespacet &ns,
     bool add_to_sets);
 
   /** Mark dynamic objects as (possibly) deallocated, and thus invalid.
    *  Something to do with the black magic that allows the static analysis to
    *  deal with dynamically allocated memory.
    *  @param op Operand evaluating to the pointer to free. */
-  void do_free(const expr2tc &op);
+  void do_free(const expr2tc &op, const namespacet &ns);
 
   /** Attempt to extract the member of an expression statically. If it's a
    *  chain of with's, or a constant struct, then pick out the actual expression
@@ -577,7 +580,7 @@ protected:
    *  expression.
    *  @param src Structure type'd expr to extract a member from.
    *  @param component_name Name of the component to extract from src. */
-  expr2tc make_member(const expr2tc &src, const irep_idt &component_name);
+  expr2tc make_member(const expr2tc &src, const irep_idt &component_name, const namespacet &ns);
 
 public:
 //********************************** Members ***********************************

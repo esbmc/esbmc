@@ -209,7 +209,7 @@ void goto_symex_statet::assignment(
     expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
     level2.get_original_name(l1_rhs);
 
-    value_set.assign(l1_lhs, l1_rhs);
+    value_set.assign(l1_lhs, l1_rhs, ns);
   }
 }
 

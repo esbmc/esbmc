@@ -387,7 +387,7 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
   thread_id = art.get_cur_state().get_active_state_number();
   constant_int2tc tid(uint_type2(), BigInt(thread_id));
 
-  state.value_set.assign(call.ret, tid);
+  state.value_set.assign(call.ret, tid, ns);
 
   code_assign2tc assign(call.ret, tid);
   assert(call.ret->type == tid->type);
@@ -443,7 +443,7 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   code_assign2tc assign(call.ret, startdata);
   assert(base_type_eq(call.ret->type, startdata->type, ns));
 
-  state.value_set.assign(call.ret, startdata);
+  state.value_set.assign(call.ret, startdata, ns);
   symex_assign(assign);
   return;
 }
@@ -489,7 +489,7 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
   constant_int2tc thread_id_exp(int_type2(), BigInt(thread_id));
 
   code_assign2tc assign(call.ret, thread_id_exp);
-  state.value_set.assign(call.ret, thread_id_exp);
+  state.value_set.assign(call.ret, thread_id_exp, ns);
 
   symex_assign(assign);
 

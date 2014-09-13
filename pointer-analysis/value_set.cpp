@@ -413,7 +413,7 @@ void value_sett::get_value_set_rec(
   }
 
   unknown2tc tmp(original_type);
-  insert(dest, tmp);
+  insert(dest, tmp, 0);
 }
 
 void value_sett::get_reference_set(
@@ -442,7 +442,7 @@ void value_sett::get_reference_set_rec(
   {
     if (is_array_type(expr) &&
         is_array_type(to_array_type(expr->type).subtype))
-      insert(dest, expr);
+      insert(dest, expr, 0);
     else    
       insert(dest, expr, 0);
 
@@ -475,7 +475,7 @@ void value_sett::get_reference_set_rec(
 
       if (is_unknown2t(object)) {
         unknown2tc unknown(expr->type);
-        insert(dest, unknown);
+        insert(dest, unknown, 0);
       } else if (is_array_type(object) || is_string_type(object)) {
         index2tc new_index(index.type, object, zero_uint);
         
@@ -523,7 +523,7 @@ void value_sett::get_reference_set_rec(
       
       if (is_unknown2t(object)) {
         unknown2tc unknown(memb.type);
-        insert(dest, unknown);
+        insert(dest, unknown, 0);
       } else {
         objectt o=it->second;
 
@@ -561,12 +561,10 @@ void value_sett::get_reference_set_rec(
     const byte_extract2t &extract = to_byte_extract2t(expr);
 
     // This may or may not have a constant offset
-    objectt o;
+    objectt o(false, 0);
     if (is_constant_int2t(extract.source_offset)) {
       o.offset = to_constant_int2t(extract.source_offset).constant_value;
       o.offset_is_set = true;
-    } else {
-      o.offset_is_set = false;
     }
 
     insert(dest, extract.source_value, o);
@@ -574,7 +572,7 @@ void value_sett::get_reference_set_rec(
   }
 
   unknown2tc unknown(expr->type);
-  insert(dest, unknown);
+  insert(dest, unknown, 0);
 }
 
 void value_sett::assign(
