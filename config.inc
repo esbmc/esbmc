@@ -23,16 +23,16 @@ USE_SOLVER_Z3=1
 endif #EXTERN_ESBMC_CONFIG
 
 # Use eigen lib for digital filters verification
-USE_EIGEN_LIB=1
+#USE_EIGEN_LIB=1
 
 # If no OS or patform was specified, try to guess
 include $(ESBMCDIR)/scripts/os_detect.inc
 
 # Defaults:
 
-CC=     gcc
-CXX=    g++
-DEPCXX= g++
+CC=     ccache gcc
+CXX=    ccache g++
+DEPCXX= ccache g++
 LD=     ld
 AR=     ar
 YACC   = bison -y

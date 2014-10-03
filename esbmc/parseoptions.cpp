@@ -150,6 +150,11 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   options.cmdline(cmdline);
 
+  if (cmdline.isset("graphml")) {
+	options.set_option("graphml", cmdline.getval("graphml"));
+    options.set_option("no-slice", true);
+  }
+
   if (cmdline.isset("git-hash")) {
     std::cout << version_string << std::endl;
     exit(0);
@@ -1887,6 +1892,7 @@ void cbmc_parseoptionst::help()
     " --16, --32, --64             set width of machine word\n"
     " --show-goto-functions        show goto program\n"
     " --extended-try-analysis      check all the try block, even when an exception is throw\n"
+    " --graphml filename           output counter-example in graphML format (experimental)\n"
     " --version                    show current ESBMC version and exit\n\n"
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"

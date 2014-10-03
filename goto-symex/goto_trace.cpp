@@ -15,10 +15,13 @@
 #include <langapi/language_util.h>
 #include <arith_tools.h>
 
-
 #include "goto_trace.h"
 #include "VarMap.h"
 #include <std_types.h>
+
+#include <boost/graph/directed_graph.hpp>
+#include <boost/graph/graphml.hpp>
+#include <boost/graph/iteration_macros.hpp>
 
 void
 goto_tracet::output(
@@ -335,6 +338,56 @@ get_metada_from_llvm(
     const_cast<locationt*>(&it->pc->location)->set_line(goto_trace.LineNumber);
     const_cast<locationt*>(&it->pc->location)->set_function(goto_trace.FuncName);
   }
+}
+
+void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filename, const namespacet &ns, const goto_tracet &goto_trace)
+{
+  typedef struct graph_props {
+	std::string sourcecodeLanguage;
+  } graph_p;
+
+  typedef struct node_props {
+	std::string nodeType;
+	bool isFrontierNode;
+	bool isViolationNode;
+	bool isEntryNode;
+	bool isSinkNode;
+  } node_p;
+
+  typedef struct edge_props {
+    std::string assumption;
+    std::string sourcecode;
+    std::string tokenSet;
+    std::string originTokenSet;
+    std::string negativeCase;
+    int lineNumberInOrigin;
+    std::string originFileName;
+    std::string enterFunction;
+    std::string returnFromFunction;
+  } edge_p;
+
+  typedef boost::adjacency_list <boost::listS, boost::vecS, boost::directedS, node_p, edge_p, graph_p> Graph;
+  typedef boost::graph_traits<Graph>::vertex_descriptor node_t;
+  typedef boost::graph_traits<Graph>::edge_descriptor edge_t;
+
+  Graph g;
+  boost::dynamic_properties dp;
+
+  node_t u = boost::add_vertex(g);
+  node_t v = boost::add_vertex(g);
+
+  edge_t e; bool b;
+  boost::tie(e,b) = boost::add_edge(u,v,g);
+
+  std::ofstream graphmlOutFile(filename);
+  boost::write_graphml(graphmlOutFile, g, dp, false);
+  graphmlOutFile.close();
+
+  out << std::endl;
+  goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
+  from_expr(ns, "", it->pc->guard);
+
+  //show_goto_trace(out,ns,goto_trace);
 }
 
 void
