@@ -342,6 +342,12 @@ get_metada_from_llvm(
 
 void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filename, const namespacet &ns, const goto_tracet &goto_trace)
 {
+  out << std::endl;
+  goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
+  from_expr(ns, "", it->pc->guard);
+
+  /* graph properties */
+
   typedef struct graph_props {
 	std::string sourcecodeLanguage;
   } graph_p;
@@ -371,7 +377,40 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
   typedef boost::graph_traits<Graph>::edge_descriptor edge_t;
 
   Graph g;
+
   boost::dynamic_properties dp;
+  dp.property("nodeType", boost::get(&node_p::nodeType, g));
+  dp.property("isFrontierNode", boost::get(&node_p::isFrontierNode, g));
+  dp.property("isViolationNode", boost::get(&node_p::isViolationNode, g));
+  dp.property("isEntryNode", boost::get(&node_p::isEntryNode, g));
+  dp.property("isSinkNode", boost::get(&node_p::isSinkNode, g));
+
+  dp.property("assumption", boost::get(&edge_p::assumption, g));
+  dp.property("sourcecode", boost::get(&edge_p::sourcecode, g));
+  dp.property("tokenSet", boost::get(&edge_p::tokenSet, g));
+  dp.property("originTokenSet", boost::get(&edge_p::originTokenSet, g));
+  dp.property("negativeCase", boost::get(&edge_p::negativeCase, g));
+  dp.property("lineNumberInOrigin", boost::get(&edge_p::lineNumberInOrigin, g));
+  dp.property("originFileName", boost::get(&edge_p::enterFunction, g));
+  dp.property("returnFromFunction", boost::get(&edge_p::returnFromFunction, g));
+
+  /* creating nodes and edges */
+
+  for (goto_tracet::stepst::const_iterator it = goto_trace.steps.begin(); it != goto_trace.steps.end(); it++){
+
+    std::string::size_type find_bt = it->pc->location.to_string().find("built-in", 0);
+    std::string::size_type find_lib = it->pc->location.to_string().find("library", 0);
+    bool is_internal_call = find_bt != std::string::npos || find_lib != std::string::npos;
+
+    if ((it->type == goto_trace_stept::ASSIGNMENT) && (is_internal_call == false)){
+
+    	std::cout << " *** DUMP: " << it->pc->location  << "*** " << std::endl;
+
+    	it->value->dump();
+
+    	std::cout << "***" << std::endl;
+	}
+  }
 
   node_t u = boost::add_vertex(g);
   node_t v = boost::add_vertex(g);
@@ -379,15 +418,12 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
   edge_t e; bool b;
   boost::tie(e,b) = boost::add_edge(u,v,g);
 
+  /* writting graphml */
+
   std::ofstream graphmlOutFile(filename);
   boost::write_graphml(graphmlOutFile, g, dp, false);
   graphmlOutFile.close();
 
-  out << std::endl;
-  goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
-  from_expr(ns, "", it->pc->guard);
-
-  //show_goto_trace(out,ns,goto_trace);
 }
 
 void
