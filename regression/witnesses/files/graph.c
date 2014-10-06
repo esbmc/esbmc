@@ -14,7 +14,7 @@ typedef struct node_props {
    bool isViolationNode;
    bool isEntryNode;
    bool isSinkNode;
-} node_p;
+} node_p; // = {"", 0, 0, 0 ,0};
 
 typedef struct edge_props { 
    std::string assumption;

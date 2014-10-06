@@ -22,6 +22,37 @@
 #include <boost/graph/directed_graph.hpp>
 #include <boost/graph/graphml.hpp>
 #include <boost/graph/iteration_macros.hpp>
+#include <boost/algorithm/string.hpp>
+
+/* graph properties (graphml) */
+
+typedef struct graph_props {
+  std::string sourcecodeLanguage;
+} graph_p;
+
+typedef struct node_props {
+  std::string nodeType;
+  bool isFrontierNode;
+  bool isViolationNode;
+  bool isEntryNode;
+  bool isSinkNode;
+} node_p;
+
+typedef struct edge_props {
+  std::string assumption;
+  std::string sourcecode;
+  std::string tokenSet;
+  std::string originTokenSet;
+  std::string negativeCase;
+  int lineNumberInOrigin;
+  std::string originFileName;
+  std::string enterFunction;
+  std::string returnFromFunction;
+} edge_p;
+
+typedef boost::adjacency_list <boost::listS, boost::vecS, boost::directedS, node_p, edge_p, graph_p> Graph;
+typedef boost::graph_traits<Graph>::vertex_descriptor node_t;
+typedef boost::graph_traits<Graph>::edge_descriptor edge_t;
 
 void
 goto_tracet::output(
@@ -140,7 +171,6 @@ counterexample_value(
   if (!ns.lookup(identifier, symbol))
     if (symbol->pretty_name != "")
       name = id2string(symbol->pretty_name);
-
   out << "  " << name << "=" << value_string
       << std::endl;
 }
@@ -346,36 +376,6 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
   goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
   from_expr(ns, "", it->pc->guard);
 
-  /* graph properties */
-
-  typedef struct graph_props {
-	std::string sourcecodeLanguage;
-  } graph_p;
-
-  typedef struct node_props {
-	std::string nodeType;
-	bool isFrontierNode;
-	bool isViolationNode;
-	bool isEntryNode;
-	bool isSinkNode;
-  } node_p;
-
-  typedef struct edge_props {
-    std::string assumption;
-    std::string sourcecode;
-    std::string tokenSet;
-    std::string originTokenSet;
-    std::string negativeCase;
-    int lineNumberInOrigin;
-    std::string originFileName;
-    std::string enterFunction;
-    std::string returnFromFunction;
-  } edge_p;
-
-  typedef boost::adjacency_list <boost::listS, boost::vecS, boost::directedS, node_p, edge_p, graph_p> Graph;
-  typedef boost::graph_traits<Graph>::vertex_descriptor node_t;
-  typedef boost::graph_traits<Graph>::edge_descriptor edge_t;
-
   Graph g;
 
   boost::dynamic_properties dp;
@@ -391,10 +391,18 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
   dp.property("originTokenSet", boost::get(&edge_p::originTokenSet, g));
   dp.property("negativeCase", boost::get(&edge_p::negativeCase, g));
   dp.property("lineNumberInOrigin", boost::get(&edge_p::lineNumberInOrigin, g));
-  dp.property("originFileName", boost::get(&edge_p::enterFunction, g));
+  dp.property("originFileName", boost::get(&edge_p::originFileName, g));
+  dp.property("enterFunction", boost::get(&edge_p::enterFunction, g));
   dp.property("returnFromFunction", boost::get(&edge_p::returnFromFunction, g));
 
+  void init_node_properties(Graph & g, node_t & node);
+  void init_edge_properties(Graph & g, edge_t & edge);
+
   /* creating nodes and edges */
+
+  node_t last_node_created = boost::add_vertex(g);
+  init_node_properties(g, last_node_created);
+  g[last_node_created].isEntryNode = true;
 
   for (goto_tracet::stepst::const_iterator it = goto_trace.steps.begin(); it != goto_trace.steps.end(); it++){
 
@@ -404,19 +412,40 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
 
     if ((it->type == goto_trace_stept::ASSIGNMENT) && (is_internal_call == false)){
 
-    	std::cout << " *** DUMP: " << it->pc->location  << "*** " << std::endl;
+  	  const irep_idt &identifier = to_symbol2t(it->lhs).get_symbol_name();
 
-    	it->value->dump();
+      std::cout << " *** DUMP: " << it->pc->location  << "*** " << std::endl;
+      it->value->dump();
+      std::cout << "***" << std::endl;
 
-    	std::cout << "***" << std::endl;
+ 	  node_t new_node = boost::add_vertex(g);
+ 	  init_node_properties(g, new_node);
+
+	  edge_t e; bool b;
+	  boost::tie(e,b) = boost::add_edge(last_node_created,new_node,g);
+	  init_edge_properties(g, e);
+
+	  g[e].originFileName = it->pc->location.get_file().as_string();
+	  g[e].lineNumberInOrigin = std::atoi(it->pc->location.get_line().as_string().c_str());
+
+	  std::vector<std::string> split;
+	  std::string lhs_str = from_expr(ns, identifier, it->lhs);
+	  boost::split(split,lhs_str,boost::is_any_of("@"));
+
+	  std::string assumption = split[0] + " = " + from_expr(ns, identifier, it->rhs)+";";
+	  g[e].assumption = assumption;
+
+	  last_node_created = new_node;
+
 	}
   }
 
-  node_t u = boost::add_vertex(g);
-  node_t v = boost::add_vertex(g);
-
+  node_t violation_node = boost::add_vertex(g);
+  init_node_properties(g, violation_node);
+  g[violation_node].isViolationNode = true;
   edge_t e; bool b;
-  boost::tie(e,b) = boost::add_edge(u,v,g);
+  boost::tie(e,b) = boost::add_edge(last_node_created,violation_node,g);
+  init_edge_properties(g, e);
 
   /* writting graphml */
 
@@ -424,6 +453,26 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
   boost::write_graphml(graphmlOutFile, g, dp, false);
   graphmlOutFile.close();
 
+}
+
+void init_node_properties(Graph & g, node_t & node){
+  g[node].nodeType = "";
+  g[node].isFrontierNode = false;
+  g[node].isViolationNode = false;
+  g[node].isEntryNode = false;
+  g[node].isSinkNode = false;
+}
+
+void init_edge_properties(Graph & g, edge_t & edge){
+  g[edge].assumption = "";
+  g[edge].sourcecode = "";
+  g[edge].tokenSet = "";
+  g[edge].originTokenSet = "";
+  g[edge].negativeCase = "";
+  g[edge].originFileName = "";
+  g[edge].enterFunction = "";
+  g[edge].returnFromFunction = "";
+  g[edge].lineNumberInOrigin = -1;
 }
 
 void
