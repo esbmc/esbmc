@@ -99,8 +99,10 @@ void bmct::error_trace(prop_convt &prop_conv,
   goto_trace.metadata_filename = options.get_option("llvm-metadata");
 
   std::string graphml_output_filename;
+  std::string tokenizer_path;
   if (!(graphml_output_filename = options.get_option("graphml")).empty()){
 	set_ui(ui_message_handlert::GRAPHML);
+	tokenizer_path = options.get_option("tokenizer");
   }
 
   switch(ui)
@@ -123,7 +125,8 @@ void bmct::error_trace(prop_convt &prop_conv,
   break;
 
   case ui_message_handlert::GRAPHML:
-	 generate_goto_trace_in_graphml_format(std::cout, graphml_output_filename, ns, goto_trace);
+	 generate_goto_trace_in_graphml_format(tokenizer_path, graphml_output_filename, ns, goto_trace);
+	 std::cout << "The counter-example in GraphML format is available in: " << options.get_option("graphml") << std::endl;
   break;
 
   default:
@@ -285,7 +288,6 @@ void bmct::report_failure()
   break;
 
   case ui_message_handlert::GRAPHML:
-      std::cout << "The counter-example in GraphML format is available in: " << options.get_option("graphml") << std::endl;
   break;
 
   default:

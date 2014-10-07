@@ -152,10 +152,10 @@ void show_goto_trace(
   const goto_tracet &goto_trace);
 
 void generate_goto_trace_in_graphml_format(
-  std::ostream &out,
-  std::string &filename,
-  const namespacet &ns,
-  const goto_tracet &goto_trace);
+  std::string & tokenizer_path,
+  std::string & filename,
+  const namespacet & ns,
+  const goto_tracet & goto_trace);
 
 void counterexample_value(
   std::ostream &out,

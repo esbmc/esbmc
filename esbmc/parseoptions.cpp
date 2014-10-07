@@ -57,6 +57,7 @@ extern "C" {
 #include "version.h"
 
 #include "kinduction_parallel.h"
+#include <fstream>
 
 // jmorse - could be somewhere better
 
@@ -150,9 +151,20 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   options.cmdline(cmdline);
 
-  if (cmdline.isset("graphml")) {
+  /* graphML generation options check */
+  if ((cmdline.isset("graphml")) && (cmdline.isset("tokenizer"))) {
+	std::string tokenizer_path = cmdline.getval("tokenizer");
+	std::ifstream tfile(tokenizer_path);
+	if (!tfile){
+		std::cout << "The tokenizer path is invalid, check it and try again" << std::endl;
+		exit(1);
+	}
 	options.set_option("graphml", cmdline.getval("graphml"));
-    options.set_option("no-slice", true);
+	options.set_option("no-slice", true);
+    options.set_option("tokenizer", cmdline.getval("tokenizer"));
+  }else if ((cmdline.isset("graphml")) && (!cmdline.isset("tokenizer"))) {
+	std::cout << "For graphML generation is necessary be set a tokenizer (use --tokenizer path)" << std::endl;
+    exit(1);
   }
 
   if (cmdline.isset("git-hash")) {
@@ -1892,8 +1904,11 @@ void cbmc_parseoptionst::help()
     " --16, --32, --64             set width of machine word\n"
     " --show-goto-functions        show goto program\n"
     " --extended-try-analysis      check all the try block, even when an exception is throw\n"
+    " --version                    show current ESBMC version and exit\n"
     " --graphml filename           output counter-example in graphML format (experimental)\n"
-    " --version                    show current ESBMC version and exit\n\n"
+    " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
+    "                              program for graphML generation (experimental)\n\n"
+
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"

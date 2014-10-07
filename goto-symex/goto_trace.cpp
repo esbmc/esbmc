@@ -24,6 +24,16 @@
 #include <boost/graph/iteration_macros.hpp>
 #include <boost/algorithm/string.hpp>
 
+#include <iostream>
+#include <cstdlib>
+#include <string>
+#include <stdio.h>
+#include <fstream>
+#include <streambuf>
+#include <sstream>
+#include <vector>
+#include <map>
+
 /* graph properties (graphml) */
 
 typedef struct graph_props {
@@ -53,6 +63,8 @@ typedef struct edge_props {
 typedef boost::adjacency_list <boost::listS, boost::vecS, boost::directedS, node_p, edge_p, graph_p> Graph;
 typedef boost::graph_traits<Graph>::vertex_descriptor node_t;
 typedef boost::graph_traits<Graph>::edge_descriptor edge_t;
+
+std::string tokenizer_executable_path="/home/hussamaibrahim/Repositorios/esbmc/regression/witnesses/files/tokenizer";
 
 void
 goto_tracet::output(
@@ -370,13 +382,98 @@ get_metada_from_llvm(
   }
 }
 
-void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filename, const namespacet &ns, const goto_tracet &goto_trace)
+std::string execute_cmd(std::string command)
 {
-  out << std::endl;
-  goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
-  from_expr(ns, "", it->pc->guard);
+  FILE* pipe = popen(command.c_str(), "r");
+  if (!pipe) return "ERROR";
+  char buffer[128];
+  std::string result = "";
+  while(!feof(pipe)) {
+    if(fgets(buffer, 128, pipe) != NULL)
+      result += buffer;
+  }
+  pclose(pipe);
+  return result;
+}
+
+std::string call_tokenize(std::string file)
+{
+  return execute_cmd(tokenizer_executable_path + " " + file);
+}
+
+std::string read_file(std::string path )
+{
+  std::ifstream t(path.c_str());
+  std::string str((std::istreambuf_iterator<char>(t)),std::istreambuf_iterator<char>());
+  return str;
+}
+
+void write_file(std::string path, std::string content)
+{
+  std::ofstream out(path.c_str());
+  out << content;
+  out.close();
+}
+
+void generate_tokens(std::string tokenized_line, std::map<int, std::string> & tokens, int & token_index)
+{
+  std::istringstream tl_stream(tokenized_line.c_str());
+  std::string line;
+  while (std::getline(tl_stream, line)){
+    if (line != "\n" && line != ""){
+      tokens[token_index] = line;
+      token_index++;
+    }
+  }
+}
+
+void convert_c_file_in_tokens(std::string source_code_file, std::map<int, std::map<int,std::string> > & mapped_tokens)
+{
+  std::string source_content = read_file(source_code_file);
+  std::istringstream source_stream(source_content.c_str());
+  std::string temporary_file = "/tmp/esbmc-to-graphml.tmp";
+  std::string line;
+  int line_count = 0;
+  int token_index = 1;
+  while (std::getline(source_stream, line))
+  {
+    line_count++;
+    write_file(temporary_file, line + "\n");
+    std::string tokenized_line = call_tokenize(temporary_file);
+    std::map<int, std::string> tokens;
+    generate_tokens(tokenized_line, tokens, token_index);
+    mapped_tokens[line_count] = tokens;
+  }
+}
+
+void init_node_properties(Graph & g, node_t & node)
+{
+  g[node].nodeType = "";
+  g[node].isFrontierNode = false;
+  g[node].isViolationNode = false;
+  g[node].isEntryNode = false;
+  g[node].isSinkNode = false;
+}
+
+void init_edge_properties(Graph & g, edge_t & edge)
+{
+  g[edge].assumption = "";
+  g[edge].sourcecode = "";
+  g[edge].tokenSet = "";
+  g[edge].originTokenSet = "";
+  g[edge].negativeCase = "";
+  g[edge].originFileName = "";
+  g[edge].enterFunction = "";
+  g[edge].returnFromFunction = "";
+  g[edge].lineNumberInOrigin = -1;
+}
+
+void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::string & filename, const namespacet & ns, const goto_tracet & goto_trace)
+{
 
   Graph g;
+  std::map<int, std::map<int, std::string> > mapped_tokens;
+  tokenizer_executable_path = tokenizer_path;
 
   boost::dynamic_properties dp;
   dp.property("nodeType", boost::get(&node_p::nodeType, g));
@@ -395,9 +492,6 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
   dp.property("enterFunction", boost::get(&edge_p::enterFunction, g));
   dp.property("returnFromFunction", boost::get(&edge_p::returnFromFunction, g));
 
-  void init_node_properties(Graph & g, node_t & node);
-  void init_edge_properties(Graph & g, edge_t & edge);
-
   /* creating nodes and edges */
 
   node_t last_node_created = boost::add_vertex(g);
@@ -412,11 +506,15 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
 
     if ((it->type == goto_trace_stept::ASSIGNMENT) && (is_internal_call == false)){
 
-  	  const irep_idt &identifier = to_symbol2t(it->lhs).get_symbol_name();
+      std::string filename = it->pc->location.get_file().as_string();;
+      int line_number = std::atoi(it->pc->location.get_line().as_string().c_str());
 
-      std::cout << " *** DUMP: " << it->pc->location  << "*** " << std::endl;
-      it->value->dump();
-      std::cout << "***" << std::endl;
+      /* check if tokens already ok */
+      if(mapped_tokens.size() == 0){
+    	  convert_c_file_in_tokens(filename, mapped_tokens);
+      }
+
+  	  const irep_idt &identifier = to_symbol2t(it->lhs).get_symbol_name();
 
  	  node_t new_node = boost::add_vertex(g);
  	  init_node_properties(g, new_node);
@@ -425,8 +523,8 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
 	  boost::tie(e,b) = boost::add_edge(last_node_created,new_node,g);
 	  init_edge_properties(g, e);
 
-	  g[e].originFileName = it->pc->location.get_file().as_string();
-	  g[e].lineNumberInOrigin = std::atoi(it->pc->location.get_line().as_string().c_str());
+	  g[e].originFileName = filename;
+	  g[e].lineNumberInOrigin = line_number;
 
 	  std::vector<std::string> split;
 	  std::string lhs_str = from_expr(ns, identifier, it->lhs);
@@ -435,8 +533,28 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
 	  std::string assumption = split[0] + " = " + from_expr(ns, identifier, it->rhs)+";";
 	  g[e].assumption = assumption;
 
-	  last_node_created = new_node;
+	  std::map<int, std::string> current_line_tokens = mapped_tokens[line_number];
+	  std::map<int,std::string>::iterator it;
 
+	  std::string token_set = "";
+	  if (current_line_tokens.size() == 1){
+		  token_set = std::to_string(current_line_tokens.begin()->first);
+	  }else{
+		  int first = current_line_tokens.begin()->first;
+		  int end = first + current_line_tokens.end()->first - 1;
+		  token_set = token_set + std::to_string(current_line_tokens.begin()->first) + "," + std::to_string(end);
+	  }
+
+	  std::string source_code = "";
+	  for (it=current_line_tokens.begin(); it!=current_line_tokens.end(); ++it){
+	    source_code = source_code + it->second + "\n";
+	  }
+
+	  g[e].sourcecode = source_code;
+	  g[e].tokenSet = token_set;
+	  g[e].originTokenSet = token_set;
+
+	  last_node_created = new_node;
 	}
   }
 
@@ -453,26 +571,6 @@ void generate_goto_trace_in_graphml_format(std::ostream &out, std::string &filen
   boost::write_graphml(graphmlOutFile, g, dp, false);
   graphmlOutFile.close();
 
-}
-
-void init_node_properties(Graph & g, node_t & node){
-  g[node].nodeType = "";
-  g[node].isFrontierNode = false;
-  g[node].isViolationNode = false;
-  g[node].isEntryNode = false;
-  g[node].isSinkNode = false;
-}
-
-void init_edge_properties(Graph & g, edge_t & edge){
-  g[edge].assumption = "";
-  g[edge].sourcecode = "";
-  g[edge].tokenSet = "";
-  g[edge].originTokenSet = "";
-  g[edge].negativeCase = "";
-  g[edge].originFileName = "";
-  g[edge].enterFunction = "";
-  g[edge].returnFromFunction = "";
-  g[edge].lineNumberInOrigin = -1;
 }
 
 void
