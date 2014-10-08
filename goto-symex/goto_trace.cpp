@@ -23,6 +23,8 @@
 #include <boost/graph/graphml.hpp>
 #include <boost/graph/iteration_macros.hpp>
 #include <boost/algorithm/string.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/xml_parser.hpp>
 
 #include <iostream>
 #include <cstdlib>
@@ -570,6 +572,43 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
   std::ofstream graphmlOutFile(filename);
   boost::write_graphml(graphmlOutFile, g, dp, false);
   graphmlOutFile.close();
+
+  /* adjusting pretty xml */
+
+  boost::property_tree::ptree pt;
+  boost::property_tree::read_xml(filename, pt, boost::property_tree::xml_parser::trim_whitespace);
+
+/*TODO Remove unset elements and adjust element keys */
+/*  
+  BOOST_FOREACH( boost::property_tree::ptree::value_type & element, pt.get_child("graphml.graph") ) {
+     if( element.first == "node" ) {
+	std::cout << "ACHEI UM NODE" << std::endl;
+
+        boost::property_tree::ptree & subtree = element.second;
+	boost::property_tree::ptree::const_iterator end = subtree.end();
+
+	for (boost::property_tree::ptree::const_iterator it = subtree.begin(); it != end; ++it){
+	     if( it->first == "data" ) {
+  	     std::cout << it->first << " ~ DATA: " << it->second.data() << std::endl;
+ 		
+		if ((it->second.data() == "") || (it->second.data() == "0") || (it->second.data() == "-1")){
+			std::cout << "DADO VAZIO" << std::endl;
+			subtree.erase("2");
+		}
+
+	     }
+	}
+	
+	break;
+     }
+     if( element.first == "edge" ) {
+	std::cout << "ACHEI UM EDGE" << std::endl;	
+     }
+  }
+*/
+  
+  boost::property_tree::xml_writer_settings<char> settings('\t', 1);;
+  boost::property_tree::write_xml(filename, pt, std::locale(), settings);
 
 }
 
