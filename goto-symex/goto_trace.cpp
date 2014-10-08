@@ -62,6 +62,24 @@ typedef struct edge_props {
   std::string returnFromFunction;
 } edge_p;
 
+typedef struct defined_props {
+   bool has_sourcecodelanguage;
+   bool has_nodeType;
+   bool has_isFrontierNode;
+   bool has_isViolationNode;
+   bool has_isEntryNode;
+   bool has_isSinkNode;
+   bool has_assumption;
+   bool has_sourcecode;
+   bool has_tokenSet;
+   bool has_originTokenSet;
+   bool has_negativeCase;
+   bool has_lineNumberInOrigin;
+   bool has_originFileName;
+   bool has_enterFunction;
+   bool has_returnFromFunction;
+} def_p;
+
 typedef boost::adjacency_list <boost::listS, boost::vecS, boost::directedS, node_p, edge_p, graph_p> Graph;
 typedef boost::graph_traits<Graph>::vertex_descriptor node_t;
 typedef boost::graph_traits<Graph>::edge_descriptor edge_t;
@@ -470,29 +488,47 @@ void init_edge_properties(Graph & g, edge_t & edge)
   g[edge].lineNumberInOrigin = -1;
 }
 
+void set_dynamic_properties(Graph & g, def_p & defined_properties, boost::dynamic_properties & dp)
+{
+  if (defined_properties.has_nodeType == true)
+    dp.property("nodeType", boost::get(&node_p::nodeType, g));
+  if (defined_properties.has_isFrontierNode == true)
+    dp.property("isFrontierNode", boost::get(&node_p::isFrontierNode, g));
+  if (defined_properties.has_isViolationNode == true)
+    dp.property("isViolationNode", boost::get(&node_p::isViolationNode, g));
+  if (defined_properties.has_isEntryNode == true)
+    dp.property("isEntryNode", boost::get(&node_p::isEntryNode, g));
+  if (defined_properties.has_isSinkNode == true)
+    dp.property("isSinkNode", boost::get(&node_p::isSinkNode, g));
+  if (defined_properties.has_assumption == true)
+    dp.property("assumption", boost::get(&edge_p::assumption, g));
+  if (defined_properties.has_sourcecode == true)
+    dp.property("sourcecode", boost::get(&edge_p::sourcecode, g));
+  if (defined_properties.has_tokenSet == true)
+    dp.property("tokenSet", boost::get(&edge_p::tokenSet, g));
+  if (defined_properties.has_originTokenSet == true)
+    dp.property("originTokenSet", boost::get(&edge_p::originTokenSet, g));
+  if (defined_properties.has_negativeCase == true)
+    dp.property("negativeCase", boost::get(&edge_p::negativeCase, g));
+  if (defined_properties.has_lineNumberInOrigin == true)
+    dp.property("lineNumberInOrigin", boost::get(&edge_p::lineNumberInOrigin, g));
+  if (defined_properties.has_originFileName == true)
+    dp.property("originFileName", boost::get(&edge_p::enterFunction, g));
+  if (defined_properties.has_enterFunction == true)
+    dp.property("enterFunction", boost::get(&edge_p::enterFunction, g));
+  if (defined_properties.has_returnFromFunction == true)
+    dp.property("returnFromFunction", boost::get(&edge_p::returnFromFunction, g));
+}
+
 void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::string & filename, const namespacet & ns, const goto_tracet & goto_trace)
 {
 
   Graph g;
   std::map<int, std::map<int, std::string> > mapped_tokens;
-  tokenizer_executable_path = tokenizer_path;
-
   boost::dynamic_properties dp;
-  dp.property("nodeType", boost::get(&node_p::nodeType, g));
-  dp.property("isFrontierNode", boost::get(&node_p::isFrontierNode, g));
-  dp.property("isViolationNode", boost::get(&node_p::isViolationNode, g));
-  dp.property("isEntryNode", boost::get(&node_p::isEntryNode, g));
-  dp.property("isSinkNode", boost::get(&node_p::isSinkNode, g));
+  def_p defined_properties;
 
-  dp.property("assumption", boost::get(&edge_p::assumption, g));
-  dp.property("sourcecode", boost::get(&edge_p::sourcecode, g));
-  dp.property("tokenSet", boost::get(&edge_p::tokenSet, g));
-  dp.property("originTokenSet", boost::get(&edge_p::originTokenSet, g));
-  dp.property("negativeCase", boost::get(&edge_p::negativeCase, g));
-  dp.property("lineNumberInOrigin", boost::get(&edge_p::lineNumberInOrigin, g));
-  dp.property("originFileName", boost::get(&edge_p::originFileName, g));
-  dp.property("enterFunction", boost::get(&edge_p::enterFunction, g));
-  dp.property("returnFromFunction", boost::get(&edge_p::returnFromFunction, g));
+  tokenizer_executable_path = tokenizer_path;
 
   /* creating nodes and edges */
 
@@ -525,7 +561,10 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	  boost::tie(e,b) = boost::add_edge(last_node_created,new_node,g);
 	  init_edge_properties(g, e);
 
+	  defined_properties.has_originFileName = true;
 	  g[e].originFileName = filename;
+
+	  defined_properties.has_lineNumberInOrigin = true;
 	  g[e].lineNumberInOrigin = line_number;
 
 	  std::vector<std::string> split;
@@ -533,6 +572,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	  boost::split(split,lhs_str,boost::is_any_of("@"));
 
 	  std::string assumption = split[0] + " = " + from_expr(ns, identifier, it->rhs)+";";
+	  defined_properties.has_assumption = true;
 	  g[e].assumption = assumption;
 
 	  std::map<int, std::string> current_line_tokens = mapped_tokens[line_number];
@@ -552,8 +592,13 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	    source_code = source_code + it->second + "\n";
 	  }
 
+	  defined_properties.has_sourcecode = true;
 	  g[e].sourcecode = source_code;
-	  g[e].tokenSet = token_set;
+
+	  defined_properties.has_tokenSet = true;
+      g[e].tokenSet = token_set;
+
+	  defined_properties.has_originTokenSet = true;
 	  g[e].originTokenSet = token_set;
 
 	  last_node_created = new_node;
@@ -569,47 +614,18 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 
   /* writting graphml */
 
+  set_dynamic_properties(g, defined_properties, dp);
   std::ofstream graphmlOutFile(filename);
-  boost::write_graphml(graphmlOutFile, g, dp, false);
+  boost::write_graphml(graphmlOutFile, g, dp, true);
   graphmlOutFile.close();
 
-  /* adjusting pretty xml */
-
+/* adjusting pretty xml */
+/*
   boost::property_tree::ptree pt;
   boost::property_tree::read_xml(filename, pt, boost::property_tree::xml_parser::trim_whitespace);
-
-/*TODO Remove unset elements and adjust element keys */
-/*  
-  BOOST_FOREACH( boost::property_tree::ptree::value_type & element, pt.get_child("graphml.graph") ) {
-     if( element.first == "node" ) {
-	std::cout << "ACHEI UM NODE" << std::endl;
-
-        boost::property_tree::ptree & subtree = element.second;
-	boost::property_tree::ptree::const_iterator end = subtree.end();
-
-	for (boost::property_tree::ptree::const_iterator it = subtree.begin(); it != end; ++it){
-	     if( it->first == "data" ) {
-  	     std::cout << it->first << " ~ DATA: " << it->second.data() << std::endl;
- 		
-		if ((it->second.data() == "") || (it->second.data() == "0") || (it->second.data() == "-1")){
-			std::cout << "DADO VAZIO" << std::endl;
-			subtree.erase("2");
-		}
-
-	     }
-	}
-	
-	break;
-     }
-     if( element.first == "edge" ) {
-	std::cout << "ACHEI UM EDGE" << std::endl;	
-     }
-  }
-*/
-  
   boost::property_tree::xml_writer_settings<char> settings('\t', 1);;
   boost::property_tree::write_xml(filename, pt, std::locale(), settings);
-
+*/
 }
 
 void
