@@ -22,6 +22,7 @@ typedef struct node_props {
   bool isViolationNode = false;
   bool isEntryNode = false;
   bool isSinkNode = false;
+  int threadNumber = -1;
 } node_p;
 
 typedef struct edge_props {
@@ -108,34 +109,40 @@ void create_node(boost::property_tree::ptree & node, node_p & node_props)
 {
   node.add("<xmlattr>.id", "n" + std::to_string(node_count++));
   if (node_props.nodeType != ""){
-     boost::property_tree::ptree data_nodetype;
-     data_nodetype.add("<xmlattr>.key", "notetype");
-     data_nodetype.put_value(node_props.nodeType);
-     node.add_child("data",data_nodetype);
+    boost::property_tree::ptree data_nodetype;
+    data_nodetype.add("<xmlattr>.key", "notetype");
+    data_nodetype.put_value(node_props.nodeType);
+    node.add_child("data",data_nodetype);
   }
   if (node_props.isViolationNode != 0){
-     boost::property_tree::ptree data_violation;
-     data_violation.add("<xmlattr>.key", "violation");
-     data_violation.put_value("true");
-     node.add_child("data",data_violation);
+    boost::property_tree::ptree data_violation;
+    data_violation.add("<xmlattr>.key", "violation");
+    data_violation.put_value("true");
+    node.add_child("data",data_violation);
   }
   if (node_props.isSinkNode != 0){
-     boost::property_tree::ptree data_sink;
-     data_sink.add("<xmlattr>.key", "sink");
-     data_sink.put_value("true");
-     node.add_child("data",data_sink);
+    boost::property_tree::ptree data_sink;
+    data_sink.add("<xmlattr>.key", "sink");
+    data_sink.put_value("true");
+    node.add_child("data",data_sink);
   }
   if (node_props.isFrontierNode != 0){
-     boost::property_tree::ptree data_frontier;
-     data_frontier.add("<xmlattr>.key", "frontier");
-     data_frontier.put_value("true");
-     node.add_child("data",data_frontier);
+    boost::property_tree::ptree data_frontier;
+    data_frontier.add("<xmlattr>.key", "frontier");
+    data_frontier.put_value("true");
+    node.add_child("data",data_frontier);
   }
   if (node_props.isEntryNode != 0){
-     boost::property_tree::ptree data_entry;
-     data_entry.add("<xmlattr>.key", "entry");
-     data_entry.put_value("true");
-     node.add_child("data",data_entry);
+    boost::property_tree::ptree data_entry;
+    data_entry.add("<xmlattr>.key", "entry");
+    data_entry.put_value("true");
+    node.add_child("data",data_entry);
+  }
+  if (node_props.threadNumber != -1){
+    boost::property_tree::ptree data_threadnumber;
+    data_threadnumber.add("<xmlattr>.key", "thread");
+    data_threadnumber.put_value(node_props.threadNumber);
+    node.add_child("data",data_threadnumber);
   }
 }
 
@@ -145,58 +152,58 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props, boost:
   edge.add("<xmlattr>.source", source.get<std::string>("<xmlattr>.id"));
   edge.add("<xmlattr>.target", target.get<std::string>("<xmlattr>.id"));
   if (edge_props.originFileName != ""){
-       boost::property_tree::ptree data_originFileName;
-       data_originFileName.add("<xmlattr>.key", "originfile");
-       data_originFileName.put_value(edge_props.originFileName);
-       edge.add_child("data", data_originFileName);
+    boost::property_tree::ptree data_originFileName;
+    data_originFileName.add("<xmlattr>.key", "originfile");
+    data_originFileName.put_value(edge_props.originFileName);
+    edge.add_child("data", data_originFileName);
   }
   if (edge_props.lineNumberInOrigin != -1){
-     boost::property_tree::ptree data_lineNumberInOrigin;
-     data_lineNumberInOrigin.add("<xmlattr>.key", "originline");
-     data_lineNumberInOrigin.put_value(edge_props.lineNumberInOrigin);
-     edge.add_child("data", data_lineNumberInOrigin);
+    boost::property_tree::ptree data_lineNumberInOrigin;
+    data_lineNumberInOrigin.add("<xmlattr>.key", "originline");
+    data_lineNumberInOrigin.put_value(edge_props.lineNumberInOrigin);
+    edge.add_child("data", data_lineNumberInOrigin);
   }
   if (edge_props.assumption != ""){
-       boost::property_tree::ptree data_assumption;
-       data_assumption.add("<xmlattr>.key", "assumption");
-       data_assumption.put_value(edge_props.assumption);
-       edge.add_child("data", data_assumption);
+    boost::property_tree::ptree data_assumption;
+    data_assumption.add("<xmlattr>.key", "assumption");
+    data_assumption.put_value(edge_props.assumption);
+    edge.add_child("data", data_assumption);
   }
   if (edge_props.negativeCase != ""){
-     boost::property_tree::ptree data_negativeCase;
-     data_negativeCase.add("<xmlattr>.key", "negated");
-     data_negativeCase.put_value(edge_props.negativeCase);
-     edge.add_child("data", data_negativeCase);
+    boost::property_tree::ptree data_negativeCase;
+    data_negativeCase.add("<xmlattr>.key", "negated");
+    data_negativeCase.put_value(edge_props.negativeCase);
+    edge.add_child("data", data_negativeCase);
   }
   if (edge_props.originTokenSet != ""){
-     boost::property_tree::ptree data_originTokenSet;
-     data_originTokenSet.add("<xmlattr>.key", "origintokens");
-     data_originTokenSet.put_value(edge_props.originTokenSet);
-     edge.add_child("data", data_originTokenSet);
+    boost::property_tree::ptree data_originTokenSet;
+    data_originTokenSet.add("<xmlattr>.key", "origintokens");
+    data_originTokenSet.put_value(edge_props.originTokenSet);
+    edge.add_child("data", data_originTokenSet);
   }
   if (edge_props.tokenSet != ""){
-       boost::property_tree::ptree data_tokenSet;
-       data_tokenSet.add("<xmlattr>.key", "tokens");
-       data_tokenSet.put_value(edge_props.tokenSet);
-       edge.add_child("data", data_tokenSet);
+    boost::property_tree::ptree data_tokenSet;
+    data_tokenSet.add("<xmlattr>.key", "tokens");
+    data_tokenSet.put_value(edge_props.tokenSet);
+    edge.add_child("data", data_tokenSet);
   }
   if (edge_props.enterFunction != ""){
-     boost::property_tree::ptree data_enterFunction;
-     data_enterFunction.add("<xmlattr>.key", "enterFunction");
-     data_enterFunction.put_value(edge_props.enterFunction);
-     edge.add_child("data",data_enterFunction);
+    boost::property_tree::ptree data_enterFunction;
+    data_enterFunction.add("<xmlattr>.key", "enterFunction");
+    data_enterFunction.put_value(edge_props.enterFunction);
+    edge.add_child("data",data_enterFunction);
   }
   if (edge_props.returnFromFunction != ""){
-     boost::property_tree::ptree data_returnFromFunction;
-     data_returnFromFunction.add("<xmlattr>.key", "returnFrom");
-     data_returnFromFunction.put_value(edge_props.returnFromFunction);
-     edge.add_child("data", data_returnFromFunction);
+    boost::property_tree::ptree data_returnFromFunction;
+    data_returnFromFunction.add("<xmlattr>.key", "returnFrom");
+    data_returnFromFunction.put_value(edge_props.returnFromFunction);
+    edge.add_child("data", data_returnFromFunction);
   }
   if (edge_props.sourcecode != ""){
-     boost::property_tree::ptree data_sourcecode;
-     data_sourcecode.add("<xmlattr>.key", "sourcecode");
-     data_sourcecode.put_value(edge_props.sourcecode);
-     edge.add_child("data", data_sourcecode);
+    boost::property_tree::ptree data_sourcecode;
+    data_sourcecode.add("<xmlattr>.key", "sourcecode");
+    data_sourcecode.put_value(edge_props.sourcecode);
+    edge.add_child("data", data_sourcecode);
   }
 }
 
@@ -219,6 +226,13 @@ void create_graphml(boost::property_tree::ptree & graphml)
   key_nodeType.put(boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'), "string");
   key_nodeType.add("<xmlattr>.for", "node");
   graphml.add_child("graphml.key",key_nodeType);
+
+  boost::property_tree::ptree key_thread;
+  key_thread.add("<xmlattr>.id", "thread");
+  key_thread.put(boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'), "threadNumber");
+  key_thread.put(boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'), "int");
+  key_thread.add("<xmlattr>.for", "node");
+  graphml.add_child("graphml.key",key_thread);
 
   boost::property_tree::ptree key_entry;
   key_entry.add("<xmlattr>.id", "entry");
@@ -314,5 +328,4 @@ void create_graph(boost::property_tree::ptree & graph)
   data_sourcecodelang.add("<xmlattr>.key", "sourcecodelang");
   data_sourcecodelang.put_value("C");
   graph.add_child("data",data_sourcecodelang);
-
 }

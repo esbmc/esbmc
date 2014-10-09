@@ -358,6 +358,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
   graph.add_child("node", first_node);
 
   boost::property_tree::ptree & last_created_node = first_node;
+  std::string last_function = "";
 
   for (goto_tracet::stepst::const_iterator it = goto_trace.steps.begin(); it != goto_trace.steps.end(); it++){
 
@@ -368,6 +369,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
     if ((it->type == goto_trace_stept::ASSIGNMENT) && (is_internal_call == false)){
 
       boost::property_tree::ptree current_node; node_p current_node_p;
+      current_node_p.threadNumber = it->thread_nr;
       create_node(current_node, current_node_p);
       graph.add_child("node", current_node);
 
@@ -390,6 +392,17 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	  boost::split(split,lhs_str,boost::is_any_of("@"));
 	  std::string assumption = split[0] + " = " + from_expr(ns, identifier, it->rhs)+";";
 	  current_edge_p.assumption = assumption;
+
+	  /* check if entered in a function */
+	  std::string function_name = it->pc->function.as_string();
+	  size_t f = function_name.find("c::");
+	  if (f == 0){
+	     function_name.replace(f, std::string("c::").length(), "");
+	  }
+	  if (function_name != last_function){
+	     current_edge_p.enterFunction = function_name;
+		 last_function = function_name;
+	  }
 
 	  std::map<int, std::string> current_line_tokens = mapped_tokens[line_number];
 	  std::map<int,std::string>::iterator it;
