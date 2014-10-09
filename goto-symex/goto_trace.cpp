@@ -385,7 +385,6 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 
   	  boost::property_tree::ptree current_edge; edge_p current_edge_p;
 	  current_edge_p.originFileName = filename;
-	  current_edge_p.lineNumberInOrigin = line_number;
 
 	  std::vector<std::string> split;
 	  std::string lhs_str = from_expr(ns, identifier, it->lhs);
@@ -404,28 +403,30 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 		 last_function = function_name;
 	  }
 
-	  std::map<int, std::string> current_line_tokens = mapped_tokens[line_number];
-	  std::map<int,std::string>::iterator it;
-	  std::string token_set = "";
-	  if (current_line_tokens.size() == 1){
+	  /* check if has a line number (to get tokens) */
+	  if (line_number != 0){
+	    current_edge_p.lineNumberInOrigin = line_number;
+	    std::map<int, std::string> current_line_tokens = mapped_tokens[line_number];
+	    std::map<int,std::string>::iterator it;
+	    std::string token_set = "";
+	    if (current_line_tokens.size() == 1){
 		  token_set = std::to_string(current_line_tokens.begin()->first);
-	  }else{
+	    }else{
 		  int first = current_line_tokens.begin()->first;
 		  int end = first + current_line_tokens.end()->first - 1;
 		  token_set = token_set + std::to_string(current_line_tokens.begin()->first) + "," + std::to_string(end);
+	    }
+	    std::string source_code = "";
+	    for (it=current_line_tokens.begin(); it!=current_line_tokens.end(); ++it){
+	      source_code = source_code + it->second + "\n";
+	    }
+	    current_edge_p.sourcecode = source_code;
+	    current_edge_p.tokenSet = token_set;
+	    current_edge_p.originTokenSet = token_set;
 	  }
-	  std::string source_code = "";
-	  for (it=current_line_tokens.begin(); it!=current_line_tokens.end(); ++it){
-	    source_code = source_code + it->second + "\n";
-	  }
-
-	  current_edge_p.sourcecode = source_code;
-	  current_edge_p.tokenSet = token_set;
-	  current_edge_p.originTokenSet = token_set;
 
 	  create_edge(current_edge, current_edge_p, last_created_node, current_node);
 	  graph.add_child("edge", current_edge);
-
 	  last_created_node = current_node;
 	}
   }
