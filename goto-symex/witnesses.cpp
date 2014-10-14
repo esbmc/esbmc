@@ -183,7 +183,7 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props, boost:
   }
   if (edge_props.tokenSet != ""){
     boost::property_tree::ptree data_tokenSet;
-    data_tokenSet.add("<xmlattr>.key", "tokens");
+    data_tokenSet.add("<xmlattr>.key", "d0");
     data_tokenSet.put_value(edge_props.tokenSet);
     edge.add_child("data", data_tokenSet);
   }
@@ -312,7 +312,7 @@ void create_graphml(boost::property_tree::ptree & graphml)
   graphml.add_child("graphml.key", key_sourcecode);
 
   boost::property_tree::ptree key_tokens;
-  key_tokens.add("<xmlattr>.id", "tokens");
+  key_tokens.add("<xmlattr>.id", "d0");
   key_tokens.put(boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'), "tokenSet");
   key_tokens.put(boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'), "string");
   key_tokens.add("<xmlattr>.for", "edge");

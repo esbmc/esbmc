@@ -1905,9 +1905,9 @@ void cbmc_parseoptionst::help()
     " --show-goto-functions        show goto program\n"
     " --extended-try-analysis      check all the try block, even when an exception is throw\n"
     " --version                    show current ESBMC version and exit\n"
-    " --graphml filename           output counter-example in graphML format (experimental)\n"
+    " --graphml filename           output counterexample in graphML format\n"
     " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
-    "                              program for graphML generation (experimental)\n\n"
+    "                              program for graphML generation\n\n"
 
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
