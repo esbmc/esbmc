@@ -297,6 +297,13 @@ void create_graphml(boost::property_tree::ptree & graphml)
   key_origintokens.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key",key_origintokens);
 
+  boost::property_tree::ptree key_enterFunction;
+  key_enterFunction.add("<xmlattr>.id", "enterFunction");
+  key_enterFunction.put(boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'), "enterFromFunction");
+  key_enterFunction.put(boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'), "string");
+  key_enterFunction.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_enterFunction);
+
   boost::property_tree::ptree key_returnFunction;
   key_returnFunction.add("<xmlattr>.id", "returnFunction");
   key_returnFunction.put(boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'), "returnFromFunction");

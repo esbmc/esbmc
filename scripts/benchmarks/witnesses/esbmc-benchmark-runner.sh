@@ -26,12 +26,12 @@
 #     - Modifing the source method to get .i, and .c that 
 #       hasn't a .i file.
 #  v0.5 2014-10-14, Hussama Ismail:
-#     - Adding witnesses verification support
-# 
+#     - Adding witnesses verification support and
+#       updating competition point values
 
 # DEPENDENCY PARAMETERS
 ESBMC_WRAPPER_SCRIPT="./files/scripts/esbmc-wrapper-script.sh";
-OUTPUT_REPORT_FILE="report-controlflow-product-lines-plain.html";
+OUTPUT_REPORT_FILE="report-output-plain.html";
 SCRIPT_VERSION="0.5";
 
 # VERIFICATION WITNESSES
@@ -39,7 +39,7 @@ ESBMC_VERIFICATION_WITNESSES_SCRIPT="./files/scripts/esbmc-verification-witnesse
 
 # CHECK PARAMETERS
 if [ ${#@} -eq 0 ]; then
-    echo "Is necessary specify a benchmark or a folder";
+    echo "Is necessary specify a benchmark or a folder. (use: $0 benchmarks)";
     exit 0;
 fi
 
@@ -152,6 +152,8 @@ for file in $SOURCES; do
  
    CSS_CLASS="";
    RESULT_TEXT=""; 
+   WITNESSES_CSS="";
+   WITNESSES_TEXT="-";
 
    if [ $TIME_OUT -eq 1 ] || ([ $FAILED -eq 0 ] && [ $SUCCESS -eq 0 ] && [ $UNKNOWN -eq 0 ]); then
       CSS_CLASS="status error";
@@ -174,7 +176,7 @@ for file in $SOURCES; do
       ### VALIDATE WITNESSES ###
 
       GRAPHML=$(echo $OUT | grep Counterexample | cut -d ":" -f2 | cut -d " " -f2)
-      WITNESSES_RESPONSE=$($ESBMC_VERIFICATION_WITNESSES_SCRIPT $FILENAME $GRAPHML);
+      WITNESSES_RESPONSE=$($ESBMC_VERIFICATION_WITNESSES_SCRIPT $file $GRAPHML);
       TOTAL_WITNESSES=$((TOTAL_WITNESSES+1)); 
       IS_INCORRECT_WITNESSES=$(echo $WITNESSES_RESPONSE | grep "incorrect" | wc -l);
 
@@ -211,11 +213,6 @@ for file in $SOURCES; do
       echo $(echo -e "\033[0;32mtrue\033[0m" | cut -d " " -f2) "in $TIME""s";
    fi
 
-   if [ -z ${WITNESSES_CSS} ]; then
-      WITNESSES_CSS="";
-      WITNESSES_TEXT="-";
-   fi
-
    HTML_ENTRY="<tr><td>$FILENAME</td><td class=\"$CSS_CLASS\">$RESULT_TEXT</td><td class=\"$WITNESSES_CSS\" align=\"center\">$WITNESSES_TEXT</td><td class=\"unknownValue\">$TIME&nbsp;</td><td style=\"display: none\">$INCORRECT_RESULT</td></tr>"
    echo $HTML_ENTRY >> $OUTPUT_REPORT_FILE
 done
@@ -224,8 +221,8 @@ FINAL_TIMESTAMP=$(date +%s)
 # CALCULATE POINTS
 TOTAL_POINTS=$((TOTAL_POINTS + 2 * CORRECT_TRUES));
 TOTAL_POINTS=$((TOTAL_POINTS + CORRECT_FALSES));
-TOTAL_POINTS=$((TOTAL_POINTS - 8 * FALSE_POSITIVES));
-TOTAL_POINTS=$((TOTAL_POINTS - 4 * FALSE_NEGATIVES));
+TOTAL_POINTS=$((TOTAL_POINTS - 12 * FALSE_POSITIVES));
+TOTAL_POINTS=$((TOTAL_POINTS - 6 * FALSE_NEGATIVES));
 TOTAL_EXECUTION_TIME=$((FINAL_TIMESTAMP - INITIAL_TIMESTAMP));
 
 # HTML CONTENT
