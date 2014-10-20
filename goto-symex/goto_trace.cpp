@@ -362,11 +362,21 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 
   for (goto_tracet::stepst::const_iterator it = goto_trace.steps.begin(); it != goto_trace.steps.end(); it++){
 
+	/* check if is a internal call */
     std::string::size_type find_bt = it->pc->location.to_string().find("built-in", 0);
     std::string::size_type find_lib = it->pc->location.to_string().find("library", 0);
     bool is_internal_call = find_bt != std::string::npos || find_lib != std::string::npos;
 
     if ((it->type == goto_trace_stept::ASSIGNMENT) && (is_internal_call == false)){
+
+      const irep_idt &identifier = to_symbol2t(it->lhs).get_symbol_name();
+
+      /* check if is a temporary assignment */
+      std::string id_str = id2string(identifier);
+      std::string::size_type find_tmp = id_str.find("::$tmp::", 0);
+      if (find_tmp != std::string::npos){
+         continue;
+      }
 
       boost::property_tree::ptree current_node; node_p current_node_p;
       current_node_p.threadNumber = it->thread_nr;
@@ -378,18 +388,29 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 
       /* check if tokens already ok */
       if(mapped_tokens.size() == 0){
-    	  convert_c_file_in_tokens(filename, mapped_tokens);
+         convert_c_file_in_tokens(filename, mapped_tokens);
       }
-
-  	  const irep_idt &identifier = to_symbol2t(it->lhs).get_symbol_name();
 
   	  boost::property_tree::ptree current_edge; edge_p current_edge_p;
 	  current_edge_p.originFileName = filename;
 
+	  /* adjusts assumptions */
+	  /* left hand */
 	  std::vector<std::string> split;
 	  std::string lhs_str = from_expr(ns, identifier, it->lhs);
 	  boost::split(split,lhs_str,boost::is_any_of("@"));
-	  std::string assumption = split[0] + " = " + from_expr(ns, identifier, it->rhs)+";";
+	  lhs_str = split[0];
+      std::string::size_type findamp = lhs_str.find( "&", 0 );
+	  if( findamp != std::string::npos ) {
+	     lhs_str = lhs_str.substr(0,findamp);
+	  }
+	  std::string::size_type findds = lhs_str.find( "$", 0 );
+	  if( findds != std::string::npos ) {
+		 lhs_str = lhs_str.substr(0,findds);
+	  }
+	  /* right hand */
+	  std::string value_str = from_expr(ns, identifier, it->value);
+	  std::string assumption = lhs_str + " = " + value_str + ";";
 	  current_edge_p.assumption = assumption;
 
 	  /* check if entered in a function */
@@ -418,7 +439,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	    }
 	    std::string source_code = "";
 	    for (it=current_line_tokens.begin(); it!=current_line_tokens.end(); ++it){
-	      source_code = source_code + it->second + "\n";
+	      source_code = source_code + it->second + " ";
 	    }
 	    current_edge_p.sourcecode = source_code;
 	    current_edge_p.tokenSet = token_set;
