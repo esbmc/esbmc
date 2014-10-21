@@ -410,6 +410,16 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	  }
 	  /* right hand */
 	  std::string value_str = from_expr(ns, identifier, it->value);
+	  /* remove memory address */
+      std::string::size_type findat = value_str.find( "@", 0 );
+      if( findat != std::string::npos ) {
+         value_str = value_str.substr(0,findat);
+      }
+      /* remove float suffix */
+      std::string::size_type findfs = value_str.find( "f", 0 );
+      if( findfs != std::string::npos ) {
+         value_str = value_str.substr(0,findfs);
+      }
 	  std::string assumption = lhs_str + " = " + value_str + ";";
 	  current_edge_p.assumption = assumption;
 
@@ -441,7 +451,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	    for (it=current_line_tokens.begin(); it!=current_line_tokens.end(); ++it){
 	      source_code = source_code + it->second + " ";
 	    }
-	    current_edge_p.sourcecode = source_code;
+	    current_edge_p.sourcecode = source_code.substr(0, source_code.length() - 1);
 	    current_edge_p.tokenSet = token_set;
 	    current_edge_p.originTokenSet = token_set;
 	  }
