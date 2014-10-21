@@ -375,7 +375,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
       std::string id_str = id2string(identifier);
       std::string::size_type find_tmp = id_str.find("::$tmp::", 0);
       if (find_tmp != std::string::npos){
-         continue;
+        continue;
       }
 
       boost::property_tree::ptree current_node; node_p current_node_p;
@@ -388,7 +388,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 
       /* check if tokens already ok */
       if(mapped_tokens.size() == 0){
-         convert_c_file_in_tokens(filename, mapped_tokens);
+        convert_c_file_in_tokens(filename, mapped_tokens);
       }
 
   	  boost::property_tree::ptree current_edge; edge_p current_edge_p;
@@ -402,36 +402,41 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	  lhs_str = split[0];
       std::string::size_type findamp = lhs_str.find( "&", 0 );
 	  if( findamp != std::string::npos ) {
-	     lhs_str = lhs_str.substr(0,findamp);
+	    lhs_str = lhs_str.substr(0,findamp);
 	  }
 	  std::string::size_type findds = lhs_str.find( "$", 0 );
 	  if( findds != std::string::npos ) {
-		 lhs_str = lhs_str.substr(0,findds);
+		lhs_str = lhs_str.substr(0,findds);
 	  }
 	  /* right hand */
 	  std::string value_str = from_expr(ns, identifier, it->value);
 	  /* remove memory address */
       std::string::size_type findat = value_str.find( "@", 0 );
       if( findat != std::string::npos ) {
-         value_str = value_str.substr(0,findat);
+        value_str = value_str.substr(0,findat);
       }
       /* remove float suffix */
       std::string::size_type findfs = value_str.find( "f", 0 );
       if( findfs != std::string::npos ) {
-         value_str = value_str.substr(0,findfs);
+        value_str = value_str.substr(0,findfs);
       }
 	  std::string assumption = lhs_str + " = " + value_str + ";";
-	  current_edge_p.assumption = assumption;
+	  std::string::size_type findesbm = assumption.find( "__ESBMC", 0 );
+	  std::string::size_type finddma = assumption.find( "dynamic_1_array", 0 );
+	  bool is_esbmc_or_dynamic = ((findesbm != std::string::npos) || (finddma != std::string::npos));
+	  if (is_esbmc_or_dynamic == false){
+	     current_edge_p.assumption = assumption;
+	  }
 
 	  /* check if entered in a function */
 	  std::string function_name = it->pc->function.as_string();
 	  size_t f = function_name.find("c::");
 	  if (f == 0){
-	     function_name.replace(f, std::string("c::").length(), "");
+	    function_name.replace(f, std::string("c::").length(), "");
 	  }
 	  if (function_name != last_function){
-	     current_edge_p.enterFunction = function_name;
-		 last_function = function_name;
+	    current_edge_p.enterFunction = function_name;
+		last_function = function_name;
 	  }
 
 	  /* check if has a line number (to get tokens) */
