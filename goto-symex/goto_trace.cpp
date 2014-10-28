@@ -409,24 +409,39 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 		lhs_str = lhs_str.substr(0,findds);
 	  }
 	  /* right hand */
-	  std::string value_str = from_expr(ns, identifier, it->value);
-	  /* remove memory address */
-      std::string::size_type findat = value_str.find( "@", 0 );
-      if( findat != std::string::npos ) {
-        value_str = value_str.substr(0,findat);
-      }
-      /* remove float suffix */
-      std::string::size_type findfs = value_str.find( "f", 0 );
-      if( findfs != std::string::npos ) {
-        value_str = value_str.substr(0,findfs);
-      }
-	  std::string assumption = lhs_str + " = " + value_str + ";";
-	  std::string::size_type findesbm = assumption.find( "__ESBMC", 0 );
-	  std::string::size_type finddma = assumption.find( "dynamic_1_array", 0 );
-	  bool is_union = (it->rhs->type->type_id == it->rhs->type->union_id);
-	  bool is_esbmc_or_dynamic = ((findesbm != std::string::npos) || (finddma != std::string::npos) || is_union);
-	  if (is_esbmc_or_dynamic == false){
-	     current_edge_p.assumption = assumption;
+	  /* check if is an array (modify assumptions) */
+	  if (it->lhs->type->type_id == it->lhs->type->array_id){
+		//FIXME - works to simple assumptions, but need to review in benchmarks sv-comp15 as (cs_lazy_false_unreach_all.i (sequentialized))
+		/*
+		std::string array_assumption = "";
+		int number_of_elements = it->rhs->get_num_sub_exprs();
+	    for (int i = 0; i < number_of_elements; i++){
+	      std::string value_str = from_expr(ns, identifier, it->rhs->get_sub_expr(i)->get()->clone());
+          array_assumption = array_assumption + lhs_str + "[" + std::to_string(i) + "]=" + value_str + "; ";
+	    }
+	    current_edge_p.assumption = array_assumption.substr(0, array_assumption.length() - 1);
+	    */
+	  }else{
+		/* common cases */
+		std::string value_str = from_expr(ns, identifier, it->value);
+	    /* remove memory address */
+        std::string::size_type findat = value_str.find( "@", 0 );
+        if( findat != std::string::npos ) {
+          value_str = value_str.substr(0,findat);
+        }
+        /* remove float suffix */
+        std::string::size_type findfs = value_str.find( "f", 0 );
+        if( findfs != std::string::npos ) {
+          value_str = value_str.substr(0,findfs);
+        }
+	    std::string assumption = lhs_str + " = " + value_str + ";";
+	    std::string::size_type findesbm = assumption.find( "__ESBMC", 0 );
+	    std::string::size_type finddma = assumption.find( "dynamic_1_array", 0 );
+	    bool is_union = (it->rhs->type->type_id == it->rhs->type->union_id);
+	    bool is_esbmc_or_dynamic = ((findesbm != std::string::npos) || (finddma != std::string::npos) || is_union);
+	    if (is_esbmc_or_dynamic == false){
+	      current_edge_p.assumption = assumption;
+	    }
 	  }
 
 	  /* check if entered in a function */
