@@ -137,24 +137,11 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVUDIV:
     return new_ast(s, boolector_udiv(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSHL:
-  {
-    // Boolector demands that shifts have only the bitwidth to describe numbers
-    // less than the width of the first operand. i.e. you can't shift a number
-    // all the way out of a bv. XXX, this may break things.
-    unsigned int bwidth = log2(asts[1]->sort->data_width);
-    BoolectorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
-    return new_ast(s, boolector_sll(btor, asts[0]->e, tmp));
-  }
+    return fix_up_shift(boolector_sll, asts[0], asts[1], s);
   case SMT_FUNC_BVLSHR:
-  {
     return fix_up_shift(boolector_srl, asts[0], asts[1], s);
-  }
   case SMT_FUNC_BVASHR:
-  {
-    unsigned int bwidth = log2(asts[1]->sort->data_width);
-    BoolectorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
-    return new_ast(s, boolector_sra(btor, asts[0]->e, tmp));
-  }
+    return fix_up_shift(boolector_sra, asts[0], asts[1], s);
   case SMT_FUNC_BVNEG:
     return new_ast(s, boolector_neg(btor, asts[0]->e));
   case SMT_FUNC_BVNOT:
