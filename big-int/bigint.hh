@@ -327,8 +327,6 @@ public:
 
 // Functions on BigInt. Implementations in bigint-func.cc.
 
-BigInt pow (BigInt const &, unsigned) _fast;
-BigInt pow (BigInt const &, BigInt const &, BigInt const &modulus) _fast;
 BigInt sqrt (BigInt const &) _fast;
 BigInt gcd (const BigInt &, const BigInt &) _fast;
 BigInt modinv (const BigInt &, const BigInt &) _fast;
