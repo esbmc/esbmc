@@ -1137,6 +1137,14 @@ typecast2t::do_simplify(bool second) const
         is_code_type(ptr_to.subtype) || is_code_type(ptr_from.subtype))
       return expr2tc(); // Not worth thinking about
 
+    if (is_array_type(ptr_to.subtype) &&
+        is_symbol_type(get_array_subtype(ptr_to.subtype)))
+      return expr2tc(); // Not worth thinking about
+
+    if (is_array_type(ptr_from.subtype) &&
+        is_symbol_type(get_array_subtype(ptr_from.subtype)))
+      return expr2tc(); // Not worth thinking about
+
     try {
       unsigned int to_width = (is_empty_type(ptr_to.subtype)) ? 8
                               : ptr_to.subtype->get_width();
