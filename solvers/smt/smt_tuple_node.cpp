@@ -329,8 +329,8 @@ smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   // Exactly the same as creating a tuple symbol, but for arrays.
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
-  smt_sortt sort = ctx->convert_sort(sym.type);
-  smt_sortt subtype = ctx->convert_sort(get_array_subtype(sym.type));
+  smt_sortt sort = ctx->convert_sort(ctx->flatten_array_type(sym.type));
+  smt_sortt subtype = ctx->convert_sort(ctx->get_flattened_array_subtype(sym.type));
   return array_conv.mk_array_symbol(name, sort, subtype);
 }
 
