@@ -74,6 +74,11 @@ public:
     return new btor_smt_ast(this, _s, _e);
   }
 
+  typedef BoolectorNode *(*shift_func_ptr)
+                         (Btor *, BoolectorNode *, BoolectorNode *);
+  smt_ast *fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
+      const btor_smt_ast *op1, smt_sortt res_sort);
+
   // Members
 
   Btor *btor;

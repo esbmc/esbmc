@@ -147,24 +147,7 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
   case SMT_FUNC_BVLSHR:
   {
-    BoolectorNode *tmp, *tmp0;
-    bool need_to_shift_down = false;
-    unsigned int bwidth;
-    tmp0 = asts[0]->e;
-    bwidth = log2(asts[0]->sort->data_width);
-    if (pow(2.0, bwidth) < asts[0]->sort->data_width) {
-      bwidth++;
-      unsigned int diff = pow(2.0, bwidth) - asts[0]->sort->data_width;
-      smt_sortt newsort = mk_sort(SMT_SORT_BV, pow(2.0, bwidth));
-      smt_ast *zeroext = convert_zero_ext(asts[0], newsort, diff);
-      tmp0 = btor_ast_downcast(zeroext)->e;
-      need_to_shift_down = true;
-    }
-    tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
-    BoolectorNode *shift = boolector_srl(btor, tmp0, tmp);
-    if (need_to_shift_down)
-      shift = boolector_slice(btor, shift, s->data_width-1, 0);
-    return new_ast(s, shift);
+    return fix_up_shift(boolector_srl, asts[0], asts[1], s);
   }
   case SMT_FUNC_BVASHR:
   {
@@ -542,4 +525,28 @@ void
 boolector_convt::pop_array_ctx(void)
 {
   return;
+}
+
+smt_ast *
+boolector_convt::fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
+  const btor_smt_ast *op1, smt_sortt res_sort)
+{
+  BoolectorNode *tmp, *tmp0;
+  bool need_to_shift_down = false;
+  unsigned int bwidth;
+  tmp0 = op0->e;
+  bwidth = log2(op0->sort->data_width);
+  if (pow(2.0, bwidth) < op0->sort->data_width) {
+    bwidth++;
+    unsigned int diff = pow(2.0, bwidth) - op0->sort->data_width;
+    smt_sortt newsort = mk_sort(SMT_SORT_BV, pow(2.0, bwidth));
+    smt_astt zeroext = convert_zero_ext(op0, newsort, diff);
+    tmp0 = btor_ast_downcast(zeroext)->e;
+    need_to_shift_down = true;
+  }
+  tmp = boolector_slice(btor, op1->e, bwidth-1, 0);
+  BoolectorNode *shift = fptr(btor, tmp0, tmp);
+  if (need_to_shift_down)
+    shift = boolector_slice(btor, shift, res_sort->data_width-1, 0);
+  return new_ast(res_sort, shift);
 }
