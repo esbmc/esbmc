@@ -715,8 +715,14 @@ void value_sett::get_reference_set_rec(
     // value may refer to, plus an additional member operation. So, fetch that
     // reference set, and add the relevant offset to the offset expr.
     const member2t &memb = to_member2t(expr);
-    mp_integer offset_in_bytes =
-      member_offset(to_struct_type(memb.source_value->type), memb.member);
+    mp_integer offset_in_bytes;
+
+    if (is_union_type(memb.source_value->type)) {
+      offset_in_bytes = mp_integer(0);
+    } else {
+      offset_in_bytes =
+        member_offset(to_struct_type(memb.source_value->type), memb.member);
+    }
 
     object_mapt struct_references;
     get_reference_set(memb.source_value, struct_references);
