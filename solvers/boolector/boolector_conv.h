@@ -16,11 +16,11 @@ class btor_smt_ast : public smt_ast
 {
 public:
 #define btor_ast_downcast(x) static_cast<const btor_smt_ast *>(x)
-  btor_smt_ast(smt_convt *ctx, const smt_sort *_s, BtorNode *_e)
+  btor_smt_ast(smt_convt *ctx, const smt_sort *_s, BoolectorNode *_e)
     : smt_ast(ctx, _s), e(_e) { }
   virtual ~btor_smt_ast() { }
 
-  BtorNode *e;
+  BoolectorNode *e;
 };
 
 class boolector_convt : public smt_convt, public array_iface
@@ -70,7 +70,7 @@ public:
 
   virtual const smt_ast *overflow_arith(const expr2tc &expr);
 
-  inline btor_smt_ast *new_ast(const smt_sort *_s, BtorNode *_e) {
+  inline btor_smt_ast *new_ast(const smt_sort *_s, BoolectorNode *_e) {
     return new btor_smt_ast(this, _s, _e);
   }
 

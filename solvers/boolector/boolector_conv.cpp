@@ -38,7 +38,7 @@ boolector_convt::~boolector_convt(void)
 {
   delete_all_asts();
 
-  boolector_delete(btor);
+//  boolector_delete(btor);
 
   btor = NULL;
   if (debugfile)
@@ -66,7 +66,7 @@ boolector_convt::l_get(const smt_ast *l)
 {
   assert(l->sort->id == SMT_SORT_BOOL);
   const btor_smt_ast *ast = btor_ast_downcast(l);
-  char *result = boolector_bv_assignment(btor, ast->e);
+  const char *result = boolector_bv_assignment(btor, ast->e);
 
   assert(result != NULL && "Boolector returned null bv assignment string");
 
@@ -103,8 +103,10 @@ boolector_convt::assert_ast(const smt_ast *a)
 {
   const btor_smt_ast *ast = btor_ast_downcast(a);
   boolector_assert(btor, ast->e);
+#if 0
   if (debugfile)
     boolector_dump_smt(btor, debugfile, ast->e);
+#endif
 }
 
 smt_ast *
@@ -140,19 +142,19 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     // less than the width of the first operand. i.e. you can't shift a number
     // all the way out of a bv. XXX, this may break things.
     unsigned int bwidth = log2(asts[1]->sort->data_width);
-    BtorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
+    BoolectorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
     return new_ast(s, boolector_sll(btor, asts[0]->e, tmp));
   }
   case SMT_FUNC_BVLSHR:
   {
     unsigned int bwidth = log2(asts[1]->sort->data_width);
-    BtorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
+    BoolectorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
     return new_ast(s, boolector_srl(btor, asts[0]->e, tmp));
   }
   case SMT_FUNC_BVASHR:
   {
     unsigned int bwidth = log2(asts[1]->sort->data_width);
-    BtorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
+    BoolectorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
     return new_ast(s, boolector_sra(btor, asts[0]->e, tmp));
   }
   case SMT_FUNC_BVNEG:
@@ -294,11 +296,11 @@ boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
       bit >>= 1;
     }
 
-    BtorNode *node = boolector_const(btor, buffer);
+    BoolectorNode *node = boolector_const(btor, buffer);
     return new_ast(s, node);
   }
 
-  BtorNode *node;
+  BoolectorNode *node;
   if (sign) {
     node = boolector_int(btor, theint.to_long(), w);
   } else {
@@ -311,7 +313,7 @@ boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
 smt_ast *
 boolector_convt::mk_smt_bool(bool val)
 {
-  BtorNode *node = (val) ? boolector_true(btor) : boolector_false(btor);
+  BoolectorNode *node = (val) ? boolector_true(btor) : boolector_false(btor);
   const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
   return new_ast(sort, node);
 }
@@ -330,7 +332,7 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   if (it != symtable.end())
     return it->second;
 
-  BtorNode *node;
+  BoolectorNode *node;
 
   switch(s->id) {
   case SMT_SORT_BV:
@@ -369,7 +371,7 @@ boolector_convt::mk_extract(const smt_ast *a, unsigned int high,
                             unsigned int low, const smt_sort *s)
 {
   const btor_smt_ast *ast = btor_ast_downcast(a);
-  BtorNode *b = boolector_slice(btor, ast->e, high, low);
+  BoolectorNode *b = boolector_slice(btor, ast->e, high, low);
   return new_ast(s, b);
 }
 
@@ -422,7 +424,7 @@ boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
   assert(a->sort->id == SMT_SORT_BV && a->sort->data_width != 0);
   const btor_smt_ast *ast = btor_ast_downcast(a);
 
-  char *result = boolector_bv_assignment(btor, ast->e);
+  const char *result = boolector_bv_assignment(btor, ast->e);
   int64_t val = read_btor_string(result, a->sort->data_width);
   boolector_free_bv_assignment(btor, result);
 
@@ -475,7 +477,7 @@ boolector_convt::overflow_arith(const expr2tc &expr)
   bool is_signed = (is_signedbv_type(opers.side_1) ||
                     is_signedbv_type(opers.side_2));
 
-  BtorNode *res;
+  BoolectorNode *res;
   if (is_add2t(overflow.operand)) {
     if (is_signed) {
       res = boolector_saddo(btor, side1->e, side2->e);
