@@ -147,9 +147,24 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
   case SMT_FUNC_BVLSHR:
   {
-    unsigned int bwidth = log2(asts[1]->sort->data_width);
-    BoolectorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
-    return new_ast(s, boolector_srl(btor, asts[0]->e, tmp));
+    BoolectorNode *tmp, *tmp0;
+    bool need_to_shift_down = false;
+    unsigned int bwidth;
+    tmp0 = asts[0]->e;
+    bwidth = log2(asts[0]->sort->data_width);
+    if (pow(2.0, bwidth) < asts[0]->sort->data_width) {
+      bwidth++;
+      unsigned int diff = pow(2.0, bwidth) - asts[0]->sort->data_width;
+      smt_sortt newsort = mk_sort(SMT_SORT_BV, pow(2.0, bwidth));
+      smt_ast *zeroext = convert_zero_ext(asts[0], newsort, diff);
+      tmp0 = btor_ast_downcast(zeroext)->e;
+      need_to_shift_down = true;
+    }
+    tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
+    BoolectorNode *shift = boolector_srl(btor, tmp0, tmp);
+    if (need_to_shift_down)
+      shift = boolector_slice(btor, shift, s->data_width-1, 0);
+    return new_ast(s, shift);
   }
   case SMT_FUNC_BVASHR:
   {
