@@ -457,7 +457,9 @@ void value_sett::get_value_set_rec(
         objectt object=it->second;
 
         unsigned int nat_align =
-            get_natural_alignment(object_numbering[it->first]);
+          get_natural_alignment(object_numbering[it->first]);
+        unsigned int ptr_align = get_natural_alignment(ptr_op);
+
         if (is_const && object.offset_is_set) {
           // Both are const; we can accumulate offsets;
           object.offset += total_offs;
@@ -471,12 +473,15 @@ void value_sett::get_value_set_rec(
           // current object. Take the minimum alignment again.
           unsigned int offset_align = 0;
           if ((object.offset % nat_align) != 0) {
-            // XXX -- what to do when we have something, say a struct, how
-            // do I reduce this offset to an alignment within it.
-            // Answer for the moment it to clamp it to maximum alignment; that
-            // might work sometimes.
-            offset_align =
-              object.offset.to_ulong() % (8);
+            // We have some kind of offset into this data object, but it's less
+            // than the data objects natural alignment. So, the maximum
+            // alignment we can have is that of the pointer type being added
+            // or subtracted. The minimum, depends on the offset into the
+            // data object we're pointing at.
+            offset_align = ptr_align;
+            if (object.offset % ptr_align != 0)
+              // To complex to calculate; clamp to bytes.
+              offset_align = 1;
           } else {
             offset_align = nat_align;
           }
