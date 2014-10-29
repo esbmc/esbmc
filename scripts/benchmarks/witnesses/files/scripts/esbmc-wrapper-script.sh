@@ -65,7 +65,7 @@ fi
 TMPGRAPHML=`mktemp`
 mv $TMPGRAPHML "$TMPGRAPHML.graphml"
 TMPGRAPHML="$TMPGRAPHML.graphml"
-cmdline="$cmdline --graphml $TMPGRAPHML --tokenizer $tokenizer_path"
+cmdline="$cmdline --witnesspath $TMPGRAPHML --tokenizer $tokenizer_path"
 
 # Our approach is one of iterative deepening. Run ESBMC 3 times with a deeper
 # unwind bound each time. Turn this into a single command string:
