@@ -438,7 +438,9 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	    std::string::size_type findesbm = assumption.find( "__ESBMC", 0 );
 	    std::string::size_type finddma = assumption.find( "dynamic_1_array", 0 );
 	    bool is_union = (it->rhs->type->type_id == it->rhs->type->union_id);
-	    bool is_esbmc_or_dynamic = ((findesbm != std::string::npos) || (finddma != std::string::npos) || is_union);
+	    bool is_struct = (it->rhs->type->type_id == it->rhs->type->struct_id);
+	    /* TODO check if is union, struct or dynamic attr, need more specifications of validation tools */
+	    bool is_esbmc_or_dynamic = ((findesbm != std::string::npos) || (finddma != std::string::npos) || is_union || is_struct);
 	    if (is_esbmc_or_dynamic == false){
 	      current_edge_p.assumption = assumption;
 	    }
