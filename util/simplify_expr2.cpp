@@ -651,7 +651,7 @@ pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
 {
 
   if (is_symbol2t(offs) || is_constant_string2t(offs)) {
-    return expr2tc(new constant_int2t(int_type2(), BigInt(0)));
+    return expr2tc(new constant_int2t(type, BigInt(0)));
   } else if (is_index2t(offs)) {
     const index2t &index = to_index2t(offs);
 
