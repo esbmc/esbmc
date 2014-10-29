@@ -287,7 +287,10 @@ get_function_list(const expr2tc &expr)
   } else {
     std::cerr << "Unexpected irep id " << get_expr_id(expr) <<
     " in function ptr dereference" << std::endl;
-    abort();
+    // So, the function may point at something invalid. If that's the case,
+    // wait for a solve-time pointer validity assertion to detect that. Return
+    // nothing to call right now.
+    return l;
   }
 }
 
