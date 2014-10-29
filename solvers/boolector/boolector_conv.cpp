@@ -531,22 +531,33 @@ smt_ast *
 boolector_convt::fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
   const btor_smt_ast *op1, smt_sortt res_sort)
 {
-  BoolectorNode *tmp, *tmp0;
+  BoolectorNode *data_op, *shift_amount;
   bool need_to_shift_down = false;
   unsigned int bwidth;
-  tmp0 = op0->e;
+
+  data_op = op0->e;
   bwidth = log2(op0->sort->data_width);
+
+  // If we're a non-power-of-x number, some zero extension has to occur
   if (pow(2.0, bwidth) < op0->sort->data_width) {
+    // Zero extend up to bwidth + 1
     bwidth++;
-    unsigned int diff = pow(2.0, bwidth) - op0->sort->data_width;
-    smt_sortt newsort = mk_sort(SMT_SORT_BV, pow(2.0, bwidth));
+    unsigned int new_size = pow(2.0, bwidth);
+    unsigned int diff = new_size - op0->sort->data_width;
+    smt_sortt newsort = mk_sort(SMT_SORT_BV, new_size);
     smt_astt zeroext = convert_zero_ext(op0, newsort, diff);
-    tmp0 = btor_ast_downcast(zeroext)->e;
+    data_op = btor_ast_downcast(zeroext)->e;
     need_to_shift_down = true;
   }
-  tmp = boolector_slice(btor, op1->e, bwidth-1, 0);
-  BoolectorNode *shift = fptr(btor, tmp0, tmp);
+
+  // We also need to reduce the shift-amount operand down to log2(data_op) len
+  shift_amount = boolector_slice(btor, op1->e, bwidth-1, 0);
+
+  BoolectorNode *shift = fptr(btor, data_op, shift_amount);
+
+  // If zero extension occurred, cut off the top few bits of this value.
   if (need_to_shift_down)
     shift = boolector_slice(btor, shift, res_sort->data_width-1, 0);
+
   return new_ast(res_sort, shift);
 }
