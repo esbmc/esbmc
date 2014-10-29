@@ -134,7 +134,23 @@ goto_symext::symex_step(reachability_treet & art)
         assume(tmp2);
 
 	// we also add it to the state guard
+
 	cur_state->guard.add(tmp3);
+        expr2tc guard_expr = guard_identifier();
+        expr2tc guard_rhs = cur_state->guard.as_expr();
+        cur_state->assignment(guard_expr, guard_rhs, false);
+
+        guardt guard;
+        target->assignment(
+          guard.as_expr(),
+          guard_expr, guard_expr,
+          guard_rhs,
+          cur_state->source,
+          cur_state->gen_stack_trace(),
+          symex_targett::HIDDEN);
+
+        cur_state->guard = guardt();
+        cur_state->guard.add(guard_expr);
       }
     }
     cur_state->source.pc++;
