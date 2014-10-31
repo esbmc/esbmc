@@ -7,11 +7,11 @@ path_to_esbmc=./esbmc
 tokenizer_path=./tokenizer
 
 # Global command line, common to all (normal) tests.
-global_cmd_line="--no-unwinding-assertions --64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --no-bounds-check --no-pointer-check --error-label ERROR --no-div-by-zero-check --no-assertions --quiet --context-switch 4 --state-hashing --force-malloc-success"
+global_cmd_line="--64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --no-bounds-check --no-pointer-check --error-label ERROR --no-div-by-zero-check --no-assertions --quiet --context-switch 4 --state-hashing --force-malloc-success"
 
 # The simple memory model command line is the global, without all the
 # safety checks.
-memory_cmd_line="--no-unwinding-assertions --64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --quiet --context-switch 3 --state-hashing --force-malloc-success --memory-leak-check"
+memory_cmd_line="--64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --quiet --context-switch 3 --state-hashing --force-malloc-success --memory-leak-check"
 
 # The '-D' options are a series of workarounds for some problems encountered:
 #  -DLDV_ERROR=ERROR  maps the error label in the 'regression' dir to 'ERROR',
@@ -64,6 +64,12 @@ if test ${do_memsafety} = 0; then
     cmdline=${global_cmd_line}
 else
     cmdline=${memory_cmd_line}
+fi
+
+# If we're checking for termination, then just leave unwinding assertions on.
+# Otherwise, turn them off.
+if test ${do_term} = 0; then
+    cmdline="${cmdline} --no-unwinding-assertions"
 fi
 
 # Add graphml informations
