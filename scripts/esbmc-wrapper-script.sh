@@ -73,9 +73,7 @@ if test ${do_term} = 0; then
 fi
 
 # Add graphml informations
-TMPGRAPHML=`mktemp`
-mv $TMPGRAPHML "$TMPGRAPHML.graphml"
-TMPGRAPHML="$TMPGRAPHML.graphml"
+TMPGRAPHML="./witness.graphml"
 cmdline="$cmdline --witnesspath $TMPGRAPHML --tokenizer $tokenizer_path"
 
 # Drop all output into a temporary file,
