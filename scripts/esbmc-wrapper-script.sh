@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # Path to the ESBMC binary
-path_to_esbmc=./files/executables/esbmc
+path_to_esbmc=./esbmc
 
 # Verification Witnesses tokenizer
-tokenizer_path=./files/executables/tokenizer
+tokenizer_path=./tokenizer
 
 # Global command line, common to all (normal) tests.
 global_cmd_line="--no-unwinding-assertions --64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --no-bounds-check --no-pointer-check --error-label ERROR --no-div-by-zero-check --quiet --context-switch 3 --state-hashing --timeout 7190s" # --no-assertions
