@@ -11,7 +11,7 @@ global_cmd_line="--no-unwinding-assertions --64 -DLDV_ERROR=ERROR -Dassert=notas
 
 # The simple memory model command line is the global, without all the
 # safety checks.
-memory_cmd_line="--no-unwinding-assertions --64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --quiet --context-switch 3 --state-hashing --force-malloc-success"
+memory_cmd_line="--no-unwinding-assertions --64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --quiet --context-switch 3 --state-hashing --force-malloc-success --memory-leak-check"
 
 # The '-D' options are a series of workarounds for some problems encountered:
 #  -DLDV_ERROR=ERROR  maps the error label in the 'regression' dir to 'ERROR',
