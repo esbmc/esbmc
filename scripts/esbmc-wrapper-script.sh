@@ -83,7 +83,7 @@ TMPFILE=`mktemp`
 
 # This year we're not iteratively deepening, we're running ESBMC with a fixed
 # unwind bound of 16.
-${path_to_esbmc} ${cmdline} --unwind 16 ${benchmark}
+${path_to_esbmc} ${cmdline} --unwind 16 ${benchmark} > ${TMPFILE} 2>/dev/null
 
 # Postprocessing: first, collect some facts
 grep -q "VERIFICATION FAILED" ${TMPFILE}
