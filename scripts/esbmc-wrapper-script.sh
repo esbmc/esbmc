@@ -42,7 +42,7 @@ Options:
             if ! grep -q __VERIFIER_error $OPTARG; then
                 do_memsafety=1
             fi
-            if ! grep -q 'LTL(F' $OPTARG; then
+            if ! grep -q 'LTL\\(F' $OPTARG; then
                 do_term=1
             fi
             ;;
