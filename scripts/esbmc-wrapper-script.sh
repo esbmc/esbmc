@@ -86,11 +86,11 @@ TMPFILE=`mktemp`
 ${path_to_esbmc} ${cmdline} --unwind 16 ${benchmark}
 
 # Postprocessing: first, collect some facts
-grep "VERIFICATION FAILED" ${TMPFILE} > /dev/null #2>&1
+grep -q "VERIFICATION FAILED" ${TMPFILE}
 failed=$?
-grep "VERIFICATION SUCCESSFUL" ${TMPFILE} > /dev/null #2>&1
+grep -q "VERIFICATION SUCCESSFUL" ${TMPFILE}
 success=$?
-grep -i "Timed out" ${TMPFILE} > /dev/null #2>&1
+grep -i -q "Timed out" ${TMPFILE}
 timeout=$?
 
 # Decide which result we determined here. The ordering is important: check for
