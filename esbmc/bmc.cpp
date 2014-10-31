@@ -65,7 +65,7 @@ Function: bmct::do_cbmc
 
 \*******************************************************************/
 
-void bmct::do_cbmc(prop_convt &solver, symex_target_equationt &equation)
+void bmct::do_cbmc(smt_convt &solver, symex_target_equationt &equation)
 {
   solver.set_message_handler(message_handler);
 
@@ -73,7 +73,10 @@ void bmct::do_cbmc(prop_convt &solver, symex_target_equationt &equation)
 
   // After all conversions, clear cache, which tends to contain a large
   // amount of stuff.
-  solver.clear_cache();
+  // XXX - disabled, seeing how not a small number of things in the array
+  // bitblaster seem to depend on the cache being intact to fetch any data.
+  // Consider this carefully to re-enabled0
+//  solver.clear_cache();
 }
 
 /*******************************************************************\
@@ -88,13 +91,13 @@ Function: bmct::error_trace
 
 \*******************************************************************/
 
-void bmct::error_trace(prop_convt &prop_conv,
+void bmct::error_trace(smt_convt &smt_conv,
                        symex_target_equationt &equation)
 {
   status("Building error trace");
 
   goto_tracet goto_trace;
-  build_goto_trace(equation, prop_conv, goto_trace);
+  build_goto_trace(equation, smt_conv, goto_trace);
 
   goto_trace.metadata_filename = options.get_option("llvm-metadata");
 
@@ -133,27 +136,14 @@ void bmct::error_trace(prop_convt &prop_conv,
     assert(false);
   }
 }
-/*******************************************************************\
 
-Function: bmct::run_decision_procedure
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-prop_convt::resultt
-bmct::run_decision_procedure(prop_convt &prop_conv,
+smt_convt::resultt
+bmct::run_decision_procedure(smt_convt &smt_conv,
                              symex_target_equationt &equation)
 {
-  static bool first_uw=false;
   std::string logic;
 
-  if (options.get_bool_option("bl-bv") || options.get_bool_option("z3-bv") ||
-      !options.get_bool_option("int-encoding"))
+  if (!options.get_bool_option("int-encoding"))
     logic = "bit-vector arithmetic";
   else
     logic = "integer/real arithmetic";
@@ -161,11 +151,11 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   if (!options.get_bool_option("smt"))
     std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
 
-  prop_conv.set_message_handler(message_handler);
-  prop_conv.set_verbosity(get_verbosity());
+  smt_conv.set_message_handler(message_handler);
+  smt_conv.set_verbosity(get_verbosity());
 
   fine_timet encode_start = current_time();
-  do_cbmc(prop_conv, equation);
+  do_cbmc(smt_conv, equation);
   fine_timet encode_stop = current_time();
 
   if (!options.get_bool_option("smt"))
@@ -177,8 +167,12 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
     status(str.str());
   }
 
+  std::stringstream ss;
+  ss << "Solving with solver " << smt_conv.solver_text();
+  status(ss.str());
+
   fine_timet sat_start=current_time();
-  prop_convt::resultt dec_result=prop_conv.dec_solve();
+  smt_convt::resultt dec_result=smt_conv.dec_solve();
   fine_timet sat_stop=current_time();
 
   // output runtime
@@ -190,14 +184,6 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
     str << "s";
     status(str.str());
   }
-
-  if(options.get_bool_option("uw-model") && first_uw)
-  {
-    std::cout << "number of assumptions: " << _number_of_assumptions << " literal(s)"<< std::endl;
-    std::cout << "size of the unsatisfiable core: " << _unsat_core << " literal(s)"<< std::endl;
-  }
-  else
-    first_uw=true;
 
   return dec_result;
 }
@@ -384,19 +370,7 @@ bool bmct::run(void)
 
   if(options.get_bool_option("schedule"))
   {
-    if(options.get_bool_option("uw-model"))
-        std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
-
     resp = run_thread();
-
-
-    //underapproximation-widening model
-    while (_unsat_core)
-    {
-      std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
-      resp = run_thread();
-    }
-
     return resp;
   }
   else
@@ -487,7 +461,6 @@ bool bmct::run(void)
 bool bmct::run_thread()
 {
   goto_symext::symex_resultt *result;
-  solver_base *solver;
   symex_target_equationt *equation;
   bool ret;
 
@@ -602,28 +575,14 @@ bool bmct::run_thread()
           (unsigned int) strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
         return false;
 
-    if(options.get_bool_option("z3")) {
-#ifdef Z3
-      if (options.get_bool_option("smt-during-symex")) {
-        solver = new z3_runtime_solver(*this, is_cpp, runtime_z3_conv);
-      } else {
-        solver = new z3_solver(*this, is_cpp, ns);
-      }
-#else
-      throw "This version of ESBMC was not compiled with Z3 support";
-#endif
-    } else {
-      // If we have Z3, default to Z3. Otherwise, user needs to explicitly
-      // select an SMT solver
-#ifdef Z3
-      solver = new z3_solver(*this, is_cpp, ns);
-#else
-      throw "Please specify a SAT/SMT solver to use";
-#endif
+    if (!options.get_bool_option("smt-during-symex")) {
+      delete runtime_solver;
+      runtime_solver = create_solver_factory("", is_cpp,
+                                             options.get_bool_option("int-encoding"),
+                                             ns, options);
     }
 
-    ret = solver->run_solver(*equation);
-    delete solver;
+    ret = run_solver(*equation, runtime_solver);
     return ret;
   }
 
@@ -647,7 +606,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
   std::cerr << "Can't run LTL checking without Z3 compiled in" << std::endl;
   exit(1);
 #else
-  solver_base *solver;
+  smt_convt *solver;
   bool ret;
   unsigned int num_asserts = 0;
   // LTL checking - first check for whether we have an indeterminate prefix,
@@ -670,8 +629,10 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_BAD" << std::endl;
   if (num_asserts != 0) {
-    solver = new z3_solver(*this, is_cpp, ns);
-    ret = solver->run_solver(*equation);
+    solver = create_solver_factory("z3", is_cpp,
+                                   options.get_bool_option("int-encoding"),
+                                   ns, options);
+    ret = run_solver(*equation, solver);
     delete solver;
     if (ret) {
       std::cout << "Found trace satisfying LTL_BAD" << std::endl;
@@ -707,8 +668,10 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_FAILING" << std::endl;
   if (num_asserts != 0) {
-    solver = new z3_solver(*this, is_cpp, ns);
-    ret = solver->run_solver(*equation);
+    solver = create_solver_factory("z3", is_cpp,
+                                   options.get_bool_option("int-encoding"),
+                                   ns, options);
+    ret = run_solver(*equation, solver);
     delete solver;
     if (ret) {
       std::cout << "Found trace satisfying LTL_FAILING" << std::endl;
@@ -744,8 +707,10 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
   if (num_asserts != 0) {
-    solver = new z3_solver(*this, is_cpp, ns);
-    ret = solver->run_solver(*equation);
+    solver = create_solver_factory("z3", is_cpp,
+                                   options.get_bool_option("int-encoding"),
+                                   ns, options);
+    ret = run_solver(*equation, solver);
     delete solver;
     if (ret) {
       std::cout << "Found trace satisfying LTL_SUCCEEDING" << std::endl;
@@ -769,129 +734,48 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 #endif
 }
 
-bool bmct::solver_base::run_solver(symex_target_equationt &equation)
+bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
 {
-  switch(bmc.run_decision_procedure(*conv, equation))
+  switch(run_decision_procedure(*solver, equation))
   {
-    case prop_convt::P_UNSATISFIABLE:
-      if(!bmc.options.get_bool_option("base-case"))
-        bmc.report_success();
+    case smt_convt::P_UNSATISFIABLE:
+      if(!options.get_bool_option("base-case"))
+        report_success();
       else
-        bmc.status("No bug has been found in the base case");
+        status("No bug has been found in the base case");
       return false;
 
-    case prop_convt::P_SATISFIABLE:
-      if (bmc.options.get_bool_option("inductive-step") &&
-    		  bmc.options.get_bool_option("show-counter-example"))
+    case smt_convt::P_SATISFIABLE:
+      if (options.get_bool_option("inductive-step") &&
+    		  options.get_bool_option("show-counter-example"))
       {
-        bmc.error_trace(*conv, equation);
-   	    bmc.report_failure();
+        error_trace(*solver, equation);
+   	    report_failure();
    	    return false;
       }
-      else if(!bmc.options.get_bool_option("inductive-step")
-    		  && !bmc.options.get_bool_option("forward-condition"))
+      else if(!options.get_bool_option("inductive-step")
+    		  && !options.get_bool_option("forward-condition"))
       {
-        bmc.error_trace(*conv, equation);
-   	    bmc.report_failure();
+        error_trace(*solver, equation);
+   	    report_failure();
       }
-      else if (bmc.options.get_bool_option("forward-condition"))
-        bmc.status("The forward condition is unable to prove the property");
+      else if (options.get_bool_option("forward-condition"))
+        status("The forward condition is unable to prove the property");
       else
-        bmc.status("The inductive step is unable to prove the property");
+        status("The inductive step is unable to prove the property");
 
       return true;
 
   // Return failure if we didn't actually check anything, we just emitted the
   // test information to an SMTLIB formatted file. Causes esbmc to quit
   // immediately (with no error reported)
-  case prop_convt::P_SMTLIB:
+  case smt_convt::P_SMTLIB:
     return true;
 
   default:
-    bmc.error("decision procedure failed");
+    error("decision procedure failed");
     return true;
   }
-}
-
-#ifdef Z3
-bmct::z3_solver::z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns)
-  : solver_base(bmc), z3_conv(bmc.options.get_bool_option("uw-model"),
-                               bmc.options.get_bool_option("int-encoding"),
-                               bmc.options.get_bool_option("smt"),
-                               is_cpp, ns)
-{
-  z3_conv.set_filename(bmc.options.get_option("outfile"));
-  z3_conv.set_z3_core_size(atol(bmc.options.get_option("core-size").c_str()));
-  conv = &z3_conv;
-}
-
-bool bmct::z3_solver::run_solver(symex_target_equationt &equation)
-{
-  bool result = bmct::solver_base::run_solver(equation);
-  bmc._unsat_core = z3_conv.get_z3_core_size();
-  bmc._number_of_assumptions = z3_conv.get_z3_number_of_assumptions();
-  return result;
-}
-
-bmct::z3_runtime_solver::z3_runtime_solver(bmct &bmc,
-                                           bool is_cpp __attribute__((unused)),
-                                           z3_convt *c)
-  : solver_base(bmc), z3_conv(c)
-{
-  conv = c;
-}
-
-bool bmct::z3_runtime_solver::run_solver(symex_target_equationt &equation)
-{
-  bool result = bmct::solver_base::run_solver(equation);
-  bmc._unsat_core = z3_conv->get_z3_core_size();
-  bmc._number_of_assumptions = z3_conv->get_z3_number_of_assumptions();
-  return result;
-}
-
-#endif
-
-bmct::output_solver::output_solver(bmct &bmc)
-  : solver_base(bmc)
-{
-
-  const std::string &filename = bmc.options.get_option("outfile");
-
-  if (filename.empty() || filename=="-") {
-    out_file = &std::cout;
-  } else {
-    std::ofstream *out = new std::ofstream(filename.c_str());
-    out_file = out;
-
-    if (!out_file)
-    {
-      std::cerr << "failed to open " << filename << std::endl;
-      delete out_file;
-      return;
-    }
-  }
-
-  *out_file << "%%%\n";
-  *out_file << "%%% Generated by ESBMC " << ESBMC_VERSION << "\n";
-  *out_file << "%%%\n\n";
-
-  return;
-}
-
-bmct::output_solver::~output_solver()
-{
-
-  if (out_file != &std::cout)
-    delete out_file;
-  return;
-}
-
-bool bmct::output_solver::run_solver(symex_target_equationt &equation)
-{
-
-  bmc.do_cbmc(*conv, equation);
-  conv->dec_solve();
-  return write_output();
 }
 
 void bmct::write_checkpoint(void)

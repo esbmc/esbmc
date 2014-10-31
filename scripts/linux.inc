@@ -9,15 +9,46 @@ Z3_SOLVER_LIBS+= -L$(Z3)/lib -lz3
 INCLUDES+= -I $(Z3)/include
 endif
 
-ifdef USE_SOLVER_BOOLECTOR
-BOOLECTOR = $(SATDIR)/boolector
-CXXFLAGS+= -DBOOLECTOR
-SOLVER_LIBS+= -L$(BOOLECTOR)/lib -lboolector
+ifdef USE_SOLVER_MINISAT
+CXXFLAGS+= -DMINISAT
+MINISAT=1
+SOLVER_LIBS+= $(MINISAT_PATH)/core/lib.a  $(MINISAT_PATH)/simp/lib.a
 endif
 
-ifdef USE_SOLVER_MINISAT1
-MINISAT = $(SATDIR)/MiniSat-p_v1.14
-CXXFLAGS+= -DMINISAT
+ifdef USE_SOLVER_BOOLECTOR
+BOOLECTOR = $(SATDIR)/boolector
+CXXFLAGS+= -DBOOLECTOR -I $(BOOLECTOR$)
+SOLVER_LIBS+= -L$(BOOLECTOR) -lboolector -L$(SATDIR)/lingeling -llgl
+endif
+
+ifdef USE_SOLVER_SWORD
+SWORD=1
+CXXFLAGS+= -DSWORD
+SOLVER_LIBS+= -L$(SWORD_PATH)/lib -lsword
+endif
+
+ifdef USE_SOLVER_STP
+STP=1
+CXXFLAGS+= -DUSESTP
+SOLVER_LIBS+= -L$(STP_PATH)/lib -lstp
+endif
+
+ifdef USE_SOLVER_MATHSAT
+MATHSAT = $(MATHSAT_PATH)
+CXXFLAGS+= -DMATHSAT -I $(MATHSAT)/include
+SOLVER_LIBS += -L$(MATHSAT)/lib -lmathsat
+endif
+
+ifdef USE_SOLVER_CVC
+CVC = $(CVC_PATH)
+CXXFLAGS+= -DUSECVC -I $(CVC)/include
+SOLVER_LIBS += -L$(CVC)/lib -lcvc4
+endif
+
+ifdef USE_SOLVER_YICES
+YICES = $(YICES_PATH)
+CXXFLAGS+= -DYICES -I $(YICES)/include
+SOLVER_LIBS += -L$(YICES)/lib -lyices
 endif
 
 ifdef USE_EIGEN_LIB

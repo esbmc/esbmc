@@ -103,7 +103,7 @@ goto_symext::symex_malloc(
     type2tc subtype;
     migrate_type(symbol.type.subtype(), subtype);
     expr2tc sym = symbol2tc(new_type, symbol.name);
-    expr2tc idx_val = zero_uint;
+    expr2tc idx_val = zero_ulong;
     expr2tc idx = index2tc(subtype, sym, idx_val);
     rhs_addrof.get()->type =
       get_pointer_type(pointer_typet(symbol.type.subtype()));
@@ -112,13 +112,17 @@ goto_symext::symex_malloc(
 
   expr2tc rhs = rhs_addrof;
 
-  symbol2tc null_sym(rhs->type, "NULL");
-  sideeffect2tc choice(get_bool_type(), expr2tc(), expr2tc(), std::vector<expr2tc>(), type2tc(), sideeffect2t::nondet);
-
-  rhs = if2tc(rhs->type, choice, rhs, null_sym);
-  replace_nondet(rhs);
-
   expr2tc ptr_rhs = rhs;
+
+  if (!options.get_bool_option("force-malloc-success")) {
+    symbol2tc null_sym(rhs->type, "NULL");
+    sideeffect2tc choice(get_bool_type(), expr2tc(), expr2tc(), std::vector<expr2tc>(), type2tc(), sideeffect2t::nondet);
+
+    rhs = if2tc(rhs->type, choice, rhs, null_sym);
+    replace_nondet(rhs);
+
+    ptr_rhs = rhs;
+  }
 
   if (rhs->type != lhs->type)
     rhs = typecast2tc(lhs->type, rhs);
@@ -129,7 +133,7 @@ goto_symext::symex_malloc(
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
 
-  pointer_object2tc ptr_obj(int_type2(), ptr_rhs);
+  pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
 
   dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
@@ -164,7 +168,8 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
   expr2tc falseity = false_expr;
   symex_assign_rec(dealloc_index_expr, falseity, guard);
 
-  type2tc sz_sym_type = type2tc(new array_type2t(uint_type2(), expr2tc(),true));
+  type2tc sz_sym_type =
+    type2tc(new array_type2t(pointer_type2(), expr2tc(),true));
   symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
   index2tc sz_index_expr(get_bool_type(), sz_sym, ptr_obj);
 
@@ -172,9 +177,10 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
   if (is_nil_expr(size)) {
     try {
       mp_integer object_size = type_byte_size(*new_type);
-      object_size_exp = gen_uint(object_size.to_ulong());
+      object_size_exp =
+        constant_int2tc(pointer_type2(), object_size.to_ulong());
     } catch (array_type2t::dyn_sized_array_excp *e) {
-      object_size_exp = e->size;
+      object_size_exp = typecast2tc(pointer_type2(), e->size);
     }
   } else {
     object_size_exp = size;
@@ -194,15 +200,16 @@ void goto_symext::symex_free(const expr2tc &expr)
   expr2tc tmp = code.operand;
   dereference(tmp, false, true);
 
-  pointer_offset2tc ptr_offs(uint_type2(), tmp);
-  equality2tc eq(ptr_offs, zero_uint);
+  address_of2tc addrof(code.operand->type, tmp);
+  pointer_offset2tc ptr_offs(pointer_type2(), addrof);
+  equality2tc eq(ptr_offs, zero_ulong);
   claim(eq, "Operand of free must have zero pointer offset");
 
   // Clear the alloc bit, and set the deallocated bit.
   guardt guard;
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  pointer_object2tc ptr_obj(uint_type2(), code.operand);
+  pointer_object2tc ptr_obj(pointer_type2(), code.operand);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
@@ -296,7 +303,7 @@ void goto_symext::symex_cpp_new(
   if(do_array)
   {
     symbol2tc sym(newtype, symbol.name);
-    index2tc idx(renamedtype2, sym, zero_uint);
+    index2tc idx(renamedtype2, sym, zero_ulong);
     rhs.get()->ptr_obj = idx;
   }
   else
@@ -313,7 +320,7 @@ void goto_symext::symex_cpp_new(
                                               expr2tc(), true));
   symbol2tc sym(sym_type, "cpp::__ESBMC_is_dynamic");
 
-  pointer_object2tc ptr_obj(int_type2(), lhs);
+  pointer_object2tc ptr_obj(pointer_type2(), lhs);
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = true_expr;
 
@@ -392,7 +399,7 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   }
 
   // Install pointer modelling data into the relevant arrays.
-  pointer_object2tc ptr_obj(int_type2(), result);
+  pointer_object2tc ptr_obj(pointer_type2(), result);
   track_new_pointer(ptr_obj, type2tc(), realloc_size);
 
   // Assign the result to the left hand side.

@@ -125,43 +125,44 @@ symex_target_equationt::renumber(const expr2tc &guard, const expr2tc &symbol,
     SSA_step.short_output(ns, std::cout);
 }
 
-void symex_target_equationt::convert(prop_convt &prop_conv)
+void symex_target_equationt::convert(smt_convt &smt_conv)
 {
-  bvt assertions;
-  literalt assumpt_lit = const_literal(true);
+  smt_convt::ast_vec assertions;
+  const smt_ast *assumpt_ast = smt_conv.convert_ast(true_expr);
 
   for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
-    convert_internal_step(prop_conv, assumpt_lit, assertions, *it);
+    convert_internal_step(smt_conv, assumpt_ast, assertions, *it);
 
   if (!assertions.empty())
-    prop_conv.lcnf(assertions);
+    smt_conv.assert_ast(smt_conv.make_disjunct(assertions));
 
   return;
 }
 
-void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
-                   literalt &assumpt_lit, bvt &assertions_lits, SSA_stept &step)
+void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
+                   const smt_ast *&assumpt_ast,
+                   smt_convt::ast_vec &assertions,
+                   SSA_stept &step)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
   bvt assert_bv;
-  literalt true_lit = const_literal(true);
-  literalt false_lit = const_literal(false);
+  const smt_ast *true_val = smt_conv.convert_ast(true_expr);
+  const smt_ast *false_val = smt_conv.convert_ast(false_expr);
 
   if (step.ignore) {
-    step.cond_literal = true_lit;
-    step.guard_literal = false_lit;
+    step.cond_ast = true_val;
+    step.guard_ast = false_val;
     return;
   }
 
   expr2tc tmp(step.guard);
-  step.guard_literal = prop_conv.convert(tmp);
+  step.guard_ast = smt_conv.convert_ast(tmp);
 
   if (step.is_assume() || step.is_assert()) {
     expr2tc tmp(step.cond);
-    step.cond_literal = prop_conv.convert(tmp);
+    step.cond_ast = smt_conv.convert_ast(tmp);
   } else if (step.is_assignment()) {
-    expr2tc tmp2(step.cond);
-    prop_conv.set_to(tmp2, true);
+    smt_conv.convert_assign(step.cond);
   } else if (step.is_output()) {
     for(std::list<expr2tc>::const_iterator
         o_it = step.output_args.begin();
@@ -174,22 +175,25 @@ void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
       else
       {
         symbol2tc sym(tmp->type, "symex::output::"+i2string(output_count++));
-        equality2tc eq(tmp, sym);
-        prop_conv.set_to(eq, true);
+        equality2tc eq(sym, tmp);
+        smt_conv.set_to(eq, true);
         step.converted_output_args.push_back(sym);
       }
     }
   } else if (step.is_renumber()) {
-    prop_conv.renumber_symbol_address(step.guard, step.lhs, step.rhs);
+    smt_conv.renumber_symbol_address(step.guard, step.lhs, step.rhs);
   } else {
     assert(0 && "Unexpected SSA step type in conversion");
   }
 
   if (step.is_assert()) {
-    step.cond_literal = prop_conv.limplies(assumpt_lit, step.cond_literal);
-    assertions_lits.push_back(prop_conv.lnot(step.cond_literal));
+    step.cond_ast = smt_conv.imply_ast(assumpt_ast, step.cond_ast);
+    assertions.push_back(smt_conv.invert_ast(step.cond_ast));
   } else if (step.is_assume()) {
-    assumpt_lit = prop_conv.land(assumpt_lit, step.cond_literal);
+    smt_convt::ast_vec v;
+    v.push_back(assumpt_ast);
+    v.push_back(step.cond_ast);
+    assumpt_ast = smt_conv.make_conjunct(v);
   }
 
   return;
@@ -204,6 +208,18 @@ void symex_target_equationt::output(std::ostream &out) const
   {
     it->output(ns, out);
     out << "--------------" << std::endl;
+  }
+}
+
+void symex_target_equationt::short_output(std::ostream &out,
+                                          bool show_ignored) const
+{
+  for(SSA_stepst::const_iterator
+      it=SSA_steps.begin();
+      it!=SSA_steps.end();
+      it++)
+  {
+    it->short_output(ns, out, show_ignored);
   }
 }
 
@@ -252,10 +268,10 @@ void symex_target_equationt::SSA_stept::output(
 }
 
 void symex_target_equationt::SSA_stept::short_output(
-  const namespacet &ns, std::ostream &out) const
+  const namespacet &ns, std::ostream &out, bool show_ignored) const
 {
 
-  if (is_assignment() || is_assert() || is_assume())
+  if ((is_assignment() || is_assert() || is_assume()) && show_ignored == ignore)
   {
     out <<  from_expr(ns, "", cond) << std::endl;
   }
@@ -332,30 +348,46 @@ symex_target_equationt::clear_assertions(void)
 }
 
 runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
-                                                     prop_convt &_conv)
+                                                     smt_convt &_conv)
   : symex_target_equationt(_ns),
     conv(_conv)
 {
-  assert_vec_list.push_back(bvt());
-  assumpt_chain.push_back(const_literal(true));
+  assert_vec_list.push_back(smt_convt::ast_vec());
+  assumpt_chain.push_back(conv.convert_ast(true_expr));
+  cvt_progress = SSA_steps.end();
 }
 
 void
 runtime_encoded_equationt::flush_latest_instructions(void)
 {
-  SSA_stepst::iterator run_it = scoped_end_points.back();
 
-  // Convert this run.
-  if (SSA_steps.size() != 0) {
-    // Horror: if the start-of-run iterator is end, then it actually refers to
-    // the start of the list. The start doesn't have a persistent iterator, so
-    // we can't keep a reference to it when there's nothing in the list :|
-    if (run_it == SSA_steps.end())
-      run_it = SSA_steps.begin();
-    for (; run_it != SSA_steps.end(); run_it++)
-      convert_internal_step(conv, assumpt_chain.back(), assert_vec_list.back(),
-                            *run_it);
+  if (SSA_steps.size() == 0)
+    return;
+
+  SSA_stepst::iterator run_it = cvt_progress;
+  // Scenarios:
+  // * We're at the start of running, in which case cvt_progress == end
+  // * We're in the middle, but nothing is left to push, so run_it + 1 == end
+  // * We're in the middle, and there's more to convert.
+  if (run_it == SSA_steps.end()) {
+    run_it = SSA_steps.begin();
+  } else {
+    run_it++;
+    if (run_it == SSA_steps.end()) {
+      // There is in fact, nothing to do
+      return;
+    } else {
+      // Just roll on
+    }
   }
+
+  // Now iterate from the start insn to convert, to the end of the list.
+  for (; run_it != SSA_steps.end(); ++run_it)
+    convert_internal_step(conv, assumpt_chain.back(), assert_vec_list.back(),
+                          *run_it);
+
+  run_it--;
+  cvt_progress = run_it;
 }
 
 void
@@ -364,15 +396,10 @@ runtime_encoded_equationt::push_ctx(void)
 
   flush_latest_instructions();
 
-  SSA_stepst::iterator it = SSA_steps.end();
-
-  if (SSA_steps.size() != 0)
-    --it;
-
   // And push everything back.
   assumpt_chain.push_back(assumpt_chain.back());
   assert_vec_list.push_back(assert_vec_list.back());
-  scoped_end_points.push_back(it);
+  scoped_end_points.push_back(cvt_progress);
   conv.push_ctx();
 }
 
@@ -381,6 +408,7 @@ runtime_encoded_equationt::pop_ctx(void)
 {
 
   SSA_stepst::iterator it = scoped_end_points.back();
+  cvt_progress = it;
 
   if (SSA_steps.size() != 0)
     ++it;
@@ -394,7 +422,7 @@ runtime_encoded_equationt::pop_ctx(void)
 }
 
 void
-runtime_encoded_equationt::convert(prop_convt &prop_conv)
+runtime_encoded_equationt::convert(smt_convt &smt_conv)
 {
 
   // Don't actually convert. We've already done most of the conversion by now
@@ -405,7 +433,7 @@ runtime_encoded_equationt::convert(prop_convt &prop_conv)
 
   // Finally, we also want to assert the set of assertions.
   if(!assert_vec_list.back().empty())
-    prop_conv.lcnf(assert_vec_list.back());
+    smt_conv.assert_ast(smt_conv.make_disjunct(assert_vec_list.back()));
 
   return;
 }
@@ -419,7 +447,9 @@ runtime_encoded_equationt::clone(void) const
   // sets up a new exploration.
   assert(SSA_steps.size() == 0 && "runtime_encoded_equationt shouldn't be "
          "cloned when it contains data");
-  return new runtime_encoded_equationt(*this);
+  runtime_encoded_equationt *nthis = new runtime_encoded_equationt(*this);
+  nthis->cvt_progress = nthis->SSA_steps.end();
+  return nthis;
 }
 
 tvt
@@ -434,11 +464,11 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
 
   // Convert the question (must be a bool).
   assert(is_bool_type(question));
-  literalt q = conv.convert(question);
+  const smt_ast *q = conv.convert_ast(question);
 
   // The proposition also needs to be guarded with the in-program assumptions,
   // which are not necessarily going to be part of the state guard.
-  conv.l_set_to(assumpt_chain.back(), true);
+  conv.assert_ast(assumpt_chain.back());
 
   // Now, how to ask the question? Unfortunately the clever solver stuff won't
   // negate the condition, it'll only give us a handle to it that it negates
@@ -447,29 +477,29 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   // Those assertions are just is-the-prop-true, is-the-prop-false. Valid
   // results are true, false, both.
   push_ctx();
-  conv.l_set_to(q, true);
-  prop_convt::resultt res1 = conv.dec_solve();
+  conv.assert_ast(q);
+  smt_convt::resultt res1 = conv.dec_solve();
   pop_ctx();
   push_ctx();
-  conv.l_set_to(q, false);
-  prop_convt::resultt res2 = conv.dec_solve();
+  conv.assert_ast(conv.invert_ast(q));
+  smt_convt::resultt res2 = conv.dec_solve();
   pop_ctx();
 
   // So; which result?
-  if (res1 == prop_convt::P_ERROR || res1 == prop_convt::P_SMTLIB ||
-      res2 == prop_convt::P_ERROR || res2 == prop_convt::P_SMTLIB) {
+  if (res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB ||
+      res2 == smt_convt::P_ERROR || res2 == smt_convt::P_SMTLIB) {
     std::cerr << "Solver returned error while asking question" << std::endl;
     abort();
-  } else if (res1 == prop_convt::P_SATISFIABLE &&
-             res2 == prop_convt::P_SATISFIABLE) {
+  } else if (res1 == smt_convt::P_SATISFIABLE &&
+             res2 == smt_convt::P_SATISFIABLE) {
     // Both ways are satisfiable; result is unknown.
     final_res = tvt(tvt::TV_UNKNOWN);
-  } else if (res1 == prop_convt::P_SATISFIABLE &&
-             res2 == prop_convt::P_UNSATISFIABLE) {
+  } else if (res1 == smt_convt::P_SATISFIABLE &&
+             res2 == smt_convt::P_UNSATISFIABLE) {
     // Truth of question is satisfiable; other not; so we're true.
     final_res = tvt(tvt::TV_TRUE);
-  } else if (res1 == prop_convt::P_UNSATISFIABLE &&
-             res2 == prop_convt::P_SATISFIABLE) {
+  } else if (res1 == smt_convt::P_UNSATISFIABLE &&
+             res2 == smt_convt::P_SATISFIABLE) {
     // Truth is unsat, false is sat, proposition is false
     final_res = tvt(tvt::TV_FALSE);
   } else {

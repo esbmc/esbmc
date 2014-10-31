@@ -30,7 +30,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
     const valid_object2t &obj = to_valid_object2t(expr);
 
-    pointer_object2tc obj_expr(uint_type2(), obj.value);
+    pointer_object2tc obj_expr(pointer_type2(), obj.value);
 
     exprt alloc_array=symbol_expr(ns.lookup(valid_ptr_arr_name));
     expr2tc alloc_arr_2;
@@ -43,7 +43,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
   {
     const invalid_pointer2t &ptr = to_invalid_pointer2t(expr);
 
-    pointer_object2tc obj_expr(uint_type2(), ptr.ptr_obj);
+    pointer_object2tc obj_expr(pointer_type2(), ptr.ptr_obj);
 
     exprt alloc_array=symbol_expr(ns.lookup(valid_ptr_arr_name));
     expr2tc alloc_arr_2;
@@ -63,7 +63,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc sym_2;
     migrate_expr(sym, sym_2);
 
-    pointer_object2tc ptr_obj(int_type2(), ptr.ptr_obj);
+    pointer_object2tc ptr_obj(pointer_type2(), ptr.ptr_obj);
     index2tc is_dyn(get_bool_type(), sym_2, ptr_obj);
 
     // Catch free pointers: don't allow anything to be pointer object 1, the
@@ -83,7 +83,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
     const deallocated_obj2t &obj = to_deallocated_obj2t(expr);
 
-    pointer_object2tc obj_expr(uint_type2(), obj.value);
+    pointer_object2tc obj_expr(pointer_type2(), obj.value);
 
     exprt alloc_array=symbol_expr(ns.lookup(deallocd_arr_name));
     expr2tc alloc_arr_2;
@@ -98,7 +98,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     //nec: ex37.c
     const dynamic_size2t &size = to_dynamic_size2t(expr);
 
-    pointer_object2tc obj_expr(int_type2(), size.value);
+    pointer_object2tc obj_expr(pointer_type2(), size.value);
 
     exprt alloc_array=symbol_expr(ns.lookup(alloc_size_arr_name));
     expr2tc alloc_arr_2;

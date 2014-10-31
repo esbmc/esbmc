@@ -211,28 +211,17 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     exit(0);
   }
 
-  if(cmdline.isset("z3-bv"))
+  if(cmdline.isset("bv"))
   {
-    options.set_option("z3", true);
-    options.set_option("z3-bv", true);
     options.set_option("int-encoding", false);
   }
 
-  if(cmdline.isset("z3-ir"))
+  if(cmdline.isset("ir"))
   {
-    options.set_option("z3", true);
-    options.set_option("z3-ir", true);
     options.set_option("int-encoding", true);
   }
 
   options.set_option("fixedbv", true);
-
-  if (!options.get_bool_option("z3"))
-  {
-    // If no solver options given, default to z3 bv encoding
-    options.set_option("z3", true);
-    options.set_option("int-encoding", false);
-  }
 
   if(cmdline.isset("qf_aufbv"))
   {
@@ -254,14 +243,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
      options.set_option("context-switch", cmdline.getval("context-switch"));
    else
      options.set_option("context-switch", -1);
-
-   if(cmdline.isset("uw-model"))
-   {
-     options.set_option("uw-model", true);
-     options.set_option("schedule", true);
-   }
-   else
-     options.set_option("uw-model", false);
 
    if(cmdline.isset("deadlock-check"))
    {
@@ -419,6 +400,9 @@ int cbmc_parseoptionst::doit()
 
   optionst opts;
   get_command_line_options(opts);
+
+  // Depends on command line options and config
+  init_expr_constants();
 
   if(cmdline.isset("preprocess"))
   {
@@ -1705,8 +1689,8 @@ void cbmc_parseoptionst::help()
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
     " --no-slice                   do not remove unused equations\n\n"
     " --- solver configuration ------------------------------------------------------\n\n"
-    " --z3-bv                      use Z3 with bit-vector arithmetic\n"
-    " --z3-ir                      use Z3 with integer/real arithmetic\n"
+    " --bv                         use Z3 with bit-vector arithmetic\n"
+    " --ir                         use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"
     " --lazy                       use lazy instantiation with Z3 (default)\n"
     " --qf_aufbv                   output VCCs in QF_AUFBV format (experimental)\n"
@@ -1731,8 +1715,6 @@ void cbmc_parseoptionst::help()
     " --k-step nr                  set the k time step (default is 50) \n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
-    " --uw-model                   use under-approximation and widening approach\n"
-    " --core-size nr               limit num of assumpts in UW model(experimental)\n"
     " --round-robin                use the round robin scheduling approach\n"
     " --time-slice nr              set the time slice of the round robin algorithm (default is 1) \n\n"
     " --- concurrency checking -----------------------------------------------------\n\n"

@@ -522,7 +522,7 @@ show_goto_trace(
     switch (it->type) {
     case goto_trace_stept::ASSERT:
       if (!it->guard) {
-	out << std::endl;
+        show_state_header(out, *it, it->pc->location, it->step_nr);
 	out << "Violated property:" << std::endl;
 	if (!it->pc->location.is_nil()) {
 	  if (!goto_trace.metadata_filename.empty()) {

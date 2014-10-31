@@ -6,27 +6,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <hash_cont.h>
-
 #include "slice.h"
-#include "renaming.h"
 
-class symex_slicet
+symex_slicet::symex_slicet()
 {
-public:
-  void slice(symex_target_equationt &equation);
-
-protected:
-  typedef hash_set_cont<std::string, string_hash> symbol_sett;
-  
-  symbol_sett depends;
-  
-  void get_symbols(const expr2tc &expr);
-
-  void slice(symex_target_equationt::SSA_stept &SSA_step);
-  void slice_assignment(symex_target_equationt::SSA_stept &SSA_step);
-  void slice_renumber(symex_target_equationt::SSA_stept &SSA_step);
-};
+  single_slice = false;
+}
 
 void symex_slicet::get_symbols(const expr2tc &expr)
 {
@@ -52,18 +37,35 @@ void symex_slicet::slice(symex_target_equationt &equation)
     slice(*it);
 }
 
+void
+symex_slicet::slice_for_symbols(symex_target_equationt &equation,
+                                const expr2tc &expr)
+{
+  get_symbols(expr);
+  single_slice = true;
+
+  for(symex_target_equationt::SSA_stepst::reverse_iterator
+      it=equation.SSA_steps.rbegin();
+      it!=equation.SSA_steps.rend();
+      it++)
+    slice(*it);
+}
+
 void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
 {
-  get_symbols(SSA_step.guard);
+  if (!single_slice)
+    get_symbols(SSA_step.guard);
 
   switch(SSA_step.type)
   {
   case goto_trace_stept::ASSERT:
-    get_symbols(SSA_step.cond);
+    if (!single_slice)
+      get_symbols(SSA_step.cond);
     break;
 
   case goto_trace_stept::ASSUME:
-    get_symbols(SSA_step.cond);
+    if (!single_slice)
+      get_symbols(SSA_step.cond);
     break;
 
   case goto_trace_stept::ASSIGNMENT:

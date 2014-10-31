@@ -127,7 +127,6 @@
   for (idx = 0, ptr = theexpr.get()->get_sub_expr_nc(0); ptr != 0; \
        idx++, ptr = theexpr.get()->get_sub_expr_nc(idx))
 
-class prop_convt;
 class type2t;
 class expr2t;
 class constant_array2t;
@@ -302,19 +301,6 @@ protected:
 
 public:
   virtual ~type2t() { };
-
-  /** Despatcher for SMT conversion.
-   *  Each subclass of type2t overrides this method, and provides a routine
-   *  that will invoke a method in the class prop_convt that will convert it
-   *  to SMT representation. This converted representation is assigned to the
-   *  pointer arg, which is assumed to be an appropriate pointer type for the
-   *  prop_convt object being passed down. Implemented in bulk by type_methods
-   *  template.
-   *  @see type_methods
-   *  @param prop_convt Object to perform SMT conversion with.
-   *  @param arg Pointer to assign output to.
-   */
-  virtual void convert_smt_type(prop_convt &obj, void *arg) const = 0;
 
   /** Fetch bit width of this type.
    *  For a particular type, calculate its size in a bit representation of
@@ -580,23 +566,6 @@ public:
 
   /** Clone method. Self explanatory. */
   virtual expr2tc clone(void) const = 0;
-
-  /** SMT conversion despatcher function.
-   *  In a similar vein to convert_smt_type, this method is overridden by all
-   *  subclasses to call an appropriate method in the passed in prop_convt
-   *  object that will convert itself to a piece of SMT AST. That's then
-   *  returned in the arg ptr passed down, which is assumed to be of an
-   *  appropriate pointer type for the prop_convt object doing the converting.
-   *
-   *  This means that the procedure to look up what method to convert an irep
-   *  with is now O(1) rather than O(n), where n is a large number of irep
-   *  names that we have to compare the expr id against before working out
-   *  what method to call.
-   *  @see type2t::convert_smt_type
-   *  @param obj SMT converter object to use to convert this expr
-   *  @param arg Pointer that will receive converted piece of AST.
-   */
-  virtual void convert_smt(prop_convt &obj, void *arg) const = 0;
 
   /* These are all self explanatory */
   bool operator==(const expr2t &ref) const;
@@ -868,8 +837,7 @@ namespace esbmct {
    *  via overloading), and then inspecting the output of that.
    *
    *  In fact, we can make type generic implementations of all the following
-   *  methods in expr2t: convert_smt, clone, tostring, cmp, lt, do_crc,
-   *  list_operands, hash.
+   *  methods in expr2t: clone, tostring, cmp, lt, do_crc, list_operands, hash.
    *
    *  So, that's what this template provides; an expr2t class can be made by
    *  inheriting from this template, telling it what class it'll end up with,
@@ -1005,7 +973,6 @@ namespace esbmct {
 
     // Override expr2t methods that we're going to be generating automagically
 
-    virtual void convert_smt(prop_convt &obj, void *arg) const;
     virtual expr2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const expr2t &ref) const;
@@ -1101,7 +1068,6 @@ namespace esbmct {
                                     field6_type, field6_class, field6_ptr> &ref)
       : subclass(ref) { }
 
-    virtual void convert_smt_type(prop_convt &obj, void *arg) const;
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const type2t &ref) const;
@@ -1387,7 +1353,11 @@ public:
 class bv_data : public type2t
 {
 public:
-  bv_data(type2t::type_ids id, unsigned int w) : type2t(id), width(w) { }
+  bv_data(type2t::type_ids id, unsigned int w) : type2t(id), width(w)
+  {
+    // assert(w != 0 && "Must have nonzero width for integer type");
+    // XXX -- zero sized bitfields are permissible. Wat.
+  }
   bv_data(const bv_data &ref) : type2t(ref), width(ref.width) { }
 
   virtual unsigned int get_width(void) const;
@@ -2675,6 +2645,19 @@ public:
       { }
 
   std::vector<irep_idt> exception_list;
+};
+
+class concat_data : public expr2t
+{
+public:
+  concat_data(const type2tc &t, expr2t::expr_ids id,
+              const std::vector<expr2tc> &d)
+    : expr2t(t, id), data_items(d) { }
+  concat_data(const concat_data &ref)
+    : expr2t(ref), data_items(ref.data_items)
+      { }
+
+  std::vector<expr2tc> data_items;
 };
 
 // Give everything a typedef name. Use this to construct both the templated
@@ -4657,17 +4640,26 @@ void init_expr_constants(void);
 
 extern const expr2tc true_expr;
 extern const expr2tc false_expr;
-extern const constant_int2tc zero_uint;
-extern const constant_int2tc one_uint;
-extern const constant_int2tc zero_int;
-extern const constant_int2tc one_int;
+extern const constant_int2tc zero_ulong;
+extern const constant_int2tc one_ulong;
+extern const constant_int2tc zero_long;
+extern const constant_int2tc one_long;
 
 inline expr2tc
-gen_uint(unsigned long val)
+gen_uint(const type2tc &type, unsigned long val)
 {
-  constant_int2tc v(type_pool.get_uint(config.ansi_c.int_width), BigInt(val));
+  constant_int2tc v(type, BigInt(val));
   return v;
 }
+
+inline expr2tc
+gen_ulong(unsigned long val)
+{
+  constant_int2tc v(type_pool.get_uint(config.ansi_c.word_size), BigInt(val));
+  return v;
+}
+
+
 
 inline const type2tc &
 get_uint8_type(void)
@@ -4745,6 +4737,12 @@ inline const type2tc &
 get_pointer_type(const typet &val)
 {
   return type_pool.get_pointer(val);
+}
+
+inline const type2tc &
+get_array_subtype(const type2tc &type)
+{
+  return to_array_type(type).subtype;
 }
 
 #endif /* _UTIL_IREP2_H_ */
