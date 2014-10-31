@@ -98,30 +98,41 @@ void bmct::error_trace(prop_convt &prop_conv,
 
   goto_trace.metadata_filename = options.get_option("llvm-metadata");
 
+  std::string graphml_output_filename;
+  std::string tokenizer_path;
+  if (!(graphml_output_filename = options.get_option("witnesspath")).empty()){
+	set_ui(ui_message_handlert::GRAPHML);
+	tokenizer_path = options.get_option("tokenizer");
+  }
+
   switch(ui)
   {
   case ui_message_handlert::PLAIN:
     std::cout << std::endl << "Counterexample:" << std::endl;
     show_goto_trace(std::cout, ns, goto_trace);
-    break;
+  break;
 
   case ui_message_handlert::OLD_GUI:
     show_goto_trace_gui(std::cout, ns, goto_trace);
-    break;
+  break;
 
   case ui_message_handlert::XML_UI:
-    {
-      xmlt xml;
-      convert(ns, goto_trace, xml);
-      std::cout << xml << std::endl;
-    }
-    break;
+  {
+    xmlt xml;
+    convert(ns, goto_trace, xml);
+    std::cout << xml << std::endl;
+  }
+  break;
+
+  case ui_message_handlert::GRAPHML:
+	 generate_goto_trace_in_graphml_format(tokenizer_path, graphml_output_filename, ns, goto_trace);
+	 std::cout << "The counterexample in GraphML format is available in: " << options.get_option("witnesspath") << std::endl;
+  break;
 
   default:
     assert(false);
   }
 }
-
 /*******************************************************************\
 
 Function: bmct::run_decision_procedure
@@ -262,19 +273,22 @@ void bmct::report_failure()
   switch(ui)
   {
   case ui_message_handlert::OLD_GUI:
-    break;
+  break;
 
   case ui_message_handlert::PLAIN:
-    break;
+  break;
 
   case ui_message_handlert::XML_UI:
-    {
-      xmlt xml("cprover-status");
-      xml.data="FAILURE";
-      std::cout << xml;
-      std::cout << std::endl;
-    }
-    break;
+  {
+    xmlt xml("cprover-status");
+    xml.data="FAILURE";
+    std::cout << xml;
+    std::cout << std::endl;
+  }
+  break;
+
+  case ui_message_handlert::GRAPHML:
+  break;
 
   default:
     assert(false);
