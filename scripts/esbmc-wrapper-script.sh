@@ -39,7 +39,7 @@ Options:
             # actually interpret it. Instead we have the same options to all
             # tests (except for the memory checking ones), and define all the
             # error labels from other directories to be ERROR.
-            if ! grep -q ERROR $OPTARG; then
+            if ! grep -q __VERIFIER_error $OPTARG; then
                 do_memsafety=1
             fi
             if ! grep -q 'LTL(F' $OPTARG; then
