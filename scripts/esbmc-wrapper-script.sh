@@ -24,27 +24,32 @@ memory_cmd_line="--no-unwinding-assertions --64 -DLDV_ERROR=ERROR -Dassert=notas
 
 # Memsafety cmdline picked
 do_memsafety=0
+do_term=0
 
-while getopts "c:mh" arg; do
+while getopts "c:h" arg; do
     case $arg in
         h)
             echo "Usage: $0 [options] path_to_benchmark
 Options:
 -h             Print this message
--c propfile    Specifythe given property file
--m             Use the 'simple' memory model (i.e., the memsafety tests)"
+-c propfile    Specifythe given property file"
             ;;
         c)
             # Given the lack of variation in the property file... we don't
             # actually interpret it. Instead we have the same options to all
             # tests (except for the memory checking ones), and define all the
             # error labels from other directories to be ERROR.
-            ;;
-        m)
-            do_memsafety=1
+            if ! grep -q ERROR $OPTARG; then
+                do_memsafety=1
+            fi
+            if ! grep -q 'LTL(F' $OPTARG; then
+                do_term=1
+            fi
             ;;
     esac
 done
+
+shift $(( OPTIND - 1 ));
 
 # Store the path to the file we're going to be checking.
 benchmark=$1
