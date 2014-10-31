@@ -67,16 +67,12 @@ mv $TMPGRAPHML "$TMPGRAPHML.graphml"
 TMPGRAPHML="$TMPGRAPHML.graphml"
 cmdline="$cmdline --witnesspath $TMPGRAPHML --tokenizer $tokenizer_path"
 
-# Our approach is one of iterative deepening. Run ESBMC 3 times with a deeper
-# unwind bound each time. Turn this into a single command string:
-deepen_cmdline="${path_to_esbmc} ${cmdline} --unwind 8 ${benchmark}; ${path_to_esbmc} ${cmdline} --unwind 12 ${benchmark}; ${path_to_esbmc} ${cmdline} --unwind 16 ${benchmark};"
-
 # Drop all output into a temporary file,
 TMPFILE=`mktemp`
 
-# Invoke our iterative deepening command, wrapped in a timeout so that we can
-# postprocess the results. `timeout` is part of coreutils on debian and fedora.
-timeout 7195 bash -c "$deepen_cmdline" > ${TMPFILE} 2> /dev/null  #2>&1
+# This year we're not iteratively deepening, we're running ESBMC with a fixed
+# unwind bound of 16.
+${path_to_esbmc} ${cmdline} --unwind 16
 
 # Postprocessing: first, collect some facts
 grep "VERIFICATION FAILED" ${TMPFILE} > /dev/null #2>&1
