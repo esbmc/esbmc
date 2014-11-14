@@ -63,16 +63,19 @@ AC_TYPE_UINT64_T
 AC_TYPE_UINT8_T
 AC_CHECK_TYPES([ptrdiff_t])
 
+# These macros check for "GNU Libc compatible functions", aka things that work
+# in the way that the autoconf writers want rather than the way the spec
+# specifies. No thanks.
+# AC_FUNC_MALLOC
+# AC_FUNC_REALLOC
 AC_FUNC_CHOWN
 AC_FUNC_ERROR_AT_LINE
 AC_FUNC_FORK
 AC_FUNC_FSEEKO
 AC_FUNC_GETGROUPS
 AC_FUNC_LSTAT_FOLLOWS_SLASHED_SYMLINK
-AC_FUNC_MALLOC
 AC_FUNC_MKTIME
 AC_FUNC_MMAP
-AC_FUNC_REALLOC
 AC_FUNC_STRCOLL
 AC_FUNC_STRERROR_R
 AC_FUNC_STRNLEN
