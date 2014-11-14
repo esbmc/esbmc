@@ -28,6 +28,9 @@ LT_INIT
 AC_LANG(C++)
 
 AC_CHECK_LIB([m], [fabs])
+AC_CHECK_LIB([rt], [timer_create],
+    [AS_VAR_APPEND(LIBS, " -lrt ")], [], []
+)
 
 AC_CHECK_HEADERS([boost/mpl/if.hpp], [], [AC_MSG_ERROR([No boost mpl found])])
 AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], [AC_MSG_ERROR([No boost shared ptr found])])
