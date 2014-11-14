@@ -437,7 +437,7 @@ protected:
   cpp_scopet &typecheck_template_parameters(
     template_typet &type);
 
-  std::string fetch_compound_name(const typet &type) const;
+  std::string fetch_compound_name(const typet &type);
   void typecheck_compound_type(typet &type);
   void check_array_types(typet &type);
   void typecheck_enum_type(typet &type);

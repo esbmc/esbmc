@@ -58,6 +58,7 @@ extern "C" {
 #include <ac_config.h>
 
 #include "kinduction_parallel.h"
+#include <fstream>
 
 // jmorse - could be somewhere better
 
@@ -101,18 +102,6 @@ timeout_handler(int dummy __attribute__((unused)))
 }
 #endif
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::set_verbosity_msg
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
 {
   int v=8;
@@ -129,19 +118,70 @@ void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
   message.set_verbosity(v);
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::get_command_line_options
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 extern "C" uint8_t *version_string;
+
+uint64_t cbmc_parseoptionst::read_time_spec(const char *str)
+{
+  uint64_t mult;
+  int len = strlen(str);
+  if (!isdigit(str[len-1])) {
+    switch (str[len-1]) {
+    case 's':
+      mult = 1;
+      break;
+    case 'm':
+      mult = 60;
+      break;
+    case 'h':
+      mult = 3600;
+      break;
+    case 'd':
+      mult = 86400;
+      break;
+    default:
+      std::cerr << "Unrecognized timeout suffix" << std::endl;
+      abort();
+    }
+  } else {
+    mult = 1;
+  }
+
+  uint64_t timeout = strtol(str, NULL, 10);
+  timeout *= mult;
+  return timeout;
+}
+
+uint64_t cbmc_parseoptionst::read_mem_spec(const char *str)
+{
+
+  uint64_t mult;
+  int len = strlen(str);
+  if (!isdigit(str[len-1])) {
+    switch (str[len-1]) {
+    case 'b':
+      mult = 1;
+      break;
+    case 'k':
+      mult = 1024;
+      break;
+    case 'm':
+      mult = 1024*1024;
+      break;
+    case 'g':
+      mult = 1024*1024*1024;
+      break;
+    default:
+      std::cerr << "Unrecognized memlimit suffix" << std::endl;
+      abort();
+    }
+  } else {
+    mult = 1024*1024;
+  }
+
+  uint64_t size = strtol(str, NULL, 10);
+  size *= mult;
+  return size;
+}
 
 void cbmc_parseoptionst::get_command_line_options(optionst &options)
 {
@@ -151,6 +191,22 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 
   options.cmdline(cmdline);
+
+  /* graphML generation options check */
+  if ((cmdline.isset("witnesspath")) && (cmdline.isset("tokenizer"))) {
+	std::string tokenizer_path = cmdline.getval("tokenizer");
+	std::ifstream tfile(tokenizer_path);
+	if (!tfile){
+		std::cout << "The tokenizer path is invalid, check it and try again" << std::endl;
+		exit(1);
+	}
+	options.set_option("witnesspath", cmdline.getval("witnesspath"));
+	options.set_option("no-slice", true);
+    options.set_option("tokenizer", cmdline.getval("tokenizer"));
+  }else if ((cmdline.isset("witnesspath")) && (!cmdline.isset("tokenizer"))) {
+	std::cout << "For graphML generation is necessary be set a tokenizer (use --tokenizer path)" << std::endl;
+    exit(1);
+  }
 
   if (cmdline.isset("git-hash")) {
     std::cout << version_string << std::endl;
@@ -163,54 +219,17 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     exit(0);
   }
 
-  if(cmdline.isset("arrays-uf-always"))
-    options.set_option("arrays-uf", "always");
-  else if(cmdline.isset("arrays-uf-never"))
-    options.set_option("arrays-uf", "never");
-  else
-    options.set_option("arrays-uf", "auto");
-
-  if(cmdline.isset("z3-bv"))
+  if(cmdline.isset("bv"))
   {
-    options.set_option("z3", true);
-    options.set_option("z3-bv", true);
     options.set_option("int-encoding", false);
   }
 
-  if (cmdline.isset("lazy"))
-    options.set_option("no-assume-guarantee", false);
-  else
-	options.set_option("no-assume-guarantee", true);
-
-  if (cmdline.isset("eager"))
-    options.set_option("no-assume-guarantee", true);
-  else
-  	options.set_option("no-assume-guarantee", false);
-
-  if(cmdline.isset("btor"))
+  if(cmdline.isset("ir"))
   {
-    options.set_option("btor", true);
-  }
-
-  if(cmdline.isset("z3-ir"))
-  {
-    options.set_option("z3", true);
-    options.set_option("z3-ir", true);
     options.set_option("int-encoding", true);
   }
 
-  if(cmdline.isset("no-slice"))
-    options.set_option("no-assume-guarantee", false);
-
-  options.set_option("string-abstraction", true);
   options.set_option("fixedbv", true);
-
-  if (!options.get_bool_option("z3"))
-  {
-    // If no solver options given, default to z3 bv encoding
-    options.set_option("z3", true);
-    options.set_option("int-encoding", false);
-  }
 
   if(cmdline.isset("qf_aufbv"))
   {
@@ -233,19 +252,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    else
      options.set_option("context-switch", -1);
 
-   if(cmdline.isset("uw-model"))
-   {
-     options.set_option("uw-model", true);
-     options.set_option("schedule", true);
-   }
-   else
-     options.set_option("uw-model", false);
-
-   if(cmdline.isset("no-lock-check"))
-     options.set_option("no-lock-check", true);
-   else
-     options.set_option("no-lock-check", false);
-
    if(cmdline.isset("deadlock-check"))
    {
      options.set_option("deadlock-check", true);
@@ -259,9 +265,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("smtlib-ileave-num", cmdline.getval("smtlib-ileave-num"));
   else
     options.set_option("smtlib-ileave-num", "1");
-
-  if(cmdline.isset("no-inlining"))
-    options.set_option("no-inlining", true);
 
   if (cmdline.isset("smt-during-symex")) {
     std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
@@ -322,45 +325,14 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("unwind", i2string(k_step));
   }
 
-  if(cmdline.isset("show-counter-example"))
-  {
-	options.set_option("show-counter-example", true);
-  }
-
   // jmorse
   if(cmdline.isset("timeout")) {
 #ifdef _WIN32
     std::cerr << "Timeout unimplemented on Windows, sorry" << std::endl;
     abort();
 #else
-    int len, mult, timeout;
-
     const char *time = cmdline.getval("timeout");
-    len = strlen(time);
-    if (!isdigit(time[len-1])) {
-      switch (time[len-1]) {
-      case 's':
-        mult = 1;
-        break;
-      case 'm':
-        mult = 60;
-        break;
-      case 'h':
-        mult = 3600;
-        break;
-      case 'd':
-        mult = 86400;
-        break;
-      default:
-        std::cerr << "Unrecognized timeout suffix" << std::endl;
-        abort();
-      }
-    } else {
-      mult = 1;
-    }
-
-    timeout = strtol(time, NULL, 10);
-    timeout *= mult;
+    uint64_t timeout = read_time_spec(time);
     signal(SIGALRM, timeout_handler);
     alarm(timeout);
 #endif
@@ -371,34 +343,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     std::cerr << "Can't memlimit on Windows, sorry" << std::endl;
     abort();
 #else
-    unsigned long len, mult, size;
-
-    const char *limit = cmdline.getval("memlimit");
-    len = strlen(limit);
-    if (!isdigit(limit[len-1])) {
-      switch (limit[len-1]) {
-      case 'b':
-        mult = 1;
-        break;
-      case 'k':
-        mult = 1024;
-        break;
-      case 'm':
-        mult = 1024*1024;
-        break;
-      case 'g':
-        mult = 1024*1024*1024;
-        break;
-      default:
-        std::cerr << "Unrecognized memlimit suffix" << std::endl;
-        abort();
-      }
-    } else {
-      mult = 1024*1024;
-    }
-
-    size = strtol(limit, NULL, 10);
-    size *= mult;
+    uint64_t size = read_mem_spec(cmdline.getval("memlimit"));
 
     struct rlimit lim;
     lim.rlim_cur = size;
@@ -432,18 +377,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   config.options = options;
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::doit
-
-  Inputs:
-
- Outputs:
-
- Purpose: invoke main modules
-
-\*******************************************************************/
-
 int cbmc_parseoptionst::doit()
 {
   if(cmdline.isset("version"))
@@ -476,6 +409,9 @@ int cbmc_parseoptionst::doit()
   optionst opts;
   get_command_line_options(opts);
 
+  // Depends on command line options and config
+  init_expr_constants();
+
   if(cmdline.isset("preprocess"))
   {
     preprocessing();
@@ -502,18 +438,6 @@ int cbmc_parseoptionst::doit()
   set_verbosity_msg(bmc);
   return do_bmc(bmc);
 }
-
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::doit_k_induction
-
-  Inputs:
-
- Outputs:
-
- Purpose: invoke main modules
-
-\*******************************************************************/
 
 int cbmc_parseoptionst::doit_k_induction()
 {
@@ -1165,18 +1089,6 @@ int cbmc_parseoptionst::doit_k_induction()
   return 0;
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::set_claims
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
 {
   try
@@ -1204,18 +1116,6 @@ bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::get_goto_program
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cbmc_parseoptionst::get_goto_program(
   optionst &options,
@@ -1247,7 +1147,6 @@ bool cbmc_parseoptionst::get_goto_program(
 
       if(parse()) return true;
       if(typecheck()) return true;
-      //if(get_modules()) return true;
       if(final()) return true;
 
       if(cmdline.isset("show-symbol-table"))
@@ -1306,18 +1205,6 @@ bool cbmc_parseoptionst::get_goto_program(
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::preprocessing
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cbmc_parseoptionst::preprocessing()
 {
@@ -1445,22 +1332,6 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
   if (is_symbol2t(e)) {
     symbol2t &thesym = to_symbol2t(e);
     std::string sym = thesym.get_symbol_name();
-
-// Originally this piece of code renamed all the symbols in the property
-// expression to ones specified by the user. However, there's no easy way of
-// working out what the full name of a particular symbol you're looking for
-// is, so it's unused for the moment.
-#if 0
-    // Remove leading "c::"
-    sym = sym.substr(3, sym.size() - 3);
-
-    sym = prefix + "_" + sym;
-    if (strings.find(sym) == strings.end())
-      assert(0 && "Missing symbol mapping for property monitor");
-
-    sym = strings[sym];
-    e.identifier(sym);
-#endif
 
     used_syms.insert(sym);
   } else {
@@ -1632,18 +1503,6 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
   return;
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::read_goto_binary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cbmc_parseoptionst::read_goto_binary(
   goto_functionst &goto_functions)
 {
@@ -1664,40 +1523,6 @@ bool cbmc_parseoptionst::read_goto_binary(
   return false;
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::process_goto_program
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-#if 0
-static void
-relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
-{
-
-  if (is_nil_expr(irep))
-    return;
-
-   if (is_symbol2t(irep)) {
-    if (to_symbol2t(irep).get_symbol_name() == from_name.as_string())
-      irep = symbol2tc(irep->type, to_name);
-
-    return;
-  } else {
-    Forall_operands2(it, idx, irep)
-      relink_calls_from_to(*it, from_name, to_name);
-  }
-
-  return;
-}
-#endif
-
 bool cbmc_parseoptionst::process_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
@@ -1710,11 +1535,7 @@ bool cbmc_parseoptionst::process_goto_program(
     if (!cmdline.isset("no-inlining"))
       goto_partial_inline(goto_functions, ns, ui_message_handler);
 
-    if(!cmdline.isset("show-features"))
-    {
-      // add generic checks
-      goto_check(ns, options, goto_functions);
-    }
+    goto_check(ns, options, goto_functions);
 
     if(cmdline.isset("string-abstraction"))
     {
@@ -1777,13 +1598,6 @@ bool cbmc_parseoptionst::process_goto_program(
       return true;
     }
 
-    if(cmdline.isset("show-features"))
-    {
-      // add generic checks
-      goto_check(ns, options, goto_functions);
-      return true;
-    }
-
     if (cmdline.isset("show-ileave-points"))
     {
       print_ileave_points(ns, goto_functions);
@@ -1818,18 +1632,6 @@ bool cbmc_parseoptionst::process_goto_program(
   return false;
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::do_bmc
-
-  Inputs:
-
- Outputs:
-
- Purpose: invoke main modules
-
-\*******************************************************************/
-
 int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 {
   bmc1.set_ui(get_ui());
@@ -1850,19 +1652,6 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 
   return res;
 }
-
-
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::help
-
-  Inputs:
-
- Outputs:
-
- Purpose: display command line help
-
-\*******************************************************************/
 
 void cbmc_parseoptionst::help()
 {
@@ -1886,7 +1675,6 @@ void cbmc_parseoptionst::help()
     " --show-loops                 show the loops in the program\n"
     " --show-claims                only show claims\n"
     " --show-vcc                   show the verification conditions\n"
-    " --show-features              only show features\n"
     " --document-subgoals          generate subgoals documentation\n"
     " --no-library                 disable built-in abstract C library\n"
 //    " --binary                     read goto program instead of source code\n"
@@ -1896,7 +1684,11 @@ void cbmc_parseoptionst::help()
     " --16, --32, --64             set width of machine word\n"
     " --show-goto-functions        show goto program\n"
     " --extended-try-analysis      check all the try block, even when an exception is throw\n"
-    " --version                    show current ESBMC version and exit\n\n"
+    " --version                    show current ESBMC version and exit\n"
+    " --witnesspath filename       output counterexample in graphML format\n"
+    " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
+    "                              program for graphML generation\n\n"
+
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"
@@ -1906,11 +1698,10 @@ void cbmc_parseoptionst::help()
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
     " --no-slice                   do not remove unused equations\n\n"
     " --- solver configuration ------------------------------------------------------\n\n"
-    " --z3-bv                      use Z3 with bit-vector arithmetic\n"
-    " --z3-ir                      use Z3 with integer/real arithmetic\n"
+    " --bv                         use Z3 with bit-vector arithmetic\n"
+    " --ir                         use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"
     " --lazy                       use lazy instantiation with Z3 (default)\n"
-    " --btor                       output VCCs in BTOR format (experimental)\n"
     " --qf_aufbv                   output VCCs in QF_AUFBV format (experimental)\n"
     " --qf_auflira                 output VCCs in QF_AUFLIRA format (experimental)\n"
     " --outfile Filename           output VCCs in SMT lib format to given file\n\n"
@@ -1933,8 +1724,6 @@ void cbmc_parseoptionst::help()
     " --k-step nr                  set the k time step (default is 50) \n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
-    " --uw-model                   use under-approximation and widening approach\n"
-    " --core-size nr               limit num of assumpts in UW model(experimental)\n"
     " --round-robin                use the round robin scheduling approach\n"
     " --time-slice nr              set the time slice of the round robin algorithm (default is 1) \n\n"
     " --- concurrency checking -----------------------------------------------------\n\n"
@@ -1943,11 +1732,6 @@ void cbmc_parseoptionst::help()
     " --control-flow-test          enable context switch before control flow tests\n"
     " --no-lock-check              do not do lock acquisition ordering check\n"
     " --no-por                     do not do partial order reduction\n"
-#if 0
-    " --unsigned-char              make \"char\" unsigned by default\n"
-    " --show-symbol-table          show symbol table\n"
-    " --ppc-macos                  set MACOS/PPC architecture\n"
-#endif
     #ifdef _WIN32
     " --i386-macos                 set MACOS/I386 architecture\n"
     " --i386-linux                 set Linux/I386 architecture\n"
@@ -1958,28 +1742,8 @@ void cbmc_parseoptionst::help()
     " --i386-linux                 set Linux/I386 architecture\n"
     " --i386-win32                 set Windows/I386 architecture\n"
     #else
-#if 0
-    " --i386-macos                 set MACOS/I386 architecture\n"
-    " --i386-linux                 set Linux/I386 architecture (default)\n"
-    " --i386-win32                 set Windows/I386 architecture\n"
-#endif
     #endif
     #endif
-//    " --no-arch                    don't set up an architecture\n"
-#if 0
-    " --arrays-uf-never            never turn arrays into uninterpreted functions\n"
-    " --arrays-uf-always           always turn arrays into uninterpreted functions\n"
-#endif
-#if 0
-    " --xml-ui                     use XML-formatted output\n"
-    " --int-encoding               encode variables as integers\n"
-    " --round-to-nearest           IEEE floating point rounding mode (default)\n"
-    " --round-to-plus-inf          IEEE floating point rounding mode\n"
-    " --round-to-minus-inf         IEEE floating point rounding mode\n"
-    " --round-to-zero              IEEE floating point rounding mode\n"
-
-    " --ecp                        perform equivalence checking of programs\n"
-#endif
     "\n --- Miscellaneous options -----------------------------------------------------\n\n"
     " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
     " --timeout                    configure time limit, integer followed by {s,m,h}\n"

@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class ui_message_handlert:public message_handlert
 {
 public:
-  typedef enum { PLAIN, OLD_GUI, XML_UI } uit;
+  typedef enum { PLAIN, OLD_GUI, XML_UI, GRAPHML } uit;
   
   ui_message_handlert(uit __ui):_ui(__ui)
   {

@@ -144,6 +144,7 @@ void goto_symext::dereference(expr2tc &expr, const bool write, bool free,
     tmp = dereference2tc(get_uint8_type(), tmp);
 
     dereference.dereference_expr(tmp, guard, dereferencet::FREE);
+    expr = tmp;
   } else {
     dereference.dereference_expr(expr, guard, (write) ? dereferencet::WRITE
                                                       : dereferencet::READ);

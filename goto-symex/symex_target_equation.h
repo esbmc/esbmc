@@ -23,7 +23,7 @@ extern "C" {
 
 #include <config.h>
 #include <goto-programs/goto_program.h>
-#include <solvers/prop/prop_conv.h>
+#include <solvers/smt/smt_conv.h>
 
 #include "symex_target.h"
 #include "goto_trace.h"
@@ -83,9 +83,9 @@ public:
     const expr2tc &size,
     const sourcet &source);
 
-  virtual void convert(prop_convt &prop_conv);
-  void convert_internal_step(prop_convt &prop_conv, literalt &assumpt_lit,
-                             bvt &assertions, SSA_stept &s);
+  virtual void convert(smt_convt &smt_conv);
+  void convert_internal_step(smt_convt &smt_conv, const smt_ast *&assumpt_ast,
+                             smt_convt::ast_vec &assertions, SSA_stept &s);
 
   class SSA_stept
   {
@@ -120,7 +120,7 @@ public:
     std::list<expr2tc> output_args;
 
     // for conversion
-    literalt guard_literal, cond_literal;
+    const smt_ast *guard_ast, *cond_ast;
     std::list<expr2tc> converted_output_args;
     
     // for slicing
@@ -131,7 +131,8 @@ public:
     }
 
     void output(const namespacet &ns, std::ostream &out) const;
-    void short_output(const namespacet &ns, std::ostream &out) const;
+    void short_output(const namespacet &ns, std::ostream &out,
+                      bool show_ignored = false) const;
   };
   
   unsigned count_ignored_SSA_steps() const
@@ -159,6 +160,8 @@ public:
   }
 
   void output(std::ostream &out) const;
+  void short_output(std::ostream &out,
+                    bool show_ignored = false) const;
   
   void check_for_duplicate_assigns() const;
 
@@ -189,22 +192,23 @@ class runtime_encoded_equationt : public symex_target_equationt
 public:
   class dual_unsat_exception { };
 
-  runtime_encoded_equationt(const namespacet &_ns, prop_convt &conv);
+  runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
 
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
 
   virtual symex_targett *clone(void) const;
 
-  virtual void convert(prop_convt &prop_conv);
+  virtual void convert(smt_convt &smt_conv);
   void flush_latest_instructions(void);
 
   tvt ask_solver_question(const expr2tc &question);
 
-  prop_convt &conv;
-  std::list<bvt> assert_vec_list;
-  std::list<literalt> assumpt_chain;
+  smt_convt &conv;
+  std::list<smt_convt::ast_vec> assert_vec_list;
+  std::list<const smt_ast *> assumpt_chain;
   std::list<SSA_stepst::iterator> scoped_end_points;
+  SSA_stepst::iterator cvt_progress;
 };
 
 extern inline bool operator<(

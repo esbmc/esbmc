@@ -654,7 +654,7 @@ pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
 {
 
   if (is_symbol2t(offs) || is_constant_string2t(offs)) {
-    return expr2tc(new constant_int2t(int_type2(), BigInt(0)));
+    return expr2tc(new constant_int2t(type, BigInt(0)));
   } else if (is_index2t(offs)) {
     const index2t &index = to_index2t(offs);
 
@@ -1143,6 +1143,14 @@ typecast2t::do_simplify(bool second) const
         is_code_type(ptr_to.subtype) || is_code_type(ptr_from.subtype))
       return expr2tc(); // Not worth thinking about
 
+    if (is_array_type(ptr_to.subtype) &&
+        is_symbol_type(get_array_subtype(ptr_to.subtype)))
+      return expr2tc(); // Not worth thinking about
+
+    if (is_array_type(ptr_from.subtype) &&
+        is_symbol_type(get_array_subtype(ptr_from.subtype)))
+      return expr2tc(); // Not worth thinking about
+
     try {
       unsigned int to_width = (is_empty_type(ptr_to.subtype)) ? 8
                               : ptr_to.subtype->get_width();
@@ -1416,67 +1424,56 @@ expr2tc
 overflow2t::do_simplify(bool second __attribute__((unused))) const
 {
   unsigned int num_const = 0;
-  bool changed = false;
+  bool simplified = false;
 
   // Non constant expression. We can't just simplify the operand, because it has
   // to remain the operation we expect (i.e., add2t shouldn't distribute itself)
-  // so simplify its operands instead.
+  // so simplify its operands right here.
+  if (second)
+    return expr2tc();
+
   expr2tc new_operand = operand->clone();
   Forall_operands2(it, idx, new_operand) {
     expr2tc tmp = (**it).simplify();
     if (!is_nil_expr(tmp)) {
       *it= tmp;
-      changed = true;
-      if (is_constant_expr(tmp))
-        num_const++;
+      simplified = true;
     }
+
+    if (is_constant_expr(*it))
+      num_const++;
   }
 
-  // If we changed nothing, no further simplification.
-  if (!changed)
-    return expr2tc();
-
-  // If we have two constant operands to the operand, we can simplify
-  // completely; otherwise just return the current operand with simplified
-  // operands.
-  if (num_const != 2)
-    return expr2tc(new overflow2t(new_operand));
+  // If we don't have two constant operands, we can't simplify this expression.
+  // We also don't want the underlying addition / whatever to become
+  // distributed, so if the sub expressions are simplifiable, return a new
+  // overflow with simplified subexprs, but no distribution.
+  // The 'simplified' test guards against a continuous chain of simplifying the
+  // same overflow expression over and over again.
+  if (num_const != 2) {
+    if (simplified)
+      return expr2tc(new overflow2t(new_operand));
+    else
+      return expr2tc();
+  }
 
   // Can only simplify ints
   if (!is_bv_type(new_operand))
     return expr2tc(new overflow2t(new_operand));
 
-  /*
-  XXXjmorse - the following code:
-
-  int main()
-  {
-    int8_t face, twenty;;
-    twenty = 20;
-    face = twenty * twenty;
-    return 0;
-  }
-
-  Results in a 32 bit multiply of two 8 bit integers. This breaks the below
-  attempt to detect overflows, because it would appear that the integer width
-  of how the result is going to be used falls by the wayside somewhere.
-  It's safer to just not simplify these things.
-  */
-  return expr2tc(new overflow2t(new_operand));
-
-
-#if 0
-
   // We can simplify that expression, so do it. And how do we detect overflows?
   // Perform the operation twice, once with a small type, one with huge, and
-  // see if they differ.
+  // see if they differ. Max we can do is 64 bits, so if the expression already
+  // has that size, give up.
+  if (new_operand->type->get_width() == 64)
+    return expr2tc();
 
   expr2tc simpl_op = new_operand->simplify();
   assert(is_constant_expr(simpl_op));
   expr2tc op_with_big_type = new_operand->clone();
   op_with_big_type.get()->type = (is_signedbv_type(new_operand))
-                                 ? type_pool.get_int(128)
-                                 : type_pool.get_uint(128);
+                                 ? type_pool.get_int(64)
+                                 : type_pool.get_uint(64);
   op_with_big_type = op_with_big_type->simplify();
 
   // Now ensure they're the same.
@@ -1489,7 +1486,6 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   tmp = tmp->simplify();
   assert(!is_nil_expr(tmp) && is_constant_bool2t(tmp));
   return tmp;
-#endif
 }
 
 // Heavily inspired by cbmc's simplify_exprt::objects_equal_address_of

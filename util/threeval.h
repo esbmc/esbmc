@@ -44,6 +44,16 @@ public:
   {
   }
 
+  tvt invert()
+  {
+    if (value == TV_TRUE)
+      return tvt(TV_FALSE);
+    else if (value == TV_FALSE)
+      return tvt(TV_TRUE);
+    else
+      return tvt(value);
+  }
+
   friend bool operator ==(const tvt a, const tvt b)
   {
     return a.value==b.value;

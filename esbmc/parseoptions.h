@@ -53,11 +53,8 @@ protected:
 
   void set_verbosity_msg(messaget &message);
 
-  // get any additional stuff before finalizing
-  virtual bool get_modules()
-  {
-    return false;
-  }
+  uint64_t read_time_spec(const char *str);
+  uint64_t read_mem_spec(const char *str);
 
   void preprocessing();
 

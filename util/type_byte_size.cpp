@@ -212,7 +212,7 @@ expr2tc
 compute_pointer_offset(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
-    return zero_uint;
+    return zero_ulong;
   else if (is_index2t(expr)) {
     const index2t &index = to_index2t(expr);
     mp_integer sub_size;
@@ -230,12 +230,12 @@ compute_pointer_offset(const expr2tc &expr)
     expr2tc result;
     if (is_constant_int2t(index.index)) {
       const constant_int2t &index_val = to_constant_int2t(index.index);
-      result = constant_int2tc(get_uint_type(32),
-                               sub_size * index_val.constant_value);
+      result =
+        gen_ulong(BigInt(sub_size * index_val.constant_value).to_ulong());
     } else {
       // Non constant, create multiply.
-      constant_int2tc tmp_size(uint_type2(), sub_size);
-      result = mul2tc(uint_type2(), tmp_size, index.index);
+      constant_int2tc tmp_size(pointer_type2(), sub_size);
+      result = mul2tc(pointer_type2(), tmp_size, index.index);
     }
 
     // Also accumulate any pointer offset in the source object.
@@ -255,7 +255,7 @@ compute_pointer_offset(const expr2tc &expr)
     }
 
     // Also accumulate any pointer offset in the source object.
-    expr2tc res_expr = constant_int2tc(index_type2(), result);
+    expr2tc res_expr = gen_ulong(result.to_ulong());
     res_expr = add2tc(res_expr->type, res_expr,
                       compute_pointer_offset(memb.source_value));
 
@@ -263,20 +263,20 @@ compute_pointer_offset(const expr2tc &expr)
   } else if (is_constant_expr(expr)) {
     // This is a constant struct, array, union, string, etc. There's nothing
     // at a lower level; the offset is zero.
-    return zero_uint;
+    return zero_ulong;
   } else if (is_typecast2t(expr)) {
     // Blast straight through.
     return compute_pointer_offset(to_typecast2t(expr).from);
   } else if (is_dynamic_object2t(expr)) {
     // This is a dynamic object represented something allocated; from the static
     // pointer analysis. Assume that this is thet bottom of the expression.
-    return zero_uint;
+    return zero_ulong;
   } else if (is_dereference2t(expr)) {
     // This is a dereference at the base of a set of index/members. Here, we
     // can in theory end up evaluating across a large set of object types. So
     // there's no point continuing further or attempting to dereference, leave
     // it up to the caller to handle that.
-    return zero_uint;
+    return zero_ulong;
   } else {
     std::cerr << "compute_pointer_offset, unexpected irep:" << std::endl;
     std::cerr << expr->pretty() << std::endl;

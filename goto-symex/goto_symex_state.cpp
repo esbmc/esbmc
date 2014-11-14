@@ -73,6 +73,12 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   static unsigned int with_counter=0;
 
+  // Don't permit const propagaion of infinite-size arrays. They're going to
+  // be special modelling arrays that require special handling either at SMT
+  // or some other level, so attempting to optimse them is a Bad Plan (TM).
+  if (is_array_type(expr) && to_array_type(expr->type).size_is_infinite)
+    return false;
+
   if (is_nil_expr(expr)) {
     return true; // It's fine to constant propagate something that's absent.
   } else if (is_constant_expr(expr)) {
@@ -215,12 +221,6 @@ void goto_symex_statet::rename(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
-  if (is_array_type(expr)) {
-    // Expr size might need to be renamed.
-    array_type2t &arr_type = to_array_type(expr.get()->type);
-    rename(arr_type.array_size);
-  }
-
   if (is_symbol2t(expr))
   {
     type2tc origtype = expr->type;
@@ -250,14 +250,7 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   {
     return;
   }
-
-  if (is_array_type(expr)) {
-    // Expr size might need to be renamed.
-    array_type2t &arr_type = to_array_type(expr.get()->type);
-    rename(arr_type.array_size);
-  }
-
-  if(is_symbol2t(expr))
+  else if(is_symbol2t(expr))
   {
     // only do L1
     type2tc origtype = expr->type;

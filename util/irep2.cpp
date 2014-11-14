@@ -6,8 +6,6 @@
 #include "migrate.h"
 #include "i2string.h"
 
-#include <solvers/prop/prop_conv.h>
-
 #include <boost/algorithm/string.hpp>
 #include <boost/static_assert.hpp>
 #include <boost/functional/hash.hpp>
@@ -314,10 +312,6 @@ expr2t::expr2t(const expr2t &ref)
     crc_val(ref.crc_val)
 {
 }
-
-void expr2t::convert_smt(prop_convt &obj, void *arg) const
-{ obj.convert_smt_expr(*this, arg); }
-
 
 bool
 expr2t::operator==(const expr2t &ref) const
@@ -1220,6 +1214,11 @@ static inline __attribute__((always_inline)) int
 do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
 {
 
+  if (side1.size() < side2.size())
+    return -1;
+  else if (side1.size() > side2.size())
+    return 1;
+
   int tmp = 0;
   std::vector<type2tc>::const_iterator it2 = side2.begin();
   forall_types(it, side1) {
@@ -1768,28 +1767,6 @@ typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
 typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
 typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
 typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
-void
-esbmct::expr_methods<derived, subclass,
-  field1_type, field1_class, field1_ptr,
-  field2_type, field2_class, field2_ptr,
-  field3_type, field3_class, field3_ptr,
-  field4_type, field4_class, field4_ptr,
-  field5_type, field5_class, field5_ptr,
-  field6_type, field6_class, field6_ptr>
-  ::convert_smt(prop_convt &obj, void *arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
-}
-
-template <class derived, class subclass,
-typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
-typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
-typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
-typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
-typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
-typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 expr2tc
 esbmct::expr_methods<derived, subclass,
   field1_type, field1_class, field1_ptr,
@@ -2207,27 +2184,6 @@ template <class derived, class subclass,
   class field4_type, class field4_class, field4_type field4_class::*field4_ptr,
   class field5_type, class field5_class, field5_type field5_class::*field5_ptr,
   class field6_type, class field6_class, field6_type field6_class::*field6_ptr>
-void
-esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
-                                        field2_type, field2_class, field2_ptr,
-                                        field3_type, field3_class, field3_ptr,
-                                        field4_type, field4_class, field4_ptr,
-                                        field5_type, field5_class, field5_ptr,
-                                        field6_type, field6_class, field6_ptr>
-      ::convert_smt_type(prop_convt &obj, void *arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_type(*new_this, arg);
-  return;
-}
-
-template <class derived, class subclass,
-  class field1_type, class field1_class, field1_type field1_class::*field1_ptr,
-  class field2_type, class field2_class, field2_type field2_class::*field2_ptr,
-  class field3_type, class field3_class, field3_type field3_class::*field3_ptr,
-  class field4_type, class field4_class, field4_type field4_class::*field4_ptr,
-  class field5_type, class field5_class, field5_type field5_class::*field5_ptr,
-  class field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 type2tc
 esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
                                         field2_type, field2_class, field2_ptr,
@@ -2444,10 +2400,10 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
 const expr2tc true_expr;
 const expr2tc false_expr;
 
-const constant_int2tc zero_uint;
-const constant_int2tc one_uint;
-const constant_int2tc zero_int;
-const constant_int2tc one_int;
+const constant_int2tc zero_ulong;
+const constant_int2tc one_ulong;
+const constant_int2tc zero_long;
+const constant_int2tc one_long;
 
 // More avoidance of static initialization order fiasco
 void
@@ -2456,14 +2412,14 @@ init_expr_constants(void)
   const_cast<expr2tc&>(true_expr) = expr2tc(new constant_bool2t(true));
   const_cast<expr2tc&>(false_expr) = expr2tc(new constant_bool2t(false));
 
-  const_cast<constant_int2tc&>(zero_uint)
-    = constant_int2tc(type_pool.get_uint(32), BigInt(0));
-  const_cast<constant_int2tc&>(one_uint)
-    = constant_int2tc(type_pool.get_uint(32), BigInt(1));
-  const_cast<constant_int2tc&>(zero_int)
-    = constant_int2tc(type_pool.get_int(32), BigInt(0));
-  const_cast<constant_int2tc&>(one_int)
-    = constant_int2tc(type_pool.get_int(32), BigInt(1));
+  const_cast<constant_int2tc&>(zero_ulong)
+    = constant_int2tc(type_pool.get_uint(config.ansi_c.word_size), BigInt(0));
+  const_cast<constant_int2tc&>(one_ulong)
+    = constant_int2tc(type_pool.get_uint(config.ansi_c.word_size), BigInt(1));
+  const_cast<constant_int2tc&>(zero_long)
+    = constant_int2tc(type_pool.get_int(config.ansi_c.word_size), BigInt(0));
+  const_cast<constant_int2tc&>(one_long)
+    = constant_int2tc(type_pool.get_int(config.ansi_c.word_size), BigInt(1));
 }
 
 std::string bool_type2t::field_names [esbmct::num_type_fields]  = {"","","","", ""};

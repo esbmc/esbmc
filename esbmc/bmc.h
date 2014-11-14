@@ -15,10 +15,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <hash_cont.h>
 #include <options.h>
 
-#include <solvers/prop/prop_conv.h>
+#include <solvers/solve.h>
+#include <solvers/smt/smt_conv.h>
 #ifdef Z3
 #include <solvers/z3/z3_conv.h>
 #endif
+#include <solvers/smtlib/smtlib_conv.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
 #include <goto-symex/reachability_tree.h>
@@ -34,7 +36,6 @@ public:
     ns(_context),
     ui(ui_message_handlert::PLAIN)
   {
-    _unsat_core=0;
     interleaving_number = 0;
     interleaving_failed = 0;
     uw_loop = 0;
@@ -50,31 +51,21 @@ public:
     ltl_results_seen[ltl_res_succeeding] = 0;
     ltl_results_seen[ltl_res_good] = 0;
 
-#ifdef Z3
-    runtime_z3_conv = new z3_convt(opts.get_bool_option("uw-model"),
-                                   opts.get_bool_option("int-encoding"),
-                                   opts.get_bool_option("smt"), is_cpp, ns);
-
-    runtime_z3_conv->set_filename(opts.get_option("outfile"));
-    runtime_z3_conv->set_z3_core_size(
-                                    atol(opts.get_option("core-size").c_str()));
+    runtime_solver = create_solver_factory("", is_cpp,
+                                           opts.get_bool_option("int-encoding"),
+                                           ns, options);
 
     if (options.get_bool_option("smt-during-symex")) {
       symex = new reachability_treet(funcs, ns, options,
-                          new runtime_encoded_equationt(ns, *runtime_z3_conv),
+                          new runtime_encoded_equationt(ns, *runtime_solver),
                           _context, _message_handler);
     } else {
-#endif
       symex = new reachability_treet(funcs, ns, options,
                                      new symex_target_equationt(ns),
                                      _context, _message_handler);
-#ifdef Z3
     }
-#endif
   }
 
-  uint _unsat_core;
-  uint _number_of_assumptions;
   optionst &options;
   enum {
     ltl_res_good,
@@ -97,60 +88,18 @@ public:
 protected:
   const contextt &context;
   namespacet ns;
-#ifdef Z3
-  z3_convt *runtime_z3_conv;
-#endif
+  smt_convt *runtime_solver;
   reachability_treet *symex;
 
   // use gui format
   language_uit::uit ui;
 
-  class solver_base {
-  public:
-    virtual bool run_solver(symex_target_equationt &equation);
-    virtual ~solver_base() {}
-
-  protected:
-    solver_base(bmct &_bmc) : bmc(_bmc)
-    { }
-
-    prop_convt *conv;
-    bmct &bmc;
-  };
-
-#ifdef Z3
-  class z3_solver : public solver_base {
-  public:
-    z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns);
-    virtual bool run_solver(symex_target_equationt &equation);
-  protected:
-    z3_convt z3_conv;
-  };
-
-  class z3_runtime_solver : public solver_base {
-  public:
-    z3_runtime_solver(bmct &bmc, bool is_cpp, z3_convt *conv);
-    virtual bool run_solver(symex_target_equationt &equation);
-  protected:
-    z3_convt *z3_conv;
-  };
-#endif
-
-  class output_solver : public solver_base {
-  public:
-    output_solver(bmct &bmc);
-    ~output_solver();
-    virtual bool run_solver(symex_target_equationt &equation);
-  protected:
-    virtual bool write_output() = 0;
-    std::ostream *out_file;
-  };
-
-  virtual prop_convt::resultt
-    run_decision_procedure(prop_convt &prop_conv,
+  virtual smt_convt::resultt
+    run_decision_procedure(smt_convt &smt_conv,
                            symex_target_equationt &equation);
 
-  virtual void do_cbmc(prop_convt &solver, symex_target_equationt &eq);
+  virtual void do_cbmc(smt_convt &solver, symex_target_equationt &eq);
+  virtual bool run_solver(symex_target_equationt &equation, smt_convt *solver);
   virtual void show_vcc(symex_target_equationt &equation);
   virtual void show_vcc(std::ostream &out, symex_target_equationt &equation);
   virtual void show_program(symex_target_equationt &equation);
@@ -159,7 +108,7 @@ protected:
   virtual void write_checkpoint();
 
   virtual void error_trace(
-    prop_convt &prop_conv, symex_target_equationt &equation);
+    smt_convt &smt_conv, symex_target_equationt &equation);
     bool run_thread();
     int ltl_run_thread(symex_target_equationt *equation);
 };
