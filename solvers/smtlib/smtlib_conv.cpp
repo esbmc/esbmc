@@ -445,7 +445,7 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
   std::string name = sa->symname;
 
   // XXX -- double bracing this may be a Z3 ecentricity
-  unsigned int domain_width = array->sort->domain_width;
+  unsigned long domain_width = array->sort->domain_width;
   fprintf(out_stream,
       "(get-value ((select |%s| (_ bv%" PRIu64 " %" PRIu64 "))))\n",
       name.c_str(), index, domain_width);
@@ -593,6 +593,7 @@ smtlib_convt::l_get(const smt_ast *a)
          "output without two operands");
   std::list<sexpr>::const_iterator it = pair.sexpr_list.begin();
   const sexpr &first = *it++;
+  (void)first;
   const sexpr &second = *it++;
 //  assert(first.token == TOK_SIMPLESYM && first.data == ss.str() &&
 //         "Unexpected valuation variable from smtlib solver");
@@ -740,7 +741,7 @@ smtlib_convt::mk_smt_bool(bool val)
 
 smt_ast *
 smtlib_convt::mk_array_symbol(const std::string &name, const smt_sort *s,
-                              smt_sortt array_subtype)
+                              smt_sortt array_subtype __attribute__((unused)))
 {
   return mk_smt_symbol(name, s);
 }
