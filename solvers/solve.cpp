@@ -5,6 +5,8 @@
 #include <solvers/smt/smt_tuple_flat.h>
 #include <solvers/smt/array_conv.h>
 
+#include "solver_config.h"
+
 typedef smt_convt *(solver_creator)
   (bool int_encoding, const namespacet &ns, bool is_cpp, const optionst &opts,
    tuple_iface **tuple_api, array_iface **array_api);

@@ -179,11 +179,13 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
       AS_VAR_APPEND(esbmc_list_of_solvers, " $3")
       AS_VAR_APPEND(esbmc_list_of_backends, [ $3/'lib'$3'.la'])
       AM_CONDITIONAL(ESBMC_ENABLE_$3, true)
+      AC_SUBST([ESBMC_ENABLE_$3], 1)
       AS_ECHO("Found solver at path/libdir")
     ], [
       dnl Reset LIBS if not found
       AS_VAR_SET(LIBS, $esbmc_check_solver_old_libs)
       AM_CONDITIONAL(ESBMC_ENABLE_$3, false)
+      AC_SUBST([ESBMC_ENABLE_$3], 0)
     ], [])
 
     # Don't cache the library check, seeing how we're changing the env.
@@ -242,13 +244,20 @@ esbmc_list_of_backends="./smtlib/libsmtlib.la ";
 
 ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs])
 
+dnl Temporarily, while things remain unconfigured
+AC_SUBST([ESBMC_ENABLE_yices], 0)
+AC_SUBST([ESBMC_ENABLE_minisat], 0)
+AC_SUBST([ESBMC_ENABLE_mathsat], 0)
+AC_SUBST([ESBMC_ENABLE_cvc], 0)
+AC_SUBST([ESBMC_ENABLE_boolector], 0)
+
 # Define a list of solvers that we have
 AC_DEFINE_UNQUOTED([ESBMC_AVAILABLE_SOLVERS], ["$esbmc_list_of_solvers"], [List of ESBMC headers available to us])
 AC_SUBST([ESBMC_AVAILABLE_SOLVERS], $esbmc_list_of_solvers)
 AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile solvers/solver_config.h])
 AC_OUTPUT
 
 AS_ECHO(["----------------------------------------"])
