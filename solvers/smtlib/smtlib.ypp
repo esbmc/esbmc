@@ -10,12 +10,12 @@
 #include "smtlib_tok.hpp"
 
 #undef yylex
-#define yylex smtlib_toklex
+#define yylex smtliblex
 #undef yyerror
-#define yyerror smtlib_tokerror
+#define yyerror smtliberror
 
-int smtlib_toklex(int startsym);
-int smtlib_tokerror(int startsym, const std::string &error);
+int smtliblex(int startsym);
+int smtliberror(int startsym, const std::string &error);
 
 sexpr *smtlib_output = NULL;
 %}
