@@ -1,5 +1,9 @@
+BUILT_SOURCES = smtlib.hpp smtlib_tok.cpp
 noinst_LTLIBRARIES = libsmtlib.la
-libsmtlib_la_SOURCES = smtlib_conv.cpp smtlib.l smtlib.y
+libsmtlib_la_SOURCES = smtlib.ypp smtlib_tok.lpp smtlib_conv.cpp
 AM_YFLAGS = -d -psmtlib
-AM_LFLAGS = --header-file=y.tab.hpp -Psmtlib -olex.yy.cpp
+AM_LFLAGS = --header-file=smtlib_tok.hpp -Psmtlib_tok -osmtlib_tok.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
+
+clean-local:
+	-rm smtlib.cpp smtlib.hpp smtlib_tok.cpp smtlib_tok.hpp

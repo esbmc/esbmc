@@ -7,10 +7,10 @@
 #include <sstream>
 
 #include "smtlib_conv.h"
-#include "y.tab.hpp"
+#include "smtlib.hpp"
+#include "smtlib_tok.hpp"
 
 // Dec of external lexer input stream
-extern "C" FILE *smtlibin;
 int smtlibparse(int startval);
 extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
@@ -115,7 +115,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   // and crash upon.
 
   // Point lexer input at output stream
-  smtlibin = in_stream;
+  smtlib_tokin = in_stream;
 
   fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
   fprintf(out_stream, "(set-info :status unknown)\n");
