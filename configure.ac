@@ -238,6 +238,7 @@ m4_define(z3_possible_libdirs, [lib, bin, x64])
 
 
 esbmc_list_of_solvers="smtlib";
+esbmc_list_of_backends="./smtlib/libsmtlib.la ";
 
 ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs])
 
