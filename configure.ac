@@ -170,7 +170,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     AS_IF([test $alreadydone = "no"], [
 
     esbmc_check_solver_old_libs=$LIBS
-    AS_VAR_APPEND(LIBS, " [-L]path/libdir ")
+    AS_VAR_APPEND(LIBS, " [-L]path/libdir -l$4 ")
     AC_CHECK_LIB($4, $5, [
       AS_VAR_SET(esbmc_check_solver_libthere_${esbmc_path_name}, yes)
       AS_VAR_SET(esbmc_check_solver_libdir_${esbmc_path_name}, libdir)
