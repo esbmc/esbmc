@@ -232,24 +232,47 @@ m4_define(ESBMC_OPTIONAL_SOLVER, [
     ])
   ])
 
-m4_define(esbmc_all_solvers, [z3])
+m4_define(esbmc_all_solvers, [z3, boolector])
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
 m4_define(z3_possible_libdirs, [lib, bin, x64])
+
+dnl boolector can be in two configurations, blah/boolector, or
+dnl blah/boolector/boolector. The latter flavour has other libraries hanging
+dnl around that have to be linked in.
+
+m4_define(btor_build_headers, [boolector.h])
+m4_define(btor_possible_locs, [$SATDIR64/boolector, $SATDIR/boolector, $HOME/boolector])
+m4_define(btor_possible_libdirs, [.])
+
+dnl Look for Lingeling in likely boolector locations. I suspect it would be
+dnl hell to try and integrate this with the solver checking goo. One potential
+dnl issue in the future is differing versions of lgl being present on the
+dnl machine. That would result in severe grief and misery.
+m4_foreach(libdir, [$SATDIR64/lingeling, $SATDIR/lingeling, $HOME/lingeling, $SATDIR64/boolector/lingeling, $SATDIR/boolector/lingeling, $HOME/boolector/lingeling], [
+  AS_IF([test "$[ac_cv_lib_lgl_lglinit]" != "yes"], [
+    esbmc_check_lgl_old_libs=$LIBS
+    AS_VAR_APPEND(LIBS, " [-L]libdir ")
+    AC_CHECK_LIB([lgl], [lglinit],
+      [AS_VAR_APPEND(LIBS, " -llgl ")],
+      [AS_VAR_SET(LIBS, $esbmc_check_lgl_old_libs)], []
+    )
+  ])
+])
 
 
 esbmc_list_of_solvers="smtlib";
 esbmc_list_of_backends="./smtlib/libsmtlib.la ";
 
 ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs])
+ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, ., [btor_possible_libdirs])
 
 dnl Temporarily, while things remain unconfigured
 AC_SUBST([ESBMC_ENABLE_yices], 0)
 AC_SUBST([ESBMC_ENABLE_minisat], 0)
 AC_SUBST([ESBMC_ENABLE_mathsat], 0)
 AC_SUBST([ESBMC_ENABLE_cvc], 0)
-AC_SUBST([ESBMC_ENABLE_boolector], 0)
 
 # Define a list of solvers that we have
 AC_DEFINE_UNQUOTED([ESBMC_AVAILABLE_SOLVERS], ["$esbmc_list_of_solvers"], [List of ESBMC headers available to us])
