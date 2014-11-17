@@ -8,8 +8,6 @@ dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 AM_INIT_AUTOMAKE([1.13 -Wall -Werror foreign])
 AC_CONFIG_MACRO_DIR([scripts/build-aux/m4])
 
-AC_ARG_VAR([Z3PATH], [Path to Z3 installation directory])
-
 AC_PROG_CC(clang gcc)
 AC_PROG_CXX(clang++ g++)
 AC_PROG_AWK
@@ -280,7 +278,7 @@ AC_SUBST([ESBMC_AVAILABLE_SOLVERS], $esbmc_list_of_solvers)
 AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile solvers/solver_config.h])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile solvers/solver_config.h])
 AC_OUTPUT
 
 AS_ECHO(["----------------------------------------"])
