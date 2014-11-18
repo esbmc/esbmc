@@ -351,7 +351,6 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
   std::map<int, std::map<int, std::string> > mapped_tokens;
 
   /* creating nodes and edges */
-
   boost::property_tree::ptree first_node; node_p first_node_p;
   first_node_p.isEntryNode = true;
   create_node(first_node, first_node_p);
@@ -390,7 +389,6 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
       if(mapped_tokens.size() == 0){
         convert_c_file_in_tokens(filename, mapped_tokens);
       }
-
   	  boost::property_tree::ptree current_edge; edge_p current_edge_p;
 	  current_edge_p.originFileName = filename;
 
@@ -408,6 +406,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	  if( findds != std::string::npos ) {
 		lhs_str = lhs_str.substr(0,findds);
 	  }
+
 	  /* right hand */
 	  /* check if is an array (modify assumptions) */
 	  if (it->lhs->type->type_id == it->lhs->type->array_id){
@@ -434,9 +433,17 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
         if( findfs != std::string::npos ) {
           value_str = value_str.substr(0,findfs);
         }
+        /* check if has a double &quote */
+        std::string::size_type findq1 = value_str.find( "\"", 0 );
+        if( findfs != std::string::npos ) {
+          std::string::size_type findq2 = value_str.find( "\"", findq1 + 1 );
+          if( findq2 == std::string::npos ) {
+            value_str = value_str + "\"";
+          }
+        }
 	    std::string assumption = lhs_str + " = " + value_str + ";";
 	    std::string::size_type findesbm = assumption.find( "__ESBMC", 0 );
-	    std::string::size_type finddma = assumption.find( "dynamic_1_array", 0 );
+	    std::string::size_type finddma = assumption.find( "&dynamic_", 0 );
 	    bool is_union = (it->rhs->type->type_id == it->rhs->type->union_id);
 	    bool is_struct = (it->rhs->type->type_id == it->rhs->type->struct_id);
 	    /* TODO check if is union, struct or dynamic attr, need more specifications of validation tools */
@@ -460,23 +467,25 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
 	  /* check if has a line number (to get tokens) */
 	  if (line_number != 0){
 	    current_edge_p.lineNumberInOrigin = line_number;
-	    std::map<int, std::string> current_line_tokens = mapped_tokens[line_number];
-	    std::map<int,std::string>::iterator it;
-	    std::string token_set = "";
-	    if (current_line_tokens.size() == 1){
-		  token_set = std::to_string(current_line_tokens.begin()->first);
-	    }else{
-		  int first = current_line_tokens.begin()->first;
-		  int end = first + current_line_tokens.end()->first - 1;
-		  token_set = token_set + std::to_string(current_line_tokens.begin()->first) + "," + std::to_string(end);
+	    if (mapped_tokens.size() != 0){
+	      std::map<int, std::string> current_line_tokens = mapped_tokens[line_number];
+	      std::map<int,std::string>::iterator it;
+	      std::string token_set = "";
+	      if (current_line_tokens.size() == 1){
+		    token_set = std::to_string(current_line_tokens.begin()->first);
+	      }else{
+		    int first = current_line_tokens.begin()->first;
+		    int end = first + current_line_tokens.end()->first - 1;
+		    token_set = token_set + std::to_string(current_line_tokens.begin()->first) + "," + std::to_string(end);
+	      }
+	      std::string source_code = "";
+	      for (it=current_line_tokens.begin(); it!=current_line_tokens.end(); ++it){
+	        source_code = source_code + it->second + " ";
+	      }
+	      current_edge_p.sourcecode = source_code.substr(0, source_code.length() - 1);
+	      current_edge_p.tokenSet = token_set;
+	      current_edge_p.originTokenSet = token_set;
 	    }
-	    std::string source_code = "";
-	    for (it=current_line_tokens.begin(); it!=current_line_tokens.end(); ++it){
-	      source_code = source_code + it->second + " ";
-	    }
-	    current_edge_p.sourcecode = source_code.substr(0, source_code.length() - 1);
-	    current_edge_p.tokenSet = token_set;
-	    current_edge_p.originTokenSet = token_set;
 	  }
 
 	  create_edge(current_edge, current_edge_p, last_created_node, current_node);
