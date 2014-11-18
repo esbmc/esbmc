@@ -4,7 +4,6 @@ AC_DEFINE([ESBMC_VERSION], ["1.23.99"], [ESBMC version number])
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADER(ac_config.h:scripts/ac_config.in)
 AC_CONFIG_AUX_DIR([scripts/build-aux])
-dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 AM_INIT_AUTOMAKE([1.13 -Wall -Werror foreign])
 AC_CONFIG_MACRO_DIR([scripts/build-aux/m4])
 
@@ -89,6 +88,7 @@ AC_CHECK_FUNC(strlcpy, [AC_DEFINE([HAVE_STRLCPY], [true], [strlcpy present])], [
 
 LT_LIB_DLLOAD
 
+dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -Werror -std=c++0x"]])
 AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W"]])
 
