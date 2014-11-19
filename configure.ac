@@ -176,13 +176,11 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
       AS_VAR_SET(esbmc_found_solver_$3, yes)
       AS_VAR_APPEND(esbmc_list_of_solvers, " $3")
       AS_VAR_APPEND(esbmc_list_of_backends, [" "$3/'lib'$3'.la'])
-      AM_CONDITIONAL(ESBMC_ENABLE_$3, true)
       AC_SUBST([ESBMC_ENABLE_$3], 1)
       AS_ECHO("Found solver at path/libdir")
     ], [
       dnl Reset LIBS if not found
       AS_VAR_SET(LIBS, $esbmc_check_solver_old_libs)
-      AM_CONDITIONAL(ESBMC_ENABLE_$3, false)
       AC_SUBST([ESBMC_ENABLE_$3], 0)
     ], [])
 
