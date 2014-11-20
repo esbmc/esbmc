@@ -232,7 +232,7 @@ m4_define(ESBMC_OPTIONAL_SOLVER, [
     ])
   ])
 
-m4_define(esbmc_all_solvers, [z3, boolector])
+m4_define(esbmc_all_solvers, [z3, boolector, yices])
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
@@ -244,6 +244,10 @@ dnl do not have a structure for knowing where lingeling / minisat are.
 m4_define(btor_build_headers, [boolector/boolector.h])
 m4_define(btor_possible_locs, [$SATDIR64/boolector, $SATDIR/boolector, $HOME/boolector])
 m4_define(btor_possible_libdirs, [boolector])
+
+m4_define(yices_build_headers, [include/yices.h])
+m4_define(yices_possible_locs, [$SATDIR64/yices, $SATDIR/yices, $HOME/yices])
+m4_define(yices_possible_libdirs, [lib])
 
 dnl Random dollars are shoehorned into these names to ensure that M4 does not
 dnl rename them as they are passed down to the point where they are actually
@@ -257,14 +261,28 @@ m4_define([$$ESBMC_BOOLECTOR_EXTRA_CONFIG], [
   AS_VAR_APPEND(LIBS, " -llgl ")
 ])dnl
 
+m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
+  dnl $1 = Path we're looking at as being the yices installation
+  dnl Yices ships with 'libyices.2.x.y', but no set of appropriate symlinks.
+  dnl So linking against it is a pain in the neck. Perform a small amount of
+  dnl juggling to install such a symlink.
+  dnl Yes this is appalling, not very many other ways of doing it though.
+  AS_IF([test -d $1], [
+    AS_IF([test ! -z "`ls $1/lib | grep libyices.so.2*`"], [
+      AS_VAR_SET(yices_setting_tmp, [`ls $1/lib | grep libyices\.so\.[[0-9]]\.[[0-9]]\.[[0-9]]`])
+      ln -s $1/lib/$yices_setting_tmp $1/lib/libyices.so
+    ])
+  ])
+])dnl
+
 esbmc_list_of_solvers="smtlib";
 esbmc_list_of_backends="./smtlib/libsmtlib.la ";
 
 ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs], $$ESBMC_NOOP_CONFIG)
 ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, boolector, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
+ESBMC_OPTIONAL_SOLVER([yices_possible_locs], [yices_build_headers], yices, yices, yices_init, yices, [yices_possible_libdirs], $$ESBMC_YICES_EXTRA_CONFIG)
 
 dnl Temporarily, while things remain unconfigured
-AC_SUBST([ESBMC_ENABLE_yices], 0)
 AC_SUBST([ESBMC_ENABLE_minisat], 0)
 AC_SUBST([ESBMC_ENABLE_mathsat], 0)
 AC_SUBST([ESBMC_ENABLE_cvc], 0)
