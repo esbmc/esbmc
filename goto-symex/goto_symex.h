@@ -414,6 +414,10 @@ protected:
   void intrinsic_check_stability(const code_function_call2t &call,
                                  reachability_treet &art);
 
+  /** Generate controllers in cascade form */
+  void intrinsic_generate_cascade_controllers(const code_function_call2t &call,
+                                 reachability_treet &art);
+
 #ifdef EIGEN_LIB
   /** Get roots of a polynomial */
   int get_roots(expr2tc array_element, std::vector<RootType>& roots);

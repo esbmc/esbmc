@@ -687,6 +687,158 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
 }
 
 void
+goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &call,
+                                       reachability_treet &art __attribute__((unused)))
+{
+
+	call.clone();
+
+   #ifdef EIGEN_LIB
+
+      std::vector<expr2tc> args = call.operands;
+      assert(args.size()==4);
+
+      std::vector<RootType> denominator_roots;
+  	  get_roots(args.at(0), denominator_roots);
+      int qtd_roots = denominator_roots.size();
+
+      int size_pairs = qtd_roots % 2 == 0 ? qtd_roots / 2 : (qtd_roots + 1) / 2 ;
+      std::complex<double> pairs[size_pairs][2];
+      unsigned int idx = 0;
+      unsigned int idy = 0;
+
+      /* DEBUG */
+      /* std::cout << "root rows: " << qtd_roots  << " ~ qtd pairs: " << size_pairs << std::endl; */
+
+      for(int i=0; i<qtd_roots; i++){
+         /* check if is a complex root */
+         if (denominator_roots.at(i).imag() != 0){
+            /* check if already exists a real in pair */
+            if (idy != 0){
+               pairs[idx][idy] = 0;
+               idx = idx + 1;
+               idy = 0;
+            }
+            pairs[idx][idy] = denominator_roots.at(i);
+            pairs[idx][idy+1] = denominator_roots.at(i+1);
+            idy = 0;
+            idx = idx + 1;
+            i = i + 1;
+         }else{
+            pairs[idx][idy] = denominator_roots.at(i);
+            idy = idy + 1;
+            if (idy == 2){
+               idy = 0;
+               idx = idx + 1;
+            }
+         }
+      }
+
+      /* DEBUG */
+      /* print root pairs */
+      /* for(int i=0; i<size_pairs; i++){
+         for(int j=0; j<2;j++){
+            std::cout << pairs[i][j].real() << " + (" << pairs[i][j].imag() << ")i; " ;
+          }
+          std::cout << std::endl;
+      } */
+
+      /* DEBUG */
+      /* show cascades
+      std::cout << "cascades are: \n";
+         for(int i=0; i<size_pairs; i++){
+            std::cout << i+1 << ") ";
+            // complex pairs
+            if ((pairs[i][0].imag() != 0) && (pairs[i][1].imag() != 0)){
+               std::cout << "1 " << 2 * pairs[i][0].real() << " " << pow(pairs[i][0].real(),2) + pow(pairs[i][0].imag(),2);
+            }else{
+               std::cout << "1 " << -(pairs[i][0].real()  + pairs[i][1].real()) << " " << (pairs[i][0].real() * pairs[i][1].real());
+            }
+            std::cout << std::endl;
+      }*/
+
+      float cascade_coefficients[ 3 * size_pairs ];
+      int cc_count = 0;
+      for(int i=0; i<size_pairs; i++){
+    	  if ((pairs[i][0].imag() != 0) && (pairs[i][1].imag() != 0)){
+    		  cascade_coefficients[cc_count] = 1.0;
+    		  cascade_coefficients[cc_count + 1] = 2 * pairs[i][0].real();
+    		  cascade_coefficients[cc_count + 2] = pow(pairs[i][0].real(),2) + pow(pairs[i][0].imag(),2);
+    	  }else{
+    		  cascade_coefficients[cc_count] = 1.0;
+    		  cascade_coefficients[cc_count + 1] = -(pairs[i][0].real()  + pairs[i][1].real());
+    		  cascade_coefficients[cc_count + 2] = (pairs[i][0].real() * pairs[i][1].real());
+    	  }
+    	  cc_count = cc_count + 3;
+      }
+
+      assert(cascade_coefficients[0] == 1);
+
+      /* DEBUG */
+      /* std::cout << "Cascade Coefficients (Vector Mode): ";
+      for(int i=0; i<(3 * size_pairs); i++){
+    	  std::cout << cascade_coefficients[i] << " " ;
+      } */
+
+      /**************** test using array **************/
+      std::string identifier;
+      identifier = "kindice$"+i2string(0);
+
+      array_typet state_vector;
+      bool_typet state;
+
+      exprt lhs_index = symbol_exprt(identifier, int_type());
+      exprt new_expr(exprt::with, state_vector);
+      exprt lhs_array("symbol", state_vector);
+    //  exprt rhs("symbol", state);
+
+      std::string identifier_lhs, identifier_rhs;
+      identifier_lhs = "s$"+i2string(0);
+      identifier_rhs = "cs$"+i2string(0);
+
+      lhs_array.identifier(identifier_lhs);
+    //  rhs.identifier(identifier_rhs);
+
+      exprt op = gen_one(int_type());
+
+
+      //constant_int2tc op(uint_type2(), BigInt(5))
+
+      //s[k]=cs
+      new_expr.reserve_operands(3);
+      new_expr.copy_to_operands(lhs_array);
+      new_expr.copy_to_operands(lhs_index);
+      new_expr.move_to_operands(op);
+      //new_expr.move_to_operands(rhs);
+      code_assignt new_assign(lhs_array,new_expr);
+
+      expr2tc expr2;
+      migrate_expr(new_assign, expr2);
+
+      expr2tc cout_expr = args.at(2);
+      code_assign2tc assign2(cout_expr, expr2);
+      symex_assign(assign2);
+
+      std::cout << "NEW EXPR " << std::endl;
+      expr2.get()->dump();
+
+   //   copy(new_assign, ASSIGN, dest);
+
+      /***********************************************/
+
+      /* coutsize */
+      expr2tc cdsize_exp = args.at(3);
+      constant_int2tc cdsize_value(uint_type2(), BigInt(5));
+      code_assign2tc assign(cdsize_exp, cdsize_value);
+      symex_assign(assign);
+
+   #else
+       std::cout << "Your ESBMC version doesn't have eigenlibrary support. Try other version." << std::endl;
+       exit(1);
+   #endif
+}
+
+void
 goto_symext::intrinsic_check_stability(const code_function_call2t &call,
                                        reachability_treet &art __attribute__((unused)))
 {

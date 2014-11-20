@@ -13,7 +13,7 @@ SRCS= boolector_conv.cpp
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
-STRICTCOMPILE=1
+#STRICTCOMPILE=1
 
 include $(ESBMCDIR)/common
 

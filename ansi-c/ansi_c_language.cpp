@@ -121,6 +121,9 @@ static void internal_additions(std::string &code)
     // Digital filters code
     "_Bool __ESBMC_check_stability(float den[], float num[]);\n"
 
+	// Digital controllers code
+    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize);\n"
+
     // And again, for TACAS VERIFIER versions,
     "int __VERIFIER_nondet_int();\n"
     "unsigned int __VERIFIER_nondet_uint();\n"
