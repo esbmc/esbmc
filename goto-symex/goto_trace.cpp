@@ -423,7 +423,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
         }
         /* check if has a double &quote */
         std::string::size_type findq1 = value_str.find( "\"", 0 );
-        if( findfs != std::string::npos ) {
+        if( findq1 != std::string::npos ) {
           std::string::size_type findq2 = value_str.find( "\"", findq1 + 1 );
           if( findq2 == std::string::npos ) {
             value_str = value_str + "\"";
