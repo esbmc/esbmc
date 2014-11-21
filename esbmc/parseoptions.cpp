@@ -1674,7 +1674,7 @@ void cbmc_parseoptionst::help()
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
     " --no-slice                   do not remove unused equations\n\n"
     " --- solver configuration ------------------------------------------------------\n\n"
-    " --boolector                       use Boolector (default)\n"
+    " --boolector				   use Boolector (default)\n"
     " --bv                         use Z3 with bit-vector arithmetic\n"
     " --ir                         use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"
