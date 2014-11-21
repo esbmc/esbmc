@@ -693,7 +693,7 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
 
 	call.clone();
 
-   #ifdef EIGEN_LIB
+   //#ifdef EIGEN_LIB
 
       std::vector<expr2tc> args = call.operands;
       assert(args.size()==4);
@@ -782,36 +782,37 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
 
       /**************** test using array **************/
       std::string identifier;
-      identifier = "kindice$"+i2string(0);
+      identifier = "idx$"+i2string(0);
 
-      array_typet state_vector;
-      bool_typet state;
+      array_typet output_vector;
+      bool_typet element;
 
-      exprt lhs_index = symbol_exprt(identifier, int_type());
-      exprt new_expr(exprt::with, state_vector);
-      exprt lhs_array("symbol", state_vector);
-    //  exprt rhs("symbol", state);
+      exprt index = symbol_exprt(identifier, int_type());
+      exprt new_expr(exprt::with, output_vector);
+      exprt lhs_array("symbol", output_vector);
 
       std::string identifier_lhs, identifier_rhs;
-      identifier_lhs = "s$"+i2string(0);
-      identifier_rhs = "cs$"+i2string(0);
+      identifier_lhs = "out$"+i2string(0);
 
       lhs_array.identifier(identifier_lhs);
-    //  rhs.identifier(identifier_rhs);
 
       exprt op = gen_one(int_type());
 
 
-      //constant_int2tc op(uint_type2(), BigInt(5))
-
       //s[k]=cs
       new_expr.reserve_operands(3);
       new_expr.copy_to_operands(lhs_array);
-      new_expr.copy_to_operands(lhs_index);
+      new_expr.copy_to_operands(index);
       new_expr.move_to_operands(op);
+
       //new_expr.move_to_operands(rhs);
       code_assignt new_assign(lhs_array,new_expr);
 
+      std::cout << "lhs_array.pretty(): " << lhs_array.pretty() << std::endl;
+      std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
+      std::cout << "new_assign.code().pretty(): " << new_assign.pretty() << std::endl;
+
+#if 0
       expr2tc expr2;
       migrate_expr(new_assign, expr2);
 
@@ -821,7 +822,7 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
 
       std::cout << "NEW EXPR " << std::endl;
       expr2.get()->dump();
-
+#endif
    //   copy(new_assign, ASSIGN, dest);
 
       /***********************************************/
@@ -832,10 +833,10 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
       code_assign2tc assign(cdsize_exp, cdsize_value);
       symex_assign(assign);
 
-   #else
-       std::cout << "Your ESBMC version doesn't have eigenlibrary support. Try other version." << std::endl;
-       exit(1);
-   #endif
+   //#else
+   //    std::cout << "Your ESBMC version doesn't have eigenlibrary support. Try other version." << std::endl;
+   //    exit(1);
+   //#endif
 }
 
 void
