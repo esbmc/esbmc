@@ -781,55 +781,46 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
       } */
 
       /**************** test using array **************/
-      std::string identifier;
-      identifier = "idx$"+i2string(0);
 
-      array_typet output_vector;
-      bool_typet element;
+      std::vector<expr2tc> cout_data;
+      type2tc cout_element_type = get_uint_type(64);
 
-      exprt index = symbol_exprt(identifier, int_type());
-      exprt new_expr(exprt::with, output_vector);
-      exprt lhs_array("symbol", output_vector);
+      cout_data.push_back(constant_int2tc(cout_element_type, BigInt(5)));
+      cout_data.push_back(constant_int2tc(cout_element_type, BigInt(3)));
+      cout_data.push_back(constant_int2tc(cout_element_type, BigInt(2)));
 
-      std::string identifier_lhs, identifier_rhs;
-      identifier_lhs = "out$"+i2string(0);
+      type2tc cout_array_type(new array_type2t(cout_element_type,gen_ulong(64), false));
+      constant_array2tc cout_array(cout_array_type, cout_data);
 
-      lhs_array.identifier(identifier_lhs);
-
-      exprt op = gen_one(int_type());
-
-
-      //s[k]=cs
-      new_expr.reserve_operands(3);
-      new_expr.copy_to_operands(lhs_array);
-      new_expr.copy_to_operands(index);
-      new_expr.move_to_operands(op);
-
-      //new_expr.move_to_operands(rhs);
-      code_assignt new_assign(lhs_array,new_expr);
-
-      std::cout << "lhs_array.pretty(): " << lhs_array.pretty() << std::endl;
-      std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
-      std::cout << "new_assign.code().pretty(): " << new_assign.pretty() << std::endl;
-
-#if 0
-      expr2tc expr2;
-      migrate_expr(new_assign, expr2);
-
-      expr2tc cout_expr = args.at(2);
-      code_assign2tc assign2(cout_expr, expr2);
+      expr2tc out_exp = args.at(2);
+      code_assign2tc assign2(out_exp, cout_array);
       symex_assign(assign2);
 
-      std::cout << "NEW EXPR " << std::endl;
-      expr2.get()->dump();
-#endif
-   //   copy(new_assign, ASSIGN, dest);
+      /* experience using fixedbv
+      std::vector<expr2tc> cout_data;
 
-      /***********************************************/
+      type2tc t = type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
+      const fixedbv_type2t & element_type = fixedbv_type2t(32,4);
+      fixedbv_spect spec(element_type.width, element_type.integer_bits);
+      fixedbvt fbt;
+      fbt.spec = spec;
+      fbt.from_integer(BigInt(5));
+
+      cout_data.push_back(constant_fixedbv2t(t, fbt).clone());
+
+      type2tc cout_array_type(new array_type2t(t,gen_ulong(64), false));
+      constant_array2tc cout_array(t, cout_data);
+
+      expr2tc out_exp = args.at(2);
+      code_assign2tc assign2(out_exp, cout_array);
+      symex_assign(assign2);
+
+	  */
+     /***********************************************/
 
       /* coutsize */
       expr2tc cdsize_exp = args.at(3);
-      constant_int2tc cdsize_value(uint_type2(), BigInt(5));
+      constant_int2tc cdsize_value(uint_type2(), BigInt(cout_data.size()));
       code_assign2tc assign(cdsize_exp, cdsize_value);
       symex_assign(assign);
 
