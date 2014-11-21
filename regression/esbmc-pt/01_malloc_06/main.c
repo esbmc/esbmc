@@ -61,6 +61,9 @@ int main()
   empty = (pthread_cond_t *) malloc(sizeof(pthread_cond_t));
   full = (pthread_cond_t *) malloc(sizeof(pthread_cond_t));
 
+  if (m==NULL || empty==NULL || full==NULL)
+    exit(0);
+
   pthread_mutex_init(m, 0);
   pthread_cond_init(empty, 0);
   pthread_cond_init(full, 0);
