@@ -30,6 +30,9 @@ int x=0;
 uint8_t state;
 uint8_t tosPort; // check dataraces on this variable
 
+void __ESBMC_atomic_begin();
+void __ESBMC_atomic_end();
+
 inline result_t dataReady(uint16_t data) {
   uint8_t port;
   uint8_t oldState;
