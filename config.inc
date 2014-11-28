@@ -37,8 +37,8 @@ include $(ESBMCDIR)/scripts/os_detect.inc
 # Defaults:
 
 CC=     ccache gcc
-CXX=    ccache g++ -Wno-error=unused-local-typedefs
-DEPCXX= ccache g++ -Wno-error=unused-local-typedefs
+CXX=    ccache g++ -Wno-error=unused-local-typedefs -Wno-error=unused-parameter
+DEPCXX= ccache g++ -Wno-error=unused-local-typedefs -Wno-error=unused-parameter
 LD=     ld
 AR=     ar
 YACC   = bison -y

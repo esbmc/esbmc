@@ -686,6 +686,64 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
   ex_state.kill_monitor_thread();
 }
 
+/* ********** FIXME IMPORT THESE FUNCTIONS FROM BUILTIN FUNCTIONS *********** */
+
+void get_alloc_type_rec(
+  const exprt &src,
+  typet &type,
+  exprt &size)
+{
+  static bool is_mul=false;
+
+  const irept &sizeof_type=src.c_sizeof_type();
+  //nec: ex33.c
+  if(!sizeof_type.is_nil() && !is_mul)
+  {
+    type=(typet &)sizeof_type;
+  }
+  else if(src.id()=="*")
+  {
+	is_mul=true;
+    forall_operands(it, src)
+      get_alloc_type_rec(*it, type, size);
+  }
+  else
+  {
+    size.copy_to_operands(src);
+  }
+}
+
+void get_alloc_type(
+  const exprt &src,
+  typet &type,
+  exprt &size)
+{
+  type.make_nil();
+  size.make_nil();
+
+  get_alloc_type_rec(src, type, size);
+
+  if(type.is_nil())
+    type=char_type();
+
+  if(size.has_operands())
+  {
+    if(size.operands().size()==1)
+    {
+      exprt tmp;
+      tmp.swap(size.op0());
+      size.swap(tmp);
+    }
+    else
+    {
+      size.id("*");
+      size.type()=size.op0().type();
+    }
+  }
+}
+
+/* ************************************************************************** */
+
 void
 goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &call,
                                        reachability_treet &art __attribute__((unused)))
@@ -782,6 +840,8 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
 
       /**************** test using array **************/
 
+      /* ARRAY */
+
       std::vector<expr2tc> cout_data;
       type2tc cout_element_type = get_uint_type(64);
 
@@ -791,37 +851,53 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
 
       type2tc cout_array_type(new array_type2t(cout_element_type,gen_ulong(64), false));
       constant_array2tc cout_array(cout_array_type, cout_data);
+      exprt cout_array_exp1 = migrate_expr_back(cout_array);
 
-      expr2tc out_exp = args.at(2);
-      code_assign2tc assign2(out_exp, cout_array);
+      exprt address_of("address_of", pointer_typet());
+      address_of.type().subtype()=int_type();
+      address_of.copy_to_operands(cout_array_exp1);
+      expr2tc address_of_2;
+      migrate_expr(address_of,address_of_2);
+
+      expr2tc out_exp2 = args.at(2);
+      exprt out_exp = migrate_expr_back(out_exp2);
+      out_exp.copy_to_operands(address_of);
+      out_exp.type().subtype() = int_type();
+      out_exp.dump();
+
+      expr2tc out_expr2_new;
+      migrate_expr(out_exp,out_expr2_new);
+      out_exp2 = out_expr2_new;
+
+      std::cout << "NEW" << std::endl;
+      out_expr2_new.get()->dump();
+
+      std::cout << "OLD" << std::endl;
+      args.at(2).get()->dump();
+
+      code_assign2tc assign2(out_exp2, address_of_2);
       symex_assign(assign2);
 
-      /* experience using fixedbv
-      std::vector<expr2tc> cout_data;
+      /* INTEGER */
 
-      type2tc t = type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
-      const fixedbv_type2t & element_type = fixedbv_type2t(32,4);
-      fixedbv_spect spec(element_type.width, element_type.integer_bits);
-      fixedbvt fbt;
-      fbt.spec = spec;
-      fbt.from_integer(BigInt(5));
+      expr2tc cdsize_expr2 = args.at(3);
+      exprt cdsize_expr = migrate_expr_back(cdsize_expr2);
 
-      cout_data.push_back(constant_fixedbv2t(t, fbt).clone());
+      constant_int2tc cdsize_value_expr2(uint_type2(), BigInt(cout_data.size()));
+      exprt cdsize_value_expr1 = migrate_expr_back(cdsize_value_expr2);
 
-      type2tc cout_array_type(new array_type2t(t,gen_ulong(64), false));
-      constant_array2tc cout_array(t, cout_data);
+      exprt address_of_i("address_of", pointer_typet());
+      address_of_i.type().subtype()=int_type();
+      address_of_i.copy_to_operands(cdsize_value_expr1);
 
-      expr2tc out_exp = args.at(2);
-      code_assign2tc assign2(out_exp, cout_array);
-      symex_assign(assign2);
+      expr2tc address_of_2_i;
+      migrate_expr(address_of_i,address_of_2_i);
+      cdsize_expr.move_to_operands(address_of_i);
 
-	  */
-     /***********************************************/
+      expr2tc cdsize_expr2_new;
+      migrate_expr(cdsize_expr, cdsize_expr2_new);
 
-      /* coutsize */
-      expr2tc cdsize_exp = args.at(3);
-      constant_int2tc cdsize_value(uint_type2(), BigInt(cout_data.size()));
-      code_assign2tc assign(cdsize_exp, cdsize_value);
+      code_assign2tc assign(cdsize_expr2_new, cdsize_value_expr2);
       symex_assign(assign);
 
    //#else
