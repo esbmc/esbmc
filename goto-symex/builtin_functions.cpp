@@ -863,17 +863,10 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
       exprt out_exp = migrate_expr_back(out_exp2);
       out_exp.copy_to_operands(address_of);
       out_exp.type().subtype() = int_type();
-      out_exp.dump();
 
       expr2tc out_expr2_new;
       migrate_expr(out_exp,out_expr2_new);
       out_exp2 = out_expr2_new;
-
-      std::cout << "NEW" << std::endl;
-      out_expr2_new.get()->dump();
-
-      std::cout << "OLD" << std::endl;
-      args.at(2).get()->dump();
 
       code_assign2tc assign2(out_exp2, address_of_2);
       symex_assign(assign2);
