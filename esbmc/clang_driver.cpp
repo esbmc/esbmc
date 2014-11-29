@@ -20,13 +20,17 @@ cbmc_parseoptionst::parse_clang()
 
   // From the clang tool example,
   int num_args = cmdline.args.size();
-  num_args += 2;
+  num_args += 6;
   const char **the_args = malloc(sizeof(const char*) * num_args);
   the_args[0] = "clang";
   unsigned int i = 1;
   for (const std::string &str : cmdline.args)
     the_args[i++] = str.c_str();
   the_args[i++] = "--";
+  the_args[i++] = "-I";
+  the_args[i++] = "/home/jmorse/phd/esbmc/ansi-c/headers";
+  the_args[i++] = "-D";
+  the_args[i++] = "__ESBMC_CLANG_PARSER";
 
   CommonOptionsParser OptionsParser(num_args, the_args, dummy_tool_cat);
   free(the_args);
