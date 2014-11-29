@@ -23,17 +23,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_convert_class.h"
 
-/*******************************************************************\
-
-Function: get_alloc_type_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void get_alloc_type_rec(
   const exprt &src,
@@ -59,18 +48,6 @@ static void get_alloc_type_rec(
     size.copy_to_operands(src);
   }
 }
-
-/*******************************************************************\
-
-Function: get_alloc_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void get_alloc_type(
   const exprt &src,
@@ -100,18 +77,6 @@ static void get_alloc_type(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_printf
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_printf(
   const exprt &lhs,
@@ -147,18 +112,6 @@ void goto_convertt::do_printf(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_atomic_begin
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_atomic_begin(
   const exprt &lhs,
   const exprt &function,
@@ -181,18 +134,6 @@ void goto_convertt::do_atomic_begin(
   t->location=function.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_atomic_end
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_atomic_end(
   const exprt &lhs,
   const exprt &function,
@@ -214,18 +155,6 @@ void goto_convertt::do_atomic_end(
   goto_programt::targett t=dest.add_instruction(ATOMIC_END);
   t->location=function.location();
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_malloc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_malloc(
   const exprt &lhs,
@@ -293,18 +222,6 @@ void goto_convertt::do_malloc(
     options.set_option("disable-inductive-step", true);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_cpp_new
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_cpp_new(
   const exprt &lhs,
@@ -410,18 +327,6 @@ void goto_convertt::do_cpp_new(
   dest.destructive_append(tmp_initializer);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::cpp_new_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::cpp_new_initializer(
   const exprt &lhs,
   const exprt &rhs,
@@ -472,18 +377,6 @@ void goto_convertt::cpp_new_initializer(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_exit
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_exit(
   const exprt &lhs __attribute__((unused)),
   const exprt &function,
@@ -503,18 +396,6 @@ void goto_convertt::do_exit(
   t_a->location=function.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_abort
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_abort(
   const exprt &lhs __attribute__((unused)),
   const exprt &function,
@@ -533,18 +414,6 @@ void goto_convertt::do_abort(
   t_a->guard = false_expr;
   t_a->location=function.location();
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_free
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_free(
   const exprt &lhs,
@@ -573,18 +442,6 @@ void goto_convertt::do_free(
   migrate_expr(free_statement, t_f->code);
   t_f->location=function.location();
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_abs
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_abs(
   const exprt &lhs,
@@ -615,19 +472,6 @@ void goto_convertt::do_abs(
   assignment.location()=function.location();
   copy(assignment, ASSIGN, dest);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_function_call_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose: add function calls to function queue for later
-          processing
-
-\*******************************************************************/
 
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,

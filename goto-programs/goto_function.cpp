@@ -19,18 +19,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_convert_class.h"
 #include "goto_functions.h"
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,
   goto_programt &dest)
@@ -41,18 +29,6 @@ void goto_convertt::convert_function_call(
     function_call.arguments(),
     dest);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_function_call(
   const exprt &lhs,
@@ -140,18 +116,6 @@ void goto_convertt::do_function_call(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_function_call_if
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_function_call_if(
   const exprt &lhs,
   const exprt &function,
@@ -227,18 +191,6 @@ void goto_convertt::do_function_call_if(
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_function_call_dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_function_call_dereference(
   const exprt &lhs,

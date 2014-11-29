@@ -14,18 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "show_claims.h"
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::show_claims
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void show_claims(
   const namespacet &ns,
   const irep_idt &identifier,
@@ -85,18 +73,6 @@ void show_claims(
   }
 }
 
-/*******************************************************************\
-
-Function: cbmc_parseoptionst::show_claims
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void show_claims(
   const namespacet &ns,
   ui_message_handlert::uit ui,
@@ -105,18 +81,6 @@ void show_claims(
   unsigned count=0;
   show_claims(ns, "", ui, goto_program, count);
 }
-
-/*******************************************************************\
-
-Function: show_claims
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void show_claims(
   const namespacet &ns,

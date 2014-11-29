@@ -20,18 +20,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "remove_skip.h"
 #include "goto_inline.h"
 
-/*******************************************************************\
-
-Function: goto_inlinet::parameter_assignments
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_inlinet::parameter_assignments(
   const locationt &location,
   const code_typet &code_type,
@@ -153,18 +141,6 @@ void goto_inlinet::parameter_assignments(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_inlinet::replace_return
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_inlinet::replace_return(
   goto_programt &dest,
   const exprt &lhs,
@@ -225,18 +201,6 @@ void goto_inlinet::replace_return(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: goto_inlinet::expand_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_inlinet::expand_function_call(
   goto_programt &dest,
@@ -424,18 +388,6 @@ void goto_inlinet::expand_function_call(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_inlinet::goto_inline
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_inlinet::goto_inline(goto_programt &dest)
 {
   goto_inline_rec(dest, true);
@@ -443,18 +395,6 @@ void goto_inlinet::goto_inline(goto_programt &dest)
     static_cast<const exprt &>(get_nil_irep()),
     static_cast<const exprt &>(get_nil_irep()));
 }
-
-/*******************************************************************\
-
-Function: goto_inlinet::goto_inline_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_inlinet::goto_inline_rec(goto_programt &dest, bool full)
 {
@@ -479,18 +419,6 @@ void goto_inlinet::goto_inline_rec(goto_programt &dest, bool full)
     dest.update();
   }
 }
-
-/*******************************************************************\
-
-Function: goto_inlinet::inline_instruction
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool goto_inlinet::inline_instruction(
   goto_programt &dest,
@@ -526,18 +454,6 @@ bool goto_inlinet::inline_instruction(
 
   return expanded;
 }
-
-/*******************************************************************\
-
-Function: goto_inline
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_inline(
   goto_functionst &goto_functions,
@@ -597,18 +513,6 @@ void goto_inline(
     }
 }
 
-/*******************************************************************\
-
-Function: goto_inline
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_inline(
   goto_functionst &goto_functions,
   optionst &options,
@@ -658,18 +562,6 @@ void goto_inline(
       it->second.body.clear();
     }
 }
-
-/*******************************************************************\
-
-Function: goto_partial_inline
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_partial_inline(
   goto_functionst &goto_functions,

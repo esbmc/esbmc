@@ -16,18 +16,6 @@ Date: February 2006
 
 #include "rw_set.h"
 
-/*******************************************************************\
-
-Function: rw_sett::compute
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void rw_sett::compute(const codet &code)
 {
   const irep_idt &statement=code.get_statement();
@@ -39,35 +27,11 @@ void rw_sett::compute(const codet &code)
   }
 }
 
-/*******************************************************************\
-
-Function: rw_sett::assign
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void rw_sett::assign(const exprt &lhs, const exprt &rhs)
 {
   read(rhs);
   read_write_rec(lhs, false, true, "", guardt());
 }
-
-/*******************************************************************\
-
-Function: rw_sett::read_write_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void rw_sett::read_write_rec(
   const exprt &expr,

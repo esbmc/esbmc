@@ -12,18 +12,6 @@ Date: May 2007
 
 #include "goto_program_irep.h"
 
-/*******************************************************************\
-
-Function: convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert(const goto_programt::instructiont &instruction, irept &irep)
 {
   irep.code(migrate_expr_back(instruction.code));
@@ -89,18 +77,6 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
   }
 }
 
-/*******************************************************************\
-
-Function: convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert(const irept &irep, goto_programt::instructiont &instruction)
 {
   migrate_expr(static_cast<const exprt&>(irep.code()), instruction.code);
@@ -132,18 +108,6 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
   }
 }
 
-/*******************************************************************\
-
-Function: convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert( const goto_programt &program, irept &irep )
 {
   irep.id("goto-program");
@@ -157,18 +121,6 @@ void convert( const goto_programt &program, irept &irep )
     convert(*it, irep.get_sub().back());
   }
 }
-
-/*******************************************************************\
-
-Function: convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void convert( const irept &irep, goto_programt &program )
 {
