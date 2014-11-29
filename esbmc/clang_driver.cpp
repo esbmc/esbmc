@@ -14,7 +14,7 @@ using namespace llvm;
 
 static llvm::cl::OptionCategory dummy_tool_cat("dummy-tool-cat");
 
-int
+std::vector<std::unique_ptr<clang::ASTUnit> >
 cbmc_parseoptionst::parse_clang()
 {
 
@@ -42,7 +42,5 @@ cbmc_parseoptionst::parse_clang()
 
   Tool.buildASTs(ASTs);
 
-  abort();
-
-  return 0;
+  return ASTs;
 }

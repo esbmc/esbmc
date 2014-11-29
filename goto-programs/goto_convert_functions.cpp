@@ -350,6 +350,16 @@ void goto_convert(
     throw 0;
 }
 
+void goto_convert(
+  std::vector<std::unique_ptr<clang::ASTUnit> > &clang_ast_vec,
+  contextt &context,
+  const optionst &options,
+  goto_functionst &functions,
+  message_handlert &message_handler)
+{
+  abort();
+}
+
 void
 goto_convert_functionst::collect_type(const irept &type, typename_sett &deps)
 {

@@ -17,6 +17,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <options.h>
 #include <cmdline.h>
 
+#include <clang/Frontend/ASTUnit.h>
+
 #include "bmc.h"
 
 extern const struct opt_templ esbmc_options[];
@@ -67,7 +69,7 @@ protected:
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
 
-  int parse_clang();
+  std::vector<std::unique_ptr<clang::ASTUnit> > parse_clang();
 };
 
 #endif

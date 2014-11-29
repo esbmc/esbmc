@@ -11,6 +11,8 @@ Date: June 2003
 #ifndef CPROVER_GOTO_CONVERT_FUNCTIONS_H
 #define CPROVER_GOTO_CONVERT_FUNCTIONS_H
 
+#include <clang/Frontend/ASTUnit.h>
+
 #include "goto_functions.h"
 #include "goto_convert_class.h"
 
@@ -18,6 +20,13 @@ Date: June 2003
 void goto_convert(
   contextt &context,
   optionst &options,
+  goto_functionst &functions,
+  message_handlert &message_handler);
+
+void goto_convert(
+  std::vector<std::unique_ptr<clang::ASTUnit> > &clang_ast_vec,
+  contextt &context,
+  const optionst &options,
   goto_functionst &functions,
   message_handlert &message_handler);
 
