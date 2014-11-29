@@ -20,10 +20,13 @@ cbmc_parseoptionst::parse_clang()
 
   // From the clang tool example,
   int num_args = cmdline.args.size();
+  num_args += 2;
   const char **the_args = malloc(sizeof(const char*) * num_args);
-  unsigned int i = 0;
+  the_args[0] = "clang";
+  unsigned int i = 1;
   for (const std::string &str : cmdline.args)
     the_args[i++] = str.c_str();
+  the_args[i++] = "--";
 
   CommonOptionsParser OptionsParser(num_args, the_args, dummy_tool_cat);
   free(the_args);
