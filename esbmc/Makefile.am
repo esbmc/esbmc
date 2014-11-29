@@ -1,6 +1,7 @@
 bin_PROGRAMS = esbmc
 esbmc_SOURCES = main.cpp parseoptions.cpp bmc.cpp  \
-                document_subgoals.cpp  show_vcc.cpp options.cpp
+                document_subgoals.cpp  show_vcc.cpp options.cpp \
+                clang_driver.cpp
 ESBMC_SOLVER_LIBS = @ESBMC_SOLVER_LIBS@
 libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.a ../langapi/liblangapi.a ../ansi-c/libansic.la ../ansi-c/libclib.la ../ansi-c/cpp/libcpp.a ../ansi-c/headers/libheaders.a ../goto-programs/libgotoprograms.a ../pointer-analysis/libpointeranalysis.a ../util/libutil.a ../big-int/libbigint.a ../solvers/libsolvers.la buildidstring.o
 esbmc_LDADD = $(libs_to_link_in) $(ESBMC_SOLVER_LIBS)
