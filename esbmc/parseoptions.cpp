@@ -1126,6 +1126,8 @@ bool cbmc_parseoptionst::get_goto_program(
         return true;
       }
 
+      __asm__("int $3");
+      parse_clang();
       if(parse()) return true;
       if(typecheck()) return true;
       if(final()) return true;
