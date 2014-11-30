@@ -273,6 +273,16 @@ void goto_convert(
   goto_functionst &functions,
   message_handlert &message_handler)
 {
+  // Iterate through each translation unit and their global symbols, creating
+  // symbols as we go.
+
+  for (auto &translation_unit : clang_ast_vec) {
+    clang::ASTUnit::top_level_iterator it;
+    for (it = translation_unit->top_level_begin();
+         it != translation_unit->top_level_end(); it++) {
+      std::cerr << "Got decl kind " << (*it)->getDeclKindName() << std::endl;
+    }
+  }
   abort();
 }
 
