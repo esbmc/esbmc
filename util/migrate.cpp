@@ -2434,3 +2434,15 @@ migrate_expr_back(const expr2tc &ref)
     abort();
   }
 }
+
+void
+migrate_type(const clang::Type &type, type2tc &new_type)
+{
+  abort();
+}
+
+void
+migrate_expr(const clang::Expr &expr, type2tc &new_expr)
+{
+  abort();
+}
