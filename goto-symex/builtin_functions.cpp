@@ -25,6 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "execution_state.h"
 #include "reachability_tree.h"
+#include "../ansi-c/convert_float_literal.h"
 
 #ifdef EIGEN_LIB
 bool isApprox(double a, double b)
@@ -749,9 +750,9 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
                                        reachability_treet &art __attribute__((unused)))
 {
 
-	call.clone();
+   call.clone();
 
-   //#ifdef EIGEN_LIB
+   #ifdef EIGEN_LIB
 
       std::vector<expr2tc> args = call.operands;
       assert(args.size()==4);
@@ -764,9 +765,6 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
       std::complex<double> pairs[size_pairs][2];
       unsigned int idx = 0;
       unsigned int idy = 0;
-
-      /* DEBUG */
-      /* std::cout << "root rows: " << qtd_roots  << " ~ qtd pairs: " << size_pairs << std::endl; */
 
       for(int i=0; i<qtd_roots; i++){
          /* check if is a complex root */
@@ -792,30 +790,8 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
          }
       }
 
-      /* DEBUG */
-      /* print root pairs */
-      /* for(int i=0; i<size_pairs; i++){
-         for(int j=0; j<2;j++){
-            std::cout << pairs[i][j].real() << " + (" << pairs[i][j].imag() << ")i; " ;
-          }
-          std::cout << std::endl;
-      } */
-
-      /* DEBUG */
-      /* show cascades
-      std::cout << "cascades are: \n";
-         for(int i=0; i<size_pairs; i++){
-            std::cout << i+1 << ") ";
-            // complex pairs
-            if ((pairs[i][0].imag() != 0) && (pairs[i][1].imag() != 0)){
-               std::cout << "1 " << 2 * pairs[i][0].real() << " " << pow(pairs[i][0].real(),2) + pow(pairs[i][0].imag(),2);
-            }else{
-               std::cout << "1 " << -(pairs[i][0].real()  + pairs[i][1].real()) << " " << (pairs[i][0].real() * pairs[i][1].real());
-            }
-            std::cout << std::endl;
-      }*/
-
-      float cascade_coefficients[ 3 * size_pairs ];
+      int total_coefficients = 3 * size_pairs;
+      float cascade_coefficients[ total_coefficients ];
       int cc_count = 0;
       for(int i=0; i<size_pairs; i++){
     	  if ((pairs[i][0].imag() != 0) && (pairs[i][1].imag() != 0)){
@@ -829,74 +805,46 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
     	  }
     	  cc_count = cc_count + 3;
       }
-
       assert(cascade_coefficients[0] == 1);
 
-      /* DEBUG */
-      /* std::cout << "Cascade Coefficients (Vector Mode): ";
-      for(int i=0; i<(3 * size_pairs); i++){
-    	  std::cout << cascade_coefficients[i] << " " ;
-      } */
-
-      /**************** test using array **************/
-
-      /* ARRAY */
-
-      std::vector<expr2tc> cout_data;
-      type2tc cout_element_type = get_uint_type(64);
-
-      cout_data.push_back(constant_int2tc(cout_element_type, BigInt(5)));
-      cout_data.push_back(constant_int2tc(cout_element_type, BigInt(3)));
-      cout_data.push_back(constant_int2tc(cout_element_type, BigInt(2)));
-
-      type2tc cout_array_type(new array_type2t(cout_element_type,gen_ulong(64), false));
-      constant_array2tc cout_array(cout_array_type, cout_data);
-      exprt cout_array_exp1 = migrate_expr_back(cout_array);
-
-      exprt address_of("address_of", pointer_typet());
-      address_of.type().subtype()=int_type();
-      address_of.copy_to_operands(cout_array_exp1);
-      expr2tc address_of_2;
-      migrate_expr(address_of,address_of_2);
-
+      /* do out array */
       expr2tc out_exp2 = args.at(2);
-      exprt out_exp = migrate_expr_back(out_exp2);
-      out_exp.copy_to_operands(address_of);
-      out_exp.type().subtype() = int_type();
+      const address_of2t &addrof = to_address_of2t(out_exp2);
+      const index2t &indexof = to_index2t(addrof.ptr_obj);
 
-      expr2tc out_expr2_new;
-      migrate_expr(out_exp,out_expr2_new);
-      out_exp2 = out_expr2_new;
+      guardt guard;
+      for(int i=0; i<(total_coefficients); i++){
 
-      code_assign2tc assign2(out_exp2, address_of_2);
-      symex_assign(assign2);
+    	  expr2tc index(constant_int2tc(uint_type2(), BigInt(i)));
 
-      /* INTEGER */
+          std::string cf_value = std::to_string(cascade_coefficients[i]);
+          std::string::size_type find_l = cf_value.find("l",0);
+          if (find_l != std::string::npos){
+        	  cf_value = cf_value.replace(find_l, 1, "f");
+          }else{
+        	  cf_value = cf_value + "f";
+          }
 
-      expr2tc cdsize_expr2 = args.at(3);
-      exprt cdsize_expr = migrate_expr_back(cdsize_expr2);
+          exprt value_exprt;
+          convert_float_literal(cf_value, value_exprt);
+          expr2tc value_exprt2;
+          migrate_expr(value_exprt, value_exprt2);
+          constant_fixedbv2t value(value_exprt2->type, fixedbvt(value_exprt));
+          index2tc idx2(out_exp2->type, indexof.source_value, index);
+          symex_assign_rec(idx2, value_exprt2, guard);
 
-      constant_int2tc cdsize_value_expr2(uint_type2(), BigInt(cout_data.size()));
-      exprt cdsize_value_expr1 = migrate_expr_back(cdsize_value_expr2);
+      }
 
-      exprt address_of_i("address_of", pointer_typet());
-      address_of_i.type().subtype()=int_type();
-      address_of_i.copy_to_operands(cdsize_value_expr1);
-
-      expr2tc address_of_2_i;
-      migrate_expr(address_of_i,address_of_2_i);
-      cdsize_expr.move_to_operands(address_of_i);
-
-      expr2tc cdsize_expr2_new;
-      migrate_expr(cdsize_expr, cdsize_expr2_new);
-
-      code_assign2tc assign(cdsize_expr2_new, cdsize_value_expr2);
+      /* outsize value */
+      expr2tc cout_expr2 = args.at(3);
+      constant_int2tc cdsize_value(uint_type2(), BigInt(total_coefficients));
+      code_assign2tc assign(cout_expr2, cdsize_value);
       symex_assign(assign);
 
-   //#else
-   //    std::cout << "Your ESBMC version doesn't have eigenlibrary support. Try other version." << std::endl;
-   //    exit(1);
-   //#endif
+   #else
+       std::cout << "Your ESBMC version doesn't have eigenlibrary support. Try other version." << std::endl;
+       exit(1);
+   #endif
 }
 
 void
