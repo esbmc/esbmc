@@ -26,6 +26,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 #include "../ansi-c/convert_float_literal.h"
+#include "../util/dcutil.h"
 
 #ifdef EIGEN_LIB
 bool isApprox(double a, double b)
@@ -850,23 +851,63 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
    std::vector<expr2tc> args = call.operands;
    //assert(args.size()==4);
 
+   dcutil dc;
+
+   /* getting size of array (n) */
    expr2tc size_expr2 = args.at(2);
+   const symbol2t &size_symbol = to_symbol2t(size_expr2);
+   exprt size_exprt = ns.lookup(size_symbol.thename).value;
+   unsigned int size = atoi(size_exprt.get_string("#cformat").c_str());
 
-   size_expr2->dump();
-
-/*   std::vector<double> coefficients_vector;
+   /* getting 'a' array coefficients */
+   float a[size];
+   expr2tc a_expr2 = args.at(0);
+   const address_of2t &a_addrof = to_address_of2t(a_expr2);
+   const index2t &idx = to_index2t(a_addrof.ptr_obj);
+   const symbol2t &a_symbol = to_symbol2t(idx.source_value);
+   exprt a_exprt = ns.lookup(a_symbol.thename).value;
    for(unsigned int i=0; i<size; ++i){
-      double value=0;
+      float value=0;
 	  // The following code is necessary because #cformat does not have signal information
-	  if(element.operands()[i].id()=="unary+")
-	     value=atof(element.operands()[i].op0().get_string("#cformat").c_str());
-	  else if(element.operands()[i].id()=="unary-")
-	     value=atof(element.operands()[i].op0().get_string("#cformat").c_str())*(-1);
+	  if(a_exprt.operands()[i].id()=="unary+")
+	     value=atof(a_exprt.operands()[i].op0().get_string("#cformat").c_str());
+	  else if(a_exprt.operands()[i].id()=="unary-")
+	     value=atof(a_exprt.operands()[i].op0().get_string("#cformat").c_str())*(-1);
 	  else
-	     value=atof(element.operands()[i].get_string("#cformat").c_str());
-	     coefficients_vector.push_back(value);
-	  }*/
+	     value=atof(a_exprt.operands()[i].get_string("#cformat").c_str());
+	  a[i] = value;
+   }
 
+   /* getting delta value */
+   expr2tc delta_expr2 = args.at(3);
+   constant_fixedbv2t delta_fxdbv = to_constant_fixedbv2t(delta_expr2);
+   float delta = atof(delta_fxdbv.value.to_ansi_c_string().c_str());
+
+   float out[size];
+   dc.generate_delta_coefficients(a, out, size, delta);
+
+   /* do out array */
+   expr2tc out_exp2 = args.at(1);
+   const address_of2t &addrof = to_address_of2t(out_exp2);
+   const index2t &indexof = to_index2t(addrof.ptr_obj);
+   guardt guard;
+   for(unsigned int i=0; i<(size); i++){
+      expr2tc index(constant_int2tc(uint_type2(), BigInt(i)));
+      std::string cf_value = std::to_string(out[i]);
+      std::string::size_type find_l = cf_value.find("l",0);
+      if (find_l != std::string::npos){
+	     cf_value = cf_value.replace(find_l, 1, "f");
+	  }else{
+		 cf_value = cf_value + "f";
+	  }
+	  exprt value_exprt;
+	  convert_float_literal(cf_value, value_exprt);
+	  expr2tc value_exprt2;
+	  migrate_expr(value_exprt, value_exprt2);
+	  constant_fixedbv2t value(value_exprt2->type, fixedbvt(value_exprt));
+	  index2tc idx2(out_exp2->type, indexof.source_value, index);
+	  symex_assign_rec(idx2, value_exprt2, guard);
+	}
 }
 
 void

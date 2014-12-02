@@ -83,6 +83,21 @@ public:
 	 */
 	double pow(double a, double b);
 
+	/**
+	 * Simple method to generate a binomial coefficient.
+	 *
+	 * @param n
+	 * @param p
+	 */
+	int binomial_coefficient(int n, int p);
+
+	/**
+	 * Simple method to generate a fatorial of a number.
+	 *
+	 * @param n is the number
+	 */
+	int fatorial(int n);
+
 };
 
 #endif /* UTIL_DIGITAL_CONTROLLERS_DCUTIL_H_ */

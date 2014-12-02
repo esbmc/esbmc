@@ -30,7 +30,7 @@ void dcutil::generate_delta_coefficients(float vetor[], float out[], int n, floa
 }
 
 void dcutil::generate_delta_coefficients_b(float vetor[], float out[], int n, float delta){
-	dcutil_init_array(out,n);
+	init_array(out,n);
 	float a_invertido[n];
 	init_array(a_invertido,n);
 	revert_array(vetor, a_invertido, n);
@@ -50,11 +50,19 @@ void dcutil::generate_delta_coefficients_b(float vetor[], float out[], int n, fl
 	revert_array(_a, out, n);
 }
 
+int dcutil::fatorial(int n){
+   return n == 0 ? 1 : n * fatorial(n-1);
+}
+
+int dcutil::binomial_coefficient(int n, int p){
+   return fatorial(n) / (fatorial(p) * fatorial(n-p));
+}
+
 void dcutil::delta_binomial_generation(int grau, float delta, float out[]){
 	init_array(out, 3);
 	int i;
 	for(i=0; i<=grau; i++){
-		out[grau-i] = coeficiente_binomial(grau, i) * potencia(delta, grau-i);
+		out[grau-i] = binomial_coefficient(grau, i) * pow(delta, grau-i);
 	}
 }
 
