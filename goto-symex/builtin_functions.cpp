@@ -849,7 +849,7 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
 void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call2t &call, reachability_treet &art){
 
    std::vector<expr2tc> args = call.operands;
-   //assert(args.size()==4);
+   assert(args.size()==5);
 
    dcutil dc;
 
@@ -883,8 +883,17 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
    constant_fixedbv2t delta_fxdbv = to_constant_fixedbv2t(delta_expr2);
    float delta = atof(delta_fxdbv.value.to_ansi_c_string().c_str());
 
+   /* getting denominator flag value */
+   expr2tc isDenominator_expr2 = args.at(4);
+   constant_bool2t isDenominator_bool = to_constant_bool2t(isDenominator_expr2);
+   bool isDenominator = isDenominator_bool.constant_value;
+
    float out[size];
-   dc.generate_delta_coefficients(a, out, size, delta);
+   if (isDenominator == 1){
+       dc.generate_delta_coefficients(a, out, size, delta);
+   }else{
+	   dc.generate_delta_coefficients_b(a, out, size, delta);
+   }
 
    /* do out array */
    expr2tc out_exp2 = args.at(1);
