@@ -418,6 +418,10 @@ protected:
   void intrinsic_generate_cascade_controllers(const code_function_call2t &call,
                                  reachability_treet &art);
 
+  /** Generate delta coefficients */
+  void intrinsic_generate_delta_coefficients(const code_function_call2t &call,
+                                 reachability_treet &art);
+
 #ifdef EIGEN_LIB
   /** Get roots of a polynomial */
   int get_roots(expr2tc array_element, std::vector<RootType>& roots);

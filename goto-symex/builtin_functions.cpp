@@ -749,9 +749,7 @@ void
 goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &call,
                                        reachability_treet &art __attribute__((unused)))
 {
-
    call.clone();
-
    #ifdef EIGEN_LIB
 
       std::vector<expr2tc> args = call.operands;
@@ -796,7 +794,7 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
       for(int i=0; i<size_pairs; i++){
     	  if ((pairs[i][0].imag() != 0) && (pairs[i][1].imag() != 0)){
     		  cascade_coefficients[cc_count] = 1.0;
-    		  cascade_coefficients[cc_count + 1] = 2 * pairs[i][0].real();
+    		  cascade_coefficients[cc_count + 1] = -2 * pairs[i][0].real();
     		  cascade_coefficients[cc_count + 2] = pow(pairs[i][0].real(),2) + pow(pairs[i][0].imag(),2);
     	  }else{
     		  cascade_coefficients[cc_count] = 1.0;
@@ -845,6 +843,30 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
        std::cout << "Your ESBMC version doesn't have eigenlibrary support. Try other version." << std::endl;
        exit(1);
    #endif
+}
+
+void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call2t &call, reachability_treet &art){
+
+   std::vector<expr2tc> args = call.operands;
+   //assert(args.size()==4);
+
+   expr2tc size_expr2 = args.at(2);
+
+   size_expr2->dump();
+
+/*   std::vector<double> coefficients_vector;
+   for(unsigned int i=0; i<size; ++i){
+      double value=0;
+	  // The following code is necessary because #cformat does not have signal information
+	  if(element.operands()[i].id()=="unary+")
+	     value=atof(element.operands()[i].op0().get_string("#cformat").c_str());
+	  else if(element.operands()[i].id()=="unary-")
+	     value=atof(element.operands()[i].op0().get_string("#cformat").c_str())*(-1);
+	  else
+	     value=atof(element.operands()[i].get_string("#cformat").c_str());
+	     coefficients_vector.push_back(value);
+	  }*/
+
 }
 
 void
