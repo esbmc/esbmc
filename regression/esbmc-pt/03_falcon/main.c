@@ -31,7 +31,7 @@ void main()
 {
   pthread_t id1, id2, id3;
 
-  pthread_create(id1, NULL, &thread1, NULL);
-  pthread_create(id2, NULL, &thread2, NULL);
-  pthread_create(id3, NULL, &thread3, NULL);  
+  pthread_create(&id1, NULL, &thread1, NULL);
+  pthread_create(&id2, NULL, &thread2, NULL);
+  pthread_create(&id3, NULL, &thread3, NULL);  
 }
