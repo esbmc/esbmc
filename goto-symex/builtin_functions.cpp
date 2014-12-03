@@ -879,9 +879,17 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
    }
 
    /* getting delta value */
+   float delta = -1;
    expr2tc delta_expr2 = args.at(3);
-   constant_fixedbv2t delta_fxdbv = to_constant_fixedbv2t(delta_expr2);
-   float delta = atof(delta_fxdbv.value.to_ansi_c_string().c_str());
+   if (is_constant_fixedbv2t(delta_expr2)) {
+      constant_fixedbv2t delta_fxdbv = to_constant_fixedbv2t(delta_expr2);
+      delta = atof(delta_fxdbv.value.to_ansi_c_string().c_str());
+   } else if (is_symbol2t(delta_expr2)){
+	   const symbol2t &delta_symbol = to_symbol2t(delta_expr2);
+       exprt delta_exprt = ns.lookup(delta_symbol.thename).value;
+       fixedbvt delta_fx = fixedbvt(delta_exprt);
+       delta = atof(delta_fx.to_ansi_c_string().c_str());
+   }
 
    /* getting denominator flag value */
    expr2tc isDenominator_expr2 = args.at(4);
