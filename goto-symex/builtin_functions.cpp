@@ -28,6 +28,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "../ansi-c/convert_float_literal.h"
 #include "../util/dcutil.h"
 
+#include <vector>
+
+std::vector<exprt> delta_operands_cache;
+
 #ifdef EIGEN_LIB
 bool isApprox(double a, double b)
 {
@@ -907,6 +911,8 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
    expr2tc out_exp2 = args.at(1);
    const address_of2t &addrof = to_address_of2t(out_exp2);
    const index2t &indexof = to_index2t(addrof.ptr_obj);
+   delta_operands_cache.clear();
+
    guardt guard;
    for(unsigned int i=0; i<(size); i++){
       expr2tc index(constant_int2tc(uint_type2(), BigInt(i)));
@@ -919,6 +925,7 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
 	  }
 	  exprt value_exprt;
 	  convert_float_literal(cf_value, value_exprt);
+	  delta_operands_cache.push_back(value_exprt);
 	  expr2tc value_exprt2;
 	  migrate_expr(value_exprt, value_exprt2);
 	  constant_fixedbv2t value(value_exprt2->type, fixedbvt(value_exprt));
@@ -1054,7 +1061,17 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
   else
     assert(0);
 
-  assert(element.operands().size());
+  if (element.operands().size() == 0){
+	  if (delta_operands_cache.size() == 0){
+		  assert(0);
+	  }else{
+		  /* XXX move delta cache to current operands (find a better form to do it) */
+		  for(unsigned int i = 0; i < delta_operands_cache.size(); i++){
+			  element.operands().push_back(delta_operands_cache.at(i));
+		  }
+		  delta_operands_cache.clear();
+	  }
+  }
 
   unsigned int size=element.operands().size();
 
