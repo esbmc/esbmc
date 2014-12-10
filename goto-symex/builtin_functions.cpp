@@ -30,7 +30,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <vector>
 
-std::vector<exprt> delta_operands_cache;
+std::vector<exprt> delta_numerator_operands_cache;
+std::vector<exprt> delta_denominator_operands_cache;
 
 #ifdef EIGEN_LIB
 bool isApprox(double a, double b)
@@ -758,10 +759,14 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
    #ifdef EIGEN_LIB
 
       std::vector<expr2tc> args = call.operands;
-      assert(args.size()==4);
+      assert(args.size()==5);
+
+      expr2tc isDenominator_expr2 = args.at(4);
+      constant_bool2t isDenominator_bool = to_constant_bool2t(isDenominator_expr2);
+      bool isDenominator = isDenominator_bool.constant_value;
 
       std::vector<RootType> denominator_roots;
-  	  get_roots(args.at(0), denominator_roots);
+  	  get_roots(args.at(0), denominator_roots, isDenominator);
       int qtd_roots = denominator_roots.size();
 
       int size_pairs = qtd_roots % 2 == 0 ? qtd_roots / 2 : (qtd_roots + 1) / 2 ;
@@ -769,12 +774,17 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
       unsigned int idx = 0;
       unsigned int idy = 0;
 
+      std::complex<double> ugly_duck;
+      int ugly_duck_line = -1;
+
       for(int i=0; i<qtd_roots; i++){
          /* check if is a complex root */
          if (denominator_roots.at(i).imag() != 0){
             /* check if already exists a real in pair */
             if (idy != 0){
                pairs[idx][idy] = 0;
+               ugly_duck = pairs[idx][idy-1];
+               ugly_duck_line = idx;
                idx = idx + 1;
                idy = 0;
             }
@@ -792,23 +802,39 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
             }
          }
       }
+      /* ugly duck is the last */
+      if ((ugly_duck_line == -1) && (qtd_roots % 2 != 0)){
+         ugly_duck = pairs[idx][0];
+         ugly_duck_line = idx;
+      }
 
       int total_coefficients = 3 * size_pairs;
       float cascade_coefficients[ total_coefficients ];
       int cc_count = 0;
+      bool ugly_duck_generated = 0;
       for(int i=0; i<size_pairs; i++){
-    	  if ((pairs[i][0].imag() != 0) && (pairs[i][1].imag() != 0)){
-    		  cascade_coefficients[cc_count] = 1.0;
-    		  cascade_coefficients[cc_count + 1] = -2 * pairs[i][0].real();
-    		  cascade_coefficients[cc_count + 2] = pow(pairs[i][0].real(),2) + pow(pairs[i][0].imag(),2);
-    	  }else{
-    		  cascade_coefficients[cc_count] = 1.0;
-    		  cascade_coefficients[cc_count + 1] = -(pairs[i][0].real()  + pairs[i][1].real());
-    		  cascade_coefficients[cc_count + 2] = (pairs[i][0].real() * pairs[i][1].real());
+    	  if((ugly_duck_line != -1) && (ugly_duck_generated == 0)){
+    	      cascade_coefficients[cc_count] = 0;
+    	      cascade_coefficients[cc_count + 1] = 1;
+    	      cascade_coefficients[cc_count + 2] = - ugly_duck.real();
+    	      ugly_duck_generated = 1;
+    	      i = i - 1;
+    	      cc_count = cc_count + 3;
+    	      continue;
     	  }
-    	  cc_count = cc_count + 3;
+    	  if (i != ugly_duck_line){
+			  if ((pairs[i][0].imag() != 0) && (pairs[i][1].imag() != 0)){
+				  cascade_coefficients[cc_count] = 1.0;
+				  cascade_coefficients[cc_count + 1] = -2 * pairs[i][0].real();
+				  cascade_coefficients[cc_count + 2] = pow(pairs[i][0].real(),2) + pow(pairs[i][0].imag(),2);
+			  }else{
+				  cascade_coefficients[cc_count] = 1.0;
+				  cascade_coefficients[cc_count + 1] = -(pairs[i][0].real()  + pairs[i][1].real());
+				  cascade_coefficients[cc_count + 2] = (pairs[i][0].real() * pairs[i][1].real());
+			  }
+			  cc_count = cc_count + 3;
+    	  }
       }
-      assert(cascade_coefficients[0] == 1);
 
       /* do out array */
       expr2tc out_exp2 = args.at(2);
@@ -902,8 +928,10 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
 
    float out[size];
    if (isDenominator == 1){
+	   delta_denominator_operands_cache.clear();
        dc.generate_delta_coefficients(a, out, size, delta);
    }else{
+	   delta_numerator_operands_cache.clear();
 	   dc.generate_delta_coefficients_b(a, out, size, delta);
    }
 
@@ -911,7 +939,7 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
    expr2tc out_exp2 = args.at(1);
    const address_of2t &addrof = to_address_of2t(out_exp2);
    const index2t &indexof = to_index2t(addrof.ptr_obj);
-   delta_operands_cache.clear();
+
 
    guardt guard;
    for(unsigned int i=0; i<(size); i++){
@@ -925,7 +953,13 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
 	  }
 	  exprt value_exprt;
 	  convert_float_literal(cf_value, value_exprt);
-	  delta_operands_cache.push_back(value_exprt);
+
+	  if(isDenominator == true){
+		  delta_denominator_operands_cache.push_back(value_exprt);
+	  }else{
+		  delta_numerator_operands_cache.push_back(value_exprt);
+	  }
+
 	  expr2tc value_exprt2;
 	  migrate_expr(value_exprt, value_exprt2);
 	  constant_fixedbv2t value(value_exprt2->type, fixedbvt(value_exprt));
@@ -948,7 +982,7 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
 
   // Denominator roots
   std::vector<RootType> denominator_roots;
-  int denominator_has_roots = get_roots(args.at(0), denominator_roots);
+  int denominator_has_roots = get_roots(args.at(0), denominator_roots, true);
   if(denominator_has_roots == 2)
   {
     std::cerr << "**** WARNING: No practical filter if the denominator roots are zero." << std::endl;
@@ -956,7 +990,7 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   }
 
   std::vector<RootType> numerator_roots;
-  int numerator_has_roots = get_roots(args.at(1), numerator_roots);
+  int numerator_has_roots = get_roots(args.at(1), numerator_roots, false);
   if(numerator_has_roots == 2)
   {
     std::cerr << "**** WARNING: No practical filter if the numerator roots are zero." << std::endl;
@@ -1029,7 +1063,7 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
 }
 
 #ifdef EIGEN_LIB
-int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
+int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots, bool isDenominator)
 {
   // This code will get an irep2 of an array and return the roots of the
   // polynomial created by the values on the array
@@ -1062,16 +1096,25 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
     assert(0);
 
   if (element.operands().size() == 0){
-	  if (delta_operands_cache.size() == 0){
+	  if (((isDenominator == true) && (delta_denominator_operands_cache.size() == 0))
+			  || ((isDenominator == false) && (delta_numerator_operands_cache.size() == 0))){
 		  assert(0);
 	  }else{
 		  /* XXX move delta cache to current operands (find a better form to do it) */
-		  for(unsigned int i = 0; i < delta_operands_cache.size(); i++){
-			  element.operands().push_back(delta_operands_cache.at(i));
+		  if (isDenominator == true){
+			  for(unsigned int i = 0; i < delta_denominator_operands_cache.size(); i++){
+				  element.operands().push_back(delta_denominator_operands_cache.at(i));
+			  }
+			  delta_denominator_operands_cache.clear();
+		  }else{
+			  for(unsigned int i = 0; i < delta_numerator_operands_cache.size(); i++){
+				  element.operands().push_back(delta_numerator_operands_cache.at(i));
+			   }
+			  delta_numerator_operands_cache.clear();
 		  }
-		  delta_operands_cache.clear();
 	  }
   }
+  assert(element.operands().size());
 
   unsigned int size=element.operands().size();
 
