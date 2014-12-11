@@ -28,10 +28,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "../ansi-c/convert_float_literal.h"
 #include "../util/dcutil.h"
 
+#include <iomanip>
+#include <limits>
+#include <string>
 #include <vector>
 
 std::vector<exprt> delta_numerator_operands_cache;
 std::vector<exprt> delta_denominator_operands_cache;
+float delta_denominator_div = 0;
 
 #ifdef EIGEN_LIB
 bool isApprox(double a, double b)
@@ -930,6 +934,7 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
    if (isDenominator == 1){
 	   delta_denominator_operands_cache.clear();
        dc.generate_delta_coefficients(a, out, size, delta);
+       delta_denominator_div = out[0];
    }else{
 	   delta_numerator_operands_cache.clear();
 	   dc.generate_delta_coefficients_b(a, out, size, delta);
@@ -943,8 +948,14 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
 
    guardt guard;
    for(unsigned int i=0; i<(size); i++){
+
+	  float _value = out[i];
+	  _value = _value / delta_denominator_div;
+
       expr2tc index(constant_int2tc(uint_type2(), BigInt(i)));
-      std::string cf_value = std::to_string(out[i]);
+      std::ostringstream cf_value_precision;
+      cf_value_precision << std::setprecision(32) << _value;
+      std::string cf_value = cf_value_precision.str();
       std::string::size_type find_l = cf_value.find("l",0);
       if (find_l != std::string::npos){
 	     cf_value = cf_value.replace(find_l, 1, "f");
