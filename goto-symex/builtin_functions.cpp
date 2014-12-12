@@ -35,7 +35,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 std::vector<exprt> delta_numerator_operands_cache;
 std::vector<exprt> delta_denominator_operands_cache;
-float delta_denominator_div = 0;
+float delta_denominator_div = 1;
 
 #ifdef EIGEN_LIB
 bool isApprox(double a, double b)
