@@ -95,7 +95,7 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   }
 
   if (the_solver == "") {
-#ifdef Z3
+#ifdef BOOLECTOR
     std::cerr << "No solver specified; defaulting to Boolector" << std::endl;
     the_solver = "boolector";
 #else
