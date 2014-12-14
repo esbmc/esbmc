@@ -14,7 +14,7 @@ endif
 ifdef USE_SOLVER_BOOLECTOR
 BOOLECTOR = $(SATDIR)/boolector-2.0.1
 CXXFLAGS+= -DBOOLECTOR
-SOLVER_LIBS+= -L$(BOOLECTOR)/boolector -lboolector -L$(BOOLECTOR)/minisat/build/release/lib -lminisat
+SOLVER_LIBS+= -L$(BOOLECTOR)/boolector -lboolector -L$(BOOLECTOR)/lingeling -llgl
 INCLUDES+= -I $(BOOLECTOR)/boolector
 endif
 
