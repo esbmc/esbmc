@@ -71,7 +71,9 @@ $(MAINOBJ): $(OBJS) | $(HOSTOBJ)
 
 # Special purpose features,
 ifndef LINUX
+ifndef ONAMAC
 CXXFLAGS+=-DNO_OPENSSL
+endif
 endif
 
 DEPFILEEXISTS := $(shell stat $(OBJDIR)/.deps 2>/dev/null)
