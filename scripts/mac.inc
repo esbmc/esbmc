@@ -25,8 +25,12 @@ LIBS+=$(MINISAT_PATH)/core/lib_release.a
 endif
 
 # Other goo
-
-ifdef TARGET32
+FULLUNAME:=$(shell uname -a)
+WEARE64BIT:=$(shell uname -a | egrep "(CYGWIN.*WOW64|x86_64)")
+ifneq ($(WEARE64BIT),)
+CXXFLAGS += -m64
+GCCFLAGS += -m64
+else
 CXXFLAGS += -m32
 GCCFLAGS += -m32
 endif
