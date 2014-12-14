@@ -497,7 +497,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
   /* write graphml */
 
   graphml.add_child("graphml.graph", graph);
-  boost::property_tree::xml_writer_settings<char> settings('\t', 1);;
+  boost::property_tree::xml_writer_settings<std::string> settings('\t', 1);;
   boost::property_tree::write_xml(filename, graphml, std::locale(), settings);
 
 }
