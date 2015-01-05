@@ -934,7 +934,7 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
    if (isDenominator == 1){
 	   delta_denominator_operands_cache.clear();
        dc.generate_delta_coefficients(a, out, size, delta);
-       delta_denominator_div = out[0];
+   /*  delta_denominator_div = out[0]; */
    }else{
 	   delta_numerator_operands_cache.clear();
 	   dc.generate_delta_coefficients_b(a, out, size, delta);
@@ -945,31 +945,34 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
    const address_of2t &addrof = to_address_of2t(out_exp2);
    const index2t &indexof = to_index2t(addrof.ptr_obj);
 
-
    guardt guard;
    for(unsigned int i=0; i<(size); i++){
 
 	  float _value = out[i];
-	  _value = _value / delta_denominator_div;
+	  /* _value = _value / delta_denominator_div; */
 
       expr2tc index(constant_int2tc(uint_type2(), BigInt(i)));
       std::ostringstream cf_value_precision;
       cf_value_precision << std::setprecision(32) << _value;
       std::string cf_value = cf_value_precision.str();
       std::string::size_type find_l = cf_value.find("l",0);
-      if (find_l != std::string::npos){
+
+/*      if (find_l != std::string::npos){
 	     cf_value = cf_value.replace(find_l, 1, "f");
 	  }else{
 		 cf_value = cf_value + "f";
 	  }
+*/
 	  exprt value_exprt;
 	  convert_float_literal(cf_value, value_exprt);
 
+	  /*
 	  if(isDenominator == true){
 		  delta_denominator_operands_cache.push_back(value_exprt);
 	  }else{
 		  delta_numerator_operands_cache.push_back(value_exprt);
 	  }
+	  */
 
 	  expr2tc value_exprt2;
 	  migrate_expr(value_exprt, value_exprt2);
