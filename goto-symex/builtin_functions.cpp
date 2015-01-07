@@ -32,9 +32,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <limits>
 #include <string>
 #include <vector>
+#include <complex>
 
 std::vector<exprt> delta_numerator_operands_cache;
 std::vector<exprt> delta_denominator_operands_cache;
+std::map<std::string, exprt> delta_cache;
 float delta_denominator_div = 1;
 
 #ifdef EIGEN_LIB
@@ -957,7 +959,8 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
       std::string cf_value = cf_value_precision.str();
       std::string::size_type find_l = cf_value.find("l",0);
 
-/*      if (find_l != std::string::npos){
+/*
+      if (find_l != std::string::npos){
 	     cf_value = cf_value.replace(find_l, 1, "f");
 	  }else{
 		 cf_value = cf_value + "f";
@@ -966,13 +969,11 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
 	  exprt value_exprt;
 	  convert_float_literal(cf_value, value_exprt);
 
-	  /*
 	  if(isDenominator == true){
-		  delta_denominator_operands_cache.push_back(value_exprt);
+	  	  delta_denominator_operands_cache.push_back(value_exprt);
 	  }else{
 		  delta_numerator_operands_cache.push_back(value_exprt);
 	  }
-	  */
 
 	  expr2tc value_exprt2;
 	  migrate_expr(value_exprt, value_exprt2);
@@ -980,6 +981,52 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
 	  index2tc idx2(out_exp2->type, indexof.source_value, index);
 	  symex_assign_rec(idx2, value_exprt2, guard);
 	}
+}
+
+void goto_symext::intrinsic_check_delta_stability(const code_function_call2t &call, reachability_treet &art){
+	std::vector<expr2tc> args = call.operands;
+	assert(args.size()==2);
+
+	/* getting roots */
+	std::vector<RootType> delta_coefficients;
+	get_roots(args.at(0), delta_coefficients, true);
+
+	/* getting sample rate */
+	float sample_time = -1;
+	expr2tc sample_time_expr2 = args.at(1);
+	if (is_constant_fixedbv2t(sample_time_expr2)) {
+		constant_fixedbv2t sample_time_fxdbv = to_constant_fixedbv2t(sample_time_expr2);
+	    sample_time = atof(sample_time_fxdbv.value.to_ansi_c_string().c_str());
+	} else if (is_symbol2t(sample_time_expr2)){
+		const symbol2t &sample_time_symbol = to_symbol2t(sample_time_expr2);
+	    exprt sample_time_exprt = ns.lookup(sample_time_symbol.thename).value;
+	    fixedbvt sample_time_fx = fixedbvt(sample_time_exprt);
+	    sample_time = atof(sample_time_fx.to_ansi_c_string().c_str());
+	} else if(is_typecast2t(sample_time_expr2)){
+		typecast2t tcast = to_typecast2t(sample_time_expr2);
+		div2t dv = to_div2t(tcast.from);
+		constant_int2t num = to_constant_int2t(dv.side_1);
+		constant_int2t den = to_constant_int2t(dv.side_2);
+		sample_time = num.constant_value.to_long() / (float) den.constant_value.to_long();
+	}
+
+	bool stable = true;
+	for(unsigned int i=0; i<delta_coefficients.size(); i++){
+		std::complex<double> eig = delta_coefficients.at(i);
+
+		eig.real(eig.real() * sample_time);
+		eig.imag(eig.imag() * sample_time);
+		eig.real(eig.real() + 1);
+
+		if ((std::abs(eig) < 1) == false){
+			stable = false;
+			break;
+		}
+	}
+
+    constant_bool2tc result(stable);
+	code_assign2tc assign(call.ret, result);
+	symex_assign(assign);
 }
 
 void

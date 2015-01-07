@@ -422,6 +422,10 @@ protected:
   void intrinsic_generate_delta_coefficients(const code_function_call2t &call,
                                  reachability_treet &art);
 
+  /** Check delta stability */
+  void intrinsic_check_delta_stability(const code_function_call2t &call,
+                                 reachability_treet &art);
+
 #ifdef EIGEN_LIB
   /** Get roots of a polynomial */
   int get_roots(expr2tc array_element, std::vector<RootType>& roots, bool isDenominator);
