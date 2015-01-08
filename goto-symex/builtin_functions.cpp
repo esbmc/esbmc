@@ -884,23 +884,18 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
 void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call2t &call, reachability_treet &art){
 
    std::vector<expr2tc> args = call.operands;
-   assert(args.size()==4);
+   assert(args.size()==3);
 
    dcutil dc;
 
-   /* getting size of array (n) */
-   expr2tc size_expr2 = args.at(2);
-   const symbol2t &size_symbol = to_symbol2t(size_expr2);
-   exprt size_exprt = ns.lookup(size_symbol.thename).value;
-   unsigned int size = atoi(size_exprt.get_string("#cformat").c_str());
-
    /* getting 'a' array coefficients */
-   float a[size];
    expr2tc a_expr2 = args.at(0);
    const address_of2t &a_addrof = to_address_of2t(a_expr2);
    const index2t &idx = to_index2t(a_addrof.ptr_obj);
    const symbol2t &a_symbol = to_symbol2t(idx.source_value);
    exprt a_exprt = ns.lookup(a_symbol.thename).value;
+   unsigned int size = a_exprt.operands().size();
+   float a[size];
    for(unsigned int i=0; i<size; ++i){
       float value=0;
 	  // The following code is necessary because #cformat does not have signal information
@@ -915,7 +910,7 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
 
    /* getting delta value */
    float delta = -1;
-   expr2tc delta_expr2 = args.at(3);
+   expr2tc delta_expr2 = args.at(2);
    if (is_constant_fixedbv2t(delta_expr2)) {
       constant_fixedbv2t delta_fxdbv = to_constant_fixedbv2t(delta_expr2);
       delta = atof(delta_fxdbv.value.to_ansi_c_string().c_str());
@@ -925,6 +920,29 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
        fixedbvt delta_fx = fixedbvt(delta_exprt);
        delta = atof(delta_fx.to_ansi_c_string().c_str());
    }
+
+   /* prepare the fxp specifications */
+   /*
+   int iwidth = -1;
+   int precision = 1;
+   expr2tc iwidth_expr2 = args.at(3);
+   if (is_constant_int2t(iwidth_expr2)){
+	constant_int2t iwidth_const = to_constant_int2t(iwidth_expr2);
+	iwidth = iwidth_const.constant_value.to_long();
+   }else{
+	assert(0);
+   }
+   expr2tc precision_expr2 = args.at(4);
+   if (is_constant_int2t(precision_expr2)){
+	constant_int2t precision_const = to_constant_int2t(precision_expr2);
+	precision = precision_const.constant_value.to_long();
+   }else{
+	assert(0);
+   }
+   fixedbv_spect current_spect;
+   current_spect.width = iwidth + precision;
+   current_spect.integer_bits = iwidth;
+	*/
 
    /* getting out array */
    expr2tc out_exp2 = args.at(1);
@@ -938,6 +956,7 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
    /* remove possibles caches */
    delta_cache.erase(out_symbol.thename.as_string());
 
+   /* generate delta coefficients */
    dc.generate_delta_coefficients(a, out, size, delta);
 
    /* do out array */
@@ -954,19 +973,31 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
 
 	  exprt value_exprt;
 	  convert_float_literal(cf_value, value_exprt);
-	  current_cache.push_back(value_exprt);
 
+      /* apply fxp truncation */
+/*	  fixedbvt fxp = fixedbvt(value_exprt);
+	  fxp.round(current_spect);
+      exprt modified_value_exprt;
+      std::string cf_fxp_value = fxp.to_ansi_c_string() + "f";
+   	  convert_float_literal(cf_fxp_value, modified_value_exprt);
+
+   	  if (cf_fxp_value.compare("0f") == 0){
+   		  std::cout << "[ERROR] Does not possible to represent this delta value using this precision." << std::endl;
+   		  exit(0);
+   	  }
+*/
+	  current_cache.push_back(value_exprt);
 	  expr2tc value_exprt2;
 	  migrate_expr(value_exprt, value_exprt2);
-	  constant_fixedbv2t value(value_exprt2->type, fixedbvt(value_exprt));
-
 	  index2tc idx2(out_exp2->type, indexof.source_value, index);
 	  symex_assign_rec(idx2, value_exprt2, guard);
 	}
+
     delta_cache.insert(std::pair<std::string, std::vector<exprt>>(out_symbol.thename.as_string(),current_cache));
 }
 
 void goto_symext::intrinsic_check_delta_stability(const code_function_call2t &call, reachability_treet &art){
+
 	std::vector<expr2tc> args = call.operands;
 	assert(args.size()==4);
 
@@ -1008,6 +1039,10 @@ void goto_symext::intrinsic_check_delta_stability(const code_function_call2t &ca
 		for(unsigned int i=0; i < cache.size(); i++){
 			fixedbvt fxp = fixedbvt(cache.at(i));
 			fxp.round(current_spect);
+			if ((fxp.to_ansi_c_string().compare("0f") == 0) || (fxp.to_ansi_c_string().compare("0") == 0) || (fxp.to_ansi_c_string().compare("0l") == 0)){
+				std::cout << "[ERROR] Does not possible to represent this delta value using this precision" << std::endl;
+				exit(0);
+		 	}
 			exprt modified_value_exprt;
 			convert_float_literal(fxp.to_ansi_c_string().c_str(), it->second.at(i));
 		}
@@ -1053,6 +1088,7 @@ void goto_symext::intrinsic_check_delta_stability(const code_function_call2t &ca
     constant_bool2tc result(stable);
 	code_assign2tc assign(call.ret, result);
 	symex_assign(assign);
+
 }
 
 void
@@ -1192,7 +1228,8 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
 			  element.operands().push_back(cache.at(i));
 		  }
 	  }else{
-		  assert(0);
+		  std::cout << "[ERROR] Does not possible check this roots, use a generated delta or a constant array" << std::endl;
+		  exit(1);
 	  }
   }
 
