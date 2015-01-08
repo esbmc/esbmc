@@ -123,8 +123,8 @@ static void internal_additions(std::string &code)
 
 	// Digital controllers code
     "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
-    "void __ESBMC_generate_delta_coefficients(float a[], double out[], int n, float delta, _Bool isDenominator);\n"
-	"_Bool __ESBMC_check_delta_stability(double dc[], double sample_time);\n"
+    "void __ESBMC_generate_delta_coefficients(float a[], double out[], int n, float delta);\n"
+	"_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);\n"
 
     // And again, for TACAS VERIFIER versions,
     "int __VERIFIER_nondet_int();\n"

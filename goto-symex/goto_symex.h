@@ -428,7 +428,7 @@ protected:
 
 #ifdef EIGEN_LIB
   /** Get roots of a polynomial */
-  int get_roots(expr2tc array_element, std::vector<RootType>& roots, bool isDenominator);
+  int get_roots(expr2tc array_element, std::vector<RootType>& roots);
 #endif
 
   /** Walk back up stack frame looking for exception handler. */

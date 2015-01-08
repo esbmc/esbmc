@@ -34,9 +34,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <vector>
 #include <complex>
 
-std::vector<exprt> delta_numerator_operands_cache;
-std::vector<exprt> delta_denominator_operands_cache;
-std::map<std::string, exprt> delta_cache;
+//std::vector<exprt> delta_numerator_operands_cache;
+//std::vector<exprt> delta_denominator_operands_cache;
+std::map<std::string, std::vector<exprt>> delta_cache;
 float delta_denominator_div = 1;
 
 #ifdef EIGEN_LIB
@@ -769,10 +769,9 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
 
       expr2tc isDenominator_expr2 = args.at(4);
       constant_bool2t isDenominator_bool = to_constant_bool2t(isDenominator_expr2);
-      bool isDenominator = isDenominator_bool.constant_value;
 
       std::vector<RootType> denominator_roots;
-  	  get_roots(args.at(0), denominator_roots, isDenominator);
+  	  get_roots(args.at(0), denominator_roots);
       int qtd_roots = denominator_roots.size();
 
       int size_pairs = qtd_roots % 2 == 0 ? qtd_roots / 2 : (qtd_roots + 1) / 2 ;
@@ -885,7 +884,7 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
 void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call2t &call, reachability_treet &art){
 
    std::vector<expr2tc> args = call.operands;
-   assert(args.size()==5);
+   assert(args.size()==4);
 
    dcutil dc;
 
@@ -927,69 +926,96 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
        delta = atof(delta_fx.to_ansi_c_string().c_str());
    }
 
-   /* getting denominator flag value */
-   expr2tc isDenominator_expr2 = args.at(4);
-   constant_bool2t isDenominator_bool = to_constant_bool2t(isDenominator_expr2);
-   bool isDenominator = isDenominator_bool.constant_value;
-
-   float out[size];
-   if (isDenominator == 1){
-	   delta_denominator_operands_cache.clear();
-       dc.generate_delta_coefficients(a, out, size, delta);
-   /*  delta_denominator_div = out[0]; */
-   }else{
-	   delta_numerator_operands_cache.clear();
-	   dc.generate_delta_coefficients_b(a, out, size, delta);
-   }
-
-   /* do out array */
+   /* getting out array */
    expr2tc out_exp2 = args.at(1);
    const address_of2t &addrof = to_address_of2t(out_exp2);
    const index2t &indexof = to_index2t(addrof.ptr_obj);
+   const symbol2t &out_symbol = to_symbol2t(indexof.source_value);
 
+   /* getting denominator flag value */
+   float out[size];
+
+   /* remove possibles caches */
+   delta_cache.erase(out_symbol.thename.as_string());
+
+   dc.generate_delta_coefficients(a, out, size, delta);
+
+   /* do out array */
    guardt guard;
+   std::vector<exprt> current_cache;
    for(unsigned int i=0; i<(size); i++){
 
 	  float _value = out[i];
-	  /* _value = _value / delta_denominator_div; */
-
       expr2tc index(constant_int2tc(uint_type2(), BigInt(i)));
       std::ostringstream cf_value_precision;
       cf_value_precision << std::setprecision(32) << _value;
       std::string cf_value = cf_value_precision.str();
       std::string::size_type find_l = cf_value.find("l",0);
 
-/*
-      if (find_l != std::string::npos){
-	     cf_value = cf_value.replace(find_l, 1, "f");
-	  }else{
-		 cf_value = cf_value + "f";
-	  }
-*/
 	  exprt value_exprt;
 	  convert_float_literal(cf_value, value_exprt);
-
-	  if(isDenominator == true){
-	  	  delta_denominator_operands_cache.push_back(value_exprt);
-	  }else{
-		  delta_numerator_operands_cache.push_back(value_exprt);
-	  }
+	  current_cache.push_back(value_exprt);
 
 	  expr2tc value_exprt2;
 	  migrate_expr(value_exprt, value_exprt2);
 	  constant_fixedbv2t value(value_exprt2->type, fixedbvt(value_exprt));
+
 	  index2tc idx2(out_exp2->type, indexof.source_value, index);
 	  symex_assign_rec(idx2, value_exprt2, guard);
 	}
+    delta_cache.insert(std::pair<std::string, std::vector<exprt>>(out_symbol.thename.as_string(),current_cache));
 }
 
 void goto_symext::intrinsic_check_delta_stability(const code_function_call2t &call, reachability_treet &art){
 	std::vector<expr2tc> args = call.operands;
-	assert(args.size()==2);
+	assert(args.size()==4);
+
+	expr2tc delta_in = args.at(0);
+    const address_of2t &addrof = to_address_of2t(delta_in);
+    const index2t &idx = to_index2t(addrof.ptr_obj);
+    const symbol2t & symbol = to_symbol2t(idx.source_value);
+    std::string symbol_name = symbol.thename.as_string();
+    exprt element = ns.lookup(symbol.thename).value;
+
+    /* get especifications */
+    int iwidth = -1;
+    int precision = 1;
+    expr2tc iwidth_expr2 = args.at(2);
+    if (is_constant_int2t(iwidth_expr2)){
+    	constant_int2t iwidth_const = to_constant_int2t(iwidth_expr2);
+    	iwidth = iwidth_const.constant_value.to_long();
+    }else{
+    	assert(0);
+    }
+    expr2tc precision_expr2 = args.at(3);
+    if (is_constant_int2t(precision_expr2)){
+    	constant_int2t precision_const = to_constant_int2t(precision_expr2);
+    	precision = precision_const.constant_value.to_long();
+    }else{
+    	assert(0);
+    }
+    fixedbv_spect current_spect;
+    current_spect.width = iwidth + precision;
+    current_spect.integer_bits = iwidth;
+
+    /* do quantization */
+	std::map<std::string, std::vector<exprt>>::iterator it = delta_cache.find(symbol_name);
+	if (it == delta_cache.end()){
+		std::cout << "[ERROR] Is necessary input a static vector or generate delta coefficients using __ESBMC function" << std::endl;
+		exit(0);
+	}else{
+		std::vector<exprt> cache = it->second;
+		for(unsigned int i=0; i < cache.size(); i++){
+			fixedbvt fxp = fixedbvt(cache.at(i));
+			fxp.round(current_spect);
+			exprt modified_value_exprt;
+			convert_float_literal(fxp.to_ansi_c_string().c_str(), it->second.at(i));
+		}
+	}
 
 	/* getting roots */
 	std::vector<RootType> delta_coefficients;
-	get_roots(args.at(0), delta_coefficients, true);
+	get_roots(args.at(0), delta_coefficients);
 
 	/* getting sample rate */
 	float sample_time = -1;
@@ -1043,7 +1069,7 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
 
   // Denominator roots
   std::vector<RootType> denominator_roots;
-  int denominator_has_roots = get_roots(args.at(0), denominator_roots, true);
+  int denominator_has_roots = get_roots(args.at(0), denominator_roots);
   if(denominator_has_roots == 2)
   {
     std::cerr << "**** WARNING: No practical filter if the denominator roots are zero." << std::endl;
@@ -1051,7 +1077,7 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   }
 
   std::vector<RootType> numerator_roots;
-  int numerator_has_roots = get_roots(args.at(1), numerator_roots, false);
+  int numerator_has_roots = get_roots(args.at(1), numerator_roots);
   if(numerator_has_roots == 2)
   {
     std::cerr << "**** WARNING: No practical filter if the numerator roots are zero." << std::endl;
@@ -1123,8 +1149,8 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   return;
 }
 
-#ifdef EIGEN_LIB
-int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots, bool isDenominator)
+//#ifdef EIGEN_LIB
+int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
 {
   // This code will get an irep2 of an array and return the roots of the
   // polynomial created by the values on the array
@@ -1134,6 +1160,7 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots, 
   // 2 - No polynomial generated, for example, an array = [ 0 0 0 0 0 ]
 
   exprt element;
+  std::string symbol_name = "";
 
   // Run through the irep2 object to get its values from the symbol
   if (is_address_of2t(array_element))
@@ -1145,6 +1172,7 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots, 
       if(is_symbol2t(idx.source_value))
       {
         const symbol2t &symbol = to_symbol2t(idx.source_value);
+        symbol_name = symbol.thename.as_string();
         element = ns.lookup(symbol.thename).value;
       }
       else
@@ -1157,24 +1185,17 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots, 
     assert(0);
 
   if (element.operands().size() == 0){
-	  if (((isDenominator == true) && (delta_denominator_operands_cache.size() == 0))
-			  || ((isDenominator == false) && (delta_numerator_operands_cache.size() == 0))){
-		  assert(0);
-	  }else{
-		  /* XXX move delta cache to current operands (find a better form to do it) */
-		  if (isDenominator == true){
-			  for(unsigned int i = 0; i < delta_denominator_operands_cache.size(); i++){
-				  element.operands().push_back(delta_denominator_operands_cache.at(i));
-			  }
-			  delta_denominator_operands_cache.clear();
-		  }else{
-			  for(unsigned int i = 0; i < delta_numerator_operands_cache.size(); i++){
-				  element.operands().push_back(delta_numerator_operands_cache.at(i));
-			   }
-			  delta_numerator_operands_cache.clear();
+	  std::map<std::string,std::vector<exprt>>::iterator cache_it = delta_cache.find(symbol_name);
+	  if ((delta_cache.size() != 0) && (cache_it != delta_cache.end())) {
+		  std::vector<exprt> cache = cache_it->second;
+		  for(unsigned int i = 0; i < cache.size(); i++){
+			  element.operands().push_back(cache.at(i));
 		  }
+	  }else{
+		  assert(0);
 	  }
   }
+
   assert(element.operands().size());
 
   unsigned int size=element.operands().size();
@@ -1234,4 +1255,4 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots, 
 
   return 0;
 }
-#endif
+//#endif
