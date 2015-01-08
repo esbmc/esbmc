@@ -14,7 +14,7 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       xml.cpp xml_irep.cpp std_types.cpp std_code.cpp type_byte_size.cpp \
       format_constant.cpp irep_serialization.cpp symbol_serialization.cpp \
       fixedbv.cpp pointer_arithmetic.cpp signal_catcher.cpp irep2.cpp \
-      migrate.cpp crypto_hash.cpp thread.cpp
+      migrate.cpp crypto_hash.cpp thread.cpp dcutil.cpp
 
 ifdef MODULE_FLOATBV
   CXXFLAGS += -DHAVE_FLOATBV

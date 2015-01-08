@@ -736,6 +736,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
 bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
 {
+
   switch(run_decision_procedure(*solver, equation))
   {
     case smt_convt::P_UNSATISFIABLE:
