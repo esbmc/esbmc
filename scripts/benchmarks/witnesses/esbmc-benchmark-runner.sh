@@ -28,23 +28,39 @@
 #  v0.5 2014-10-14, Hussama Ismail:
 #     - Adding witnesses verification support and
 #       updating competition point values
+#  v0.6 2015-01-19, Hussama Ismail:
+#     - Updating with support to -c param for competition
+#       (use -c prop.prp). It's send to esbmc-wrapper-script.sh
 
 # DEPENDENCY PARAMETERS
 ESBMC_WRAPPER_SCRIPT="./files/scripts/esbmc-wrapper-script.sh";
-OUTPUT_REPORT_FILE="report-output-plain.html";
-SCRIPT_VERSION="0.5";
+OUTPUT_REPORT_FILE="report-output-recursion-plain.html";
+SCRIPT_VERSION="0.6";
 
 # VERIFICATION WITNESSES
 ESBMC_VERIFICATION_WITNESSES_SCRIPT="./files/scripts/esbmc-verification-witnesses-script.sh";
 
+SOURCE_PARAMETERS=$@;
 # CHECK PARAMETERS
 if [ ${#@} -eq 0 ]; then
     echo "Is necessary specify a benchmark or a folder. (use: $0 benchmarks)";
     exit 0;
 fi
 
+while getopts "c:h" arg; do
+    case $arg in
+        c)
+            ESBMC_WRAPPER_SCRIPT="$ESBMC_WRAPPER_SCRIPT -c $OPTARG";
+	    PARAMS=$@;
+            PARAM_REMOVE_C=$(echo ${PARAMS[@]/-c})
+            PARAM_REMOVE_C_PARAM=$(echo ${PARAM_REMOVE_C[@]/$OPTARG})                     
+            SOURCE_PARAMETERS=$PARAM_REMOVE_C_PARAM;
+            ;;
+    esac
+done
+
 SOURCES="";
-for current_source in "$@"; do
+for current_source in "$SOURCE_PARAMETERS"; do
     FILES_I=$(find $current_source  -type f \( -iname "*.i" \));
     FILES_C=$(find $current_source -type f \( -iname "*.c" \))
     SOURCES=$(echo $SOURCES $FILES_I);  
@@ -97,7 +113,7 @@ TOTAL_WITNESSES=0
 CORRECT_WITNESSES=0
 INCORRECT_WITNESSES=0
 
-cp ./files/report/header.html $OUTPUT_REPORT_FILE
+cp ../files/report/header.html $OUTPUT_REPORT_FILE
 echo $HTML_TABLE_HEADER >> $OUTPUT_REPORT_FILE
 
 echo "*** ESBMC Benchmark Runner v$SCRIPT_VERSION ***"
