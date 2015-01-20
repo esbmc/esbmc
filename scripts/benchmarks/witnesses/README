@@ -22,14 +22,19 @@ Configuration:
 
 Execution: 
 
+
    1) To execute the esbmc-benchmark-runner.sh, you only need to add execution permission to file:
       chmod +x esbmc-benchmark-runner.sh
 
    2) Pass through parameter the file or folder to check:
       ./esbmc-benchmark-runner.sh /opt/competition/svcomp15/bitvector/
 
+
 Optional:
+
 
    1) You can pass the property file to the category using:
       ./esbmc-benchmark-runner.sh -c property_file.prp /opt/competition/svcomp15/bitvector/
 
+   2) If you want to skip witness verification, use --no-witness in final of command line.
+      ./esbmc-benchmark-runner.sh -c property_file.prp /opt/competition/svcomp15/bitvector/ --no-witness
