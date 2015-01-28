@@ -2336,6 +2336,8 @@ bool goto_convertt::check_op_const(
   const exprt &tmp,
   const locationt &loc)
 {
+  //std::cout << "check_op_const: " << tmp.pretty() << std::endl;
+
   if (tmp.is_constant() || tmp.type().id() == "pointer")
   {
     std::cerr << "warning: this program " << loc.get_file()
@@ -2492,8 +2494,7 @@ void goto_convertt::replace_cond(
   }
   else if ( exprid == "<" ||  exprid == "<=")
   {
-    //std::cout << tmp.pretty() << std::endl;
-    if (is_for_block())
+    if (is_for_block() || is_while_block())
       if (check_op_const(tmp.op1(), tmp.location()))
         return ;
 
