@@ -285,7 +285,7 @@ void goto_convertt::do_malloc(
   t_n->location=location;
 
   //the k-induction does not support dynamic memory allocation yet
-  if (inductive_step)
+  if (base_case || inductive_step)
   {
     print_msg_mem_alloc();
     assert(0);

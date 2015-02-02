@@ -3523,11 +3523,13 @@ void goto_convertt::replace_ifthenelse(
 {
   DEBUGLOC;
 
+  //std::cout << expr.pretty() << std::endl;
+
   bool found=false;
 
   if(expr.id()=="constant")
     return;
-
+#if 0
   // We only transform the condition if all the variables are not touched during
   // the loop
   if(expr.operands().size()==2)
@@ -3541,11 +3543,15 @@ void goto_convertt::replace_ifthenelse(
         {
           // Before returning we must check if the variable is dirty, if that is true
           // then we should replace it
-          if(it1->second.value.find("assignment_inside_loop").is_nil())
+          if(it1->second.value.find("assignment_inside_loop").is_nil()) {
             return;
+
+          }
         }
     }
   }
+#endif
+
 
   if (expr.operands().size()==0 || expr.operands().size() == 1)
   {
