@@ -3529,7 +3529,7 @@ void goto_convertt::replace_ifthenelse(
 
   if(expr.id()=="constant")
     return;
-#if 0
+
   // We only transform the condition if all the variables are not touched during
   // the loop
   if(expr.operands().size()==2)
@@ -3550,7 +3550,6 @@ void goto_convertt::replace_ifthenelse(
         }
     }
   }
-#endif
 
 
   if (expr.operands().size()==0 || expr.operands().size() == 1)
