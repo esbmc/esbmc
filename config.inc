@@ -19,7 +19,7 @@ ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
 # There's also the 'smtlib' backend that will print a benchmark, and that
 # attempts to interpret a counterexample if it's hooked up with a solver
 # process via a pipe; however it's slightly shakey.
-#USE_SOLVER_Z3=1
+USE_SOLVER_Z3=1
 USE_SOLVER_BOOLECTOR=1
 #USE_SOLVER_MINISAT=1
 #USE_SOLVER_MATHSAT=1
@@ -37,8 +37,8 @@ include $(ESBMCDIR)/scripts/os_detect.inc
 # Defaults:
 
 CC=     ccache gcc
-CXX=    ccache g++ -Wno-error=unused-local-typedefs -Wno-error=unused-parameter -Wno-error=unused-variable -Wno-error=unused-but-set-variable
-DEPCXX= ccache g++ -Wno-error=unused-local-typedefs -Wno-error=unused-parameter -Wno-error=unused-variable -Wno-error=unused-but-set-variable
+CXX=    ccache g++
+DEPCXX= ccache g++
 LD=     ld
 AR=     ar
 YACC   = bison -y

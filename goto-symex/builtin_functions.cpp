@@ -757,12 +757,13 @@ void get_alloc_type(
 
 /* ************************************************************************** */
 
+#if 0
 void
 goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &call,
                                        reachability_treet &art __attribute__((unused)))
 {
    call.clone();
-   #ifdef EIGEN_LIB
+	#ifdef EIGEN_LIB
 
       std::vector<expr2tc> args = call.operands;
       assert(args.size()==5);
@@ -880,7 +881,9 @@ goto_symext::intrinsic_generate_cascade_controllers(const code_function_call2t &
        exit(1);
    #endif
 }
+#endif
 
+#if 0
 void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call2t &call, reachability_treet &art){
 
    std::vector<expr2tc> args = call.operands;
@@ -995,7 +998,9 @@ void goto_symext::intrinsic_generate_delta_coefficients(const code_function_call
 
     delta_cache.insert(std::pair<std::string, std::vector<exprt>>(out_symbol.thename.as_string(),current_cache));
 }
+#endif
 
+#if 0
 void goto_symext::intrinsic_check_delta_stability(const code_function_call2t &call, reachability_treet &art){
 
 	std::vector<expr2tc> args = call.operands;
@@ -1090,6 +1095,7 @@ void goto_symext::intrinsic_check_delta_stability(const code_function_call2t &ca
 	symex_assign(assign);
 
 }
+#endif
 
 void
 goto_symext::intrinsic_check_stability(const code_function_call2t &call,
