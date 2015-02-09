@@ -24,8 +24,6 @@ SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck_enum_type.cpp cpp_typecheck_bases.cpp \
       cpp_typecheck_constructor.cpp cpp_typecheck_virtual_table.cpp
 
-GCCFLAGS += -D CPP_SYSTEMC_EXTENSION
-
 # lex.yy.cpp isn't a source file we actually have for dependancy purposes,
 # so instead put it in the object list.
 OBJS= $(OBJDIR)/lex.yy.o

@@ -35,6 +35,7 @@ for(counter=0; counter<argc; counter++)
      if(argc==1)                  /* if not given filename,take as '""' */
        {
         fname= (char *) malloc(sizeof(char));
+        __ESBMC_assume(fname);
         *fname = '\0';
        }
      else if(argc==2)

@@ -107,7 +107,6 @@ bool read_bin_goto_object(
       code_typet type = functions.function_map[symbol.name].type=
         to_code_type(symbol.type);
     }
-    // std::cout << "Adding Symbol: " << symbol.name << std::endl;
     context.add(symbol);
   }
 
@@ -117,8 +116,7 @@ bool read_bin_goto_object(
     irept t;
     dstring fname=irepconverter.read_string(in);
     gfconverter.convert(in, t);
-    // std::cout << "Adding function body: " << fname << std::endl;
-    goto_functionst::goto_functiont &f = functions.function_map[fname];
+    goto_functiont &f = functions.function_map[fname];
     convert(t, f.body);
     f.body_available = f.body.instructions.size()>0;
   }

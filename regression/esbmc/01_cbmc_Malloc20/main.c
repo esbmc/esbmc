@@ -8,7 +8,9 @@ struct person {
 int main() {
 	struct person** ptr_ptr_p1;
 	ptr_ptr_p1 = malloc(sizeof(struct person*));
+        __ESBMC_assume(ptr_ptr_p1);
         *ptr_ptr_p1 = malloc(sizeof(struct person));
+        __ESBMC_assume(*ptr_ptr_p1);
 	
 	// Piecewise assignments are ok with cbmc
 	struct person* ptr_p;

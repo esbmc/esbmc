@@ -1,23 +1,44 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 
-OBJS= sat/$(OBJDIR)/satsolvers.o flattening/$(OBJDIR)/flattening.o \
-      prop/$(OBJDIR)/propobj.o
+OBJS= prop/$(OBJDIR)/propobj.o smt/$(OBJDIR)/smt.o smtlib/$(OBJDIR)/smtlib.o \
+      $(OBJDIR)/solve.o sat/$(OBJDIR)/sat.o
 
-DIRS= sat flattening prop
+DIRS= prop smt smtlib sat
 
 ###############################################################################
-
-ifdef BOOLECTOR
-OBJS+= boolector/$(OBJDIR)/boolector.o
-DIRS+= boolector
-endif
 
 ifdef Z3
 OBJS+= z3/$(OBJDIR)/z3.o
 DIRS+= z3
 endif
 
+ifdef MATHSAT
+OBJS+= mathsat/$(OBJDIR)/mathsat.o
+DIRS+= mathsat
+endif
+
+ifdef MINISAT
+OBJS+= minisat/$(OBJDIR)/minisat.o
+DIRS+= minisat
+endif
+
+ifdef CVC
+OBJS+= cvc/$(OBJDIR)/cvc.o
+DIRS+= cvc
+endif
+
+ifdef BOOLECTOR
+OBJS+= boolector/$(OBJDIR)/boolector.o
+DIRS+= boolector
+endif
+
+ifdef YICES
+OBJS+= yices/$(OBJDIR)/yices.o
+DIRS+= yices
+endif
+
+#
 ###############################################################################
 
 # Make dirs then solvers.o _seperately_ so that changes to file mod
@@ -34,14 +55,20 @@ dirs:
 	    fi \
 	done
 
-$(OBJDIR)/solvers.o: $(OBJS)
-	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
+$(OBJDIR)/solvers.o: $(OBJS) $(ESBMCDIR)/config.inc
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $(OBJS) $(PARTLINKOPTS)
 
 clean:
 	-rm $(OBJDIR)/solvers.o
+	-rm $(OBJS)
 	for dir in $(DIRS); do \
 	    make -C $$dir clean; \
 	done
 	-rm $(OBJDIR)/.depends
+
+$(OBJDIR)/solve.o: solve.cpp $(ESBMCDIR)/config.inc
+	$(CXX) $(CXXFLAGS) -c solve.cpp -o $@
+
+STRICTCOMPILE=1
 
 include $(ESBMCDIR)/common

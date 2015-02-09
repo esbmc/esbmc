@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "cmdline.h"
 #include "options.h"
-#include "ieee_float.h"
 
 class configt
 {
@@ -34,8 +33,6 @@ public:
 
     bool char_is_unsigned;
     bool use_fixed_for_float;
-
-    ieee_floatt::rounding_modet rounding_mode;
 
     void set_16();
     void set_32();
@@ -61,11 +58,6 @@ public:
     bool deadlock_check;
     bool lock_check;
   } ansi_c;
-
-  struct verilogt
-  {
-    std::list<std::string> include_paths;
-  } verilog;
 
   std::string main;
 

@@ -53,6 +53,14 @@ bool cpp_typecheckt::cpp_is_pod(const typet &type) const
     // * overloading assignment operator
     // * Base classes
 
+    // XXX jmorse: certain things listed above don't always make their way into
+    // the class definition though, such as templated constructors. In that
+    // case, we set a flag to indicate that such methods have been seen, before
+    // removing them. The "is_not_pod" flag thus only guarentees that it /isn't/
+    // and its absence doesn't guarentee that it is.
+    if (!type.find("is_not_pod").is_nil())
+      return false;
+
     const struct_typet &struct_type=to_struct_type(type);
 
     if(!type.find("bases").get_sub().empty())

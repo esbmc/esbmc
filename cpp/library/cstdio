@@ -26,10 +26,6 @@ typedef unsigned int TMP_MAX;
 
 typedef unsigned int FILENAME_MAX;
 
-#define SEEK_SET 0
-#define SEEK_CUR 1
-#define SEEK_END 2
-
 FILE * tmpfile(void);
 
 char * tmpnam(char * str);
@@ -117,5 +113,7 @@ int snprintf(char * s, size_t n, const char * format, ... );
 int vsnprintf (char * s, size_t n, const char * format, va_list arg );
 
 FILE * stdout;
+
+int vsnprintf (char * s, size_t n, const char * format, va_list arg );
 
 #endif

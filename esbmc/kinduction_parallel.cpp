@@ -9,11 +9,9 @@
 
 /* Base case class implementation */
 
-base_caset::base_caset(bmct &bmc,
-    goto_functionst &goto_functions)
+base_caset::base_caset(bmct &bmc)
   : _k(1),
-    _bmc(bmc),
-    _goto_functions(goto_functions)
+    _bmc(bmc)
 {
   _bmc.options.set_option("unwind", i2string(_k));
 }
@@ -26,7 +24,7 @@ resultt base_caset::startSolving()
   r.result=0;
   r.finished=false;
 
-  r.result=_bmc.run(_goto_functions);
+  r.result=_bmc.run();
   _bmc.options.set_option("unwind", i2string(++_k));
 
   return r;
@@ -34,11 +32,9 @@ resultt base_caset::startSolving()
 
 /* Forward condition class implementation */
 
-forward_conditiont::forward_conditiont(bmct &bmc,
-    goto_functionst &goto_functions)
+forward_conditiont::forward_conditiont(bmct &bmc)
   : _k(2),
-    _bmc(bmc),
-    _goto_functions(goto_functions)
+    _bmc(bmc)
 {
   _bmc.options.set_option("unwind", i2string(_k));
 }
@@ -51,7 +47,7 @@ resultt forward_conditiont::startSolving()
   r.result=1;
   r.finished=false;
 
-  r.result=_bmc.run(_goto_functions);
+  r.result=_bmc.run();
   _bmc.options.set_option("unwind", i2string(++_k));
 
   return r;
@@ -59,11 +55,9 @@ resultt forward_conditiont::startSolving()
 
 /* Inductive step class implementation */
 
-inductive_stept::inductive_stept(bmct &bmc,
-    goto_functionst &goto_functions)
+inductive_stept::inductive_stept(bmct &bmc)
   : _k(2),
-    _bmc(bmc),
-    _goto_functions(goto_functions)
+    _bmc(bmc)
 {
   _bmc.options.set_option("unwind", i2string(_k));
 }
@@ -77,7 +71,7 @@ resultt inductive_stept::startSolving()
   r.result=1;
   r.finished=false;
 
-  r.result=_bmc.run(_goto_functions);
+  r.result=_bmc.run();
   _bmc.options.set_option("unwind", i2string(++_k));
 
   return r;

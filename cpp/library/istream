@@ -75,29 +75,68 @@ namespace std
 
 namespace std
 {
-
-
-  istream& operator>> (istream& is, bool val )
+  // As with ostream, the spec says that these functions are explicitly
+  // declared and defined, not templated.
+  istream& operator>> (istream& is, bool &val )
   {
     dec(is);
     if (val == 1) {
       boolalpha(is);
     }
+    is._gcount=0; return is; }
+  istream& operator>> (istream& is, char &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, short &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned short &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, int &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned int &val )
+  { is._gcount=0; return is; }
+#if __WORDSIZE == 64
+  istream& operator>> (istream& is, long &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned long &val )
+  { is._gcount=0; return is; }
+#endif
+  istream& operator>> (istream& is, float &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, double &val )
+  { is._gcount=0; return is; }
+#if 0
+  istream& operator>> (istream& is, long double &val )
+  { is._gcount=0; return is; }
+#endif
+  istream& operator>> (istream& is, void *&val )
+  { is._gcount=0; return is; }
 
-    is._gcount=0;
-    return is;
-  }
-
-
-  template < typename T >
-  istream& operator>> (istream& is, T val )
+  // Delightful special cases.
+  istream& operator>> (istream& is, ios& (*pf)(ios&))
   {
-    is._gcount=0;
+    pf(is);
+    return is;
+  }
+  istream& operator>> (istream& is, ios_base& (*pf)(ios_base&))
+  {
+    pf(is);
     return is;
   }
 
+  // These are also defined to be non-member functions by the spec.
 
+  istream& operator>> (istream& is, char *s)
+  { is._gcount=0; return is; }
+#if 0
+  // platform-dependant difference right now.
+  istream& operator>> (istream& is, signed char *s)
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned char *s)
+  { is._gcount=0; return is; }
+#endif
 
+  istream& operator>> (istream& is, const smanip &val)
+  { is._gcount=0; return is; }
 
   int istream::get()
   {

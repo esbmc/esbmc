@@ -246,7 +246,6 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   bool found=false;
   mp_integer offset=0;
 
-  c_sizeoft csize(*this);
   forall_irep(it, components.get_sub())
   {
     if(it->name()==member)
@@ -257,7 +256,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
     else
     {
       const typet &type=it->type();
-      exprt size_expr=csize(type);
+      exprt size_expr=c_sizeof(type, *this);
 
       mp_integer i;
       to_integer(size_expr, i);
@@ -522,42 +521,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
     throw 0;
   }
 
-  #if 0
-  typet type;
-
-  if(expression.sizeofType!=NULL)
-    convert(*expression.sizeofType, expression.location, type);
-  else if(expression.expr!=NULL)
-  {
-    exprt expr;
-    convert(*expression.expr, expr);
-
-    // special case: ANSI-C 99 section 6.3.2.1 paragraph 4
-
-    if(expr.is_address_of() &&
-       expr.implicit() &&
-       expr.operands().size()==1 &&
-       expr.op0().id()=="symbol" &&
-       expr.op0().type().is_code())
-    {
-      // undo implicit address_of
-      exprt tmp;
-      tmp.swap(expr.op0());
-      expr.swap(tmp);
-    }
-
-    type=expr.type();
-  }
-  else
-  {
-    str << "sizeof without parameter: " << expr;
-    throw 0;
-  }
-  #endif
-
-  c_sizeoft c_sizeof(*this);
-
-  exprt new_expr=c_sizeof(type);
+  exprt new_expr=c_sizeof(type, *this);
 
   if(new_expr.is_nil())
   {

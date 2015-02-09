@@ -1,1 +1,0 @@
-valgrind -v --leak-check=yes ./main

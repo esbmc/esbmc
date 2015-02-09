@@ -1,3 +1,3 @@
 main.c
---big-endian --z3-bv
-^VERIFICATION SUCCESSFUL$
+--big-endian --bv
+^VERIFICATION FAILED$

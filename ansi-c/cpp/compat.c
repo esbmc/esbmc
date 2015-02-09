@@ -32,6 +32,8 @@
 #include "config.h"
 #include "manifest.h"
 
+#ifndef ONAMAC
+ 
 #ifndef HAVE_STRLCAT
 /*
  * Appends src to string dst of size siz (unlike strncat, siz is the
@@ -101,4 +103,6 @@ strlcpy(char *dst, const char *src, size_t siz)
 
 	return(s - src - 1);	/* count does not include NUL */
 }
+#endif
+
 #endif

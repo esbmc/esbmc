@@ -1,3 +1,0 @@
-main.c
---unwind 1 --z3-ir --context-switch 1
-^VERIFICATION FAILED$

@@ -4,51 +4,41 @@
 
 ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
 
-LINUX=1
+# These should be autodetected; one can also override them if needed.
+#LINUX=1
 #WIN_MINGW32=1
-
-# 32 or 64 bits? If left unset, default to whatever your host machine is.
+#ONAMAC
+#
 #TARGET64=1
 #TARGET32=1
 
 # Static? (Linux only)
 #STATICLINK=1
 
-# Enable linux compatibility (gcc34)
-
-#LINUXCOMPAT=1
-
-# What sat solvers to use? Comment out to disable
+# What sat solvers to use? The following have native (in ESBMC) support.
+# There's also the 'smtlib' backend that will print a benchmark, and that
+# attempts to interpret a counterexample if it's hooked up with a solver
+# process via a pipe; however it's slightly shakey.
 USE_SOLVER_Z3=1
 USE_SOLVER_BOOLECTOR=1
-USE_SOLVER_MINISAT1=1
+#USE_SOLVER_MINISAT=1
+#USE_SOLVER_MATHSAT=1
+#USE_SOLVER_CVC=1
+#USE_SOLVER_YICES=1
 
 endif #EXTERN_ESBMC_CONFIG
 
-# Might need to guess what bitwidth target to build.
-ifndef TARGET64
-ifndef TARGET32
-THEMACHINE:=$(shell uname -m)
-ifeq ($(THEMACHINE),x86_64)
-  TARGET64=1
-else
-  TARGET32=1
-endif
-endif
-endif
+# Use eigen lib for digital filters verification
+USE_EIGEN_LIB=1
 
-# Detect cygwin
-
-AMONCYGWIN:= $(shell uname -a | grep -o CYGWIN)
-ifeq "$(AMONCYGWIN)" "CYGWIN"
-ONCYGWIN=1
-endif
+# If no OS or patform was specified, try to guess
+include $(ESBMCDIR)/scripts/os_detect.inc
 
 # Defaults:
 
-CC=     gcc
-CXX=    g++
-DEPCXX= g++
+CC=     ccache gcc
+CXX=    ccache g++
+DEPCXX= ccache g++
 LD=     ld
 AR=     ar
 YACC   = bison -y
@@ -112,6 +102,10 @@ endif
 
 ifdef WIN_MINGW32
 include $(ESBMCDIR)/scripts/mingw.inc
+endif
+
+ifdef ONAMAC
+include $(ESBMCDIR)/scripts/mac.inc
 endif
 
 # Unless someone else has set OBJDIR, default to `pwd`/.objs

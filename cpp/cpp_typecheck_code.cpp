@@ -533,6 +533,10 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     {
       exprt object_expr=cpp_symbol_expr(symbol);
 
+      // Remove any 'constant' qualifier from the object being constructed.
+      // It's allowed to be initialized with a constructor once, on declaration.
+      object_expr.type().remove("#constant");
+
       already_typechecked(object_expr);
 
       exprt constructor_call=

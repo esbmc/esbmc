@@ -264,6 +264,10 @@ void cpp_typecheckt::typecheck_function_template(
   cpp_scopet &template_scope=
     typecheck_template_parameters(declaration.template_type());
 
+  // Record that this template is 'using' the scope of the parent class. This
+  // prevents the template identifier hiding other methods / types.
+  template_scope.using_set.insert(&template_scope.get_parent(0));
+
   std::string identifier, base_name;
   cpp_name.convert(identifier, base_name);
   if(identifier!=base_name)

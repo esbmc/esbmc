@@ -39,6 +39,76 @@ bool cpp_typecheck(
   message_handlert &message_handler,
   const namespacet &ns);
 
+class cpp_typecast_rank
+{
+public:
+  // Total score of what conversions occurred to make this conversion happen,
+  // summed from:
+  //   0) None?
+  //   1) An exact-match conversion
+  //   2) Promotion
+  //   3) Conversion (including floating point and pointer casting).
+  //   4) User defined conversion.
+  unsigned int rank;
+
+  // How many template arguments exist in this templated function.
+  unsigned int templ_distance;
+
+  bool has_ptr_to_bool; // Self explanatory.
+  bool has_ptr_to_base; // Derived ptr casted down to base ptr
+  bool has_ptr_to_voidptr; // Any pointer converted to void ptr type.
+
+  // There are more conditions to detect; These are the most relevant at the
+  // moment.
+
+  cpp_typecast_rank()
+  {
+    rank = 0;
+    templ_distance = 0;
+    has_ptr_to_bool = false;
+    has_ptr_to_base = false;
+    has_ptr_to_voidptr = false;
+  }
+
+  cpp_typecast_rank &
+  operator +=(const cpp_typecast_rank &ref)
+  {
+    rank += ref.rank;
+    templ_distance += ref.templ_distance;
+    has_ptr_to_bool |= ref.has_ptr_to_bool;
+    has_ptr_to_base |= ref.has_ptr_to_base;
+    has_ptr_to_voidptr |= ref.has_ptr_to_voidptr;
+    return *this;
+  }
+
+  bool
+  operator<(const cpp_typecast_rank &ref) const
+  {
+    if (rank < ref.rank)
+      return true;
+    else if (rank > ref.rank)
+      return false;
+
+    // Put funkier rules here. Note that less-than means a better match.
+
+    // Prefer functions with the fewest template parameters.
+    if (templ_distance < ref.templ_distance)
+      return true;
+    else if (templ_distance > ref.templ_distance)
+      return false;
+
+    if (!has_ptr_to_bool && ref.has_ptr_to_bool)
+      return true;
+
+    // Pointer-to-base-ptr is better than casting it to void.
+    if (has_ptr_to_base && ref.has_ptr_to_voidptr)
+      return true;
+
+    // Insert here: other rules.
+    return false;
+  }
+};
+
 class cpp_typecheckt:public c_typecheck_baset
 {
 public:
@@ -204,12 +274,34 @@ protected:
     instantiation_stackt &instantiation_stack;
   };
 
+  const symbolt *handle_recursive_template_instance(
+    const symbolt &template_symbol,
+    const cpp_template_args_tct &full_template_args,
+    const exprt &new_decl);
+
   const symbolt &instantiate_template(
     const locationt &location,
     const symbolt &template_symbol,
     const cpp_template_args_tct &specialization_template_args,
     const cpp_template_args_tct &full_template_args,
     const typet &specialization=typet("nil"));
+
+  void put_template_args_in_scope(
+      const template_typet &template_type,
+      const cpp_template_args_tct &template_args);
+
+  void put_template_arg_into_scope(
+      const template_parametert &template_param,
+      const exprt &argument);
+
+  const symbolt *is_template_instantiated(
+      const irep_idt &template_symbol_name,
+      const irep_idt &template_pattern_name) const;
+
+  void mark_template_instantiated(
+      const irep_idt &template_symbol_name,
+      const irep_idt &template_pattern_name,
+      const irep_idt &instantiated_symbol_name);
 
   unsigned template_counter;
   unsigned anon_counter;
@@ -346,6 +438,7 @@ protected:
   cpp_scopet &typecheck_template_parameters(
     template_typet &type);
 
+  std::string fetch_compound_name(const typet &type);
   void typecheck_compound_type(typet &type);
   void check_array_types(typet &type);
   void typecheck_enum_type(typet &type);
@@ -477,12 +570,6 @@ protected:
 
   void typecheck_assign(codet &code);
 
-  #ifdef CPP_SYSTEMC_EXTENSION
-  void typecheck_expr_sc_index(exprt &expr);
-  void typecheck_expr_sc_member(exprt &expr,
-                                const cpp_typecheck_fargst &fargs);
-  #endif
-
   public:
   //
   // Type Conversions
@@ -524,31 +611,31 @@ protected:
   bool standard_conversion_boolean(
     const exprt &expr, exprt &new_expr) const;
 
-  #ifdef CPP_SYSTEMC_EXTENSION
-  bool standard_conversion_verilogbv(
-          const exprt &expr, const typet &type, exprt &new_expr) const;
-  #endif
-
   bool standard_conversion_sequence(
-    const exprt &expr, const typet &type, exprt &new_expr, unsigned &rank);
+    const exprt &expr, const typet &type, exprt &new_expr,
+    class cpp_typecast_rank &rank);
 
   bool user_defined_conversion_sequence(
-    const exprt &expr, const typet &type, exprt &new_expr, unsigned &rank);
+    const exprt &expr, const typet &type, exprt &new_expr,
+    class cpp_typecast_rank &rank);
 
   bool reference_related(
     const exprt &expr, const typet &type) const;
 
   bool reference_compatible(
-    const exprt &expr, const typet &type, unsigned &rank) const;
+    const exprt &expr, const typet &type,
+    class cpp_typecast_rank &rank) const;
 
   bool reference_binding(
-    exprt expr, const typet &type, exprt &new_expr, unsigned &rank);
+    exprt expr, const typet &type, exprt &new_expr,
+    class cpp_typecast_rank &rank);
 
   bool implicit_conversion_sequence(
-    const exprt &expr, const typet &type, exprt &new_expr, unsigned &rank);
+    const exprt &expr, const typet &type, exprt &new_expr,
+    class cpp_typecast_rank &rank);
 
   bool implicit_conversion_sequence(
-    const exprt &expr, const typet &type, unsigned &rank);
+    const exprt &expr, const typet &type,class cpp_typecast_rank &rank);
 
   bool implicit_conversion_sequence(
     const exprt &expr, const typet &type, exprt &new_expr);

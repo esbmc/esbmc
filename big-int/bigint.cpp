@@ -8,12 +8,14 @@
 #include "bigint.hh"
 #include "allocainc.h"
 
+#include <iostream>
 #include <ctype.h>
 #include <limits.h>
 #include <string.h>
 
 // How to report errors.
 #include <stdio.h>
+#include <stdlib.h>
 #define error(x) fprintf (stderr, "%s\n", x)
 
 
@@ -615,7 +617,7 @@ BigInt::as_string (char *p, unsigned l, onedig_t b) const
 }
 
 bool
-BigInt::dump (unsigned char *p, unsigned n)
+BigInt::dump (unsigned char *p, unsigned n) const
 {
   // Access most significant digit.
   onedig_t *t = digit + length;
@@ -700,6 +702,24 @@ BigInt::is_long() const
     if (digit[l] != 0)
       return false;
   return true;
+}
+
+uint64_t BigInt::to_uint64() const
+{
+  uint64_t ul = 0;
+  for (int i = length; --i >= 0; )
+    {
+      ul <<= single_bits;
+      ul |= digit[i];
+    }
+  return ul;
+}
+
+int64_t BigInt::to_int64() const
+{
+  uint64_t ul = to_uint64();
+  int64_t ret = positive ? ul : -ul;
+  return ret;
 }
 
 ullong_t BigInt::to_ulong() const
@@ -1051,8 +1071,8 @@ BigInt::div (BigInt const &x, BigInt const &y, BigInt &q, BigInt &r)
   if (y.length == 0)
     {
     zero:
-      error ("Division by zero.");
-      return;
+      std::cerr << "Division by zero in bigint routine.";
+      abort();
     }
   if (x.is_ulong())
     {
@@ -1139,8 +1159,8 @@ BigInt::operator/= (BigInt const &y)
   if (y.length == 0)
     {
     zero:
-      error ("Division by zero.");
-      return *this;
+      std::cerr << "Division by zero in bigint routine.";
+      abort();
     }
   if (is_ulong())
     {
@@ -1205,8 +1225,8 @@ BigInt::operator%= (BigInt const &y)
   if (y.length == 0)
     {
     zero:
-      error ("Division by zero.");
-      return *this;
+      std::cerr << "Division by zero in bigint routine.";
+      abort();
     }
   if (is_ulong())
     {

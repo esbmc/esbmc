@@ -25,6 +25,8 @@ bool uncaught_exception() throw ();
 void default_terminate() throw ()
 {
   __ESBMC_assert(0, "Aborted");
+  // Allow now further execution.
+  __ESBMC_assume(0);
 }
 
 // Default unexpected function: calls terminate

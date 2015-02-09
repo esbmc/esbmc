@@ -1,3 +1,0 @@
-main.c
---k-induction-parallel --memlimit 12000000 --timeout 15m
-^VERIFICATION SUCCESSFUL$

@@ -36,7 +36,7 @@ public:
 
 protected:
   virtual void get_command_line_options(optionst &options);
-  virtual bool do_bmc(bmct &bmc, const goto_functionst &goto_functions);
+  virtual int do_bmc(bmct &bmc);
 
   virtual bool get_goto_program(
     optionst &options,
@@ -50,19 +50,16 @@ protected:
 
   bool set_claims(goto_functionst &goto_functions);
 
-  void set_verbosity(messaget &message);
+  void set_verbosity_msg(messaget &message);
 
-  // get any additional stuff before finalizing
-  virtual bool get_modules()
-  {
-    return false;
-  }
+  uint64_t read_time_spec(const char *str);
+  uint64_t read_mem_spec(const char *str);
 
   void preprocessing();
 
   void add_property_monitors(goto_functionst &goto_functions, namespacet &ns);
-  exprt calculate_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms);
-  void add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, exprt> >monitors);
+  expr2tc calculate_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms);
+  void add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, expr2tc> >monitors);
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
 

@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "std_types.h"
 #include "fixedbv.h"
 #include "arith_tools.h"
+#include "irep2.h"
 
 /*******************************************************************\
 
@@ -138,7 +139,7 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
   unsigned old_fraction_bits=spec.width-spec.integer_bits;
   unsigned new_fraction_bits=dest_spec.width-dest_spec.integer_bits;
 
-  mp_integer result;
+  mp_integer result = v;
 
   if(new_fraction_bits>old_fraction_bits)
     result=v*power(2, new_fraction_bits-old_fraction_bits);
@@ -157,6 +158,25 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
 
     result=div;
   }
+
+  unsigned old_integer_bits = spec.integer_bits;
+  unsigned new_integer_bits = dest_spec.integer_bits;
+
+  if (old_integer_bits > new_integer_bits) {
+    // Need to cut off some higher bits.
+    fixedbvt tmp;
+    tmp.spec = dest_spec;
+
+    // Make a number that's 2^integer_bits
+    BigInt aval(2);
+    aval = power(aval, new_integer_bits);
+    tmp.from_integer(aval);
+
+    // Now modulus that up.
+    result = result % tmp.v;
+  }
+
+  // Increasing integer bits requires no additional changes to representation.
 
   v=result;
   spec=dest_spec;
@@ -221,6 +241,26 @@ fixedbvt &fixedbvt::operator/=(const fixedbvt &o)
 {
   v*=power(2, o.spec.get_fraction_bits());
   v/=o.v;
+
+  return *this;
+}
+
+fixedbvt &fixedbvt::operator+=(const fixedbvt &o)
+{
+  v+=o.v;
+
+  // No need to change the spec.
+  round(spec);
+
+  return *this;
+}
+
+fixedbvt &fixedbvt::operator-=(const fixedbvt &o)
+{
+  v-=o.v;
+
+  // No need to change the spec.
+  round(spec);
 
   return *this;
 }

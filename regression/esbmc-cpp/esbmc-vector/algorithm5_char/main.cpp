@@ -49,7 +49,7 @@ bool comp_case_insensitive (char c1, char c2) {
 }
 
 int main () {
-  int mychars[] = {'a','b','c','A','B','C'};
+  char mychars[] = {'a','b','c','A','B','C'};
   vector<char> myvector (mychars,mychars+6);
   vector<char>::iterator it;
 

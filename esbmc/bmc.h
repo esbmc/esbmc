@@ -15,49 +15,57 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <hash_cont.h>
 #include <options.h>
 
-#include <solvers/prop/prop.h>
-#include <solvers/prop/prop_conv.h>
-#ifdef BOOLECTOR
-#include <solvers/boolector/boolector_dec.h>
-#endif
+#include <solvers/solve.h>
+#include <solvers/smt/smt_conv.h>
 #ifdef Z3
 #include <solvers/z3/z3_conv.h>
 #endif
-#include <solvers/sat/cnf.h>
-#include <solvers/sat/satcheck.h>
-#include <solvers/flattening/sat_minimizer.h>
-#include <solvers/sat/cnf_clause_list.h>
+#include <solvers/smtlib/smtlib_conv.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
 #include <goto-symex/reachability_tree.h>
-
-#include "bv_cbmc.h"
 
 class bmct:public messaget
 {
 public:
   bmct(const goto_functionst &funcs, optionst &opts,
-      contextt &_context, message_handlert &_message_handler):
+      contextt &_context, message_handlert &_message_handler) :
     messaget(_message_handler),
     options(opts),
     context(_context),
     ns(_context),
-    symex(funcs, ns, options, new symex_target_equationt(ns), _context,
-          _message_handler),
     ui(ui_message_handlert::PLAIN)
   {
-    _unsat_core=0;
     interleaving_number = 0;
     interleaving_failed = 0;
     uw_loop = 0;
+
+    const symbolt *sp;
+    if (ns.lookup(irep_idt("c::__ESBMC_alloc"), sp))
+      is_cpp = true;
+    else
+      is_cpp = false;
+
     ltl_results_seen[ltl_res_bad] = 0;
     ltl_results_seen[ltl_res_failing] = 0;
     ltl_results_seen[ltl_res_succeeding] = 0;
     ltl_results_seen[ltl_res_good] = 0;
+
+    runtime_solver = create_solver_factory("", is_cpp,
+                                           opts.get_bool_option("int-encoding"),
+                                           ns, options);
+
+    if (options.get_bool_option("smt-during-symex")) {
+      symex = new reachability_treet(funcs, ns, options,
+                          new runtime_encoded_equationt(ns, *runtime_solver),
+                          _context, _message_handler);
+    } else {
+      symex = new reachability_treet(funcs, ns, options,
+                                     new symex_target_equationt(ns),
+                                     _context, _message_handler);
+    }
   }
 
-  uint _unsat_core;
-  uint _number_of_assumptions;
   optionst &options;
   enum {
     ltl_res_good,
@@ -70,83 +78,28 @@ public:
   unsigned int interleaving_number;
   unsigned int interleaving_failed;
   unsigned int uw_loop;
+  bool is_cpp;
 
-  virtual bool run(const goto_functionst &goto_functions);
+  virtual bool run(void);
   virtual ~bmct() { }
-
-  // additional stuff
-  expr_listt bmc_constraints;
 
   void set_ui(language_uit::uit _ui) { ui=_ui; }
 
 protected:
   const contextt &context;
   namespacet ns;
-  reachability_treet symex;
+  smt_convt *runtime_solver;
+  reachability_treet *symex;
 
   // use gui format
   language_uit::uit ui;
 
-  class solver_base {
-  public:
-    virtual bool run_solver(symex_target_equationt &equation);
-    virtual ~solver_base() {}
-
-  protected:
-    solver_base(bmct &_bmc) : bmc(_bmc)
-    { }
-
-    prop_convt *conv;
-    bmct &bmc;
-  };
-
-  class minisat_solver : public solver_base {
-  public:
-    minisat_solver(bmct &bmc);
-    virtual bool run_solver(symex_target_equationt &equation);
-
-  protected:
-    sat_minimizert satcheck;
-    bv_cbmct bv_cbmc;
-  };
-
-#ifdef BOOLECTOR
-  class boolector_solver : public solver_base {
-  public:
-    boolector_solver(bmct &bmc);
-  protected:
-    boolector_dect boolector_dec;
-  };
-#endif
-
-#ifdef Z3
-  class z3_solver : public solver_base {
-  public:
-    z3_solver(bmct &bmc);
-    virtual bool run_solver(symex_target_equationt &equation);
-  protected:
-    z3_convt z3_conv;
-  };
-#endif
-
-  class output_solver : public solver_base {
-  public:
-    output_solver(bmct &bmc);
-    ~output_solver();
-    virtual bool run_solver(symex_target_equationt &equation);
-  protected:
-    virtual bool write_output() = 0;
-    std::ostream *out_file;
-  };
-
-  virtual decision_proceduret::resultt
-    run_decision_procedure(prop_convt &prop_conv,
+  virtual smt_convt::resultt
+    run_decision_procedure(smt_convt &smt_conv,
                            symex_target_equationt &equation);
 
-  virtual void do_unwind_module(
-    decision_proceduret &decision_procedure);
-
-  virtual void do_cbmc(prop_convt &solver, symex_target_equationt &eq);
+  virtual void do_cbmc(smt_convt &solver, symex_target_equationt &eq);
+  virtual bool run_solver(symex_target_equationt &equation, smt_convt *solver);
   virtual void show_vcc(symex_target_equationt &equation);
   virtual void show_vcc(std::ostream &out, symex_target_equationt &equation);
   virtual void show_program(symex_target_equationt &equation);
@@ -155,7 +108,7 @@ protected:
   virtual void write_checkpoint();
 
   virtual void error_trace(
-    const prop_convt &prop_conv, symex_target_equationt &equation);
+    smt_convt &smt_conv, symex_target_equationt &equation);
     bool run_thread();
     int ltl_run_thread(symex_target_equationt *equation);
 };

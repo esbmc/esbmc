@@ -9,254 +9,208 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef CPROVER_PROP_Z3_CONV_H
 #define CPROVER_PROP_Z3_CONV_H
 
-#ifdef __linux__
-#include <execinfo.h>
-#endif
+#include <irep2.h>
+#include <namespace.h>
+
 #include <stdint.h>
 
 #include <map>
 #include <set>
 #include <hash_cont.h>
-#include <solvers/prop/prop_conv.h>
-#include <solvers/flattening/pointer_logic.h>
+#include <solvers/smt/smt_conv.h>
+#include <solvers/prop/pointer_logic.h>
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple.h>
 #include <vector>
 #include <string.h>
-#include <decision_procedure.h>
 
-#include "z3_prop.h"
-#include "z3_capi.h"
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/ordered_index.hpp>
 
-#define Z3_UNSAT_CORE_LIMIT 10000
+#include "z3pp.h"
 
 typedef unsigned int uint;
 
-class z3_convt: public prop_convt
+class z3_convt: public smt_convt, public tuple_iface, public array_iface
 {
 public:
-  z3_convt(bool uw, bool int_encoding, bool smt)
-                               :prop_convt(z3_prop),
-                                z3_prop(uw, *this)
-  {
-    if (z3_ctx == NULL) {
-      z3_ctx = z3_api.mk_proof_context(uw);
-    }
-
-    this->int_encoding = int_encoding;
-    this->z3_prop.smtlib = smt;
-    this->z3_prop.store_assumptions = (smt || uw);
-    s_is_uw = uw;
-    total_mem_space = 0;
-    model = NULL;
-
-    Z3_push(z3_ctx);
-    z3_prop.z3_ctx = z3_ctx;
-    ignoring_expr=true;
-    max_core_size=Z3_UNSAT_CORE_LIMIT;
-
-    z3_api.set_z3_ctx(z3_ctx);
-    z3_prop.z3_api.set_z3_ctx(z3_ctx);
-
-    init_addr_space_array();
-  }
-
+  z3_convt(bool int_encoding, bool is_cpp, const namespacet &ns);
   virtual ~z3_convt();
-  virtual decision_proceduret::resultt dec_solve(void);
-  Z3_lbool check2_z3_properties(void);
-  bool get_z3_encoding(void) const;
-  void set_filename(std::string file);
-  void set_z3_ecp(bool ecp);
-  uint get_z3_core_size(void);
-  uint get_z3_number_of_assumptions(void);
-  void set_z3_core_size(uint val);
+private:
+  void intr_push_ctx(void);
+  void intr_pop_ctx(void);
+public:
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
+  virtual smt_convt::resultt dec_solve(void);
+  z3::check_result check2_z3_properties(void);
 
-  // overloading
-  virtual exprt get(const exprt &expr) const;
-
-  u_int get_number_variables_z3(void);
-  u_int get_number_vcs_z3(void);
+  virtual expr2tc get_bool(const smt_ast *a);
+  virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
+  virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
+                                 const type2tc &subtype);
 
 private:
-  virtual literalt convert_rest(const exprt &expr);
-  virtual void set_to(const exprt &expr, bool value);
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
-  void create_array_type(const typet &type, Z3_type_ast &bv) const;
-  void create_type(const typet &type, Z3_type_ast &bv) const;
-  void create_struct_union_type(const typet &type, bool uni, Z3_type_ast &bv) const;
-  void create_struct_type(const typet &type, Z3_type_ast &bv) const {
-    create_struct_union_type(type, false, bv);
-  }
-  void create_union_type(const typet &type, Z3_type_ast &bv) const {
-    create_struct_union_type(type, true, bv);
-  }
-  void create_enum_type(Z3_type_ast &bv) const;
-  void create_pointer_type(Z3_type_ast &bv) const;
-  Z3_ast convert_cmp(const exprt &expr);
-  Z3_ast convert_eq(const exprt &expr);
-  Z3_ast convert_same_object(const exprt &expr);
-  Z3_ast convert_invalid_object(const exprt &expr);
-  Z3_ast convert_overflow_sum_sub_mul(const exprt &expr);
-  Z3_ast convert_overflow_unary(const exprt &expr);
-  Z3_ast convert_overflow_typecast(const exprt &expr);
-  Z3_ast convert_memory_leak(const exprt &expr);
-  Z3_ast convert_width(const exprt &expr);
-  void convert_typecast(const exprt &expr, Z3_ast &bv);
-  void convert_typecast_bool(const exprt &expr, Z3_ast &bv);
-  void convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv);
-  void convert_typecast_to_ints(const exprt &expr, Z3_ast &bv);
-  void convert_typecast_to_ptr(const exprt &expr, Z3_ast &bv);
-  void convert_typecast_from_ptr(const exprt &expr, Z3_ast &bv);
-  void convert_typecast_struct(const exprt &expr, Z3_ast &bv);
-  void convert_typecast_enum(const exprt &expr, Z3_ast &bv);
-  void convert_struct_union(const exprt &expr, Z3_ast &bv);
-  void convert_identifier_pointer(const exprt &expr, std::string symbol,
-                                  Z3_ast &bv);
-  void convert_zero_string(const exprt &expr, Z3_ast &bv);
-  void convert_array(const exprt &expr, Z3_ast &bv);
-  void convert_constant(const exprt &expr, Z3_ast &bv);
-  void convert_bitwise(const exprt &expr, Z3_ast &bv);
-  void convert_unary_minus(const exprt &expr, Z3_ast &bv);
-  void convert_if(const exprt &expr, Z3_ast &bv);
-  void convert_logical_ops(const exprt &expr, Z3_ast &bv);
-  void convert_logical_not(const exprt &expr, Z3_ast &bv);
-  void convert_equality(const exprt &expr, Z3_ast &bv);
-  void convert_pointer_arith(const exprt &expr, Z3_ast &bv);
-  void convert_add_sub(const exprt &expr, Z3_ast &bv);
-  void convert_div(const exprt &expr, Z3_ast &bv);
-  void convert_mod(const exprt &expr, Z3_ast &bv);
-  void convert_mul(const exprt &expr, Z3_ast &bv);
-  void convert_address_of(const exprt &expr, Z3_ast &bv);
-  void convert_array_of(const exprt &expr, Z3_ast &bv);
-  void convert_index(const exprt &expr, Z3_ast &bv);
-  void convert_shift(const exprt &expr, Z3_ast &bv);
-  void convert_abs(const exprt &expr, Z3_ast &bv);
-  void convert_with(const exprt &expr, Z3_ast &bv);
-  void convert_bitnot(const exprt &expr, Z3_ast &bv);
-  void select_pointer_offset(const exprt &expr, Z3_ast &bv);
-  void convert_member(const exprt &expr, Z3_ast &bv);
-  void convert_pointer_object(const exprt &expr, Z3_ast &bv);
-  void convert_zero_string_length(const exprt &expr, Z3_ast &bv);
-  void select_pointer_value(Z3_ast object, Z3_ast offset, Z3_ast &bv);
-  void convert_byte_update(const exprt &expr, Z3_ast &bv);
-  void convert_byte_extract(const exprt &expr, Z3_ast &bv);
-  void convert_isnan(const exprt &expr, Z3_ast &bv);
-  void convert_z3_expr(const exprt &expr, Z3_ast &bv);
+  void setup_pointer_sort(void);
+  void convert_type(const type2tc &type, z3::sort &outtype);
 
-  void convert_identifier(const std::string &identifier, const typet &type, Z3_ast &bv);
-  void convert_bv(const exprt &expr, Z3_ast &bv);
+  void convert_struct_union(const std::vector<expr2tc> &members,
+                            const std::vector<type2tc> &member_types,
+                            const type2tc &type, z3::expr &bv);
+
+  void convert_struct_union_type(const std::vector<type2tc> &members,
+                                 const std::vector<irep_idt> &member_names,
+                                 const irep_idt &name, bool uni, z3::sort &s);
+
+  z3::expr mk_tuple_update(const z3::expr &t, unsigned i,
+                           const z3::expr &new_val);
+  z3::expr mk_tuple_select(const z3::expr &t, unsigned i);
+
+  // SMT-abstraction migration:
+  virtual smt_astt mk_func_app(const smt_sort *s, smt_func_kind k,
+                               const smt_ast * const *args,
+                               unsigned int numargs);
+  virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
+
+  virtual smt_astt mk_smt_int(const mp_integer &theint, bool sign);
+  virtual smt_astt mk_smt_real(const std::string &str);
+  virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
+                                unsigned int w);
+  virtual smt_astt mk_smt_bool(bool val);
+  virtual smt_astt mk_array_symbol(const std::string &name, const smt_sort *s,
+                                   smt_sortt array_subtype);
+  virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s);
+  virtual smt_sort *mk_struct_sort(const type2tc &type);
+  virtual smt_sort *mk_union_sort(const type2tc &type);
+  virtual smt_astt mk_extract(const smt_ast *a, unsigned int high,
+                              unsigned int low, const smt_sort *s);
+  virtual const smt_ast *make_disjunct(const ast_vec &v);
+  virtual const smt_ast *make_conjunct(const ast_vec &v);
+
+  virtual smt_astt tuple_create(const expr2tc &structdef);
+  virtual smt_astt union_create(const expr2tc &unidef);
+  virtual smt_astt tuple_fresh(const smt_sort *s, std::string name = "");
+  virtual expr2tc tuple_get(const expr2tc &expr);
+
+  virtual const smt_ast *tuple_array_create(const type2tc &array_type,
+                                            const smt_ast **input_args,
+                                            bool const_array,
+                                            const smt_sort *domain);
+
+  virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s);
+  virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
+  virtual smt_astt tuple_array_of(const expr2tc &init,
+                                  unsigned long domain_width);
+
+  virtual const smt_ast *convert_array_of(smt_astt init_val,
+                                          unsigned long domain_width);
+
+  virtual const smt_ast *overflow_arith(const expr2tc &expr);
+  virtual smt_ast *overflow_cast(const expr2tc &expr);
+  virtual const smt_ast *overflow_neg(const expr2tc &expr);
+
+  virtual void add_array_constraints_for_solving();
+  virtual void add_tuple_constraints_for_solving();
+  void push_array_ctx(void);
+  void pop_array_ctx(void);
+  void push_tuple_ctx();
+  void pop_tuple_ctx();
 
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate
   // the ast with a literal.
-  void assert_formula(Z3_ast ast, bool needs_literal = true);
-  void assert_literal(literalt l, Z3_ast ast);
+  void assert_formula(const z3::expr &ast);
+  virtual void assert_ast(const smt_ast *a);
 
-  void get_type_width(const typet &t, unsigned &width) const;
-
-  std::string double2string(double d) const;
-
-  std::string get_fixed_point(
-	const unsigned width,
-    std::string value) const;
-
-  exprt bv_get_rec(const Z3_ast bv, const typet &type) const;
-
-  pointer_logict pointer_logic;
-
-  typedef hash_map_cont<const exprt, Z3_ast, irep_hash> bv_cachet;
-  bv_cachet bv_cache;
-
-  std::string itos(int i);
-  std::string fixed_point(std::string v, unsigned width);
-  std::string extract_magnitude(std::string v, unsigned width);
-  std::string extract_fraction(std::string v, unsigned width);
-  bool is_bv(const typet &type);
-  bool is_ptr(const typet &type);
-  bool is_signed(const typet &type);
-  void print_data_types(Z3_ast operand0, Z3_ast operand1);
-  void print_location(const exprt &expr);
-  void debug_label_formula(std::string name, Z3_ast formula);
-  void show_bv_size(Z3_ast operand);
-  Z3_ast convert_number(int64_t value, u_int width, bool type);
-  Z3_ast convert_number_int(int64_t value, u_int width, bool type);
-  Z3_ast convert_number_bv(int64_t value, u_int width, bool type);
-  void bump_addrspace_array(unsigned int idx, Z3_ast val);
-  std::string get_cur_addrspace_ident(void);
-  void generate_assumptions(const exprt &expr, const Z3_ast &result);
-  void link_syms_to_literals(void);
-  void finalize_pointer_chain(void);
+  void debug_label_formula(std::string name, const z3::expr &formula);
   void init_addr_space_array(void);
-  u_int number_variables_z3, set_to_counter, number_vcs_z3,
-	    max_core_size;
 
-  Z3_model model; // Model of satisfying program.
+  virtual const std::string solver_text()
+  {
+    unsigned int major, minor, build, revision;
+    Z3_get_version(&major, &minor, &build, &revision);
+    std::stringstream ss;
+    ss << "Z3 v" << major << "." << minor;
+    return ss.str();
+  }
 
-  z3_propt z3_prop;
-  z3_capi z3_api;
+  virtual tvt l_get(const smt_ast *a);
 
-  bool int_encoding, ignoring_expr, equivalence_checking;
-  //Z3_ast assumptions[Z3_UNSAT_CORE_LIMIT];
-  std::list<Z3_ast> assumptions;
+  // Some useful types
+public:
+  #define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
+  class z3_smt_ast : public smt_ast {
+  public:
+    z3_smt_ast(smt_convt *ctx, z3::expr _e, const smt_sort *_s) :
+              smt_ast(ctx, _s), e(_e) { }
+    virtual ~z3_smt_ast() { }
+    z3::expr e;
+
+    virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
+    virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
+                                  unsigned int idx, expr2tc idx_expr) const;
+    virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
+    virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
+  };
+
+  inline z3_smt_ast *
+  new_ast(z3::expr _e, const smt_sort *_s) {
+    return new z3_smt_ast(this, _e, _s);
+  }
+
+  class z3_smt_sort : public smt_sort {
+  public:
+  #define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
+    z3_smt_sort(smt_sort_kind i, z3::sort _s)
+      : smt_sort(i), s(_s), rangesort(NULL) { }
+    z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
+      : smt_sort(i), s(_s), rangesort(NULL), tupletype(_tupletype) { }
+    z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w)
+      : smt_sort(i, w), s(_s), rangesort(NULL) { }
+    z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w, unsigned long dw,
+                const smt_sort *_rangesort)
+      : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
+
+    virtual ~z3_smt_sort() { }
+
+    z3::sort s;
+    const smt_sort *rangesort;
+    type2tc tupletype;
+  };
+
+  //  Must be first member; that way it's the last to be destroyed.
+  z3::context ctx;
+  z3::solver solver;
+  z3::model model;
+
+  bool smtlib, assumpt_mode;
   std::string filename;
 
-  typedef std::map<std::string, unsigned int> union_varst;
-  union_varst union_vars;
+  std::list<z3::expr> assumpt;
+  std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
+
+  // XXX - push-pop will break here.
+  typedef std::map<std::string, z3::expr> renumber_mapt;
+  renumber_mapt renumber_map;
 
   // Array of obj ID -> address range tuples
-  unsigned int addr_space_sym_num;
-  Z3_sort addr_space_tuple_sort;
-  Z3_sort addr_space_arr_sort;
-  std::map<unsigned,unsigned> addr_space_data; // Obj id, size
-  unsigned long total_mem_space;
+  z3::sort addr_space_tuple_sort;
+  z3::sort addr_space_arr_sort;
+  z3::func_decl addr_space_tuple_decl;
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;
 
-public:
-  class conv_error {
-    void *backtrace_ptrs[50];
-    char **backtrace_syms;
-    int num_frames;
-    std::string msg;
-    irept irep;
+  z3::sort pointer_sort;
+  z3::func_decl pointer_decl;
 
-  public:
-    conv_error(std::string msg, irept irep) {
-      this->msg = msg;
-      this->irep = irep;
-#ifndef _WIN32
-      num_frames = backtrace(backtrace_ptrs, 50);
-      backtrace_syms = backtrace_symbols(backtrace_ptrs, num_frames);
-#else
-      num_frames = 0;
-      backtrace_syms = NULL;
-#endif
-      return;
-    }
-
-    std::string to_string(void) {
-      std::string out;
-      out = "Encountered Z3 conversion error: \"" + msg + "\" at:\n";
-      for (int i = 0; i < num_frames; i++) {
-        out += backtrace_syms[i];
-        out += "\n";
-      }
-
-      if (num_frames == 0)
-        out += "(couldn't get a backtrace)\n";
-
-      out += "For irep:" + irep.pretty(0);
-
-      return out;
-    }
-  };
-
-public:
-  static Z3_context z3_ctx;
-  static bool s_is_uw;
-  static unsigned int num_ctx_ileaves; // Number of ileaves z3_ctx has handled
+  Z3_context z3_ctx;
 };
 
 #endif

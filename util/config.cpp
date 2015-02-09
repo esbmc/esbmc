@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <iostream>
+
 #include "config.h"
 
 configt config;
@@ -88,7 +90,7 @@ void configt::ansi_ct::set_64()
   long_int_width=8*8;
   char_width=1*8;
   short_int_width=2*8;
-  long_long_int_width=16*8;
+  long_long_int_width=8*8;
   pointer_width=8*8;
   pointer_diff_width=8*8;
   single_width=4*8;
@@ -126,7 +128,6 @@ bool configt::set(const cmdlinet &cmdline)
   ansi_c.endianess=ansi_ct::NO_ENDIANESS;
   ansi_c.os=ansi_ct::NO_OS;
   ansi_c.lib=configt::ansi_ct::LIB_NONE;
-  ansi_c.rounding_mode=ieee_floatt::ROUND_TO_EVEN;
 
   if(cmdline.isset("16"))
     ansi_c.set_16();
@@ -221,14 +222,6 @@ bool configt::set(const cmdlinet &cmdline)
   else
     ansi_c.deadlock_check=false;
 
-#if 0
-  if (cmdline.isset("uw-model"))
-  {
-    ansi_c.deadlock_check=false;
-    ansi_c.lock_check=false;
-  }
-#endif
-
   if(cmdline.isset("no-library"))
     ansi_c.lib=configt::ansi_ct::LIB_NONE;
 
@@ -246,19 +239,6 @@ bool configt::set(const cmdlinet &cmdline)
 
   if(cmdline.isset("unsigned-char"))
     ansi_c.char_is_unsigned=true;
-
-  if(cmdline.isset("round-to-even") ||
-     cmdline.isset("round-to-nearest"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_EVEN;
-
-  if(cmdline.isset("round-to-plus-inf"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_PLUS_INF;
-
-  if(cmdline.isset("round-to-minus-inf"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_MINUS_INF;
-
-  if(cmdline.isset("round-to-zero"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_ZERO;
 
   return false;
 }

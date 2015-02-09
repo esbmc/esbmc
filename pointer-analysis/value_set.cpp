@@ -6,8 +6,16 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+// XXXjmorse - consider whether or not many more of the type assertions below
+// need to take consideration of the data they're working on being an dynamic
+// object type, which should match all types.
+
+#include <irep2.h>
+#include <migrate.h>
+
 #include <assert.h>
 
+#include <config.h>
 #include <context.h>
 #include <simplify_expr.h>
 #include <expr_util.h>
@@ -17,43 +25,32 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <prefix.h>
 #include <std_code.h>
 #include <arith_tools.h>
+#include <type_byte_size.h>
 
 #include <langapi/language_util.h>
 #include <ansi-c/c_types.h>
 
 #include "value_set.h"
 
-const value_sett::object_map_dt value_sett::object_map_dt::empty;
+const value_sett::object_map_dt value_sett::object_map_dt::empty = { };
 object_numberingt value_sett::object_numbering;
 
-/*******************************************************************\
-
-Function: value_sett::output
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void value_sett::output(
-  const namespacet &ns,
-  std::ostream &out) const
+void value_sett::output(std::ostream &out) const
 {
+  // Iterate over all tracked variables, dumping a list of all the things it
+  // might point at.
   for(valuest::const_iterator
       v_it=values.begin();
       v_it!=values.end();
       v_it++)
   {
-    irep_idt identifier, display_name;
-
+    std::string identifier, display_name;
+    
     const entryt &e=v_it->second;
-
-    if(has_prefix(id2string(e.identifier), "value_set::dynamic_object"))
+  
+    if(has_prefix(e.identifier, "value_set::dynamic_object"))
     {
-      display_name=id2string(e.identifier)+e.suffix;
+      display_name=e.identifier + e.suffix;
       identifier="";
     }
     else if(e.identifier=="value_set::return_value")
@@ -68,48 +65,51 @@ void value_sett::output(
       display_name=symbol.display_name()+e.suffix;
       identifier=symbol.name;
       #else
-      identifier=id2string(e.identifier);
-      display_name=id2string(identifier)+e.suffix;
+      identifier = e.identifier;
+      display_name = identifier + e.suffix;
       #endif
     }
-
+    
     out << display_name;
 
     out << " = { ";
 
     const object_map_dt &object_map=e.object_map.read();
-
+    
     unsigned width=0;
-
+    
     for(object_map_dt::const_iterator
         o_it=object_map.begin();
         o_it!=object_map.end();
         o_it++)
     {
-      const exprt &o=object_numbering[o_it->first];
-
+      const expr2tc &o = object_numbering[o_it->first];
+    
       std::string result;
 
-      if(o.id()=="invalid" || o.id()=="unknown")
+      // Display invalid / unknown objects as just that,
+      if (is_invalid2t(o) || is_unknown2t(o))
         result=from_expr(ns, identifier, o);
       else
       {
+        // Everything else, display as a triple of <object, offset, type>.
         result="<"+from_expr(ns, identifier, o)+", ";
-
+      
         if(o_it->second.offset_is_set)
           result+=integer2string(o_it->second.offset)+"";
         else
           result+="*";
-
-        result+=", "+from_type(ns, identifier, o.type());
-
+        
+        result += ", "+from_type(ns, identifier, o->type);
+      
         result+=">";
       }
 
+      // Actually print.
       out << result;
 
       width+=result.size();
-
+    
       object_map_dt::const_iterator next(o_it);
       next++;
 
@@ -124,60 +124,31 @@ void value_sett::output(
   }
 }
 
-void
-value_sett::dump(void) const
+expr2tc
+value_sett::to_expr(object_map_dt::const_iterator it) const
 {
-  output(namespacet(contextt()), std::cout);
-}
-
-/*******************************************************************\
-
-Function: value_sett::to_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-exprt value_sett::to_expr(object_map_dt::const_iterator it) const
-{
-  const exprt &object=object_numbering[it->first];
-
-  if(object.id()=="invalid" ||
-     object.id()=="unknown")
+  const expr2tc &object = object_numbering[it->first];
+  
+  if (is_invalid2t(object) || is_unknown2t(object))
     return object;
 
-  object_descriptor_exprt od;
+  expr2tc offs;
+  if (it->second.offset_is_set)
+    offs = constant_int2tc(index_type2(), it->second.offset);
+  else
+    offs = unknown2tc(index_type2());
 
-  od.object()=object;
-
-  if(it->second.offset_is_set)
-    od.offset()=from_integer(it->second.offset, index_type());
-
-  od.type()=od.object().type();
-
-  return od;
+  expr2tc obj = object_descriptor2tc(object->type, object, offs,
+                                     it->second.offset_alignment);
+  return obj;
 }
-
-/*******************************************************************\
-
-Function: value_sett::make_union
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 {
   bool result=false;
-
+  
+  // Iterate over all new values; if they're in the current value set, merge
+  // them. If not, only merge it in if keepnew is true.
   for(valuest::const_iterator
       it=new_values.begin();
       it!=new_values.end();
@@ -185,9 +156,12 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
   {
     valuest::iterator it2=values.find(it->first);
 
+    // If the new variable isnt in this' set,
     if(it2==values.end())
     {
-      // we always track these
+      // We always track these when merging value sets, as these store data
+      // that's transfered back and forth between function calls. So, the
+      // variables not existing in the state we're merging into is irrelevant.
       if(has_prefix(id2string(it->second.identifier),
            "value_set::dynamic_object") ||
          it->second.identifier=="value_set::return_value" ||
@@ -199,33 +173,23 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 
       continue;
     }
-
+      
+    // The variable was in this' set, merge the values.
     entryt &e=it2->second;
     const entryt &new_e=it->second;
-
+    
     if(make_union(e.object_map, new_e.object_map))
       result=true;
   }
-
+  
   return result;
 }
-
-/*******************************************************************\
-
-Function: value_sett::make_union
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
 {
   bool result=false;
-
+  
+  // Merge the pointed at objects in src into dest.
   for(object_map_dt::const_iterator it=src.read().begin();
       it!=src.read().end();
       it++)
@@ -233,30 +197,19 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
     if(insert(dest, it))
       result=true;
   }
-
+  
   return result;
 }
 
-/*******************************************************************\
-
-Function: value_sett::get_value_set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::get_value_set(
-  const exprt &expr,
-  value_setst::valuest &dest,
-  const namespacet &ns) const
+  const expr2tc &expr,
+  value_setst::valuest &dest) const
 {
   object_mapt object_map;
-  get_value_set(expr, object_map, ns);
-
+  // Fetch all values into object_map,
+  get_value_set(expr, object_map);
+  
+  // Convert values into expressions to return.
   for(object_map_dt::const_iterator
       it=object_map.read().begin();
       it!=object_map.read().end();
@@ -264,125 +217,138 @@ void value_sett::get_value_set(
     dest.push_back(to_expr(it));
 }
 
-/*******************************************************************\
-
-Function: value_sett::get_value_set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void value_sett::get_value_set(
-  const exprt &expr,
-  object_mapt &dest,
-  const namespacet &ns) const
+void value_sett::get_value_set(const expr2tc &expr, object_mapt &dest) const
 {
-  exprt tmp(expr);
-  simplify(tmp);
+  // Simplify expr if possible,
+  expr2tc new_expr = expr->simplify();
+  if (is_nil_expr(new_expr))
+    new_expr = expr;
 
-  get_value_set_rec(tmp, dest, "", tmp.type(), ns);
+  // Then, start fetching values.
+  get_value_set_rec(new_expr, dest, "", new_expr->type);
 }
 
-/*******************************************************************\
-
-Function: value_sett::get_value_set_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::get_value_set_rec(
-  const exprt &expr,
+  const expr2tc &expr,
   object_mapt &dest,
   const std::string &suffix,
-  const typet &original_type,
-  const namespacet &ns) const
+  const type2tc &original_type) const
 {
-  const typet &expr_type=ns.follow(expr.type());
 
-  if(expr.id()=="unknown" || expr.id()=="invalid")
+  if (is_unknown2t(expr) || is_invalid2t(expr))
   {
-    insert(dest, exprt("unknown", original_type));
+    // Unknown / invalid exprs mean we just point at something unknown (and
+    // potentially invalid).
+    insert(dest, unknown2tc(original_type), mp_integer(0));
     return;
   }
-  else if(expr.id()=="index")
+  else if (is_index2t(expr))
   {
-    assert(expr.operands().size()==2);
+    // This is an index, fetch values from the array being indexed.
+    const index2t &idx = to_index2t(expr);
 
-    const typet &type=ns.follow(expr.op0().type());
+#ifndef NDEBUG
+    const type2tc &source_type = idx.source_value->type;
+    assert(is_array_type(source_type) || is_string_type(source_type));
+#endif
 
-    assert(type.is_array() ||
-           type.id()=="incomplete_array");
-
-    get_value_set_rec(expr.op0(), dest, "[]"+suffix, original_type, ns);
-
+    // Attach '[]' to the suffix, identifying the variable tracking all the
+    // pointers in this array.
+    get_value_set_rec(idx.source_value, dest, "[]"+suffix, original_type);
+    
     return;
   }
-  else if(expr.id()=="member")
+  else if (is_member2t(expr))
   {
-    assert(expr.operands().size()==1);
+    // We're selecting a member variable of a structure: fetch the values it
+    // might point at.
+    const member2t &memb = to_member2t(expr);
 
-    const typet &type=ns.follow(expr.op0().type());
-
-    assert(type.id()=="struct" ||
-           type.id()=="union" ||
-           type.id()=="incomplete_struct" ||
-           type.id()=="incomplete_union");
-
-    const std::string &component_name=
-      expr.component_name().as_string();
-
-    get_value_set_rec(expr.op0(), dest,
-      "."+component_name+suffix, original_type, ns);
-
+#ifndef NDEBUG
+    const type2tc &source_type = memb.source_value->type;
+    assert(is_struct_type(source_type) || is_union_type(source_type));
+#endif
+           
+    // Add '.$field' to the suffix, identifying the member from the other
+    // members of the struct's variable.
+    get_value_set_rec(memb.source_value, dest,
+                      "." + memb.member.as_string() + suffix,
+                      original_type);
     return;
   }
-  else if(expr.id()=="symbol")
+  else if (is_symbol2t(expr))
   {
-    // look it up
-    valuest::const_iterator v_it=
-      values.find(expr.identifier().as_string()+suffix);
+    // This is a symbol, and if it's a pointer then this expression might
+    // evalutate to what it points at. So, return this symbols value set.
+    const symbol2t &sym = to_symbol2t(expr);
 
+    // If it's null however, create a null_object2t with the appropriate type.
+    if (sym.thename == "NULL" && is_pointer_type(expr))
+    {
+      // XXXjmorse - looks like there's no easy way to avoid this ns.follow
+      // for getting the null objects type, without an internal pointer
+      // repr reshuffle.
+      const pointer_type2t &ptr_ref = to_pointer_type(expr->type);
+      typet subtype = migrate_type_back(ptr_ref.subtype);
+      if (subtype.id() == "symbol")
+        subtype = ns.follow(subtype);
+
+      expr2tc tmp = null_object2tc(ptr_ref.subtype);
+      insert(dest, tmp, mp_integer(0));
+      return;
+    }
+
+    // Look up this symbol, with the given suffix to distinguish any arrays or
+    // members we've picked out of it at a higher level.
+    valuest::const_iterator v_it = values.find(string_wrapper(sym.get_symbol_name() + suffix));
+      
+    // If it points at things, put those things into the destination object map.
     if(v_it!=values.end())
     {
       make_union(dest, v_it->second.object_map);
       return;
     }
   }
-  else if(expr.id()=="if")
+  else if (is_if2t(expr))
   {
-    if(expr.operands().size()!=3)
-      throw "if takes three operands";
+    // This expression might evaluate to either side of this if (assuming that
+    // the simplifier couldn't simplify it away. Grab the value set from either
+    // side.
+    const if2t &ifval = to_if2t(expr);
 
-    get_value_set_rec(expr.op1(), dest, suffix, original_type, ns);
-    get_value_set_rec(expr.op2(), dest, suffix, original_type, ns);
+    get_value_set_rec(ifval.true_value, dest, suffix, original_type);
+    get_value_set_rec(ifval.false_value, dest, suffix, original_type);
 
     return;
   }
-  else if(expr.is_address_of())
+  else if (is_address_of2t(expr))
   {
-    if(expr.operands().size()!=1)
-      throw expr.id_string()+" expected to have one operand";
-
-    get_reference_set(expr.op0(), dest, ns);
-
+    // The set of things this expression might point at is the set of things
+    // that might be the operand to this address-of. So, get the reference set
+    // of things it refers to, rather than the value set (of things it points
+    // to).
+    const address_of2t &addrof = to_address_of2t(expr);
+    get_reference_set(addrof.ptr_obj, dest);
     return;
   }
-  else if(expr.id()=="dereference" ||
-          expr.id()=="implicit_dereference")
+  else if (is_dereference2t(expr))
   {
+    // Fetch the set of things that this dereference might point at... That
+    // means if we have the code:
+    //   int *a = NULL;
+    //   int **b = &a;
+    //   *b;
+    // Then we're evaluating the final line, what does *b point at? To do this,
+    // take all the things that (*b) refers to, which performs the actual
+    // dereference itself. We then have a list of things that b might point at
+    // (in this case just a); so we then compute the value set of all those
+    // things.
     object_mapt reference_set;
-    get_reference_set(expr, reference_set, ns);
+    // Get reference set of dereference; this evaluates the dereference itself.
+    get_reference_set(expr, reference_set);
     const object_map_dt &object_map=reference_set.read();
-
+    
+    // Then get the value set of all the pointers we might dereference to.
     if(object_map.begin()!=object_map.end())
     {
       for(object_map_dt::const_iterator
@@ -390,78 +356,99 @@ void value_sett::get_value_set_rec(
           it1!=object_map.end();
           it1++)
       {
-        const exprt &object=object_numbering[it1->first];
-        get_value_set_rec(object, dest, suffix, original_type, ns);
+        const expr2tc &object = object_numbering[it1->first];
+        get_value_set_rec(object, dest, suffix, original_type);
       }
 
       return;
     }
   }
-  else if(expr.id()=="reference_to")
+  else if(is_constant_expr(expr))
   {
-    object_mapt reference_set;
-
-    get_reference_set(expr, reference_set, ns);
-
-    const object_map_dt &object_map=reference_set.read();
-
-    if(object_map.begin()!=object_map.end())
-    {
-      for(object_map_dt::const_iterator
-          it=object_map.begin();
-          it!=object_map.end();
-          it++)
-      {
-        const exprt &object=object_numbering[it->first];
-        get_value_set_rec(object, dest, suffix, original_type, ns);
-      }
-
-      return;
-    }
-  }
-  else if(expr.is_constant())
-  {
-    // check if NULL
-    if(expr.value()=="NULL" && expr.type().id()=="pointer")
-    {
-      insert(dest, exprt("NULL-object", expr.type().subtype()), 0);
-      return;
-    }
-  }
-  else if(expr.id()=="typecast")
-  {
-    if(expr.operands().size()!=1)
-      throw "typecast takes one operand";
-
-    get_value_set_rec(expr.op0(), dest, suffix, original_type, ns);
-
+    // Constant numbers aren't pointers. Null check is in the value set code
+    // for symbols.
     return;
   }
-  else if(expr.id()=="+" || expr.id()=="-")
+  else if (is_typecast2t(expr))
   {
-    if(expr.operands().size()<2)
-      throw expr.id_string()+" expected to have at least two operands";
-
-    if(expr.type().id()=="pointer")
+    // Push straight through typecasts.
+    const typecast2t &cast = to_typecast2t(expr);
+    get_value_set_rec(cast.from, dest, suffix, original_type);
+    return;
+  }
+  else if (is_add2t(expr) || is_sub2t(expr))
+  {
+    // Consider pointer arithmetic. This takes takes the form of finding the
+    // value sets of the operands, then speculating on how the addition /
+    // subtraction affects the offset.
+    if (is_pointer_type(expr))
     {
       // find the pointer operand
-      const exprt *ptr_operand=NULL;
+      // XXXjmorse - polymorphism.
+      const expr2tc &op0 = (is_add2t(expr))
+                           ? to_add2t(expr).side_1
+                           : to_sub2t(expr).side_1;
+      const expr2tc &op1 = (is_add2t(expr))
+                           ? to_add2t(expr).side_2
+                           : to_sub2t(expr).side_2;
 
-      forall_operands(it, expr)
-        if(it->type().id()=="pointer")
-        {
-          if(ptr_operand==NULL)
-            ptr_operand=&(*it);
-          else
-            throw "more than one pointer operand in pointer arithmetic";
-        }
+      assert(!(is_pointer_type(op0) && is_pointer_type(op1)) &&
+              "Cannot have pointer arithmetic with two pointers as operands");
 
-      if(ptr_operand==NULL)
-        throw "pointer type sum expected to have pointer operand";
+      const expr2tc &ptr_op= (is_pointer_type(op0)) ? op0 : op1;
+      const expr2tc &non_ptr_op= (is_pointer_type(op0)) ? op1 : op0;
 
+      // Find out what the pointer operand points at, and suck that data into
+      // a new object map.
       object_mapt pointer_expr_set;
-      get_value_set_rec(*ptr_operand, pointer_expr_set, "", ptr_operand->type(), ns);
+      get_value_set_rec(ptr_op, pointer_expr_set, "", ptr_op->type);
 
+      // Calculate the offset caused by this addition, in _bytes_. Involves
+      // pointer arithmetic. We also use the _perceived_ type of what we're
+      // adding or subtracting from/to, it might be being typecasted.
+      const type2tc &subtype = to_pointer_type(ptr_op->type).subtype;
+      mp_integer total_offs(0);
+      bool is_const = false;
+      try {
+        if (is_constant_int2t(non_ptr_op)) {
+          if (to_constant_int2t(non_ptr_op).constant_value.is_zero()) {
+            total_offs = 0;
+          } else {
+            if (is_empty_type(subtype))
+              throw new type2t::symbolic_type_excp();
+
+            // Potentially rename,
+            const type2tc renamed = ns.follow(subtype);
+            mp_integer elem_size = type_byte_size(*renamed);
+            const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
+            total_offs = val * elem_size;
+            if (is_sub2t(expr))
+              total_offs.negate();
+          }
+          is_const = true;
+        } else {
+          is_const = false;
+        }
+      } catch (array_type2t::dyn_sized_array_excp *e) { // Nondet'ly sized.
+      } catch (array_type2t::inf_sized_array_excp *e) {
+      } catch (type2t::symbolic_type_excp *e) {
+        // This vastly annoying piece of code is making operations on void
+        // pointers, or worse. If a void pointer, treat the multiplier of the
+        // addition as being one. If not void pointer, throw cookies.
+        if (is_empty_type(subtype)) {
+          total_offs = to_constant_int2t(non_ptr_op).constant_value;
+          is_const = true;
+        } else {
+          std::cerr << "Pointer arithmetic on type where we can't determine ";
+          std::cerr << "size:" << std::endl;
+          std::cerr << subtype->pretty(0) << std::endl;
+          abort();
+        }
+      }
+
+      // For each object, update its offset data according to the integer
+      // offset to this expr. Potential outcomes are keeping it nondet, making
+      // it nondet, or calculating a new static offset.
       for(object_map_dt::const_iterator
           it=pointer_expr_set.read().begin();
           it!=pointer_expr_set.read().end();
@@ -469,148 +456,143 @@ void value_sett::get_value_set_rec(
       {
         objectt object=it->second;
 
-        if(object.offset_is_zero() &&
-           expr.operands().size()==2)
-        {
-          if(expr.op0().type().id()!="pointer")
-          {
-            mp_integer i;
-            if(to_integer(expr.op0(), i))
-              object.offset_is_set=false;
-            else
-              object.offset=i;
-          }
-          else
-          {
-            mp_integer i;
-            if(to_integer(expr.op1(), i))
-              object.offset_is_set=false;
-            else
-              object.offset=i;
-          }
-        }
-        else
-          object.offset_is_set=false;
+        unsigned int nat_align =
+          get_natural_alignment(object_numbering[it->first]);
+        unsigned int ptr_align = get_natural_alignment(ptr_op);
 
+        if (is_const && object.offset_is_set) {
+          // Both are const; we can accumulate offsets;
+          object.offset += total_offs;
+        } else if (is_const && !object.offset_is_set) {
+          // Offset is const, but existing pointer isn't. The alignment is now
+          // at least as small as the operand alignment.
+          object.offset_alignment =
+            std::min(nat_align, object.offset_alignment);
+        } else if (!is_const && object.offset_is_set) {
+          // Nondet but aligned offset from arithmetic; but offset set in
+          // current object. Take the minimum alignment again.
+          unsigned int offset_align = 0;
+          if ((object.offset % nat_align) != 0) {
+            // We have some kind of offset into this data object, but it's less
+            // than the data objects natural alignment. So, the maximum
+            // alignment we can have is that of the pointer type being added
+            // or subtracted. The minimum, depends on the offset into the
+            // data object we're pointing at.
+            offset_align = ptr_align;
+            if (object.offset % ptr_align != 0)
+              // To complex to calculate; clamp to bytes.
+              offset_align = 1;
+          } else {
+            offset_align = nat_align;
+          }
+
+          object.offset_is_set=false;
+          object.offset_alignment = std::min(nat_align, offset_align);
+        } else {
+          // Final case: nondet offset from operation, and nondet offset in
+          // the current object. So, just take the minimum available.
+          object.offset_alignment = std::min(nat_align,object.offset_alignment);
+        }
+
+        // Once updated, store object reference into destination map.
         insert(dest, it->first, object);
       }
 
       return;
     }
   }
-  else if(expr.id()=="sideeffect")
+  else if (is_sideeffect2t(expr))
   {
-    const irep_idt &statement=expr.statement();
-
-    if(statement=="function_call")
-    {
-      std::cout << "value_sett: expr.pretty(): " << expr.pretty() << std::endl;
-      // these should be gone
-      throw "value_sett: unexpected function_call sideeffect";
-    }
-    else if(statement=="malloc")
-    {
+    // Consider a (potentially memory allocating) side effect. Perform crazy
+    // black (and possibly broken) magic to track said memory during static
+    // analysis.
+    // During symbolic execution, the only assignments handed to value_sett
+    // have all the sideeffects taken out of them (as they're SSA assignments),
+    // so this is never triggered.
+    const sideeffect2t &side = to_sideeffect2t(expr);
+    switch (side.kind) {
+    case sideeffect2t::malloc:
+      {
       assert(suffix=="");
+      const type2tc &dynamic_type = side.alloctype;
 
-      const typet &dynamic_type=
-        static_cast<const typet &>(expr.cmt_type());
 
-      dynamic_object_exprt dynamic_object(dynamic_type);
-      dynamic_object.instance()=from_integer(location_number, typet("natural"));
-      dynamic_object.valid()=true_exprt();
+      expr2tc locnum = gen_ulong(location_number);
+      dynamic_object2tc dynobj(dynamic_type, locnum, false, false);
 
-      insert(dest, dynamic_object, 0);
-      return;
-    }
-    else if(statement=="cpp_new" ||
-            statement=="cpp_new[]")
-    {
+      insert(dest, dynobj, mp_integer(0));
+      }
+      return;          
+ 
+    case sideeffect2t::cpp_new:
+    case sideeffect2t::cpp_new_arr:
+      {
       assert(suffix=="");
-      assert(expr.type().id()=="pointer");
+      assert(is_pointer_type(side.type));
 
-      dynamic_object_exprt dynamic_object(expr.type().subtype());
-      dynamic_object.instance()=from_integer(location_number, typet("natural"));
-      dynamic_object.valid()=true_exprt();
+      expr2tc locnum = gen_ulong(location_number);
 
-      insert(dest, dynamic_object, 0);
+      const pointer_type2t &ptr = to_pointer_type(side.type);
+
+      dynamic_object2tc dynobj(ptr.subtype, locnum, false, false);
+
+      insert(dest, dynobj, mp_integer(0));
+      }
       return;
+    case sideeffect2t::nondet:
+      // XXXjmorse - don't know what to do here, previously wasn't handled,
+      // so I won't try to handle it now.
+      return;
+    default:
+      std::cerr << "Unexpected side-effect: " << expr->pretty(0) << std::endl;
+      abort();
     }
   }
-  else if(expr.id()=="struct")
+  else if (is_constant_struct2t(expr))
   {
-    // this is like a static struct object
-    insert(dest, address_of_exprt(expr), 0);
+    // The use of an explicit constant struct value evaluates to it's address.
+    address_of2tc tmp(expr->type, expr);
+    insert(dest, tmp, mp_integer(0));
     return;
   }
-
-  else if(expr.id()=="with")
+  else if (is_with2t(expr))
   {
-    assert(expr.operands().size()==3);
+    // Consider an array/struct update: the pointer we evaluate to may be in
+    // the base array/struct, or depending on the index may be the update value.
+    // So, consider both.
+    // XXX jmorse -- this could be improved. What if source_value is a constant
+    // array or something?
+    const with2t &with = to_with2t(expr);
 
     // this is the array/struct
     object_mapt tmp_map0;
-    get_value_set_rec(expr.op0(), tmp_map0, suffix, original_type, ns);
+    get_value_set_rec(with.source_value, tmp_map0, suffix, original_type);
 
     // this is the update value -- note NO SUFFIX
     object_mapt tmp_map2;
-    get_value_set_rec(expr.op2(), tmp_map2, "", original_type, ns);
+    get_value_set_rec(with.update_value, tmp_map2, "", original_type);
 
-    if(expr_type.id()=="struct")
-    {
-      #if 0
-      const object_map_dt &object_map0=tmp_map0.read();
-      irep_idt component_name=expr.op1().get(ID_component_name);
-
-      bool insert=true;
-
-      for(object_map_dt::const_iterator
-          it=object_map0.begin();
-          it!=object_map0.end();
-          it++)
-      {
-        const exprt &e=to_expr(it);
-
-        if(e.id()==ID_member &&
-           e.get(ID_component_name)==component_name)
-        {
-          if(insert)
-          {
-            dest.write().insert(tmp_map2.read().begin(), tmp_map2.read().end());
-            insert=false;
-          }
-        }
-        else
-          dest.write().insert(*it);
-      }
-      #else
-      // Should be more precise! We only want "suffix"
-      make_union(dest, tmp_map0);
-      make_union(dest, tmp_map2);
-      #endif
-    }
-    else
-    {
-      make_union(dest, tmp_map0);
-      make_union(dest, tmp_map2);
-    }
+    make_union(dest, tmp_map0);
+    make_union(dest, tmp_map2);
   }
-  else if(expr.id()=="array_of" ||
-          expr.is_array())
+  else if (is_constant_array_of2t(expr) || is_constant_array2t(expr))
   {
     // these are supposed to be done by assign()
-    throw "unexpected value in get_value_set: "+expr.id_string();
+    assert(0 && "Encountered array irep in get_value_set_rec");
   }
-  else if(expr.id()=="dynamic_object")
+  else if (is_dynamic_object2t(expr))
   {
-    const dynamic_object_exprt &dynamic_object=
-      to_dynamic_object_expr(expr);
-
-    const std::string name=
-      "value_set::dynamic_object"+
-      dynamic_object.instance().value().as_string()+suffix;
-
+    // No idea what this does. Black magic.
+    const dynamic_object2t &dyn = to_dynamic_object2t(expr);
+  
+    // XXXjmorse, could become a uint.
+    assert(is_constant_int2t(dyn.instance));
+    const constant_int2t &intref = to_constant_int2t(dyn.instance);
+    std::string idnum = integer2string(intref.constant_value);
+    const std::string name = "value_set::dynamic_object" + idnum + suffix;
+  
     // look it up
-    valuest::const_iterator v_it=values.find(name);
+    valuest::const_iterator v_it=values.find(string_wrapper(name));
 
     if(v_it!=values.end())
     {
@@ -618,100 +600,22 @@ void value_sett::get_value_set_rec(
       return;
     }
   }
-#if 1
-  else if(expr.id()=="byte_extract_little_endian" ||
-          expr.id()=="byte_extract_big_endian")
-  {
-    if(expr.operands().size()!=2)
-      throw "byte_extract takes two operands";
 
-    if (expr.type().is_struct())
-    {
-      const struct_typet &struct_type = to_struct_type(expr.type());
-      const struct_typet::componentst &components = struct_type.components();
-
-      // we just pass through
-      if (components.size() < expr.operands().size())
-        get_value_set_rec(expr.op0(), dest, suffix, original_type, ns);
-    }
-
-    return;
-  }
-  else if(expr.id()=="byte_update_little_endian" ||
-          expr.id()=="byte_update_big_endian")
-  {
-    if(expr.operands().size()!=3)
-      throw "byte_update takes three operands";
-
-    // we just pass through
-    get_value_set_rec(expr.op0(), dest, suffix, original_type, ns);
-    get_value_set_rec(expr.op2(), dest, suffix, original_type, ns);
-
-    return;
-    // we could have checked object size to be more precise
-  }
-#endif
-  else
-  {
-	#if 0
-	  std::cout << "WARNING: not doing " << expr.id() << std::endl;
-	#endif
-  }
-
-
-  insert(dest, exprt("unknown", original_type));
+  // If none of those expressions matched, then we don't really know what this
+  // expression evaluates to. So just record it as being unknown.
+  unknown2tc tmp(original_type);
+  insert(dest, tmp, mp_integer(0));
 }
-
-/*******************************************************************\
-
-Function: value_sett::dereference_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void value_sett::dereference_rec(
-  const exprt &src,
-  exprt &dest) const
-{
-  // remove pointer typecasts
-  if(src.id()=="typecast")
-  {
-    assert(src.type().id()=="pointer");
-
-    if(src.operands().size()!=1)
-      throw "typecast expects one operand";
-
-    dereference_rec(src.op0(), dest);
-  }
-  else
-    dest=src;
-}
-
-/*******************************************************************\
-
-Function: value_sett::get_reference_set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_sett::get_reference_set(
-  const exprt &expr,
-  value_setst::valuest &dest,
-  const namespacet &ns) const
+  const expr2tc &expr,
+  value_setst::valuest &dest) const
 {
+  // Fetch all the symbols expr refers to into this object map.
   object_mapt object_map;
-  get_reference_set(expr, object_map, ns);
-
+  get_reference_set(expr, object_map);
+  
+  // Then convert to expressions into the destination list.
   for(object_map_dt::const_iterator
       it=object_map.read().begin();
       it!=object_map.read().end();
@@ -719,112 +623,115 @@ void value_sett::get_reference_set(
     dest.push_back(to_expr(it));
 }
 
-/*******************************************************************\
-
-Function: value_sett::get_reference_set_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::get_reference_set_rec(
-  const exprt &expr,
-  object_mapt &dest,
-  const namespacet &ns) const
+  const expr2tc &expr,
+  object_mapt &dest) const
 {
 
-  if(expr.id()=="symbol" ||
-     expr.id()=="dynamic_object" ||
-     expr.id()=="string-constant")
+  if (is_symbol2t(expr) || is_dynamic_object2t(expr) ||
+      is_constant_string2t(expr))
   {
-    if(expr.type().is_array() &&
-       expr.type().subtype().is_array())
-      insert(dest, expr);
-    else
-      insert(dest, expr, 0);
-
+    // Any symbol we refer to, store into the destination object map.
+    // Given that this is a simple symbol, we can be sure that the offset to
+    // it is zero.
+    insert(dest, expr, objectt(true, 0));
     return;
   }
-  else if(expr.id()=="dereference" ||
-          expr.id()=="implicit_dereference")
+  else if (is_dereference2t(expr))
   {
-    if(expr.operands().size()!=1)
-      throw expr.id_string()+" expected to have one operand";
-
-    get_value_set_rec(expr.op0(), dest, "", expr.op0().type(), ns);
-
+    // The set of variables referred to here are the set of things the operand
+    // may point at. So, find its value set, and return that.
+    const dereference2t &deref = to_dereference2t(expr);
+    get_value_set_rec(deref.value, dest, "", deref.type);
     return;
   }
-  else if(expr.id()=="index")
+  else if (is_index2t(expr))
   {
-    if(expr.operands().size()!=2)
-      throw "index expected to have two operands";
+    // This index may be dereferencing a pointer. So, get the reference set of
+    // the source value, and store a reference to all those things.
+    const index2t &index = to_index2t(expr);
 
-    const exprt &array=expr.op0();
-    const exprt &offset=expr.op1();
-    const typet &array_type=ns.follow(array.type());
+    assert(is_array_type(index.source_value) ||
+           is_string_type(index.source_value));
 
-    assert(array_type.is_array() ||
-           array_type.id()=="incomplete_array");
-
+    // Compute the offset introduced by this index.
+    mp_integer index_offset;
+    bool has_const_index_offset = false;
+    if (is_constant_int2t(index.index)) {
+      index_offset = to_constant_int2t(index.index).constant_value *
+                         type_byte_size(*index.type);
+      has_const_index_offset = true;
+    }
+    
     object_mapt array_references;
-    get_reference_set(array, array_references, ns);
-
+    get_reference_set(index.source_value, array_references);
+        
     const object_map_dt &object_map=array_references.read();
-
+    
     for(object_map_dt::const_iterator
         a_it=object_map.begin();
         a_it!=object_map.end();
         a_it++)
     {
-      const exprt &object=object_numbering[a_it->first];
+      expr2tc object = object_numbering[a_it->first];
 
-      if(object.id()=="unknown")
-        insert(dest, exprt("unknown", expr.type()));
-      else
-      {
-        index_exprt index_expr(expr.type());
-        index_expr.array()=object;
-        index_expr.index()=gen_zero(index_type());
+      if (is_unknown2t(object)) {
+        // Once an unknown, always an unknown.
+        unknown2tc unknown(expr->type);
+        insert(dest, unknown, mp_integer(0));
+      } else {
+        // Whatever the base object is, apply the offset represented by this
+        // index expression.
+        objectt o = a_it->second;
 
-        // adjust type?
-        if(ns.follow(object.type())!=array_type)
-          index_expr.make_typecast(array.type());
+        if (has_const_index_offset && index_offset == 0) {
+          ;
+        } else if (has_const_index_offset && o.offset_is_zero()) {
+          o.offset = index_offset;
+        } else {
+          // Non constant offset -- work out what the lowest alignment is.
+          // Fetch the type size of the array index element.
+          const array_type2t &a = to_array_type(index.source_value->type);
+          mp_integer m = type_byte_size(a);
 
-        objectt o=a_it->second;
-        mp_integer i;
+          // This index operation, whatever the offset, will always multiply
+          // by the size of the element type.
+          unsigned int index_align = m.to_ulong();
 
-        if(offset.is_zero())
-        {
+          // Extract an offset from the old offset if set, otherwise the
+          // alignment field.
+          unsigned int old_align = (o.offset_is_set)
+            ? offset2align(object, o.offset)
+            : o.offset_alignment;
+
+          o.offset_alignment = std::min(index_align, old_align);
+          o.offset_is_set = false;
         }
-        else if(!to_integer(offset, i) &&
-                o.offset_is_zero())
-          o.offset=i;
-        else
-          o.offset_is_set=false;
-
-        insert(dest, index_expr, o);
+          
+        insert(dest, object, o);
       }
     }
-
+    
     return;
   }
-  else if(expr.id()=="member")
+  else if (is_member2t(expr))
   {
-    const irep_idt &component_name=expr.component_name();
+    // The set of things referred to here are all the things the struct source
+    // value may refer to, plus an additional member operation. So, fetch that
+    // reference set, and add the relevant offset to the offset expr.
+    const member2t &memb = to_member2t(expr);
+    mp_integer offset_in_bytes;
 
-    if(expr.operands().size()!=1)
-      throw "member expected to have one operand";
-
-    const exprt &struct_op=expr.op0();
+    if (is_union_type(memb.source_value->type)) {
+      offset_in_bytes = mp_integer(0);
+    } else {
+      offset_in_bytes =
+        member_offset(to_struct_type(memb.source_value->type), memb.member);
+    }
 
     object_mapt struct_references;
-    get_reference_set(struct_op, struct_references, ns);
-
+    get_reference_set(memb.source_value, struct_references);
+    
     const object_map_dt &object_map=struct_references.read();
 
     for(object_map_dt::const_iterator
@@ -832,159 +739,183 @@ void value_sett::get_reference_set_rec(
         it!=object_map.end();
         it++)
     {
-      const exprt &object=object_numbering[it->first];
-
-      if(object.id()=="unknown")
-        insert(dest, exprt("unknown", expr.type()));
-      else
-      {
+      expr2tc object = object_numbering[it->first];
+      
+      // An unknown or null base is /always/ unknown or null.
+      if (is_unknown2t(object) || is_null_object2t(object) ||
+          (is_typecast2t(object) &&
+           is_null_object2t(to_typecast2t(object).from))) {
+        unknown2tc unknown(memb.type);
+        insert(dest, unknown, mp_integer(0));
+      } else {
         objectt o=it->second;
 
-        member_exprt member_expr(expr.type());
-        member_expr.op0()=object;
-        member_expr.set_component_name(component_name);
+        // XXX -- in terms of alignment, I believe this doesn't require
+        // anything, as we're constructing an expression that takes account
+        // of this. Also the same for references to indexes?
+        if (o.offset_is_set)
+          o.offset += offset_in_bytes;
 
-        // adjust type?
-        if(ns.follow(struct_op.type())!=ns.follow(object.type()))
-          member_expr.op0().make_typecast(struct_op.type());
-
-        insert(dest, member_expr, o);
+        insert(dest, object, o);
       }
     }
 
     return;
   }
-  else if(expr.id()=="if")
+  else if (is_if2t(expr))
   {
-    if(expr.operands().size()!=3)
-      throw "if takes three operands";
+    // This if expr couldn't be simplified out; take the reference set of each
+    // side.
+    const if2t &anif = to_if2t(expr);
+    get_reference_set_rec(anif.true_value, dest);
+    get_reference_set_rec(anif.false_value, dest);
+    return;
+  }
+  else if (is_typecast2t(expr))
+  {
+    // Blast straight through typecasts.
+    const typecast2t &cast = to_typecast2t(expr);
+    get_reference_set_rec(cast.from, dest);
+    return;
+  }
+  else if (is_byte_extract2t(expr))
+  {
+    // Address of byte extracts can refer to the object that is being extracted
+    // from.
+    const byte_extract2t &extract = to_byte_extract2t(expr);
 
-    get_reference_set_rec(expr.op1(), dest, ns);
-    get_reference_set_rec(expr.op2(), dest, ns);
+    // This may or may not have a constant offset
+    objectt o = (is_constant_int2t(extract.source_offset))
+      ? objectt(true, to_constant_int2t(extract.source_offset).constant_value)
+      // Don't know what to do about alignments right now; default to nothing.
+      : objectt(false, 1);
+
+    insert(dest, extract.source_value, o);
     return;
   }
 
-  insert(dest, exprt("unknown", expr.type()));
+  // If we didn't recognize the expression, then we have no idea what this
+  // refers to, so store an unknown expr.
+  unknown2tc unknown(expr->type);
+  insert(dest, unknown, mp_integer(0));
 }
 
-/*******************************************************************\
-
-Function: value_sett::assign
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::assign(
-  const exprt &lhs,
-  const exprt &rhs,
-  const namespacet &ns,
+  const expr2tc &lhs,
+  const expr2tc &rhs,
   bool add_to_sets)
 {
+  // Assignment interpretation.
 
-  if(rhs.id()=="if")
+  if (is_if2t(rhs))
   {
-    if(rhs.operands().size()!=3)
-      throw "if takes three operands";
-
-    assign(lhs, rhs.op1(), ns, add_to_sets);
-    assign(lhs, rhs.op2(), ns, true);
+    // If the rhs could be either side of this if, perform the assigment of
+    // either side.
+    const if2t &ifref = to_if2t(rhs);
+    assign(lhs, ifref.true_value, add_to_sets);
+    assign(lhs, ifref.false_value, true);
     return;
   }
 
-  const typet &type=ns.follow(lhs.type());
-
-  if(type.id()=="struct" ||
-     type.id()=="union")
+  // Must have concrete type.
+  assert(!is_symbol_type(lhs));
+  const type2tc &lhs_type = lhs->type;
+  
+  if (is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
-    const struct_typet &struct_type=to_struct_type(type);
-
-    for(struct_typet::componentst::const_iterator
-        c_it=struct_type.components().begin();
-        c_it!=struct_type.components().end();
-        c_it++)
+    // Assign the values of all members of the rhs thing to the lhs. It's
+    // sort-of-valid for the right hand side to be a superclass of the subclass,
+    // in which case there are some fields not common between them, so we
+    // iterate over the superclasses members.
+    const std::vector<type2tc> &members = (is_struct_type(rhs->type))
+      ? to_struct_type(rhs->type).members : to_union_type(rhs->type).members;
+    const std::vector<irep_idt> &member_names = (is_struct_type(rhs->type))
+      ? to_struct_type(rhs->type).member_names
+      : to_union_type(rhs->type).member_names;
+    
+    unsigned int i = 0;
+    for (std::vector<type2tc>::const_iterator c_it = members.begin();
+        c_it != members.end(); c_it++, i++)
     {
-      const typet &subtype=c_it->type();
-      const irep_idt &name=c_it->name();
+      const type2tc &subtype = *c_it;
+      const irep_idt &name = member_names[i];
 
       // ignore methods
-      if(subtype.is_code()) continue;
+      if (is_code_type(subtype))
+        continue;
+    
+      member2tc lhs_member(subtype, lhs, name);
 
-      member_exprt lhs_member(subtype);
-      lhs_member.set_component_name(name);
-      lhs_member.op0()=lhs;
-
-      exprt rhs_member;
-
-      if(rhs.id()=="unknown" ||
-         rhs.id()=="invalid" )
+      expr2tc rhs_member;
+      if (is_unknown2t(rhs))
       {
-        rhs_member=exprt(rhs.id(), subtype);
+        rhs_member = unknown2tc(subtype);
+      }
+      else if (is_invalid2t(rhs))
+      {
+        rhs_member = invalid2tc(subtype);
       }
       else
       {
-    	if (rhs.id() == "index") {
-          if (lhs.id() == "symbol") {
-            assign(lhs_member, rhs.op0(), ns, add_to_sets);
-            return;
-    	  }
-    	}
+        assert(base_type_eq(rhs->type, lhs_type, ns) || is_subclass_of(lhs_type, rhs->type, ns));
+        expr2tc rhs_member = make_member(rhs, name);
 
-        assert(base_type_eq(rhs.type(), type, ns));
-
-        rhs_member=make_member(rhs, name, ns);
-
-        assign(lhs_member, rhs_member, ns, add_to_sets);
+        // XXX -- shouldn't this be one level of indentation up?
+        assign(lhs_member, rhs_member, add_to_sets);
       }
     }
   }
-  else if(type.is_array())
+  else if (is_array_type(lhs_type))
   {
-    exprt lhs_index("index", type.subtype());
-    lhs_index.copy_to_operands(lhs, exprt("unknown", index_type()));
+    const array_type2t &arr_type = to_array_type(lhs_type);
+    unknown2tc unknown(index_type2());
+    index2tc lhs_index(arr_type.subtype, lhs, unknown);
 
-    if(rhs.id()=="unknown" ||
-       rhs.id()=="invalid")
+    if (is_unknown2t(rhs) || is_invalid2t(rhs))
     {
-      assign(lhs_index, exprt(rhs.id(), type.subtype()), ns, add_to_sets);
+      // Assign an uknown subtype value to the array's (unknown) index.
+      unknown2tc unknown_field(arr_type.subtype);
+      assign(lhs_index, unknown_field, add_to_sets);
     }
     else
     {
-      assert(base_type_eq(rhs.type(), type, ns));
-
-      if(rhs.id()=="array_of")
+      assert(base_type_eq(rhs->type, lhs_type, ns));
+        
+      if (is_constant_array_of2t(rhs))
       {
-        assert(rhs.operands().size()==1);
-        assign(lhs_index, rhs.op0(), ns, add_to_sets);
+        assign(lhs_index, to_constant_array_of2t(rhs).initializer,
+               add_to_sets);
       }
-      else if(rhs.is_array() ||
-              rhs.id()=="constant")
+      else if (is_constant_array2t(rhs) || is_constant_expr(rhs))
       {
+        // ...whattt
+#if 0
         forall_operands(o_it, rhs)
         {
-          assign(lhs_index, *o_it, ns, add_to_sets);
+          assign(lhs_index, *o_it, add_to_sets);
           add_to_sets=true;
         }
+#endif
+        forall_operands2(it, idx, rhs) {
+          assign(lhs_index, *it, add_to_sets);
+          add_to_sets = true;
+        }
       }
-      else if(rhs.id()=="with")
+      else if (is_with2t(rhs))
       {
-        assert(rhs.operands().size()==3);
+        const with2t &with = to_with2t(rhs);
 
-        exprt op0_index("index", type.subtype());
-        op0_index.copy_to_operands(rhs.op0(), exprt("unknown", index_type()));
+        unknown2tc unknown(index_type2());
+        index2tc idx(arr_type.subtype, with.source_value, unknown);
 
-        assign(lhs_index, op0_index, ns, add_to_sets);
-        assign(lhs_index, rhs.op2(), ns, true);
+        assign(lhs_index, idx, add_to_sets);
+        assign(lhs_index, with.update_value, true);
       }
       else
       {
-        exprt rhs_index("index", type.subtype());
-        rhs_index.copy_to_operands(rhs, exprt("unknown", index_type()));
-        assign(lhs_index, rhs_index, ns, true);
+        unknown2tc unknown(index_type2());
+        index2tc rhs_idx(arr_type.subtype, rhs, unknown);
+        assign(lhs_index, rhs_idx, true);
       }
     }
   }
@@ -992,59 +923,44 @@ void value_sett::assign(
   {
     // basic type
     object_mapt values_rhs;
-
-    get_value_set(rhs, values_rhs, ns);
-
-    assign_rec(lhs, values_rhs, "", ns, add_to_sets);
+    
+    get_value_set(rhs, values_rhs);
+    
+    assign_rec(lhs, values_rhs, "", add_to_sets);
   }
 }
 
-/*******************************************************************\
-
-Function: value_sett::do_free
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void value_sett::do_free(
-  const exprt &op,
-  const namespacet &ns)
+void value_sett::do_free(const expr2tc &op)
 {
   // op must be a pointer
-  if(op.type().id()!="pointer")
-    throw "free expected to have pointer-type operand";
+  assert(is_pointer_type(op));
 
-  // find out what it points to
+  // find out what it points to    
   object_mapt value_set;
-  get_value_set(op, value_set, ns);
-
+  get_value_set(op, value_set);
+  
   const object_map_dt &object_map=value_set.read();
-
+  
   // find out which *instances* interest us
   expr_sett to_mark;
-
+  
   for(object_map_dt::const_iterator
       it=object_map.begin();
       it!=object_map.end();
       it++)
   {
-    const exprt &object=object_numbering[it->first];
+    const expr2tc &object = object_numbering[it->first];
 
-    if(object.id()=="dynamic_object")
+    if (is_dynamic_object2t(object))
     {
-      const dynamic_object_exprt &dynamic_object=
-        to_dynamic_object_expr(object);
-
-      if(dynamic_object.valid().is_true())
-        to_mark.insert(dynamic_object.instance());
+      const dynamic_object2t &dynamic_object = to_dynamic_object2t(object);
+      
+      if (!dynamic_object.invalid) {
+        to_mark.insert(dynamic_object.instance);
+      }
     }
   }
-
+  
   // mark these as 'may be invalid'
   // this, unfortunately, destroys the sharing
   for(valuest::iterator v_it=values.begin();
@@ -1055,192 +971,153 @@ void value_sett::do_free(
 
     const object_map_dt &old_object_map=
       v_it->second.object_map.read();
-
+      
     bool changed=false;
-
+    
     for(object_map_dt::const_iterator
         o_it=old_object_map.begin();
         o_it!=old_object_map.end();
         o_it++)
     {
-      const exprt &object=object_numbering[o_it->first];
+      const expr2tc &object = object_numbering[o_it->first];
 
-      if(object.id()=="dynamic_object")
+      if (is_dynamic_object2t(object))
       {
-        const exprt &instance=
-          to_dynamic_object_expr(object).instance();
+        const expr2tc &instance = to_dynamic_object2t(object).instance;
 
-        if(to_mark.count(instance)==0)
+        if (to_mark.count(instance) == 0)
           set(new_object_map, o_it);
         else
         {
           // adjust
           objectt o=o_it->second;
-          exprt tmp(object);
-          to_dynamic_object_expr(tmp).valid()=exprt("unknown");
-          insert(new_object_map, tmp, o);
+          dynamic_object2tc new_dyn(object);
+          new_dyn.get()->invalid = false;
+          new_dyn.get()->unknown = true;
+          insert(new_object_map, new_dyn, o);
           changed=true;
         }
       }
       else
         set(new_object_map, o_it);
     }
-
+    
     if(changed)
       v_it->second.object_map=new_object_map;
   }
 }
 
-/*******************************************************************\
-
-Function: value_sett::assign_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::assign_rec(
-  const exprt &lhs,
+  const expr2tc &lhs,
   const object_mapt &values_rhs,
   const std::string &suffix,
-  const namespacet &ns,
   bool add_to_sets)
 {
 
-  if(lhs.id()=="symbol")
+  if (is_symbol2t(lhs))
   {
-    const irep_idt &identifier=lhs.identifier();
-
+    std::string identifier = to_symbol2t(lhs).get_symbol_name();
+    
     if(add_to_sets)
       make_union(get_entry(identifier, suffix).object_map, values_rhs);
     else
       get_entry(identifier, suffix).object_map=values_rhs;
   }
-  else if(lhs.id()=="dynamic_object")
+  else if (is_dynamic_object2t(lhs))
   {
-    const dynamic_object_exprt &dynamic_object=
-      to_dynamic_object_expr(lhs);
-
-    const std::string name=
-      "value_set::dynamic_object"+
-      dynamic_object.instance().value().as_string();
+    const dynamic_object2t &dynamic_object = to_dynamic_object2t(lhs);
+  
+    if (is_unknown2t(dynamic_object.instance))
+      return; // XXXjmorse - we're assigning to something unknown.
+              // Not much we can do about it.
+    assert(is_constant_int2t(dynamic_object.instance));
+    unsigned int idnum =
+      to_constant_int2t(dynamic_object.instance).constant_value.to_long();
+    const std::string name = "value_set::dynamic_object" + i2string(idnum);
 
     make_union(get_entry(name, suffix).object_map, values_rhs);
   }
-  else if(lhs.id()=="dereference" ||
-          lhs.id()=="implicit_dereference")
+  else if (is_dereference2t(lhs))
   {
-    if(lhs.operands().size()!=1)
-      throw lhs.id_string()+" expected to have one operand";
-
     object_mapt reference_set;
-    get_reference_set(lhs, reference_set, ns);
+    get_reference_set(lhs, reference_set);
 
     if(reference_set.read().size()!=1)
       add_to_sets=true;
-
+      
     for(object_map_dt::const_iterator
         it=reference_set.read().begin();
         it!=reference_set.read().end();
         it++)
     {
-      const exprt &object=object_numbering[it->first];
+      // XXXjmorse - some horrible type safety is about to fail
+      const expr2tc obj = object_numbering[it->first];
 
-      if(object.id()!="unknown")
-        assign_rec(object, values_rhs, suffix, ns, add_to_sets);
+      if (!is_unknown2t(obj))
+        assign_rec(obj, values_rhs, suffix, add_to_sets);
     }
   }
-  else if(lhs.id()=="index")
+  else if (is_index2t(lhs))
   {
-    if(lhs.operands().size()!=2)
-      throw "index expected to have two operands";
+    assert(is_array_type(to_index2t(lhs).source_value) ||
+           is_string_type(to_index2t(lhs).source_value) ||
+           is_dynamic_object2t(to_index2t(lhs).source_value));
 
-    const typet &type=ns.follow(lhs.op0().type());
-
-    assert(type.is_array() || type.id()=="incomplete_array");
-
-    assign_rec(lhs.op0(), values_rhs, "[]"+suffix, ns, true);
+    assign_rec(to_index2t(lhs).source_value, values_rhs, "[]"+suffix, true);
   }
-  else if(lhs.id()=="member")
+  else if (is_member2t(lhs))
   {
-    if(lhs.operands().size()!=1)
-      throw "member expected to have one operand";
+    type2tc tmp;
+    const member2t &member = to_member2t(lhs);
+    const std::string &component_name = member.member.as_string();
 
-    const std::string &component_name=lhs.component_name().as_string();
+    // Might travel through a dereference, in which case type resolving is
+    // required
+    const type2tc *ourtype = &member.source_value->type;
+    if (is_symbol_type(*ourtype)) {
+      tmp = ns.follow(*ourtype);
+      ourtype = &tmp;
+    }
 
-    const typet &type=ns.follow(lhs.op0().type());
-
-    assert(type.id()=="struct" ||
-           type.id()=="union" ||
-           type.id()=="incomplete_struct" ||
-           type.id()=="incomplete_union");
-
-    assign_rec(lhs.op0(), values_rhs, "."+component_name+suffix, ns, add_to_sets);
+    assert(is_struct_type(*ourtype) || is_union_type(*ourtype) ||
+           is_dynamic_object2t(member.source_value));
+           
+    assign_rec(to_member2t(lhs).source_value, values_rhs,
+               "."+component_name+suffix, add_to_sets);
   }
-  else if(lhs.id()=="valid_object" ||
-		  lhs.id()=="deallocated_object" ||
-          lhs.id()=="dynamic_size" ||
-          lhs.id()=="dynamic_type" ||
-          lhs.id()=="is_zero_string" ||
-          lhs.id()=="zero_string" ||
-          lhs.id()=="zero_string_length")
+  else if (is_zero_string2t(lhs) || is_zero_length_string2t(lhs) ||
+           is_constant_string2t(lhs) || is_null_object2t(lhs) ||
+           is_valid_object2t(lhs) || is_deallocated_obj2t(lhs) ||
+           is_dynamic_size2t(lhs))
   {
-    // we ignore this here
+    // Ignored
   }
-  else if(lhs.id()=="string-constant")
+  else if (is_typecast2t(lhs))
   {
-    // someone writes into a string-constant
-    // evil guy
+    assign_rec(to_typecast2t(lhs).from, values_rhs, suffix, add_to_sets);
   }
-  else if(lhs.id()=="constant")
+  else if (is_byte_extract2t(lhs))
   {
-    // evil as well
-  }
-  else if(lhs.id()=="NULL-object")
-  {
-    // evil as well
-  }
-  else if(lhs.id()=="typecast")
-  {
-    const typecast_exprt &typecast_expr=to_typecast_expr(lhs);
-
-    assign_rec(typecast_expr.op(), values_rhs, suffix, ns, add_to_sets);
-  }
-  else if(lhs.id()=="byte_extract_little_endian" ||
-          lhs.id()=="byte_extract_big_endian")
-  {
-    assert(lhs.operands().size()==2);
-    assign_rec(lhs.op0(), values_rhs, suffix, ns, true);
+    assign_rec(to_byte_extract2t(lhs).source_value, values_rhs, suffix, true);
   }
   else
-    throw "assign NYI: `"+lhs.id_string()+"'";
+    throw "assign NYI: `" + get_expr_id(lhs)+ "'";
 }
 
-/*******************************************************************\
-
-Function: value_sett::do_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void value_sett::do_function_call(
-  const irep_idt &function,
-  const exprt::operandst &arguments,
-  const namespacet &ns)
+  const symbolt &symbol,
+  const std::vector<expr2tc> &arguments)
 {
-  const symbolt &symbol=ns.lookup(function);
 
   const code_typet &type=to_code_type(symbol.type);
-  const code_typet::argumentst &argument_types=type.arguments();
+
+  type2tc tmp_migrated_type;
+  migrate_type(type, tmp_migrated_type);
+  const code_type2t &migrated_type =
+    dynamic_cast<const code_type2t &>(*tmp_migrated_type.get());
+
+  const std::vector<type2tc> &argument_types = migrated_type.arguments;
+  const std::vector<irep_idt> &argument_names = migrated_type.argument_names;
 
   // these first need to be assigned to dummy, temporary arguments
   // and only thereafter to the actuals, in order
@@ -1251,29 +1128,39 @@ void value_sett::do_function_call(
   {
     const std::string identifier="value_set::dummy_arg_"+i2string(i);
     add_var(identifier, "");
-    exprt dummy_lhs=symbol_exprt(identifier, arguments[i].type());
-    assign(dummy_lhs, arguments[i], ns, true);
+
+    expr2tc dummy_lhs;
+    expr2tc tmp_arg = arguments[i];
+    if (is_nil_expr(tmp_arg)) {
+      // As a workaround for the "--function" option, which feeds "nil"
+      // arguments in here, take the expected function argument type rather
+      // than the type from the argument.
+      tmp_arg = unknown2tc(argument_types[i]);
+      dummy_lhs = symbol2tc(argument_types[i], identifier);
+    } else {
+      dummy_lhs = symbol2tc(arguments[i]->type, identifier);
+    }
+
+    assign(dummy_lhs, tmp_arg, true);
   }
 
   // now assign to 'actual actuals'
 
   unsigned i=0;
 
-  for(code_typet::argumentst::const_iterator
-      it=argument_types.begin();
-      it!=argument_types.end();
-      it++)
+  std::vector<type2tc>::const_iterator it2 = argument_types.begin();
+  for (std::vector<irep_idt>::const_iterator it = argument_names.begin();
+      it != argument_names.end(); it++, it2++)
   {
-    const irep_idt &identifier=it->get_identifier();
+    const std::string &identifier = it->as_string();
     if(identifier=="") continue;
 
     add_var(identifier, "");
+  
+    symbol2tc v_expr(*it2, "value_set::dummy_arg_"+i2string(i));
 
-    const exprt v_expr=
-      symbol_exprt("value_set::dummy_arg_"+i2string(i), it->type());
-
-    exprt actual_lhs=symbol_exprt(identifier, it->type());
-    assign(actual_lhs, v_expr, ns, true);
+    symbol2tc actual_lhs(*it2, identifier);
+    assign(actual_lhs, v_expr, true);
     i++;
   }
 
@@ -1285,194 +1172,127 @@ void value_sett::do_function_call(
   }
 }
 
-/*******************************************************************\
-
-Function: value_sett::do_end_function
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void value_sett::do_end_function(
-  const exprt &lhs,
-  const namespacet &ns)
+void value_sett::do_end_function(const expr2tc &lhs)
 {
-  if(lhs.is_nil()) return;
+  if (is_nil_expr(lhs))
+    return;
 
-  symbol_exprt rhs("value_set::return_value", lhs.type());
+  symbol2tc rhs(lhs->type, irep_idt("value_set::return_value"));
 
-  assign(lhs, rhs, ns);
+  assign(lhs, rhs);
 }
 
-/*******************************************************************\
-
-Function: value_sett::apply_code
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void value_sett::apply_code(
-  const exprt &code,
-  const namespacet &ns)
+void value_sett::apply_code(const expr2tc &code)
 {
-  const irep_idt &statement=code.statement();
 
-  if(statement=="block")
+  if (is_code_block2t(code))
   {
-    forall_operands(it, code)
-      apply_code(*it, ns);
+    const code_block2t &ref = to_code_block2t(code);
+    forall_exprs(it, ref.operands)
+      apply_code(*it);
   }
-  else if(statement=="function_call")
+  else if (is_code_assign2t(code))
   {
-    // shouldn't be here
-    assert(false);
+    const code_assign2t &ref = to_code_assign2t(code);
+    assign(ref.target, ref.source);
   }
-  else if(statement=="assign" ||
-          statement=="init")
+  else if (is_code_init2t(code))
   {
-    if(code.operands().size()!=2)
-      throw "assignment expected to have two operands";
-
-    assign(code.op0(), code.op1(), ns);
+    const code_init2t &ref = to_code_init2t(code);
+    assign(ref.target, ref.source);
   }
-  else if(statement=="decl")
+  else if (is_code_decl2t(code))
   {
-    if(code.operands().size()!=1)
-      throw "decl expected to have one operand";
-
-    const exprt &lhs=code.op0();
-
-    if(lhs.id()!="symbol")
-      throw "decl expected to have symbol on lhs";
-
-    assign(lhs, exprt("invalid", lhs.type()), ns);
+    const code_decl2t &ref = to_code_decl2t(code);
+    symbol2tc sym(ref.type, ref.value);
+    invalid2tc invalid(ref.type);
+    assign(sym, invalid);
   }
-  else if(statement=="specc_notify" ||
-          statement=="specc_wait")
-  {
-    // ignore, does not change variables
-  }
-  else if(statement=="expression")
+  else if (is_code_expression2t(code))
   {
     // can be ignored, we don't expect sideeffects here
   }
-  else if(statement=="cpp_delete" ||
-          statement=="cpp_delete[]")
-  {
-    // does nothing
-  }
-  else if(statement=="free")
+  else if (is_code_free2t(code))
   {
     // this may kill a valid bit
-
-    if(code.operands().size()!=1)
-      throw "free expected to have one operand";
-
-    do_free(code.op0(), ns);
+    const code_free2t &ref = to_code_free2t(code);
+    do_free(ref.operand);
   }
-  else if(statement=="lock" || statement=="unlock")
-  {
-    // ignore for now
-  }
-  else if(statement=="asm")
-  {
-    // ignore for now, probably not safe
-  }
-  else if(statement=="nondet")
+  else if (is_code_printf2t(code))
   {
     // doesn't do anything
   }
-  else if(statement=="printf")
-  {
-    // doesn't do anything
-  }
-  else if(statement=="return")
+  else if (is_code_return2t(code))
   {
     // this is turned into an assignment
-    if(code.operands().size()==1)
+    const code_return2t &ref = to_code_return2t(code);
+    if (!is_nil_expr(ref.operand))
     {
-      symbol_exprt lhs("value_set::return_value", code.op0().type());
-      assign(lhs, code.op0(), ns);
+      symbol2tc sym(ref.operand->type, "value_set::return_value");
+      assign(sym, ref.operand);
     }
   }
-  else if(statement=="typeid")
+  else if (is_code_asm2t(code))
   {
-    // doesn't do anything
+    // Ignore assembly. No idea why it isn't preprocessed out anyway.
+  }
+  else if (is_code_cpp_delete2t(code) || is_code_cpp_del_array2t(code))
+  {
+    // Ignore these too
   }
   else
   {
-    std::cerr << code.pretty() << std::endl;
-    throw "value_sett: unexpected statement: "+id2string(statement);
+    std::cerr << code->pretty() << std::endl;
+    std::cerr << "value_sett: unexpected statement" << std::endl;
+    abort();
   }
 }
 
-/*******************************************************************\
-
-Function: value_sett::make_member
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-exprt value_sett::make_member(
-  const exprt &src,
-  const irep_idt &component_name,
-  const namespacet &ns)
+expr2tc value_sett::make_member(
+  const expr2tc &src,
+  const irep_idt &component_name)
 {
-  const struct_union_typet &struct_type=
-    to_struct_type(ns.follow(src.type()));
+  const type2tc &type = src->type;
+  assert(is_struct_type(type) || is_union_type(type));
 
-  if(src.id()=="struct" ||
-     src.id()=="constant")
+  // Work around for the current lack of type inheretance
+  const std::vector<type2tc> &members = (is_struct_type(type))
+    ? to_struct_type(type).members : to_union_type(type).members;
+
+  if (is_constant_struct2t(src))
   {
-    unsigned no=struct_type.component_number(component_name);
-    if (no>=src.operands().size()		//component number does not exist,
-    	&& src.operands().size()==1)    //we have only one component
-      return src.op0();
-    else {
-      assert(no<src.operands().size());
-      return src.operands()[no];
-    }
+    unsigned no = to_struct_type(type).get_component_number(component_name);
+    return to_constant_struct2t(src).datatype_members[no];
   }
-  else if(src.id()=="with")
+  else if (is_with2t(src))
   {
-    assert(src.operands().size()==3);
+    const with2t &with = to_with2t(src);
+    assert(is_constant_string2t(with.update_field));
+    const constant_string2t &memb_name =to_constant_string2t(with.update_field);
 
-    // see if op1 is the member we want
-    const exprt &member_operand=src.op1();
-
-    if(component_name==member_operand.component_name())
+    if (component_name == memb_name.value)
       // yes! just take op2
-      return src.op2();
+      return with.update_value;
     else
       // no! do this recursively
-      return make_member(src.op0(), component_name, ns);
+      return make_member(with.source_value, component_name);
   }
-  else if(src.id()=="typecast")
+  else if (is_typecast2t(src))
   {
     // push through typecast
-    assert(src.operands().size()==1);
-    return make_member(src.op0(), component_name, ns);
+    return make_member(to_typecast2t(src).from, component_name);
   }
 
   // give up
-  typet subtype=struct_type.component_type(component_name);
-  member_exprt member_expr(subtype);
-  member_expr.op0()=src;
-  member_expr.set_component_name(component_name);
+  unsigned no = static_cast<const struct_union_data&>(*type.get())
+                .get_component_number(component_name);
+  const type2tc &subtype = members[no];
+  member2tc memb(subtype, src, component_name);
+  return memb;
+}
 
-  return member_expr;
+void
+value_sett::dump(void) const
+{
+  output(std::cout);
 }

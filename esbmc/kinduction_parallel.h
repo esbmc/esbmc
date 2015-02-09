@@ -11,8 +11,6 @@
 #include <signal.h>
 #include <sys/wait.h>
 
-#include <goto-programs/goto_functions.h>
-
 #include "bmc.h"
 
 const unsigned int MAX_STEPS=50;
@@ -30,43 +28,37 @@ struct resultt
 class base_caset
 {
   public:
-    base_caset(bmct &bmc,
-        goto_functionst &goto_functions);
+    base_caset(bmct &bmc);
 
     resultt startSolving();
 
   private:
     unsigned int _k;
     bmct &_bmc;
-    goto_functionst &_goto_functions;
 };
 
 class forward_conditiont
 {
   public:
-    forward_conditiont(bmct &bmc,
-        goto_functionst &goto_functions);
+    forward_conditiont(bmct &bmc);
 
     resultt startSolving();
 
   private:
     unsigned int _k;
     bmct &_bmc;
-    goto_functionst &_goto_functions;
 };
 
 class inductive_stept
 {
   public:
-    inductive_stept(bmct &bmc,
-        goto_functionst &goto_functions);
+    inductive_stept(bmct &bmc);
 
     resultt startSolving();
 
   private:
     unsigned int _k;
     bmct &_bmc;
-    goto_functionst &_goto_functions;
 };
 
 #endif /* K_INDUCTION_PARALLEL_H_ */

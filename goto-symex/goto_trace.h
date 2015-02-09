@@ -11,14 +11,15 @@ Date: July 2005
 #ifndef CPROVER_GOTO_SYMEX_GOTO_TRACE_H
 #define CPROVER_GOTO_SYMEX_GOTO_TRACE_H
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <iostream>
 #include <vector>
 
 #include <fstream>
 #include <map>
 #include "VarMap.h"
-
-#include <pretty_names.h>
 
 #include <goto-programs/goto_program.h>
 
@@ -35,8 +36,9 @@ public:
   bool is_assert() const     { return type==ASSERT; }
   bool is_output() const     { return type==OUTPUT; }
   bool is_skip() const       { return type==SKIP; }
+  bool is_renumber() const   { return type==RENUMBER; }
 
-  typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT, SKIP } typet;
+  typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT, SKIP, RENUMBER } typet;
   typet type;
     
   goto_programt::const_targett pc;
@@ -51,17 +53,17 @@ public:
   std::string comment;
 
   // in SSA
-  exprt lhs, rhs;
+  expr2tc lhs, rhs;
   
   // this is a constant
-  exprt value;
+  expr2tc value;
   
   // original expression
-  exprt original_lhs;
+  expr2tc original_lhs;
 
   // for OUTPUT
   std::string format_string;
-  std::list<exprt> output_args;
+  std::list<expr2tc> output_args;
 
   void output(
     const class namespacet &ns,
@@ -72,10 +74,6 @@ public:
     thread_nr(0),
     guard(false)
   {
-    lhs.make_nil();
-    rhs.make_nil();
-    value.make_nil();
-    original_lhs.make_nil();
   }
 };
 
@@ -153,17 +151,16 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
-void show_goto_trace(
-  std::ostream &out,
-  const namespacet &ns,
-  const pretty_namest &pretty_names,
-  const goto_tracet &goto_trace);
-  
+void generate_goto_trace_in_graphml_format(
+  std::string & tokenizer_path,
+  std::string & filename,
+  const namespacet & ns,
+  const goto_tracet & goto_trace);
+
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,
-  const irep_idt &identifier,
-  const exprt &value,
-  const pretty_namest &pretty_names);
+  const expr2tc &identifier,
+  const expr2tc &value);
 
 #endif

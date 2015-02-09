@@ -11,6 +11,8 @@
 #ifndef EXECUTION_STATE_H_
 #define EXECUTION_STATE_H_
 
+#include <irep2.h>
+
 #include <iostream>
 #include <deque>
 #include <set>
@@ -23,7 +25,6 @@
 #include "symex_target.h"
 #include "goto_symex_state.h"
 #include "goto_symex.h"
-#include "read_write_set.h"
 #include "renaming.h"
 
 class reachability_treet;
@@ -84,11 +85,7 @@ class execution_statet : public goto_symext
    *  Default copy constructor.
    *  Used each time we duplicate an execution_statet in reachability_treet.
    *  Does what you might expect, but also updates any ex_state_level2t objects
-   *  in the new execution_statet to point at the right object. It also takes a
-   *  snapshot of the current string pool state - this is so that when we
-   *  finish all exploration proceeding from this state, we can free the
-   *  contents of the string pool that are no-longer needed.
-   */
+   *  in the new execution_statet to point at the right object. */
   execution_statet(const execution_statet &ex);
   execution_statet &operator=(const execution_statet &ex);
 
@@ -98,10 +95,6 @@ class execution_statet : public goto_symext
   virtual ~execution_statet();
 
   // Types
-
-  typedef std::string (*serialise_fxn)(execution_statet &ex_state,
-                                       const exprt &rhs);
-  typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
 
   /**
    *  execution_statet specific level2t.
@@ -116,8 +109,8 @@ class execution_statet : public goto_symext
     ex_state_level2t(execution_statet &ref);
     virtual ~ex_state_level2t();
     virtual ex_state_level2t *clone(void) const;
-    virtual void rename(const irep_idt &identifier, unsigned count);
-    virtual void rename(exprt &identifier);
+    virtual void rename(expr2tc &lhs_symbol, unsigned count);
+    virtual void rename(expr2tc &identifier);
 
     execution_statet *owner;
   };
@@ -133,9 +126,9 @@ class execution_statet : public goto_symext
     state_hashing_level2t(execution_statet &ref);
     virtual ~state_hashing_level2t(void);
     virtual state_hashing_level2t *clone(void) const;
-    virtual irep_idt make_assignment(irep_idt l1_ident,
-                                     const exprt &const_value,
-                                     const exprt &assigned_value);
+    virtual void make_assignment(expr2tc &lhs_symbol,
+                                     const expr2tc &const_value,
+                                     const expr2tc &assigned_value);
     crypto_hash generate_l2_state_hash() const;
     typedef std::map<irep_idt, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
@@ -193,7 +186,7 @@ class execution_statet : public goto_symext
   }
 
   /** Set internal thread startup data */
-  void set_thread_start_data(unsigned int tid, const exprt &argdata)
+  void set_thread_start_data(unsigned int tid, const expr2tc &argdata)
   {
     if (tid >= thread_start_data.size()) {
       std::cerr << "Setting thread data for nonexistant thread " << tid;
@@ -205,7 +198,7 @@ class execution_statet : public goto_symext
   }
 
   /** Fetch internal thread startup data */
-  const exprt &get_thread_start_data(unsigned int tid) const
+  const expr2tc &get_thread_start_data(unsigned int tid) const
   {
     if (tid >= thread_start_data.size()) {
       std::cerr << "Getting thread data for nonexistant thread " << tid;
@@ -244,7 +237,7 @@ class execution_statet : public goto_symext
    *  see whether the assignment should be generating a context switch.
    *  @param code Code representing assignment we're making.
    */
-  virtual void symex_assign(const codet &code);
+  virtual void symex_assign(const expr2tc &code);
 
   /**
    *  Symbolically assert something.
@@ -255,7 +248,7 @@ class execution_statet : public goto_symext
    *  @param expr Expression that we're asserting is true.
    *  @param msg Textual message explaining this assertion.
    */
-  virtual void claim(const exprt &expr, const std::string &msg);
+  virtual void claim(const expr2tc &expr, const std::string &msg);
 
   /**
    *  Perform a jump across GOTO code.
@@ -266,7 +259,7 @@ class execution_statet : public goto_symext
    *  too.
    *  @param old_guard Guard of the goto jump being performed.
    */
-  virtual void symex_goto(const exprt &old_guard);
+  virtual void symex_goto(const expr2tc &old_guard);
 
   /**
    *  Assume some expression is true.
@@ -275,7 +268,7 @@ class execution_statet : public goto_symext
    *  function.
    *  @param assumption Expression of the thing we're assuming to be true.
    */
-  virtual void assume(const exprt &assumption);
+  virtual void assume(const expr2tc &assumption);
 
   /**
    *  Fetch reference to count of dynamic objects in this state.
@@ -294,10 +287,9 @@ class execution_statet : public goto_symext
    *  The execution guard being the guard of the interleavings up to this point
    *  being true and feasable. This is a symbolic name for it.
    *  @see execute_guard
-   *  @return Name of current execution state guard
+   *  @return Symbol of current execution state guard
    */
-
-  irep_idt get_guard_identifier();
+  expr2tc get_guard_identifier();
 
   /**
    *  Get reference to current thread state.
@@ -327,6 +319,15 @@ class execution_statet : public goto_symext
    *  @param i Thread ID to switch to.
    */
   void switch_to_thread(unsigned int i);
+
+  /**
+   *  Determines if current state guard is false.
+   *  Used to check whether the interleaving we're exploring has a false guard,
+   *  meaning that any further interleaving we take is unviable. If
+   *  --smt-thread-guard is enabled, we ask the solver.
+   *  @return True when state guard is false
+   */
+  bool is_cur_state_guard_false(void);
 
   /**
    *  Generates execution guard that's true if this interleaving can be reached.
@@ -365,14 +366,6 @@ class execution_statet : public goto_symext
   bool check_if_ileaves_blocked(void);
 
   /**
-   *  Apply a partial order reduction.
-   *  @param expr Assignment or read to consider in this analysis.
-   *  @param i Thread id of the currently executing thread.
-   *  @return False if we should skip this interleaving.
-   */
-  bool apply_static_por(const exprt &expr, unsigned int i) const;
-
-  /**
    *  Create a new thread.
    *  Creates and initializes a new thread, running at the start of the GOTO
    *  program prog.
@@ -392,18 +385,83 @@ class execution_statet : public goto_symext
   void end_thread(void);
 
   /**
-   *  Get number of globals written by expr.
+   *  Perform any necessary steps after a context switch point. Whether or not
+   *  it was taken. Resets DFS record, POR records, executes thread guard.
+   */
+  void update_after_switch_point(void);
+
+  /**
+   *  Analyze the contents of an assignment for threading.
+   *  If the assignment touches any kind of shared state, we track the accessed
+   *  variables for POR decisions made in the future, and also ask the RT obj
+   *  whether or not it wants to generate an interleaving.
+   *  @param assign Container of code_assign2t object.
+   */
+  void analyze_assign(const expr2tc &assign);
+
+  /**
+   *  Analyze the contents of a read for threading.
+   *  If the read touches any kind of shared state, we track the accessed
+   *  variables for POR decisions made in the future, and also ask the RT obj
+   *  whether or not it wants to generate an interleaving.
+   *  @param expr Container of expression possibly touching global state.
+   */
+  void analyze_read(const expr2tc &expr);
+
+  /**
+   *  Get list of globals accessed by expr.
    *  Exactly how this works, I do not know.
    *  @param ns Namespace to work under.
    *  @expr Expression to count global writes in.
    *  @return Number of global refs in this expression.
    */
-  unsigned int get_expr_write_globals(const namespacet &ns, const exprt & expr);
+  void get_expr_globals(const namespacet &ns, const expr2tc &expr,
+                        std::set<expr2tc> &global_list);
 
   /**
-   *  See get_expr_write_globals.
+   *  Check for scheduling dependancies. Whether it exists between the variables
+   *  accessed by the last transition of thread j and the last transition of
+   *  thread l.
+   *  @param j Most recently executed thread id
+   *  @param l Other thread id to check dependancy with
+   *  @return True if scheduling dependancy exists between threads j and l
    */
-  unsigned int get_expr_read_globals(const namespacet &ns, const exprt & expr);
+  bool check_mpor_dependancy(unsigned int j, unsigned int l) const;
+
+  /**
+   *  Calculate MPOR schedulable threads. I.E. what threads we can schedule
+   *  right now without violating the "quasi-monotonic" property.
+   */
+  void calculate_mpor_constraints(void);
+
+  /** Accessor method for mpor_schedulable. Ensures its access is within bounds
+   *  and is read-only. */
+  bool is_transition_blocked_by_mpor(void) const
+  {
+    return mpor_says_no;
+  }
+
+  /** Accessor method for cswitch_forced. Sets it to true. */
+  void force_cswitch(void)
+  {
+    cswitch_forced = true;
+  }
+
+  /**
+   *  Has a context switch point occured.
+   *  Four things can justify this:
+   *   1. cswitch forced by atomic end or yield.
+   *   2. Global data read/written.
+   *  @return True if context switch is now triggered
+   */
+  bool has_cswitch_point_occured(void) const;
+
+  /**
+   *  Can execution continue in this thread?
+   *  Answer is no if the thread has ended or there's nothing on the call stack
+   *  @return False if there are no further instructions to execute.
+   */
+  bool can_execution_continue(void) const;
 
   /**
    *  Generate hash of entire execution state.
@@ -420,14 +478,7 @@ class execution_statet : public goto_symext
    *  @param rhs Expression to hash.
    *  @return Hash of passed in expression.
    */
-  crypto_hash update_hash_for_assignment(const exprt &rhs);
-
-  /**
-   *  Serialise expressions contents into a string.
-   *  @param rhs Expresson to serialise
-   *  @return String, serialised version of rhs.
-   */
-  std::string serialise_expr(const exprt &rhs);
+  crypto_hash update_hash_for_assignment(const expr2tc &rhs);
 
   /**
    *  Print stack trace of each thread to stdout.
@@ -474,15 +525,11 @@ class execution_statet : public goto_symext
    *  Every time a context switch is taken, the bool in this vector is set to
    *  true at the corresponding thread IDs index. */
   std::vector<bool> DFS_traversed;
-  /** Unknown, something POR related. */
-  std::vector<read_write_set> exprs_read_write;
   /** Storage for threading libraries thread start data. See version history
    *  of when this was introduced to fully understand why; essentially this
    *  is a workaround to prevent too much nondeterminism entering into the
    *  thread starting process. */
-  std::vector<exprt> thread_start_data;
-  /** Unknown, Something POR related. */
-  read_write_set last_global_read_write;
+  std::vector<expr2tc> thread_start_data;
   /** Last active thread's ID. */
   unsigned int last_active_thread;
   /** Global L2 state of this execution_statet. It's also copied as a reference
@@ -503,6 +550,14 @@ class execution_statet : public goto_symext
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;
+  /** True if the guard on this interleaving becomes false.
+   *  Means that there is no path from here on where any assertion may
+   *  become satisfiable. */
+  bool interleaving_unviable;
+  /** State guard prior to a GOTO instruction causing a cswitch. Any thread
+   *  interleaved after a GOTO will be composed with this guard, rather than
+   *  the guard from any of the branches of the GOTO itself. */
+  expr2tc pre_goto_guard;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */
@@ -532,15 +587,36 @@ class execution_statet : public goto_symext
   protected:
   /** Number of context switches performed by this ex_state */
   int CS_number;
-  /** Snapshot of global string pool. @see dfs_execution_statet */
-  string_containert::str_snapshot str_state;
+  /** For each thread, a set of symbols that were read by the thread in the
+   *  last transition (run). Renamed to level1, as that identifies each piece of
+   *  data that could have storage in C. */
+  std::vector<std::set<expr2tc> > thread_last_reads;
+  /** For each thread, a set of symbols that were written by the thread in the
+   *  last transition (run). Renamed to level1, as that identifies each piece of
+   *  data that could have storage in C. */
+  std::vector<std::set<expr2tc> > thread_last_writes;
+  /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
+   *  to dependancy_chain[i][j] here. */
+  std::vector<std::vector<int> > dependancy_chain;
+  /** MPOR scheduling outcome. If we've just taken a transition that MPOR
+   *  rejects, this becomes true. For various reasons, we can't tell whether or
+   *  not MPOR rejects a transition in advance. */
+  bool mpor_says_no;
+  /** Indicates a manatory context switch should occur. Can happen when an
+   *  atomic_end instruction has occured, or when a __ESBMC_yield(); runs */
+  bool cswitch_forced;
+
+  /** Are we tracing / printing symex instructions? */
+  bool symex_trace;
+  /** Are we encoding SMT during exploration? */
+  bool smt_during_symex;
+  /** Are we evaluating the thread guard in the SMT solver during context
+   *  switching? */
+  bool smt_thread_guard;
 
   // Static stuff:
 
   public:
-  static expr_id_map_t init_expr_id_map();
-  static bool expr_id_map_initialized;
-  static expr_id_map_t expr_id_map;
   static unsigned int node_count;
 };
 
@@ -581,8 +657,7 @@ class dfs_execution_statet : public execution_statet
 /**
  *  Execution state class for --schedule exploration.
  *  Provides additional storage for tracking the number of claims that have
- *  been made, and doesn't either reset the string pool snapshot or delete the
- *  trace/equation on destruction.
+ *  been made, doesn't delete the trace/equation on destruction.
  */
 
 class schedule_execution_statet : public execution_statet
@@ -610,7 +685,7 @@ class schedule_execution_statet : public execution_statet
   schedule_execution_statet(const schedule_execution_statet &ref);
   schedule_execution_statet *clone(void) const;
   virtual ~schedule_execution_statet(void);
-  virtual void claim(const exprt &expr, const std::string &msg);
+  virtual void claim(const expr2tc &expr, const std::string &msg);
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;

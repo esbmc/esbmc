@@ -56,7 +56,7 @@ protected:
   // function calls  
   //
   void add_return(
-    goto_functionst::goto_functiont &f,
+    goto_functiont &f,
     const locationt &location);
 
 private:

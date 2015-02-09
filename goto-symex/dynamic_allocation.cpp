@@ -6,6 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
 #include <assert.h>
 
 #include <cprover_prefix.h>
@@ -17,57 +18,39 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "dynamic_allocation.h"
 
-/*******************************************************************\
-
-Function: default_replace_dynamic_allocation
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::default_replace_dynamic_allocation(exprt &expr)
+void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
-  Forall_operands(it, expr)
-    default_replace_dynamic_allocation(*it);
 
-  if(expr.id()=="valid_object")
+  Forall_operands2(it, idx, expr)
+    if (!is_nil_expr(*it))
+      default_replace_dynamic_allocation(*it);
+
+  if (is_valid_object2t(expr))
   {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()==typet::t_pointer);
-
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
+    const valid_object2t &obj = to_valid_object2t(expr);
 
-    exprt object_expr("pointer_object", uint_type());
-    object_expr.move_to_operands(expr.op0());
+    pointer_object2tc obj_expr(pointer_type2(), obj.value);
 
     exprt alloc_array=symbol_expr(ns.lookup(valid_ptr_arr_name));
+    expr2tc alloc_arr_2;
+    migrate_expr(alloc_array, alloc_arr_2);
 
-    exprt index_expr(exprt::index, typet(typet::t_bool));
-    index_expr.move_to_operands(alloc_array, object_expr);
-
-    expr.swap(index_expr);
+    index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
+    expr = index_expr;
   }
-  if (expr.id()=="invalid-pointer")
+  else if (is_invalid_pointer2t(expr))
   {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()=="pointer");
+    const invalid_pointer2t &ptr = to_invalid_pointer2t(expr);
 
-    exprt theptr = expr.op0();
-
-    exprt object_expr("pointer_object", uint_type());
-    object_expr.move_to_operands(expr.op0());
+    pointer_object2tc obj_expr(pointer_type2(), ptr.ptr_obj);
 
     exprt alloc_array=symbol_expr(ns.lookup(valid_ptr_arr_name));
+    expr2tc alloc_arr_2;
+    migrate_expr(alloc_array, alloc_arr_2);
 
-    exprt index_expr("index", typet("bool"));
-    index_expr.move_to_operands(alloc_array, object_expr);
-
-    exprt notindex("not", bool_typet());
-    notindex.move_to_operands(index_expr);
+    index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
+    not2tc notindex(index_expr);
 
     // XXXjmorse - currently we don't correctly track the fact that stack
     // objects change validity as the program progresses, and the solver is
@@ -77,66 +60,51 @@ void goto_symext::default_replace_dynamic_allocation(exprt &expr)
     // objects.
 
     exprt sym = symbol_expr(ns.lookup(dyn_info_arr_name));
-    exprt pointerobj("pointer_object", signedbv_typet());
-    pointerobj.copy_to_operands(theptr);
-    exprt is_dyn("index", bool_typet());
-    is_dyn.copy_to_operands(sym, pointerobj);
+    expr2tc sym_2;
+    migrate_expr(sym, sym_2);
+
+    pointer_object2tc ptr_obj(pointer_type2(), ptr.ptr_obj);
+    index2tc is_dyn(get_bool_type(), sym_2, ptr_obj);
 
     // Catch free pointers: don't allow anything to be pointer object 1, the
     // invalid pointer.
-    exprt invalid_object("invalid-object");
-    invalid_object.type() = theptr.type();
-    exprt isinvalid("=", bool_typet());
-    isinvalid.copy_to_operands(theptr, invalid_object);
-    exprt notinvalid("not", bool_typet());
-    notinvalid.copy_to_operands(isinvalid);
+    type2tc ptr_type = type2tc(new pointer_type2t(type2tc(new empty_type2t())));
+    symbol2tc invalid_object(ptr_type, "INVALID");
+    equality2tc isinvalid(ptr.ptr_obj, invalid_object);
+    not2tc notinvalid(isinvalid);
 
-    exprt is_not_bad_ptr("and", bool_typet());
-    is_not_bad_ptr.move_to_operands(notindex, is_dyn);
+    and2tc is_not_bad_ptr(notindex, is_dyn);
+    or2tc is_valid_ptr(is_not_bad_ptr, isinvalid);
 
-    exprt is_valid_ptr("or", bool_typet());
-    is_valid_ptr.move_to_operands(is_not_bad_ptr, isinvalid);
-
-    expr.swap(is_valid_ptr);
+    expr = is_valid_ptr;
   }
-  if(expr.id()=="deallocated_object")
+  if (is_deallocated_obj2t(expr))
   {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()==typet::t_pointer);
-
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
+    const deallocated_obj2t &obj = to_deallocated_obj2t(expr);
 
-    exprt object_expr("pointer_object", uint_type());
-    object_expr.move_to_operands(expr.op0());
+    pointer_object2tc obj_expr(pointer_type2(), obj.value);
 
     exprt alloc_array=symbol_expr(ns.lookup(deallocd_arr_name));
+    expr2tc alloc_arr_2;
+    migrate_expr(alloc_array, alloc_arr_2);
 
-    exprt index_expr("memory-leak", typet(typet::t_bool));
-    index_expr.move_to_operands(alloc_array, object_expr);
-
-    expr.swap(index_expr);
+    index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
+    expr = index_expr;
   }
-  else if(expr.id()=="dynamic_size")
+  else if (is_dynamic_size2t(expr))
   {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()==typet::t_pointer);
-
     // replace with CPROVER_alloc_size[POINTER_OBJECT(...)]
     //nec: ex37.c
-    exprt object_expr("pointer_object", int_type()/*uint_type()*/);
-    object_expr.move_to_operands(expr.op0());
+    const dynamic_size2t &size = to_dynamic_size2t(expr);
+
+    pointer_object2tc obj_expr(pointer_type2(), size.value);
 
     exprt alloc_array=symbol_expr(ns.lookup(alloc_size_arr_name));
+    expr2tc alloc_arr_2;
+    migrate_expr(alloc_array, alloc_arr_2);
 
-    exprt index_expr(exprt::index, ns.follow(alloc_array.type()).subtype());
-    index_expr.move_to_operands(alloc_array, object_expr);
-
-    expr.swap(index_expr);
-  }
-  else if(expr.id()=="pointer_object_has_type")
-  {
-    assert(expr.operands().size()==1);
-    assert(expr.op0().type().id()==typet::t_pointer);
-
+    index2tc index_expr(uint_type2(), alloc_arr_2, obj_expr);
+    expr = index_expr;
   }
 }

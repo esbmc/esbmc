@@ -1,4 +1,5 @@
 #include <pthread.h>
+#include <stdlib.h>
 
 void *malloc(unsigned size);
 void free(void *p);
@@ -24,7 +25,8 @@ int main(void)
   pthread_t id1, id2;
 
   cv = (pthread_cond_t *) malloc(sizeof(pthread_cond_t));
-
+  if (cv==NULL)
+    exit(0);
   pthread_cond_init(cv, NULL);
 
   pthread_create(&id1, NULL, thread1, NULL);

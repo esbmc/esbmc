@@ -6,85 +6,25 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <hash_cont.h>
-
 #include "slice.h"
 
-/*******************************************************************\
-
-   Class: symex_slicet
-
- Purpose:
-
-\*******************************************************************/
-
-class symex_slicet
+symex_slicet::symex_slicet()
 {
-public:
-  void slice(symex_target_equationt &equation);
-
-protected:
-  typedef hash_set_cont<irep_idt, irep_id_hash> symbol_sett;
-  
-  symbol_sett depends;
-  
-  void get_symbols(const exprt &expr);
-  void get_symbols(const typet &type);
-
-  void slice(symex_target_equationt::SSA_stept &SSA_step);
-  void slice_assignment(symex_target_equationt::SSA_stept &SSA_step);
-};
-
-/*******************************************************************\
-
-Function: symex_slicet::get_symbols
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void symex_slicet::get_symbols(const exprt &expr)
-{
-  get_symbols(expr.type());
-
-  forall_operands(it, expr)
-    get_symbols(*it);
-
-  if(expr.id()==exprt::symbol)
-    depends.insert(expr.identifier());
+  single_slice = false;
 }
 
-/*******************************************************************\
-
-Function: symex_slicet::get_symbols
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void symex_slicet::get_symbols(const typet &type)
+void symex_slicet::get_symbols(const expr2tc &expr)
 {
+
+  forall_operands2(it, idx, expr)
+    if (!is_nil_expr(*it))
+      get_symbols(*it);
+
+  if (is_symbol2t(expr)) {
+    const symbol2t &tmp = to_symbol2t(expr);
+    depends.insert(tmp.get_symbol_name());
+  }
 }
-
-/*******************************************************************\
-
-Function: symex_slicet::slice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_slicet::slice(symex_target_equationt &equation)
 {
@@ -97,30 +37,35 @@ void symex_slicet::slice(symex_target_equationt &equation)
     slice(*it);
 }
 
-/*******************************************************************\
+void
+symex_slicet::slice_for_symbols(symex_target_equationt &equation,
+                                const expr2tc &expr)
+{
+  get_symbols(expr);
+  single_slice = true;
 
-Function: symex_slicet::slice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+  for(symex_target_equationt::SSA_stepst::reverse_iterator
+      it=equation.SSA_steps.rbegin();
+      it!=equation.SSA_steps.rend();
+      it++)
+    slice(*it);
+}
 
 void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
 {
-  get_symbols(SSA_step.guard);
+  if (!single_slice)
+    get_symbols(SSA_step.guard);
 
   switch(SSA_step.type)
   {
   case goto_trace_stept::ASSERT:
-    get_symbols(SSA_step.cond);
+    if (!single_slice)
+      get_symbols(SSA_step.cond);
     break;
 
   case goto_trace_stept::ASSUME:
-    get_symbols(SSA_step.cond);
+    if (!single_slice)
+      get_symbols(SSA_step.cond);
     break;
 
   case goto_trace_stept::ASSIGNMENT:
@@ -130,67 +75,55 @@ void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
   case goto_trace_stept::OUTPUT:
     break;
 
+  case goto_trace_stept::RENUMBER:
+    slice_renumber(SSA_step);
+    break;
+
   default:
     assert(false);  
   }
 }
 
-/*******************************************************************\
-
-Function: symex_slicet::slice_assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_slicet::slice_assignment(
   symex_target_equationt::SSA_stept &SSA_step)
 {
-  assert(SSA_step.lhs.id()==exprt::symbol);
+  assert(is_symbol2t(SSA_step.lhs));
 
-  if(depends.find(SSA_step.lhs.identifier())==
-     depends.end())
+  const symbol2t &tmp = to_symbol2t(SSA_step.lhs);
+  if (depends.find(tmp.get_symbol_name()) == depends.end())
   {
     // we don't really need it
     SSA_step.ignore=true;
   }
   else
+  {
     get_symbols(SSA_step.rhs);
+    // Remove this symbol as we won't be seeing any references to it further
+    // into the history.
+    depends.erase(tmp.get_symbol_name());
+  }
 }
 
-/*******************************************************************\
+void symex_slicet::slice_renumber(
+  symex_target_equationt::SSA_stept &SSA_step)
+{
+  assert(is_symbol2t(SSA_step.lhs));
 
-Function: slice
+  if (depends.find(to_symbol2t(SSA_step.lhs).get_symbol_name())
+              == depends.end())
+  {
+    // we don't really need it
+    SSA_step.ignore=true;
+  }
 
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+  // Don't collect the symbol; this insn has no effect on dependencies.
+}
 
 void slice(symex_target_equationt &equation)
 {
   symex_slicet symex_slice;
   symex_slice.slice(equation);
 }
-
-/*******************************************************************\
-
-Function: simple_slice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void simple_slice(symex_target_equationt &equation)
 {
@@ -216,4 +149,3 @@ void simple_slice(symex_target_equationt &equation)
         s_it++)
       s_it->ignore=true;
 }
-

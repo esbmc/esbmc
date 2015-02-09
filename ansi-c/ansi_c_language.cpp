@@ -78,7 +78,9 @@ static void internal_additions(std::string &code)
     "_Bool __ESBMC_alloc[__ESBMC_constant_infinity_uint];\n"
     "_Bool __ESBMC_deallocated[__ESBMC_constant_infinity_uint];\n"
     "_Bool __ESBMC_is_dynamic[__ESBMC_constant_infinity_uint];\n"
-    "unsigned __ESBMC_alloc_size[__ESBMC_constant_infinity_uint];\n"
+    "unsigned long __ESBMC_alloc_size[__ESBMC_constant_infinity_uint];\n"
+
+    "void *__ESBMC_realloc(void *ptr, long unsigned int size);\n"
 
     // this is ANSI-C
     "extern const char __func__[];\n"
@@ -116,6 +118,14 @@ static void internal_additions(std::string &code)
     "unsigned char nondet_uchar();\n"
     "signed char nondet_schar();\n"
 
+    // Digital filters code
+    "_Bool __ESBMC_check_stability(float den[], float num[]);\n"
+
+	// Digital controllers code
+    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
+    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"
+	"_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);\n"
+
     // And again, for TACAS VERIFIER versions,
     "int __VERIFIER_nondet_int();\n"
     "unsigned int __VERIFIER_nondet_uint();\n"
@@ -130,6 +140,8 @@ static void internal_additions(std::string &code)
     "signed char __VERIFIER_nondet_schar();\n"
 
     "const char *__PRETTY_FUNCTION__;\n"
+    "const char *__FILE__ = \"\";\n"
+    "unsigned int __LINE__ = 0;\n"
 
     // GCC junk stuff
     GCC_BUILTIN_HEADERS
@@ -157,6 +169,11 @@ bool ansi_c_languaget::preprocess(
 {
   // check extensions
 
+  // TACAS14: preprocess /everything/, including .i files. While the user might
+  // have preprocessed his file already, we might still want to inject some
+  // model checker specific stuff into it. A command line option disabling
+  // preprocessing would be more appropriate.
+#if 0
   const char *ext=strrchr(path.c_str(), '.');
   if(ext!=NULL && std::string(ext)==".i")
   {
@@ -169,6 +186,7 @@ bool ansi_c_languaget::preprocess(
 
     return false;
   }
+#endif
 
   return c_preprocess(instream, path, outstream, false, message_handler);
 }

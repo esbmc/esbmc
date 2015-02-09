@@ -1,0 +1,40 @@
+******************************************************
+*    README - ESBMC Benchmarks Runner (sv-comp)      *
+******************************************************
+*                                                    *
+*  Federal University of Amazonas - UFAM             * 
+*  Author: Hussama Ibrahim - hussamaismail@gmail.com *
+*                                                    *
+******************************************************
+
+Configuration:
+
+
+   1) Create a symbolic link inside the ./files/ folder to the cpachecker directory.
+      ./files/cpachecker -> cpachecker_directory (e.g., /opt/cpachecker/)
+
+   2) In ./files/executables/ folder create a symbolic link to the esbmc executable.
+      ./executables/esbmc -> esbmc_executable_path (e.g., /opt/esbmc/esbmc)
+
+   3) In ./files/executables/ folder create a symbolic link to the tokenizer executable.
+      ./executables/tokenizer -> tokenizer_executable_path (e.g., /opt/esbmc/tokenizer)
+
+
+Execution: 
+
+
+   1) To execute the esbmc-benchmark-runner.sh, you only need to add execution permission to file:
+      chmod +x esbmc-benchmark-runner.sh
+
+   2) Pass through parameter the file or folder to check:
+      ./esbmc-benchmark-runner.sh /opt/competition/svcomp15/bitvector/
+
+
+Optional:
+
+
+   1) You can pass the property file to the category using:
+      ./esbmc-benchmark-runner.sh -c property_file.prp /opt/competition/svcomp15/bitvector/
+
+   2) If you want to skip witness verification, use --no-witness in final of command line.
+      ./esbmc-benchmark-runner.sh -c property_file.prp /opt/competition/svcomp15/bitvector/ --no-witness

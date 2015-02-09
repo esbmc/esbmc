@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_BASIC_SYMEX_EQUATION_H
 #define CPROVER_BASIC_SYMEX_EQUATION_H
 
+#include <irep2.h>
+
 extern "C" {
 #include <stdio.h>
 }
@@ -21,7 +23,7 @@ extern "C" {
 
 #include <config.h>
 #include <goto-programs/goto_program.h>
-#include <solvers/prop/prop_conv.h>
+#include <solvers/smt/smt_conv.h>
 
 #include "symex_target.h"
 #include "goto_trace.h"
@@ -34,6 +36,8 @@ extern "C" {
 class symex_target_equationt:public symex_targett
 {
 public:
+  class SSA_stept;
+
   symex_target_equationt(const namespacet &_ns):ns(_ns)
   {
     debug_print = config.options.get_bool_option("symex-ssa-trace");
@@ -42,43 +46,46 @@ public:
   // assignment to a variable - must be symbol
   // the value is destroyed
   virtual void assignment(
-    const guardt &guard,
-    const exprt &lhs,
-    const exprt &original_lhs,
-    exprt &rhs,
+    const expr2tc &guard,
+    const expr2tc &lhs,
+    const expr2tc &original_lhs,
+    const expr2tc &rhs,
     const sourcet &source,
     std::vector<dstring> stack_trace,
     assignment_typet assignment_type);
     
   // output
   virtual void output(
-    const guardt &guard,
+    const expr2tc &guard,
     const sourcet &source,
     const std::string &fmt,
-    const std::list<exprt> &args);
+    const std::list<expr2tc> &args);
   
   // record an assumption
   // cond is destroyed
   virtual void assumption(
-    const guardt &guard,
-    exprt &cond,
+    const expr2tc &guard,
+    const expr2tc &cond,
     const sourcet &source);
 
   // record an assertion
   // cond is destroyed
   virtual void assertion(
-    const guardt &guard,
-    exprt &cond,
+    const expr2tc &guard,
+    const expr2tc &cond,
     const std::string &msg,
     std::vector<dstring> stack_trace,
     const sourcet &source);
 
-  void convert(prop_convt &prop_conv);
-  void convert_assignments(decision_proceduret &decision_procedure) const;
-  void convert_assumptions(prop_convt &prop_conv);
-  void convert_assertions(prop_convt &prop_conv);
-  void convert_guards(prop_convt &prop_conv);
-  void convert_output(decision_proceduret &decision_procedure);
+  virtual void renumber(
+    const expr2tc &guard,
+    const expr2tc &symbol,
+    const expr2tc &size,
+    const sourcet &source);
+
+  virtual void convert(smt_convt &smt_conv);
+  void convert_internal_step(smt_convt &smt_conv, const smt_ast *&assumpt_ast,
+                             smt_convt::ast_vec &assertions, SSA_stept &s);
 
   class SSA_stept
   {
@@ -96,37 +103,36 @@ public:
     bool is_assume() const     { return type==goto_trace_stept::ASSUME; }
     bool is_assignment() const { return type==goto_trace_stept::ASSIGNMENT; }
     bool is_output() const     { return type==goto_trace_stept::OUTPUT; }
+    bool is_renumber() const   { return type==goto_trace_stept::RENUMBER; }
     
-    exprt guard;
+    expr2tc guard;
 
     // for ASSIGNMENT  
-    exprt lhs, rhs, original_lhs;
+    expr2tc lhs, rhs, original_lhs;
     assignment_typet assignment_type;
     
     // for ASSUME/ASSERT
-    exprt cond; 
+    expr2tc cond;
     std::string comment;
 
     // for OUTPUT
     std::string format_string;
-    std::list<exprt> output_args;
+    std::list<expr2tc> output_args;
 
     // for conversion
-    literalt guard_literal, cond_literal;
-    std::list<exprt> converted_output_args;
+    const smt_ast *guard_ast, *cond_ast;
+    std::list<expr2tc> converted_output_args;
     
     // for slicing
     bool ignore;
     
-    SSA_stept():
-      guard(static_cast<const exprt &>(get_nil_irep())),
-      cond(static_cast<const exprt &>(get_nil_irep())),
-      ignore(false)
+    SSA_stept() : ignore(false)
     {
     }
 
     void output(const namespacet &ns, std::ostream &out) const;
-    void short_output(const namespacet &ns, std::ostream &out) const;
+    void short_output(const namespacet &ns, std::ostream &out,
+                      bool show_ignored = false) const;
   };
   
   unsigned count_ignored_SSA_steps() const
@@ -154,12 +160,18 @@ public:
   }
 
   void output(std::ostream &out) const;
+  void short_output(std::ostream &out,
+                    bool show_ignored = false) const;
   
+  void check_for_duplicate_assigns() const;
+
   void clear()
   {
     SSA_steps.clear();
   }
   
+  unsigned int clear_assertions();
+
   virtual symex_targett *clone(void) const
   {
     // No pointers or anything that requires ownership modification, can just
@@ -167,10 +179,36 @@ public:
     return new symex_target_equationt(*this);
   }
 
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
 
 protected:
   const namespacet &ns;
   bool debug_print;
+};
+
+class runtime_encoded_equationt : public symex_target_equationt
+{
+public:
+  class dual_unsat_exception { };
+
+  runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
+
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
+
+  virtual symex_targett *clone(void) const;
+
+  virtual void convert(smt_convt &smt_conv);
+  void flush_latest_instructions(void);
+
+  tvt ask_solver_question(const expr2tc &question);
+
+  smt_convt &conv;
+  std::list<smt_convt::ast_vec> assert_vec_list;
+  std::list<const smt_ast *> assumpt_chain;
+  std::list<SSA_stepst::iterator> scoped_end_points;
+  SSA_stepst::iterator cvt_progress;
 };
 
 extern inline bool operator<(

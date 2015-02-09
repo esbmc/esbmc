@@ -262,25 +262,31 @@ char *strstr(const char *s1, const char *s2) {
 }
 
 void *memcpy(void *dst, const void *src, size_t n) {
-	__ESBMC_HIDE: for (size_t i = 0; i < n; i++)
-		dst[i] = src[i];
+	__ESBMC_HIDE:
+        char *cdst = static_cast<char *>(dst);
+        const char *csrc = static_cast<const char *>(src);
+        for (size_t i = 0; i < n; i++)
+		cdst[i] = csrc[i];
 	return dst;
 }
 
 void *memmove(void *dest, const void *src, size_t n) {
-	__ESBMC_HIDE: if (dest - src >= n) {
+	__ESBMC_HIDE:
+        char *cdst = static_cast<char *>(dest);
+        const char *csrc = static_cast<const char *>(src);
+        if (dest - src >= n) {
 		for (size_t i = 0; i < n; i++)
-			dest[i] = src[i];
+			cdst[i] = csrc[i];
 	} else {
 		for (size_t i = n; i > 0; i--)
-			dest[i - 1] = src[i - 1];
+			cdst[i - 1] = csrc[i - 1];
 	}
 	return dest;
 }
 
 int memcmp(const void *p1, const void *p2, size_t n) {
-	void *v1 = (void*) p1;
-	void *v2 = (void*) p2;
+	char *v1 = (char*) p1;
+	char *v2 = (char*) p2;
 	size_t i;
 
 	for (i = 0; i < n; i++) {
@@ -306,18 +312,7 @@ void *memchr(void *s, int c, size_t n) {
 
 void *memset(void *s, int c, size_t n) {
 	size_t i;
-	int *src = (int*) s;
-
-	for (i = 0; i < n; i++) {
-		src[i] = c;
-	}
-
-	return src;
-}
-
-void *memset(void *s, int c, int n) {
-	size_t i;
-	int *src = (int*) s;
+	char *src = (char*) s;
 
 	for (i = 0; i < n; i++) {
 		src[i] = c;

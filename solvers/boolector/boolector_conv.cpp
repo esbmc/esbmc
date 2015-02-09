@@ -1,2819 +1,550 @@
-/*******************************************************************
- Module:
-
- Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
-
- \*******************************************************************/
-
-#include <assert.h>
-#include <ctype.h>
-#include <math.h>
-#include<sstream>
-#include <arith_tools.h>
-#include <std_types.h>
-#include <config.h>
-#include <i2string.h>
-#include <expr_util.h>
-#include <prefix.h>
-#include <string2array.h>
-#include <pointer_offset_size.h>
-#include <find_symbols.h>
-#include <fixedbv.h>
-#include <solvers/flattening/boolbv_width.h>
+#include <string.h>
 
 #include "boolector_conv.h"
-#include "../ansi-c/c_types.h"
 
-extern "C" {
-#include <boolector.h>
+smt_convt *
+create_new_boolector_solver(bool int_encoding, const namespacet &ns,
+                            bool is_cpp, const optionst &options,
+                            tuple_iface **tuple_api __attribute__((unused)),
+                            array_iface **array_api)
+{
+  boolector_convt *conv =
+    new boolector_convt(is_cpp, int_encoding, ns, options);
+  *array_api = static_cast<array_iface*>(conv);
+  return conv;
 }
 
-//#define DEBUG
-
-boolector_convt::boolector_convt(std::ostream &_out) :
-        boolector_prop_wrappert(_out),
-        prop_convt(boolector_prop)
+boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
+                                 const namespacet &ns, const optionst &options)
+  : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false)
 {
 
-  number_variables_boolector=0;
-  set_to_counter=0;
-  boolector_prop.boolector_ctx = boolector_new();
-  boolector_ctx = boolector_prop.boolector_ctx;
-  boolector_enable_model_gen(boolector_ctx);
-  //boolector_enable_inc_usage(boolector_ctx);
-  //btorFile = fopen ( "btor.txt" , "wb" );
-  //smtFile = fopen ( "smt.txt" , "wb" );
-}
+  if (int_encoding) {
+    std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
+    abort();
+  }
 
-boolector_convt::~boolector_convt()
-{
+  btor = boolector_new();
+  boolector_set_opt(btor,"model_gen",1);
 
-  //fclose(btorFile);
-  //fclose(smtFile);
-  if (boolector_prop.btor && boolector_prop.assumpt.size()>0)
-  {
-    btorFile = fopen ( filename.c_str() , "wb" );
-
-    for(unsigned i=0; i<boolector_prop.assumpt.size(); i++)
-      boolector_dump_smt(boolector_ctx, btorFile, boolector_prop.assumpt.at(i));
-
-    fclose (btorFile);
+  if (options.get_option("output") != "") {
+    debugfile = fopen(options.get_option("output").c_str(), "w");
+  } else {
+    debugfile = NULL;
   }
 }
 
-/*******************************************************************
- Function: boolector_convt::print_data_types
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void boolector_convt::print_data_types(BtorExp* operand0, BtorExp* operand1)
+boolector_convt::~boolector_convt(void)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
+  delete_all_asts();
 
+//  boolector_delete(btor);
+
+  btor = NULL;
+  if (debugfile)
+    fclose(debugfile);
+  debugfile = NULL;
 }
 
-/*******************************************************************
- Function: boolector_convt::check_all_types
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::check_all_types(const typet &type)
+smt_convt::resultt
+boolector_convt::dec_solve()
 {
-  if (type.is_bool() || type.id()=="signedbv" || type.id()=="unsignedbv" ||
-	  type.id()=="symbol" || type.id()=="empty" || type.id() == "fixedbv" ||
-	  type.is_array() || type.id()=="struct" || type.id()=="pointer" ||
-	  type.id()=="union")
-  {
-    return true;
-  }
+  pre_solve();
 
-  return false;
-}
+  int result = boolector_sat(btor);
 
-/*******************************************************************
- Function: boolector_convt::is_signed
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::is_signed(const typet &type)
-{
-  if (type.id()=="signedbv" || type.id()=="fixedbv")
-    return true;
-
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::check_boolector_properties
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-int boolector_convt::check_boolector_properties(void)
-{
-  return boolector_sat(boolector_ctx);
-}
-
-/*******************************************************************
- Function: boolector_convt::is_ptr
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::is_ptr(const typet &type)
-{
-  return type.id()=="pointer" || type.id()=="reference";
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_pointer_offset
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_pointer_offset(unsigned bits, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-/*******************************************************************
- Function: boolector_convt::select_pointer_value
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::select_pointer_value(BtorExp* object, BtorExp* offset, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-/*******************************************************************
- Function: boolector_convt::set_filename
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void boolector_convt::set_filename(std::string file)
-{
-  filename = file;
-}
-
-/*******************************************************************
- Function: boolector_convt::create_boolector_array
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::create_boolector_array(const typet &type, std::string identifier, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  BtorExp *array;
-  unsigned int width = 0;
-
-  if (type.subtype().is_bool())
-  {
-    array = boolector_array(boolector_ctx, 1, config.ansi_c.int_width, identifier.c_str());
-  }
-  else if (type.subtype().id() == "fixedbv")
-  {
-	width = atoi(type.subtype().width().c_str());
-	array = boolector_array(boolector_ctx, width, config.ansi_c.int_width, identifier.c_str());
-  }
-  else if (type.subtype().id() == "signedbv" || type.subtype().id() == "unsignedbv")
-  {
-	width = atoi(type.subtype().width().c_str());
-	array = boolector_array(boolector_ctx, width, config.ansi_c.int_width, identifier.c_str());
-  }
-  else if (type.subtype().id() == "pointer")
-  {
-	create_boolector_array(type.subtype(), identifier, array);
-  }
-
-  bv = array;
-
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_identifier
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_identifier(const std::string &identifier, const typet &type, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "identifier: " << identifier << std::endl;
-  std::cout << "type.pretty(): " << type.pretty() << std::endl;
-#endif
-
-  unsigned int width = 0;
-
-  width = atoi(type.width().c_str());
-
-  if (type.is_bool())
-  {
-	bv = boolector_var(boolector_ctx, 1, identifier.c_str());
-  }
-  else if (type.id()=="signedbv" || type.id()=="unsignedbv" || type.id()=="c_enum")
-  {
-	bv = boolector_var(boolector_ctx, width, identifier.c_str());
-  }
-  else if (type.id()== "fixedbv")
-  {
-	bv = boolector_var(boolector_ctx, width, identifier.c_str());
-  }
-  else if (type.is_array())
-  {
-	create_boolector_array(type, identifier, bv);
-  }
-  else if (type.id()=="pointer")
-  {
-	if (convert_identifier(identifier, type.subtype(), bv))
-	  return true;
-  }
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-  return false;
-}
-
-/*******************************************************************\
-
-Function: boolector_convt::convert_bv
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool boolector_convt::convert_bv(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-#if 1
-  bv_cachet::const_iterator cache_result=bv_cache.find(expr);
-  if(cache_result!=bv_cache.end())
-  {
-#ifdef DEBUG
-    std::cout << "Cache hit on " << expr.pretty() << "\n";
-#endif
-	bv = cache_result->second;
-    return false;
-  }
-#endif
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  if (convert_boolector_expr(expr, bv))
-    return true;
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  // insert into cache
-  bv_cache.insert(std::pair<const exprt, BtorExp*>(expr, bv));
-
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::read_cache
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::read_cache(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  std::string symbol;
-  unsigned int size = pointer_cache.size();
-
-  symbol = expr.identifier().as_string();
-
-  for(pointer_cachet::const_iterator it = pointer_cache.begin();
-  it != pointer_cache.end(); it++)
-  {
-	if (symbol.compare((*it).second.c_str())==0)
-	{
-	  //std::cout << "Cache hit on: " << (*it).first.pretty() << "\n";
-	  if (convert_bv((*it).first, bv))
-	    return true;
-	  else
-	    return false;
-	}
-  }
-
-  return convert_bv(expr, bv);
-}
-
-/*******************************************************************
- Function: boolector_convt::write_cache
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void boolector_convt::write_cache(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  std::string symbol, identifier;
-
-  identifier = expr.identifier().as_string();
-
-  for (std::string::const_iterator it = identifier.begin(); it
-		!= identifier.end(); it++)
-  {
-	char ch = *it;
-
-	if (isalnum(ch) || ch == '$' || ch == '?')
-	{
-	  symbol += ch;
-	}
-	else if (ch == '#')
-	{
-      pointer_cache.insert(std::pair<const exprt, std::string>(expr, symbol));
-      return;
-	}
-  }
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_lt
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_lt(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-  BtorExp *constraint, *operand0, *operand1;
-
-  if (expr.op0().type().is_array())
-    write_cache(expr.op0());
-
-  if (convert_bv(expr.op0(), operand0))
-    return boolector_false(boolector_ctx);
-  if (convert_bv(expr.op1(), operand1))
-	return boolector_false(boolector_ctx);
-
-  if (expr.op1().type().id()=="signedbv" || expr.op1().type().id()=="fixedbv")
-	constraint = boolector_slt(boolector_ctx, operand0, operand1);
-  else if (expr.op1().type().id()=="unsignedbv")
-	constraint = boolector_ult(boolector_ctx, operand0, operand1);
-
-  return constraint;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_gt
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_gt(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-  BtorExp *constraint, *operand0, *operand1;
-
-  if (expr.op0().type().is_array())
-    write_cache(expr.op0());
-
-  if (convert_bv(expr.op0(), operand0))
-    return boolector_false(boolector_ctx);
-  if (convert_bv(expr.op1(), operand1))
-	return boolector_false(boolector_ctx);
-
-  if (expr.op1().type().id()=="signedbv" || expr.op1().type().id()=="fixedbv")
-	constraint = boolector_sgt(boolector_ctx, operand0, operand1);
-  else if (expr.op1().type().id()=="unsignedbv")
-	constraint = boolector_ugt(boolector_ctx, operand0, operand1);
-
-  return constraint;
-}
-
-
-/*******************************************************************
- Function: boolector_convt::convert_le
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_le(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-  BtorExp *constraint, *operand0, *operand1;
-
-  if (expr.op0().type().is_array())
-    write_cache(expr.op0());
-
-  if (convert_bv(expr.op0(), operand0))
-	  return boolector_false(boolector_ctx);
-  if (convert_bv(expr.op1(), operand1))
-	  return boolector_false(boolector_ctx);
-
-  if (expr.op1().type().id()=="signedbv" || expr.op1().type().id()=="fixedbv")
-	constraint = boolector_slte(boolector_ctx, operand0, operand1);
-  else if (expr.op1().type().id()=="unsignedbv")
-	constraint = boolector_ulte(boolector_ctx, operand0, operand1);
-
-  return constraint;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_ge
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_ge(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-  BtorExp *constraint, *operand0, *operand1;
-
-  if (expr.op0().type().is_array())
-    write_cache(expr.op0());
-
-  if (convert_bv(expr.op0(), operand0))
-	  return boolector_false(boolector_ctx);
-  if (convert_bv(expr.op1(), operand1))
-	  return boolector_false(boolector_ctx);
-
-  //std::cout << expr.pretty() << std::endl;
-
-  if (expr.op1().type().id()=="signedbv" || expr.op1().type().id()=="fixedbv")
-	constraint = boolector_sgte(boolector_ctx, operand0, operand1);
-  else if (expr.op1().type().id()=="unsignedbv")
-	constraint = boolector_ugte(boolector_ctx, operand0, operand1);
-
-  //std::cout << expr.pretty() << std::endl;
-  //if (expr.op0().id()=="symbol" && expr.op1().is_constant())
-    //boolector_assert(boolector_ctx, constraint);
-
-  return constraint;
-}
-
-
-/*******************************************************************
- Function: boolector_convt::convert_eq
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_eq(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-#endif
-
-  assert(expr.operands().size()==2);
-  static BtorExp *constraint, *operand0, *operand1;
-
-  if (expr.op0().type().is_array())
-    write_cache(expr.op0());
-
-  if (convert_bv(expr.op0(), operand0))
-	  return boolector_false(boolector_ctx);
-  if (convert_bv(expr.op1(),operand1))
-	  return boolector_false(boolector_ctx);
-
-  if (expr.id() == "=")
-	constraint = boolector_eq(boolector_ctx, operand0, operand1);
+  if (result == BOOLECTOR_SAT)
+    return P_SATISFIABLE;
+  else if (result == BOOLECTOR_UNSAT)
+    return P_UNSATISFIABLE;
   else
-  {
-	constraint = boolector_ne(boolector_ctx, operand0, operand1);
-	//std::cout << "expr.op1().is_constant(): " << expr.op1().is_constant() << std::endl;
-	//std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-	//if (expr.op0().id()=="symbol" && expr.op1().is_constant())
-	  //boolector_assert(boolector_ctx, constraint);
+    return P_ERROR;
+}
+
+tvt
+boolector_convt::l_get(const smt_ast *l)
+{
+  assert(l->sort->id == SMT_SORT_BOOL);
+  const btor_smt_ast *ast = btor_ast_downcast(l);
+  const char *result = boolector_bv_assignment(btor, ast->e);
+
+  assert(result != NULL && "Boolector returned null bv assignment string");
+
+  tvt t;
+
+  switch (*result) {
+  case '1':
+    t = tvt(tvt::TV_TRUE);
+    break;
+  case '0':
+    t = tvt(tvt::TV_FALSE);
+    break;
+  case 'x':
+    t = tvt(tvt::TV_UNKNOWN);
+    break;
+  default:
+    std::cerr << "Boolector bv model string \"" << result << "\" not of the "
+              << "expected format" << std::endl;
+    abort();
   }
 
-
-  return constraint;
+  boolector_free_bv_assignment(btor, result);
+  return t;
 }
 
-/*******************************************************************
- Function: boolector_convt::convert_invalid_pointer
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_invalid(const exprt &expr)
+const std::string
+boolector_convt::solver_text()
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
+  return "Boolector";
 }
 
-/*******************************************************************
- Function: boolector_convt::convert_same_object
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_same_object(const exprt &expr)
+void
+boolector_convt::assert_ast(const smt_ast *a)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_dynamic_object
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_dynamic_object(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_overflow_sum
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_overflow_sum(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-  static BtorExp *bv, *operand[2];
-
-  if (convert_bv(expr.op0(), operand[0]))
-	  return boolector_false(boolector_ctx);
-  if (convert_bv(expr.op1(), operand[1]))
-	  return boolector_false(boolector_ctx);
-
-  if (expr.op0().type().id()=="signedbv" && expr.op1().type().id()=="signedbv")
-    bv = boolector_saddo(boolector_ctx, operand[0], operand[1]);
-  else if (expr.op0().type().id()=="unsignedbv" && expr.op1().type().id()=="unsignedbv")
-	bv = boolector_uaddo(boolector_ctx, operand[0], operand[1]);
-
-  return bv; //boolector_not(boolector_ctx, bv);
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_overflow_sub
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_overflow_sub(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-  static BtorExp *bv, *operand[2];
-
-  if (convert_bv(expr.op0(), operand[0]))
-	  return boolector_false(boolector_ctx);
-  if (convert_bv(expr.op1(), operand[1]))
-	  return boolector_false(boolector_ctx);
-
-  if (expr.op0().type().id()=="signedbv" && expr.op1().type().id()=="signedbv")
-    bv = boolector_ssubo(boolector_ctx, operand[0], operand[1]);
-  else if (expr.op0().type().id()=="unsignedbv" && expr.op1().type().id()=="unsignedbv")
-	bv = boolector_usubo(boolector_ctx, operand[0], operand[1]);
-
-  return bv; //boolector_not(boolector_ctx, bv);
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_overflow_mul
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_overflow_mul(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-  static BtorExp *bv, *operand[2];
-
-  if (convert_bv(expr.op0(), operand[0]))
-	  return boolector_false(boolector_ctx);
-  if (convert_bv(expr.op1(), operand[1]))
-	  return boolector_false(boolector_ctx);
-
-  if (expr.op0().type().id()=="signedbv" && expr.op1().type().id()=="signedbv")
-    bv = boolector_smulo(boolector_ctx, operand[0], operand[1]);
-  else if (expr.op0().type().id()=="unsignedbv" && expr.op1().type().id()=="unsignedbv")
-	bv = boolector_umulo(boolector_ctx, operand[0], operand[1]);
-
-  return bv; //boolector_not(boolector_ctx, bv);
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_overflow_unary
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_overflow_unary(const exprt &expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-  std::cout << "width: " << width << std::endl;
-#endif
-
-  assert(expr.operands().size()==1);
-  static BtorExp *bv, *operand;
-  u_int i, width;
-
-
-
-  if (convert_bv(expr.op0(), operand))
-	  return boolector_false(boolector_ctx);
-
-  if (boolbv_get_width(expr.op0().type(), width))
-	  return boolector_false(boolector_ctx);
-
-  bv = boolector_not(boolector_ctx, boolector_ne(boolector_ctx, operand, boolector_ones(boolector_ctx,width)));
-
+  const btor_smt_ast *ast = btor_ast_downcast(a);
+  boolector_assert(btor, ast->e);
 #if 0
-  if (expr.op0().type().id()=="signedbv")
-    bv = boolector_slt(boolector_ctx, boolector_neg(boolector_ctx, operand), boolector_ones(boolector_ctx,width));
-  else if (expr.op0().type().id()=="unsignedbv")
-	bv = boolector_ult(boolector_ctx, boolector_neg(boolector_ctx, operand), boolector_ones(boolector_ctx,width));
+  if (debugfile)
+    boolector_dump_smt(btor, debugfile, ast->e);
 #endif
-
-  return bv;
 }
 
-/*******************************************************************
- Function: boolector_convt::convert_overflow_typecast
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-BtorExp* boolector_convt::convert_overflow_typecast(const exprt &expr)
+smt_ast *
+boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
+                               const smt_ast * const *args,
+                               unsigned int numargs)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
+  const btor_smt_ast *asts[4];
+  unsigned int i;
 
-  unsigned bits=atoi(expr.id().c_str()+18);
+  assert(numargs <= 4);
+  for (i = 0; i < numargs; i++)
+    asts[i] = btor_ast_downcast(args[i]);
 
-  const exprt::operandst &operands=expr.operands();
-
-  if(operands.size()!=1)
-    throw "operand "+expr.id_string()+" takes one operand";
-
-  static BtorExp *bv, *operand[3], *mid, *overflow[2], *tmp, *minus_one, *two;
-  u_int i, result=1, width;
-  std::string value;
-
-  boolbv_get_width(expr.op0().type(), width);
-
-  if(bits>=width || bits==0)
-    throw "overflow-typecast got wrong number of bits";
-
-  assert(bits <= 32);
-
-  for(i=0; i<bits; i++)
-  {
-	if (i==31)
-	  result=(result-1)*2+1;
-	else if (i<31)
-      result*=2;
+  switch (k) {
+  case SMT_FUNC_BVADD:
+    return new_ast(s, boolector_add(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSUB:
+    return new_ast(s, boolector_sub(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVMUL:
+    return new_ast(s, boolector_mul(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSMOD:
+    return new_ast(s, boolector_srem(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVUMOD:
+    return new_ast(s, boolector_urem(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSDIV:
+    return new_ast(s, boolector_sdiv(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVUDIV:
+    return new_ast(s, boolector_udiv(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSHL:
+    return fix_up_shift(boolector_sll, asts[0], asts[1], s);
+  case SMT_FUNC_BVLSHR:
+    return fix_up_shift(boolector_srl, asts[0], asts[1], s);
+  case SMT_FUNC_BVASHR:
+    return fix_up_shift(boolector_sra, asts[0], asts[1], s);
+  case SMT_FUNC_BVNEG:
+    return new_ast(s, boolector_neg(btor, asts[0]->e));
+  case SMT_FUNC_BVNOT:
+  case SMT_FUNC_NOT:
+    return new_ast(s, boolector_not(btor, asts[0]->e));
+  case SMT_FUNC_BVNXOR:
+    return new_ast(s, boolector_xnor(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVNOR:
+    return new_ast(s, boolector_nor(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVNAND:
+    return new_ast(s, boolector_nand(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVXOR:
+  case SMT_FUNC_XOR:
+    return new_ast(s, boolector_xor(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVOR:
+  case SMT_FUNC_OR:
+    return new_ast(s, boolector_or(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVAND:
+  case SMT_FUNC_AND:
+    return new_ast(s, boolector_and(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_IMPLIES:
+    return new_ast(s, boolector_implies(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVULT:
+    return new_ast(s, boolector_ult(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSLT:
+    return new_ast(s, boolector_slt(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVULTE:
+    return new_ast(s, boolector_ulte(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSLTE:
+    return new_ast(s, boolector_slte(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVUGT:
+    return new_ast(s, boolector_ugt(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSGT:
+    return new_ast(s, boolector_sgt(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVUGTE:
+    return new_ast(s, boolector_ugte(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSGTE:
+    return new_ast(s, boolector_sgte(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_EQ:
+    return new_ast(s, boolector_eq(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_NOTEQ:
+    return new_ast(s, boolector_ne(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_ITE:
+    return new_ast(s, boolector_cond(btor, asts[0]->e, asts[1]->e, asts[2]->e));
+  case SMT_FUNC_STORE:
+    return new_ast(s, boolector_write(btor, asts[0]->e, asts[1]->e,
+                                               asts[2]->e));
+  case SMT_FUNC_SELECT:
+    return new_ast(s, boolector_read(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_CONCAT:
+    return new_ast(s, boolector_concat(btor, asts[0]->e, asts[1]->e));
+  default:
+    std::cerr << "Unhandled SMT func \"" << smt_func_name_table[k]
+              << "\" in boolector conv" << std::endl;
+    abort();
   }
-
-  if (is_signed(expr.op0().type()))
-    value = integer2string(binary2integer(expr.op0().value().as_string(), true),10);
-  else
-	value = integer2string(binary2integer(expr.op0().value().as_string(), false),10);
-
-  if (convert_bv(expr.op0(), operand[0]))
-	  return boolector_false(boolector_ctx);
-
-  if (expr.op0().type().id()=="signedbv" || expr.op0().type().id()=="fixedbv")
-  {
-	tmp = boolector_int(boolector_ctx, result, width);
-	two = boolector_int(boolector_ctx, 2, width);
-	minus_one = boolector_int(boolector_ctx, -1, width);
-	mid = boolector_sdiv(boolector_ctx, tmp, two);
-	operand[1] = boolector_sub(boolector_ctx, mid, minus_one);
-	operand[2] = boolector_mul(boolector_ctx, operand[1], minus_one);
-
-	overflow[0] = boolector_slt(boolector_ctx, operand[0], operand[1]);
-	overflow[1] = boolector_sgt(boolector_ctx, operand[0], operand[2]);
-	bv = boolector_not(boolector_ctx, boolector_and(boolector_ctx, overflow[0], overflow[1]));
-  }
-  else if (expr.op0().type().id()=="unsignedbv")
-  {
-	operand[2] = boolector_unsigned_int(boolector_ctx, 0, width);
-	operand[1] = boolector_unsigned_int(boolector_ctx, result, width);
-	overflow[0] = boolector_ult(boolector_ctx, operand[0], operand[1]);
-	overflow[1] = boolector_ugt(boolector_ctx, operand[0], operand[2]);
-	bv = boolector_not(boolector_ctx, boolector_and(boolector_ctx, overflow[0], overflow[1]));
-  }
-
-  return bv;
 }
 
-/*******************************************************************
- Function: boolector_convt::convert_rest
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-literalt boolector_convt::convert_rest(const exprt &expr)
+smt_sort *
+boolector_convt::mk_sort(const smt_sort_kind k, ...)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << "\n";
-#endif
+  // Boolector doesn't have any special handling for sorts, they're all always
+  // explicit arguments to functions. So, just use the base smt_sort class.
+  va_list ap;
+  smt_sort *s = NULL, *dom, *range;
+  unsigned long uint;
 
-  literalt l = boolector_prop.new_variable();
-  static BtorExp *constraint, *formula;
+  va_start(ap, k);
+  switch (k) {
+  case SMT_SORT_INT:
+  case SMT_SORT_REAL:
+    std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
+    abort();
+  case SMT_SORT_BV:
+    uint = va_arg(ap, unsigned long);
+    s = new smt_sort(k, uint);
+    break;
+  case SMT_SORT_ARRAY:
+    dom = va_arg(ap, smt_sort *); // Consider constness?
+    range = va_arg(ap, smt_sort *);
+    s = new smt_sort(k, range->data_width, dom->data_width);
+    break;
+  case SMT_SORT_BOOL:
+    s = new smt_sort(k);
+    break;
+  default:
+    std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
+    abort();
+  }
 
-  if (!assign_boolector_expr(expr))
-	return l;
-
-  if (expr.id() == "=" || expr.id() == "notequal")
-	constraint = convert_eq(expr);
-  else if (expr.id() == "<")
-	constraint = convert_lt(expr);
-  else if (expr.id() == ">")
-	constraint = convert_gt(expr);
-  else if (expr.id() == "<=")
-	constraint = convert_le(expr);
-  else if (expr.id() == ">=")
-	constraint = convert_ge(expr);
-  else if (expr.id() == "overflow-+")
-	constraint = convert_overflow_sum(expr);
-  else if (expr.id() == "overflow--")
-	constraint = convert_overflow_sub(expr);
-  else if (expr.id() == "overflow-*")
-	constraint = convert_overflow_mul(expr);
-  else if (expr.id() == "overflow-unary-")
-	constraint = convert_overflow_unary(expr);
-  else if(has_prefix(expr.id_string(), "overflow-typecast-"))
-	constraint = convert_overflow_typecast(expr);
-  else
-	throw "convert_boolector_expr: " + expr.id_string() + " is not supported yet";
-
-#ifdef DEBUG
-  std::cout << "convert_rest l" << l.var_no() << std::endl;
-#endif
-
-  formula = boolector_iff(boolector_ctx, boolector_prop.boolector_literal(l), constraint);
-  boolector_assert(boolector_ctx, formula);
-
-  if (boolector_prop.btor)
-    boolector_prop.assumpt.push_back(formula);
-
-  //boolector_dump_btor(boolector_ctx, btorFile, formula);
-  //boolector_dump_smt(boolector_ctx, smtFile, formula);
-
-  return l;
+  return s;
 }
 
-/*******************************************************************
- Function: boolector_convt::convert_rel
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_rel(const exprt &expr, BtorExp* &bv)
+smt_ast *
+boolector_convt::mk_smt_int(const mp_integer &theint __attribute__((unused)), bool sign __attribute__((unused)))
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-#endif
-
-  assert(expr.operands().size()==2);
-
-  BtorExp *result, *operand0, *operand1;
-
-  if (convert_bv(expr.op0(), operand0)) return true;
-  if (convert_bv(expr.op1(), operand1)) return true;
-
-  const typet &op_type=expr.op0().type();
-
-  if (op_type.id()=="unsignedbv" || op_type.subtype().id()=="unsignedbv")
-  {
-    if(expr.id()=="<=")
-   	  result = boolector_ulte(boolector_ctx,operand0,operand1);
-    else if(expr.id()=="<")
-      result = boolector_ult(boolector_ctx,operand0,operand1);
-    else if(expr.id()==">=")
-      result = boolector_ugt(boolector_ctx,operand0,operand1);
-    else if(expr.id()==">")
-      result = boolector_ugte(boolector_ctx,operand0,operand1);
-  }
-  else if (op_type.id()=="signedbv" || op_type.id()=="fixedbv" ||
-			 op_type.subtype().id()=="signedbv" || op_type.subtype().id()=="fixedbv" )
-  {
-    if(expr.id()=="<=")
-      result = boolector_slte(boolector_ctx,operand0,operand1);
-    else if(expr.id()=="<")
-      result = boolector_ult(boolector_ctx,operand0,operand1);
-    else if(expr.id()==">=")
-      result = boolector_sgt(boolector_ctx,operand0,operand1);
-    else if(expr.id()==">")
-      result = boolector_sgte(boolector_ctx,operand0,operand1);
-  }
-
-  bv = result;
-
-  return false;
+  std::cerr << "Boolector can't create integer sorts" << std::endl;
+  abort();
 }
 
-/*******************************************************************
- Function: boolector_convt::convert_typecast
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_typecast(const exprt &expr, BtorExp* &bv)
+smt_ast *
+boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-#endif
+  std::cerr << "Boolector can't create Real sorts" << std::endl;
+  abort();
+}
 
-  assert(expr.operands().size()==1);
+smt_ast *
+boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
+                              unsigned int w)
+{
+  const smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
 
-  BtorExp *result, *operand;
-  BtorExp *args[2];
-
-  const exprt &op=expr.op0();
-
-  if(expr.type().id()=="signedbv" || expr.type().id()=="unsignedbv")
-  {
-    unsigned to_width=atoi(expr.type().width().c_str());
-
-    if(op.type().id()=="signedbv")
-    {
-      unsigned from_width=atoi(op.type().width().c_str());
-      //std::cout << "from_width: " << from_width << "\n";
-      //std::cout << "to_width: " << to_width << "\n";
-
-      if(from_width==to_width)
-      {
-    	if (convert_bv(op, result))
-    	  return true;
-      }
-      else if(from_width<to_width)
-      {
-    	if (convert_bv(op, operand))
-    	  return true;
-    	result = boolector_sext(boolector_ctx, operand, (to_width-from_width));
-      }
-      else if (from_width>to_width)
-      {
-    	if (convert_bv(op, operand))
-    	  return true;
-    	result = boolector_slice(boolector_ctx, operand, (to_width-1), 0);
-      }
+  if (w > 32) {
+    // We have to pass things around via means of strings, becausae boolector
+    // uses native int types as arguments to its functions, rather than fixed
+    // width integers. Seeing how amd64 is LP64, there's no way to pump 64 bit
+    // ints to boolector natively.
+    if (w > 64) {
+      std::cerr <<  "Boolector backend assumes maximum bitwidth is 64, sorry"
+                << std::endl;
+      abort();
     }
-    else if(op.type().id()=="unsignedbv")
-    {
-      unsigned from_width=atoi(op.type().width().c_str());
 
-      if(from_width==to_width)
-      {
-    	if (convert_bv(op, result))
-    	  return true;
-      }
-      else if(from_width<to_width)
-      {
-    	if (convert_bv(op, operand))
-    	  return true;
-    	result = boolector_uext(boolector_ctx, operand, (to_width-from_width));
-      }
-      else if (from_width>to_width)
-      {
-      	if (convert_bv(op, operand))
-      	  return true;
-      	result = boolector_slice(boolector_ctx, operand, (to_width-1), 0);
-      }
-    }
-    else if (op.type().is_bool())
-    {
-  	  BtorExp *zero, *one;
-      unsigned width;
+    char buffer[65];
+    memset(buffer, 0, sizeof(buffer));
 
-      boolbv_get_width(expr.type(), width);
-  	  if (expr.type().id()=="signedbv" || expr.type().id()=="fixedbv")
-  	  {
-  	    zero = boolector_int(boolector_ctx, 0, width);
-  	    one =  boolector_int(boolector_ctx, 1, width);
-  	  }
-  	  else if (expr.type().id()=="unsignedbv")
-  	  {
-  	    zero = boolector_unsigned_int(boolector_ctx, 0, width);
-  	    one =  boolector_unsigned_int(boolector_ctx, 1, width);
-  	  }
-
-  	  if (convert_bv(op,operand)) return true;
-  	  result = boolector_cond(boolector_ctx, operand, one, zero);
-    }
-    if (op.type().id()=="pointer")
-    {
-      unsigned width;
-      unsigned object=pointer_logic.add_object(expr);
-      boolbv_get_width(expr.type(), width);
-      result = boolector_int(boolector_ctx, object, width);
-    }
-  }
-  else if(expr.type().id()=="fixedbv")
-  {
-    const fixedbv_typet &fixedbv_type=to_fixedbv_type(expr.type());
-    unsigned to_fraction_bits=fixedbv_type.get_fraction_bits();
-    unsigned to_integer_bits=fixedbv_type.get_integer_bits();
-
-    if(op.type().id()=="unsignedbv" ||
-       op.type().id()=="signedbv" ||
-       op.type().id()=="enum")
-    {
-      unsigned from_width;
-
-   	  boolbv_get_width(op.type(), from_width);
-
-      if(from_width==to_integer_bits)
-      {
-    	if (convert_bv(op, result)) return true;
-      }
-      else if(from_width>to_integer_bits)
-      {
-    	if (convert_bv(op, args[0])) return true;
-      	result = boolector_slice(boolector_ctx, args[0], (from_width-1), to_integer_bits);
-      }
+    // Note that boolector has the most significant bit first in bit strings.
+    int64_t num = theint.to_int64();
+    uint64_t bit = 1ULL << (w - 1);
+    for (unsigned int i = 0; i < w; i++) {
+      if (num & bit)
+        buffer[i] = '1';
       else
-      {
-        assert(from_width<to_integer_bits);
+        buffer[i] = '0';
 
-        if(expr.type().id()=="unsignedbv")
-        {
-       	  if (convert_bv(op, args[0])) return true;
-          result = boolector_uext(boolector_ctx, args[0], (to_integer_bits-from_width));
-        }
-        else
-        {
-          if (convert_bv(op, args[0])) return true;
-      	  result = boolector_sext(boolector_ctx, args[0], (to_integer_bits-from_width));
-        }
-      }
-
-      result = boolector_concat(boolector_ctx, result, boolector_int(boolector_ctx, 0, to_fraction_bits));
+      bit >>= 1;
     }
-    else if(op.type().is_bool())
-    {
-      BtorExp *zero, *one;
-      unsigned width;
 
-      boolbv_get_width(expr.type(), width);
+    BoolectorNode *node = boolector_const(btor, buffer);
+    return new_ast(s, node);
+  }
 
-  	  zero = boolector_int(boolector_ctx, 0, to_integer_bits);
-  	  one = boolector_int(boolector_ctx, 1, to_integer_bits);
-  	  result = boolector_cond(boolector_ctx, result, one, zero);
-  	  result = boolector_concat(boolector_ctx, result, boolector_int(boolector_ctx, 0, to_fraction_bits));
+  BoolectorNode *node;
+  if (sign) {
+    node = boolector_int(btor, theint.to_long(), w);
+  } else {
+    node = boolector_unsigned_int(btor, theint.to_ulong(), w);
+  }
+
+  return new_ast(s, node);
+}
+
+smt_ast *
+boolector_convt::mk_smt_bool(bool val)
+{
+  BoolectorNode *node = (val) ? boolector_true(btor) : boolector_false(btor);
+  const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+  return new_ast(sort, node);
+}
+
+smt_ast *
+boolector_convt::mk_array_symbol(const std::string &name, const smt_sort *s,
+                                smt_sortt array_subtype __attribute__((unused)))
+{
+  return mk_smt_symbol(name, s);
+}
+
+smt_ast *
+boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
+{
+  symtable_type::iterator it = symtable.find(name);
+  if (it != symtable.end())
+    return it->second;
+
+  BoolectorNode *node;
+
+  switch(s->id) {
+  case SMT_SORT_BV:
+    node = boolector_var(btor, s->data_width, name.c_str());
+    break;
+  case SMT_SORT_BOOL:
+    node = boolector_var(btor, 1, name.c_str());
+    break;
+  case SMT_SORT_ARRAY:
+    node = boolector_array(btor, s->data_width, s->domain_width, name.c_str());
+    break;
+  default:
+    return NULL; // Hax.
+  }
+
+  btor_smt_ast *ast = new_ast(s, node);
+
+  symtable.insert(symtable_type::value_type(name, ast));
+  return ast;
+}
+
+smt_sort *
+boolector_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
+{
+  abort();
+}
+
+smt_sort *
+boolector_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
+{
+  abort();
+}
+
+smt_ast *
+boolector_convt::mk_extract(const smt_ast *a, unsigned int high,
+                            unsigned int low, const smt_sort *s)
+{
+  const btor_smt_ast *ast = btor_ast_downcast(a);
+  BoolectorNode *b = boolector_slice(btor, ast->e, high, low);
+  return new_ast(s, b);
+}
+
+expr2tc
+boolector_convt::get_bool(const smt_ast *a)
+{
+  tvt t = l_get(a);
+  if (t.is_true())
+    return true_expr;
+  else if (t.is_false())
+    return false_expr;
+  else
+    return expr2tc();
+}
+
+static int64_t read_btor_string(const char *result, unsigned int len)
+{
+  assert(result != NULL && "Boolector returned null bv assignment string");
+
+  // Assume first bit is the most significant for the moment.
+  int64_t res = 0;
+
+  for (unsigned int i = 0; i < len; i++) {
+    res <<= 1;
+
+    assert(result[i] != '\0' && "Premature end of boolector bv assignment str");
+    switch (result[i]) {
+    case '1':
+      res |= 1;
+      break;
+    case '0':
+    case 'x':
+      break;
+    default:
+      std::cerr << "Boolector bv model string \"" << result << "\" not of the "
+                << "expected format" << std::endl;
+      abort();
     }
-    else if(op.type().id()=="fixedbv")
-    {
-      BtorExp *magnitude, *fraction;
-      const fixedbv_typet &from_fixedbv_type=to_fixedbv_type(op.type());
-      unsigned from_fraction_bits=from_fixedbv_type.get_fraction_bits();
-      unsigned from_integer_bits=from_fixedbv_type.get_integer_bits();
-      unsigned from_width=from_fixedbv_type.get_width();
 
-      if(to_integer_bits<=from_integer_bits)
-      {
-    	if (convert_bv(op, args[0])) return true;
-        magnitude = boolector_slice(boolector_ctx, args[0], (from_fraction_bits+to_integer_bits-1), from_fraction_bits);
-      }
-      else
-      {
-        assert(to_integer_bits>from_integer_bits);
-        if (convert_bv(op, args[0])) return true;
-        magnitude = boolector_sext(boolector_ctx, boolector_slice(boolector_ctx, args[0], from_width-1, from_fraction_bits), (to_integer_bits-from_integer_bits));
-      }
-
-      if(to_fraction_bits<=from_fraction_bits)
-      {
-        if (convert_bv(op, args[0])) return true;
-        fraction = boolector_slice(boolector_ctx, args[0], (from_fraction_bits-1), from_fraction_bits-to_fraction_bits);
-      }
-      else
-      {
-        assert(to_fraction_bits>from_fraction_bits);
-
-        if (convert_bv(op, args[0])) return true;
-        fraction = boolector_concat(boolector_ctx, boolector_slice(boolector_ctx, args[0], (from_fraction_bits-1), 0), boolector_int(boolector_ctx, 0, to_fraction_bits-from_fraction_bits));
-      }
-
-      result = boolector_concat(boolector_ctx, magnitude, fraction);
-    }
-    else
-      throw "unexpected typecast to fixedbv";
+    if (i == 0 && res == 1)
+      res = -1;
   }
 
-  if(expr.type().id()=="c_enum")
-  {
-	BtorExp *zero, *one;
-	unsigned width;
-
-	if (op.type().is_bool())
-	{
-      boolbv_get_width(expr.type(), width);
-
-      zero = boolector_int(boolector_ctx, 0, width);
-	  one =  boolector_int(boolector_ctx, 1, width);
-
-	  if (convert_bv(op, operand))
-	    return true;
-
-	  result = boolector_cond(boolector_ctx, operand, one, zero);
-	}
-  }
-  bv = result;
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  return false;
+  return res;
 }
 
-/*******************************************************************
- Function: boolector_convt::convert_struct
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_struct(const exprt &expr, BtorExp* &bv)
+expr2tc
+boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
+  assert(a->sort->id == SMT_SORT_BV && a->sort->data_width != 0);
+  const btor_smt_ast *ast = btor_ast_downcast(a);
 
+  const char *result = boolector_bv_assignment(btor, ast->e);
+  int64_t val = read_btor_string(result, a->sort->data_width);
+  boolector_free_bv_assignment(btor, result);
+
+  constant_int2tc exp(t, BigInt(val));
+  return exp;
 }
 
-/*******************************************************************
- Function: boolector_convt::convert_union
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_union(const exprt &expr, BtorExp* &bv)
+expr2tc
+boolector_convt::get_array_elem(const smt_ast *array, uint64_t index,
+                                const type2tc &subtype __attribute__((unused)))
 {
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_boolector_pointer
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_boolector_pointer(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_zero_string
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_zero_string(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  BtorExp *zero_string;
-
-  create_boolector_array(expr.type(), "zero_string", zero_string);
-
-  zero_string = bv;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_array
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_array(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_constant_array
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_constant_array(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  unsigned int width=0, i=0;
-  BtorExp *array_cte, *int_cte, *val_cte;
-  std::string value_cte, tmp, identifier;
-  char i_str[2];
-
-  width = atoi(expr.type().subtype().width().c_str());
-  identifier = expr.identifier().as_string() + expr.type().subtype().width().c_str();
-
-  create_boolector_array(expr.type(), identifier, array_cte);
-
-  i=0;
-  forall_operands(it, expr)
-  {
-	//std::cout << "i: " << i << std::endl;
-	sprintf(i_str,"%i",i);
-	//std::cout << "atoi(i_str): " << atoi(i_str) << std::endl;
-    int_cte = boolector_int(boolector_ctx, atoi(i_str), config.ansi_c.int_width);
-	if (is_signed(it->type()))
-	  value_cte = integer2string(binary2integer(it->value().as_string().c_str(), true),10);
-	else
-	  value_cte = integer2string(binary2integer(it->value().as_string().c_str(), false),10);
-	//std::cout << "value_cte.c_str(): " << value_cte.c_str() << std::endl;
-	//std::cout << "width: " << width << std::endl;
-	val_cte = boolector_int(boolector_ctx, atoi(value_cte.c_str()), width);
-	array_cte = boolector_write(boolector_ctx, array_cte, int_cte, val_cte);
-	++i;
-  }
-
-  bv = array_cte;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::extract_magnitude
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-std::string boolector_convt::extract_magnitude(std::string v, unsigned width)
-{
-  return integer2string(binary2integer(v.substr(0, width/2), true), 10);
-}
-
-/*******************************************************************
- Function: boolector_convt::extract_fraction
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-std::string boolector_convt::extract_fraction(std::string v, unsigned width)
-{
-  return integer2string(binary2integer(v.substr(width/2, width), false), 10);
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_constant
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_constant(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-#endif
-
-  BtorExp *const_var;
-  std::string value;
-  unsigned int width;
-
-  if (expr.type().id() == "c_enum")
-  {
-    value = expr.value().as_string();
-  }
-  else if (expr.type().is_bool())
-  {
-    value = expr.value().as_string();
-  }
-  else if (expr.type().id() == "pointer" && expr.value().as_string() == "NULL")
-  {
-    value = "0";
-  }
-  else if (is_signed(expr.type()))
-    value = integer2string(binary2integer(expr.value().as_string(), true),10);
-  else
-	value = integer2string(binary2integer(expr.value().as_string(), false),10);
-
-  width = atoi(expr.type().width().c_str());
-
-  if (expr.type().is_bool())
-  {
-	if (expr.is_false())
-	  const_var = boolector_false(boolector_ctx);
-	else if (expr.is_true())
-	  const_var = boolector_true(boolector_ctx);
-  }
-  else if (expr.type().id() == "signedbv" || expr.type().id() == "c_enum")
-  {
-	const_var = boolector_int(boolector_ctx, atoi(value.c_str()), width);
-  }
-  else if (expr.type().id() == "unsignedbv")
-  {
-	const_var = boolector_unsigned_int(boolector_ctx, atoi(value.c_str()), width);
-  }
-  else if (expr.type().id()== "fixedbv")
-  {
-	BtorExp *magnitude, *fraction;
-	std::string m, f, c;
-
-	m = extract_magnitude(expr.value().as_string(), width);
-	f = extract_fraction(expr.value().as_string(), width);
-
-	magnitude = boolector_int(boolector_ctx, atoi(m.c_str()), width/2);
-	fraction = boolector_int(boolector_ctx, atoi(f.c_str()), width/2);
-	const_var = boolector_concat(boolector_ctx, magnitude, fraction);
-	//const_var = boolector_int(boolector_ctx, atoi(value.c_str()), width);
-  }
-  else if (expr.type().is_array())
-  {
-	convert_constant_array(expr, const_var);
-  }
-  else if (expr.type().id()== "pointer")
-  {
-	width = atoi(expr.type().subtype().width().c_str());
-	const_var = boolector_int(boolector_ctx, atoi(value.c_str()), width);
-  }
-
-  bv = const_var;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_concatenation
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_concatenation(const exprt &expr, BtorExp* &bv) {
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_bitwise
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_bitwise(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-
-  BtorExp *args[2];
-
-  if (convert_bv(expr.op0(), args[0]))
-    return true;
-
-  if (convert_bv(expr.op1(), args[1]))
-	return true;
-
-  if(expr.id()=="bitand")
-    bv = boolector_and(boolector_ctx, args[0], args[1]);
-  else if(expr.id()=="bitor")
-	bv = boolector_or(boolector_ctx, args[0], args[1]);
-  else if(expr.id()=="bitxor")
-	bv = boolector_xor(boolector_ctx, args[0], args[1]);
-  else if (expr.id()=="bitnand")
-	bv = boolector_nand(boolector_ctx, args[0], args[1]);
-  else if (expr.id()=="bitnor")
-	bv = boolector_nor(boolector_ctx, args[0], args[1]);
-  else if (expr.id()=="bitnxor")
-    bv = boolector_xnor(boolector_ctx, args[0], args[1]);
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_unary_minus
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_unary_minus(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-#endif
-
-  assert(expr.operands().size()==1);
-
-  BtorExp* result;
-
-  if (convert_bv(expr.op0(), result))
-    return true;
-
-  bv = boolector_neg(boolector_ctx, result);
-
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_if
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_if(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-#endif
-
-  assert(expr.operands().size()==3);
-
-  BtorExp *result, *operand0, *operand1, *operand2;
-
-  if (convert_bv(expr.op0(), operand0)) return true;
-  if (convert_bv(expr.op1(), operand1)) return true;
-  if (convert_bv(expr.op2(), operand2)) return true;
-
-  result = boolector_cond(boolector_ctx, operand0, operand1, operand2);
-
-  bv = result;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_logical_ops
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_logical_ops(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.type().is_bool());
-  assert(expr.operands().size()>=1);
-
-  u_int i=0, size;
-
-  size=expr.operands().size();
-  BtorExp *args[size], *result;
-
-  if (size==1)
-  {
-    if (convert_bv(expr.op0(), result)) return true;
-  }
-  else
-  {
-	forall_operands(it, expr)
-	{
-	  if (convert_bv(*it, args[i])) return true;
-
-	  if (i>=1)
-	  {
-		if(expr.is_and())
-		  args[i] = boolector_and(boolector_ctx, args[i-1], args[i]);
-		else if(expr.id()=="or")
-		  args[i] = boolector_or(boolector_ctx, args[i-1], args[i]);
-		else if(expr.id()=="xor")
-		  args[i] = boolector_xor(boolector_ctx, args[i-1], args[i]);
-	  }
-
-	  ++i;
-	}
-
-	result = args[size-1];
-  }
-
-  bv = result;
-  return false;
-}
-
-
-/*******************************************************************
- Function: boolector_convt::convert_logical_not
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_logical_not(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-#endif
-
-  assert(expr.operands().size()==1);
-
-  BtorExp *operand0;
-
-  if (convert_bv(expr.op0(), operand0)) return true;
-
-  bv = boolector_not(boolector_ctx, operand0);
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_equality
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_equality(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-  assert(expr.op0().type()==expr.op1().type());
-
-  BtorExp *result=0, *args[2];
-
-  if (convert_bv(expr.op0(), args[0])) return true;
-  if (convert_bv(expr.op1(), args[1])) return true;
-
-  if (expr.id()=="=")
-    result = boolector_eq(boolector_ctx, args[0], args[1]);
-  else
-	result = boolector_ne(boolector_ctx, args[0], args[1]);
-
-  bv = result;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_add
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_add(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-#endif
-
-  assert(expr.operands().size()>=2);
-  u_int i=0, size;
-
-  size=expr.operands().size()+1;
-  BtorExp *args[size];
-
-  forall_operands(it, expr)
-  {
-	if (convert_bv(*it, args[i])) return true;
-    if (i==1)
-      args[size-1] = boolector_add(boolector_ctx, args[0], args[1]);
-    else if (i>1)
- 	  args[size-1] = boolector_add(boolector_ctx, args[size-1], args[i]);
-    ++i;
-  }
-  bv = args[i];
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_sub
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_sub(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()>=2);
-  u_int i=0, size;
-
-  size=expr.operands().size()+1;
-  BtorExp *args[size];
-
-  forall_operands(it, expr)
-  {
-	if (convert_bv(*it, args[i])) return true;
-
-    if (i==1)
-      args[size-1] = boolector_sub(boolector_ctx, args[0], args[1]);
-    else if (i>1)
- 	  args[size-1] = boolector_sub(boolector_ctx, args[size-1], args[i]);
-    ++i;
-  }
-
-  bv = args[i];
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_div
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_div(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-
-  BtorExp *result, *args[2], *concat;
-
-  if (convert_bv(expr.op0(), args[0])) return true;
-  if (convert_bv(expr.op1(), args[1])) return true;
-
-  if (expr.type().id()=="signedbv")
-	result = boolector_sdiv(boolector_ctx, args[0], args[1]);
-  else if (expr.type().id()=="unsignedbv")
-	result = boolector_udiv(boolector_ctx, args[0], args[1]);
-  else if (expr.type().id()=="fixedbv")
-  {
-    fixedbvt fbt(expr);
-    unsigned fraction_bits=fbt.spec.get_fraction_bits();
-
-    concat = boolector_concat(boolector_ctx, args[0], boolector_int(boolector_ctx, 0, fraction_bits));
-    result = boolector_sdiv(boolector_ctx, concat, boolector_sext(boolector_ctx, args[1], fraction_bits));
-    result = boolector_slice(boolector_ctx, result, fbt.spec.width-1, 0);
-  }
-  else
-    throw "unsupported type for /: "+expr.type().id_string();
-
-  bv = result;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_mod
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_mod(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-
-  BtorExp *result, *operand0, *operand1;
-
-  if (convert_bv(expr.op0(), operand0)) return true;
-  if (convert_bv(expr.op1(), operand1)) return true;
-
-  if(expr.type().id()=="signedbv")
-	result = boolector_srem(boolector_ctx, operand0, operand1);
-  else if (expr.type().id()=="unsignedbv")
-	result = boolector_urem(boolector_ctx, operand0, operand1);
-  else if (expr.type().id()=="fixedbv")
-	throw "unsupported type for mod: "+expr.type().id_string();
-
-  bv = result;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_mul
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_mul(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()>=2);
-  u_int i=0, size;
-  unsigned fraction_bits;
-  size=expr.operands().size()+1;
-  BtorExp *args[size];
-
-  if(expr.type().id()=="fixedbv")
-  {
-    fixedbvt fbt(expr);
-	fraction_bits=fbt.spec.get_fraction_bits();
-  }
-
-  forall_operands(it, expr)
-  {
-	if (convert_bv(*it, args[i])) return true;
-
-    if(expr.type().id()=="fixedbv")
-      args[i] = boolector_sext(boolector_ctx, args[i], fraction_bits);
-
-    if (i==1)
-      args[size-1] = boolector_mul(boolector_ctx, args[0], args[1]);
-    else if (i>1)
- 	  args[size-1] = boolector_mul(boolector_ctx, args[size-1], args[i]);
-    ++i;
-  }
-
-  if(expr.type().id()=="fixedbv")
-  {
-	fixedbvt fbt(expr);
-    args[i] = boolector_slice(boolector_ctx, args[i], fbt.spec.width+fraction_bits-1, fraction_bits);
-  }
-
-  bv = args[i];
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_pointer
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_pointer(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==1);
-  assert(expr.type().id()=="pointer");
-
-  BtorExp *result, *args[2];
-  std::string symbol_name;
-
-  if (expr.op0().id() == "index")
-  {
-    const exprt &object=expr.op0().operands()[0];
-	const exprt &index=expr.op0().operands()[1];
-
-    read_cache(object, args[0]);
-	if (convert_bv(index, args[1])) return true;
-
-	result = boolector_read(boolector_ctx, args[0], args[1]);
-  }
-
-  bv = result;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_array_of
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_array_of(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  BtorExp *index, *value, *array_of_var;
-  const array_typet &array_type_size=to_array_type(expr.type());
-  std::string tmp;
-  unsigned int j, size, width;
-
-  tmp = integer2string(binary2integer(array_type_size.size().value().as_string(), false),10);
-  size = atoi(tmp.c_str());
-  width = atoi(expr.type().subtype().width().c_str());
-
-  if (expr.type().subtype().is_bool())
-  {
-    value = boolector_false(boolector_ctx);
-    array_of_var = boolector_array(boolector_ctx, 1, config.ansi_c.int_width,"ARRAY_OF(false)");
-  }
-  else if (expr.type().subtype().id()=="signedbv" || expr.type().subtype().id()=="unsignedbv")
-  {
-	if (convert_bv(expr.op0(), value)) return true;
-    array_of_var = boolector_array(boolector_ctx, width, config.ansi_c.int_width,"ARRAY_OF(0)");
-  }
-  else if (expr.type().subtype().id()=="fixedbv")
-  {
-	if (convert_bv(expr.op0(), value)) return true;
-    array_of_var = boolector_array(boolector_ctx, width, config.ansi_c.int_width, "ARRAY_OF(0l)");
-  }
-  else if (expr.type().subtype().id()=="pointer")
-  {
-	const exprt &object=expr.op0().operands()[0];
-	const exprt &index=expr.op0().operands()[1];
-
-	width = atoi(expr.op0().type().subtype().width().c_str());
-	if (convert_bv(expr.op0(), value)) return true;
-	array_of_var = boolector_array(boolector_ctx, width, config.ansi_c.int_width, "&(ZERO_STRING())[0]");
-  }
-
-  if (size==0)
-	size=1; //update at leat the first element of the array of bool
-
-  //update array
-  for (j=0; j<size; j++)
-  {
-    index = boolector_int(boolector_ctx, j, config.ansi_c.int_width);
-    array_of_var = boolector_write(boolector_ctx, array_of_var, index, value);
-  }
-
-  bv = array_of_var;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_array_of_array
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_array_of_array(const std::string identifier, const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-
-/*******************************************************************
- Function: boolector_convt::convert_index
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_index(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.op0().pretty(): " << expr.op0().pretty() << std::endl;
-  std::cout << "expr.op1().pretty(): " << expr.op1().pretty() << std::endl;
-#endif
-
-  assert(expr.operands().size()==2);
-
-  BtorExp *array, *index;
-
-  if (convert_bv(expr.op0(), array)) return true;
-  if (convert_bv(expr.op1(), index)) return true;
-#if 0
-  if (expr.op0().is_constant() && expr.op1().id()=="symbol")
-  {
-    const array_typet &array_type_size=to_array_type(expr.op0().type());
-    std::string tmp;
-    unsigned size;
-    BtorExp *lower, *upper, *formula;
-
-    tmp = integer2string(binary2integer(array_type_size.size().value().as_string(), false),10);
-    size = atoi(tmp.c_str());
-    std::cout << "size: " << size << std::endl;
-    std::cout << "expr.op1().type().id(): " << expr.op1().type().id() << std::endl;
-    if (expr.op1().type().id()=="signedbv")
-    {
-      unsigned width = atoi(expr.op1().type().width().c_str());
-      std::cout << "width: " << width << std::endl;
-      lower = boolector_sgte(boolector_ctx, index, boolector_zero (boolector_ctx, width));
-      upper = boolector_slt(boolector_ctx, index, boolector_int(boolector_ctx, size, width));
-      formula = boolector_and(boolector_ctx, lower, upper);
-      boolector_assert(boolector_ctx, formula);
-      index = boolector_zero (boolector_ctx, width);
-    }
-  }
-  std::cout << "boolector_is_array(boolector_ctx, array): " << boolector_is_array(boolector_ctx, array) << std::endl;
-  std::cout << "boolector_is_array(boolector_ctx, index): " << boolector_is_array(boolector_ctx, index) << std::endl;
-  std::cout << "boolector_bv_assignment: " << boolector_bv_assignment(boolector_ctx, boolector_read(boolector_ctx, array, index)) << std::endl;
-#endif
-  bv = boolector_read(boolector_ctx, array, index);
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_constant
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_shift_constant(const exprt &expr, unsigned int wop0, unsigned int wop1, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-#endif
-
-  BtorExp *result;
-  std::string value;
-  unsigned int size, width;
-
-  if (is_signed(expr.type()))
-    value = integer2string(binary2integer(expr.value().as_string(), true),10);
-  else
-	value = integer2string(binary2integer(expr.value().as_string(), false),10);
-
-  size = atoi(expr.type().width().c_str());
-
-  if (wop0>wop1)
-    width = (log(wop0)/log(2))+1;
-  else
-    width = log(size)/log(2);
-
-
-  if (expr.type().id() == "signedbv" || expr.type().id() == "c_enum")
-	result = boolector_int(boolector_ctx, atoi(value.c_str()), width);
-  else if (expr.type().id() == "unsignedbv")
-	result = boolector_unsigned_int(boolector_ctx, atoi(value.c_str()), width);
-  else if (expr.type().id()== "fixedbv")
-	result = boolector_int(boolector_ctx, atoi(value.c_str()), width);
-
-  bv = result;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_shift
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_shift(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==2);
-
-  BtorExp *result, *operand0, *operand1;
-
-  unsigned width_op0, width_op1;
-  boolbv_get_width(expr.op0().type(), width_op0);
-  boolbv_get_width(expr.op1().type(), width_op1);
-
-  if (expr.op0().id()=="constant")
-	convert_shift_constant(expr.op0(), width_op0, width_op1, operand0);
-  else
-    if (convert_bv(expr.op0(), operand0)) return true;
-
-  if (expr.op1().id()=="constant")
-	convert_shift_constant(expr.op1(), width_op0, width_op1, operand1);
-  else
-    if (convert_bv(expr.op1(), operand1)) return true;
-
-  if(expr.id()=="ashr")
-    result = boolector_sra(boolector_ctx, operand0, operand1);
-  else if (expr.id()=="lshr")
-    result = boolector_srl(boolector_ctx, operand0, operand1);
-  else if(expr.id()=="shl")
-    result = boolector_sll(boolector_ctx, operand0, operand1);
-  else
-    assert(false);
-
-  bv=result;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_with
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_with(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()>=1);
-  BtorExp *result, *array, *index, *value;
-
-  if (convert_bv(expr.op0(), array)) return true;
-  if (convert_bv(expr.op1(), index)) return true;
-  if (convert_bv(expr.op2(), value)) return true;
-
-  result = boolector_write(boolector_ctx, array, index, value);
-
-  bv = result;
-
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_abs
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_abs(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  unsigned width;
-  std::string out;
-
-  boolbv_get_width(expr.type(), width);
-
-  const exprt::operandst &operands=expr.operands();
-
-  if(operands.size()!=1)
-    throw "abs takes one operand";
-
-  const exprt &op0=expr.op0();
-  static BtorExp *zero, *minus_one, *is_negative, *val_orig, *val_mul;
-
-  out = "width: "+ width;
-  if (expr.type().id()=="signedbv" || expr.type().id()=="fixedbv")
-    zero = boolector_int(boolector_ctx, 0, width);
-  else if (expr.type().id()=="unsignedbv")
-	zero = boolector_unsigned_int(boolector_ctx, 0, width);
-
-  minus_one = boolector_int(boolector_ctx, -1, width);
-
-  if (convert_bv(op0, val_orig)) return true;
-
-  if (expr.type().id()=="signedbv" || expr.type().id()=="fixedbv")
-    is_negative = boolector_slt(boolector_ctx, val_orig, zero);
-
-  val_mul = boolector_mul(boolector_ctx, val_orig, minus_one);
-
-  bv = boolector_cond(boolector_ctx, is_negative, val_mul, val_orig);
-
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_bitnot
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_bitnot(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_bitnot
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-unsigned int boolector_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-
-/*******************************************************************
- Function: boolector_convt::convert_extractbit
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_extractbit(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_object
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_object(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-/*******************************************************************
- Function: boolector_convt::select_pointer_offset
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::select_pointer_offset(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  assert(expr.operands().size()==1);
-
-  BtorExp *offset;
-
-  if (convert_bv(expr.op0(), offset)) return true;
-
-  bv = offset;
-  return false;
-}
-
-/*******************************************************************
- Function: boolector_convt::convert_member
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_member(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-
-/*******************************************************************
- Function: convert_invalid_pointer
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_invalid_pointer(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-
-/*******************************************************************
- Function: convert_pointer_object
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_pointer_object(const exprt &expr, BtorExp* &bv)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-}
-/*******************************************************************
- Function: boolector_convt::convert_boolector_expr
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::convert_boolector_expr(const exprt &expr, BtorExp* &bv)
-{
-  if (expr.id() == "symbol")
-	return convert_identifier(expr.identifier().as_string(), expr.type(), bv);
-  else if (expr.id() == "nondet_symbol") {
-	return convert_identifier("nondet$"+expr.identifier().as_string(), expr.type(), bv);
-  } else if (expr.id() == "typecast")
-    return convert_typecast(expr, bv);
-#if 0
-  else if (expr.id() == "struct")
-	return convert_struct(expr);
-  else if (expr.id() == "union")
-	return convert_union(expr);
-#endif
-  else if (expr.id() == "constant")
-	return convert_constant(expr, bv);
-  else if (expr.id() == "concatenation")
-	return convert_concatenation(expr, bv);
-  else if (expr.id() == "bitand" || expr.id() == "bitor" || expr.id() == "bitxor"
-		|| expr.id() == "bitnand" || expr.id() == "bitnor" || expr.id() == "bitnxor")
-    return convert_bitwise(expr, bv);
-  else if (expr.id() == "bitnot")
-	return convert_bitnot(expr, bv);
-  else if (expr.id() == "unary-")
-    return convert_unary_minus(expr, bv);
-  else if (expr.id() == "if")
-    return convert_if(expr, bv);
-  else if (expr.is_and() || expr.id() == "or" || expr.id() == "xor")
-	return convert_logical_ops(expr, bv);
-  else if (expr.id() == "not")
-	return convert_logical_not(expr, bv);
-  else if (expr.id() == "=" || expr.id() == "notequal")
-	return convert_equality(expr, bv);
-  else if (expr.id() == "<=" || expr.id() == "<" || expr.id() == ">="
-		|| expr.id() == ">")
-	return convert_rel(expr, bv);
-  else if (expr.id() == "+")
-	return convert_add(expr, bv);
-  else if (expr.id() == "-")
-	return convert_sub(expr, bv);
-  else if (expr.id() == "/")
-	return convert_div(expr, bv);
-  else if (expr.id() == "mod")
-	return convert_mod(expr, bv);
-  else if (expr.id() == "*")
-	return convert_mul(expr, bv);
-  else if(expr.id()=="abs")
-    return convert_abs(expr, bv);
-  else if (expr.is_address_of() || expr.id() == "implicit_address_of"
-		|| expr.id() == "reference_to")
-	return convert_pointer(expr, bv);
-  else if (expr.id() == "array_of")
-	return convert_array_of(expr, bv);
-  else if (expr.id() == "index")
-	return convert_index(expr, bv);
-  else if (expr.id() == "ashr" || expr.id() == "lshr" || expr.id() == "shl")
-	return convert_shift(expr, bv);
-  else if (expr.id() == "with")
-	return convert_with(expr, bv);
-  else if (expr.id() == "member")
-	return convert_member(expr, bv);
-#if 0
-  else if (expr.id() == "invalid-pointer")
-	return convert_invalid_pointer(expr);
-#endif
-  else if (expr.id()=="zero_string")
-	return convert_zero_string(expr, bv);
-  else if (expr.id() == "pointer_offset")
-	return select_pointer_offset(expr, bv);
-  else if (expr.id() == "pointer_object")
-	return convert_pointer_object(expr, bv);
-#if 0
-  else if (expr.id() == "same-object")
-	return convert_object(expr);
-#endif
-  else if (expr.id() == "string-constant") {
-	  exprt tmp;
-	  string2array(expr, tmp);
-	return convert_boolector_expr(tmp, bv);
-  } else if (expr.id() == "extractbit")
-	return convert_extractbit(expr, bv);
-  else if (expr.id() == "replication") {
-	assert(expr.operands().size()==2);
-  } else
-	throw "convert_boolector_expr: " + expr.id_string() + " is not supported yet";
-}
-
-/*******************************************************************
- Function: boolector_convt::assign_boolector_expr
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-bool boolector_convt::assign_boolector_expr(const exprt expr)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-#endif
-
-  if (expr.op0().type().id() == "pointer" && expr.op0().type().subtype().is_code())
-  {
-	ignoring(expr);
-	return false;
-  }
-  else if (expr.op0().type().is_array() && expr.op0().type().subtype().id()=="struct")
-  {
-	ignoring(expr);
-  	return false;
-  }
-  else if (expr.op0().type().id() == "pointer" && expr.op0().type().subtype().id()=="symbol")
-  {
-	ignoring(expr);
-  	return false;
-  }
-
-  return true;
-}
-
-
-/*******************************************************************
- Function: boolector_convt::set_to
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-void boolector_convt::set_to(const exprt &expr, bool value)
-{
-#ifdef DEBUG
-  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-  std::cout << "set_to expr.pretty(): " << expr.pretty() << std::endl;
-
-#endif
-
-#ifdef DEBUG
-  std::cout << "1 - set_to expr.pretty(): " << expr.pretty() << std::endl;
-  std::cout << "2 - set_to expr.id(): " << expr.id() << std::endl;
-  std::cout << "3 - expr.type().id(): " << expr.type().id() << std::endl;
-  std::cout << "4 - value: " << value << std::endl;
-#endif
-
-
-  if(expr.is_and() && value)
-  {
-    forall_operands(it, expr)
-      set_to(*it, true);
-    return;
-  }
-
-  if(expr.id()=="not")
-  {
-    assert(expr.operands().size()==1);
-    return set_to(expr.op0(), !value);
-  }
-
-#if 1
-  if(!expr.type().is_bool())
-  {
-    std::string msg="prop_convt::set_to got "
-                    "non-boolean expression:\n";
-    msg+=expr.to_string();
-    throw msg;
-  }
-
-  bool boolean=true;
-
-  forall_operands(it, expr)
-    if(!it->type().is_bool())
-    {
-      boolean=false;
+  // Super inefficient, but never mind.
+  assert(array->sort->id == SMT_SORT_ARRAY);
+  const btor_smt_ast *ast = btor_ast_downcast(array);
+
+  int size;
+  char **indicies, **values;
+  boolector_array_assignment(btor, ast->e, &indicies, &values, &size);
+
+  if (size == 0)
+    // Presumably no allocation occurred either.
+    return expr2tc();
+
+  expr2tc final_result;
+
+  for (int i = 0; i < size; i++) {
+    int64_t idx = read_btor_string(indicies[i], array->sort->domain_width);
+    if (idx == (int64_t)index) {
+      int64_t value = read_btor_string(values[i], array->sort->data_width);
+      final_result =
+        constant_int2tc(get_int_type(array->sort->data_width), BigInt(value));
       break;
     }
-
-#ifdef DEBUG
-  std::cout << "boolean: " << boolean << std::endl;
-#endif
-
-  if(boolean)
-  {
-    if(expr.id()=="not")
-    {
-      if(expr.operands().size()==1)
-      {
-        set_to(expr.op0(), !value);
-        return;
-      }
-    }
-    else
-    {
-      if(value)
-      {
-        // set_to_true
-        if(expr.is_and())
-        {
-          forall_operands(it, expr)
-            set_to_true(*it);
-          return;
-        }
-        else if(expr.id()=="or")
-        {
-          if(expr.operands().size()>0)
-          {
-            bvt bv;
-            bv.reserve(expr.operands().size());
-
-            forall_operands(it, expr)
-              bv.push_back(convert(*it));
-            prop.lcnf(bv);
-            return;
-          }
-        }
-        else if(expr.id()=="=>")
-        {
-          if(expr.operands().size()==2)
-          {
-            bvt bv;
-            bv.resize(2);
-            bv[0]=prop.lnot(convert(expr.op0()));
-            bv[1]=convert(expr.op1());
-            prop.lcnf(bv);
-            return;
-          }
-        }
-#if 0
-        else if(expr.id()=="=")
-        {
-          if(!set_equality_to_true(expr))
-            return;
-        }
-#endif
-      }
-      else
-      {
-        // set_to_false
-        if(expr.id()=="=>") // !(a=>b)  ==  (a && !b)
-        {
-          if(expr.operands().size()==2)
-          {
-            set_to_true(expr.op0());
-            set_to_false(expr.op1());
-          }
-        }
-        else if(expr.id()=="or") // !(a || b)  ==  (!a && !b)
-        {
-          forall_operands(it, expr)
-            set_to_false(*it);
-        }
-      }
-    }
   }
 
-  // fall back to convert
-  prop.l_set_to(convert(expr), value);
-
-  if (value && expr.is_and())
-  {
-	forall_operands(it, expr)
-	  set_to(*it, true);
-	return;
-  }
-
-  if (value && expr.is_true())
-	return;
-#endif
-
-  if (expr.id() == "=" && value)
-  {
-    assert(expr.operands().size()==2);
-
-    BtorExp *formula, *operand0, *operand1;
-
-	if (assign_boolector_expr(expr))
-	{
-#ifdef DEBUG
-	  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-	  std::cout << "set_to expr.op0().pretty():" << expr.op0().pretty() << std::endl;
-#endif
-	  if (convert_bv(expr.op0(), operand0))
-	  {
-		assert(0);
-		return ;
-	  }
-#ifdef DEBUG
-	  std::cout << "\n" << __FUNCTION__ << "[" << __LINE__ << "]" << "\n";
-	  std::cout << "set_to expr.op1().pretty():" << expr.op1().pretty() << std::endl;
-#endif
-	  if (convert_bv(expr.op1(), operand1))
-	  {
-		assert(0);
-		return ;
-	  }
-
-	  if (expr.op0().type().is_bool())
-	    formula = boolector_iff(boolector_ctx, operand0, operand1);
-	  else
-	    formula = boolector_eq(boolector_ctx, operand0, operand1);
-
-	  //formula = boolector_eq(boolector_ctx, operand0, operand1);
-	  boolector_assert(boolector_ctx, formula);
-
-	  if (boolector_prop.btor)
-	    boolector_prop.assumpt.push_back(formula);
-
-	  //boolector_dump_btor(boolector_ctx, btorFile, formula);
-	  //boolector_dump_smt(boolector_ctx, smtFile, formula);
-	}
-  }
-
+  boolector_free_array_assignment(btor, indicies, values, size);
+  return final_result;
 }
 
-/*******************************************************************
- Function: boolector_convt::get_number_variables_z
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- \*******************************************************************/
-
-unsigned int boolector_convt::get_number_variables_boolector(void)
+const smt_ast *
+boolector_convt::overflow_arith(const expr2tc &expr)
 {
-  return number_variables_boolector;
+  const overflow2t &overflow = to_overflow2t(expr);
+  const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
+
+  const btor_smt_ast *side1 = btor_ast_downcast(convert_ast(opers.side_1));
+  const btor_smt_ast *side2 = btor_ast_downcast(convert_ast(opers.side_2));
+
+  // Guess whether we're performing a signed or unsigned comparison.
+  bool is_signed = (is_signedbv_type(opers.side_1) ||
+                    is_signedbv_type(opers.side_2));
+
+  BoolectorNode *res;
+  if (is_add2t(overflow.operand)) {
+    if (is_signed) {
+      res = boolector_saddo(btor, side1->e, side2->e);
+    } else {
+      res = boolector_uaddo(btor, side1->e, side2->e);
+    }
+  } else if (is_sub2t(overflow.operand)) {
+    if (is_signed) {
+      res = boolector_ssubo(btor, side1->e, side2->e);
+    } else {
+      res = boolector_usubo(btor, side1->e, side2->e);
+    }
+  } else if (is_mul2t(overflow.operand)) {
+    if (is_signed) {
+      res = boolector_smulo(btor, side1->e, side2->e);
+    } else {
+      res = boolector_umulo(btor, side1->e, side2->e);
+    }
+  } else {
+    std::cerr << "Unexpected operand to overflow_arith2t irep" << std::endl;
+    abort();
+  }
+
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  return new_ast(s, res);
 }
 
+const smt_ast *
+boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
+{
+  return default_convert_array_of(init_val, domain_width, this);
+}
+
+void
+boolector_convt::add_array_constraints_for_solving()
+{
+  return;
+}
+
+void
+boolector_convt::push_array_ctx(void)
+{
+  return;
+}
+
+void
+boolector_convt::pop_array_ctx(void)
+{
+  return;
+}
+
+smt_ast *
+boolector_convt::fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
+  const btor_smt_ast *op1, smt_sortt res_sort)
+{
+  BoolectorNode *data_op, *shift_amount;
+  bool need_to_shift_down = false;
+  unsigned int bwidth;
+
+  data_op = op0->e;
+  bwidth = log2(op0->sort->data_width);
+
+  // If we're a non-power-of-x number, some zero extension has to occur
+  if (pow(2.0, bwidth) < op0->sort->data_width) {
+    // Zero extend up to bwidth + 1
+    bwidth++;
+    unsigned int new_size = pow(2.0, bwidth);
+    unsigned int diff = new_size - op0->sort->data_width;
+    smt_sortt newsort = mk_sort(SMT_SORT_BV, new_size);
+    smt_astt zeroext = convert_zero_ext(op0, newsort, diff);
+    data_op = btor_ast_downcast(zeroext)->e;
+    need_to_shift_down = true;
+  }
+
+  // We also need to reduce the shift-amount operand down to log2(data_op) len
+  shift_amount = boolector_slice(btor, op1->e, bwidth-1, 0);
+
+  BoolectorNode *shift = fptr(btor, data_op, shift_amount);
+
+  // If zero extension occurred, cut off the top few bits of this value.
+  if (need_to_shift_down)
+    shift = boolector_slice(btor, shift, res_sort->data_width-1, 0);
+
+  return new_ast(res_sort, shift);
+}
