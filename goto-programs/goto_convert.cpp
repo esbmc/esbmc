@@ -2549,7 +2549,7 @@ void goto_convertt::replace_cond(
 	      << " of " << tmp.location().get_file()
   	      << " is not supported yet" << std::endl;
     //std::cout << tmp.pretty() << std::endl;
-    //assert(0);
+    assert(0);
   }
 }
 
