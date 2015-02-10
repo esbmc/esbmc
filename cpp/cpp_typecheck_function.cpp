@@ -136,7 +136,17 @@ void cpp_typecheckt::convert_function(symbolt &symbol)
     assert(symbol.value.id()=="code");
     assert(symbol.value.statement() == "block");
 
-    symbol.value.copy_to_operands(dtor(msymb));
+    // vtables should be updated as soon as the destructor is called
+    // dtors contains the destructors for members and base classes,
+    // that should be called after the code of the current destructor
+    code_blockt vtables, dtors;
+    dtor(msymb, vtables, dtors);
+
+    if(vtables.has_operands())
+      symbol.value.operands().insert(symbol.value.operands().begin(), vtables);
+
+    if(dtors.has_operands())
+      symbol.value.copy_to_operands(dtors);
   }
 
   // enter appropriate scope

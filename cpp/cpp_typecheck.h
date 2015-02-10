@@ -343,7 +343,7 @@ protected:
 
   void default_dtor(const symbolt& symb, cpp_declarationt& dtor);
 
-  codet dtor(const symbolt &symb);
+  void dtor(const symbolt &symb, code_blockt& vtables, code_blockt& dtors);
 
   void check_member_initializers(
     const irept &bases,
