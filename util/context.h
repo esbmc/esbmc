@@ -49,31 +49,31 @@ public:
   symbolst symbols;
   symbol_base_mapt symbol_base_map;
   symbol_module_mapt symbol_module_map;
-  
+
   bool add(const symbolt &symbol);
   bool move(symbolt &symbol, symbolt *&new_symbol);
 
   bool move(symbolt &symbol)
   { symbolt *new_symbol; return move(symbol, new_symbol); }
-   
+
   void clear()
   {
     symbols.clear();
     symbol_base_map.clear();
     symbol_module_map.clear();
   }
-   
-  void show(std::ostream &out) const;
-  
+
+  void show(std::ostream &out = std::cout) const;
+
   const irept &value(const irep_idt &name) const;
-  
+
   void swap(contextt &other)
   {
     symbols.swap(other.symbols);
     symbol_base_map.swap(other.symbol_base_map);
     symbol_module_map.swap(other.symbol_module_map);
   }
-  
+
   bool has_symbol(const irep_idt &name) const
   {
     return symbols.find(name)!=symbols.end();
