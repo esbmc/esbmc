@@ -130,31 +130,33 @@ void cpp_typecheckt::typecheck_class_template(
     class_template_identifier(
       base_name, template_type, partial_specialization_args);
 
-  #if 0
+
   // Check if the name is already used by a different template
   // in the same scope.
   {
     cpp_scopet::id_sett id_set;
     cpp_scopes.current_scope().lookup(
       base_name,
-      cpp_scopet::SCOPE_ONLY,
       cpp_scopet::TEMPLATE,
       id_set);
 
     if(!id_set.empty())
     {
-      const symbolt &previous=lookup((*id_set.begin())->identifier);
-      if(previous.name!=symbol_name || id_set.size()>1)
+      // It is ok to be share the name if it's an specialization
+      if(declaration.get_specialization_of() == "")
       {
-        err_location(cpp_name.location());
-        str << "template declaration of `" << base_name.c_str()
-            << " does not match previous declaration\n";
-        str << "location of previous definition: " << previous.location;
-        throw 0;
+        const symbolt &previous=lookup((*id_set.begin())->identifier);
+        if(previous.name!=symbol_name || id_set.size()>1)
+        {
+          err_location(cpp_name.location());
+          str << "template declaration of `" << base_name.c_str()
+              << " does not match previous declaration\n";
+          str << "location of previous definition: " << previous.location;
+          throw 0;
+        }
       }
     }
   }
-  #endif
 
   // check if we have it already
 
