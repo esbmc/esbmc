@@ -39,7 +39,7 @@ public:
   typet lookup_type(const irep_idt &identifier) const;
   exprt lookup_expr(const irep_idt &identifier) const;
 
-  void print(std::ostream &out) const;
+  void print(std::ostream &out = std::cout) const;
 
   void clear()
   {
