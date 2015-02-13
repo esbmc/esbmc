@@ -270,7 +270,11 @@ bool cpp_typecheckt::has_incomplete_args(
         context.symbols.find(e.identifier())->second;
 
       if (arg_sym.type.id() == "incomplete_struct")
+      {
+        std::cerr << "**** WARNING: template instantiation with incomplete type "
+          << arg_sym.pretty_name << " at "<< arg_sym.location << std::endl;
         return true;
+      }
     }
   }
 
