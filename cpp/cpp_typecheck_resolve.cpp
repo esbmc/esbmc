@@ -1968,7 +1968,54 @@ exprt cpp_typecheck_resolvet::resolve(
     }
   }
 
+  check_incomplete_template(result, want);
+
   return result;
+}
+
+void cpp_typecheck_resolvet::check_incomplete_template(exprt result, wantt want)
+{
+  // Check if the type is complete. The template might have been forward
+  // declared so ESBMC didn't instantiated it.
+  if (want != TYPE)
+    return;
+
+  const typet &t = result.type();
+
+  if (t.identifier() == irep_idt())
+    return;
+
+  if (cpp_typecheck.context.symbols.find(t.identifier())
+    != cpp_typecheck.context.symbols.end())
+  {
+    symbolt &sym =
+      cpp_typecheck.context.symbols.find(t.identifier())->second;
+
+    // It is a template and it wasn't instantiated?
+    if (sym.type.id() == "incomplete_struct"
+      && sym.type.find("#template").is_not_nil())
+    {
+      exprt template_expr = static_cast<const exprt&>(sym.type.find(
+        "#template"));
+
+      if (cpp_typecheck.context.symbols.find(template_expr.id())
+        != cpp_typecheck.context.symbols.end())
+      {
+        symbolt &template_sym = cpp_typecheck.context.symbols.find(
+          template_expr.id())->second;
+
+        // If it is nil, it was forward declared, when it got a body,
+        // we'll instantiate it
+        if (template_sym.type.type().body().is_not_nil())
+        {
+          cpp_template_args_tct instantiated_args = to_cpp_template_args_tc(
+            sym.type.find("#template_arguments"));
+          cpp_typecheck.instantiate_template(location, template_sym,
+            instantiated_args, instantiated_args);
+        }
+      }
+    }
+  }
 }
 
 /*******************************************************************\

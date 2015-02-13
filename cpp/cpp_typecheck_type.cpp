@@ -75,7 +75,7 @@ void cpp_typecheckt::typecheck_type(typet &type)
     if(type.cmt_constant())
       qualifiers.is_constant = true;
 
-     qualifiers.write(type);
+    qualifiers.write(type);
   }
   else if(type.id()=="struct" ||
           type.id()=="union")

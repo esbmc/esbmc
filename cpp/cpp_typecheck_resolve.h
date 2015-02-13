@@ -142,6 +142,8 @@ protected:
   void filter_for_named_scopes(cpp_scopest::id_sett &id_set);
   void filter_for_namespaces(cpp_scopest::id_sett &id_set);
 
+  void check_incomplete_template(exprt result, wantt want);
+
   struct matcht
   {
     unsigned cost;
