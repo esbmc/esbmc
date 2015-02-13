@@ -361,8 +361,6 @@ const symbolt &cpp_typecheckt::instantiate_template(
   // sub-scope for fixing the prefix
   std::string subscope_name=id2string(template_scope->identifier)+suffix;
 
-  bool already_instantiated = false;
-
   // Does it already exist?
   const symbolt *existing_template_instance =
     is_template_instantiated(template_symbol.name, subscope_name);
@@ -370,21 +368,16 @@ const symbolt &cpp_typecheckt::instantiate_template(
     // continue if the type is incomplete only -- it might now be complete(?).
 //      if (symb.type.id() != "incomplete_struct" || symb.value.is_not_nil())
       return *existing_template_instance;
-
-    already_instantiated = true;
   }
 
-  if (!already_instantiated)
-  {
-    // set up a scope as subscope of the template scope
-    std::string prefix=template_scope->get_parent().prefix+suffix;
-    cpp_scopet &sub_scope=
-      cpp_scopes.current_scope().new_scope(subscope_name);
-    sub_scope.prefix=prefix;
-    cpp_scopes.go_to(sub_scope);
-    cpp_scopes.id_map.insert(
-      cpp_scopest::id_mapt::value_type(subscope_name, &sub_scope));
-  }
+  // set up a scope as subscope of the template scope
+  std::string prefix=template_scope->get_parent().prefix+suffix;
+  cpp_scopet &sub_scope=
+    cpp_scopes.current_scope().new_scope(subscope_name);
+  sub_scope.prefix=prefix;
+  cpp_scopes.go_to(sub_scope);
+  cpp_scopes.id_map.insert(
+    cpp_scopest::id_mapt::value_type(subscope_name, &sub_scope));
 
   // store the information that the template has
   // been instantiated using these arguments
@@ -434,8 +427,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   }
 
   // We're definitely instantiating this; put the template types into scope.
-  if (!already_instantiated)
-    put_template_args_in_scope(template_type, specialization_template_args);
+  put_template_args_in_scope(template_type, specialization_template_args);
 
   if(new_decl.type().id()=="struct")
   {
