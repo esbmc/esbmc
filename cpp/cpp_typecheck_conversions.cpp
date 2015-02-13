@@ -1893,9 +1893,6 @@ bool cpp_typecheckt::dynamic_typecast(
   exprt &new_expr)
 {
   exprt e(expr);
-//  std::cout << "e: " << e << std::endl;
-//  std::cout << "type: " << type << std::endl;
-//  std::cout << "new_expr: " << new_expr << std::endl;
 
   if(type.id()=="pointer")
   {
@@ -1912,42 +1909,36 @@ bool cpp_typecheckt::dynamic_typecast(
   {
     exprt typeid_function = new_expr;
     exprt function = typeid_function;
-    irep_idt badcast_identifier="cpp::std::tag.bad_cast";
+    irep_idt badcast_identifier = "cpp::std::tag.bad_cast";
+
     // We must check if the user included typeinfo
     const symbolt *bad_cast_symbol;
     bool is_included = lookup(badcast_identifier, bad_cast_symbol);
 
-    if(is_included)
+    if (is_included)
       throw "Error: must #include <typeinfo>. Bad_cast throw";
 
     // Ok! Let's create the temp object badcast
     exprt badcast;
     badcast.identifier(badcast_identifier);
     badcast.operands().push_back(exprt("sideeffect"));
-    badcast.op0().type()=typet("symbol");
+    badcast.op0().type() = typet("symbol");
     badcast.op0().type().identifier(badcast_identifier);
-
 
     // Check throw
     typecheck_expr_throw(badcast);
 
     // Save on the expression for handling on goto-program
     function.set("exception_list", badcast.find("exception_list"));
-//    std::cout << "badcast: " << badcast << std::endl;
-
-//    std::cout << "e1: " << e << std::endl;
     e.make_typecast(type);
-//    std::cout << "e2: " << e << std::endl;
     new_expr.swap(e);
     new_expr.op0().operands().push_back(badcast);
-//    std::cout << "new_expr2: " << new_expr << std::endl;
     return true;
 
-    if(follow(type.subtype()).id()!="struct")
+    if (follow(type.subtype()).id() != "struct")
     {
       return false;
     }
-
   }
   else if(type.id()=="pointer")
   {
@@ -1976,90 +1967,80 @@ bool cpp_typecheckt::dynamic_typecast(
 
   bool res = static_typecast(e,type, new_expr);
 
-  if(res)
+  if (res)
   {
-    if(type.id()=="pointer" && e.type().id()=="pointer")
+    if (type.id() == "pointer" && e.type().id() == "pointer")
     {
-      if(type.find("to-member").is_nil()
-          && e.type().find("to-member").is_nil())
+      if (type.find("to-member").is_nil()
+        && e.type().find("to-member").is_nil())
       {
-        //std::cout << "e.pretty(): " << e.pretty() << std::endl;
-        //std::cout << "type.pretty(): " << type.pretty() << std::endl;
-        //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
-
         typet to = follow(type.subtype());
-        //std::cout << "to: " << to << std::endl;
         symbolt t;
-        if(e.identifier()!="")
+        if (e.identifier() != "")
         {
           t = lookup(e.identifier());
         }
-        //Array
-        else
-          if(e.op0().identifier()!="")
-          {
-            t = lookup(e.op0().identifier());
-          }
-          else
-            return false;
-
-        //std::cout << "t: " << t << std::endl;
-        typet from;
-        //dynamic cast of array type
-        if (t.type.id()=="array")
+        else if (e.op0().identifier() != "") // Array
         {
-          if (type.id()==new_expr.type().id())
+          t = lookup(e.op0().identifier());
+        }
+        else
+          return false;
+
+        typet from;
+        if (t.type.id() == "array")
+        {
+          if (type.id() == new_expr.type().id())
           {
             from = follow(t.value.op0().type());
             e.make_typecast(type);
             new_expr.op0().op0().operands() = t.value.operands();
-//            new_expr.operands() = t.value.operands();
-//            std::cout << "depois new_expr.pretty(): " << new_expr.pretty() << std::endl;
             return true;
           }
         }
 
         from = follow(t.value.type());
-        //could not dynamic_cast from void type
-        if(t.type.subtype().id()=="empty")
+
+        // Could not dynamic_cast from void type
+        if (t.type.subtype().id() == "empty")
         {
           return false;
         }
 
-        //are we doing a dynamic typecast between objects of the same class type?
-        if ((type.id() == new_expr.type().id()) &&
-            (type.subtype().id() == new_expr.type().subtype().id()) )
+        // Are we doing a dynamic typecast between objects of the same class type?
+        if ((type.id() == new_expr.type().id())
+          && (type.subtype().id() == new_expr.type().subtype().id()))
         {
           return true;
         }
 
-        if(from.id()=="empty")
+        if (from.id() == "empty")
         {
           e.make_typecast(type);
           new_expr.swap(e);
           return true;
         }
 
-        if(to.id()=="struct" && from.id()=="struct")
+        if (to.id() == "struct" && from.id() == "struct")
         {
-          if(e.cmt_lvalue())
+          if (e.cmt_lvalue())
           {
             exprt tmp(e);
-            if(!standard_conversion_lvalue_to_rvalue(tmp,e))
+            if (!standard_conversion_lvalue_to_rvalue(tmp, e))
               return false;
           }
 
           struct_typet from_struct = to_struct_type(from);
           struct_typet to_struct = to_struct_type(to);
-          if(subtype_typecast(from_struct, to_struct))
+          if (subtype_typecast(from_struct, to_struct))
           {
-            make_ptr_typecast(e,type);
+            make_ptr_typecast(e, type);
             new_expr.op0().swap(t.value);
             return true;
           }
         }
 
-        //Cannot make typecast
+        // Cannot make typecast
         constant_exprt null_expr;
         null_expr.type() = new_expr.type();
         null_expr.set_value("NULL");
@@ -2068,18 +2049,18 @@ bool cpp_typecheckt::dynamic_typecast(
         return true;
       }
       else if (type.find("to-member").is_not_nil()
-          && e.type().find("to-member").is_not_nil())
+        && e.type().find("to-member").is_not_nil())
       {
-        if(type.subtype() != e.type().subtype())
+        if (type.subtype() != e.type().subtype())
           return false;
 
-        struct_typet from_struct =
-            to_struct_type(follow(static_cast<const typet&>(e.type().find("to-member"))));
+        struct_typet from_struct = to_struct_type(
+          follow(static_cast<const typet&>(e.type().find("to-member"))));
 
-        struct_typet to_struct =
-            to_struct_type(follow(static_cast<const typet&>(type.find("to-member"))));
+        struct_typet to_struct = to_struct_type(
+          follow(static_cast<const typet&>(type.find("to-member"))));
 
-        if(subtype_typecast(from_struct, to_struct))
+        if (subtype_typecast(from_struct, to_struct))
         {
           new_expr = e;
           new_expr.make_typecast(type);
@@ -2089,8 +2070,11 @@ bool cpp_typecheckt::dynamic_typecast(
       else
         return false;
     }
+
     return false;
   }
+
+  return false;
 }
 
 /*******************************************************************\

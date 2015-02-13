@@ -51,38 +51,6 @@ void cpp_typecheckt::salvage_default_parameters(
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::check_template_restrictions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void cpp_typecheckt::check_template_restrictions(
-  const irept &cpp_name,
-  const irep_idt &final_identifier,
-  const typet &final_type)
-{
-  if(final_type.id()=="template")
-  {
-    // subtype must be class or function
-
-    if(final_type.subtype().id()!="struct" &&
-       final_type.subtype().id()!="code")
-    {
-      err_location(cpp_name);
-      str << "template only allowed with classes or functions,"
-             " but got `" << to_string(final_type.subtype()) << "'";
-      throw 0;
-    }
-  }
-}
-
-/*******************************************************************\
-
 Function: cpp_typecheckt::typecheck_class_template
 
   Inputs:
