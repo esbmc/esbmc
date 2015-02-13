@@ -319,6 +319,9 @@ protected:
     const irep_idt &mode,
     code_typet::argumentt &argument);
 
+  bool has_incomplete_args(
+    cpp_template_args_tct template_args_tc);
+
   //
   // Misc
   //

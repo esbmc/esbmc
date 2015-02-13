@@ -253,6 +253,30 @@ cpp_typecheckt::handle_recursive_template_instance(
   return NULL;
 }
 
+bool cpp_typecheckt::has_incomplete_args(
+  cpp_template_args_tct template_args_tc)
+{
+  const cpp_template_args_tct::argumentst &_arguments =
+    template_args_tc.arguments();
+
+  for (cpp_template_args_tct::argumentst::const_iterator it =
+    _arguments.begin(); it != _arguments.end(); it++)
+  {
+    const typet& e = it->type();
+    if (context.symbols.find(e.identifier())
+      != context.symbols.end())
+    {
+      symbolt &arg_sym =
+        context.symbols.find(e.identifier())->second;
+
+      if (arg_sym.type.id() == "incomplete_struct")
+        return true;
+    }
+  }
+
+  return false;
+}
+
 /*******************************************************************\
 
 Function: cpp_typecheckt::instantiate_template
@@ -335,6 +359,21 @@ const symbolt &cpp_typecheckt::instantiate_template(
   new_decl.remove("template_type");
   new_decl.set("#template", template_symbol.name);
   new_decl.set("#template_arguments", specialization_template_args);
+
+  // Let's check if the arguments are incompletes (they might have been
+  // forward declared)
+  if(has_incomplete_args(specialization_template_args))
+  {
+    // This happens when the arguments were not declared yet but the
+    // code tried to use the template. Crazy right? This can happen when
+    // typedefing for example, check esbmc-cpp/esbmc-cbmc/Templates39 for
+    // an example
+    // Hack: let's remove the template body so nothing will be instantiated
+    // When an object is instantiated in the future, it will create the
+    // right instantiated template, or will throw an error if the argument
+    // isn't declared yet
+    new_decl.type().remove("body");
+  }
 
   // save old scope
   cpp_save_scopet saved_scope(cpp_scopes);
