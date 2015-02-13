@@ -1968,12 +1968,12 @@ exprt cpp_typecheck_resolvet::resolve(
     }
   }
 
-  check_incomplete_template(result, want);
+  check_incomplete_template_class(result, want);
 
   return result;
 }
 
-void cpp_typecheck_resolvet::check_incomplete_template(exprt result, wantt want)
+void cpp_typecheck_resolvet::check_incomplete_template_class(exprt result, wantt want)
 {
   // Check if the type is complete. The template might have been forward
   // declared so ESBMC didn't instantiated it.
