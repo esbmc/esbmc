@@ -280,7 +280,7 @@ esbmc_list_of_backends="./smtlib/libsmtlib.la ";
 
 ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs], $$ESBMC_NOOP_CONFIG)
 ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, boolector, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
-ESBMC_OPTIONAL_SOLVER([yices_possible_locs], [yices_build_headers], yices, yices, yices_init, yices, [yices_possible_libdirs], $$ESBMC_YICES_EXTRA_CONFIG)
+ESBMC_OPTIONAL_SOLVER([yices_possible_locs], [yices_build_headers], yices, yices, yices_init, include, [yices_possible_libdirs], $$ESBMC_YICES_EXTRA_CONFIG)
 
 dnl Temporarily, while things remain unconfigured
 AC_SUBST([ESBMC_ENABLE_minisat], 0)
