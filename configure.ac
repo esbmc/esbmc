@@ -232,7 +232,7 @@ m4_define(ESBMC_OPTIONAL_SOLVER, [
     ])
   ])
 
-m4_define(esbmc_all_solvers, [z3, boolector, yices])
+m4_define(esbmc_all_solvers, [z3, boolector, yices, cvc])
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
@@ -248,6 +248,10 @@ m4_define(btor_possible_libdirs, [boolector])
 m4_define(yices_build_headers, [include/yices.h])
 m4_define(yices_possible_locs, [$SATDIR64/yices, $SATDIR/yices, $HOME/yices])
 m4_define(yices_possible_libdirs, [lib])
+
+m4_define(cvc_build_headers, [include/cvc4/cvc4.h])
+m4_define(cvc_possible_locs, [$SATDIR64/cvc4, $SATDIR/cvc4, $HOME/cvc4])
+m4_define(cvc_possible_libdirs, [lib])
 
 dnl Random dollars are shoehorned into these names to ensure that M4 does not
 dnl rename them as they are passed down to the point where they are actually
@@ -281,6 +285,10 @@ esbmc_list_of_backends="./smtlib/libsmtlib.la ";
 ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs], $$ESBMC_NOOP_CONFIG)
 ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, boolector, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
 ESBMC_OPTIONAL_SOLVER([yices_possible_locs], [yices_build_headers], yices, yices, yices_init, include, [yices_possible_libdirs], $$ESBMC_YICES_EXTRA_CONFIG)
+
+dnl NB: this checks for 'sleep' in libcvc4 (which resolves) because autoconf
+dnl does not enjoy the idea of testing for C++ / mangled symbols
+ESBMC_OPTIONAL_SOLVER([cvc_possible_locs], [cvc_build_headers], cvc, cvc4, sleep, include, [cvc_possible_libdirs], $$ESBMC_NOOP_CONFIG)
 
 dnl Temporarily, while things remain unconfigured
 AC_SUBST([ESBMC_ENABLE_minisat], 0)
