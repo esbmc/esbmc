@@ -232,7 +232,7 @@ m4_define(ESBMC_OPTIONAL_SOLVER, [
     ])
   ])
 
-m4_define(esbmc_all_solvers, [z3, boolector, yices, cvc4])
+m4_define(esbmc_all_solvers, [z3, boolector, yices, cvc4, mathsat])
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
@@ -252,6 +252,10 @@ m4_define(yices_possible_libdirs, [lib])
 m4_define(cvc4_build_headers, [include/cvc4/cvc4.h])
 m4_define(cvc4_possible_locs, [$SATDIR64/cvc4, $SATDIR/cvc4, $HOME/cvc4])
 m4_define(cvc4_possible_libdirs, [lib])
+
+m4_define(mathsat_build_headers, [include/mathsat.h])
+m4_define(mathsat_possible_locs, [$SATDIR64/mathsat, $SATDIR/mathsat, $HOME/mathsat])
+m4_define(mathsat_possible_libdirs, [lib])
 
 dnl Random dollars are shoehorned into these names to ensure that M4 does not
 dnl rename them as they are passed down to the point where they are actually
@@ -290,9 +294,10 @@ dnl NB: this checks for 'sleep' in libcvc4 (which resolves) because autoconf
 dnl does not enjoy the idea of testing for C++ / mangled symbols
 ESBMC_OPTIONAL_SOLVER([cvc4_possible_locs], [cvc4_build_headers], cvc4, cvc4, sleep, include, [cvc4_possible_libdirs], $$ESBMC_NOOP_CONFIG)
 
+ESBMC_OPTIONAL_SOLVER([mathsat_possible_locs], [mathsat_build_headers], mathsat, mathsat, msat_create_config, include, [mathsat_possible_libdirs], $$ESBMC_NOOP_CONFIG)
+
 dnl Temporarily, while things remain unconfigured
 AC_SUBST([ESBMC_ENABLE_minisat], 0)
-AC_SUBST([ESBMC_ENABLE_mathsat], 0)
 
 # Define a list of solvers that we have
 AC_DEFINE_UNQUOTED([ESBMC_AVAILABLE_SOLVERS], ["$esbmc_list_of_solvers"], [List of ESBMC headers available to us])
@@ -300,7 +305,7 @@ AC_SUBST([ESBMC_AVAILABLE_SOLVERS], $esbmc_list_of_solvers)
 AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile solvers/solver_config.h])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile esbmc/Makefile solvers/solver_config.h])
 AC_OUTPUT
 
 AS_ECHO(["----------------------------------------"])
