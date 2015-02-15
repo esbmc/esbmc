@@ -43,6 +43,11 @@ int edge_count;
 
 std::string execute_cmd(std::string command)
 {
+  /* add ./ for linux execution */
+  std::string initial = command.substr (0,1);
+  if (initial != "./"){
+	  command = "./" + command;
+  }
   FILE* pipe = popen(command.c_str(), "r");
   if (!pipe) return "ERROR";
   char buffer[128];
@@ -88,6 +93,10 @@ void generate_tokens(std::string tokenized_line, std::map<int, std::string> & to
 
 void convert_c_file_in_tokens(std::string source_code_file, std::map<int, std::map<int,std::string> > & mapped_tokens)
 {
+  std::ifstream sfile(source_code_file);
+  if (!sfile || tokenizer_executable_path.length() == 0){
+ 	return;
+  }
   std::string source_content = read_file(source_code_file);
   std::istringstream source_stream(source_content.c_str());
   std::string temporary_file = "/tmp/esbmc-to-graphml.tmp";

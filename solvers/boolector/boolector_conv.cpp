@@ -25,7 +25,7 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
   }
 
   btor = boolector_new();
-  boolector_enable_model_gen(btor);
+  boolector_set_opt(btor,"model_gen",1);
 
   if (options.get_option("output") != "") {
     debugfile = fopen(options.get_option("output").c_str(), "w");

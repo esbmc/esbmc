@@ -26,7 +26,8 @@ int main(void)
   pthread_t id1, id2;
 
   n = (node *) malloc(sizeof(node));
-
+  if (n==NULL)
+    exit(0);
   pthread_mutex_init(&n->mutex, NULL);
   pthread_create(&id1, NULL, thread1, NULL);
   pthread_create(&id2, NULL, thread2, NULL);

@@ -231,21 +231,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   options.set_option("fixedbv", true);
 
-  if(cmdline.isset("qf_aufbv"))
-  {
-	options.set_option("qf_aufbv", true);
-    options.set_option("smt", true);
-    options.set_option("z3", true);
-  }
-
-  if(cmdline.isset("qf_auflira"))
-  {
-	options.set_option("qf_auflira", true);
-	options.set_option("smt", true);
-    options.set_option("z3", true);
-    options.set_option("int-encoding", true);
-  }
-
 
    if(cmdline.isset("context-switch"))
      options.set_option("context-switch", cmdline.getval("context-switch"));
@@ -1698,12 +1683,11 @@ void cbmc_parseoptionst::help()
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
     " --no-slice                   do not remove unused equations\n\n"
     " --- solver configuration ------------------------------------------------------\n\n"
+    " --boolector				   use Boolector (default)\n"
     " --bv                         use Z3 with bit-vector arithmetic\n"
     " --ir                         use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"
     " --lazy                       use lazy instantiation with Z3 (default)\n"
-    " --qf_aufbv                   output VCCs in QF_AUFBV format (experimental)\n"
-    " --qf_auflira                 output VCCs in QF_AUFLIRA format (experimental)\n"
     " --outfile Filename           output VCCs in SMT lib format to given file\n\n"
     " --- property checking ---------------------------------------------------------\n\n"
     " --no-assertions              ignore assertions\n"

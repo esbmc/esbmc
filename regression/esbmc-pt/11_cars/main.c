@@ -14,21 +14,21 @@ int main()
 	x1=100;
 	x2=75;
 	x3=-50;
-	if (! (v3 >= 0)) return;
-	if (! (v1 <= 5)) return;
-	if (! (v1 -v3 >= 0)) return;
-	if (! (2* v2 - v1 - v3 == 0)) return;
+	if (! (v3 >= 0)) return 0;
+	if (! (v1 <= 5)) return 0;
+	if (! (v1 -v3 >= 0)) return 0;
+	if (! (2* v2 - v1 - v3 == 0)) return 0;
 	t=0;
 
-	if (! (v2 +5 >=0)) return;
-	if (! (v2 <= 5)) return;
+	if (! (v2 +5 >=0)) return 0;
+	if (! (v2 <= 5)) return 0;
 	while (nondet())
 	{
-		if (! (v2 +5 >=0)) return;
-		if (! (v2 <= 5)) return;
+		if (! (v2 +5 >=0)) return 0;
+		if (! (v2 <= 5)) return 0;
 		if (nondet())
 		{
-			if (! (2* x2 - x1 - x3>=0)) return;
+			if (! (2* x2 - x1 - x3>=0)) return 0;
 			x1 = x1+v1;
 			x3 = x3+v3;
 			x2 = x2+v2;
@@ -37,7 +37,7 @@ int main()
 		}
 		else
 		{
-			if (! (2*x2 -x1-x3 <=0)) return;
+			if (! (2*x2 -x1-x3 <=0)) return 0;
 			x1 = x1+v1;
 			x3 = x3+v3;
 			x2 = x2+v2;
@@ -54,5 +54,6 @@ int main()
 	assert (x2 + 5*t >= 75);
 	assert (v1 - 2*v2 + v3 + 2*t >= 0);
 	assert (v1 - v3 >= 0);
+  return 0;
 }
 

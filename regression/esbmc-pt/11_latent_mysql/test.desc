@@ -1,0 +1,3 @@
+bakery.simple.c
+--unwind 10
+^VERIFICATION SUCCESSFUL$

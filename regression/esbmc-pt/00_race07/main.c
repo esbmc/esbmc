@@ -4,8 +4,8 @@
 
 #define USAGE "./reorder <param1> <param2>\n"
 
-static int iSet = 2;
-static int iCheck = 2;
+static int iSet = 1;
+static int iCheck = 1;
 
 static int a = 0;
 static int b = 0;

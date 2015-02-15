@@ -2336,6 +2336,8 @@ bool goto_convertt::check_op_const(
   const exprt &tmp,
   const locationt &loc)
 {
+  //std::cout << "check_op_const: " << tmp.pretty() << std::endl;
+
   if (tmp.is_constant() || tmp.type().id() == "pointer")
   {
     std::cerr << "warning: this program " << loc.get_file()
@@ -2492,8 +2494,7 @@ void goto_convertt::replace_cond(
   }
   else if ( exprid == "<" ||  exprid == "<=")
   {
-    //std::cout << tmp.pretty() << std::endl;
-    if (is_for_block())
+    if (is_for_block() || is_while_block())
       if (check_op_const(tmp.op1(), tmp.location()))
         return ;
 
@@ -2548,7 +2549,7 @@ void goto_convertt::replace_cond(
 	      << " of " << tmp.location().get_file()
   	      << " is not supported yet" << std::endl;
     //std::cout << tmp.pretty() << std::endl;
-    //assert(0);
+    assert(0);
   }
 }
 
@@ -3522,6 +3523,8 @@ void goto_convertt::replace_ifthenelse(
 {
   DEBUGLOC;
 
+  //std::cout << expr.pretty() << std::endl;
+
   bool found=false;
 
   if(expr.id()=="constant")
@@ -3540,11 +3543,14 @@ void goto_convertt::replace_ifthenelse(
         {
           // Before returning we must check if the variable is dirty, if that is true
           // then we should replace it
-          if(it1->second.value.find("assignment_inside_loop").is_nil())
+          if(it1->second.value.find("assignment_inside_loop").is_nil()) {
             return;
+
+          }
         }
     }
   }
+
 
   if (expr.operands().size()==0 || expr.operands().size() == 1)
   {
