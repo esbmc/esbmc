@@ -30,6 +30,9 @@ AC_CHECK_LIB([rt], [timer_create],
     [AS_VAR_APPEND(LIBS, " -lrt ")], [], []
 )
 
+AS_VAR_APPEND(CPPFLAGS, " -I /usr/include/eigen3")
+AS_VAR_APPEND(CXXFLAGS, " -I /usr/include/eigen3")
+
 AC_CHECK_HEADERS([boost/mpl/if.hpp], [], [AC_MSG_ERROR([No boost mpl found])])
 AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], [AC_MSG_ERROR([No boost shared ptr found])])
 AC_CHECK_HEADERS([boost/crc.hpp], [], [AC_MSG_ERROR([No boost CRC library found])])
@@ -38,6 +41,7 @@ AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], [AC_MSG_ERROR([No boos
 AC_CHECK_HEADERS([sys/sendfile.h], [AC_DEFINE([HAVE_SENDFILE], [], [Has sendfile header])], [])
 
 AC_CHECK_HEADERS([unistd.h], [AC_DEFINE([HAVE_UNISTD], [], [Has unistd.h header])], [])
+AC_CHECK_HEADERS([eigen3/Eigen/Eigen], [AC_DEFINE([EIGEN_LIB], [], [Have Eigen library])], [])
 
 AC_HEADER_STDBOOL
 AC_TYPE_UID_T
