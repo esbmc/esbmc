@@ -1,3 +1,8 @@
+# TODO:
+# Not injecting arbitary symlinks
+# Sometimes libtool cracks up if we re-configure and don't make clean.
+# (This may be a libtool feature)
+
 AC_INIT([ESBMC], [1.23.99], [esbmc@ecs.soton.ac.uk])
 AC_DEFINE([ESBMC_VERSION], ["1.23.99"], [ESBMC version number])
 
