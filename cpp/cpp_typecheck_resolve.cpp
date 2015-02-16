@@ -1460,38 +1460,31 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
   // Check if there was more than one hit
   if (zero_distance_matches.size() > 1)
   {
-    std::vector<matcht> exact_matches;
-
-    for (std::vector<matcht>::const_iterator m_it =
-      zero_distance_matches.begin(); m_it != zero_distance_matches.end();
-      m_it++)
-    {
-      // We start by inserting the match on the exact matches vector
-      exact_matches.push_back(*m_it);
-
-      // This should be replaced by a clean std::remove_if...
-      for (unsigned i = 0; i < full_template_args_tc.arguments().size(); ++i)
+    auto new_end = std::remove_if(zero_distance_matches.begin(),
+      zero_distance_matches.end(), [&full_template_args_tc](matcht const& match)
       {
-        irept full_args_cpp = m_it->full_args.arguments()[i].type().find(
-          "#cpp_type");
-        irept full_template_args_cpp =
-          full_template_args_tc.arguments()[i].type().find("#cpp_type");
-
-        // If we cannot get the #cpp_type or if they are different, we remove it
-        // from the vector
-        if (!(full_args_cpp != irept() && full_template_args_cpp != irept()
-          && full_args_cpp == full_template_args_cpp))
+        // This should be replaced by a clean std::remove_if...
+        for (unsigned i = 0; i < full_template_args_tc.arguments().size(); ++i)
         {
-          exact_matches.pop_back();
-          break;
-        }
-      }
-    }
+          irept full_args_cpp = match.full_args.arguments()[i].type().find(
+            "#cpp_type");
+          irept full_template_args_cpp =
+            full_template_args_tc.arguments()[i].type().find("#cpp_type");
 
-    // If there is only one hit, than we succeded!
-    // Update the match
-    if(exact_matches.size() == 1)
-      match = exact_matches.at(0);
+          // If we cannot get the #cpp_type or if they are different, we remove it
+          // from the vector
+          if (!(full_args_cpp != irept() && full_template_args_cpp != irept()
+              && full_args_cpp == full_template_args_cpp))
+            return true;
+        }
+
+        return false;
+      });
+
+    zero_distance_matches.erase(new_end, zero_distance_matches.end());
+
+    if(zero_distance_matches.size() == 1)
+      match = zero_distance_matches.at(0);
   }
 
   const symbolt &choice=
