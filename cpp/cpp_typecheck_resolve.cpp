@@ -1417,7 +1417,7 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
          full_template_args_tc)
       {
         matches.push_back(matcht(
-          guessed_template_args, full_template_args_tc, id));
+          guessed_template_args, partial_specialization_args_tc, id));
       }
     }
   }
@@ -1440,6 +1440,59 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
   #endif
 
   const matcht &match=*matches.begin();
+
+  // Let's check if there is more than one 0 distance match
+  // This may happen when there is an template specialization on,
+  // for example, char and signed_char
+  // To solve that, we'll rely on the #cpp_type field, which keeps
+  // the original type name
+
+  std::vector<matcht> zero_distance_matches;
+
+  // Lambda expression to insert on the zero_distance_matches if
+  // the cost of each element is zero
+  std::copy_if(matches.begin(), matches.end(),
+    std::back_inserter(zero_distance_matches), [](matcht const& match)
+    {
+      return match.cost==0;
+    });
+
+  // Check if there was more than one hit
+  if (zero_distance_matches.size() > 1)
+  {
+    std::vector<matcht> exact_matches;
+
+    for (std::vector<matcht>::const_iterator m_it =
+      zero_distance_matches.begin(); m_it != zero_distance_matches.end();
+      m_it++)
+    {
+      // We start by inserting the match on the exact matches vector
+      exact_matches.push_back(*m_it);
+
+      // This should be replaced by a clean std::remove_if...
+      for (unsigned i = 0; i < full_template_args_tc.arguments().size(); ++i)
+      {
+        irept full_args_cpp = m_it->full_args.arguments()[i].type().find(
+          "#cpp_type");
+        irept full_template_args_cpp =
+          full_template_args_tc.arguments()[i].type().find("#cpp_type");
+
+        // If we cannot get the #cpp_type or if they are different, we remove it
+        // from the vector
+        if (!(full_args_cpp != irept() && full_template_args_cpp != irept()
+          && full_args_cpp == full_template_args_cpp))
+        {
+          exact_matches.pop_back();
+          break;
+        }
+      }
+    }
+
+    // If there is only one hit, than we succeded!
+    // Update the match
+    if(exact_matches.size() == 1)
+      match = exact_matches.at(0);
+  }
 
   const symbolt &choice=
     cpp_typecheck.lookup(match.id);
