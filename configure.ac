@@ -34,6 +34,10 @@ AC_CHECK_LIB([gomp], [omp_get_num_threads],
              [AS_VAR_APPEND(LIBS, " -lgomp ")],
              [AC_MSG_WARN([No libgomp found: Z3 may want this])], [])
 
+AC_CHECK_LIB([gmp], [__gmpz_cmp],
+             [AS_VAR_APPEND(LIBS, " -lgmp ")],
+             [AC_MSG_WARN([No libgmp found: various solvers require it])], [])
+
 AS_VAR_APPEND(CPPFLAGS, " -I /usr/include/eigen3")
 AS_VAR_APPEND(CXXFLAGS, " -I /usr/include/eigen3")
 
