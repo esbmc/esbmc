@@ -30,6 +30,10 @@ AC_CHECK_LIB([rt], [timer_create],
     [AS_VAR_APPEND(LIBS, " -lrt ")], [], []
 )
 
+AC_CHECK_LIB([gomp], [omp_get_num_threads],
+             [AS_VAR_APPEND(LIBS, " -lgomp ")],
+             [AC_MSG_WARN([No libgomp found: Z3 may want this])], [])
+
 AS_VAR_APPEND(CPPFLAGS, " -I /usr/include/eigen3")
 AS_VAR_APPEND(CXXFLAGS, " -I /usr/include/eigen3")
 
