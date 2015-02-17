@@ -246,6 +246,14 @@ m4_define(ESBMC_OPTIONAL_SOLVER, [
 
 m4_define(esbmc_all_solvers, [z3, boolector, yices, cvc4, mathsat])
 
+dnl Define all of these to be not enabled by default
+m4_foreach(thesolver, [esbmc_all_solvers], [
+  m4_define([str], [ESBMC_ENABLE_])
+  m4_append([str], thesolver)
+  AC_SUBST([str], 0)
+  undefine([str])
+])
+
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
 m4_define(z3_possible_libdirs, [lib, bin, x64])
