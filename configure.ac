@@ -248,6 +248,13 @@ m4_define(ESBMC_OPTIONAL_SOLVER, [
   ])
 
 m4_define(esbmc_all_solvers, [z3, boolector, yices, cvc4, mathsat])
+m4_foreach(thesolver, [esbmc_all_solvers], [
+  AC_ARG_ENABLE(thesolver,
+              [AS_HELP_STRING([--disable-thesolver], Disable thesolver solver)])
+  AS_IF([test "x$[enable_]thesolver" = "xno"], [
+           AS_VAR_SET([esbmc_disable_solver_]thesolver, "yes")
+        ])
+  ])
 
 dnl Define all of these to be not enabled by default
 m4_foreach(thesolver, [esbmc_all_solvers], [
@@ -309,15 +316,27 @@ m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
 esbmc_list_of_solvers="smtlib";
 esbmc_list_of_backends="./smtlib/libsmtlib.la ";
 
+AS_IF([test "$esbmc_disable_solver_z3" != "yes"], [
 ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs], $$ESBMC_NOOP_CONFIG)
-ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, boolector, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
-ESBMC_OPTIONAL_SOLVER([yices_possible_locs], [yices_build_headers], yices, yices, yices_init, include, [yices_possible_libdirs], $$ESBMC_YICES_EXTRA_CONFIG)
+])
 
+AS_IF([test "$esbmc_disable_solver_boolector" != "yes"], [
+ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, boolector, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
+])
+
+AS_IF([test "$esbmc_disable_solver_yices" != "yes"], [
+ESBMC_OPTIONAL_SOLVER([yices_possible_locs], [yices_build_headers], yices, yices, yices_init, include, [yices_possible_libdirs], $$ESBMC_YICES_EXTRA_CONFIG)
+])
+
+AS_IF([test "$esbmc_disable_solver_cvc4" != "yes"], [
 dnl NB: this checks for 'sleep' in libcvc4 (which resolves) because autoconf
 dnl does not enjoy the idea of testing for C++ / mangled symbols
 ESBMC_OPTIONAL_SOLVER([cvc4_possible_locs], [cvc4_build_headers], cvc4, cvc4, sleep, include, [cvc4_possible_libdirs], $$ESBMC_NOOP_CONFIG)
+])
 
+AS_IF([test "$esbmc_disable_solver_mathsat" != "yes"], [
 ESBMC_OPTIONAL_SOLVER([mathsat_possible_locs], [mathsat_build_headers], mathsat, mathsat, msat_create_config, include, [mathsat_possible_libdirs], $$ESBMC_NOOP_CONFIG)
+])
 
 dnl Temporarily, while things remain unconfigured
 AC_SUBST([ESBMC_ENABLE_minisat], 0)
