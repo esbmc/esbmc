@@ -181,7 +181,10 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     AS_IF([test $alreadydone = "no"], [
 
     esbmc_check_solver_old_libs=$LIBS
-    AS_VAR_APPEND(LIBS, " [-L]path/libdir -l$4 ")
+    # Prepend library to LIBS -- this is because the link ordering is important,
+    # and the library might depend on previously detected libraries already in
+    # LIBS
+    LIBS="[-L]path/libdir -l$4 $LIBS"
     # Indirectly call local-config macro
     indir($8, path)
     AC_CHECK_LIB($4, $5, [
