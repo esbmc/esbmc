@@ -2673,26 +2673,45 @@ void cpp_typecheck_resolvet::apply_template_args(
     if(!code_type.arguments().empty() &&
         code_type.arguments()[0].cmt_base_name()=="this")
     {
+      const symbolt type_symb;
+
       // do we have an object?
       if(fargs.has_object)
-      {
-        const symbolt &type_symb =
-          cpp_typecheck.lookup(fargs.operands.begin()->type().identifier());
+        type_symb = cpp_typecheck.lookup(fargs.operands.begin()->type().identifier());
+      else
+        type_symb = cpp_typecheck.lookup(original_scope->class_identifier);
 
-        assert(type_symb.type.id()=="struct");
+      assert(type_symb.type.id()=="struct");
 
-        const struct_typet &struct_type=
+      const struct_typet &struct_type=
           to_struct_type(type_symb.type);
 
-        assert(struct_type.has_component(new_symbol.name));
-        member_exprt member(code_type);
-        member.set_component_name(new_symbol.name);
+      assert(struct_type.has_component(new_symbol.name));
+      member_exprt member(code_type);
+      member.set_component_name(new_symbol.name);
+      if(fargs.has_object)
         member.struct_op()=*fargs.operands.begin();
-        member.location()=location;
-        expr.swap(member);
-        return;
-      }
+      else
+      {
+        // Add (this) as argument of the function
+        const exprt &this_expr=
+          original_scope->this_expr;
 
+        // use this->...
+        assert(this_expr.type().id()=="pointer");
+
+        exprt object=exprt("dereference", this_expr.type().subtype());
+        object.copy_to_operands(this_expr);
+        object.type().set("#constant",
+          this_expr.type().subtype().cmt_constant());
+        object.set("#lvalue",true);
+        object.location()=location;
+
+        member.struct_op()=object;
+      }
+      member.location()=location;
+      expr.swap(member);
+      return;
     }
 
     expr=cpp_symbol_expr(new_symbol);
