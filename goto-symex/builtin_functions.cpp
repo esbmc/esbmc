@@ -1191,7 +1191,7 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   return;
 }
 
-//#ifdef EIGEN_LIB
+#ifdef EIGEN_LIB
 int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
 {
   // This code will get an irep2 of an array and return the roots of the
@@ -1298,4 +1298,4 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
 
   return 0;
 }
-//#endif
+#endif
