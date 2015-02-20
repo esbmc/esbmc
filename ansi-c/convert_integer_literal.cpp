@@ -35,7 +35,7 @@ void convert_integer_literal(
 
   for(unsigned i=src.size(); i!=0; i--)
   {
-    register char ch=src[i-1];
+    char ch=src[i-1];
     if(ch=='u' || ch=='U')
       is_unsigned=true;
     else if(ch=='l' || ch=='L')
