@@ -331,7 +331,7 @@ public:
   {
     operands().resize(2);
   }
- 
+
   index_exprt(const typet &_type):exprt(exprt::index, _type)
   {
     operands().resize(2);
@@ -395,7 +395,7 @@ public:
   {
     operands().resize(1);
   }
- 
+
   inline exprt &what()
   {
     return op0();
@@ -441,7 +441,7 @@ public:
   {
     return op0();
   }
-  
+
   const exprt &root_object() const
   {
     const exprt *p=&object();
@@ -451,7 +451,7 @@ public:
       assert(p->operands().size()!=0);
       p=&p->op0();
     }
-    
+
     return *p;
   }
 
@@ -645,7 +645,7 @@ public:
   {
     operands().resize(1);
   }
-  
+
   exprt &object()
   {
     return op0();
@@ -699,7 +699,7 @@ public:
   {
     operands().resize(3);
   }
-  
+
   exprt &cond()
   {
     return op0();
@@ -757,7 +757,7 @@ public:
   {
     operands().resize(3);
   }
-  
+
   exprt &old()
   {
     return op0();
@@ -824,7 +824,7 @@ public:
   {
     operands().resize(1);
   }
-  
+
   irep_idt get_component_name() const
   {
     return get("component_name");
@@ -880,7 +880,13 @@ public:
   explicit constant_exprt(const typet &type):exprt(exprt::constant, type)
   {
   }
-  
+
+  inline constant_exprt(const irep_idt &_value, const typet &_type):
+    exprt(exprt::constant, _type)
+  {
+    set_value(_value);
+  }
+
   const irep_idt &get_value() const
   {
     return get("value");
