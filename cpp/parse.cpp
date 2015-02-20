@@ -1565,7 +1565,7 @@ bool Parser::optCvQualify(typet &cv)
     int t=lex->LookAhead(0);
     if(t==TOK_CONST || t==TOK_VOLATILE ||
        t==TOK_PTR32 || t==TOK_PTR64 ||
-       t==TOK_ATTRIBUTE)
+       t==TOK_GCC_ATTRIBUTE)
     {
       Token tk;
       lex->GetToken(tk);
@@ -1597,7 +1597,7 @@ bool Parser::optCvQualify(typet &cv)
         merge_types(p, cv);
         break;
 
-      case TOK_ATTRIBUTE:
+      case TOK_GCC_ATTRIBUTE:
         if(!rAttribute())
           return false;
         break;
@@ -5104,13 +5104,11 @@ bool Parser::rPrimaryExpr(exprt &exp)
   case TOK_INTEGER:
   case TOK_CHARACTER:
   case TOK_FLOATING:
-  case TOK_WideCharConst:
     lex->GetToken(tk);
     exp.swap(tk.data);
     set_location(exp, tk);
     return true;
 
-  case TOK_WideStringL:
   case TOK_STRING:
     rString(tk);
     exp.swap(tk.data);
