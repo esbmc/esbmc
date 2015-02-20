@@ -50,13 +50,56 @@ void cpp_scanner_init()
   YY_FLUSH_BUFFER;
   BEGIN(0); // this is INITIAL, hopefully
 }
+
+#define loc() (PARSER.current_token().text=yytext,PARSER.set_location())
+
+static inline int make_identifier()
+{
+  loc();
+  irep_idt base_name=yytext;
+  PARSER.current_token().data.id("symbol");
+  PARSER.current_token().data.set("#base_name", base_name);
+  return TOK_IDENTIFIER;
+}
+
+static inline int token(int x)
+{
+  loc();
+  return x;
+}
+
+static inline int MSC_Keyword(int x)
+{
+  if(PARSER.mode==cpp_parsert::MSC)
+    return token(x);
+  else
+    return make_identifier();
+}
+
 %}
 
 identifier [a-zA-Z_$][0-9a-zA-Z_$]*
 
-exponent_part [eE][-+]?[0-9]+
-fractional_constant ([0-9]*"."[0-9]+)|([0-9]+".")
-floating_constant (({fractional_constant}{exponent_part}?)|([0-9]+{exponent_part}))[FfLl]?
+
+digit		[0-9]
+bindigit	[01]
+octdigit	[0-7]
+hexdigit	[0-9a-fA-F]
+integer		{digit}+
+exponent	[eE][+-]?{integer}
+fraction	{integer}
+
+float1		{integer}"."{fraction}?({exponent})?
+float2		"."{fraction}({exponent})?
+float3		{integer}{exponent}
+hexfloat1       "0"[xX]{hexdigit}+"."{hexdigit}+[pP][+-]?{integer}
+hexfloat2       "0"[xX]{hexdigit}+"."[pP][+-]?{integer}
+hexfloat3       "0"[xX]{hexdigit}+[pP][+-]?{integer}
+float		{float1}|{float2}|{float3}|{hexfloat1}|{hexfloat2}|{hexfloat3}
+float_f		{float}[fF]|{integer}[fF]
+float_l		{float}[lL]
+
+floating_constant {float}|{float_f}|{float_l}
 
 integer_suffix [uUlL]
 iw_suffix       ("i8"|"i16"|"i32"|"i64"|"i128")
@@ -71,7 +114,10 @@ hex_escape "x"[0-9a-fA-F]+
 
 escape_sequence [\\]({simple_escape}|{octal_escape}|{hex_escape})
 c_char [^'\\\n]|{escape_sequence}
-s_char [^"]|{escape_sequence}
+s_char [^"\\\n]|{escape_sequence}
+
+char_lit    "L"?[']{c_char}+[']
+string_lit  "L"?["]{s_char}*["]
 
 h_tab [\011]
 form_feed [\014]
@@ -80,18 +126,14 @@ c_return [\015]
 
 horizontal_white [ ]|{h_tab}
 ws {horizontal_white}*
+newline         [\n\f\v]|"\\\n"
+ws_or_newline ({horizontal_white}|{newline})*
 
-integer         [0-9]+
 cppfile         "\""[ !#-~]*"\""
 cpplineno       "#"{horizontal_white}*"line"*{horizontal_white}*{integer}.*"\n"
 pragma          "#"{horizontal_white}*pragma{horizontal_white}.*"\n"
 
 %%
-
-%{
-#define loc() (PARSER.current_token().text=yytext,PARSER.set_location())
-#define MSC_Keyword(x) (PARSER.mode==cpp_parsert::MSC?x:TOK_IDENTIFIER)
-%}
 
 <INITIAL>"/*"	{ BEGIN(COMMENT1); }	/* begin C comment state */
 
@@ -136,8 +178,8 @@ pragma          "#"{horizontal_white}*pragma{horizontal_white}.*"\n"
 <MSC_ANNOTATION>"]" { BEGIN(INITIAL); }
 <MSC_ANNOTATION>. { /* ignore */ }
 
-<MSC_ASM1>{ws}"{" { BEGIN(MSC_ASM2); loc(); return '{'; }
-<MSC_ASM1>[^{^}]* { loc();
+<MSC_ASM1>{ws}"{" { BEGIN(MSC_ASM2); loc(); return token('{'); }
+<MSC_ASM1>[^{^}^\n]* { loc();
                     PARSER.current_token().data=exprt(yytext);
                     BEGIN(INITIAL);
                     return TOK_STRING; }
@@ -145,7 +187,7 @@ pragma          "#"{horizontal_white}*pragma{horizontal_white}.*"\n"
 <MSC_ASM2>[^}]* { loc();
                   PARSER.current_token().data=exprt(yytext);
                   return TOK_STRING; }
-<MSC_ASM2>"}"   { BEGIN(INITIAL); loc(); return '}'; }
+<MSC_ASM2>"}"   { BEGIN(INITIAL); return token('}'); }
 
 <MSC_DECLSPEC>")"    { PARSER.parenthesis_counter--;
                         if(PARSER.parenthesis_counter==0)
@@ -164,171 +206,174 @@ pragma          "#"{horizontal_white}*pragma{horizontal_white}.*"\n"
 ({v_tab}|{c_return}|{form_feed})+
 ({horizontal_white}|{v_tab}|{c_return}|{form_feed})*"\n"
 
-__alignof__         { loc(); return TOK_SIZEOF; }
+__alignof__         { return token(TOK_ALIGNOF); }
+
 __asm__|asm|__asm   { if(PARSER.mode==cpp_parsert::MSC)
                       {
                         BEGIN(MSC_ASM1);
-                        return TOK_MSC_ASM;
+                        return token(TOK_MSC_ASM);
                       }
                       else
                       {
-                        loc();
-                        return TOK_GCC_ASM;
+                        return token(TOK_GCC_ASM);
                       }
                     }
 __attribute         { BEGIN(GCC_ATTRIBUTE); PARSER.parenthesis_counter=0; }
 __attribute__       { BEGIN(GCC_ATTRIBUTE); PARSER.parenthesis_counter=0; }
-_cdecl|__cdecl 	    { loc(); return MSC_Keyword(TOK_CDECL); }
-__const             { loc(); return TOK_CONST; }
+_cdecl|__cdecl 	    { return MSC_Keyword(TOK_CDECL); }
+__const             { return token(TOK_CONST); }
 _declspec|__declspec { BEGIN(MSC_DECLSPEC); PARSER.parenthesis_counter=0; }
 __extension__       { /* ignore */ }
-__if_exists         { loc(); return MSC_Keyword(TOK_MSC_IF_EXISTS); }
-__if_not_exists     { loc(); return MSC_Keyword(TOK_MSC_IF_NOT_EXISTS); }
-_inline             { loc(); return TOK_INLINE; }
-__inline            { loc(); return TOK_INLINE; }
-__inline__          { loc(); return TOK_INLINE; }
-__interface         { loc(); return MSC_Keyword(TOK_INTERFACE); }
-__forceinline       { loc(); return MSC_Keyword(TOK_INLINE); }
+__if_exists         { return MSC_Keyword(TOK_MSC_IF_EXISTS); }
+__if_not_exists     { return MSC_Keyword(TOK_MSC_IF_NOT_EXISTS); }
+_inline             { return token(TOK_INLINE); }
+__inline            { return token(TOK_INLINE); }
+__inline__          { return token(TOK_INLINE); }
+__interface         { return MSC_Keyword(TOK_INTERFACE); }
+__forceinline       { return MSC_Keyword(TOK_INLINE); }
 __noreturn__        { /* ignore */ }
 restrict            { /* ignore */ }
-__restrict__        { /* ignore */ }
+__restrict__        { /* ignroe */ }
 __restrict          { /* ignore */ }
-__stdcall           { loc(); return MSC_Keyword(TOK_STDCALL); }
-__fastcall          { loc(); return MSC_Keyword(TOK_FASTCALL); }
-__clrcall           { loc(); return MSC_Keyword(TOK_CLRCALL); }
-__signed            { loc(); return TOK_SIGNED; }
-__signed__          { loc(); return TOK_SIGNED; }
+__stdcall           { return MSC_Keyword(TOK_STDCALL); }
+__fastcall          { return MSC_Keyword(TOK_FASTCALL); }
+__clrcall           { return MSC_Keyword(TOK_CLRCALL); }
+__signed            { return token(TOK_SIGNED); }
+__signed__          { return token(TOK_SIGNED); }
 __vector            { /* ignore */ }
-__volatile__        { loc(); return TOK_VOLATILE; }
-typeof              { loc(); return TOK_TYPEOF; }
-__typeof            { loc(); return TOK_TYPEOF; }
-__typeof__          { loc(); return TOK_TYPEOF; }
-__int8              { loc(); return MSC_Keyword(TOK_INT8); }
-__int16             { loc(); return MSC_Keyword(TOK_INT16); }
-__int32             { loc(); return MSC_Keyword(TOK_INT32); }
-__int64             { loc(); return MSC_Keyword(TOK_INT64); }
-__ptr32             { loc(); return MSC_Keyword(TOK_PTR32); }
-__ptr64             { loc(); return MSC_Keyword(TOK_PTR64); }
+__volatile__        { return token(TOK_VOLATILE); }
+alignof             { return token(TOK_ALIGNOF); }
+typeof              { return token(TOK_TYPEOF); }
+__typeof            { return token(TOK_TYPEOF); }
+__typeof__          { return token(TOK_TYPEOF); }
+__int8              { return MSC_Keyword(TOK_INT8); }
+__int16             { return MSC_Keyword(TOK_INT16); }
+__int32             { return MSC_Keyword(TOK_INT32); }
+__int64             { return MSC_Keyword(TOK_INT64); }
+__ptr32             { return MSC_Keyword(TOK_PTR32); }
+__ptr64             { return MSC_Keyword(TOK_PTR64); }
 __thiscall          { /* ignore */ }
 __w64               { /* ignore */ }
-_Complex            { loc(); return TOK_COMPLEX; }
-__complex__         { loc(); return TOK_COMPLEX; }
-__real__            { loc(); return TOK_REAL; }
-__imag__            { loc(); return TOK_IMAG; }
-__try               { loc(); return MSC_Keyword(TOK_MSC_TRY); }
-__except            { loc(); return MSC_Keyword(TOK_MSC_EXCEPT); }
-__leave             { loc(); return MSC_Keyword(TOK_MSC_LEAVE); }
-__finally           { loc(); return MSC_Keyword(TOK_MSC_FINALLY); }
-__uuidof 	        { loc(); return MSC_Keyword(TOK_MSC_UUIDOF); }
-and                 { loc(); return TOK_ANDAND; }
-and_eq              { loc(); return TOK_ANDASSIGN; }
-auto                { loc(); return TOK_AUTO; }
-bool                { loc(); return TOK_BOOL; }
-break               { loc(); return TOK_BREAK; }
-case                { loc(); return TOK_CASE; }
-catch               { loc(); return TOK_CATCH; }
-char                { loc(); return TOK_CHAR; }
-class               { loc(); return TOK_CLASS; }
-const               { loc(); return TOK_CONST; }
-continue            { loc(); return TOK_CONTINUE; }
-default             { loc(); return TOK_DEFAULT; }
-delete              { loc(); return TOK_DELETE; }
-decltype            { loc(); return TOK_DECLTYPE; }
-do                  { loc(); return TOK_DO; }
-double              { loc(); return TOK_DOUBLE; }
-else                { loc(); return TOK_ELSE; }
-enum                { loc(); return TOK_ENUM; }
-explicit            { loc(); return TOK_EXPLICIT; }
-extern              { loc(); return TOK_EXTERN; }
-float               { loc(); return TOK_FLOAT; }
-for                 { loc(); return TOK_FOR; }
-friend              { loc(); return TOK_FRIEND; }
-goto                { loc(); return TOK_GOTO; }
-if                  { loc(); return TOK_IF; }
-inline              { loc(); return TOK_INLINE; }
-int                 { loc(); return TOK_INT; }
-long                { loc(); return TOK_LONG; }
-mutable             { loc(); return TOK_MUTABLE; }
-namespace           { loc(); return TOK_NAMESPACE; }
-new                 { loc(); return TOK_NEW; }
-not_eq              { loc(); return TOK_NE; }
+_Complex            { return token(TOK_COMPLEX); }
+__complex__         { return token(TOK_COMPLEX); }
+__real__            { return token(TOK_REAL); }
+__imag__            { return token(TOK_IMAG); }
+__try               { return MSC_Keyword(TOK_MSC_TRY); }
+__except            { return MSC_Keyword(TOK_MSC_EXCEPT); }
+__leave             { return MSC_Keyword(TOK_MSC_LEAVE); }
+__finally           { return MSC_Keyword(TOK_MSC_FINALLY); }
+__uuidof 	    { return MSC_Keyword(TOK_MSC_UUIDOF); }
+auto                { return token(TOK_AUTO); }
+bool                { return token(TOK_BOOL); }
+break               { return token(TOK_BREAK); }
+case                { return token(TOK_CASE); }
+catch               { return token(TOK_CATCH); }
+char                { return token(TOK_CHAR); }
+class               { return token(TOK_CLASS); }
+const               { return token(TOK_CONST); }
+continue            { return token(TOK_CONTINUE); }
+default             { return token(TOK_DEFAULT); }
+delete              { return token(TOK_DELETE); }
+decltype            { return token(TOK_DECLTYPE); } // C++11
+__decltype          { return token(TOK_DECLTYPE); } // gcc
+do                  { return token(TOK_DO); }
+double              { return token(TOK_DOUBLE); }
+else                { return token(TOK_ELSE); }
+enum                { return token(TOK_ENUM); }
+explicit            { return token(TOK_EXPLICIT); }
+extern              { return token(TOK_EXTERN); }
+float               { return token(TOK_FLOAT); }
+for                 { return token(TOK_FOR); }
+friend              { return token(TOK_FRIEND); }
+goto                { return token(TOK_GOTO); }
+if                  { return token(TOK_IF); }
+inline              { return token(TOK_INLINE); }
+int                 { return token(TOK_INT); }
+long                { return token(TOK_LONG); }
+mutable             { return token(TOK_MUTABLE); }
+namespace           { return token(TOK_NAMESPACE); }
+new                 { return token(TOK_NEW); }
 noreturn            { /* ignore */ }
 nullptr             { loc(); return TOK_NULLPTR; } // C++11
-operator            { loc(); return TOK_OPERATOR; }
-or                  { loc(); return TOK_OROR; }
-or_eq               { loc(); return TOK_ORASSIGN; }
-private             { loc(); return TOK_PRIVATE; }
-protected           { loc(); return TOK_PROTECTED; }
-public              { loc(); return TOK_PUBLIC; }
-register            { loc(); return TOK_REGISTER; }
-return              { loc(); return TOK_RETURN; }
-short               { loc(); return TOK_SHORT; }
-signed              { loc(); return TOK_SIGNED; }
-sizeof              { loc(); return TOK_SIZEOF; }
-static              { loc(); return TOK_STATIC; }
-static_assert       { loc(); return TOK_STATIC_ASSERT; } // C++11
-struct              { loc(); return TOK_STRUCT; }
-switch              { loc(); return TOK_SWITCH; }
-template            { loc(); return TOK_TEMPLATE; }
-this                { loc(); return TOK_THIS; }
-thread_local        { loc(); return TOK_THREAD_LOCAL; } // C++11
-throw               { loc(); return TOK_THROW; }
-try                 { loc(); return TOK_TRY; }
-typedef             { loc(); return TOK_TYPEDEF; }
-typeid              { loc(); return TOK_TYPEID; }
-typename            { loc(); return TOK_TYPENAME; }
-union               { loc(); return TOK_UNION; }
-unsigned            { loc(); return TOK_UNSIGNED; }
-using               { loc(); return TOK_USING; }
-virtual             { loc(); return TOK_VIRTUAL; }
-void                { loc(); return TOK_VOID; }
-volatile            { loc(); return TOK_VOLATILE; }
+operator            { return token(TOK_OPERATOR); }
+private             { return token(TOK_PRIVATE); }
+protected           { return token(TOK_PROTECTED); }
+public              { return token(TOK_PUBLIC); }
+register            { return token(TOK_REGISTER); }
+return              { return token(TOK_RETURN); }
+short               { return token(TOK_SHORT); }
+signed              { return token(TOK_SIGNED); }
+sizeof              { return token(TOK_SIZEOF); }
+static              { return token(TOK_STATIC); }
+static_assert       { return token(TOK_STATIC_ASSERT); } // C++11
+struct              { return token(TOK_STRUCT); }
+switch              { return token(TOK_SWITCH); }
+template            { return token(TOK_TEMPLATE); }
+this                { return token(TOK_THIS); }
+thread_local        { return token(TOK_THREAD_LOCAL); } // C++11
+throw               { return token(TOK_THROW); }
+try                 { return token(TOK_TRY); }
+typedef             { return token(TOK_TYPEDEF); }
+typeid              { return token(TOK_TYPEID); }
+typename            { return token(TOK_TYPENAME); }
+union               { return token(TOK_UNION); }
+unsigned            { return token(TOK_UNSIGNED); }
+using               { return token(TOK_USING); }
+virtual             { return token(TOK_VIRTUAL); }
+void                { return token(TOK_VOID); }
+volatile            { return token(TOK_VOLATILE); }
+
 wchar_t	            { loc(); return TOK_WCHAR_T; }
-while               { loc(); return TOK_WHILE; }
+while               { return token(TOK_WHILE); }
 __CPROVER_thread_local { loc(); return TOK_THREAD_LOCAL; }
-bitand              { loc(); return '&'; }
-bitor               { loc(); return '|'; }
-compl               { loc(); return '~'; }
-xor	                { loc(); return '^'; }
-xor_eq              { loc(); return TOK_XORASSIGN; }
 
 %{
 /* a huge batch of MS extensions
    http://msdn.microsoft.com/en-us/library/ms177194(v=vs.80).aspx */
 %}
 
-"__has_assign"      { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_copy"        { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_finalizer"   { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_nothrow_assign" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_nothrow_constructor" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_nothrow_copy" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_trivial_assign" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_trivial_constructor" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_trivial_copy" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_trivial_destructor" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_user_destructor" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__has_virtual_destructor" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_abstract"     { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_base_of"      { loc(); return MSC_Keyword(TOK_MSC_BINARY_TYPE_PREDICATE); }
-"__is_class"        { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_convertible_to" { loc(); return MSC_Keyword(TOK_MSC_BINARY_TYPE_PREDICATE); }
-"__is_delegate"     { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_empty"        { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_enum"         { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_interface_class" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_pod"          { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_polymorphic"  { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_ref_array"    { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_ref_class"    { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_sealed"       { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_simple_value_class" { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_union"        { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
-"__is_value_class"  { loc(); return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_assign"      { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_copy"        { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_finalizer"   { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_nothrow_assign" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_nothrow_constructor" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_nothrow_copy" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_trivial_assign" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_trivial_constructor" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_trivial_copy" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_trivial_destructor" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_user_destructor" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__has_virtual_destructor" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_abstract"     { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_base_of"      { return MSC_Keyword(TOK_MSC_BINARY_TYPE_PREDICATE); }
+"__is_class"        { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_convertible_to" { return MSC_Keyword(TOK_MSC_BINARY_TYPE_PREDICATE); }
+"__is_delegate"     { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_empty"        { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_enum"         { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_interface_class" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_pod"          { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_polymorphic"  { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_ref_array"    { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_ref_class"    { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_sealed"       { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_simple_value_class" { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_union"        { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
+"__is_value_class"  { return MSC_Keyword(TOK_MSC_UNARY_TYPE_PREDICATE); }
 
-{identifier}        { loc();
-                      return TOK_IDENTIFIER; // or TYPDEFname
-                    }
+"and"               { return token(TOK_ANDAND); }
+"bitand"            { return token('&'); }
+"and_eq"            { return token(TOK_ANDASSIGN); }
+"or"                { return token(TOK_OROR); }
+"bitor"             { return token('|'); }
+"or_eq"             { return token(TOK_ORASSIGN); }
+"xor"               { return token('^'); }
+"xor_eq"            { return token(TOK_XORASSIGN); }
+"not"               { return token('!'); }
+"not_eq"            { return token(TOK_NE); }
+"compl"             { return token('~'); }
+
+{identifier}        { return make_identifier(); }
 
 {decimal_constant}  { loc();
                       convert_integer_literal(yytext, PARSER.current_token().data, 10);
@@ -424,7 +469,7 @@ xor_eq              { loc(); return TOK_XORASSIGN; }
 "|="                { loc(); return TOK_ORASSIGN; }
 "..."               { loc(); return TOK_ELLIPSIS; }
 
-.                   { yycpperror("unknown character"); }
+.                   { return token(yytext[0]); }
 }
 
 %%
