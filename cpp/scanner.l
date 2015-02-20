@@ -31,6 +31,7 @@ static int isatty(int) { return 0; }
 #include "tokens.h"
 
 void set_line_no();
+int yycpperror(const std::string &error);
 
 %}
 
@@ -433,4 +434,10 @@ int yywrap() { return 1; }
 void set_line_no()
 {
   preprocessor_line(yytext, PARSER.line_no, PARSER.filename);
+}
+
+int yycpperror(const std::string &error)
+{
+  cpp_parser.parse_error(error, yycpptext);
+  return error.size()+1;
 }
