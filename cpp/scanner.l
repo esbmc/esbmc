@@ -232,9 +232,9 @@ __inline__          { return token(TOK_INLINE); }
 __interface         { return MSC_Keyword(TOK_INTERFACE); }
 __forceinline       { return MSC_Keyword(TOK_INLINE); }
 __noreturn__        { /* ignore */ }
-restrict            { /* ignore */ }
-__restrict__        { /* ignroe */ }
-__restrict          { /* ignore */ }
+restrict            { return token(TOK_RESTRICT); }
+__restrict__        { return token(TOK_RESTRICT); }
+__restrict          { return token(TOK_RESTRICT); }
 __stdcall           { return MSC_Keyword(TOK_STDCALL); }
 __fastcall          { return MSC_Keyword(TOK_FASTCALL); }
 __clrcall           { return MSC_Keyword(TOK_CLRCALL); }
