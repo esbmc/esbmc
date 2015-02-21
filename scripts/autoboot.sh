@@ -5,9 +5,9 @@ if test ! -e .git; then
   exit 1
 fi
 
-aclocal -I scripts/build-aux/m4
-
 libtoolize
+
+aclocal -I scripts/build-aux/m4
 
 automake --add-missing --foreign
 

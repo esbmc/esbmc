@@ -5,12 +5,13 @@
 
 AC_INIT([ESBMC], [1.23.99], [esbmc@ecs.soton.ac.uk])
 AC_DEFINE([ESBMC_VERSION], ["1.23.99"], [ESBMC version number])
+dnl Numerous things croak unless we do this immediately:
+AC_CONFIG_AUX_DIR([scripts/build-aux])
+AC_CONFIG_MACRO_DIR([scripts/build-aux/m4])
 
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADER(ac_config.h:scripts/ac_config.in)
-AC_CONFIG_AUX_DIR([scripts/build-aux])
 AM_INIT_AUTOMAKE([1.13 -Wall -Werror foreign])
-AC_CONFIG_MACRO_DIR([scripts/build-aux/m4])
 
 AC_PROG_CC(clang gcc)
 AC_PROG_CXX(clang++ g++)
@@ -27,6 +28,7 @@ AM_PROG_AR
 AM_PROG_LEX
 
 LT_INIT
+LTDL_INIT
 
 AC_LANG(C++)
 
@@ -34,6 +36,14 @@ AC_CHECK_LIB([m], [fabs])
 AC_CHECK_LIB([rt], [timer_create],
     [AS_VAR_APPEND(LIBS, " -lrt ")], [], []
 )
+
+AC_CHECK_LIB([gomp], [omp_get_num_threads],
+             [AS_VAR_APPEND(LIBS, " -lgomp ")],
+             [AC_MSG_WARN([No libgomp found: Z3 may want this])], [])
+
+AC_CHECK_LIB([gmp], [__gmpz_cmp],
+             [AS_VAR_APPEND(LIBS, " -lgmp ")],
+             [AC_MSG_WARN([No libgmp found: various solvers require it])], [])
 
 AS_VAR_APPEND(CPPFLAGS, " -I /usr/include/eigen3")
 AS_VAR_APPEND(CXXFLAGS, " -I /usr/include/eigen3")
@@ -178,7 +188,10 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     AS_IF([test $alreadydone = "no"], [
 
     esbmc_check_solver_old_libs=$LIBS
-    AS_VAR_APPEND(LIBS, " [-L]path/libdir -l$4 ")
+    # Prepend library to LIBS -- this is because the link ordering is important,
+    # and the library might depend on previously detected libraries already in
+    # LIBS
+    LIBS="[-L]path/libdir -l$4 $LIBS"
     # Indirectly call local-config macro
     indir($8, path)
     AC_CHECK_LIB($4, $5, [
@@ -242,6 +255,21 @@ m4_define(ESBMC_OPTIONAL_SOLVER, [
   ])
 
 m4_define(esbmc_all_solvers, [z3, boolector, yices, cvc4, mathsat])
+m4_foreach(thesolver, [esbmc_all_solvers], [
+  AC_ARG_ENABLE(thesolver,
+              [AS_HELP_STRING([--disable-thesolver], Disable thesolver solver)])
+  AS_IF([test "x$[enable_]thesolver" = "xno"], [
+           AS_VAR_SET([esbmc_disable_solver_]thesolver, "yes")
+        ])
+  ])
+
+dnl Define all of these to be not enabled by default
+m4_foreach(thesolver, [esbmc_all_solvers], [
+  m4_define([str], [ESBMC_ENABLE_])
+  m4_append([str], thesolver)
+  AC_SUBST([str], 0)
+  undefine([str])
+])
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
 m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
@@ -295,15 +323,27 @@ m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
 esbmc_list_of_solvers="smtlib";
 esbmc_list_of_backends="./smtlib/libsmtlib.la ";
 
+AS_IF([test "$esbmc_disable_solver_z3" != "yes"], [
 ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_context, include, [z3_possible_libdirs], $$ESBMC_NOOP_CONFIG)
-ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, boolector, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
-ESBMC_OPTIONAL_SOLVER([yices_possible_locs], [yices_build_headers], yices, yices, yices_init, include, [yices_possible_libdirs], $$ESBMC_YICES_EXTRA_CONFIG)
+])
 
+AS_IF([test "$esbmc_disable_solver_boolector" != "yes"], [
+ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, boolector, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
+])
+
+AS_IF([test "$esbmc_disable_solver_yices" != "yes"], [
+ESBMC_OPTIONAL_SOLVER([yices_possible_locs], [yices_build_headers], yices, yices, yices_init, include, [yices_possible_libdirs], $$ESBMC_YICES_EXTRA_CONFIG)
+])
+
+AS_IF([test "$esbmc_disable_solver_cvc4" != "yes"], [
 dnl NB: this checks for 'sleep' in libcvc4 (which resolves) because autoconf
 dnl does not enjoy the idea of testing for C++ / mangled symbols
 ESBMC_OPTIONAL_SOLVER([cvc4_possible_locs], [cvc4_build_headers], cvc4, cvc4, sleep, include, [cvc4_possible_libdirs], $$ESBMC_NOOP_CONFIG)
+])
 
+AS_IF([test "$esbmc_disable_solver_mathsat" != "yes"], [
 ESBMC_OPTIONAL_SOLVER([mathsat_possible_locs], [mathsat_build_headers], mathsat, mathsat, msat_create_config, include, [mathsat_possible_libdirs], $$ESBMC_NOOP_CONFIG)
+])
 
 dnl Temporarily, while things remain unconfigured
 AC_SUBST([ESBMC_ENABLE_minisat], 0)

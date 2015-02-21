@@ -20,3 +20,4 @@ libtool
 ac_config.h*
 *.a
 stamp-h1
+libltdl
