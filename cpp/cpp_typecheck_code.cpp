@@ -129,11 +129,30 @@ void cpp_typecheckt::typecheck_catch(codet &code)
       it++)
   {
     code_blockt &block=to_code_block(to_code(*it));
+
+    const code_blockt &code_block = to_code_block(block);
+    assert(code_block.operands().size() >= 1);
+
+    // Remove reference from catch parameter
+    {
+      const codet &first_instruction = to_code(code_block.op0());
+      assert(first_instruction.get_statement() == "decl");
+
+      const code_declt &code_decl = to_code_decl(first_instruction);
+
+      const cpp_declarationt &cpp_declaration =
+          to_cpp_declaration(code_decl.op0());
+      assert(cpp_declaration.declarators().size() == 1);
+
+      const cpp_declaratort &declarator =
+          cpp_declaration.declarators().front();
+      if (is_reference(declarator.type()))
+        declarator.type() = declarator.type().subtype();
+    }
+
     typecheck_code(block);
 
-    const code_blockt &code_block=to_code_block(block);
-    assert(code_block.operands().size()>=1);
-
+    // After the typecheck, the reference are now invalid, so let's get them again
     const codet &first_instruction=to_code(code_block.op0());
     assert(first_instruction.get_statement()=="decl");
 
@@ -529,7 +548,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
       if(symbol.value.id()=="code")
         new_code.copy_to_operands(symbol.value);
     }
-    else if(!declarator.find("name").get_bool("catch_decl"))
+    else
     {
       exprt object_expr=cpp_symbol_expr(symbol);
 
