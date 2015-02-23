@@ -51,11 +51,11 @@ public:
 		it.it_size = this->_size;
 		return it;
 	}
-    void push_back ( const T& x ){
+	void push_back ( const T& x ){
 
 	}
+	};
 };
-
 
 
 int main ()
