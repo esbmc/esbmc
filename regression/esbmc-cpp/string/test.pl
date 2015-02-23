@@ -9,6 +9,7 @@ use strict;
 no warnings;
 use XML::LibXML;
 use vars qw(%tags);
+use Time::HiRes qw(tv_interval gettimeofday);
 
 #------------------------------------------------------
 # Generate the xml file with result the tests 
@@ -26,7 +27,7 @@ $root->appendChild($second_root);
 
 my $llvm = 0;
 my $testdesc = "test.desc";
-
+my $failures = 0;
 
 # ---------------------------------------
 # run esbmc
@@ -46,9 +47,12 @@ sub run($$$) {
 		$cmd = "llbmc $input $options >$output 2>&1";
 	}
 	
+	
 	print LOG "Running $cmd\n";
-
+	
+	my $tv = [gettimeofday()];
 	system $cmd;
+	my $elapsed = tv_interval($tv);	
 
 	my $exit_value = $? >> 8;
 	my $signal_num = $? & 127;
@@ -83,7 +87,7 @@ sub run($$$) {
 	system "echo EXIT=$exit_value >>$output";
 	system "echo SIGNAL=$signal_num >>$output";
 
-	return $failed;
+	return ($failed, $elapsed);
 }
 
 
@@ -170,7 +174,8 @@ sub test($$) {
 	}
 	
 
-	my $failed = run($input, $options, $output);
+	my ($failed, $elapsed);
+	($failed, $elapsed) = run($input, $options, $output);
 
 	if(!$failed) {
 		# for XML file
@@ -379,7 +384,17 @@ sub test($$) {
 	
 	#------------------------------------------------------
 	
-	return $failed;
+	chdir "..";
+
+	#count fails
+	if($failed) {
+		$failures++;
+		print "  [FAILED]";
+	} else {
+		print "  [OK]";
+	}
+
+	printf(" (%.2f seconds)\n", $elapsed);
 }
 
 sub dirs() {
@@ -438,26 +453,21 @@ if($count == 1) {
 }
 
 print "\n";
-my $failures = 0;
 print "Running tests\n";
+
+my $tv = [gettimeofday()];
 foreach my $test (@tests) {		
 	
 	print "  Running $test";
 
 	chdir $test;
-					# PATH, file.desc
-	my $failed = test($test, $testdesc);
-	#
-	chdir "..";
 
-	#count fails
-	if($failed) {
-		$failures++;
-		print "  [FAILED]\n";
-	} else {
-		print "  [OK]\n";
-	}
+
+	test($test, $testdesc);
 }
+
+my $elapsed = tv_interval($tv);
+printf("\n  Duration: %.2f seconds\n", $elapsed);
 print "\n";
 
 if($failures == 0) {
