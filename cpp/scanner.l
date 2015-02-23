@@ -78,46 +78,54 @@ static inline int MSC_Keyword(int x)
 
 %}
 
-identifier [a-zA-Z_$][0-9a-zA-Z_$]*
-
-
+delimiter       [ \t\b\r]
+newline         [\n\f\v]|"\\\n"
+whitespace      {delimiter}+
+ws              {delimiter}*
+ucletter	[A-Z]
+lcletter	[a-z]
+letter		({ucletter}|{lcletter})
 digit		[0-9]
 bindigit	[01]
 octdigit	[0-7]
 hexdigit	[0-9a-fA-F]
+identifier	(({letter}|"_"|"$")({letter}|{digit}|"_"|"$")*)
 integer		{digit}+
+binary		{bindigit}+
+msiw_suffix     ([iI]("8"|"16"|"32"|"64"|"128"))
+int_suffix      [uUlLiIjJ]*|[uU]?{msiw_suffix}
+bininteger	"0"[bB]{bindigit}+{int_suffix}
+decinteger	[1-9]({digit}|"'")*{int_suffix}
+octinteger	"0"({octdigit}|"'")*{int_suffix}
+hexinteger	"0"[xX]{hexdigit}({hexdigit}|"'")*{int_suffix}
+integer_s       {decinteger}|{bininteger}|{octinteger}|{hexinteger}
+octchar		"\\"{octdigit}{1,3}
+hexchar		"\\x"{hexdigit}+
 exponent	[eE][+-]?{integer}
 fraction	{integer}
-
 float1		{integer}"."{fraction}?({exponent})?
 float2		"."{fraction}({exponent})?
 float3		{integer}{exponent}
 hexfloat1       "0"[xX]{hexdigit}+"."{hexdigit}+[pP][+-]?{integer}
 hexfloat2       "0"[xX]{hexdigit}+"."[pP][+-]?{integer}
 hexfloat3       "0"[xX]{hexdigit}+[pP][+-]?{integer}
+float_suffix    [fFlLiIjJ]*
+gcc_ext_float_suffix    [wWqQ]|[dD][fFdDlL]?
 float		{float1}|{float2}|{float3}|{hexfloat1}|{hexfloat2}|{hexfloat3}
-float_f		{float}[fF]|{integer}[fF]
-float_l		{float}[lL]
+float_s         {float}{float_suffix}|{integer}[fF]
+gcc_ext_float_s         {float}{gcc_ext_float_suffix}
+bitvector	{binary}[bB]
+bitvector_u	{binary}([uU][bB]|[bB][uU])
+cppstart	{ws}"#"{ws}
+cpplineno	{cppstart}"line"*{ws}{integer}{ws}.*{newline}
+cppdirective	{cppstart}.*
 
-floating_constant {float}|{float_f}|{float_l}
-
-integer_suffix [uUlL]
-iw_suffix       ("i8"|"i16"|"i32"|"i64"|"i128")
-integer_suffix_opt {integer_suffix}*{iw_suffix}?
-decimal_constant [1-9][0-9]*{integer_suffix_opt}
-octal_constant "0"[0-7]*{integer_suffix_opt}
-hex_constant "0"[xX][0-9a-fA-F]+{integer_suffix_opt}
-
-simple_escape [abfnrtv'"?\\]
-octal_escape  [0-7]{1,3}
-hex_escape "x"[0-9a-fA-F]+
-
-escape_sequence [\\]({simple_escape}|{octal_escape}|{hex_escape})
+escape_sequence [\\][^\n]
 c_char [^'\\\n]|{escape_sequence}
 s_char [^"\\\n]|{escape_sequence}
 
-char_lit    "L"?[']{c_char}+[']
-string_lit  "L"?["]{s_char}*["]
+char_lit        ("L"|"u"|"U")?[']{c_char}+[']
+string_lit      ("L"|"u"|"U"|"u8")?["]{s_char}*["]
 
 h_tab [\011]
 form_feed [\014]
@@ -125,12 +133,6 @@ v_tab [\013]
 c_return [\015]
 
 horizontal_white [ ]|{h_tab}
-ws {horizontal_white}*
-newline         [\n\f\v]|"\\\n"
-ws_or_newline ({horizontal_white}|{newline})*
-
-cppfile         "\""[ !#-~]*"\""
-cpplineno       "#"{horizontal_white}*"line"*{horizontal_white}*{integer}.*"\n"
 pragma          "#"{horizontal_white}*pragma{horizontal_white}.*"\n"
 
 %%
@@ -375,22 +377,12 @@ __CPROVER_thread_local { loc(); return TOK_THREAD_LOCAL; }
 
 {identifier}        { return make_identifier(); }
 
-{decimal_constant}  { loc();
+{integer_s}  { loc();
                       convert_integer_literal(yytext, PARSER.current_token().data, 10);
                       return TOK_INTEGER;
                     }
 
-{octal_constant}    { loc();
-                      convert_integer_literal(yytext, PARSER.current_token().data, 8);
-                      return TOK_INTEGER;
-                    }
-
-{hex_constant}      { loc();
-                      convert_integer_literal(yytext, PARSER.current_token().data, 16);
-                      return TOK_INTEGER;
-                    }
-
-{floating_constant} {
+{float_s}           {
                       loc();
                       convert_float_literal(yytext, PARSER.current_token().data);
                       return TOK_FLOATING;
