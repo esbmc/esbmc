@@ -593,7 +593,7 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
     if(is_code && declarator.type().id()!="template")
       cpp_typecheck.add_function_body(new_symbol);
 
-    if(!is_code)
+    if(!is_code && !declarator.find("name").get_bool("catch_decl"))
       cpp_typecheck.convert_initializer(*new_symbol);
   }
 
