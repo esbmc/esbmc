@@ -5676,7 +5676,7 @@ bool Parser::rStatement(codet &statement)
     if(lex->GetToken(tk3)!=';')
       return false;
 
-    statement.destination(tk2.data.get("base_name"));
+    statement.destination(tk2.data.get("#base_name"));
 
     return true;
 
@@ -5744,7 +5744,7 @@ bool Parser::rStatement(codet &statement)
 
       statement=codet("label");
       set_location(statement, tk1);
-      statement.set("label", tk1.data.get("base_name"));
+      statement.set("label", tk1.data.get("#base_name"));
 
       lex->GetToken(tk2);
 
