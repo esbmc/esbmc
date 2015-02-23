@@ -4,7 +4,7 @@ echo ""
 echo "Script LLBMC Started:" $(date +"%T")
 echo ""
 
-MODULES="esbmc-algorithm esbmc-cpp esbmc-deque esbmc-inheritance esbmc-list esbmc-queue esbmc-stack esbmc-stream esbmc-string esbmc-try_catch esbmc-vector"
+MODULES="algorithm cpp deque inheritance list queue stack stream string try_catch vector"
 
 for module in $MODULES; do
   echo "============================== "
