@@ -26,6 +26,9 @@ AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
 
 AX_BOOST_BASE(1.47, [], [AC_MSG_ERROR([Cannot find boost base dir, please pass it in --with-boost argument or set BOOST_ROOT])])
 
+AS_VAR_APPEND(CPPFLAGS, "$BOOST_CPPFLAGS")
+AS_VAR_APPEND(LDFLAGS, "$BOOST_LDFLAGS")
+
 AM_PROG_AR
 AM_PROG_LEX
 
