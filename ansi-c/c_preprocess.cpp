@@ -139,7 +139,7 @@ static const char *cpp_normal_defs[] = {
 // mingw sched/pthread headers choke and die upon this.
 // Mac's attempt to spam inline assembly everywhere if this is defined, to
 // alias some deprecated function symbols
-#if !defined(__WIN32__) && !defined(ONAMAC)
+#if !defined(__WIN32__) && !defined(__APPLE__)
 "_POSIX_C_SOURCE=200112L",
 #endif
 "__GNUC__",
@@ -168,7 +168,7 @@ static const char *cpp_linux_defs[] = {
 NULL
 };
 
-#ifdef ONAMAC
+#ifdef __APPLE__
 static const char *cpp_mac_defs[] = {
 "__APPLE__",
 "__GNUC__",
@@ -285,7 +285,7 @@ bool c_preprocess(
 
 
   const char **defs;
-#ifdef ONAMAC
+#ifdef __APPLE__
   defs = cpp_mac_defs;
 #else
   defs = cpp_linux_defs;
