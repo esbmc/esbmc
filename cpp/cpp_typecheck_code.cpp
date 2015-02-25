@@ -179,21 +179,6 @@ void cpp_typecheckt::typecheck_ifthenelse(codet &code)
     c_typecheck_baset::typecheck_ifthenelse(code);
 }
 
-
-void cpp_typecheckt::recursive_cpp_name(exprt &code)
-{
-	if (code.id() == "cpp-name")
-	{
-		typecheck_expr_cpp_name(code, cpp_typecheck_fargst());
-	}
-//	else if (code.has_operands() && ((code.id() == "code") || (code.id() == "=")))
-	else if (code.has_operands())
-	{
-		Forall_operands(it, code)
-		    recursive_cpp_name(*it);
-	}
-}
-
 /*******************************************************************\
 
 Function: cpp_typecheckt::typecheck_while
