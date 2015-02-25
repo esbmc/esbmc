@@ -3532,6 +3532,7 @@ void goto_convertt::replace_ifthenelse(
 
   // We only transform the condition if all the variables are not touched during
   // the loop
+#if 0
   if(expr.operands().size()==2)
   {
     exprt::operandst::iterator it = expr.operands().begin();
@@ -3550,6 +3551,7 @@ void goto_convertt::replace_ifthenelse(
         }
     }
   }
+#endif
 
 
   if (expr.operands().size()==0 || expr.operands().size() == 1)
