@@ -180,8 +180,15 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ~
 
-The ESBMC code base that are not covered by the licenses above are covered by
-the terms of the Apache license 2.0.
+The ESBMC code base, our own code and our modifications to the CBMC code base,
+are distributed under the terms of the Apache license 2.0, below. A list of
+copyright holders:
+
+  Lucas Corderio
+  Jeremy Morse
+  Bernd Fischer
+  Mikhail Ramalho
+  The University of Southampton
 
 ---------------8<---------------
 
