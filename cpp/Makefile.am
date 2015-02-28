@@ -1,3 +1,4 @@
+SUBDIRS = library
 noinst_LTLIBRARIES = libcxxscanner.la libcxx.la
 
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
