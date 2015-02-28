@@ -26,6 +26,7 @@ mkdir $TARDIR
 git archive -o $tmpfile HEAD
 tar -xf $tmpfile -C $TARDIR
 rm $tmpfile
+cp -r scripts/debian $TARDIR
 
 # Ahem
 mkdir $TARDIR/.git
