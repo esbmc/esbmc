@@ -319,6 +319,9 @@ protected:
     const irep_idt &mode,
     code_typet::argumentt &argument);
 
+  bool has_incomplete_args(
+    cpp_template_args_tct template_args_tc);
+
   //
   // Misc
   //
@@ -343,7 +346,7 @@ protected:
 
   void default_dtor(const symbolt& symb, cpp_declarationt& dtor);
 
-  codet dtor(const symbolt &symb);
+  void dtor(const symbolt &symb, code_blockt& vtables, code_blockt& dtors);
 
   void check_member_initializers(
     const irept &bases,
@@ -509,7 +512,6 @@ protected:
   virtual void typecheck_block(codet &code);
   virtual void typecheck_ifthenelse(codet &code);
   virtual void typecheck_while(codet &code);
-  virtual void recursive_cpp_name(exprt &code);
   virtual void typecheck_switch(codet &code);
 
   const struct_typet &this_struct_type();

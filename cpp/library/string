@@ -20,7 +20,7 @@ size_t npos;
 
 namespace std {
 
-template<class charT> struct char_traits;
+template<class charT> struct char_traits { };
 
 class string {
 public:

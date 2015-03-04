@@ -48,8 +48,6 @@ void symbolt::show(std::ostream &out) const
   if(lvalue)          out << " lvalue";
   if(static_lifetime) out << " static_lifetime";
   if(file_local)      out << " file_local";
-  if(theorem)         out << " theorem";
-  if(axiom)           out << " axiom";
   if(is_type)         out << " type";
   if(is_extern)       out << " extern";
   if(is_input)        out << " input";
@@ -65,15 +63,6 @@ void symbolt::show(std::ostream &out) const
   if(pretty_name!="") out << " pretty_name=" << pretty_name;
   out << std::endl;
   out << "  location: " << location << std::endl;
-
-  out << "  hierarchy:";
-
-  for(std::list<irep_idt>::const_iterator it=hierarchy.begin();
-      it!=hierarchy.end();
-      it++)
-    out << " " << *it;
-
-  out << std::endl;
   out << std::endl;
 }
 
@@ -121,8 +110,6 @@ void symbolt::to_irep(irept &dest) const
   dest.pretty_name(pretty_name);
   dest.ordering(ordering);
 
-  if (theorem) dest.theorem(true);
-  if (axiom) dest.axiom(true);
   if (is_type) dest.is_type(true);
   if (is_macro) dest.is_macro(true);
   if (is_exported) dest.is_exported(true);
@@ -164,8 +151,6 @@ void symbolt::from_irep(const irept &src)
   pretty_name=src.pretty_name();
   ordering=atoi(src.ordering().c_str());
 
-  theorem=src.theorem();
-  axiom=src.axiom();
   is_type=src.is_type();
   is_macro=src.is_macro();
   is_exported=src.is_exported();

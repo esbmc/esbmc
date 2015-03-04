@@ -538,8 +538,6 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
         }
       }
     }
-    else
-      symbol.theorem=true;
   }
 
   if(symbol.static_lifetime)
@@ -656,9 +654,9 @@ Function: cpp_declarator_convertert::operator_overloading_rules
 \*******************************************************************/
 
 void cpp_declarator_convertert::operator_overloading_rules(
-  const symbolt &symbol)
+  const symbolt &symbol __attribute__((unused)))
 {
-
+  // TODO
 }
 
 /*******************************************************************\

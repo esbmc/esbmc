@@ -1417,7 +1417,7 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
          full_template_args_tc)
       {
         matches.push_back(matcht(
-          guessed_template_args, full_template_args_tc, id));
+          guessed_template_args, partial_specialization_args_tc, id));
       }
     }
   }
@@ -1440,6 +1440,52 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
   #endif
 
   const matcht &match=*matches.begin();
+
+  // Let's check if there is more than one 0 distance match
+  // This may happen when there is an template specialization on,
+  // for example, char and signed_char
+  // To solve that, we'll rely on the #cpp_type field, which keeps
+  // the original type name
+
+  std::vector<matcht> zero_distance_matches;
+
+  // Lambda expression to insert on the zero_distance_matches if
+  // the cost of each element is zero
+  std::copy_if(matches.begin(), matches.end(),
+    std::back_inserter(zero_distance_matches), [](matcht const& match)
+    {
+      return match.cost==0;
+    });
+
+  // Check if there was more than one hit
+  if (zero_distance_matches.size() > 1)
+  {
+    auto new_end = std::remove_if(zero_distance_matches.begin(),
+      zero_distance_matches.end(), [&full_template_args_tc](matcht const& match)
+      {
+        // This should be replaced by a clean std::remove_if...
+        for (unsigned i = 0; i < full_template_args_tc.arguments().size(); ++i)
+        {
+          irept full_args_cpp = match.full_args.arguments()[i].type().find(
+            "#cpp_type");
+          irept full_template_args_cpp =
+            full_template_args_tc.arguments()[i].type().find("#cpp_type");
+
+          // If we cannot get the #cpp_type or if they are different, we remove it
+          // from the vector
+          if (!(full_args_cpp != irept() && full_template_args_cpp != irept()
+              && full_args_cpp == full_template_args_cpp))
+            return true;
+        }
+
+        return false;
+      });
+
+    zero_distance_matches.erase(new_end, zero_distance_matches.end());
+
+    if(zero_distance_matches.size() == 1)
+      match = zero_distance_matches.at(0);
+  }
 
   const symbolt &choice=
     cpp_typecheck.lookup(match.id);
@@ -1968,7 +2014,54 @@ exprt cpp_typecheck_resolvet::resolve(
     }
   }
 
+  check_incomplete_template_class(result, want);
+
   return result;
+}
+
+void cpp_typecheck_resolvet::check_incomplete_template_class(exprt result, wantt want)
+{
+  // Check if the type is complete. The template might have been forward
+  // declared so ESBMC didn't instantiated it.
+  if (want != TYPE)
+    return;
+
+  const typet &t = result.type();
+
+  if (t.identifier() == irep_idt())
+    return;
+
+  if (cpp_typecheck.context.symbols.find(t.identifier())
+    != cpp_typecheck.context.symbols.end())
+  {
+    symbolt &sym =
+      cpp_typecheck.context.symbols.find(t.identifier())->second;
+
+    // It is a template and it wasn't instantiated?
+    if (sym.type.id() == "incomplete_struct"
+      && sym.type.find("#template").is_not_nil())
+    {
+      exprt template_expr = static_cast<const exprt&>(sym.type.find(
+        "#template"));
+
+      if (cpp_typecheck.context.symbols.find(template_expr.id())
+        != cpp_typecheck.context.symbols.end())
+      {
+        symbolt &template_sym = cpp_typecheck.context.symbols.find(
+          template_expr.id())->second;
+
+        // If it is nil, it was forward declared, when it got a body,
+        // we'll instantiate it
+        if (template_sym.type.type().body().is_not_nil())
+        {
+          cpp_template_args_tct instantiated_args = to_cpp_template_args_tc(
+            sym.type.find("#template_arguments"));
+          cpp_typecheck.instantiate_template(location, template_sym,
+            instantiated_args, instantiated_args);
+        }
+      }
+    }
+  }
 }
 
 /*******************************************************************\
@@ -2580,26 +2673,45 @@ void cpp_typecheck_resolvet::apply_template_args(
     if(!code_type.arguments().empty() &&
         code_type.arguments()[0].cmt_base_name()=="this")
     {
+      const symbolt type_symb;
+
       // do we have an object?
       if(fargs.has_object)
-      {
-        const symbolt &type_symb =
-          cpp_typecheck.lookup(fargs.operands.begin()->type().identifier());
+        type_symb = cpp_typecheck.lookup(fargs.operands.begin()->type().identifier());
+      else
+        type_symb = cpp_typecheck.lookup(original_scope->class_identifier);
 
-        assert(type_symb.type.id()=="struct");
+      assert(type_symb.type.id()=="struct");
 
-        const struct_typet &struct_type=
+      const struct_typet &struct_type=
           to_struct_type(type_symb.type);
 
-        assert(struct_type.has_component(new_symbol.name));
-        member_exprt member(code_type);
-        member.set_component_name(new_symbol.name);
+      assert(struct_type.has_component(new_symbol.name));
+      member_exprt member(code_type);
+      member.set_component_name(new_symbol.name);
+      if(fargs.has_object)
         member.struct_op()=*fargs.operands.begin();
-        member.location()=location;
-        expr.swap(member);
-        return;
-      }
+      else
+      {
+        // Add (this) as argument of the function
+        const exprt &this_expr=
+          original_scope->this_expr;
 
+        // use this->...
+        assert(this_expr.type().id()=="pointer");
+
+        exprt object=exprt("dereference", this_expr.type().subtype());
+        object.copy_to_operands(this_expr);
+        object.type().set("#constant",
+          this_expr.type().subtype().cmt_constant());
+        object.set("#lvalue",true);
+        object.location()=location;
+
+        member.struct_op()=object;
+      }
+      member.location()=location;
+      expr.swap(member);
+      return;
     }
 
     expr=cpp_symbol_expr(new_symbol);

@@ -1254,7 +1254,7 @@ Function: dtor
 
 \*******************************************************************/
 
-codet cpp_typecheckt::dtor(const symbolt &symb)
+void cpp_typecheckt::dtor(const symbolt &symb, code_blockt &vtables, code_blockt &dtors)
 {
   assert(symb.type.id() == "struct");
 
@@ -1263,8 +1263,6 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
   location.set_function(
     id2string(symb.base_name)+
     "::~"+id2string(symb.base_name)+"()");
-
-  code_blockt block;
 
   const struct_typet::componentst &components =
     to_struct_type(symb.type).components();
@@ -1302,10 +1300,12 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
       ptrmember.operands().push_back(exprt("cpp-this"));
 
       code_assignt assign(ptrmember, address);
-      block.operands().push_back(assign);
+      vtables.operands().push_back(assign);
       continue;
     }
   }
+
+  code_blockt block;
 
   // call the data member destructors in the reverse order
   for(struct_typet::componentst::const_reverse_iterator
@@ -1365,5 +1365,5 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
       block.move_to_operands(dtor_code);
   }
 
-  return block;
+  dtors = block;
 }

@@ -12,6 +12,7 @@
 
 #include "iostream"
 #include "utility"
+#include "string"
 
 namespace std {
 template<class Category, class T, class Distance = ptrdiff_t,
@@ -24,8 +25,6 @@ public:
 	typedef Reference reference;
 	typedef Category iterator_category;
 };
-
-template<class charT> struct char_traits;
 
 ///  Marking input iterators.
 class input_iterator_tag { };

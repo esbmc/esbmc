@@ -1,20 +1,20 @@
 # Directories
-algorithm := esbmc-algorithm
-cpp := esbmc-cpp
-inheritance := esbmc-inheritance
-stream := esbmc-stream
-string := esbmc-string
-trycatch := esbmc-try_catch
-vector := esbmc-vector
-deque := esbmc-deque
-list := esbmc-list
-stack := esbmc-stack
-queue := esbmc-queue
-priority_queue := esbmc-priority_queue
-map := esbmc-map
-set := esbmc-set
-multimap := esbmc-multimap
-multiset := esbmc-multiset
+algorithm := algorithm
+cpp := cpp
+inheritance := inheritance
+stream := stream
+string := string
+trycatch := try_catch
+vector := vector
+deque := deque
+list := list
+stack := stack
+queue := queue
+priority_queue := priority_queue
+map := map
+set := set
+multimap := multimap
+multiset := multiset
 
 # Clean
 ifneq ($(filter clean,$(MAKECMDGOALS)),)

@@ -32,13 +32,10 @@ public:
     return pretty_name==""?name:pretty_name;
   }
 
-  typedef std::list<irep_idt> hierarchyt;
-  hierarchyt hierarchy;
-
   unsigned ordering;
 
   // global use
-  bool theorem, axiom, is_type, is_macro, is_exported,
+  bool is_type, is_macro, is_exported,
        is_input, is_output, is_statevar;
 
   // PVS
@@ -56,8 +53,8 @@ public:
   {
     value.make_nil();
     location.make_nil();
-    theorem=lvalue=static_lifetime=file_local=is_extern=
-    axiom=free_var=
+    lvalue=static_lifetime=file_local=is_extern=
+    free_var=
     is_type=is_actual=is_macro=is_exported=binding=
     is_volatile=is_input=is_output=is_statevar=false;
     ordering=0;
@@ -80,8 +77,6 @@ public:
     #define SYM_SWAP2(x) std::swap(x, b.x)
 
     SYM_SWAP2(ordering);
-    SYM_SWAP2(theorem);
-    SYM_SWAP2(axiom);
     SYM_SWAP2(is_type);
     SYM_SWAP2(is_macro);
     SYM_SWAP2(is_exported);

@@ -253,6 +253,34 @@ cpp_typecheckt::handle_recursive_template_instance(
   return NULL;
 }
 
+bool cpp_typecheckt::has_incomplete_args(
+  cpp_template_args_tct template_args_tc)
+{
+  const cpp_template_args_tct::argumentst &_arguments =
+    template_args_tc.arguments();
+
+  for (cpp_template_args_tct::argumentst::const_iterator it =
+    _arguments.begin(); it != _arguments.end(); it++)
+  {
+    const typet& e = it->type();
+    if (context.symbols.find(e.identifier())
+      != context.symbols.end())
+    {
+      symbolt &arg_sym =
+        context.symbols.find(e.identifier())->second;
+
+      if (arg_sym.type.id() == "incomplete_struct")
+      {
+        std::cerr << "**** WARNING: template instantiation with incomplete type "
+          << arg_sym.pretty_name << " at "<< arg_sym.location << std::endl;
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 /*******************************************************************\
 
 Function: cpp_typecheckt::instantiate_template
@@ -275,8 +303,6 @@ const symbolt &cpp_typecheckt::instantiate_template(
   const cpp_template_args_tct &full_template_args,
   const typet &specialization)
 {
-  symbolt *output_new_symbol = NULL;
-
   if(instantiation_stack.size()==50)
   {
     err_location(location);
@@ -338,6 +364,21 @@ const symbolt &cpp_typecheckt::instantiate_template(
   new_decl.set("#template", template_symbol.name);
   new_decl.set("#template_arguments", specialization_template_args);
 
+  // Let's check if the arguments are incompletes (they might have been
+  // forward declared)
+  if(has_incomplete_args(specialization_template_args))
+  {
+    // This happens when the arguments were not declared yet but the
+    // code tried to use the template. Crazy right? This can happen when
+    // typedefing for example, check esbmc-cpp/esbmc-cbmc/Templates39 for
+    // an example
+    // Hack: let's remove the template body so nothing will be instantiated
+    // When an object is instantiated in the future, it will create the
+    // right instantiated template, or will throw an error if the argument
+    // isn't declared yet
+    new_decl.type().remove("body");
+  }
+
   // save old scope
   cpp_save_scopet saved_scope(cpp_scopes);
 
@@ -361,8 +402,6 @@ const symbolt &cpp_typecheckt::instantiate_template(
   // sub-scope for fixing the prefix
   std::string subscope_name=id2string(template_scope->identifier)+suffix;
 
-  bool already_instantiated = false;
-
   // Does it already exist?
   const symbolt *existing_template_instance =
     is_template_instantiated(template_symbol.name, subscope_name);
@@ -370,21 +409,16 @@ const symbolt &cpp_typecheckt::instantiate_template(
     // continue if the type is incomplete only -- it might now be complete(?).
 //      if (symb.type.id() != "incomplete_struct" || symb.value.is_not_nil())
       return *existing_template_instance;
-
-    already_instantiated = true;
   }
 
-  if (!already_instantiated)
-  {
-    // set up a scope as subscope of the template scope
-    std::string prefix=template_scope->get_parent().prefix+suffix;
-    cpp_scopet &sub_scope=
-      cpp_scopes.current_scope().new_scope(subscope_name);
-    sub_scope.prefix=prefix;
-    cpp_scopes.go_to(sub_scope);
-    cpp_scopes.id_map.insert(
-      cpp_scopest::id_mapt::value_type(subscope_name, &sub_scope));
-  }
+  // set up a scope as subscope of the template scope
+  std::string prefix=template_scope->get_parent().prefix+suffix;
+  cpp_scopet &sub_scope=
+    cpp_scopes.current_scope().new_scope(subscope_name);
+  sub_scope.prefix=prefix;
+  cpp_scopes.go_to(sub_scope);
+  cpp_scopes.id_map.insert(
+    cpp_scopest::id_mapt::value_type(subscope_name, &sub_scope));
 
   // store the information that the template has
   // been instantiated using these arguments
@@ -434,8 +468,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   }
 
   // We're definitely instantiating this; put the template types into scope.
-  if (!already_instantiated)
-    put_template_args_in_scope(template_type, specialization_template_args);
+  put_template_args_in_scope(template_type, specialization_template_args);
 
   if(new_decl.type().id()=="struct")
   {

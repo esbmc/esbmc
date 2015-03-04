@@ -51,38 +51,6 @@ void cpp_typecheckt::salvage_default_parameters(
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::check_template_restrictions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void cpp_typecheckt::check_template_restrictions(
-  const irept &cpp_name,
-  const irep_idt &final_identifier,
-  const typet &final_type)
-{
-  if(final_type.id()=="template")
-  {
-    // subtype must be class or function
-
-    if(final_type.subtype().id()!="struct" &&
-       final_type.subtype().id()!="code")
-    {
-      err_location(cpp_name);
-      str << "template only allowed with classes or functions,"
-             " but got `" << to_string(final_type.subtype()) << "'";
-      throw 0;
-    }
-  }
-}
-
-/*******************************************************************\
-
 Function: cpp_typecheckt::typecheck_class_template
 
   Inputs:
@@ -130,31 +98,33 @@ void cpp_typecheckt::typecheck_class_template(
     class_template_identifier(
       base_name, template_type, partial_specialization_args);
 
-  #if 0
+
   // Check if the name is already used by a different template
   // in the same scope.
   {
     cpp_scopet::id_sett id_set;
     cpp_scopes.current_scope().lookup(
       base_name,
-      cpp_scopet::SCOPE_ONLY,
       cpp_scopet::TEMPLATE,
       id_set);
 
     if(!id_set.empty())
     {
-      const symbolt &previous=lookup((*id_set.begin())->identifier);
-      if(previous.name!=symbol_name || id_set.size()>1)
+      // It is ok to be share the name if it's an specialization
+      if(declaration.get_specialization_of() == "")
       {
-        err_location(cpp_name.location());
-        str << "template declaration of `" << base_name.c_str()
-            << " does not match previous declaration\n";
-        str << "location of previous definition: " << previous.location;
-        throw 0;
+        const symbolt &previous=lookup((*id_set.begin())->identifier);
+        if(previous.name!=symbol_name || id_set.size()>1)
+        {
+          err_location(cpp_name.location());
+          str << "template declaration of `" << base_name.c_str()
+              << " does not match previous declaration\n";
+          str << "location of previous definition: " << previous.location;
+          throw 0;
+        }
       }
     }
   }
-  #endif
 
   // check if we have it already
 
