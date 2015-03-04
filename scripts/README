@@ -18,7 +18,7 @@ The makefile inside the directory "smoke-tests" can also serve as an example to 
 
 1 - To run ESBMC for a single C program, e.g., crc.c located at the directory "smoke-tests", you should first set the environment variable PATH in your .bashrc file as follows:
 
-"export PATH=$PATH:/home/lucas/esbmc-v1.11/bin/
+"export PATH=$PATH:/home/lucas/esbmc-v1.25/bin/
 
 2 - After that, you can run ESBMC from the command line by calling:
 
