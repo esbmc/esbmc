@@ -1,1 +1,1 @@
-#define ESBMC_VERSION "1.24.1"
+#define ESBMC_VERSION "1.25"
