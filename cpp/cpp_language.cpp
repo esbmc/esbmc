@@ -125,6 +125,8 @@ void cpp_languaget::internal_additions(std::ostream &out)
 {
   out << "# 1 \"<built-in>\"" << std::endl;
 
+  out << "void *operator new(unsigned int size);" << std::endl;
+
   // assume/assert
   out << "extern \"C\" void assert(bool assertion);" << std::endl;
   out << "extern \"C\" void __ESBMC_assume(bool assumption);" << std::endl;

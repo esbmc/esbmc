@@ -305,8 +305,8 @@ Function: goto_convertt::do_cpp_new
 \*******************************************************************/
 
 void goto_convertt::do_cpp_new(
-  exprt &lhs,
-  exprt &rhs,
+  const exprt &lhs,
+  const exprt &rhs,
   goto_programt &dest)
 {
   if(lhs.is_nil())
@@ -428,7 +428,7 @@ Function: goto_convertt::cpp_new_initializer
 
 void goto_convertt::cpp_new_initializer(
   const exprt &lhs,
-  exprt &rhs,
+  const exprt &rhs,
   goto_programt &dest)
 {
   // grab initializer
@@ -885,6 +885,20 @@ void goto_convertt::do_function_call_symbol(
     t->location.property("assertion");
     t->location.comment(description);
     // we ignore any LHS
+  }
+  else if(identifier=="cpp::operatorcpp_new(unsigned_int)")
+  {
+    assert(arguments.size()== 1);
+
+    side_effect_exprt new_function("cpp_new");
+    new_function.add("#location") = function.cmt_location();
+    new_function.add("sizeof") = arguments.front();
+
+    new_function.type() = pointer_typet(
+        static_cast<const typet&>(arguments.front().add("#c_sizeof_type")));
+    new_function.type().add("#location") = function.cmt_location();
+
+    do_cpp_new(lhs, new_function, dest);
   }
   else
   {
