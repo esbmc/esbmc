@@ -14,6 +14,7 @@
 #include <ansi-c/printf_formatter.h>
 #include <langapi/language_util.h>
 #include <arith_tools.h>
+#include <boost/version.hpp>
 
 #include "goto_trace.h"
 #include "VarMap.h"
@@ -497,7 +498,11 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
   /* write graphml */
 
   graphml.add_child("graphml.graph", graph);
+#if (BOOST_VERSION == 105700)
+  boost::property_tree::xml_writer_settings<std::string> settings('\t', 1);
+#else
   boost::property_tree::xml_writer_settings<char> settings('\t', 1);;
+#endif
   boost::property_tree::write_xml(filename, graphml, std::locale(), settings);
 
 }
