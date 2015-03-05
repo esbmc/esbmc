@@ -1554,8 +1554,8 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
   assert(is_array_type(expr) || is_string_type(expr));
 
   expr2tc arrsize;
-  const symbolt &sym = ns.lookup(to_symbol2t(expr).thename);
-  if (has_prefix(sym.name.as_string(), "symex_dynamic::")) {
+  if (!is_constant_array2t(expr) &&
+       has_prefix(ns.lookup(to_symbol2t(expr).thename).name.as_string(), "symex_dynamic::")) {
     // Construct a dynamic_size irep.
     address_of2tc addrof(expr->type, expr);
     arrsize = dynamic_size2tc(addrof);
