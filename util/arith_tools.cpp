@@ -40,7 +40,8 @@ bool to_integer(const exprt &expr, mp_integer &int_value)
   }
   else if(type_id=="integer" ||
           type_id=="natural" ||
-          type_id=="c_enum")
+          type_id=="c_enum"  ||
+          type_id=="symbol")
   {
     int_value=string2integer(value);
     return false;
