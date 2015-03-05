@@ -1,7 +1,13 @@
 Release Notes of the ESBMC model checker
 
+*** Version 1.25
++ Bugfixes for the k-induction implementation.
++ Boolector is now the default solver.
++ Improved the C++ parser and template. 
++ Decreased memory usage.
+
 *** Version 1.23
-+ Bugfixes for the k-induction implementation
++ Bugfixes for the k-induction implementation.
 + Added the ability to run each step of the k-induction process concurrently.
   --k-induction-parallel will run the base, forward condition, and inductive
   step in separate concurrent subprocesses.

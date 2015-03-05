@@ -2549,7 +2549,7 @@ void goto_convertt::replace_cond(
 	      << " of " << tmp.location().get_file()
   	      << " is not supported yet" << std::endl;
     //std::cout << tmp.pretty() << std::endl;
-    //assert(0);
+    assert(0);
   }
 }
 
@@ -3402,7 +3402,7 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr, bool &found)
     else
       get_cs_member(expr, new_expr, expr.type(), found);
   }
-  else if (expr.is_constant())
+  else if (expr.is_constant() || expr.is_typecast())
   {
     new_expr = expr;
     found=true;
@@ -3472,8 +3472,6 @@ void goto_convertt::replace_ifthenelse(
 {
   DEBUGLOC;
 
-  //std::cout << expr.pretty() << std::endl;
-
   bool found=false;
 
   if(expr.id()=="constant")
@@ -3481,6 +3479,7 @@ void goto_convertt::replace_ifthenelse(
 
   // We only transform the condition if all the variables are not touched during
   // the loop
+#if 0
   if(expr.operands().size()==2)
   {
     exprt::operandst::iterator it = expr.operands().begin();
@@ -3499,15 +3498,15 @@ void goto_convertt::replace_ifthenelse(
         }
     }
   }
-
+#endif
 
   if (expr.operands().size()==0 || expr.operands().size() == 1)
   {
     exprt new_expr;
-    if (expr.operands().size())
-      get_new_expr(expr.op0(), new_expr, found);
-    else
+    if (expr.operands().size()==0 || expr.is_typecast())
       get_new_expr(expr, new_expr, found);
+    else if (expr.operands().size())
+      get_new_expr(expr.op0(), new_expr, found);
 
     if (!found) std::cout << "failed" << std::endl;
     assert(found);
@@ -3559,6 +3558,7 @@ void goto_convertt::replace_ifthenelse(
 
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
   }
+
 }
 
 /*******************************************************************\

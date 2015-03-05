@@ -12,6 +12,7 @@ y.tab.c: cpy.y
 	$(YACC) -d $(YFLAGS) -pcpp $<
 
 cpp.c: y.tab.c # Includes y.tab.h
+token.c: y.tab.c # Includes y.tab.h
 
 $(OBJS): $(HEADERS)
 
