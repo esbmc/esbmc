@@ -6,10 +6,6 @@ test:
 tests.log: test.pl
 	@./test.pl
 
-llvm: test.pl
-	@./llvmconvert.sh
-	@./test.pl --llvm
-
 show:
 	@for dir in *; do \
 		if [ -d "$$dir" ]; then \

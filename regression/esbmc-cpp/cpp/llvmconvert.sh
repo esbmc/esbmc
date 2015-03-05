@@ -6,7 +6,7 @@ for i in $SOURCES
 do
 	cd $i
 	echo $i
-	$(./convert.sh)
+	$(../convert.sh)
     if [ $? -eq 0 ]; then qtyok=$(expr $qtyok + 1);
     else qtyfail=$(expr $qtyfail + 1); fi
 
