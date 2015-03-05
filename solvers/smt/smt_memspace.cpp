@@ -485,7 +485,6 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     // The pointer will remain consistent because any pointer taken to the
     // same constant array will be picked up in the expression cache
     static unsigned int constarr_num = 0;
-    const constant_array2t &str = to_constant_array2t(obj.ptr_obj);
     std::stringstream ss;
     ss << "address_of_arr_const(" << constarr_num++ << ")";
     return convert_identifier_pointer(obj.ptr_obj, ss.str());
