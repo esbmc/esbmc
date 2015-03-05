@@ -34,7 +34,7 @@ INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 ifndef STRICTCOMPILE
 CXXFLAGS+=-fpermissive -Wno-deprecated -Wall -Wextra -std=c++0x -fno-strict-aliasing
 else
-CXXFLAGS+= -W -Wall -Wextra -std=c++0x -fno-strict-aliasing -DEIGEN_MPL2_ONLY
+CXXFLAGS+= -W -Wall -Wextra -Werror -std=c++0x -fno-strict-aliasing -DEIGEN_MPL2_ONLY
 endif
 
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
