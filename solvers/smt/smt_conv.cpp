@@ -229,7 +229,7 @@ smt_convt::pop_ctx(void)
   tuple_api->pop_tuple_ctx();
 }
 
-smt_astt 
+smt_astt
 smt_convt::make_disjunct(const ast_vec &v)
 {
   smt_astt args[v.size()];
@@ -260,7 +260,7 @@ smt_convt::make_disjunct(const ast_vec &v)
   return result;
 }
 
-smt_astt 
+smt_astt
 smt_convt::make_conjunct(const ast_vec &v)
 {
   smt_astt args[v.size()];
@@ -289,14 +289,14 @@ smt_convt::make_conjunct(const ast_vec &v)
   return result;
 }
 
-smt_astt 
+smt_astt
 smt_convt::invert_ast(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
   return mk_func_app(a->sort, SMT_FUNC_NOT, a);
 }
 
-smt_astt 
+smt_astt
 smt_convt::imply_ast(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
@@ -355,7 +355,7 @@ smt_convt::convert_assign(const expr2tc &expr)
   }
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_ast(const expr2tc &expr)
 {
   // Variable length array; constant array's and so forth can have hundreds
@@ -1078,7 +1078,7 @@ smt_convt::mk_fresh(smt_sortt s, const std::string &tag,
   }
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
 {
   const isnan2t &isnan = to_isnan2t(expr);
@@ -1103,7 +1103,7 @@ smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
   }
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_member(const expr2tc &expr, smt_astt src)
 {
   const member2t &member = to_member2t(expr);
@@ -1146,7 +1146,7 @@ smt_convt::convert_member(const expr2tc &expr, smt_astt src)
   return src->project(this, idx);
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
                             unsigned int topbit, unsigned int topwidth)
 {
@@ -1173,7 +1173,7 @@ smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
   return mk_func_app(s, SMT_FUNC_CONCAT, topbits, a);
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_zero_ext(smt_astt a, smt_sortt s,
                             unsigned int topwidth)
 {
@@ -1182,7 +1182,7 @@ smt_convt::convert_zero_ext(smt_astt a, smt_sortt s,
   return mk_func_app(s, SMT_FUNC_CONCAT, z, a);
 }
 
-smt_astt 
+smt_astt
 smt_convt::round_real_to_int(smt_astt a)
 {
   // SMT truncates downwards; however C truncates towards zero, which is not
@@ -1208,7 +1208,7 @@ smt_convt::round_real_to_int(smt_astt a)
   return mk_func_app(intsort, SMT_FUNC_ITE, is_lt_zero, selected, as_int);
 }
 
-smt_astt 
+smt_astt
 smt_convt::round_fixedbv_to_int(smt_astt a, unsigned int fromwidth,
                                 unsigned int towidth)
 {
@@ -1256,7 +1256,7 @@ smt_convt::round_fixedbv_to_int(smt_astt a, unsigned int fromwidth,
   return mk_func_app(tosort, SMT_FUNC_ITE, is_neg, neg_val, intvalue);
 }
 
-smt_astt 
+smt_astt
 smt_convt::make_bool_bit(smt_astt a)
 {
 
@@ -1269,7 +1269,7 @@ smt_convt::make_bool_bit(smt_astt a)
   return mk_func_app(one->sort, SMT_FUNC_ITE, a, one, zero);
 }
 
-smt_astt 
+smt_astt
 smt_convt::make_bit_bool(smt_astt a)
 {
 
@@ -1331,7 +1331,7 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
   }
 }
 
-smt_sortt 
+smt_sortt
 smt_convt::make_array_domain_sort(const array_type2t &arr)
 {
 
@@ -1478,7 +1478,7 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
   return output;
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_array_index(const expr2tc &expr)
 {
   smt_astt a;
@@ -1513,7 +1513,7 @@ smt_convt::convert_array_index(const expr2tc &expr)
   }
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_array_store(const expr2tc &expr)
 {
   const with2t &with = to_with2t(expr);
@@ -1630,7 +1630,7 @@ smt_convt::get_fixed_point(const unsigned width, std::string value) const
   m = value.substr(0, found);
   if (found != std::string::npos)
     f = value.substr(found + 1, size);
-  else 
+  else
 		f = "1";
 
   if (m.compare("0") == 0 && f.compare("0") == 0)
@@ -1647,7 +1647,7 @@ smt_convt::get_fixed_point(const unsigned width, std::string value) const
 
   std::string integer_str, fraction_str;
   integer_str = integer2binary(string2integer(double2string(magnitude), 10), width / 2);
-	
+
   fraction_str = integer2binary(string2integer(double2string(fraction), 10), width / 2);
 
   value = integer_str + fraction_str;
@@ -1911,7 +1911,7 @@ smt_convt::get_type_def(const type2tc &type) const
         : dynamic_cast<const struct_union_data &>(*type.get());
 }
 
-smt_astt 
+smt_astt
 smt_convt::array_create(const expr2tc &expr)
 {
   if (is_constant_array_of2t(expr))
@@ -1957,7 +1957,7 @@ smt_convt::array_create(const expr2tc &expr)
   return newsym_ast;
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_array_of_prep(const expr2tc &expr)
 {
   const constant_array_of2t &arrof = to_constant_array_of2t(expr);
@@ -1993,7 +1993,7 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
     return array_api->convert_array_of(convert_ast(base_init), array_size);
 }
 
-smt_astt 
+smt_astt
 array_iface::default_convert_array_of(smt_astt init_val,
                                           unsigned long array_size,
                                           smt_convt *ctx)
@@ -2014,7 +2014,7 @@ array_iface::default_convert_array_of(smt_astt init_val,
   return newsym_ast;
 }
 
-smt_astt 
+smt_astt
 smt_convt::pointer_array_of(const expr2tc &init_val __attribute__((unused)),
     unsigned long array_width)
 {

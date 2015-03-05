@@ -29,7 +29,7 @@
  *  map a pointer to its integer representation, and back again.
  */
 
-smt_astt 
+smt_astt
 smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
                            const expr2tc &templ_expr)
 {
@@ -68,7 +68,7 @@ smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
   return convert_ast(res);
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 {
   const arith_2ops &expr_ref = static_cast<const arith_2ops &>(*expr);
@@ -230,7 +230,7 @@ smt_convt::renumber_symbol_address(const expr2tc &guard,
   }
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 {
   smt_astt a;
@@ -422,7 +422,7 @@ smt_convt::finalize_pointer_chain(unsigned int objnum)
   return;
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_addr_of(const expr2tc &expr)
 {
   const address_of2t &obj = to_address_of2t(expr);
