@@ -432,13 +432,28 @@ void goto_convertt::cpp_new_initializer(
   goto_programt &dest)
 {
   // grab initializer
-  exprt initializer;
+  code_expressiont initializer;
 
   if(rhs.initializer().is_nil())
-    initializer.make_nil();
+  {
+    // Initialize with default value
+    side_effect_exprt assignment("assign");
+    assignment.type() = rhs.type().subtype();
+
+    // the new object
+    exprt new_object("new_object");
+    new_object.set("#lvalue", true);
+    new_object.type() = rhs.type().subtype();
+
+    // Default value is zero
+    exprt default_value = gen_zero(rhs.type().subtype());
+
+    assignment.move_to_operands(new_object, default_value);
+    initializer.move_to_operands(assignment);
+  }
   else
   {
-    initializer = (exprt&)rhs.initializer();
+    initializer = (code_expressiont&)rhs.initializer();
     rhs.remove("initializer");
   }
 
@@ -890,10 +905,12 @@ void goto_convertt::do_function_call_symbol(
   {
     assert(arguments.size()== 1);
 
+    // Change it into a cpp_new expression
     side_effect_exprt new_function("cpp_new");
     new_function.add("#location") = function.cmt_location();
     new_function.add("sizeof") = arguments.front();
 
+    // Set return type, a allocated pointer
     new_function.type() = pointer_typet(
         static_cast<const typet&>(arguments.front().add("#c_sizeof_type")));
     new_function.type().add("#location") = function.cmt_location();
