@@ -629,7 +629,7 @@ void value_sett::get_reference_set_rec(
 {
 
   if (is_symbol2t(expr) || is_dynamic_object2t(expr) ||
-      is_constant_string2t(expr))
+      is_constant_string2t(expr) || is_constant_array2t(expr))
   {
     // Any symbol we refer to, store into the destination object map.
     // Given that this is a simple symbol, we can be sure that the offset to
@@ -1088,7 +1088,7 @@ void value_sett::assign_rec(
   else if (is_zero_string2t(lhs) || is_zero_length_string2t(lhs) ||
            is_constant_string2t(lhs) || is_null_object2t(lhs) ||
            is_valid_object2t(lhs) || is_deallocated_obj2t(lhs) ||
-           is_dynamic_size2t(lhs))
+           is_dynamic_size2t(lhs) || is_constant_array2t(lhs))
   {
     // Ignored
   }
