@@ -2336,8 +2336,6 @@ bool goto_convertt::check_op_const(
   const exprt &tmp,
   const locationt &loc)
 {
-  //std::cout << "check_op_const: " << tmp.pretty() << std::endl;
-
   if (tmp.is_constant() || tmp.type().id() == "pointer")
   {
     std::cerr << "warning: this program " << loc.get_file()
@@ -2472,8 +2470,6 @@ void goto_convertt::replace_cond(
   exprt &tmp,
   goto_programt &dest)
 {
-  //std::cout << tmp.id() << std::endl;
-
   irep_idt exprid = tmp.id();
 
   if (tmp.is_true())
@@ -2492,7 +2488,7 @@ void goto_convertt::replace_cond(
     set_expr_to_nondet(tmp, dest);
 
   }
-  else if ( exprid == "<" ||  exprid == "<=")
+  else if (exprid == "<" ||  exprid == "<=")
   {
     if (is_for_block() || is_while_block())
       if (check_op_const(tmp.op1(), tmp.location()))
@@ -2512,7 +2508,7 @@ void goto_convertt::replace_cond(
         init_nondet_expr(tmp.op1(), dest);
     }
   }
-  else if ( exprid == "and" || exprid == "or")
+  else if (tmp.is_and() || tmp.is_or())
   {
     assert(tmp.operands().size()==2);
 
@@ -2533,10 +2529,11 @@ void goto_convertt::replace_cond(
         print_msg(tmp);
       }
     }
+    replace_cond(tmp.op0(),dest);
+    replace_cond(tmp.op1(),dest);
   }
-  else if (exprid == "notequal")
+  else if (tmp.is_notequal() || tmp.is_typecast())
   {
-    //std::cout << tmp.pretty() << std::endl;
     if (!tmp.op0().is_symbol())
       print_msg(tmp);
 
