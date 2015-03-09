@@ -113,14 +113,14 @@ protected:
   void remove_statement_expression(exprt &expr, guardt &guard, goto_programt &dest, bool result_is_used);
   void remove_gcc_conditional_expression(exprt &expr, guardt &guard, goto_programt &dest);
 
-  virtual void do_cpp_new(exprt &lhs, exprt &rhs, goto_programt &dest);
+  virtual void do_cpp_new(const exprt &lhs, const exprt &rhs, goto_programt &dest);
 
   static void replace_new_object(
     const exprt &object,
     exprt &dest);
 
   void cpp_new_initializer(
-    const exprt &lhs, exprt &rhs, goto_programt &dest);
+    const exprt &lhs, const exprt &rhs, goto_programt &dest);
 
   //
   // function calls

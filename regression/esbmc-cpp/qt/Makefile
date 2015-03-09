@@ -6,10 +6,6 @@ test:
 tests.log: test.pl
 	@./test.pl
 
-llvm: test.pl
-	@./llvmconvert.sh
-	@./test.pl --llvm
-
 show:
 	@for dir in *; do \
 		if [ -d "$$dir" ]; then \
@@ -29,7 +25,6 @@ clean:
 		fi; \
 	done;
 	find . -name *.*~ | xargs rm -f
-	find . -name *.xml | xargs rm -f
 	find . -name *.out | xargs rm -f
 	find . -name *.smt | xargs rm -f
 	find . -name txt | xargs rm -f

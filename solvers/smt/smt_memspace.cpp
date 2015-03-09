@@ -29,7 +29,7 @@
  *  map a pointer to its integer representation, and back again.
  */
 
-smt_astt 
+smt_astt
 smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
                            const expr2tc &templ_expr)
 {
@@ -68,7 +68,7 @@ smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
   return convert_ast(res);
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 {
   const arith_2ops &expr_ref = static_cast<const arith_2ops &>(*expr);
@@ -230,7 +230,7 @@ smt_convt::renumber_symbol_address(const expr2tc &guard,
   }
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 {
   smt_astt a;
@@ -422,7 +422,7 @@ smt_convt::finalize_pointer_chain(unsigned int objnum)
   return;
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_addr_of(const expr2tc &expr)
 {
   const address_of2t &obj = to_address_of2t(expr);
@@ -477,6 +477,17 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     std::string identifier =
       "address_of_str_const(" + str.value.as_string() + ")";
     return convert_identifier_pointer(obj.ptr_obj, identifier);
+  } else if (is_constant_array2t(obj.ptr_obj)) {
+    // This can occur (rather than being a constant string) when the C++
+    // frontend performs const propagation in functions that pass around
+    // character array references/pointers, but it drops some type information
+    // along the way.
+    // The pointer will remain consistent because any pointer taken to the
+    // same constant array will be picked up in the expression cache
+    static unsigned int constarr_num = 0;
+    std::stringstream ss;
+    ss << "address_of_arr_const(" << constarr_num++ << ")";
+    return convert_identifier_pointer(obj.ptr_obj, ss.str());
   } else if (is_if2t(obj.ptr_obj)) {
     // We can't nondeterministically take the address of something; So instead
     // rewrite this to be if (cond) ? &a : &b;.

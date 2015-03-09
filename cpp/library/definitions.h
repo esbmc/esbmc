@@ -3,25 +3,11 @@
 
 #include "cstddef"
 
-//#ifndef EOF
-//#define EOF (-1)
-//#endif
-
-//#undef NULL
-//#if defined(__cplusplus)
-//#define NULL 0
-//#else
-//#define NULL ((void *)0)
-//#endif
-
 #define SIGINT  2
 
 #define SEEK_SET 0
 #define SEEK_CUR 1
 #define SEEK_END 2
-
-
-//#define EXIT_SUCCESS 0
 
 #ifndef __TIMESTAMP__
 #define __TIMESTAMP__ (0)
@@ -43,16 +29,6 @@ char* nondet_charPointer();
 char nondet_char();
 unsigned nondet_unsigned();
 class smanip {};
-
-//int sprintf ( char * str, const char * format, ... );
-
-//#ifndef _size_t
-//typedef unsigned int size_t;
-//#endif
-
-//#ifndef _ptrdiff_t
-//typedef int ptrdiff_t;
-//#endif
 
 #define _SIZE_T_DEFINED
 

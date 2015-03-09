@@ -38,7 +38,7 @@ bool c_typecheck_baset::zero_initializer(
   const typet &type) const
 {
   const std::string &type_id=type.id_string();
-  
+
   if(type_id=="bool")
   {
     value.make_false();
@@ -65,10 +65,10 @@ bool c_typecheck_baset::zero_initializer(
   else if(type_id=="array")
   {
     const array_typet &array_type=to_array_type(type);
-  
+
     exprt tmpval;
     if(zero_initializer(tmpval, array_type.subtype())) return true;
-    
+
     const exprt &size_expr=array_type.size();
 
     if(size_expr.id()=="infinity")
@@ -155,7 +155,7 @@ void c_typecheck_baset::do_initializer(
   bool force_constant)
 {
   if(type.id()=="symbol")
-  {     
+  {
     const irep_idt &identifier=type.identifier();
     symbolst::iterator sit=context.symbols.find(identifier);
 
@@ -164,18 +164,18 @@ void c_typecheck_baset::do_initializer(
       str << "failed to find symbol `" << identifier << "'";
       throw 0;
     }
-    
+
     do_initializer(value, sit->second.type, force_constant);
     return;
   }
-  
+
   value=do_initializer_rec(value, type, force_constant);
-    
+
   if(type.id()=="incomplete_array")
   {
     assert(value.type().is_array());
     type=value.type();
-  } 
+  }
 }
 
 /*******************************************************************\
@@ -217,11 +217,11 @@ exprt c_typecheck_baset::do_initializer_rec(
           << to_string(full_type) << "'";
       throw 0;
     }
-    
+
     if (full_type.id() == "struct")
       return do_designated_initializer(value, to_struct_type(full_type), force_constant);
   }
-  
+
   if(full_type.id()=="incomplete_array" ||
      full_type.is_array() ||
      full_type.id()=="struct" ||
@@ -307,7 +307,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   {
     init_statet tmp_state(*state);
     state++;
-    
+
     return do_initializer_rec(tmp_state, type, force_constant, false);
   }
 
@@ -325,7 +325,7 @@ exprt c_typecheck_baset::do_initializer_rec(
   {
     // The initializer for a scalar shall be a single expression,
     // * optionally enclosed in braces. *
- 
+
     exprt result=*state;
     state++;
     implicit_typecast(result, type);
@@ -351,7 +351,7 @@ exprt c_typecheck_baset::do_initializer_array(
   bool force_constant)
 {
   // get size
-  
+
   mp_integer mp_size;
 
   if(to_integer(type.size(), mp_size))
@@ -361,7 +361,7 @@ exprt c_typecheck_baset::do_initializer_array(
         << "' is not a constant";
     throw 0;
   }
-  
+
   if(mp_size<0)
   {
     err_location(type);
@@ -378,7 +378,7 @@ exprt c_typecheck_baset::do_initializer_array(
         << "' is probably too large";
     throw 0;
   }
-  
+
   unsigned long size=integer2long(mp_size);
 
   // build array constant
@@ -405,15 +405,15 @@ exprt c_typecheck_baset::do_initializer_array(
 
       for(; pos<size; pos++)
         result.operands()[pos]=zero;
-      
+
       break;
     }
-    
+
     exprt &r=result.operands()[pos];
 
     r=do_initializer_rec(state, type.subtype(), force_constant, true);
   }
-  
+
   return result;
 }
 
@@ -436,10 +436,10 @@ exprt c_typecheck_baset::do_initializer_incomplete_array(
 {
   // build array constant
   exprt result("constant", type);
-  
+
   // lucky guess
   result.reserve_operands(state.remaining());
-  
+
   const typet &subtype=follow(follow(type).subtype());
 
   // grab initializers
@@ -448,14 +448,14 @@ exprt c_typecheck_baset::do_initializer_incomplete_array(
     result.copy_to_operands(
       do_initializer_rec(state, subtype, force_constant, true));
   }
-  
+
   // get size
   unsigned s=result.operands().size();
-    
+
   // set size
   result.type().id("array");
   result.type().size(from_integer(s, int_type()));
-  
+
   return result;
 }
 
@@ -487,7 +487,7 @@ exprt c_typecheck_baset::do_initializer_struct(
     type.components();
 
   exprt result("struct", type);
-  
+
   result.reserve_operands(components.size());
 
   for(struct_typet::componentst::const_iterator
@@ -517,7 +517,7 @@ exprt c_typecheck_baset::do_initializer_struct(
       result.move_to_operands(zero);
     }
   }
-  
+
   return result;
 }
 
@@ -564,7 +564,7 @@ exprt c_typecheck_baset::do_initializer_union(
     str << "initialization of empty union";
     throw 0;
   }
-  
+
   const typet &op_type=components.front().type();
   result.copy_to_operands(
     do_initializer_rec(state, op_type, force_constant, true));
@@ -596,7 +596,7 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
     if(symbol.value.is_nil())
     {
       const typet &final_type=follow(symbol.type);
-      
+
       if(final_type.id()!="incomplete_struct" &&
          final_type.id()!="incomplete_array" &&
          !symbol.is_extern) // Don't zero-init externs
@@ -610,7 +610,7 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
               << to_string(symbol.type) << "'";
           throw 0;
         }
-        
+
         symbol.value.zero_initializer(true);
       }
     }
@@ -623,7 +623,7 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
   else if(!symbol.is_type)
   {
     const typet &final_type=follow(symbol.type);
-    
+
     if(final_type.id()=="incomplete_c_enum" ||
        final_type.id()=="c_enum")
     {
@@ -660,7 +660,7 @@ exprt c_typecheck_baset::do_designated_initializer(
   assert(value.id()=="designated_list");
 
   exprt result("struct", struct_type);
-  
+
   const struct_typet::componentst &components=
     struct_type.components();
 
@@ -668,13 +668,13 @@ exprt c_typecheck_baset::do_designated_initializer(
   result.operands().resize(
     components.size(),
     static_cast<const exprt &>(get_nil_irep()));
-  
+
   forall_operands(it, value)
   {
     const exprt &initializer=*it;
-    
+
     assert(initializer.operands().size()==1);
-    
+
     const irep_idt &component_name=initializer.component_name();
 
     if(!struct_type.has_component(component_name))
@@ -687,13 +687,13 @@ exprt c_typecheck_baset::do_designated_initializer(
     unsigned number=struct_type.component_number(component_name);
 
     assert(number<result.operands().size());
-    
+
     result.operands()[number]=do_initializer_rec(
       initializer.op0(),
       components[number].type(),
       force_constant);
   }
-  
+
   // NIL left? zero initialize!
   for(unsigned i=0; i<result.operands().size(); i++)
   {
@@ -715,7 +715,7 @@ exprt c_typecheck_baset::do_designated_union_initializer(
   assert(value.operands().size() == 1);
 
   exprt result("union", union_type);
-  
+
   // We don't in fact have to lay out a series of fields. Because this is a
   // union, all we do to represent a constant set operand 0 to something of the
   // type of one of the union fields.
