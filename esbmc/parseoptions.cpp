@@ -494,7 +494,7 @@ int cbmc_parseoptionst::doit_k_induction()
       }
     }
 
-    // All processeses were created successfully
+    // All processes were created successfully
     switch(whoAmI)
     {
       case -1:
@@ -551,7 +551,7 @@ int cbmc_parseoptionst::doit_k_induction()
                 std::cout << "BASE CASE PROCESS CRASHED." << std::endl;
 
                 bc_finished=true;
-                if(!cmdline.isset("ignore-child-process"))
+                if(cmdline.isset("dont-ignore-dead-child-process"))
                   fc_finished=is_finished=true;
               }
             }
@@ -568,7 +568,7 @@ int cbmc_parseoptionst::doit_k_induction()
                 std::cout << "FORWARD CONDITION PROCESS CRASHED." << std::endl;
 
                 fc_finished=true;
-                if(!cmdline.isset("ignore-child-process"))
+                if(cmdline.isset("dont-ignore-dead-child-process"))
                   bc_finished=is_finished=true;
               }
             }
@@ -585,7 +585,7 @@ int cbmc_parseoptionst::doit_k_induction()
                 std::cout << "INDUCTIVE STEP PROCESS CRASHED." << std::endl;
 
                 is_finished=true;
-                if(!cmdline.isset("ignore-child-process"))
+                if(cmdline.isset("dont-ignore-dead-child-process"))
                   bc_finished=fc_finished=true;
               }
             }
