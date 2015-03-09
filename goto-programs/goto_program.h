@@ -159,7 +159,7 @@ public:
       make_goto();
       targets.push_back(_target);
     }
-    
+
     inline void make_goto(std::list<class instructiont>::iterator _target,
                           const expr2tc &g)
     {
@@ -377,7 +377,7 @@ public:
     std::ostream &out) const;
 
   //! Output goto-program to given stream
-  inline std::ostream &output(std::ostream &out) const
+  inline std::ostream &output(std::ostream &out = std::cout) const
   {
     return output(namespacet(contextt()), "", out);
   }
