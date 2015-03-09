@@ -233,6 +233,8 @@ protected:
   virtual void make_constant_index(exprt &expr);
   virtual void make_constant_rec(exprt &expr);
 
+  virtual void mark_functions_inside_loops(exprt &expr);
+
   // types
   virtual void typecheck_type(typet &type);
   virtual void adjust_function_argument(typet &type) const;
