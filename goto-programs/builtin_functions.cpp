@@ -725,7 +725,6 @@ void goto_convertt::do_function_call_symbol(
     	&& (is_while_block() || is_for_block()))
     {
       exprt cond = arguments.front();
-      std::cout << cond.pretty() << std::endl;
       replace_ifthenelse(cond);
       goto_programt::targett t=dest.add_instruction(ASSUME);
       migrate_expr(cond, t->guard);
