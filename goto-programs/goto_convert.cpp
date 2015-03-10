@@ -818,10 +818,9 @@ Function: goto_convertt::is_expr_in_state
 \*******************************************************************/
 
 bool goto_convertt::is_expr_in_state(
-  const exprt &expr,
-  const struct_typet &str)
+  const exprt &expr)
 {
-  const struct_typet &struct_type = to_struct_type(str);
+  const struct_typet &struct_type = to_struct_type(state);
   const struct_typet::componentst &components = struct_type.components();
 
   for (struct_typet::componentst::const_iterator
@@ -873,7 +872,7 @@ void goto_convertt::get_struct_components(const exprt &exp)
     if (is_for_block() || is_while_block())
       loop_vars.insert(exp);
 
-    if (!is_expr_in_state(exp, state))
+    if (!is_expr_in_state(exp))
     {
       unsigned int size = state.components().size();
       state.components().resize(size+1);
