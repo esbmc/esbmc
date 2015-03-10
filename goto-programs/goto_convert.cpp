@@ -1135,12 +1135,15 @@ void goto_convertt::convert_assign(
         dest.add_instruction(ATOMIC_END);
   }
 
-  if (inductive_step && lhs.type().id() != "empty") {
+  if (inductive_step && lhs.type().id() != "empty")
+  {
     get_struct_components(lhs);
-    if (rhs.is_constant() && is_ifthenelse_block()) {
-      nondet_vars.insert(std::pair<exprt,exprt>(lhs,rhs));
+    if (rhs.is_constant() && is_ifthenelse_block())
+    {
+      nondet_vars.insert(std::pair<exprt, exprt>(lhs, rhs));
     }
-    else if ((is_for_block() || is_while_block()) && is_ifthenelse_block()) {
+    else if ((is_for_block() || is_while_block()) && is_ifthenelse_block())
+    {
       nondet_varst::const_iterator cache_result;
       cache_result = nondet_vars.find(lhs);
       if (cache_result == nondet_vars.end())
@@ -1936,7 +1939,7 @@ Function: goto_convertt::add_new_variables_to_context
 
 void goto_convertt::add_new_variables_to_context()
 {
-  if(!options.get_bool_option("inductive-step"))
+  if(!inductive_step)
     return;
 
   symbolt *symbol_ptr=NULL;
@@ -2677,9 +2680,6 @@ void goto_convertt::convert_while(
   if (inductive_step)
     update_state_vector(state_vector, dest);
 
-//  if (inductive_step)
-//    increment_var(code.op0(), dest);
-
   dest.destructive_append(tmp_x);
 
   // do the d label
@@ -2695,8 +2695,7 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto()
-			&& (inductive_step))
+  if (!is_break() && !is_goto() && inductive_step)
     assume_cond(*cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(tmp, true, dest); //assert(!c)
@@ -3472,29 +3471,6 @@ void goto_convertt::replace_ifthenelse(
 
   if(expr.id()=="constant")
     return;
-
-  // We only transform the condition if all the variables are not touched during
-  // the loop
-#if 0
-  if(expr.operands().size()==2)
-  {
-    exprt::operandst::iterator it = expr.operands().begin();
-    for( ; it != expr.operands().end(); ++it)
-    {
-      const symbolst::const_iterator it1=context.symbols.find(it->identifier());
-      if(it1!=context.symbols.end())
-        if(!it1->second.static_lifetime)
-        {
-          // Before returning we must check if the variable is dirty, if that is true
-          // then we should replace it
-          if(it1->second.value.find("assignment_inside_loop").is_nil()) {
-            return;
-
-          }
-        }
-    }
-  }
-#endif
 
   if (expr.operands().size()==0 || expr.operands().size() == 1)
   {
