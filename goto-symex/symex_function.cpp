@@ -28,6 +28,13 @@ bool
 goto_symext::get_unwind_recursion(
   const irep_idt &identifier, unsigned unwind)
 {
+  if (k_induction
+      || options.get_bool_option("k-induction-parallel")) {
+    std::cerr << "Sorry, can't perform k-induction on recursive code";
+    std::cerr  << std::endl;
+    abort();
+  }
+
   unsigned long this_loop_max_unwind = max_unwind;
 
   #if 1
