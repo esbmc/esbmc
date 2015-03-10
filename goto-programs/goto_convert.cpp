@@ -2095,8 +2095,7 @@ Function: goto_convertt::assign_current_state
 void goto_convertt::assign_current_state(
   goto_programt &dest)
 {
-  u_int j=0;
-  for (j=0; j < state.components().size(); j++)
+  for (unsigned int j = 0; j < state.components().size(); j++)
   {
     exprt rhs_expr(state.components()[j]);
     exprt new_expr(exprt::with, state);
@@ -2104,7 +2103,7 @@ void goto_convertt::assign_current_state(
 
     std::string identifier;
 
-    identifier = "cs$"+i2string(state_counter);
+    identifier = "cs$" + i2string(state_counter);
 
     lhs_expr.identifier(identifier);
 
@@ -2115,7 +2114,8 @@ void goto_convertt::assign_current_state(
 
     if (!state.components()[j].operands().size())
     {
-      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+      new_expr.op1().component_name(
+        state.components()[j].get_string("identifier"));
       assert(!new_expr.op1().get_string("component_name").empty());
     }
     else
@@ -2127,7 +2127,7 @@ void goto_convertt::assign_current_state(
       }
     }
 
-    code_assignt new_assign(lhs_expr,new_expr);
+    code_assignt new_assign(lhs_expr, new_expr);
     copy(new_assign, ASSIGN, dest);
   }
 }
@@ -3530,7 +3530,6 @@ void goto_convertt::replace_ifthenelse(
 
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
   }
-
 }
 
 /*******************************************************************\
