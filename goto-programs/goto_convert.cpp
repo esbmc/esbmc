@@ -1913,8 +1913,7 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto()
-			&& inductive_step)
+  if (!is_break() && !is_goto() && inductive_step)
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
@@ -2367,13 +2366,15 @@ void goto_convertt::init_nondet_expr(
   exprt &tmp,
   goto_programt &dest)
 {
+  if (!tmp.is_symbol())
+    return;
 
-  if (!tmp.is_symbol()) return ;
-  exprt nondet_expr=side_effect_expr_nondett(tmp.type());
-  code_assignt new_assign_nondet(tmp,nondet_expr);
+  exprt nondet_expr = side_effect_expr_nondett(tmp.type());
+  code_assignt new_assign_nondet(tmp, nondet_expr);
   copy(new_assign_nondet, ASSIGN, dest);
+
   if (!is_ifthenelse_block())
-  nondet_vars.insert(std::pair<exprt,exprt>(tmp,nondet_expr));
+    nondet_vars.insert(std::pair<exprt, exprt>(tmp, nondet_expr));
 }
 
 
