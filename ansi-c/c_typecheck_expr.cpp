@@ -339,6 +339,10 @@ void c_typecheck_baset::mark_functions_inside_loops(exprt &expr)
     if(s_it!=context.symbols.end())
     {
       symbolt &symbol=s_it->second;
+
+      if(symbol.value.find("inside_loop") == true_exprt())
+        return;
+
       symbol.value.add("inside_loop") = true_exprt();
 
       // We must search now for nested functions inside the
