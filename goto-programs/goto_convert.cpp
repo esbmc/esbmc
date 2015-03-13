@@ -1701,6 +1701,120 @@ void goto_convertt::update_state_vector(
 
 /*******************************************************************\
 
+Function: goto_convertt::assume_all_state_vector
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::assume_all_state_vector(
+  array_typet state_vector,
+  goto_programt &dest)
+{
+  // Temp symbol that will be used to count up to kindice
+  exprt tmp_symbol = gen_zero(int_type());
+  make_temp_symbol(tmp_symbol, dest);
+
+  // Condition (tmp_symbol <= kindice)
+  exprt lhs_index =
+    symbol_exprt("kindice$"+i2string(state_counter), int_type());
+  exprt cond("<=", typet("bool"));
+  cond.copy_to_operands(tmp_symbol, lhs_index);
+
+  goto_programt sideeffects;
+  remove_sideeffects(cond, sideeffects);
+
+  // save break/continue targets
+  break_continue_targetst old_targets(targets);
+
+  // do the u label
+  goto_programt::targett u=sideeffects.instructions.begin();
+
+  // do the v label
+  goto_programt tmp_v;
+  goto_programt::targett v=tmp_v.add_instruction();
+
+  // do the z label
+  goto_programt tmp_z;
+  goto_programt::targett z=tmp_z.add_instruction(SKIP);
+
+  // Increment (tmp_symbol++)
+  side_effect_exprt postincrement("postincrement");
+  postincrement.type() = int_type();
+  postincrement.copy_to_operands(tmp_symbol);
+
+  code_expressiont increment_expression;
+  increment_expression.copy_to_operands(postincrement);
+
+  // do the x label
+  goto_programt tmp_x;
+  convert(to_code(increment_expression), tmp_x);
+
+  // optimize the v label
+  if(sideeffects.instructions.empty())
+    u=v;
+
+  // set the targets
+  targets.set_break(z);
+  targets.set_continue(tmp_x.instructions.begin());
+
+  // v: if(!c) goto z;
+  v->make_goto(z);
+  expr2tc tmp_cond;
+  migrate_expr(cond, tmp_cond);
+  tmp_cond = not2tc(tmp_cond);
+  v->guard = tmp_cond;
+
+  // do the w label
+  goto_programt tmp_w;
+  //set the type of the state vector
+  state_vector.subtype() = state;
+
+  exprt new_expr(exprt::index, state);
+  exprt lhs_array("symbol", state_vector);
+  exprt rhs("symbol", state);
+
+  lhs_array.identifier("s$"+i2string(state_counter));
+  rhs.identifier("cs$"+i2string(state_counter));
+
+  //s[k]
+  new_expr.reserve_operands(2);
+  new_expr.copy_to_operands(lhs_array);
+  new_expr.copy_to_operands(tmp_symbol);
+
+  //assume(s[k]!=cs)
+  exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
+  assume_cond(result_expr, false, tmp_w);
+
+  // y: goto u;
+  goto_programt tmp_y;
+  goto_programt::targett y=tmp_y.add_instruction();
+  y->make_goto(u);
+  y->guard = true_expr;
+
+  dest.destructive_append(sideeffects);
+  dest.destructive_append(tmp_v);
+  dest.destructive_append(tmp_w);
+  dest.destructive_append(tmp_x);
+  dest.destructive_append(tmp_y);
+  dest.destructive_append(tmp_z);
+
+  // restore break/continue
+  targets.restore(old_targets);
+
+  //kindice=kindice+1
+  exprt one_expr = gen_one(int_type());
+  exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
+  code_assignt new_assign_plus(lhs_index,rhs_expr);
+  copy(new_assign_plus, ASSIGN, dest);
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::assume_state_vector
 
   Inputs:
@@ -1892,10 +2006,6 @@ void goto_convertt::convert_for(
     update_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_w);
-
-//  if (inductive_step)
-//    increment_var(code.op1(), dest);
-
   dest.destructive_append(tmp_x);
 
   // do the d label
@@ -2836,8 +2946,7 @@ void goto_convertt::convert_dowhile(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto()
-			&& (/*base_case ||*/ inductive_step))
+  if (!is_break() && !is_goto() && inductive_step)
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(tmp, true, dest); //assert(!c)
