@@ -94,14 +94,36 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
     }
   }
 
-  if (the_solver == "") {
-#ifdef BOOLECTOR
-    std::cerr << "No solver specified; defaulting to Boolector" << std::endl;
-    the_solver = "boolector";
+  if (the_solver == "")
+  {
+    if (options.get_bool_option("k-induction")
+        || options.get_bool_option("k-induction-parallel"))
+    {
+#ifdef Z3
+      std::cerr << "No solver specified; k-induction defaults to z3" << std::endl;
+      the_solver = "z3";
 #else
-    std::cerr << "No solver specified and Boolector is not enabled: please specify a solver" << std::endl;
-    abort();
+
+#ifdef BOOLECTOR
+      std::cerr << "No solver specified; defaulting to Boolector" << std::endl;
+      the_solver = "boolector";
+#else
+      std::cerr << "No solver specified and Boolector is not enabled: please specify a solver" << std::endl;
+      abort();
 #endif
+
+#endif
+    }
+    else
+    {
+#ifdef BOOLECTOR
+      std::cerr << "No solver specified; defaulting to Boolector" << std::endl;
+      the_solver = "boolector";
+#else
+      std::cerr << "No solver specified and Boolector is not enabled: please specify a solver" << std::endl;
+      abort();
+#endif
+    }
   }
 
   return create_solver(the_solver, is_cpp, int_encoding, ns,
