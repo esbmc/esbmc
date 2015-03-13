@@ -1829,6 +1829,12 @@ void goto_convertt::assume_state_vector(
   array_typet state_vector,
   goto_programt &dest)
 {
+  if(assume_all_states)
+  {
+    assume_all_state_vector(state_vector, dest);
+    return;
+  }
+
   //set the type of the state vector
   state_vector.subtype() = state;
 
