@@ -32,6 +32,28 @@ Author: Daniel Kroening, kroening@kroening.com
 #define DEBUGLOC
 #endif
 
+void goto_convertt::set_for_block(bool entering)
+{
+  entering? ++for_block : --for_block;
+}
+
+bool goto_convertt::is_for_block()
+{
+  assert(for_block >= 0);
+  return (for_block > 0);
+}
+
+void goto_convertt::set_while_block(bool entering)
+{
+  entering? ++while_block : --while_block;
+}
+
+bool goto_convertt::is_while_block()
+{
+  assert(while_block >= 0);
+  return (while_block > 0);
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::finish_gotos
@@ -447,9 +469,6 @@ void goto_convertt::convert_block(
   const codet &code,
   goto_programt &dest)
 {
-  bool last_for=is_for_block();
-  bool last_while=is_while_block();
-
   if(inductive_step && (const_cast<codet&>(code).add("inside_loop") != irept("")))
     set_for_block(true);
 
@@ -522,11 +541,7 @@ void goto_convertt::convert_block(
   }
 
   if(inductive_step)
-  {
     const_cast<codet&>(code).remove("inside_loop");
-    set_for_block(last_for);
-    set_while_block(last_while);
-  }
 }
 
 /*******************************************************************\
@@ -1816,7 +1831,6 @@ void goto_convertt::convert_for(
   // do the t label
   if(inductive_step)
   {
-    //assert(cond.operands().size()==2);
     get_struct_components(cond);
     get_struct_components(code.op3());
     make_nondet_assign(dest);
@@ -1825,11 +1839,6 @@ void goto_convertt::convert_for(
   goto_programt sideeffects;
 
   remove_sideeffects(cond, sideeffects);
-
-  //unsigned int globals = get_expr_number_globals(cond);
-
-  //if(globals > 0)
-	//break_globals2assignments(cond, dest,code.location());
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -1895,9 +1904,6 @@ void goto_convertt::convert_for(
     update_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_w);
-
-//  if (inductive_step)
-//    increment_var(code.op1(), dest);
 
   dest.destructive_append(tmp_x);
 
@@ -3577,7 +3583,6 @@ void goto_convertt::convert_ifthenelse(
   if (options.get_bool_option("control-flow-test")
     && code.op0().id() != "notequal" && code.op0().id() != "symbol"
     && code.op0().id() != "typecast" && code.op0().id() != "="
-    && !is_thread
     && !options.get_bool_option("deadlock-check"))
   {
     symbolt &new_symbol=new_cftest_symbol(code.op0().type());

@@ -39,10 +39,11 @@ public:
   {
     goto_stmt=false;
     break_stmt=false;
-    is_thread=false;
     ifthenelse_block=false;
-    for_block=false;
-    while_block=false;
+
+    for_block=0;
+    while_block=0;
+
     state_counter=1;
     k_induction=false;
     inductive_step=options.get_bool_option("inductive-step");
@@ -204,16 +205,6 @@ protected:
   void replace_ifthenelse(exprt &expr);
   void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
   void get_new_expr(exprt &expr, exprt &new_expr, bool &found);
-  void set_goto(bool opt) {goto_stmt=opt;}
-  bool is_goto() const {return goto_stmt;}
-  void set_break(bool opt) {break_stmt=opt;}
-  bool is_break() const {return break_stmt;}
-  void set_for_block(bool opt) {for_block=opt;}
-  bool is_for_block() const {return for_block;}
-  void set_while_block(bool opt) {while_block=opt;}
-  void set_ifthenelse_block(bool opt) {ifthenelse_block=opt;}
-  bool is_ifthenelse_block() {return ifthenelse_block;}
-  bool is_while_block() const {return while_block;}
   bool nondet_initializer(exprt &value, const typet &type, exprt &rhs_expr) const;
   bool is_expr_in_state(const exprt &expr);
   void get_struct_components(const exprt &exp);
@@ -229,6 +220,21 @@ protected:
   void disable_k_induction(void);
   void print_msg_mem_alloc(void);
   void set_expr_to_nondet(exprt &tmp, goto_programt &dest);
+
+  void set_goto(bool opt) {goto_stmt=opt;}
+  bool is_goto() const {return goto_stmt;}
+
+  void set_break(bool opt) {break_stmt=opt;}
+  bool is_break() const {return break_stmt;}
+
+  void set_ifthenelse_block(bool opt) {ifthenelse_block=opt;}
+  bool is_ifthenelse_block() {return ifthenelse_block;}
+
+  void set_for_block(bool entering);
+  bool is_for_block();
+
+  void set_while_block(bool entering);
+  bool is_while_block();
 
   //
   // gotos
@@ -390,8 +396,9 @@ protected:
     unsigned int state_counter;
 
   private:
-    bool is_thread, for_block, break_stmt,
-         goto_stmt, while_block, ifthenelse_block;
+    bool break_stmt, goto_stmt, ifthenelse_block;
+    int for_block, while_block;
+
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;
 };
