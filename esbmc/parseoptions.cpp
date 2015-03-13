@@ -1032,17 +1032,20 @@ int cbmc_parseoptionst::doit_k_induction()
     }
     else
     {
-      std::cout << "inductive step " << std::endl;
+      if(!opts3.get_bool_option("disable-inductive-step"))
+      {
+        std::cout << "inductive step " << std::endl;
 
-      // We need to set the right context
-      context.clear();
-      context = context_inductive_step;
+        // We need to set the right context
+        context.clear();
+        context = context_inductive_step;
 
-      migrate_namespace_lookup = &ns_inductive_step;
-      res = do_bmc(bmc_inductive_step);
+        migrate_namespace_lookup = &ns_inductive_step;
+        res = do_bmc(bmc_inductive_step);
 
-      if (!res)
-        return res;
+        if (!res)
+          return res;
+      }
 
       base_case = true; //enable base case
     }

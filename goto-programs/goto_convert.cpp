@@ -2388,8 +2388,9 @@ Function: goto_convertt::disable_k_induction
 
 void goto_convertt::disable_k_induction()
 {
-  inductive_step=0;
-  base_case=0;
+  options.set_option("disable-inductive-step", true);
+  inductive_step=false;
+  base_case=false;
 }
 
 
