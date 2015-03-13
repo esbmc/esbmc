@@ -45,7 +45,6 @@ public:
     while_block=0;
 
     state_counter=1;
-    k_induction=false;
     inductive_step=options.get_bool_option("inductive-step");
     base_case=options.get_bool_option("base-case");
   }
@@ -388,7 +387,7 @@ protected:
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
 
   protected:
-    bool k_induction, inductive_step, base_case;
+    bool inductive_step, base_case;
     struct_typet state;
 
     typedef std::set<exprt> loop_varst;

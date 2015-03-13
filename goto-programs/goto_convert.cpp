@@ -1921,7 +1921,7 @@ void goto_convertt::convert_for(
   //do the g label
   if (!is_break() && !is_goto() && inductive_step)
     assume_cond(cond, true, dest); //assume(!c)
-  else if (k_induction)
+  else if (base_case)
     assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue
@@ -2277,7 +2277,6 @@ Function: goto_convertt::disable_k_induction
 
 void goto_convertt::disable_k_induction()
 {
-  k_induction=1;
   inductive_step=0;
   base_case=0;
 }
@@ -2704,7 +2703,7 @@ void goto_convertt::convert_while(
   //do the g label
   if (!is_break() && !is_goto() && inductive_step)
     assume_cond(*cond, true, dest); //assume(!c)
-  else if (k_induction)
+  else if (base_case)
     assert_cond(tmp, true, dest); //assert(!c)
 
   // restore break/continue
@@ -2845,7 +2844,7 @@ void goto_convertt::convert_dowhile(
   if (!is_break() && !is_goto()
 			&& (/*base_case ||*/ inductive_step))
     assume_cond(cond, true, dest); //assume(!c)
-  else if (k_induction)
+  else if (base_case)
     assert_cond(tmp, true, dest); //assert(!c)
 
   // restore break/continue targets
