@@ -37,16 +37,17 @@ public:
     temporary_counter(0),
     tmp_symbol_prefix("goto_convertt::")
   {
-    goto_stmt=false;
-    break_stmt=false;
-    ifthenelse_block=false;
+    goto_stmt = false;
+    break_stmt = false;
+    ifthenelse_block = false;
 
-    for_block=0;
-    while_block=0;
+    for_block = 0;
+    while_block = 0;
 
-    state_counter=1;
-    inductive_step=options.get_bool_option("inductive-step");
-    base_case=options.get_bool_option("base-case");
+    state_counter = 1;
+    inductive_step = options.get_bool_option("inductive-step");
+    base_case = options.get_bool_option("base-case");
+    assume_all_states = options.get_bool_option("assume-all-states");
   }
 
   virtual ~goto_convertt()
@@ -388,7 +389,7 @@ protected:
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
 
   protected:
-    bool inductive_step, base_case;
+    bool inductive_step, base_case, assume_all_states;
     struct_typet state;
 
     typedef std::set<exprt> loop_varst;
