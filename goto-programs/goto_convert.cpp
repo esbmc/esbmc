@@ -1725,14 +1725,8 @@ void goto_convertt::assume_all_state_vector(
   exprt cond("<=", typet("bool"));
   cond.copy_to_operands(tmp_symbol, lhs_index);
 
-  goto_programt sideeffects;
-  remove_sideeffects(cond, sideeffects);
-
   // save break/continue targets
   break_continue_targetst old_targets(targets);
-
-  // do the u label
-  goto_programt::targett u=sideeffects.instructions.begin();
 
   // do the v label
   goto_programt tmp_v;
@@ -1754,9 +1748,8 @@ void goto_convertt::assume_all_state_vector(
   goto_programt tmp_x;
   convert(to_code(increment_expression), tmp_x);
 
-  // optimize the v label
-  if(sideeffects.instructions.empty())
-    u=v;
+  // do the u label
+    goto_programt::targett u=v;
 
   // set the targets
   targets.set_break(z);
@@ -1796,7 +1789,6 @@ void goto_convertt::assume_all_state_vector(
   y->make_goto(u);
   y->guard = true_expr;
 
-  dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
