@@ -1154,16 +1154,8 @@ void goto_convertt::convert_assign(
   {
     get_struct_components(lhs);
     if (rhs.is_constant() && is_ifthenelse_block())
-    {
-      nondet_vars.insert(std::pair<exprt, exprt>(lhs, rhs));
-    }
-    else if ((is_for_block() || is_while_block()) && is_ifthenelse_block())
-    {
-      nondet_varst::const_iterator cache_result;
-      cache_result = nondet_vars.find(lhs);
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(lhs, dest);
-    }
+      if(!is_expr_in_state(lhs))
+        nondet_vars.insert(std::pair<exprt, exprt>(lhs, rhs));
   }
 }
 
