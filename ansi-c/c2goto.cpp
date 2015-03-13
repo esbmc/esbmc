@@ -55,7 +55,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
     std::ofstream out(cmdline.getval("output"), std::ios::out | std::ios::binary);
 
     if (write_goto_binary(out, context, goto_functions)) {
-      std::cerr << "Failed to write C library to binary obj" << std::endl;;
+      std::cerr << "Failed to write C library to binary obj" << std::endl;
       return 1;
     }
 
@@ -63,6 +63,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
   }
 
   int doit_k_induction(){ return 0; };
+  int doit_k_induction_parallel() { return 0; };
 };
 
 int main(int argc, const char **argv)

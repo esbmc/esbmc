@@ -65,6 +65,7 @@ protected:
 
   // k-induction related
   int doit_k_induction();
+  int doit_k_induction_parallel();
 };
 
 #endif

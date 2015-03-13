@@ -24,6 +24,7 @@ public:
 
   virtual int doit()=0;
   virtual int doit_k_induction()=0;
+  virtual int doit_k_induction_parallel()=0;
 
   virtual int main();
   virtual ~parseoptions_baset() { }
