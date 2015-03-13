@@ -707,9 +707,6 @@ protected:
   /** Flag as to whether we're doing a k-induction base case. Corresponds to
    *  the option --base-case */
   bool base_case;
-  /** Flag as to whether we're doing a k-induction forward condition.
-   *  Corresponds to the option --forward-condition */
-  bool forward_condition;
   /** Names of functions that we've complained about missing bodies of. */
   static hash_set_cont<irep_idt, irep_id_hash> body_warnings;
   /** Set of dereference state records; this field is used as a mailbox between

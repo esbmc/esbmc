@@ -2022,9 +2022,9 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() && inductive_step)
+  if (!is_break() && !is_goto() && (inductive_step || base_case))
     assume_cond(cond, true, dest); //assume(!c)
-  else if (base_case)
+  else if (base_case || forward_condition)
     assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue
@@ -2805,9 +2805,9 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() && inductive_step)
+  if (!is_break() && !is_goto() && (inductive_step || base_case))
     assume_cond(*cond, true, dest); //assume(!c)
-  else if (base_case)
+  else if (base_case || forward_condition)
     assert_cond(tmp, true, dest); //assert(!c)
 
   // restore break/continue
@@ -2945,9 +2945,9 @@ void goto_convertt::convert_dowhile(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() && inductive_step)
+  if (!is_break() && !is_goto() && (inductive_step || base_case))
     assume_cond(cond, true, dest); //assume(!c)
-  else if (base_case)
+  else if (forward_condition)
     assert_cond(tmp, true, dest); //assert(!c)
 
   // restore break/continue targets

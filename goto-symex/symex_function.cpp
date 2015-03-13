@@ -30,32 +30,28 @@ goto_symext::get_unwind_recursion(
 {
   unsigned long this_loop_max_unwind = max_unwind;
 
-  #if 1
-  if (unwind != 0) {
+  if (unwind != 0)
+  {
 
-	if (k_induction
-	  || options.get_bool_option("k-induction-parallel")) {
-	  std::cerr << "Sorry, can't perform k-induction on recursive code";
-	  std::cerr  << std::endl;
-	  abort();
-	}
+    if (k_induction || options.get_bool_option("k-induction-parallel"))
+    {
+      std::cerr << "Sorry, can't perform k-induction on recursive code";
+      std::cerr << std::endl;
+      abort();
+    }
 
     const symbolt &symbol = ns.lookup(identifier);
 
-    std::string msg =
-      "Unwinding recursion " +
-      id2string(symbol.display_name()) +
-      " iteration " + i2string(unwind);
+    std::string msg = "Unwinding recursion " + id2string(symbol.display_name())
+      + " iteration " + i2string(unwind);
 
     if (this_loop_max_unwind != 0)
       msg += " (" + i2string(this_loop_max_unwind) + " max)";
 
     std::cout << msg << std::endl;
   }
-  #endif
 
-  return this_loop_max_unwind != 0 &&
-         unwind >= this_loop_max_unwind;
+  return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
 void
