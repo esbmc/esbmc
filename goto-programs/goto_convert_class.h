@@ -200,17 +200,14 @@ protected:
   void add_new_variables_to_context();
   void make_nondet_assign(goto_programt &dest);
   void init_k_indice(goto_programt &dest);
-  void assign_state_vector(const array_typet &state_vector, goto_programt &dest);
-  void assign_current_state(/*const struct_typet &state,*/ goto_programt &dest);
+  void assign_current_state(goto_programt &dest);
   void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
   void replace_ifthenelse(exprt &expr);
   void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
   void get_new_expr(exprt &expr, exprt &new_expr, bool &found);
-  bool nondet_initializer(exprt &value, const typet &type, exprt &rhs_expr) const;
   bool is_expr_in_state(const exprt &expr);
   void get_struct_components(const exprt &exp);
   void replace_cond(exprt &tmp, goto_programt &dest);
-  void increment_var(const exprt &var, goto_programt &dest);
   void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
   bool check_op_const(const exprt &tmp, const locationt &loc);
   void assume_state_vector(array_typet state_vector, goto_programt &dest);
@@ -218,7 +215,6 @@ protected:
   void update_state_vector(array_typet state_vector, goto_programt &dest);
   void init_nondet_expr(exprt &tmp, goto_programt &dest);
   void print_msg(const exprt &tmp);
-  void replace_infinite_loop(exprt &tmp, goto_programt &dest);
   void disable_k_induction(void);
   void print_msg_mem_alloc(void);
   void set_expr_to_nondet(exprt &tmp, goto_programt &dest);

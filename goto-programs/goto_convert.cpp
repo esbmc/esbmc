@@ -2265,51 +2265,6 @@ void goto_convertt::init_k_indice(
 
 /*******************************************************************\
 
-Function: goto_convertt::assign_state_vector
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::assign_state_vector(
-  const array_typet &state_vector,
-  goto_programt &dest)
-{
-    //set the type of the state vector
-    const_cast<typet&>(state_vector.subtype()) = state;
-
-    std::string identifier;
-    identifier = "kindice$"+i2string(state_counter);
-
-    exprt lhs_index = symbol_exprt(identifier, int_type());
-    exprt new_expr(exprt::with, state_vector);
-    exprt lhs_array("symbol", state_vector);
-    exprt rhs("symbol", state);
-
-    std::string identifier_lhs, identifier_rhs;
-    identifier_lhs = "s$"+i2string(state_counter);
-    identifier_rhs = "cs$"+i2string(state_counter);
-
-    lhs_array.identifier(identifier_lhs);
-    rhs.identifier(identifier_rhs);
-
-    // s[k]=cs
-    new_expr.reserve_operands(3);
-    new_expr.copy_to_operands(lhs_array);
-    new_expr.copy_to_operands(lhs_index);
-    new_expr.move_to_operands(rhs);
-
-    code_assignt new_assign(lhs_array,new_expr);
-    copy(new_assign, ASSIGN, dest);
-}
-
-
-/*******************************************************************\
-
 Function: goto_convertt::assume_cond
 
   Inputs:
@@ -2486,55 +2441,6 @@ void goto_convertt::init_nondet_expr(
     nondet_vars.insert(std::pair<exprt, exprt>(tmp, nondet_expr));
 }
 
-
-/*******************************************************************\
-
-Function: goto_convertt::replace_infinite_loop
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::replace_infinite_loop(
-  exprt &tmp,
-  goto_programt &dest)
-{
-  //declare variable i$ of type uint
-  std::string identifier;
-  identifier = "c::i$"+i2string(state_counter);
-  exprt indice = symbol_exprt(identifier, uint_type());
-
-  get_struct_components(indice);
-
-  //declare variables n$ of type uint
-  identifier = "c::n$"+i2string(state_counter);
-  exprt n_expr = symbol_exprt(identifier, uint_type());
-
-  get_struct_components(n_expr);
-
-  exprt zero_expr = gen_zero(uint_type());
-  exprt nondet_expr=side_effect_expr_nondett(uint_type());
-
-  //initialize i=0
-  code_assignt new_assign(indice,zero_expr);
-  copy(new_assign, ASSIGN, dest);
-
-
-  //initialize n=nondet_uint();
-  code_assignt new_assign_nondet(n_expr,nondet_expr);
-  copy(new_assign_nondet, ASSIGN, dest);
-
-  //assume that n>0;
-  assume_cond(gen_binary(exprt::i_gt, bool_typet(), n_expr, zero_expr), false, dest);
-
-  //replace the condition c by i<=n;
-  tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
-}
-
 /*******************************************************************\
 
 Function: goto_convertt::set_expr_to_nondet
@@ -2584,11 +2490,7 @@ void goto_convertt::replace_cond(
 {
   irep_idt exprid = tmp.id();
 
-  if (tmp.is_true())
-  {
-    //replace_infinite_loop(tmp, dest);
-  }
-  else if (exprid == ">" ||  exprid == ">=")
+  if (exprid == ">" ||  exprid == ">=")
   {
     assert(tmp.operands().size()==2);
     if (is_for_block()) {
@@ -2657,40 +2559,8 @@ void goto_convertt::replace_cond(
 	      << "' located at line " << tmp.location().get_line()
 	      << " of " << tmp.location().get_file()
   	      << " is not supported yet" << std::endl;
-    //std::cout << tmp.pretty() << std::endl;
-    assert(0);
+    disable_k_induction();
   }
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::increment_var
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::increment_var(
-  const exprt &var,
-  goto_programt &dest)
-{
-  if (var.is_true())
-  {
-    std::string identifier;
-    identifier = "c::i$"+i2string(state_counter);
-    exprt lhs_expr = symbol_exprt(identifier, uint_type());
-
-    //increment var by 1
-    exprt one_expr = gen_one(uint_type());
-    exprt rhs_expr = gen_binary(exprt::plus, uint_type(), lhs_expr, one_expr);
-    code_assignt new_assign_indice(lhs_expr,rhs_expr);
-    copy(new_assign_indice, ASSIGN, dest);
-  }
-
 }
 
 /*******************************************************************\
