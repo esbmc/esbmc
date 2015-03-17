@@ -32,28 +32,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define DEBUGLOC
 #endif
 
-void goto_convertt::set_for_block(bool entering)
-{
-  entering? ++for_block : --for_block;
-}
-
-bool goto_convertt::is_for_block()
-{
-  assert(for_block >= 0);
-  return (for_block > 0);
-}
-
-void goto_convertt::set_while_block(bool entering)
-{
-  entering? ++while_block : --while_block;
-}
-
-bool goto_convertt::is_while_block()
-{
-  assert(while_block >= 0);
-  return (while_block > 0);
-}
-
 /*******************************************************************\
 
 Function: goto_convertt::finish_gotos
@@ -469,8 +447,8 @@ void goto_convertt::convert_block(
   const codet &code,
   goto_programt &dest)
 {
-  if(inductive_step && (const_cast<codet&>(code).add("inside_loop") != irept("")))
-    set_for_block(true);
+//  if(inductive_step && (const_cast<codet&>(code).add("inside_loop") != irept("")))
+//    push_new_loop_block();
 
   std::list<irep_idt> locals;
   //extract all the local variables from the block
@@ -540,8 +518,11 @@ void goto_convertt::convert_block(
     locals.pop_back();
   }
 
-  if(inductive_step)
-    const_cast<codet&>(code).remove("inside_loop");
+//  if(inductive_step && (const_cast<codet&>(code).add("inside_loop") != irept("")))
+//  {
+//    const_cast<codet&>(code).remove("inside_loop");
+//    pop_loop_block();
+//  }
 }
 
 /*******************************************************************\
@@ -2509,8 +2490,6 @@ void goto_convertt::convert_while(
 
   exprt tmp=code.op0();
 
-  set_while_block(true);
-
   if(inductive_step)
     replace_cond(tmp, dest);
 
@@ -2605,8 +2584,6 @@ void goto_convertt::convert_while(
   // restore break/continue
   targets.restore(old_targets);
 
-  state_counter++;
-  set_while_block(false);
   set_break(false);
   set_goto(false);
 }
@@ -2640,8 +2617,6 @@ void goto_convertt::convert_dowhile(
 
   goto_programt sideeffects;
   remove_sideeffects(tmp, sideeffects);
-
-  set_while_block(true);
 
   if(inductive_step)
     replace_cond(tmp, dest);

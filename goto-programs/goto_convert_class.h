@@ -224,12 +224,6 @@ protected:
   void set_ifthenelse_block(bool opt) {ifthenelse_block=opt;}
   bool is_ifthenelse_block() {return ifthenelse_block;}
 
-  void set_for_block(bool entering);
-  bool is_for_block();
-
-  void set_while_block(bool entering);
-  bool is_while_block();
-
   typedef std::set<exprt> loop_varst;
 
   class loop_block
@@ -419,7 +413,6 @@ protected:
 
   private:
     bool break_stmt, goto_stmt, ifthenelse_block;
-    int for_block, while_block;
 
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;
