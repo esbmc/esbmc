@@ -923,9 +923,6 @@ void goto_convertt::convert_decl(
     throw "decl statement expects symbol as first operand";
   }
 
-  if (inductive_step)
-    get_struct_components(op0);
-
   const irep_idt &identifier=op0.identifier();
 
   const symbolt &symbol=lookup(identifier);
