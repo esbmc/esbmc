@@ -1115,7 +1115,7 @@ void goto_convertt::convert_assign(
         dest.add_instruction(ATOMIC_END);
   }
 
-  if (inductive_step && lhs.type().id() != "empty")
+  if (inductive_step && current_block != NULL && lhs.type().id() != "empty")
   {
     get_struct_components(lhs);
   }
