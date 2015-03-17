@@ -2165,6 +2165,10 @@ void goto_convertt::assume_cond(
   const bool &neg,
   goto_programt &dest)
 {
+  // We don't assume false if there is a break inside the loop
+  if(cond.is_true() && current_block->has_break)
+    return;
+
   goto_programt tmp_e;
   goto_programt::targett e=tmp_e.add_instruction(ASSUME);
   exprt result_expr = cond;
@@ -2195,6 +2199,10 @@ void goto_convertt::assert_cond(
   const bool &neg,
   goto_programt &dest)
 {
+  // We don't assert false if there is a break inside the loop
+  if(cond.is_true() && current_block->has_break)
+    return;
+
   goto_programt tmp_e;
   goto_programt::targett e=tmp_e.add_instruction(ASSERT);
   exprt result_expr = cond;
@@ -2894,8 +2902,8 @@ void goto_convertt::convert_break(
   t->make_goto(targets.break_target);
   t->location=code.location();
 
-  if (inductive_step && (current_block != NULL))
-    set_break(true);
+  if (current_block != NULL)
+    current_block->has_break = true;
 }
 
 /*******************************************************************\
