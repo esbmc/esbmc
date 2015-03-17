@@ -2512,10 +2512,7 @@ void goto_convertt::convert_while(
 
   // do the t label
   if(inductive_step)
-  {
     get_struct_components(code.op1());
-    make_nondet_assign(dest);
-  }
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -2551,7 +2548,10 @@ void goto_convertt::convert_while(
 
   //do the c label
   if (inductive_step)
+  {
+    make_nondet_assign(dest);
     init_k_indice(dest);
+  }
 
   dest.destructive_append(tmp_branch);
 
@@ -2641,10 +2641,7 @@ void goto_convertt::convert_dowhile(
 
   // do the t label
   if(inductive_step)
-  {
     get_struct_components(code.op1());
-    make_nondet_assign(dest);
-  }
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -2665,10 +2662,6 @@ void goto_convertt::convert_dowhile(
   else
     x=sideeffects.instructions.begin();
 
-  //do the c label
-  if (inductive_step)
-    init_k_indice(dest);
-
   // set the targets
   targets.set_break(z);
   targets.set_continue(x);
@@ -2677,6 +2670,13 @@ void goto_convertt::convert_dowhile(
   goto_programt tmp_w;
   convert(to_code(code.op1()), tmp_w);
   goto_programt::targett w=tmp_w.instructions.begin();
+
+  //do the c label
+  if (inductive_step)
+  {
+    init_k_indice(dest);
+    make_nondet_assign(dest);
+  }
 
   dest.destructive_append(tmp_w);
   dest.destructive_append(sideeffects);
