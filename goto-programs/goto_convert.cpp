@@ -1985,7 +1985,7 @@ void goto_convertt::convert_for(
   //do the g label
   if (!is_goto() && (inductive_step || base_case))
     assume_cond(cond, true, dest); //assume(!c)
-  else if (base_case || forward_condition)
+  else if (forward_condition)
     assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue
@@ -2576,7 +2576,7 @@ void goto_convertt::convert_while(
   //do the g label
   if (!is_goto() && (inductive_step || base_case))
     assume_cond(*cond, true, dest); //assume(!c)
-  else if (base_case || forward_condition)
+  else if (forward_condition)
     assert_cond(tmp, true, dest); //assert(!c)
 
   // restore break/continue
