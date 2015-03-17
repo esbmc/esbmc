@@ -721,8 +721,7 @@ void goto_convertt::do_function_call_symbol(
     t->location=function.location();
     t->location.user_provided(true);
 
-    if (is_assume && inductive_step
-    	&& (is_while_block() || is_for_block()))
+    if (is_assume && inductive_step && (current_block != NULL))
     {
       exprt cond = arguments.front();
       replace_ifthenelse(cond);

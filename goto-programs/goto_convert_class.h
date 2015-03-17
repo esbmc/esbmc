@@ -36,20 +36,16 @@ public:
     options(_options),
     ns(_context),
     temporary_counter(0),
-    tmp_symbol_prefix("goto_convertt::")
+    tmp_symbol_prefix("goto_convertt::"),
+    current_block(NULL),
+    inductive_step(options.get_bool_option("inductive-step")),
+    base_case(options.get_bool_option("base-case")),
+    forward_condition(options.get_bool_option("forward-condition")),
+    assume_all_states(options.get_bool_option("assume-all-states")),
+    break_stmt(false),
+    goto_stmt(false),
+    ifthenelse_block(false)
   {
-    goto_stmt = false;
-    break_stmt = false;
-    ifthenelse_block = false;
-
-    for_block = 0;
-    while_block = 0;
-
-    state_counter = 1;
-    inductive_step = options.get_bool_option("inductive-step");
-    base_case = options.get_bool_option("base-case");
-    forward_condition = options.get_bool_option("forward-condition");
-    assume_all_states = options.get_bool_option("assume-all-states");
   }
 
   virtual ~goto_convertt()
