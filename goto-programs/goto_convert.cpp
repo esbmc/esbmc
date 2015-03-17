@@ -2391,7 +2391,11 @@ void goto_convertt::replace_cond(
 {
   irep_idt exprid = tmp.id();
 
-  if (exprid == ">" ||  exprid == ">=")
+  if (tmp.is_constant())
+  {
+
+  }
+  else if (exprid == ">" ||  exprid == ">=")
   {
     assert(tmp.operands().size()==2);
     if (current_block != NULL) {
