@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <list>
 #include <queue>
+#include <stack>
 #include <namespace.h>
 #include <guard.h>
 #include <std_code.h>
@@ -197,7 +198,6 @@ protected:
   // k-induction conversion
   //
   void add_global_variable_to_state();
-  void add_new_variables_to_context();
   void make_nondet_assign(goto_programt &dest);
   void init_k_indice(goto_programt &dest);
   void assign_current_state(goto_programt &dest);
@@ -233,6 +233,35 @@ protected:
 
   void set_while_block(bool entering);
   bool is_while_block();
+
+  typedef std::set<exprt> loop_varst;
+
+  class loop_block
+  {
+    public:
+      loop_block(unsigned int _state_counter, loop_varst _global_vars)
+        : loop_vars(_global_vars),
+          has_break(false),
+          has_outside_goto(false),
+          state_counter(_state_counter),
+          state(struct_typet())
+      {}
+
+      loop_varst loop_vars;
+
+      bool has_break, has_outside_goto;
+      unsigned int state_counter;
+      struct_typet state;
+  };
+
+  typedef std::stack<loop_block*> loop_stackt;
+  loop_stackt loop_stack;
+
+  loop_block* current_block;
+  loop_varst global_vars;
+
+  void push_new_loop_block();
+  void pop_loop_block();
 
   //
   // gotos
@@ -389,7 +418,6 @@ protected:
     bool inductive_step, base_case, forward_condition, assume_all_states;
     struct_typet state;
 
-    typedef std::set<exprt> loop_varst;
     loop_varst loop_vars;
     unsigned int state_counter;
 
