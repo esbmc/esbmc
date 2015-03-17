@@ -881,22 +881,6 @@ void goto_convertt::get_struct_components(const exprt &exp)
       current_block->state.components()[size].pretty_name(exp.get_string("identifier"));
     }
   }
-  else if (exp.operands().size()==1)
-  {
-    DEBUGLOC;
-    if (exp.op0().is_symbol()) {
-      get_struct_components(exp.op0());
-    } else if (exp.op0().operands().size()==1)
-      get_struct_components(exp.op0().op0());
-  }
-  else if (exp.operands().size()==2)
-  {
-    DEBUGLOC;
-    if (exp.op0().is_symbol()) {
-      get_struct_components(exp.op0());
-    } else if (exp.op0().operands().size())
-      get_struct_components(exp.op0().op0());
-  }
   else
   {
     forall_operands(it, exp)
