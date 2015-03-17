@@ -1915,10 +1915,7 @@ void goto_convertt::convert_for(
 
   // do the t label
   if(inductive_step)
-  {
-    get_struct_components(cond);
     get_struct_components(code.op3());
-  }
 
   goto_programt sideeffects;
 
@@ -2010,6 +2007,8 @@ void goto_convertt::convert_for(
 
   // restore break/continue
   targets.restore(old_targets);
+
+  pop_loop_block();
 }
 
 /*******************************************************************\
@@ -2496,7 +2495,6 @@ void goto_convertt::convert_while(
   array_typet state_vector;
   const exprt *cond=&tmp;
   const locationt &location=code.location();
-
 
   //    while(c) P;
   //--------------------
@@ -3848,8 +3846,6 @@ void goto_convertt::pop_loop_block()
   state_symbol.mode="C";
   state_symbol.module="main";
   state_symbol.pretty_name="struct state$vector";
-
-  state_symbol.dump();
 
   context.move(state_symbol, symbol_ptr);
 
