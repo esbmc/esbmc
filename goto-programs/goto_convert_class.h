@@ -42,6 +42,7 @@ public:
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
     assume_all_states(options.get_bool_option("assume-all-states")),
+    total_states(1),
     break_stmt(false),
     goto_stmt(false),
     ifthenelse_block(false)
@@ -406,6 +407,7 @@ protected:
 
   protected:
     bool inductive_step, base_case, forward_condition, assume_all_states;
+    unsigned int total_states;
 
   private:
     bool break_stmt, goto_stmt, ifthenelse_block;

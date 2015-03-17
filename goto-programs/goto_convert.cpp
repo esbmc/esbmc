@@ -884,12 +884,8 @@ void goto_convertt::get_struct_components(const exprt &exp)
   else
   {
     forall_operands(it, exp)
-    {
-      DEBUGLOC;
       get_struct_components(*it);
-    }
   }
-  DEBUGLOC;
 }
 
 /*******************************************************************\
@@ -2033,8 +2029,7 @@ Function: goto_convertt::make_nondet_assign
 void goto_convertt::make_nondet_assign(
   goto_programt &dest)
 {
-  u_int j=0;
-  for (j=0; j < current_block->state.components().size(); j++)
+  for (unsigned int j=0; j < current_block->state.components().size(); j++)
   {
     exprt rhs_expr=side_effect_expr_nondett(current_block->state.components()[j].type());
     exprt new_expr(exprt::with, current_block->state);
@@ -3815,11 +3810,14 @@ void goto_convertt::guard_program(
 void goto_convertt::push_new_loop_block()
 {
   // Add new block to stack
-  loop_block *block = new loop_block(loop_stack.size() + 1, global_vars);
+  loop_block *block = new loop_block(total_states, global_vars);
   loop_stack.push(block);
 
   // Update current_block reference
   current_block = block;
+
+  // Increment total number of states
+  ++total_states;
 }
 
 void goto_convertt::pop_loop_block()
@@ -3828,21 +3826,20 @@ void goto_convertt::pop_loop_block()
 
   // Create symbol for the state$vector
   symbolt *symbol_ptr=NULL;
+  unsigned int i = current_block->state_counter;
 
   symbolt state_symbol;
-  state_symbol.name="c::state$vector";
-  state_symbol.base_name="state$vector";
+  state_symbol.name="c::state$vector"+i2string(i);
+  state_symbol.base_name="state$vector"+i2string(i);
   state_symbol.is_type=true;
   state_symbol.type=current_block->state;
   state_symbol.mode="C";
   state_symbol.module="main";
-  state_symbol.pretty_name="struct state$vector";
+  state_symbol.pretty_name="struct state$vector"+i2string(i);
 
   context.move(state_symbol, symbol_ptr);
 
   // Create new symbol for this state
-  unsigned int i = loop_stack.size();
-
   // First is kindice
   symbolt kindice_symbol;
   kindice_symbol.name="kindice$"+i2string(i);
@@ -3869,7 +3866,7 @@ void goto_convertt::pop_loop_block()
 
   // Finally, the current state cs
   typet state_type("struct");
-  state_type.tag("state$vector");
+  state_type.tag("state$vector"+i2string(i));
 
   symbolt current_state_symbol;
   current_state_symbol.name="cs$"+i2string(i);
