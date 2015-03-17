@@ -1869,8 +1869,6 @@ void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
-  DEBUGLOC;
-
   push_new_loop_block();
 
   if(code.operands().size()!=4)
@@ -2481,6 +2479,8 @@ void goto_convertt::convert_while(
   const codet &code,
   goto_programt &dest)
 {
+  push_new_loop_block();
+
   if(code.operands().size()!=2)
   {
     err_location(code);
@@ -2584,6 +2584,8 @@ void goto_convertt::convert_while(
 
   set_break(false);
   set_goto(false);
+
+  pop_loop_block();
 }
 
 /*******************************************************************\
@@ -2602,6 +2604,8 @@ void goto_convertt::convert_dowhile(
   const codet &code,
   goto_programt &dest)
 {
+  push_new_loop_block();
+
   if(code.operands().size()!=2)
   {
     err_location(code);
@@ -2717,6 +2721,8 @@ void goto_convertt::convert_dowhile(
 
   // restore break/continue targets
   targets.restore(old_targets);
+
+  pop_loop_block();
 }
 
 /*******************************************************************\
