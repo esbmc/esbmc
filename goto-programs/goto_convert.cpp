@@ -1983,7 +1983,7 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() && (inductive_step || base_case))
+  if (!is_goto() && (inductive_step || base_case))
     assume_cond(cond, true, dest); //assume(!c)
   else if (base_case || forward_condition)
     assert_cond(cond, true, dest); //assert(!c)
@@ -2574,7 +2574,7 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() && (inductive_step || base_case))
+  if (!is_goto() && (inductive_step || base_case))
     assume_cond(*cond, true, dest); //assume(!c)
   else if (base_case || forward_condition)
     assert_cond(tmp, true, dest); //assert(!c)
@@ -2582,7 +2582,6 @@ void goto_convertt::convert_while(
   // restore break/continue
   targets.restore(old_targets);
 
-  set_break(false);
   set_goto(false);
 
   pop_loop_block();
@@ -2714,7 +2713,7 @@ void goto_convertt::convert_dowhile(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() && (inductive_step || base_case))
+  if (!is_goto() && (inductive_step || base_case))
     assume_cond(cond, true, dest); //assume(!c)
   else if (forward_condition)
     assert_cond(tmp, true, dest); //assert(!c)
