@@ -406,10 +406,6 @@ protected:
 
   protected:
     bool inductive_step, base_case, forward_condition, assume_all_states;
-    struct_typet state;
-
-    loop_varst loop_vars;
-    unsigned int state_counter;
 
   private:
     bool break_stmt, goto_stmt, ifthenelse_block;
