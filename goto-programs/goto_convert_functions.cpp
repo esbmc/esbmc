@@ -100,9 +100,6 @@ void goto_convert_functionst::goto_convert()
   }
 
   functions.compute_location_numbers();
-
-  // If it is the inductive step, it will add the new variables to context
-  add_new_variables_to_context();
 }
 
 /*******************************************************************\
