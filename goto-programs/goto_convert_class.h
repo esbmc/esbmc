@@ -203,7 +203,7 @@ protected:
   void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
   void get_new_expr(exprt &expr, exprt &new_expr, bool &found);
   bool is_expr_in_state(const exprt &expr);
-  void get_struct_components(const exprt &exp);
+  void get_struct_components(const exprt &exp, bool is_global = false);
   void replace_cond(exprt &tmp, goto_programt &dest);
   void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
   bool check_op_const(const exprt &tmp, const locationt &loc);
@@ -236,7 +236,21 @@ protected:
           has_outside_goto(false),
           state_counter(_state_counter),
           state(struct_typet())
-      {}
+      {
+        // Check if there are any variables on the set already (static and globals)
+        // and add them to the state
+        if (!loop_vars.size())
+          return;
+
+        for (exprt exp : loop_vars )
+        {
+          unsigned int size = state.components().size();
+          state.components().resize(size+1);
+          state.components()[size] = (struct_typet::componentt &) exp;
+          state.components()[size].set_name(exp.get_string("identifier"));
+          state.components()[size].pretty_name(exp.get_string("identifier"));
+        }
+      }
 
       loop_varst loop_vars;
 

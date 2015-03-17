@@ -846,7 +846,7 @@ Function: goto_convertt::get_struct_components
 
 \*******************************************************************/
 
-void goto_convertt::get_struct_components(const exprt &exp)
+void goto_convertt::get_struct_components(const exprt &exp, bool is_global)
 {
   DEBUGLOC;
 
@@ -868,6 +868,14 @@ void goto_convertt::get_struct_components(const exprt &exp)
        || exp.type().location().file().as_string() == "<built-in>"
        || exp.type().cmt_location().file().as_string() == "<built-in>")
       return;
+
+    // That means that we're trying to insert the global variables, but
+    // there is no state created here, so add to the global_vars and return
+    if (is_global)
+    {
+      global_vars.insert(exp);
+      return;
+    }
 
     if (current_block != NULL)
       current_block->loop_vars.insert(exp);
@@ -2009,7 +2017,7 @@ void goto_convertt::add_global_variable_to_state()
       exprt s = symbol_expr(it->second);
       if(it->second.value.id()==irep_idt("array_of"))
         s.type()=it->second.value.type();
-      get_struct_components(s);
+      get_struct_components(s, true);
     }
   }
 }
