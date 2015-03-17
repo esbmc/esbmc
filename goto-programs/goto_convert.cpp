@@ -2296,6 +2296,19 @@ bool goto_convertt::check_op_const(
     return true;
   }
 
+  if (tmp.is_symbol())
+  {
+    if(ns.lookup(tmp.identifier()).value.is_constant())
+    {
+      std::cerr << "warning: this program " << loc.get_file()
+                << " contains a bounded loop at line " << loc.get_line()
+          << ", so we are not applying the k-induction method to this program!"
+                << std::endl;
+      disable_k_induction();
+      return true;
+    }
+  }
+
   return false;
 }
 
@@ -2377,7 +2390,6 @@ void goto_convertt::replace_cond(
 
   if (tmp.is_constant())
   {
-
   }
   else if (exprid == ">" ||  exprid == ">=")
   {
