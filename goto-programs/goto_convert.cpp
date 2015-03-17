@@ -2284,7 +2284,7 @@ void goto_convertt::print_msg(
   std::cerr << "warning: this program " << tmp.location().get_file()
             << " contains a '" << tmp.id() << "' operator at line "
             << tmp.location().get_line()
-            << ", so we are not applying the k-induction method to this program!"
+            << ", so we are not applying the inductive step to this program!"
             << std::endl;
   disable_k_induction();
 }
