@@ -47,7 +47,7 @@ public:
     k_induction=false;
     inductive_step = options.get_bool_option("inductive-step");
     base_case = options.get_bool_option("base-case");
-    assume_all_states = options.get_bool_option("assume-all-states");
+    assume_all_states = options.get_bool_option("constraint-all-states");
   }
 
   virtual ~goto_convertt()

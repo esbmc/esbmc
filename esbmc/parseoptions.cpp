@@ -1736,6 +1736,7 @@ void cbmc_parseoptionst::help()
     " --inductive-step             check the inductive step\n"
     " --k-induction                prove by k-induction \n"
     " --k-induction-parallel       prove by k-induction, running ech step on a separate process\n"
+    " --constraint-all-states      remove all redundant states in the inductive step\n"
     " --k-step nr                  set the k time step (default is 50) \n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
