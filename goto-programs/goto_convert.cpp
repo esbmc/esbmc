@@ -3465,7 +3465,7 @@ void goto_convertt::convert_ifthenelse(
     tmp_guard=code.op0();
 
   remove_sideeffects(tmp_guard, dest);
-  if (inductive_step && (current_block != NULL))
+  if (inductive_step && (current_block != NULL) && current_block->active)
   {
     replace_ifthenelse(tmp_guard);
 
