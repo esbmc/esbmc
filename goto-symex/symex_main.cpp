@@ -127,14 +127,14 @@ goto_symext::symex_step(reachability_treet & art)
       do_simplify(tmp);
 
       if (!is_true(tmp)) {
-	expr2tc tmp2 = tmp;
+        expr2tc tmp2 = tmp;
         expr2tc tmp3 = tmp2;
-	cur_state->guard.guard_expr(tmp2);
+        cur_state->guard.guard_expr(tmp2);
 
         assume(tmp2);
 
-	// we also add it to the state guard
-	cur_state->guard.add(tmp3);
+        // we also add it to the state guard
+        cur_state->guard.add(tmp3);
       }
     }
     cur_state->source.pc++;
@@ -186,7 +186,7 @@ goto_symext::symex_step(reachability_treet & art)
 
       replace_nondet(deref_code);
 
-      code_assign2t &assign = to_code_assign2t(deref_code); 
+      code_assign2t &assign = to_code_assign2t(deref_code);
 
       dereference(assign.target, true);
       dereference(assign.source, false);

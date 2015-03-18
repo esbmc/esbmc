@@ -33,7 +33,7 @@ goto_symext::get_unwind_recursion(
   if (unwind != 0)
   {
 
-    if (k_induction || options.get_bool_option("k-induction-parallel"))
+    if (k_induction)
     {
       std::cerr << "Sorry, can't perform k-induction on recursive code";
       std::cerr << std::endl;
@@ -177,8 +177,6 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     if (!no_unwinding_assertions)
       claim(false_expr,
             "recursion unwinding assertion");
-    else if (base_case)
-			unwinding_recursion_assumption=true;
     else {
       // Add an unwinding assumption.
       expr2tc now_guard = cur_state->guard.as_expr();
