@@ -1891,7 +1891,11 @@ void goto_convertt::convert_for(
   exprt tmp=code.op1();
 
   if (inductive_step)
+  {
+    exprt tmp_op0 = code.op0();
+    check_loop_cond(tmp_op0, dest);
     check_loop_cond(tmp, dest);
+  }
 
   exprt cond=tmp;
 
