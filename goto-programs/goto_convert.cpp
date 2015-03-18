@@ -3905,6 +3905,10 @@ void goto_convertt::pop_loop_block()
 
   context.move(current_state_symbol, symbol_ptr);
 
+  // Update flag to disable inductive step
+  if(current_block->active)
+    disable_inductive_step = false;
+
   delete current_block;
 
   // Pop block from stack

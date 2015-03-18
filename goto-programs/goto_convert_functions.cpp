@@ -100,6 +100,14 @@ void goto_convert_functionst::goto_convert()
   }
 
   functions.compute_location_numbers();
+
+  if (disable_inductive_step)
+  {
+    std::cerr << "warning: esbmc couldn't find any non-deterministic loop "
+                << ", so we are not applying the inductive step to this program!"
+                << std::endl;
+    disable_k_induction();
+  }
 }
 
 /*******************************************************************\
