@@ -2396,10 +2396,8 @@ void goto_convertt::check_loop_cond(
   {
 
   }
-  else if (exprid == ">" ||  exprid == ">=")
+  else if (exprid == ">" ||  exprid == ">=" || expr.is_typecast())
   {
-    assert(expr.operands().size()==2);
-
     if (!check_expr_const(expr.op0(), expr.location()))
       current_block->active = true;
   }
