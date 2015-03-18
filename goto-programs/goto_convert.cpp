@@ -1893,8 +1893,8 @@ void goto_convertt::convert_for(
   if (inductive_step)
   {
     exprt tmp_op0 = code.op0();
-    check_loop_cond(tmp_op0, dest);
-    check_loop_cond(tmp, dest);
+    check_loop_cond(tmp_op0);
+    check_loop_cond(tmp);
   }
 
   exprt cond=tmp;
@@ -2381,8 +2381,7 @@ Function: goto_convertt::check_loop_cond
 \*******************************************************************/
 
 void goto_convertt::check_loop_cond(
-  exprt &expr,
-  goto_programt &dest)
+  exprt &expr)
 {
   assert(current_block != NULL);
 
@@ -2424,8 +2423,8 @@ void goto_convertt::check_loop_cond(
         print_msg(expr);
       }
     }
-    check_loop_cond(expr.op0(),dest);
-    check_loop_cond(expr.op1(),dest);
+    check_loop_cond(expr.op0());
+    check_loop_cond(expr.op1());
   }
   else if (expr.is_symbol())
   {
@@ -2435,7 +2434,7 @@ void goto_convertt::check_loop_cond(
   else if (expr.has_operands())
   {
     Forall_operands(it, expr)
-      check_loop_cond(*it, dest);
+      check_loop_cond(*it);
   }
   else
   {
@@ -2475,7 +2474,7 @@ void goto_convertt::convert_while(
   exprt tmp=code.op0();
 
   if (inductive_step)
-    check_loop_cond(tmp, dest);
+    check_loop_cond(tmp);
 
   array_typet state_vector;
   const exprt *cond=&tmp;
@@ -2605,7 +2604,7 @@ void goto_convertt::convert_dowhile(
   remove_sideeffects(tmp, sideeffects);
 
   if (inductive_step)
-    check_loop_cond(tmp, dest);
+    check_loop_cond(tmp);
 
   array_typet state_vector;
   const exprt &cond=tmp;
