@@ -1854,7 +1854,8 @@ void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
-  push_new_loop_block();
+  if (is_inductive_step_active())
+    push_new_loop_block();
 
   if(code.operands().size()!=4)
   {
@@ -1889,15 +1890,15 @@ void goto_convertt::convert_for(
 
   exprt tmp=code.op1();
 
-  if (inductive_step)
-    replace_cond(tmp, dest);
+  if (is_inductive_step_active())
+    check_loop_cond(tmp, dest);
 
   exprt cond=tmp;
 
   array_typet state_vector;
 
   // do the t label
-  if(inductive_step)
+  if (is_inductive_step_active())
     get_struct_components(code.op3());
 
   goto_programt sideeffects;
@@ -1948,7 +1949,7 @@ void goto_convertt::convert_for(
   goto_programt tmp_w;
   convert(to_code(code.op3()), tmp_w);
 
-  if(inductive_step)
+  if (is_inductive_step_active())
   {
     make_nondet_assign(dest);
     init_k_indice(dest);
@@ -1965,18 +1966,18 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_v);
 
   // do the f label
-  if (inductive_step)
+  if (is_inductive_step_active())
     update_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
 
   // do the d label
-  if (inductive_step)
+  if (is_inductive_step_active())
     assign_current_state(dest);
 
   // do the e label
-  if (inductive_step)
+  if (is_inductive_step_active())
     assume_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_y);
@@ -1991,7 +1992,8 @@ void goto_convertt::convert_for(
   // restore break/continue
   targets.restore(old_targets);
 
-  pop_loop_block();
+  if (is_inductive_step_active())
+    pop_loop_block();
 }
 
 /*******************************************************************\
@@ -2487,7 +2489,8 @@ void goto_convertt::convert_while(
   const codet &code,
   goto_programt &dest)
 {
-  push_new_loop_block();
+  if (is_inductive_step_active())
+    push_new_loop_block();
 
   if(code.operands().size()!=2)
   {
@@ -2497,8 +2500,8 @@ void goto_convertt::convert_while(
 
   exprt tmp=code.op0();
 
-  if(inductive_step)
-    replace_cond(tmp, dest);
+  if (is_inductive_step_active())
+    check_loop_cond(tmp, dest);
 
   array_typet state_vector;
   const exprt *cond=&tmp;
@@ -2519,7 +2522,7 @@ void goto_convertt::convert_while(
   // g: assume(!c)
 
   // do the t label
-  if(inductive_step)
+  if (is_inductive_step_active())
     get_struct_components(code.op1());
 
   // save break/continue targets
@@ -2555,7 +2558,7 @@ void goto_convertt::convert_while(
   y->location=code.location();
 
   //do the c label
-  if (inductive_step)
+  if (is_inductive_step_active())
   {
     make_nondet_assign(dest);
     init_k_indice(dest);
@@ -2564,17 +2567,17 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_branch);
 
   // do the f label
-  if (inductive_step)
+  if (is_inductive_step_active())
     update_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_x);
 
   // do the d label
-  if (inductive_step)
+  if (is_inductive_step_active())
     assign_current_state(dest);
 
   // do the e label
-  if (inductive_step)
+  if (is_inductive_step_active())
     assume_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_y);
@@ -2590,7 +2593,8 @@ void goto_convertt::convert_while(
   // restore break/continue
   targets.restore(old_targets);
 
-  pop_loop_block();
+  if (is_inductive_step_active())
+    pop_loop_block();
 }
 
 /*******************************************************************\
@@ -2609,7 +2613,8 @@ void goto_convertt::convert_dowhile(
   const codet &code,
   goto_programt &dest)
 {
-  push_new_loop_block();
+  if (is_inductive_step_active())
+    push_new_loop_block();
 
   if(code.operands().size()!=2)
   {
@@ -2625,8 +2630,8 @@ void goto_convertt::convert_dowhile(
   goto_programt sideeffects;
   remove_sideeffects(tmp, sideeffects);
 
-  if(inductive_step)
-    replace_cond(tmp, dest);
+  if (is_inductive_step_active())
+    check_loop_cond(tmp, dest);
 
   array_typet state_vector;
   const exprt &cond=tmp;
@@ -2645,7 +2650,7 @@ void goto_convertt::convert_dowhile(
   // g: assume(!c)
 
   // do the t label
-  if(inductive_step)
+  if (is_inductive_step_active())
     get_struct_components(code.op1());
 
   // save break/continue targets
@@ -2677,7 +2682,7 @@ void goto_convertt::convert_dowhile(
   goto_programt::targett w=tmp_w.instructions.begin();
 
   //do the c label
-  if (inductive_step)
+  if (is_inductive_step_active())
   {
     init_k_indice(dest);
     make_nondet_assign(dest);
@@ -2705,15 +2710,15 @@ void goto_convertt::convert_dowhile(
   dest.destructive_append(tmp_y);
 
   // do the f label
-  if (inductive_step)
+  if (is_inductive_step_active())
     update_state_vector(state_vector, dest);
 
   // do the d label
-  if (inductive_step)
+  if (is_inductive_step_active())
     assign_current_state(dest);
 
   // do the e label
-  if (inductive_step)
+  if (is_inductive_step_active())
     assume_state_vector(state_vector, dest);
 
   dest.destructive_append(tmp_z);
@@ -2727,7 +2732,8 @@ void goto_convertt::convert_dowhile(
   // restore break/continue targets
   targets.restore(old_targets);
 
-  pop_loop_block();
+  if (is_inductive_step_active())
+    pop_loop_block();
 }
 
 /*******************************************************************\
@@ -3909,4 +3915,9 @@ void goto_convertt::pop_loop_block()
     current_block = loop_stack.top();
   else
     current_block = NULL;
+}
+
+bool goto_convertt::is_inductive_step_active()
+{
+  return inductive_step && (current_block != NULL) && current_block->active;
 }

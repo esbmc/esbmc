@@ -214,6 +214,8 @@ protected:
   void print_msg_mem_alloc(void);
   void set_expr_to_nondet(exprt &tmp, goto_programt &dest);
 
+  inline bool is_inductive_step_active();
+
   void set_ifthenelse_block(bool opt) {ifthenelse_block=opt;}
   bool is_ifthenelse_block() {return ifthenelse_block;}
 
@@ -225,7 +227,7 @@ protected:
       loop_block(unsigned int _state_counter, loop_varst _global_vars)
         : loop_vars(_global_vars),
           has_break(false),
-          has_outside_goto(false),
+          active(false),
           state_counter(_state_counter),
           state(struct_typet())
       {
@@ -234,7 +236,7 @@ protected:
         if (!loop_vars.size())
           return;
 
-        for (exprt exp : loop_vars )
+        for (exprt exp : loop_vars)
         {
           unsigned int size = state.components().size();
           state.components().resize(size+1);
@@ -246,7 +248,7 @@ protected:
 
       loop_varst loop_vars;
 
-      bool has_break, has_outside_goto;
+      bool has_break, active;
       unsigned int state_counter;
       struct_typet state;
   };
