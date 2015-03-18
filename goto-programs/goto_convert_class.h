@@ -203,7 +203,7 @@ protected:
   void get_new_expr(exprt &expr, exprt &new_expr, bool &found);
   bool is_expr_in_state(const exprt &expr);
   void get_struct_components(const exprt &exp, bool is_global = false);
-  void replace_cond(exprt &tmp, goto_programt &dest);
+  void check_loop_cond(exprt &cond, goto_programt &dest);
   void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
   bool check_expr_const(const exprt &expr, const locationt &loc);
   void assume_state_vector(array_typet state_vector, goto_programt &dest);

@@ -2370,7 +2370,7 @@ void goto_convertt::set_expr_to_nondet(
 
 /*******************************************************************\
 
-Function: goto_convertt::replace_cond
+Function: goto_convertt::check_loop_cond
 
   Inputs:
 
@@ -2380,82 +2380,68 @@ Function: goto_convertt::replace_cond
 
 \*******************************************************************/
 
-void goto_convertt::replace_cond(
-  exprt &tmp,
+void goto_convertt::check_loop_cond(
+  exprt &expr,
   goto_programt &dest)
 {
-  irep_idt exprid = tmp.id();
+  assert(current_block != NULL);
 
-  if (tmp.is_constant())
+  irep_idt exprid = expr.id();
+
+  if (expr.is_true() || expr.is_false() || expr.is_constant())
   {
   }
   else if (exprid == ">" ||  exprid == ">=")
   {
-    assert(tmp.operands().size()==2);
-    if (current_block != NULL) {
-      if (check_op_const(tmp.op0(), tmp.location()))
-        return ;
-    } else if (tmp.op0().is_typecast() || tmp.op1().is_typecast())
-    	return ;
+    assert(expr.operands().size()==2);
 
-    set_expr_to_nondet(tmp, dest);
+    if (!check_expr_const(expr.op0(), expr.location()))
+      current_block->active = true;
   }
   else if (exprid == "<" ||  exprid == "<=")
   {
-    if ((current_block != NULL))
-      if (check_op_const(tmp.op1(), tmp.location()))
-        return ;
-
-    nondet_varst::const_iterator cache_result;
-    if (tmp.op1().is_constant())
-    {
-      cache_result = nondet_vars.find(tmp.op0());
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(tmp.op0(), dest);
-    }
-    else
-    {
-      cache_result = nondet_vars.find(tmp.op1());
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(tmp.op1(), dest);
-    }
+    if (!check_expr_const(expr.op1(), expr.location()))
+      current_block->active = true;
   }
-  else if (tmp.is_and() || tmp.is_or())
+  else if (expr.is_and() || expr.is_or())
   {
-    assert(tmp.operands().size()==2);
+    assert(expr.operands().size()==2);
 
     //check whether we have the same variable
-    if (!tmp.op0().op0().is_constant())
+    if (!expr.op0().op0().is_constant())
     {
-      if ((tmp.op0().op0() == tmp.op1().op0()) ||
-          (tmp.op0().op0() == tmp.op1().op1()))
+      if ((expr.op0().op0() == expr.op1().op0()) ||
+          (expr.op0().op0() == expr.op1().op1()))
       {
-        print_msg(tmp);
+        print_msg(expr);
       }
     }
-    else if (!tmp.op0().op1().is_constant())
+    else if (!expr.op0().op1().is_constant())
     {
-      if ((tmp.op0().op1() == tmp.op1().op0()) ||
-          (tmp.op0().op1() == tmp.op1().op1()))
+      if ((expr.op0().op1() == expr.op1().op0()) ||
+          (expr.op0().op1() == expr.op1().op1()))
       {
-        print_msg(tmp);
+        print_msg(expr);
       }
     }
-    replace_cond(tmp.op0(),dest);
-    replace_cond(tmp.op1(),dest);
+    check_loop_cond(expr.op0(),dest);
+    check_loop_cond(expr.op1(),dest);
   }
-  else if (tmp.is_notequal() || tmp.is_typecast())
+  else if (expr.is_symbol())
   {
-    if (!tmp.op0().is_symbol())
-      print_msg(tmp);
-
-    set_expr_to_nondet(tmp, dest);
+    if (!check_expr_const(expr, expr.location()))
+      current_block->active = true;
+  }
+  else if (expr.has_operands())
+  {
+    Forall_operands(it, expr)
+      check_loop_cond(*it, dest);
   }
   else
   {
-    std::cerr << "warning: the expression '" << tmp.id()
-	      << "' located at line " << tmp.location().get_line()
-	      << " of " << tmp.location().get_file()
+    std::cerr << "warning: the expression '" << expr.id()
+	      << "' located at line " << expr.location().get_line()
+	      << " of " << expr.location().get_file()
   	      << " is not supported yet" << std::endl;
     disable_k_induction();
   }
