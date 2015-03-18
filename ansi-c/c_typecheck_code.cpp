@@ -454,45 +454,33 @@ void c_typecheck_baset::typecheck_for(codet &code)
   //
   //   { a; for(;b;c) d; }
 
-  if(code.op0().is_nil())
-  {
-    if(code.op1().is_nil())
-      code.op1().make_true();
-    else
-    {
-      typecheck_expr(code.op1());
-      implicit_typecast_bool(code.op1());
-    }
+  if(code.op0().is_not_nil())
+    typecheck_code(to_code(code.op0()));
 
-    if(code.op2().is_not_nil())
-      typecheck_code(to_code(code.op2()));
-
-    if(code.op3().is_not_nil())
-    {
-      // save & set flags
-      bool old_break_is_allowed(break_is_allowed);
-      bool old_continue_is_allowed(continue_is_allowed);
-
-      break_is_allowed=continue_is_allowed=true;
-
-      typecheck_code(to_code(code.op3()));
-
-      // restore flags
-      break_is_allowed=old_break_is_allowed;
-      continue_is_allowed=old_continue_is_allowed;
-    }
-  }
+  if (code.op1().is_nil())
+    code.op1().make_true();
   else
   {
-    code_blockt code_block;
-    code_block.location()=code.location();
+    typecheck_expr(code.op1());
+    implicit_typecast_bool(code.op1());
+  }
 
-    code_block.reserve_operands(2);
-    code_block.move_to_operands(code.op0());
-    code.op0().make_nil();
-    code_block.move_to_operands(code);
-    code.swap(code_block);
-    typecheck_code(code); // recursive call
+  if (code.op2().is_not_nil())
+    typecheck_code(to_code(code.op2()));
+
+  if (code.op3().is_not_nil())
+  {
+    // save & set flags
+    bool old_break_is_allowed(break_is_allowed);
+    bool old_continue_is_allowed(continue_is_allowed);
+
+    break_is_allowed = continue_is_allowed = true;
+
+    typecheck_code(to_code(code.op3()));
+
+    // restore flags
+    break_is_allowed = old_break_is_allowed;
+    continue_is_allowed = old_continue_is_allowed;
   }
 
   is_loop=false;
