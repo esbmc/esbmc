@@ -1854,7 +1854,7 @@ void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
-  if (is_inductive_step_active())
+  if (inductive_step)
     push_new_loop_block();
 
   if(code.operands().size()!=4)
@@ -1890,7 +1890,7 @@ void goto_convertt::convert_for(
 
   exprt tmp=code.op1();
 
-  if (is_inductive_step_active())
+  if (inductive_step)
     check_loop_cond(tmp, dest);
 
   exprt cond=tmp;
@@ -1992,7 +1992,7 @@ void goto_convertt::convert_for(
   // restore break/continue
   targets.restore(old_targets);
 
-  if (is_inductive_step_active())
+  if (inductive_step)
     pop_loop_block();
 }
 
@@ -2489,7 +2489,7 @@ void goto_convertt::convert_while(
   const codet &code,
   goto_programt &dest)
 {
-  if (is_inductive_step_active())
+  if (inductive_step)
     push_new_loop_block();
 
   if(code.operands().size()!=2)
@@ -2522,7 +2522,7 @@ void goto_convertt::convert_while(
   // g: assume(!c)
 
   // do the t label
-  if (is_inductive_step_active())
+  if (inductive_step)
     get_struct_components(code.op1());
 
   // save break/continue targets
@@ -2593,7 +2593,7 @@ void goto_convertt::convert_while(
   // restore break/continue
   targets.restore(old_targets);
 
-  if (is_inductive_step_active())
+  if (inductive_step)
     pop_loop_block();
 }
 
@@ -2613,7 +2613,7 @@ void goto_convertt::convert_dowhile(
   const codet &code,
   goto_programt &dest)
 {
-  if (is_inductive_step_active())
+  if (inductive_step)
     push_new_loop_block();
 
   if(code.operands().size()!=2)
@@ -2630,7 +2630,7 @@ void goto_convertt::convert_dowhile(
   goto_programt sideeffects;
   remove_sideeffects(tmp, sideeffects);
 
-  if (is_inductive_step_active())
+  if (inductive_step)
     check_loop_cond(tmp, dest);
 
   array_typet state_vector;
@@ -2732,7 +2732,7 @@ void goto_convertt::convert_dowhile(
   // restore break/continue targets
   targets.restore(old_targets);
 
-  if (is_inductive_step_active())
+  if (inductive_step)
     pop_loop_block();
 }
 
