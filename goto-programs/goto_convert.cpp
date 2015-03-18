@@ -1854,7 +1854,7 @@ void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
-  if (inductive_step || base_case)
+  if (inductive_step || base_case || forward_condition)
     push_new_loop_block();
 
   if(code.operands().size()!=4)
@@ -1996,7 +1996,7 @@ void goto_convertt::convert_for(
   // restore break/continue
   targets.restore(old_targets);
 
-  if (inductive_step || base_case)
+  if (inductive_step || base_case || forward_condition)
     pop_loop_block();
 }
 
@@ -2171,7 +2171,7 @@ void goto_convertt::assume_cond(
   const bool &neg,
   goto_programt &dest)
 {
-  // We don't assume false if there is a break inside the loop
+  // We don't assume false if there is a break inside a infinite loop
   if(cond.is_true() && current_block->has_break)
     return;
 
@@ -2205,7 +2205,7 @@ void goto_convertt::assert_cond(
   const bool &neg,
   goto_programt &dest)
 {
-  // We don't assert false if there is a break inside the loop
+  // We don't assert false if there is a break inside a infinite loop
   if(cond.is_true() && current_block->has_break)
     return;
 
@@ -2456,7 +2456,7 @@ void goto_convertt::convert_while(
   const codet &code,
   goto_programt &dest)
 {
-  if (inductive_step || base_case)
+  if (inductive_step || base_case || forward_condition)
     push_new_loop_block();
 
   if(code.operands().size()!=2)
@@ -2560,7 +2560,7 @@ void goto_convertt::convert_while(
   // restore break/continue
   targets.restore(old_targets);
 
-  if (inductive_step || base_case)
+  if (inductive_step || base_case || forward_condition)
     pop_loop_block();
 }
 
@@ -2580,7 +2580,7 @@ void goto_convertt::convert_dowhile(
   const codet &code,
   goto_programt &dest)
 {
-  if (inductive_step || base_case)
+  if (inductive_step || base_case || forward_condition)
     push_new_loop_block();
 
   if(code.operands().size()!=2)
@@ -2699,7 +2699,7 @@ void goto_convertt::convert_dowhile(
   // restore break/continue targets
   targets.restore(old_targets);
 
-  if (inductive_step || base_case)
+  if (inductive_step || base_case || forward_condition)
     pop_loop_block();
 }
 
