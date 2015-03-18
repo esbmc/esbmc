@@ -2296,32 +2296,16 @@ Function: goto_convertt::check_op_const
 
 \*******************************************************************/
 
-bool goto_convertt::check_op_const(
-  const exprt &tmp,
+bool goto_convertt::check_expr_const(
+  const exprt &expr,
   const locationt &loc)
 {
-  if (tmp.is_constant() || tmp.type().id() == "pointer")
-  {
-    std::cerr << "warning: this program " << loc.get_file()
-              << " contains a bounded loop at line " << loc.get_line()
-	      << ", so we are not applying the k-induction method to this program!"
-              << std::endl;
-    disable_k_induction();
+  if (expr.is_constant() || expr.type().id() == "pointer")
     return true;
-  }
 
-  if (tmp.is_symbol())
-  {
-    if(ns.lookup(tmp.identifier()).value.is_constant())
-    {
-      std::cerr << "warning: this program " << loc.get_file()
-                << " contains a bounded loop at line " << loc.get_line()
-          << ", so we are not applying the k-induction method to this program!"
-                << std::endl;
-      disable_k_induction();
+  if (expr.is_symbol())
+    if(ns.lookup(expr.identifier()).value.is_constant())
       return true;
-    }
-  }
 
   return false;
 }
