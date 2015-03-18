@@ -2474,7 +2474,7 @@ void goto_convertt::convert_while(
 
   exprt tmp=code.op0();
 
-  if (is_inductive_step_active())
+  if (inductive_step)
     check_loop_cond(tmp, dest);
 
   array_typet state_vector;
@@ -2496,7 +2496,7 @@ void goto_convertt::convert_while(
   // g: assume(!c)
 
   // do the t label
-  if (inductive_step)
+  if (is_inductive_step_active())
     get_struct_components(code.op1());
 
   // save break/continue targets
