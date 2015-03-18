@@ -1029,14 +1029,12 @@ int cbmc_parseoptionst::doit_k_induction()
   namespacet ns_inductive_step(context_inductive_step);
 
   do {
-    std::cout << std::endl << "*** K-Induction Loop Iteration ";
-    std::cout << i2string((unsigned long) k_step);
-    std::cout << " ***" << std::endl;
-    std::cout << "*** Checking ";
-
     if(base_case)
     {
-      std::cout << "base case " << std::endl;
+      std::cout << std::endl << "*** K-Induction Loop Iteration ";
+      std::cout << i2string((unsigned long) k_step);
+      std::cout << " ***" << std::endl;
+      std::cout << "*** Checking base case" << std::endl;
 
       // We need to set the right context
       context.clear();
@@ -1057,7 +1055,10 @@ int cbmc_parseoptionst::doit_k_induction()
     }
     else if (forward_condition)
     {
-      std::cout << "forward condition " << std::endl;
+      std::cout << std::endl << "*** K-Induction Loop Iteration ";
+      std::cout << i2string((unsigned long) k_step);
+      std::cout << " ***" << std::endl;
+      std::cout << "*** Checking forward condition" << std::endl;
 
       // We need to set the right context
       context.clear();
@@ -1075,7 +1076,10 @@ int cbmc_parseoptionst::doit_k_induction()
     {
       if(!opts3.get_bool_option("disable-inductive-step"))
       {
-        std::cout << "inductive step " << std::endl;
+        std::cout << std::endl << "*** K-Induction Loop Iteration ";
+        std::cout << i2string((unsigned long) k_step);
+        std::cout << " ***" << std::endl;
+        std::cout << "*** Checking inductive step" << std::endl;
 
         // We need to set the right context
         context.clear();
