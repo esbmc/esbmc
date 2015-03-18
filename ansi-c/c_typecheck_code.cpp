@@ -169,6 +169,9 @@ void c_typecheck_baset::typecheck_decl_block(codet &code)
 {
   Forall_operands(it, code)
     typecheck_code(to_code(*it));
+
+  // Remove decl-block ID
+  code.set_statement("block");
 }
 
 /*******************************************************************\
