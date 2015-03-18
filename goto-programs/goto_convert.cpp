@@ -2387,8 +2387,14 @@ void goto_convertt::check_loop_cond(
 
   irep_idt exprid = expr.id();
 
-  if (expr.is_true() || expr.is_false() || expr.is_constant())
+  if (expr.is_true())
   {
+    // allow transformations on infinite loops
+    current_block->active = true;
+  }
+  else if (expr.is_false() || expr.is_constant())
+  {
+
   }
   else if (exprid == ">" ||  exprid == ">=")
   {
@@ -2402,27 +2408,13 @@ void goto_convertt::check_loop_cond(
     if (!check_expr_const(expr.op1(), expr.location()))
       current_block->active = true;
   }
-  else if (expr.is_and() || expr.is_or())
+  else if (expr.is_and() || expr.is_or()
+    || exprid == "-" || exprid == "+"
+    || exprid == "*" || exprid == "/"
+    || expr.is_notequal())
   {
     assert(expr.operands().size()==2);
 
-    //check whether we have the same variable
-    if (!expr.op0().op0().is_constant())
-    {
-      if ((expr.op0().op0() == expr.op1().op0()) ||
-          (expr.op0().op0() == expr.op1().op1()))
-      {
-        print_msg(expr);
-      }
-    }
-    else if (!expr.op0().op1().is_constant())
-    {
-      if ((expr.op0().op1() == expr.op1().op0()) ||
-          (expr.op0().op1() == expr.op1().op1()))
-      {
-        print_msg(expr);
-      }
-    }
     check_loop_cond(expr.op0());
     check_loop_cond(expr.op1());
   }
@@ -2431,10 +2423,10 @@ void goto_convertt::check_loop_cond(
     if (!check_expr_const(expr, expr.location()))
       current_block->active = true;
   }
-  else if (expr.has_operands())
+  else if (expr.is_code())
   {
-    Forall_operands(it, expr)
-      check_loop_cond(*it);
+    if(expr.statement() == "assign")
+      check_loop_cond(expr.op1());
   }
   else
   {
