@@ -43,7 +43,6 @@ public:
     forward_condition(options.get_bool_option("forward-condition")),
     assume_all_states(options.get_bool_option("assume-all-states")),
     total_states(1),
-    goto_stmt(false),
     ifthenelse_block(false)
   {
   }
@@ -214,9 +213,6 @@ protected:
   void disable_k_induction(void);
   void print_msg_mem_alloc(void);
   void set_expr_to_nondet(exprt &tmp, goto_programt &dest);
-
-  void set_goto(bool opt) {goto_stmt=opt;}
-  bool is_goto() const {return goto_stmt;}
 
   void set_ifthenelse_block(bool opt) {ifthenelse_block=opt;}
   bool is_ifthenelse_block() {return ifthenelse_block;}
@@ -420,7 +416,7 @@ protected:
     unsigned int total_states;
 
   private:
-    bool goto_stmt, ifthenelse_block;
+    bool ifthenelse_block;
 
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;

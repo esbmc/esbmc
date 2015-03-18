@@ -1955,11 +1955,11 @@ void goto_convertt::convert_for(
   }
 
   // y: goto u;
-   goto_programt tmp_y;
-   goto_programt::targett y=tmp_y.add_instruction();
-   y->make_goto(u);
-   y->guard = true_expr;
-   y->location=code.location();
+  goto_programt tmp_y;
+  goto_programt::targett y=tmp_y.add_instruction();
+  y->make_goto(u);
+  y->guard = true_expr;
+  y->location=code.location();
 
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
@@ -1983,7 +1983,7 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_goto() && (inductive_step || base_case))
+  if (inductive_step || base_case)
     assume_cond(cond, true, dest); //assume(!c)
   else if (forward_condition)
     assert_cond(cond, true, dest); //assert(!c)
@@ -2582,15 +2582,13 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_goto() && (inductive_step || base_case))
+  if (inductive_step || base_case)
     assume_cond(*cond, true, dest); //assume(!c)
   else if (forward_condition)
     assert_cond(tmp, true, dest); //assert(!c)
 
   // restore break/continue
   targets.restore(old_targets);
-
-  set_goto(false);
 
   pop_loop_block();
 }
@@ -2721,7 +2719,7 @@ void goto_convertt::convert_dowhile(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_goto() && (inductive_step || base_case))
+  if (inductive_step || base_case)
     assume_cond(cond, true, dest); //assume(!c)
   else if (forward_condition)
     assert_cond(tmp, true, dest); //assert(!c)
@@ -3025,9 +3023,6 @@ void goto_convertt::convert_goto(
 
   // remember it to do target later
   targets.gotos.insert(t);
-
-  if (inductive_step && (current_block != NULL))
-    set_goto(true);
 }
 
 /*******************************************************************\
