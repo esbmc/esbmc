@@ -1854,7 +1854,7 @@ void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
-  if (inductive_step)
+  if (inductive_step || base_case)
     push_new_loop_block();
 
   if(code.operands().size()!=4)
@@ -1996,7 +1996,7 @@ void goto_convertt::convert_for(
   // restore break/continue
   targets.restore(old_targets);
 
-  if (inductive_step)
+  if (inductive_step || base_case)
     pop_loop_block();
 }
 
@@ -2463,7 +2463,7 @@ void goto_convertt::convert_while(
   const codet &code,
   goto_programt &dest)
 {
-  if (inductive_step)
+  if (inductive_step || base_case)
     push_new_loop_block();
 
   if(code.operands().size()!=2)
@@ -2567,7 +2567,7 @@ void goto_convertt::convert_while(
   // restore break/continue
   targets.restore(old_targets);
 
-  if (inductive_step)
+  if (inductive_step || base_case)
     pop_loop_block();
 }
 
@@ -2587,7 +2587,7 @@ void goto_convertt::convert_dowhile(
   const codet &code,
   goto_programt &dest)
 {
-  if (inductive_step)
+  if (inductive_step || base_case)
     push_new_loop_block();
 
   if(code.operands().size()!=2)
@@ -2706,7 +2706,7 @@ void goto_convertt::convert_dowhile(
   // restore break/continue targets
   targets.restore(old_targets);
 
-  if (inductive_step)
+  if (inductive_step || base_case)
     pop_loop_block();
 }
 
