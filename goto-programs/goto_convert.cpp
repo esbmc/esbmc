@@ -2418,6 +2418,10 @@ void goto_convertt::check_loop_cond(
     check_loop_cond(expr.op0());
     check_loop_cond(expr.op1());
   }
+  else if (expr.is_dereference())
+  {
+    check_loop_cond(expr.op0());
+  }
   else if (expr.is_symbol())
   {
     if (!check_expr_const(expr, expr.location()))
