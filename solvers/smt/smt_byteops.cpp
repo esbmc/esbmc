@@ -117,7 +117,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   // We are merging two values: an 8 bit update value, and a larger source
   // value that we will have to merge it into. Start off by collecting
   // information about the source values and their widths.
-  assert(is_bv_type(data.source_value->type) && "Byte update of unsupported data type");
+  assert(is_number_type(data.source_value->type) && "Byte update of unsupported data type");
 
   smt_astt value, src_value;
   unsigned int width_op0, width_op2, src_offset;
