@@ -761,6 +761,20 @@ public:
   mutable size_t crc_val;
 };
 
+inline bool is_nil_expr(const expr2tc &exp)
+{
+  if (exp.get() == NULL)
+    return true;
+  return false;
+}
+
+inline bool is_nil_type(const type2tc &t)
+{
+  if (t.get() == NULL)
+    return true;
+  return false;
+}
+
 // For boost multi-index hashing,
 inline std::size_t
 hash_value(const expr2tc &expr)
@@ -4589,20 +4603,6 @@ inline bool is_structure_type(const type2tc &t)
 inline bool is_structure_type(const expr2tc &e)
 {
   return is_structure_type(e->type);
-}
-
-inline bool is_nil_expr(const expr2tc &exp)
-{
-  if (exp.get() == NULL)
-    return true;
-  return false;
-}
-
-inline bool is_nil_type(const type2tc &t)
-{
-  if (t.get() == NULL)
-    return true;
-  return false;
 }
 
 /** Test if expr is true. First checks whether the expr is a constant bool, and
