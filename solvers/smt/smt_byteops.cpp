@@ -114,12 +114,20 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     return convert_ast(bitor2tc(offs->type, shl2, source));
   }
 
-  smt_astt value;
-  unsigned int width_op0, width_op2;
+  // We are merging two values: an 8 bit update value, and a larger source
+  // value that we will have to merge it into. Start off by collecting
+  // information about the source values and their widths.
+  assert(is_bv_type(data.source_value->type) && "Byte update of unsupported data type");
+
+  smt_astt value, src_value;
+  unsigned int width_op0, width_op2, src_offset;
 
   value = convert_ast(data.update_value);
+  src_value = convert_ast(data.source_value);
 
   width_op2 = data.update_value->type->get_width();
+  width_op0 = data.source_value->type->get_width();
+  src_offset = to_constant_int2t(data.source_offset).constant_value.to_ulong();
 
   if (int_encoding) {
     std::cerr << "Can't byte update in integer mode; rerun in bitvector mode"
@@ -127,41 +135,49 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     abort();
   }
 
-  if (is_signedbv_type(data.source_value->type)) {
-    width_op0 = data.source_value->type->get_width();
+  // Assertion some of our assumptions, which broadly mean that we'll only work
+  // on bytes that are going into non-byte words
+  assert(width_op2 == 8 && "Can't byte update non-byte operations");
+  assert(width_op2 != width_op0 && "Can't byte update bytes, sorry");
 
-    if (width_op0 == 0) {
-      // XXXjmorse - can this ever happen now?
-      std::cerr << "failed to get width of byte_update operand";
-      abort();
-    }
+  smt_astt top, middle, bottom;
 
-    if (width_op0 > width_op2) {
-      return convert_sign_ext(value, convert_sort(expr->type), width_op2,
-                              width_op0 - width_op2);
-    } else if (width_op0 == width_op2 &&
-        to_constant_int2t(data.source_offset).constant_value.to_ulong() == 0) {
-      // Byte update at offset zero with value of same size. Just return update
-      // value. Ideally this shouldn't ever be encoded, but it needn't be fatal
-      // if it is, just unperformant.
-      return convert_ast(data.update_value);
-    } else {
-      std::cerr << "unsupported irep for conver_byte_update" << std::endl;
-      abort();
-    }
-  } else if (is_unsignedbv_type(data.source_value->type)) {
-    width_op0 = data.source_value->type->get_width();
-    assert(width_op0 != 0);
+  // Build in three parts: the most significant bits, any in the middle, and
+  // the bottom, of the reconstructed / merged output. There might not be a
+  // middle if the update byte is at the top or the bottom.
+  unsigned int top_of_update = (8 * src_offset) + 8;
+  unsigned int bottom_of_update = (8 * src_offset);
 
-    if (width_op0 > width_op2) {
-      return convert_zero_ext(value, convert_sort(expr->type),
-                              width_op0 - width_op2);
-    } else {
-      std::cerr << "unsupported irep for conver_byte_update" << std::endl;
-      abort();
-    }
+  if (top_of_update == width_op0) {
+    top = value;
+  } else {
+    smt_sortt s = mk_sort(SMT_SORT_BV, width_op0 - top_of_update, false);
+    top = mk_extract(src_value, width_op0 - 1, top_of_update, s);
   }
 
-  std::cerr << "unsupported irep for convert_byte_update" << std::endl;;
-  abort();
+  if (top == value) {
+    middle = NULL;
+  } else {
+    middle = value;
+  }
+
+  if (src_offset == 0) {
+    middle = NULL;
+    bottom = value;
+  } else {
+    smt_sortt s = mk_sort(SMT_SORT_BV, bottom_of_update, false);
+    bottom = mk_extract(src_value, bottom_of_update - 1, 0, s);
+  }
+
+  // Concatenate the top and bottom, and possible middle, together.
+  smt_astt concat;
+
+  if (middle != NULL) {
+    smt_sortt s = mk_sort(SMT_SORT_BV, width_op0 - bottom_of_update, false);
+    concat = mk_func_app(s, SMT_FUNC_CONCAT, top, middle);
+  } else {
+    concat = top;
+  }
+
+  return mk_func_app(src_value->sort, SMT_FUNC_CONCAT, concat, bottom);
 }
