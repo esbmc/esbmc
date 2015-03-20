@@ -718,6 +718,17 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t=dest.add_instruction(
       is_assume?ASSUME:ASSERT);
     migrate_expr(arguments.front(), t->guard);
+
+    // The user may have (irritatingly) re-declared the assert or assume
+    // functions to take an integer argument, rather than a boolean. This leads
+    // to problems at the other end of the model checking process, because
+    // we assume that ASSUME/ASSERT insns are boolean exprs.
+    // So, if the given argument to this function isn't a bool, typecast it.
+    // We can't rely on the C/C++ type system to ensure that.
+    if (!is_bool_type(t->guard->type)) {
+      t->guard = typecast2tc(get_bool_type(), t->guard);
+    }
+
     t->location=function.location();
     t->location.user_provided(true);
 
