@@ -2257,7 +2257,6 @@ void goto_convertt::print_msg_mem_alloc(void)
   std::cerr << "warning: this program contains dynamic memory allocation,"
             << " so we are not applying the inductive step to this program!"
             << std::endl;
-  std::cout << "failed" << std::endl;
   disable_k_induction();
 }
 
