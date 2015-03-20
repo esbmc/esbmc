@@ -540,11 +540,12 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
 
-  if (k_induction
-      || options.get_bool_option("k-induction-parallel")) {
-    std::cerr << "Sorry, can't perform k-induction on multithreaded code";
+  if (k_induction) {
+    std::cerr << "warning: this program contains is multithreaded,"
+              << " so we are not applying the inductive step to this program!"
+              << std::endl;
     std::cerr  << std::endl;
-    abort();
+    const_cast<optionst&>(options).set_option("disable-inductive-step", true);
   }
 
   // As an argument, we expect the address of a symbol.
