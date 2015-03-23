@@ -205,7 +205,7 @@ protected:
   void get_struct_components(const exprt &exp, bool is_global = false);
   void check_loop_cond(exprt &cond);
   void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
-  bool check_expr_const(const exprt &expr, const locationt &loc);
+  bool check_expr_const(const exprt &expr);
   void assume_state_vector(array_typet state_vector, goto_programt &dest);
   void assume_all_state_vector(array_typet state_vector, goto_programt &dest);
   void update_state_vector(array_typet state_vector, goto_programt &dest);

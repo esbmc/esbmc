@@ -2300,15 +2300,14 @@ Function: goto_convertt::check_op_const
 \*******************************************************************/
 
 bool goto_convertt::check_expr_const(
-  const exprt &expr,
-  const locationt &loc)
+  const exprt &expr)
 {
   if (expr.is_constant() || expr.type().id() == "pointer")
     return true;
 
-  if (expr.is_symbol())
-    if(ns.lookup(expr.identifier()).value.is_constant())
-      return true;
+  exprt value = ns.lookup(expr.identifier()).value;
+  if (value.is_constant())
+    return true;
 
   return false;
 }
@@ -2401,12 +2400,12 @@ void goto_convertt::check_loop_cond(
   }
   else if (exprid == ">" ||  exprid == ">=" || expr.is_typecast())
   {
-    if (!check_expr_const(expr.op0(), expr.location()))
+    if (!check_expr_const(expr.op0()))
       current_block->active = true;
   }
   else if (exprid == "<" ||  exprid == "<=")
   {
-    if (!check_expr_const(expr.op1(), expr.location()))
+    if (!check_expr_const(expr.op1()))
       current_block->active = true;
   }
   else if (expr.is_and() || expr.is_or()
@@ -2425,7 +2424,7 @@ void goto_convertt::check_loop_cond(
   }
   else if (expr.is_symbol())
   {
-    if (!check_expr_const(expr, expr.location()))
+    if (!check_expr_const(expr))
       current_block->active = true;
   }
   else if (expr.is_code())
