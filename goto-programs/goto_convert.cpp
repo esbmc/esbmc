@@ -803,7 +803,7 @@ void goto_convertt::convert_expression(
 
 /*******************************************************************\
 
-Function: goto_convertt::is_expr_in_state
+Function: goto_convertt::look_for_variables_changes
 
   Inputs:
 
@@ -812,28 +812,6 @@ Function: goto_convertt::is_expr_in_state
  Purpose:
 
 \*******************************************************************/
-
-bool goto_convertt::is_expr_in_state(
-  const exprt &expr)
-{
-  if(current_block == NULL)
-    return true;
-
-  const struct_typet &struct_type = to_struct_type(current_block->get_state());
-  const struct_typet::componentst &components = struct_type.components();
-
-  for (struct_typet::componentst::const_iterator
-     it = components.begin();
-     it != components.end();
-     it++)
-  {
-    if (it->get("name").compare(expr.get_string("identifier")) == 0)
-   	  return true;
-  }
-
-  return false;
-}
-
 
 void goto_convertt::look_for_variables_changes(const exprt &expr)
 {
