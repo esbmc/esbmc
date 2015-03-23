@@ -49,7 +49,7 @@ public:
     migrate_type(followed, tmp);
     return tmp;
   }
-  
+
   namespacet(const contextt &_context)
   { context1=&_context; context2=NULL; }
 

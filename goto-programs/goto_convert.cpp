@@ -2294,9 +2294,12 @@ bool goto_convertt::check_expr_const(
   if (expr.is_constant() || expr.type().id() == "pointer")
     return true;
 
-  exprt value = ns.lookup(expr.identifier()).value;
-  if (value.is_constant())
-    return true;
+  if(expr.is_symbol())
+  {
+    exprt value = ns.lookup(expr.identifier()).value;
+    if (value.is_constant())
+      return true;
+  }
 
   return false;
 }
