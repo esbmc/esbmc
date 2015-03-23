@@ -819,7 +819,7 @@ bool goto_convertt::is_expr_in_state(
   if(current_block == NULL)
     return true;
 
-  const struct_typet &struct_type = to_struct_type(current_block->state);
+  const struct_typet &struct_type = to_struct_type(current_block->get_state());
   const struct_typet::componentst &components = struct_type.components();
 
   for (struct_typet::componentst::const_iterator
@@ -882,11 +882,12 @@ void goto_convertt::get_struct_components(const exprt &exp, bool is_global)
 
     if (!is_expr_in_state(exp))
     {
-      unsigned int size = current_block->state.components().size();
-      current_block->state.components().resize(size+1);
-      current_block->state.components()[size] = (struct_typet::componentt &) exp;
-      current_block->state.components()[size].set_name(exp.get_string("identifier"));
-      current_block->state.components()[size].pretty_name(exp.get_string("identifier"));
+      struct_typet& state = current_block->get_state();
+      unsigned int size = state.components().size();
+      state.components().resize(size+1);
+      state.components()[size] = (struct_typet::componentt &) exp;
+      state.components()[size].set_name(exp.get_string("identifier"));
+      state.components()[size].pretty_name(exp.get_string("identifier"));
     }
   }
   else
@@ -1649,19 +1650,19 @@ void goto_convertt::update_state_vector(
   goto_programt &dest)
 {
   //set the type of the state vector
-  state_vector.subtype() = current_block->state;
+  state_vector.subtype() = current_block->get_state();
 
   std::string identifier;
-  identifier = "kindice$"+i2string(current_block->state_counter);
+  identifier = "kindice$"+i2string(current_block->get_state_counter());
 
   exprt lhs_index = symbol_exprt(identifier, int_type());
   exprt new_expr(exprt::with, state_vector);
   exprt lhs_array("symbol", state_vector);
-  exprt rhs("symbol", current_block->state);
+  exprt rhs("symbol", current_block->get_state());
 
   std::string identifier_lhs, identifier_rhs;
-  identifier_lhs = "s$"+i2string(current_block->state_counter);
-  identifier_rhs = "cs$"+i2string(current_block->state_counter);
+  identifier_lhs = "s$"+i2string(current_block->get_state_counter());
+  identifier_rhs = "cs$"+i2string(current_block->get_state_counter());
 
   lhs_array.identifier(identifier_lhs);
   rhs.identifier(identifier_rhs);
@@ -1697,7 +1698,7 @@ void goto_convertt::assume_all_state_vector(
 
   // Condition (tmp_symbol <= kindice)
   exprt lhs_index =
-    symbol_exprt("kindice$"+i2string(current_block->state_counter), int_type());
+    symbol_exprt("kindice$"+i2string(current_block->get_state_counter()), int_type());
   exprt cond("<=", typet("bool"));
   cond.copy_to_operands(tmp_symbol, lhs_index);
 
@@ -1741,14 +1742,14 @@ void goto_convertt::assume_all_state_vector(
   // do the w label
   goto_programt tmp_w;
   //set the type of the state vector
-  state_vector.subtype() = current_block->state;
+  state_vector.subtype() = current_block->get_state();
 
-  exprt new_expr(exprt::index, current_block->state);
+  exprt new_expr(exprt::index, current_block->get_state());
   exprt lhs_array("symbol", state_vector);
-  exprt rhs("symbol", current_block->state);
+  exprt rhs("symbol", current_block->get_state());
 
-  lhs_array.identifier("s$"+i2string(current_block->state_counter));
-  rhs.identifier("cs$"+i2string(current_block->state_counter));
+  lhs_array.identifier("s$"+i2string(current_block->get_state_counter()));
+  rhs.identifier("cs$"+i2string(current_block->get_state_counter()));
 
   //s[k]
   new_expr.reserve_operands(2);
@@ -1804,20 +1805,20 @@ void goto_convertt::assume_state_vector(
   }
 
   //set the type of the state vector
-  state_vector.subtype() = current_block->state;
+  state_vector.subtype() = current_block->get_state();
 
   std::string identifier;
-  identifier = "kindice$"+i2string(current_block->state_counter);
+  identifier = "kindice$"+i2string(current_block->get_state_counter());
 
   exprt lhs_index = symbol_exprt(identifier, int_type());
-  exprt new_expr(exprt::index, current_block->state);
+  exprt new_expr(exprt::index, current_block->get_state());
   exprt lhs_array("symbol", state_vector);
-  exprt rhs("symbol", current_block->state);
+  exprt rhs("symbol", current_block->get_state());
 
   std::string identifier_lhs, identifier_rhs;
 
-  identifier_lhs = "s$"+i2string(current_block->state_counter);
-  identifier_rhs = "cs$"+i2string(current_block->state_counter);
+  identifier_lhs = "s$"+i2string(current_block->get_state_counter());
+  identifier_rhs = "cs$"+i2string(current_block->get_state_counter());
 
   lhs_array.identifier(identifier_lhs);
   rhs.identifier(identifier_rhs);
@@ -2043,17 +2044,17 @@ Function: goto_convertt::make_nondet_assign
 void goto_convertt::make_nondet_assign(
   goto_programt &dest)
 {
-  for (unsigned int j=0; j < current_block->state.components().size(); j++)
+  for (unsigned int j=0; j < current_block->get_state().components().size(); j++)
   {
-    exprt rhs_expr=side_effect_expr_nondett(current_block->state.components()[j].type());
-    exprt new_expr(exprt::with, current_block->state);
-    exprt lhs_expr("symbol", current_block->state);
+    exprt rhs_expr=side_effect_expr_nondett(current_block->get_state().components()[j].type());
+    exprt new_expr(exprt::with, current_block->get_state());
+    exprt lhs_expr("symbol", current_block->get_state());
 
-    if (current_block->state.components()[j].type().is_array())
-      rhs_expr = side_effect_expr_nondett(current_block->state.components()[j].type());
+    if (current_block->get_state().components()[j].type().is_array())
+      rhs_expr = side_effect_expr_nondett(current_block->get_state().components()[j].type());
 
     std::string identifier;
-    identifier = "cs$"+i2string(current_block->state_counter);
+    identifier = "cs$"+i2string(current_block->get_state_counter());
     lhs_expr.identifier(identifier);
 
     new_expr.reserve_operands(3);
@@ -2061,14 +2062,14 @@ void goto_convertt::make_nondet_assign(
     new_expr.copy_to_operands(exprt("member_name"));
     new_expr.move_to_operands(rhs_expr);
 
-    if (!current_block->state.components()[j].operands().size())
+    if (!current_block->get_state().components()[j].operands().size())
     {
-      new_expr.op1().component_name(current_block->state.components()[j].get_string("identifier"));
+      new_expr.op1().component_name(current_block->get_state().components()[j].get_string("identifier"));
       assert(!new_expr.op1().get_string("component_name").empty());
     }
     else
     {
-      forall_operands(it, current_block->state.components()[j])
+      forall_operands(it, current_block->get_state().components()[j])
       {
         new_expr.op1().component_name(it->get_string("identifier"));
         assert(!new_expr.op1().get_string("component_name").empty());
@@ -2094,15 +2095,15 @@ Function: goto_convertt::assign_current_state
 void goto_convertt::assign_current_state(
   goto_programt &dest)
 {
-  for (unsigned int j = 0; j < current_block->state.components().size(); j++)
+  for (unsigned int j = 0; j < current_block->get_state().components().size(); j++)
   {
-    exprt rhs_expr(current_block->state.components()[j]);
-    exprt new_expr(exprt::with, current_block->state);
-    exprt lhs_expr("symbol", current_block->state);
+    exprt rhs_expr(current_block->get_state().components()[j]);
+    exprt new_expr(exprt::with, current_block->get_state());
+    exprt lhs_expr("symbol", current_block->get_state());
 
     std::string identifier;
 
-    identifier = "cs$" + i2string(current_block->state_counter);
+    identifier = "cs$" + i2string(current_block->get_state_counter());
 
     lhs_expr.identifier(identifier);
 
@@ -2111,15 +2112,15 @@ void goto_convertt::assign_current_state(
     new_expr.copy_to_operands(exprt("member_name"));
     new_expr.move_to_operands(rhs_expr);
 
-    if (!current_block->state.components()[j].operands().size())
+    if (!current_block->get_state().components()[j].operands().size())
     {
       new_expr.op1().component_name(
-        current_block->state.components()[j].get_string("identifier"));
+        current_block->get_state().components()[j].get_string("identifier"));
       assert(!new_expr.op1().get_string("component_name").empty());
     }
     else
     {
-      forall_operands(it, current_block->state.components()[j])
+      forall_operands(it, current_block->get_state().components()[j])
       {
         new_expr.op1().component_name(it->get_string("identifier"));
         assert(!new_expr.op1().get_string("component_name").empty());
@@ -2147,7 +2148,7 @@ void goto_convertt::init_k_indice(
   goto_programt &dest)
 {
   std::string identifier;
-  identifier = "kindice$"+i2string(current_block->state_counter);
+  identifier = "kindice$"+i2string(current_block->get_state_counter());
   exprt lhs_index = symbol_exprt(identifier, int_type());
   exprt zero_expr = gen_zero(int_type());
   code_assignt new_assign(lhs_index,zero_expr);
@@ -2172,11 +2173,11 @@ void goto_convertt::assume_cond(
   goto_programt &dest)
 {
   // If the loop was not transformed, don't assume
-  if (inductive_step && !current_block->active)
+  if (inductive_step && !current_block->is_active())
     return;
 
   // We don't assume false if there is a break inside a infinite loop
-  if (cond.is_true() && current_block->has_break)
+  if (cond.is_true() && current_block->has_break())
     return;
 
   goto_programt tmp_e;
@@ -2210,7 +2211,7 @@ void goto_convertt::assert_cond(
   goto_programt &dest)
 {
   // We don't assert false if there is a break inside a infinite loop
-  if(cond.is_true() && current_block->has_break)
+  if(cond.is_true() && current_block->has_break())
     return;
 
   goto_programt tmp_e;
@@ -2392,7 +2393,7 @@ void goto_convertt::check_loop_cond(
   if (expr.is_true())
   {
     // allow transformations on infinite loops
-    current_block->active = true;
+    current_block->set_active(true);
   }
   else if (expr.is_false() || expr.is_constant())
   {
@@ -2401,12 +2402,12 @@ void goto_convertt::check_loop_cond(
   else if (exprid == ">" ||  exprid == ">=" || expr.is_typecast())
   {
     if (!check_expr_const(expr.op0()))
-      current_block->active = true;
+      current_block->set_active(true);
   }
   else if (exprid == "<" ||  exprid == "<=")
   {
     if (!check_expr_const(expr.op1()))
-      current_block->active = true;
+      current_block->set_active(true);
   }
   else if (expr.is_and() || expr.is_or()
     || exprid == "-" || exprid == "+"
@@ -2425,7 +2426,7 @@ void goto_convertt::check_loop_cond(
   else if (expr.is_symbol())
   {
     if (!check_expr_const(expr))
-      current_block->active = true;
+      current_block->set_active(true);
   }
   else if (expr.is_code())
   {
@@ -2876,7 +2877,7 @@ void goto_convertt::convert_break(
   t->location=code.location();
 
   if (current_block != NULL)
-    current_block->has_break = true;
+    current_block->set_break(true);
 }
 
 /*******************************************************************\
@@ -3190,9 +3191,9 @@ void goto_convertt::get_cs_member(
   found=false;
   std::string identifier;
 
-  identifier = "cs$"+i2string(current_block->state_counter);
+  identifier = "cs$"+i2string(current_block->get_state_counter());
 
-  exprt lhs_struct("symbol", current_block->state);
+  exprt lhs_struct("symbol", current_block->get_state());
   lhs_struct.identifier(identifier);
 
   exprt new_expr(exprt::member, type);
@@ -3469,7 +3470,7 @@ void goto_convertt::convert_ifthenelse(
     tmp_guard=code.op0();
 
   remove_sideeffects(tmp_guard, dest);
-  if (inductive_step && (current_block != NULL) && current_block->active)
+  if (inductive_step && (current_block != NULL) && current_block->is_active())
   {
     replace_ifthenelse(tmp_guard);
 
@@ -3823,13 +3824,13 @@ void goto_convertt::pop_loop_block()
 
   // Create symbol for the state$vector
   symbolt *symbol_ptr=NULL;
-  unsigned int i = current_block->state_counter;
+  unsigned int i = current_block->get_state_counter();
 
   symbolt state_symbol;
   state_symbol.name="c::state$vector"+i2string(i);
   state_symbol.base_name="state$vector"+i2string(i);
   state_symbol.is_type=true;
-  state_symbol.type=current_block->state;
+  state_symbol.type=current_block->get_state();
   state_symbol.mode="C";
   state_symbol.module="main";
   state_symbol.pretty_name="struct state$vector"+i2string(i);
@@ -3875,7 +3876,7 @@ void goto_convertt::pop_loop_block()
   context.move(current_state_symbol, symbol_ptr);
 
   // Update flag to disable inductive step
-  if(current_block->active)
+  if(current_block->is_active())
     disable_inductive_step = false;
 
   delete current_block;
@@ -3892,5 +3893,45 @@ void goto_convertt::pop_loop_block()
 
 bool goto_convertt::is_inductive_step_active()
 {
-  return inductive_step && (current_block != NULL) && current_block->active;
+  return inductive_step && (current_block != NULL) && current_block->is_active();
+}
+
+bool goto_convertt::loop_block::is_active() const
+{
+  return _active;
+}
+
+void goto_convertt::loop_block::set_active(bool active)
+{
+  this->_active = active;
+}
+
+bool goto_convertt::loop_block::has_break() const
+{
+  return _break;
+}
+
+void goto_convertt::loop_block::set_break(bool _break)
+{
+  this->_break = _break;
+}
+
+struct_typet& goto_convertt::loop_block::get_state()
+{
+  return _state;
+}
+
+void goto_convertt::loop_block::set_state(const struct_typet& state)
+{
+  _state = state;
+}
+
+unsigned int goto_convertt::loop_block::get_state_counter() const
+{
+  return _state_counter;
+}
+
+void goto_convertt::loop_block::set_state_counter(unsigned int state_counter)
+{
+  _state_counter = state_counter;
 }

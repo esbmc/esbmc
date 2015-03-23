@@ -226,12 +226,12 @@ protected:
   {
     public:
       loop_block(unsigned int _state_counter, loop_varst _global_vars)
-        : loop_vars(_global_vars),
-          has_break(false),
-          active(false),
-          state_counter(_state_counter),
-          state(struct_typet())
-      {
+    : loop_vars(_global_vars),
+      _break(false),
+      _active(false),
+      _state_counter(_state_counter),
+      _state(struct_typet())
+    {
         // Check if there are any variables on the set already (static and globals)
         // and add them to the state
         if (!loop_vars.size())
@@ -239,19 +239,32 @@ protected:
 
         for (exprt exp : loop_vars)
         {
-          unsigned int size = state.components().size();
-          state.components().resize(size+1);
-          state.components()[size] = (struct_typet::componentt &) exp;
-          state.components()[size].set_name(exp.get_string("identifier"));
-          state.components()[size].pretty_name(exp.get_string("identifier"));
+          unsigned int size = _state.components().size();
+          _state.components().resize(size+1);
+          _state.components()[size] = (struct_typet::componentt &) exp;
+          _state.components()[size].set_name(exp.get_string("identifier"));
+          _state.components()[size].pretty_name(exp.get_string("identifier"));
         }
-      }
+    }
 
-      loop_varst loop_vars;
+    bool is_active() const;
+    void set_active(bool active);
 
-      bool has_break, active;
-      unsigned int state_counter;
-      struct_typet state;
+    bool has_break() const;
+    void set_break(bool _break);
+
+    struct_typet& get_state();
+    void set_state(const struct_typet& state);
+
+    unsigned int get_state_counter() const;
+    void set_state_counter(unsigned int state_counter);
+
+    loop_varst loop_vars;
+
+  private:
+    bool _break, _active;
+    unsigned int _state_counter;
+    struct_typet _state;
   };
 
   typedef std::stack<loop_block*> loop_stackt;
