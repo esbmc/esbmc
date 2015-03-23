@@ -179,7 +179,6 @@ protected:
   virtual void typecheck_break(codet &code);
   virtual void typecheck_continue(codet &code);
   virtual void typecheck_decl(codet &code);
-  virtual void typecheck_decl_block(codet &code);
   virtual void typecheck_expression(codet &code);
   virtual void typecheck_for(codet &code);
   virtual void typecheck_goto(codet &code);

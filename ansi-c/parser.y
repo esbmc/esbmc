@@ -1478,7 +1478,7 @@ declaration_statement:
 	declaration
 	{
 	  init(&$$);
-	  statement(*$$, "decl-block");
+	  statement(*$$, "block");
 	  $$->operands().swap($1->operands());
 	}
 	;

@@ -256,7 +256,7 @@ void goto_symext::symex_printf(
         const std::string &fmt =
           to_constant_string2t(idx.source_value).value.as_string();
 
-        std::list<expr2tc> args; 
+        std::list<expr2tc> args;
         forall_operands2(it, idx, new_rhs) {
           expr2tc tmp = *it;
           do_simplify(tmp);

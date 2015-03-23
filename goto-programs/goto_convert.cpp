@@ -3444,7 +3444,7 @@ void goto_convertt::convert_ifthenelse(
 
     tmp_guard=symbol_expr(new_symbol);
   }
-  else if (code.op0().statement() == "decl-block")
+  else if (code.op0().statement() == "block")
   {
     exprt lhs(code.op0().op0().op0());
     lhs.location()=code.op0().op0().location();

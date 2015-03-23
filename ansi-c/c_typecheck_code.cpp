@@ -77,8 +77,6 @@ void c_typecheck_baset::typecheck_code(codet &code)
     typecheck_return(code);
   else if(statement=="decl")
     typecheck_decl(code);
-  else if(statement=="decl-block")
-    typecheck_decl_block(code);
   else if(statement=="assign")
     typecheck_assign(code);
   else if(statement=="skip")
@@ -155,27 +153,6 @@ void c_typecheck_baset::typecheck_assign(codet &code)
 
 /*******************************************************************\
 
-Function: c_typecheck_baset::typecheck_decl_block
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void c_typecheck_baset::typecheck_decl_block(codet &code)
-{
-  Forall_operands(it, code)
-    typecheck_code(to_code(*it));
-
-  // Remove decl-block ID
-  code.set_statement("block");
-}
-
-/*******************************************************************\
-
 Function: c_typecheck_baset::typecheck_block
 
   Inputs:
@@ -202,13 +179,7 @@ void c_typecheck_baset::typecheck_block(codet &code)
 
     codet &code_op=to_code(*it1);
 
-    if(code_op.get_statement()=="decl-block")
-    {
-      Forall_operands(it2, code_op)
-        if(it2->is_not_nil())
-          new_ops.move_to_operands(*it2);
-    }
-    else if(code_op.get_statement()=="label")
+    if(code_op.get_statement()=="label")
     {
       // these may be nested
       codet *code_ptr=&code_op;
@@ -219,23 +190,7 @@ void c_typecheck_baset::typecheck_block(codet &code)
         code_ptr=&to_code(code_ptr->op0());
       }
 
-      codet &label_op=*code_ptr;
-
-      // move declaration out of label
-      if(label_op.get_statement()=="decl-block")
-      {
-        codet tmp;
-        tmp.swap(label_op);
-        label_op=codet("skip");
-
-        new_ops.move_to_operands(code_op);
-
-        Forall_operands(it2, tmp)
-          if(it2->is_not_nil())
-            new_ops.move_to_operands(*it2);
-      }
-      else
-        new_ops.move_to_operands(code_op);
+      new_ops.move_to_operands(code_op);
     }
     else
       new_ops.move_to_operands(code_op);

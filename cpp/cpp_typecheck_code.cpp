@@ -131,14 +131,18 @@ void cpp_typecheckt::typecheck_catch(codet &code)
     code_blockt &block=to_code_block(to_code(*it));
     typecheck_code(block);
 
-    const code_blockt &code_block=to_code_block(block);
+    code_blockt &code_block=to_code_block(block);
     assert(code_block.operands().size()>=1);
 
-    const codet &first_instruction=to_code(code_block.op0());
-    assert(first_instruction.get_statement()=="decl");
+    codet &instruction_block = to_code(code_block.op0());
+
+    assert(instruction_block.op0().statement()=="decl");
+
+    // Hack, there are two block, remove the outer one
+    instruction_block = to_code(instruction_block.op0());
 
     // get the declaration
-    const code_declt &code_decl=to_code_decl(first_instruction);
+    const code_declt &code_decl=to_code_decl(to_code(instruction_block));
 
     // get the type
     const typet &type=code_decl.op0().type();
@@ -171,7 +175,7 @@ void cpp_typecheckt::typecheck_ifthenelse(codet &code)
     codet decl = to_code(code.op0());
     typecheck_decl(decl);
 
-    assert(decl.get_statement()=="decl-block");
+    assert(decl.get_statement()=="block");
     assert(decl.operands().size()==1);
 
     // replace declaration by its symbol
@@ -210,7 +214,7 @@ void cpp_typecheckt::typecheck_while(codet &code)
     codet decl = to_code(code.op0());
     typecheck_decl(decl);
 
-    assert(decl.get_statement()=="decl-block");
+    assert(decl.get_statement()=="block");
     assert(decl.operands().size()==1);
 
     // replace declaration by its symbol
@@ -250,7 +254,7 @@ void cpp_typecheckt::typecheck_switch(codet &code)
     codet decl = to_code(code.op0());
     typecheck_decl(decl);
 
-    assert(decl.get_statement()=="decl-block");
+    assert(decl.get_statement()=="block");
     assert(decl.operands().size()==1);
 
     // replace declaration by its symbol
@@ -489,7 +493,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     return;
   }
 
-  codet new_code("decl-block");
+  codet new_code("block");
   new_code.reserve_operands(declaration.declarators().size());
 
   // Do the declarators (optional).

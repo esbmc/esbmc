@@ -53,7 +53,7 @@ void cpp_typecheckt::convert_anonymous_union(
   cpp_declarationt &declaration,
   codet &code)
 {
-  codet new_code("decl-block");
+  codet new_code("block");
   new_code.reserve_operands(declaration.declarators().size());
 
   // unnamed object
