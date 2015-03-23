@@ -834,6 +834,28 @@ bool goto_convertt::is_expr_in_state(
   return false;
 }
 
+
+void goto_convertt::look_for_variables_changes(const exprt &expr)
+{
+  if(expr.statement() == "assign"
+     || expr.statement() == "postincrement"
+     || expr.statement() == "postdecrement"
+     || expr.statement() == "preincrement"
+     || expr.statement() == "predecrement")
+  {
+    get_loop_variables(expr);
+  }
+  if(expr.statement() == "function_call")
+  {
+    get_loop_variables(expr.op0());
+  }
+  else
+  {
+    forall_operands(it, expr)
+      look_for_variables_changes(*it);
+  }
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::get_struct_components
@@ -882,7 +904,7 @@ void goto_convertt::get_loop_variables(const exprt &expr, bool is_global)
   else
   {
     forall_operands(it, expr)
-      get_loop_variables(*it);
+      get_loop_variables(*it, is_global);
   }
 }
 
@@ -1888,7 +1910,7 @@ void goto_convertt::convert_for(
 
   // do the t label
   if (is_inductive_step_active())
-    get_loop_variables(code.op3());
+    look_for_variables_changes(code.op3());
 
   goto_programt sideeffects;
 
@@ -2422,7 +2444,7 @@ void goto_convertt::convert_while(
 
   // do the t label
   if (is_inductive_step_active())
-    get_struct_components(code.op1());
+    look_for_variables_changes(code.op1());
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -2549,7 +2571,7 @@ void goto_convertt::convert_dowhile(
 
   // do the t label
   if (is_inductive_step_active())
-    get_loop_variables(code.op1());
+    look_for_variables_changes(code.op1());
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
