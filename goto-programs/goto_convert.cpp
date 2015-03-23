@@ -3119,29 +3119,20 @@ Function: goto_convertt::get_cs_member
 
 \*******************************************************************/
 
-void goto_convertt::get_cs_member(
-  exprt &expr,
-  exprt &result,
-  const typet &type,
-  bool &found)
+void goto_convertt::replace_by_cs_member(exprt &expr)
 {
-  DEBUGLOC;
-
-  found=false;
-  std::string identifier;
-
-  identifier = "cs$"+i2string(current_block->get_state_counter());
-
   exprt lhs_struct("symbol", current_block->get_state());
-  lhs_struct.identifier(identifier);
+  lhs_struct.identifier("cs$" + i2string(current_block->get_state_counter()));
 
-  exprt new_expr(exprt::member, type);
+  exprt new_expr(exprt::member, expr.type());
   new_expr.reserve_operands(1);
   new_expr.copy_to_operands(lhs_struct);
   new_expr.identifier(expr.get_string("identifier"));
   new_expr.component_name(expr.get_string("identifier"));
 
   assert(!new_expr.get_string("component_name").empty());
+
+  expr = new_expr;
 }
 
 /*******************************************************************\
@@ -3159,6 +3150,11 @@ Function: goto_convertt::replace_ifthenelse
 void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
+  Forall_operands(it, expr)
+  {
+    if(current_block->is_expr_in_state(*it))
+      replace_by_cs_member(*it);
+  }
 }
 
 /*******************************************************************\
