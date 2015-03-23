@@ -213,31 +213,24 @@ protected:
 
   inline bool is_inductive_step_active();
 
-  typedef std::set<exprt> loop_varst;
+  typedef std::map<irep_idt, const exprt> loop_varst;
 
   class loop_block
   {
     public:
       loop_block(unsigned int _state_counter, loop_varst _global_vars)
-    : loop_vars(_global_vars),
-      _break(false),
+    : _break(false),
       _active(false),
       _state_counter(_state_counter),
       _state(struct_typet())
     {
-        // Check if there are any variables on the set already (static and globals)
-        // and add them to the state
-        if (!loop_vars.size())
-          return;
+      // If there is no global or static variables,
+      // no need to add them to the state (static and globals)
+      if (!_global_vars.size())
+        return;
 
-        for (exprt exp : loop_vars)
-        {
-          unsigned int size = _state.components().size();
-          _state.components().resize(size+1);
-          _state.components()[size] = (struct_typet::componentt &) exp;
-          _state.components()[size].set_name(exp.get_string("identifier"));
-          _state.components()[size].pretty_name(exp.get_string("identifier"));
-        }
+      for (std::pair<irep_idt, const exprt> expr : _global_vars)
+        add_expr_to_state(expr.second);
     }
 
     bool is_active() const;
@@ -252,12 +245,16 @@ protected:
     unsigned int get_state_counter() const;
     void set_state_counter(unsigned int state_counter);
 
-    loop_varst loop_vars;
+    bool is_expr_in_state(exprt expr);
+    void add_expr_to_state(const exprt expr);
+
+    void dump_loop_vars();
 
   private:
     bool _break, _active;
     unsigned int _state_counter;
     struct_typet _state;
+    loop_varst _loop_vars;
   };
 
   typedef std::stack<loop_block*> loop_stackt;

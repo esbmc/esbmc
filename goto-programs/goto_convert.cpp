@@ -846,53 +846,44 @@ Function: goto_convertt::get_struct_components
 
 \*******************************************************************/
 
-void goto_convertt::get_struct_components(const exprt &exp, bool is_global)
+void goto_convertt::get_struct_components(const exprt &expr, bool is_global)
 {
   DEBUGLOC;
 
-  if (exp.is_symbol() && exp.type().id()!="code")
+  if (expr.is_symbol() && expr.type().id() != "code")
   {
-    std::size_t found = exp.identifier().as_string().find("__ESBMC_");
+    std::size_t found = expr.identifier().as_string().find("__ESBMC_");
     if(found != std::string::npos)
       return;
 
-    if(exp.identifier().as_string() == "c::__func__"
-       || exp.identifier().as_string() == "c::__PRETTY_FUNCTION__"
-       || exp.identifier().as_string() == "c::__LINE__"
-       || exp.identifier().as_string() == "c::pthread_lib::num_total_threads"
-       || exp.identifier().as_string() == "c::pthread_lib::num_threads_running")
+    if(expr.identifier().as_string() == "c::__func__"
+       || expr.identifier().as_string() == "c::__PRETTY_FUNCTION__"
+       || expr.identifier().as_string() == "c::__LINE__"
+       || expr.identifier().as_string() == "c::pthread_lib::num_total_threads"
+       || expr.identifier().as_string() == "c::pthread_lib::num_threads_running")
       return;
 
-    if(exp.location().file().as_string() == "<built-in>"
-       || exp.cmt_location().file().as_string() == "<built-in>"
-       || exp.type().location().file().as_string() == "<built-in>"
-       || exp.type().cmt_location().file().as_string() == "<built-in>")
+    if(expr.location().file().as_string() == "<built-in>"
+       || expr.cmt_location().file().as_string() == "<built-in>"
+       || expr.type().location().file().as_string() == "<built-in>"
+       || expr.type().cmt_location().file().as_string() == "<built-in>")
       return;
 
     // That means that we're trying to insert the global variables, but
     // there is no state created here, so add to the global_vars and return
     if (is_global)
     {
-      global_vars.insert(exp);
+      global_vars.insert(
+        std::pair<irep_idt, const exprt>(expr.identifier(), expr));
       return;
     }
 
     if (current_block != NULL)
-      current_block->loop_vars.insert(exp);
-
-    if (!is_expr_in_state(exp))
-    {
-      struct_typet& state = current_block->get_state();
-      unsigned int size = state.components().size();
-      state.components().resize(size+1);
-      state.components()[size] = (struct_typet::componentt &) exp;
-      state.components()[size].set_name(exp.get_string("identifier"));
-      state.components()[size].pretty_name(exp.get_string("identifier"));
-    }
+      current_block->add_expr_to_state(expr);
   }
   else
   {
-    forall_operands(it, exp)
+    forall_operands(it, expr)
       get_struct_components(*it);
   }
 }
@@ -3699,4 +3690,37 @@ unsigned int goto_convertt::loop_block::get_state_counter() const
 void goto_convertt::loop_block::set_state_counter(unsigned int state_counter)
 {
   _state_counter = state_counter;
+}
+
+void goto_convertt::loop_block::add_expr_to_state(const exprt expr)
+{
+  if(is_expr_in_state(expr))
+    return;
+
+  _loop_vars.insert(
+    std::pair<irep_idt, const exprt>(expr.identifier(), expr));
+
+  unsigned int size = _state.components().size();
+  _state.components().resize(size+1);
+  _state.components()[size] = (struct_typet::componentt &) expr;
+  _state.components()[size].set_name(expr.get_string("identifier"));
+  _state.components()[size].pretty_name(expr.get_string("identifier"));
+}
+
+bool goto_convertt::loop_block::is_expr_in_state(exprt expr)
+{
+  return _loop_vars.find(expr.identifier()) != _loop_vars.end();
+}
+
+void goto_convertt::loop_block::dump_loop_vars()
+{
+  std::cout << "current_block loop variables:" << std::endl;
+
+  u_int i = 0;
+  for (std::pair<irep_idt, const exprt> expr : _loop_vars)
+  {
+    std::cout << ++i << ". \t" << "identifier: " << expr.first << std::endl
+      << " \t" << expr.second << std::endl << std::endl;
+  }
+  std::cout << std::endl;
 }
