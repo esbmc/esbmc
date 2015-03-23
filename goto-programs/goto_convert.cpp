@@ -2171,8 +2171,12 @@ void goto_convertt::assume_cond(
   const bool &neg,
   goto_programt &dest)
 {
+  // If the loop was not transformed, don't assume
+  if (inductive_step && !current_block->active)
+    return;
+
   // We don't assume false if there is a break inside a infinite loop
-  if(cond.is_true() && current_block->has_break)
+  if (cond.is_true() && current_block->has_break)
     return;
 
   goto_programt tmp_e;
