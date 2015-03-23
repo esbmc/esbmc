@@ -32,12 +32,13 @@ goto_symext::get_unwind_recursion(
 
   if (unwind != 0)
   {
-
-    if (k_induction)
+    if (options.get_bool_option("inductive-step"))
     {
-      std::cerr << "Sorry, can't perform k-induction on recursive code";
-      std::cerr << std::endl;
-      abort();
+      std::cerr << "warning: this program is recursive,"
+        << " so we are not applying the inductive step to this program!"
+        << std::endl;
+      std::cerr  << std::endl;
+      const_cast<optionst&>(options).set_option("disable-inductive-step", true);
     }
 
     const symbolt &symbol = ns.lookup(identifier);
