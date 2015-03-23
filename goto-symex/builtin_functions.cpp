@@ -541,7 +541,7 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
 {
 
   if (k_induction) {
-    std::cerr << "warning: this program contains is multithreaded,"
+    std::cerr << "warning: this program is multithreaded,"
               << " so we are not applying the inductive step to this program!"
               << std::endl;
     std::cerr  << std::endl;
