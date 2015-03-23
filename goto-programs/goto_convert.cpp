@@ -846,10 +846,8 @@ Function: goto_convertt::get_struct_components
 
 \*******************************************************************/
 
-void goto_convertt::get_struct_components(const exprt &expr, bool is_global)
+void goto_convertt::get_loop_variables(const exprt &expr, bool is_global)
 {
-  DEBUGLOC;
-
   if (expr.is_symbol() && expr.type().id() != "code")
   {
     std::size_t found = expr.identifier().as_string().find("__ESBMC_");
@@ -884,7 +882,7 @@ void goto_convertt::get_struct_components(const exprt &expr, bool is_global)
   else
   {
     forall_operands(it, expr)
-      get_struct_components(*it);
+      get_loop_variables(*it);
   }
 }
 
@@ -1109,9 +1107,7 @@ void goto_convertt::convert_assign(
   }
 
   if (inductive_step && current_block != NULL && lhs.type().id() != "empty")
-  {
-    get_struct_components(lhs);
-  }
+    get_loop_variables(lhs);
 }
 
 /*******************************************************************\
@@ -1892,7 +1888,7 @@ void goto_convertt::convert_for(
 
   // do the t label
   if (is_inductive_step_active())
-    get_struct_components(code.op3());
+    get_loop_variables(code.op3());
 
   goto_programt sideeffects;
 
@@ -2012,7 +2008,7 @@ void goto_convertt::add_global_variable_to_state()
       exprt s = symbol_expr(it->second);
       if(it->second.value.id()==irep_idt("array_of"))
         s.type()=it->second.value.type();
-      get_struct_components(s, true);
+      get_loop_variables(s, true);
     }
   }
 }
@@ -2452,7 +2448,6 @@ void goto_convertt::convert_while(
 
   // do the x label
   goto_programt tmp_x;
-
   convert(to_code(code.op1()), tmp_x);
 
   // y: if(c) goto v;
@@ -2554,7 +2549,7 @@ void goto_convertt::convert_dowhile(
 
   // do the t label
   if (is_inductive_step_active())
-    get_struct_components(code.op1());
+    get_loop_variables(code.op1());
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);

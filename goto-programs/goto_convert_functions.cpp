@@ -241,7 +241,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
       arg.remove("#base_name");
       arg.remove("#location");
 
-      get_struct_components(arg);
+      get_loop_variables(arg);
     }
 
     const irep_idt &identifier=it->get_identifier();

@@ -200,7 +200,7 @@ protected:
   void replace_ifthenelse(exprt &expr);
   void replace_by_cs_member(exprt &expr);
   bool is_expr_in_state(const exprt &expr);
-  void get_struct_components(const exprt &exp, bool is_global = false);
+  void get_loop_variables(const exprt &exp, bool is_global = false);
   void check_loop_cond(exprt &cond);
   void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
   bool check_expr_const(const exprt &expr);
