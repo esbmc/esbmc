@@ -555,7 +555,7 @@ void goto_convertt::convert_sideeffect(
       throw 0;
     }
 
-    if((current_block != NULL) && !is_ifthenelse_block() && inductive_step)
+    if((current_block != NULL) && inductive_step)
     {
       symbolst::iterator it=context.symbols.find(expr.op0().identifier());
       if(it!=context.symbols.end())
@@ -1010,9 +1010,6 @@ void goto_convertt::convert_decl(
     // break up into decl and assignment
     copy(tmp, OTHER, dest);
 
-		if (initializer.is_symbol())
-      nondet_vars.insert(std::pair<exprt,exprt>(code.op0(),initializer));
-
     code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
     assign.location()=tmp.location();
     copy(assign, ASSIGN, dest);
@@ -1041,7 +1038,7 @@ void goto_convertt::convert_assign(
     throw "assignment statement takes two operands";
   }
 
-  if((current_block != NULL) && !is_ifthenelse_block() && inductive_step)
+  if((current_block != NULL) && inductive_step)
   {
     symbolst::iterator it=context.symbols.find(code.op0().identifier());
     if(it!=context.symbols.end())
@@ -2315,64 +2312,6 @@ bool goto_convertt::check_expr_const(
 
 /*******************************************************************\
 
-Function: goto_convertt::init_nondet_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::init_nondet_expr(
-  exprt &tmp,
-  goto_programt &dest)
-{
-  if (!tmp.is_symbol())
-    return;
-
-  exprt nondet_expr = side_effect_expr_nondett(tmp.type());
-  code_assignt new_assign_nondet(tmp, nondet_expr);
-  copy(new_assign_nondet, ASSIGN, dest);
-
-  if (!is_ifthenelse_block())
-    nondet_vars.insert(std::pair<exprt, exprt>(tmp, nondet_expr));
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::set_expr_to_nondet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::set_expr_to_nondet(
-  exprt &tmp,
-  goto_programt &dest)
-{
-  nondet_varst::const_iterator cache_result;
-  if (tmp.op0().is_constant())
-  {
-    cache_result = nondet_vars.find(tmp.op1());
-    if (cache_result == nondet_vars.end())
-      init_nondet_expr(tmp.op1(), dest);
-  }
-  else
-  {
-    cache_result = nondet_vars.find(tmp.op0());
-    if (cache_result == nondet_vars.end())
-      init_nondet_expr(tmp.op0(), dest);
-  }
-}
-
-/*******************************************************************\
-
 Function: goto_convertt::check_loop_cond
 
   Inputs:
@@ -3203,107 +3142,6 @@ void goto_convertt::get_cs_member(
   new_expr.component_name(expr.get_string("identifier"));
 
   assert(!new_expr.get_string("component_name").empty());
-
-  const struct_typet &struct_type = to_struct_type(lhs_struct.type());
-  const struct_typet::componentst &components = struct_type.components();
-  u_int i = 0;
-
-  for (struct_typet::componentst::const_iterator
-       it = components.begin();
-       it != components.end();
-       it++, i++)
-  {
-    if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
-      found=true;
-  }
-
-  if (!found)
-  {
-    new_expr = expr;
-    std::cerr << "warning: the symbol '" << expr.get_string("identifier")
-  		  << "' at line " << expr.location().get_line()
-  		  << " is not a member of the state struct" << std::endl;
-  }
-
-
-  result = new_expr;
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::get_new_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr, bool &found)
-{
-  DEBUGLOC;
-
-  if (expr.is_symbol())
-  {
-    if (expr.type().is_pointer() &&
-    		expr.type().subtype().is_symbol())
-      found = true;
-    else
-      get_cs_member(expr, new_expr, expr.type(), found);
-  }
-  else if (expr.is_constant() || expr.is_typecast())
-  {
-    new_expr = expr;
-    found=true;
-  }
-  else if (expr.is_index())
-  {
-    exprt array, index;
-    assert(expr.operands().size()==2);
-
-    //do we have an index of index?
-    if (expr.op0().operands().size() == 2)
-      get_new_expr(expr.op0(), array, found); // this should return another index
-    else
-      get_cs_member(expr.op0(), array, expr.op0().type(), found); //we have one index only
-
-    get_cs_member(expr.op1(), index, expr.op1().type(), found);
-
-    exprt tmp(exprt::index, expr.op0().type());
-    tmp.reserve_operands(2);
-    tmp.copy_to_operands(array);
-    tmp.copy_to_operands(index);
-    new_expr = tmp;
-  }
-  else if (expr.operands().size() == 1)
-  {
-    get_new_expr(expr.op0(), new_expr, found);
-  }
-  else if (expr.operands().size() == 2)
-  {
-    exprt operand0, operand1;
-    get_new_expr(expr.op0(), operand0, found);
-    get_new_expr(expr.op1(), operand1, found);
-
-    new_expr = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
-
-    if (new_expr.op0().is_index())
-      assert(new_expr.op0().type().id() == expr.op0().op0().type().id());
-    else if (new_expr.op0().type()!=new_expr.op1().type())
-   	  new_expr.op1().make_typecast(new_expr.op0().type());
-    else
-      assert(new_expr.op0().type()==new_expr.op1().type());
-  }
-  else
-  {
-    std::cerr << "warning: the expression '" << expr.pretty()
-  		  << "' is not supported yet" << std::endl;
-    assert(0);
-  }
-
-  if (!found) new_expr = expr;
 }
 
 /*******************************************************************\
@@ -3321,72 +3159,6 @@ Function: goto_convertt::replace_ifthenelse
 void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
-  DEBUGLOC;
-
-  bool found=false;
-
-  if(expr.id()=="constant")
-    return;
-
-  if (expr.operands().size()==0 || expr.operands().size() == 1)
-  {
-    exprt new_expr;
-    if (expr.operands().size()==0 || expr.is_typecast())
-      get_new_expr(expr, new_expr, found);
-    else if (expr.operands().size())
-      get_new_expr(expr.op0(), new_expr, found);
-
-    if (!found) std::cout << "failed" << std::endl;
-    assert(found);
-
-    expr = new_expr;
-  }
-  else
-  {
-    assert(expr.operands().size()==2);
-
-    if(expr.has_operands())
-    {
-      exprt::operandst::iterator it = expr.operands().begin();
-      for( ; it != expr.operands().end(); ++it)
-        replace_ifthenelse(*it);
-      return;
-    }
-
-    nondet_varst::const_iterator result_op0 = nondet_vars.find(expr.op0());
-    nondet_varst::const_iterator result_op1 = nondet_vars.find(expr.op1());
-
-    if (result_op0 != nondet_vars.end() && result_op1 != nondet_vars.end())
-      return;
-    else if (expr.op0().is_constant() || expr.op1().is_constant()) {
-      if (result_op0 != nondet_vars.end() || result_op1 != nondet_vars.end())
-        return;
-    }
-
-    loop_varst::const_iterator cache_result =
-      current_block->loop_vars.find(expr.op0());
-    if (cache_result == current_block->loop_vars.end())
-      return;
-
-    assert(expr.op0().type() == expr.op1().type());
-
-    exprt new_expr1, new_expr2;
-
-    get_new_expr(expr.op0(), new_expr1, found);
-    found=false;
-    get_new_expr(expr.op1(), new_expr2, found);
-
-    if (expr.op0().is_index())
-      assert(new_expr1.type().id() == expr.op0().op0().type().id());
-    else if (expr.op1().is_index())
-      assert(new_expr2.type().id() == expr.op1().op0().type().id());
-    else
-      if (new_expr1.type().id() != new_expr2.type().id() ||
-          new_expr1.type().width()!=new_expr2.type().width())
-        new_expr2.make_typecast(new_expr1.type());
-
-    expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
-  }
 }
 
 /*******************************************************************\
@@ -3405,8 +3177,6 @@ void goto_convertt::convert_ifthenelse(
   const codet &code,
   goto_programt &dest)
 {
-  set_ifthenelse_block(true);
-
   if(code.operands().size()!=2 &&
     code.operands().size()!=3)
   {
@@ -3479,7 +3249,6 @@ void goto_convertt::convert_ifthenelse(
   }
 
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
-  set_ifthenelse_block(false);
 }
 
 /*******************************************************************\

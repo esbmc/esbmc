@@ -43,8 +43,7 @@ public:
     forward_condition(options.get_bool_option("forward-condition")),
     assume_all_states(options.get_bool_option("assume-all-states")),
     disable_inductive_step(true),
-    total_states(1),
-    ifthenelse_block(false)
+    total_states(1)
   {
   }
 
@@ -200,7 +199,6 @@ protected:
   void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
   void replace_ifthenelse(exprt &expr);
   void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
-  void get_new_expr(exprt &expr, exprt &new_expr, bool &found);
   bool is_expr_in_state(const exprt &expr);
   void get_struct_components(const exprt &exp, bool is_global = false);
   void check_loop_cond(exprt &cond);
@@ -209,16 +207,11 @@ protected:
   void assume_state_vector(array_typet state_vector, goto_programt &dest);
   void assume_all_state_vector(array_typet state_vector, goto_programt &dest);
   void update_state_vector(array_typet state_vector, goto_programt &dest);
-  void init_nondet_expr(exprt &tmp, goto_programt &dest);
   void print_msg(const exprt &tmp);
   void disable_k_induction(void);
   void print_msg_mem_alloc(void);
-  void set_expr_to_nondet(exprt &tmp, goto_programt &dest);
 
   inline bool is_inductive_step_active();
-
-  void set_ifthenelse_block(bool opt) {ifthenelse_block=opt;}
-  bool is_ifthenelse_block() {return ifthenelse_block;}
 
   typedef std::set<exprt> loop_varst;
 
@@ -431,12 +424,6 @@ protected:
     bool inductive_step, base_case, forward_condition, assume_all_states;
     bool disable_inductive_step;
     unsigned int total_states;
-
-  private:
-    bool ifthenelse_block;
-
-    typedef std::map<exprt, exprt> nondet_varst;
-    nondet_varst nondet_vars;
 };
 
 #endif
