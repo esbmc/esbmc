@@ -815,17 +815,37 @@ Function: goto_convertt::look_for_variables_changes
 
 void goto_convertt::look_for_variables_changes(const exprt &expr)
 {
-  if(expr.statement() == "assign"
-     || expr.statement() == "postincrement"
-     || expr.statement() == "postdecrement"
-     || expr.statement() == "preincrement"
-     || expr.statement() == "predecrement")
+  if (expr.statement() == "assign"
+      || expr.statement() == "postincrement"
+      || expr.statement() == "postdecrement"
+      || expr.statement() == "preincrement"
+      || expr.statement() == "predecrement")
   {
     get_loop_variables(expr);
   }
-  if(expr.statement() == "function_call")
+  else if (expr.statement() == "function_call")
   {
-    get_loop_variables(expr.op0());
+    irep_idt identifier;
+    if (expr.is_code())
+    {
+      get_loop_variables(expr.op0());
+      identifier = expr.op1().identifier();
+    }
+    else if (expr.id() == "sideeffect")
+    {
+      identifier = expr.op0().identifier();
+    }
+
+    symbolst::iterator s_it=context.symbols.find(identifier);
+    if(s_it!=context.symbols.end())
+    {
+      symbolt &symbol=s_it->second;
+      if(symbol.value.is_nil())
+        return;
+
+      // Look through the function body for variables
+      look_for_variables_changes(symbol.value);
+    }
   }
   else
   {
