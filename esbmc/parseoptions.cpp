@@ -741,9 +741,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       write(commPipe[1], &r, sizeof(r));
 
       std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
-
       return res;
-
       break;
     }
 
@@ -804,14 +802,11 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
         if(!r.result) return r.result;
       }
-
       r.finished=true;
       write(commPipe[1], &r, sizeof(r));
 
       std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
-
       return res;
-
       break;
     }
 
@@ -875,9 +870,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       write(commPipe[1], &r, sizeof(r));
 
       std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
-
       return res;
-
       break;
     }
   }
@@ -1744,6 +1737,7 @@ void cbmc_parseoptionst::help()
     " --inductive-step             check the inductive step\n"
     " --k-induction                prove by k-induction \n"
     " --k-induction-parallel       prove by k-induction, running ech step on a separate process\n"
+    " --constrain-all-states       remove all redundant states in the inductive step\n"
     " --k-step nr                  set the k time step (default is 50) \n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"

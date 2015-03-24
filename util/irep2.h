@@ -761,6 +761,20 @@ public:
   mutable size_t crc_val;
 };
 
+inline bool is_nil_expr(const expr2tc &exp)
+{
+  if (exp.get() == NULL)
+    return true;
+  return false;
+}
+
+inline bool is_nil_type(const type2tc &t)
+{
+  if (t.get() == NULL)
+    return true;
+  return false;
+}
+
 // For boost multi-index hashing,
 inline std::size_t
 hash_value(const expr2tc &expr)
@@ -1648,7 +1662,16 @@ public:
    *  @param inf Whether or not this array is infinitely sized
    */
   array_type2t(const type2tc subtype, const expr2tc size, bool inf)
-    : array_type_methods (array_id, subtype, size, inf) { }
+    : array_type_methods (array_id, subtype, size, inf) {
+      // If we can simplify the array size, do so
+      // XXX, this is probably massively inefficient. Some kind of boundry in
+      // the checking process should exist to eliminate this requirement.
+      if (!is_nil_expr(size)) {
+        expr2tc sz = size->simplify();
+        if (!is_nil_expr(sz))
+          array_size = sz;
+      }
+    }
   array_type2t(const array_type2t &ref)
     : array_type_methods(ref) { }
 
@@ -4589,20 +4612,6 @@ inline bool is_structure_type(const type2tc &t)
 inline bool is_structure_type(const expr2tc &e)
 {
   return is_structure_type(e->type);
-}
-
-inline bool is_nil_expr(const expr2tc &exp)
-{
-  if (exp.get() == NULL)
-    return true;
-  return false;
-}
-
-inline bool is_nil_type(const type2tc &t)
-{
-  if (t.get() == NULL)
-    return true;
-  return false;
 }
 
 /** Test if expr is true. First checks whether the expr is a constant bool, and

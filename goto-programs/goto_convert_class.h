@@ -41,7 +41,7 @@ public:
     inductive_step(options.get_bool_option("inductive-step")),
     base_case(options.get_bool_option("base-case")),
     forward_condition(options.get_bool_option("forward-condition")),
-    assume_all_states(options.get_bool_option("assume-all-states")),
+    assume_all_states(options.get_bool_option("constrain-all-states")),
     disable_inductive_step(true),
     total_states(1)
   {
@@ -420,6 +420,7 @@ protected:
   protected:
     bool inductive_step, base_case, forward_condition, assume_all_states;
     bool disable_inductive_step;
+
     unsigned int total_states;
 };
 

@@ -95,7 +95,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"inductive-step",	switc,		""	},
 { 0,	"k-induction", switc, "" },
 { 0,  "k-induction-parallel", switc, "" },
-{ 0,  "assume-all-states", switc, ""},
+{ 0,  "constrain-all-states", switc, ""},
 { 0,  "dont-ignore-dead-child-process", switc, "" },
 { 0,	"break-at",		string,		""	},
 { 0,	"decide",		switc,		""	},

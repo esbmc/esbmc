@@ -2252,7 +2252,6 @@ void goto_convertt::disable_k_induction()
   base_case=false;
 }
 
-
 /*******************************************************************\
 
 Function: goto_convertt::print_msg_mem_alloc
