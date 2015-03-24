@@ -453,7 +453,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
   // do actual BMC
   bool res=0;
-  int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
   int whoAmI=-1;
 
   if (pipe(commPipe))
@@ -501,9 +501,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
         struct resultt a_result;
 
-        bool bc_res[MAX_STEPS], fc_res[MAX_STEPS], is_res[MAX_STEPS];
+        bool bc_res[max_k_step], fc_res[max_k_step], is_res[max_k_step];
 
-        for(unsigned int i=0; i<MAX_STEPS; ++i)
+        for(unsigned int i=0; i<max_k_step; ++i)
         {
           bc_res[i]=false;
           fc_res[i]=is_res[i]=true;
@@ -645,12 +645,16 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
         // No solution was found :/
         if(!solution_found)
+        {
           std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
+          return res;
+        }
 
         if(bc_res[solution_found])
         {
           std::cout << std::endl << "Solution found by the base case" << std::endl;
           std::cout << "VERIFICATION FAILED" << std::endl;
+          return res;
         }
 
         // Successful!
@@ -658,15 +662,15 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         {
           std::cout << std::endl << "Solution found by the forward condition" << std::endl;
           std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          return res;
         }
 
         if(!bc_res[solution_found] && !is_res[solution_found])
         {
           std::cout << std::endl << "Solution found by the inductive step" << std::endl;
           std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          return res;
         }
-
-        return res;
       }
       else
       {
@@ -918,7 +922,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
   // do actual BMC
   bool res=0;
-  int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
 
   //
   // do the base case

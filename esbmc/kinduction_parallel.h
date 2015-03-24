@@ -13,8 +13,6 @@
 
 #include "bmc.h"
 
-const unsigned int MAX_STEPS=50;
-
 enum STEP { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP, NONE };
 
 struct resultt
