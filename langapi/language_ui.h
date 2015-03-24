@@ -51,7 +51,7 @@ protected:
   const cmdlinet &_cmdline;
 
   // k-induction related
-  int k_step;
+  u_int k_step;
   bool base_case;
   bool forward_condition;
 
