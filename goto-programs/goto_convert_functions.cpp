@@ -258,7 +258,8 @@ void goto_convert_functionst::convert_function(const symbolt &symbol)
       arg.remove("#base_name");
       arg.remove("#location");
 
-      get_loop_variables(arg);
+      if (current_block != NULL)
+        current_block->add_expr_to_state(arg);
     }
 
     const irep_idt &identifier=it->get_identifier();
