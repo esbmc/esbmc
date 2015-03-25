@@ -82,7 +82,7 @@ void goto_convert_functionst::goto_convert()
 
   // warning! hash-table iterators are not stable
 
-  typedef std::list<symbolt*> symbol_listt;
+  typedef std::list<const symbolt*> symbol_listt;
   symbol_listt symbol_list;
 
   forall_symbols(it, context.symbols)
