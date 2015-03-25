@@ -20,7 +20,7 @@ void goto_convert(
   const optionst &options,
   goto_functionst &functions,
   message_handlert &message_handler);
-  
+
 class goto_convert_functionst:public goto_convertt
 {
 public:
@@ -28,6 +28,7 @@ public:
   typedef std::set<irep_idt> typename_sett;
 
   void goto_convert();
+  void convert_function(const symbolt &symbol);
   void convert_function(const irep_idt &identifier);
   void thrash_type_symbols(void);
   void collect_type(const irept &type, typename_sett &set);
@@ -44,16 +45,16 @@ public:
     const optionst &_options,
     goto_functionst &_functions,
     message_handlert &_message_handler);
-  
+
   virtual ~goto_convert_functionst();
 
 protected:
   goto_functionst &functions;
-  
+
   static bool hide(const goto_programt &goto_program);
 
   //
-  // function calls  
+  // function calls
   //
   void add_return(
     goto_functiont &f,
