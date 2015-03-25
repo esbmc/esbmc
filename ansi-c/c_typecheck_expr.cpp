@@ -340,6 +340,9 @@ void c_typecheck_baset::mark_functions_inside_loops(exprt &expr)
     {
       symbolt &symbol=s_it->second;
 
+      if(symbol.value.is_nil())
+        return;
+
       if(symbol.value.find("inside_loop") == true_exprt())
         return;
 
