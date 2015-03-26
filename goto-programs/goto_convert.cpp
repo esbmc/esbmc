@@ -2080,7 +2080,7 @@ void goto_convertt::make_nondet_assign(
     new_expr.copy_to_operands(exprt("member_name"));
     new_expr.move_to_operands(rhs_expr);
 
-    if (!current_block->get_state().components()[j].operands().size())
+    if (!current_block->get_state().components()[j].has_operands())
     {
       new_expr.op1().component_name(current_block->get_state().components()[j].get_string("identifier"));
       assert(!new_expr.op1().get_string("component_name").empty());
@@ -2130,7 +2130,7 @@ void goto_convertt::assign_current_state(
     new_expr.copy_to_operands(exprt("member_name"));
     new_expr.move_to_operands(rhs_expr);
 
-    if (!current_block->get_state().components()[j].operands().size())
+    if (!current_block->get_state().components()[j].has_operands())
     {
       new_expr.op1().component_name(
         current_block->get_state().components()[j].get_string("identifier"));
