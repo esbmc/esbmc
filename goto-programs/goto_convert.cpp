@@ -828,11 +828,21 @@ void goto_convertt::look_for_variables_changes(const exprt &expr)
     irep_idt identifier;
     if (expr.is_code())
     {
+      // Get return
       get_loop_variables(expr.op0());
+
+      // Get args variables
+      forall_operands(it, expr.op2())
+        get_loop_variables(*it);
+
       identifier = expr.op1().identifier();
     }
     else if (expr.id() == "sideeffect")
     {
+      // Get args variables
+      forall_operands(it, expr.op1())
+        get_loop_variables(*it);
+
       identifier = expr.op0().identifier();
     }
 
