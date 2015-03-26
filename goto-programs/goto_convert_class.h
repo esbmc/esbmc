@@ -263,6 +263,9 @@ protected:
   loop_block* current_block;
   loop_varst global_vars;
 
+  typedef std::map<unsigned int, loop_block*> statest;
+  statest states_map;
+
   void push_new_loop_block();
   void pop_loop_block();
 

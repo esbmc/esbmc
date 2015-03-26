@@ -3664,7 +3664,7 @@ void goto_convertt::pop_loop_block()
   if(current_block->is_active())
     disable_inductive_step = false;
 
-  delete current_block;
+  states_map[current_block->get_state_counter()] = current_block;
 
   // Pop block from stack
   loop_stack.pop();
