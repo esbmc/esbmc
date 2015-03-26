@@ -2062,17 +2062,20 @@ Function: goto_convertt::make_nondet_assign
 void goto_convertt::make_nondet_assign(
   goto_programt &dest)
 {
-  for (unsigned int j=0; j < current_block->get_state().components().size(); j++)
+  unsigned int component_size = current_block->get_state().components().size();
+  for (unsigned int j = 0; j < component_size; j++)
   {
-    exprt rhs_expr=side_effect_expr_nondett(current_block->get_state().components()[j].type());
+    exprt rhs_expr = side_effect_expr_nondett(
+      current_block->get_state().components()[j].type());
     exprt new_expr(exprt::with, current_block->get_state());
     exprt lhs_expr("symbol", current_block->get_state());
 
     if (current_block->get_state().components()[j].type().is_array())
-      rhs_expr = side_effect_expr_nondett(current_block->get_state().components()[j].type());
+      rhs_expr = side_effect_expr_nondett(
+        current_block->get_state().components()[j].type());
 
     std::string identifier;
-    identifier = "cs$"+i2string(current_block->get_state_counter());
+    identifier = "cs$" + i2string(current_block->get_state_counter());
     lhs_expr.identifier(identifier);
 
     new_expr.reserve_operands(3);
@@ -2094,7 +2097,7 @@ void goto_convertt::make_nondet_assign(
         assert(!new_expr.op1().get_string("component_name").empty());
       }
     }
-    code_assignt new_assign(lhs_expr,new_expr);
+    code_assignt new_assign(lhs_expr, new_expr);
     copy(new_assign, ASSIGN, dest);
   }
 }
@@ -2114,7 +2117,8 @@ Function: goto_convertt::assign_current_state
 void goto_convertt::assign_current_state(
   goto_programt &dest)
 {
-  for (unsigned int j = 0; j < current_block->get_state().components().size(); j++)
+  unsigned int component_size = current_block->get_state().components().size();
+  for (unsigned int j = 0; j < component_size; j++)
   {
     exprt rhs_expr(current_block->get_state().components()[j]);
     exprt new_expr(exprt::with, current_block->get_state());
