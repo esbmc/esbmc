@@ -82,7 +82,6 @@ void goto_convert_functionst::goto_convert()
 
   // warning! hash-table iterators are not stable
 
-  typedef std::list<const symbolt*> symbol_listt;
   symbol_listt symbol_list;
 
   forall_symbols(it, context.symbols)
@@ -97,6 +96,18 @@ void goto_convert_functionst::goto_convert()
       it++)
   {
     convert_function(**it);
+  }
+
+  // Check if there is any delayed function to be converted
+  if(inductive_step && delayed_functions.size())
+  {
+    for(symbol_listt::const_iterator
+        it=delayed_functions.begin();
+        it!=delayed_functions.end();
+        it++)
+    {
+      convert_function(**it);
+    }
   }
 
   functions.compute_location_numbers();
@@ -215,6 +226,28 @@ Function: goto_convert_functionst::convert_function
 
 void goto_convert_functionst::convert_function(const symbolt &symbol)
 {
+  // Trying to convert a function during inductive step
+  // If the function is inside a loop, we must know which loop to
+  // correct replace if/switchs
+  if (inductive_step)
+  {
+    const exprt& inside_loop = symbol.value.find_expr("inside_loop");
+
+    // If the value is true, than we must place it on the list to be
+    // converted later
+    if(inside_loop == true_exprt())
+    {
+      delayed_functions.push_back(&symbol);
+      return;
+    }
+    else if(inside_loop != nil_exprt())
+    {
+      // Restore current_block
+      assert(current_block == NULL);
+      current_block = states_map[atoi(inside_loop.value().c_str())];
+    }
+  }
+
   irep_idt identifier = symbol.name;
 
   // Apply a SFINAE test: discard unused C++ templates.
@@ -309,6 +342,21 @@ void goto_convert_functionst::convert_function(const symbolt &symbol)
 
   if(hide(f.body))
     f.type.hide(true);
+
+  if (inductive_step)
+  {
+    const exprt& inside_loop = symbol.value.find_expr("inside_loop");
+
+    // If the value is true, than we must place it on the list to be
+    // converted later
+    if(inside_loop == true_exprt())
+    {
+    }
+    else if(inside_loop != nil_exprt())
+    {
+      current_block == NULL;
+    }
+  }
 }
 
 /*******************************************************************\
