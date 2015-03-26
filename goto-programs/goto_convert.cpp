@@ -447,9 +447,6 @@ void goto_convertt::convert_block(
   const codet &code,
   goto_programt &dest)
 {
-//  if(inductive_step && (const_cast<codet&>(code).add("inside_loop") != irept("")))
-//    push_new_loop_block();
-
   std::list<irep_idt> locals;
   //extract all the local variables from the block
 
@@ -517,12 +514,6 @@ void goto_convertt::convert_block(
 
     locals.pop_back();
   }
-
-//  if(inductive_step && (const_cast<codet&>(code).add("inside_loop") != irept("")))
-//  {
-//    const_cast<codet&>(code).remove("inside_loop");
-//    pop_loop_block();
-//  }
 }
 
 /*******************************************************************\
