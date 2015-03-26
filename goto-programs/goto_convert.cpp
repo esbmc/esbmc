@@ -2082,14 +2082,15 @@ void goto_convertt::make_nondet_assign(
 
     if (!current_block->get_state().components()[j].has_operands())
     {
-      new_expr.op1().component_name(current_block->get_state().components()[j].get_string("identifier"));
+      new_expr.op1().component_name(
+        current_block->get_state().components()[j].identifier());
       assert(!new_expr.op1().get_string("component_name").empty());
     }
     else
     {
       forall_operands(it, current_block->get_state().components()[j])
       {
-        new_expr.op1().component_name(it->get_string("identifier"));
+        new_expr.op1().component_name(it->identifier());
         assert(!new_expr.op1().get_string("component_name").empty());
       }
     }
@@ -2133,14 +2134,14 @@ void goto_convertt::assign_current_state(
     if (!current_block->get_state().components()[j].has_operands())
     {
       new_expr.op1().component_name(
-        current_block->get_state().components()[j].get_string("identifier"));
+        current_block->get_state().components()[j].identifier());
       assert(!new_expr.op1().get_string("component_name").empty());
     }
     else
     {
       forall_operands(it, current_block->get_state().components()[j])
       {
-        new_expr.op1().component_name(it->get_string("identifier"));
+        new_expr.op1().component_name(it->identifier());
         assert(!new_expr.op1().get_string("component_name").empty());
       }
     }
@@ -3149,8 +3150,8 @@ void goto_convertt::replace_by_cs_member(exprt &expr)
   exprt new_expr(exprt::member, expr.type());
   new_expr.reserve_operands(1);
   new_expr.copy_to_operands(lhs_struct);
-  new_expr.identifier(expr.get_string("identifier"));
-  new_expr.component_name(expr.get_string("identifier"));
+  new_expr.identifier(expr.identifier());
+  new_expr.component_name(expr.identifier());
 
   assert(!new_expr.get_string("component_name").empty());
 
@@ -3736,8 +3737,8 @@ void goto_convertt::loop_block::add_expr_to_state(const exprt expr)
   unsigned int size = _state.components().size();
   _state.components().resize(size+1);
   _state.components()[size] = (struct_typet::componentt &) expr;
-  _state.components()[size].set_name(expr.get_string("identifier"));
-  _state.components()[size].pretty_name(expr.get_string("identifier"));
+  _state.components()[size].set_name(expr.identifier());
+  _state.components()[size].pretty_name(expr.identifier());
 }
 
 bool goto_convertt::loop_block::is_expr_in_state(exprt expr)
