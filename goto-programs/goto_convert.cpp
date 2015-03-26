@@ -3173,9 +3173,11 @@ void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
   Forall_operands(it, expr)
+    replace_ifthenelse(*it);
+
+  if(current_block->is_expr_in_state(expr))
   {
-    if(current_block->is_expr_in_state(*it))
-      replace_by_cs_member(*it);
+    replace_by_cs_member(expr);
   }
 }
 
