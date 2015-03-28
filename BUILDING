@@ -1,4 +1,4 @@
-From v1.25 ESBMC has been autoconfiscated -- build configuration is performed
+From v1.26 ESBMC has been autoconfiscated -- build configuration is performed
 by a configure script in the root project directory and a set of Makefile.in's.
 These files are generated thorugh the use of autotools and all it's minions.
 Two scripts exist to operate autotools:
@@ -29,6 +29,10 @@ Errata:
    by appending "CXX+g++" or similar to the configure command line
  - On Mac OS if you need to use libc++ rather than libstdc++, you must specify
    "-stdlib=libc++" in CXXFLAGS (see below)
+ - If you're using a steaming-new version of clang or gcc, you'll likely get a
+   bunch of new warnings that are then turned into errors by -Werror. You can
+   disable this behaviour with the --disable-werror switch to configure. You
+   should take great care if developing code with werror turned off though.
 
 ~
 

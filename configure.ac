@@ -112,10 +112,20 @@ AC_CHECK_FUNC(strlcpy, [AC_DEFINE([HAVE_STRLCPY], [true], [strlcpy present])], [
 
 LT_LIB_DLLOAD
 
+AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build flag)])
+
 dnl # Do not turn -Werror off: your code is wrong, not -Werror.
-dnl Disabled because of Fisch's mac's version of clang. Sigh.
-AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x"]])
-AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W"]])
+dnl Unless of course you're on a mac, in which case clang will frequently
+dnl generate new warnings, and you probably want it off. This should be used
+dnl with care in that case.
+AS_IF([test "x$enable_werror" = "xno"], [
+  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x"]])
+  AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W"]])
+], [
+  dnl not disabled -> enable werror
+  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x -Werror"]])
+  AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W -Werror"]])
+])
 
 AC_SUBST([ESBMC_CXXFLAGS_WARNINGS],[["-Wall -Wextra -W -std=c++0x"]])
 
