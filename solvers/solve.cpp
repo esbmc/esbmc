@@ -77,6 +77,28 @@ create_solver(std::string the_solver,
   abort();
 }
 
+static const std::string &
+pick_default_solver()
+{
+
+#ifdef BOOLECTOR
+  std::cerr << "No solver specified; defaulting to Boolector" << std::endl;
+  return "boolector";
+#else
+  // Pick whatever's first in the list.
+  if (num_solvers == 1) {
+    std::cerr << "No solver backends built into ESBMC; please either build ";
+    std::cerr << "some in, or explicitly configure the smtlib backend";
+    std::cerr << std::endl;
+    abort();
+  } else {
+    std::cerr << "No solver specified; defaulting to " << solvers[1].name;
+    std::cerr << std::endl;
+    return solvers[1].name;
+  }
+#endif
+}
+
 static smt_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
             const optionst &options, tuple_iface **tuple_api,
@@ -105,26 +127,12 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
       std::cerr << "No solver specified; k-induction defaults to z3" << std::endl;
       the_solver = "z3";
 #else
-
-#ifdef BOOLECTOR
-      std::cerr << "No solver specified; defaulting to Boolector" << std::endl;
-      the_solver = "boolector";
-#else
-      std::cerr << "No solver specified and Boolector is not enabled: please specify a solver" << std::endl;
-      abort();
-#endif
-
+      the_solver = pick_default_solver();
 #endif
     }
     else
     {
-#ifdef BOOLECTOR
-      std::cerr << "No solver specified; defaulting to Boolector" << std::endl;
-      the_solver = "boolector";
-#else
-      std::cerr << "No solver specified and Boolector is not enabled: please specify a solver" << std::endl;
-      abort();
-#endif
+      the_solver = pick_default_solver();
     }
   }
 
