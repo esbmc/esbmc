@@ -33,7 +33,12 @@
 #define yyparse cppparse
 #endif
 
-typedef unsigned char usch;
+// jmorse: This was unsigned char. Which would be fine, except that pcc wants
+// to interact with the rest of the standard library, which has varying signs
+// of char. So, switch back to normal chars.
+// This is slightly problematic as some constants used in the code are in the
+// unsigned range; however they've been tweaked to just be negative.
+typedef char usch;
 extern char *yytext;
 extern usch *stringbuf;
 
@@ -72,9 +77,9 @@ extern	int	defining;
 #define	NAMEMAX	CPPBUF	/* currently pushbackbuffer */
 #define	BBUFSZ	(NAMEMAX+CPPBUF+1)
 
-#define GCCARG	0xfd	/* has gcc varargs that may be replaced with 0 */
-#define VARG	0xfe	/* has varargs */
-#define OBJCT	0xff
+#define GCCARG	-126	/* has gcc varargs that may be replaced with 0 */
+#define VARG	-127	/* has varargs */
+#define OBJCT	-128
 #define WARN	1	/* SOH, not legal char */
 #define CONC	2	/* STX, not legal char */
 #define SNUFF	3	/* ETX, not legal char */
@@ -199,4 +204,4 @@ void getcmnt(void);
 void xwrite(int, const void *, unsigned int);
 
 /* ESBMC */
-int handle_hooked_header(usch *name);
+int handle_hooked_header(const usch *name);

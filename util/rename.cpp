@@ -11,34 +11,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "i2string.h"
 #include "rename.h"
 
-/*******************************************************************\
-
-Function: get_new_name
-
-  Inputs: symbol to be renamed, namespace
-
- Outputs: new symbol
-
- Purpose: automated variable renaming
-
-\*******************************************************************/
-
 void get_new_name(symbolt &symbol, const namespacet &ns)
 {
   get_new_name(symbol.name, ns);
 }
-
-/*******************************************************************\
-
-Function: get_new_name
-
-  Inputs: symbol to be renamed, namespace
-
- Outputs: new symbol
-
- Purpose: automated variable renaming
-
-\*******************************************************************/
 
 void get_new_name(irep_idt &new_name, const namespacet &ns)
 {

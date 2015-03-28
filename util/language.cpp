@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "language.h"
 
-/*******************************************************************\
-
-Function: languaget::from_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool languaget::from_expr(
   const exprt &expr,
   std::string &code,
@@ -28,18 +16,6 @@ bool languaget::from_expr(
   code=expr.pretty();
   return false;
 }
-
-/*******************************************************************\
-
-Function: languaget::from_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool languaget::from_type(
   const typet &type,

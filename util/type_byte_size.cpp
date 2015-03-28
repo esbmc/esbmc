@@ -55,7 +55,7 @@ mp_integer
 member_offset(const struct_type2t &type, const irep_idt &member)
 {
   mp_integer result = 0;
-  unsigned bit_field_bits = 0, idx = 0;
+  unsigned idx = 0;
 
   forall_types(it, type.members) {
     // If the current field is 64 bits, and we're on a 32 bit machine, then we

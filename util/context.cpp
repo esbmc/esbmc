@@ -8,36 +8,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "context.h"
 
-/*******************************************************************\
-
-Function: contextt::value
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const irept &contextt::value(const irep_idt &name) const
 {
   symbolst::const_iterator it=symbols.find(name);
   if(it==symbols.end()) return get_nil_irep();
   return it->second.value;
 }
-
-/*******************************************************************\
-
-Function: contextt::add
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool contextt::add(const symbolt &symbol)
 {
@@ -49,18 +25,6 @@ bool contextt::add(const symbolt &symbol)
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: contextt::move
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 {
@@ -84,18 +48,6 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   return false;
 }
 
-/*******************************************************************\
-
-Function: contextt::show
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void contextt::show(std::ostream &out) const
 {
   out << std::endl << "Symbols:" << std::endl;
@@ -103,18 +55,6 @@ void contextt::show(std::ostream &out) const
   forall_symbols(it, symbols)
     out << it->second;
 }
-
-/*******************************************************************\
-
-Function: operator <<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::ostream &operator << (std::ostream &out, const contextt &context)
 {

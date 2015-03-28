@@ -24,7 +24,6 @@ public:
   virtual void print(
     unsigned level,
     const std::string &message,
-    int sequence_number,
     const locationt &location);
 
   virtual ~message_handlert()
@@ -42,7 +41,6 @@ public:
   virtual void print(
     unsigned level,
     const std::string &message,
-    int sequence_number,
     const locationt &location)
   {
   }
@@ -84,7 +82,7 @@ public:
   {
     locationt location;
     location.set_file(file);
-    print(6, message, -1, location);
+    print(6, message, location);
   }
 
   void error(const std::string &message)
@@ -96,7 +94,7 @@ public:
   {
     locationt location;
     location.set_file(file);
-    print(1, message, -1, location);
+    print(1, message, location);
   }
 
   virtual void print(unsigned level, const std::string &message);
@@ -104,7 +102,6 @@ public:
   virtual void print(
     unsigned level,
     const std::string &message,
-    int sequence_number, // -1: no sequence information
     const locationt &location);
 
   virtual void set_message_handler(message_handlert *_message_handler);

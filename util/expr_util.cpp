@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "fixedbv.h"
 #include "bitvector.h"
 
-/*******************************************************************\
-
-Function: gen_zero
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt gen_zero(const typet &type)
 {
   exprt result;
@@ -66,18 +54,6 @@ exprt gen_zero(const typet &type)
   return result;
 }
 
-/*******************************************************************\
-
-Function: gen_one
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt gen_one(const typet &type)
 {
   const std::string &type_id=type.id_string();
@@ -119,34 +95,10 @@ exprt gen_one(const typet &type)
   return result;
 }
 
-/*******************************************************************\
-
-Function: gen_not
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt gen_not(const exprt &op)
 {
   return gen_unary("not", typet("bool"), op);
 }
-
-/*******************************************************************\
-
-Function: gen_unary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt gen_unary(const std::string &id, const typet &type, const exprt &op)
 {
@@ -154,18 +106,6 @@ exprt gen_unary(const std::string &id, const typet &type, const exprt &op)
   result.copy_to_operands(op);
   return result;
 }
-
-/*******************************************************************\
-
-Function: gen_binary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt gen_binary(const std::string &id, const typet &type, const exprt &op1, const exprt &op2)
 {
@@ -181,34 +121,10 @@ exprt gen_binary(irep_idt &id, const typet &type, const exprt &op1, const exprt 
   return result;
 }
 
-/*******************************************************************\
-
-Function: gen_and
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt gen_and(const exprt &op1, const exprt &op2)
 {
   return gen_binary("and", typet("bool"), op1, op2);
 }
-
-/*******************************************************************\
-
-Function: gen_and
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt gen_and(const exprt &op1, const exprt &op2, const exprt &op3)
 {
@@ -217,34 +133,10 @@ exprt gen_and(const exprt &op1, const exprt &op2, const exprt &op3)
   return result;
 }
 
-/*******************************************************************\
-
-Function: gen_or
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt gen_or(const exprt &op1, const exprt &op2)
 {
   return gen_binary("or", typet("bool"), op1, op2);
 }
-
-/*******************************************************************\
-
-Function: gen_or
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt gen_or(const exprt &op1, const exprt &op2, const exprt &op3)
 {
@@ -253,34 +145,10 @@ exprt gen_or(const exprt &op1, const exprt &op2, const exprt &op3)
   return result;
 }
 
-/*******************************************************************\
-
-Function: gen_implies
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt gen_implies(const exprt &op1, const exprt &op2)
 {
   return gen_binary("=>", typet("bool"), op1, op2);
 }
-
-/*******************************************************************\
-
-Function: gen_binary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void gen_binary(exprt &expr, const std::string &id, bool default_value)
 {
@@ -304,51 +172,15 @@ void gen_binary(exprt &expr, const std::string &id, bool default_value)
   }
 }
 
-/*******************************************************************\
-
-Function: gen_and
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void gen_and(exprt &expr)
 {
   gen_binary(expr, "and", true);
 }
 
-/*******************************************************************\
-
-Function: gen_or
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void gen_or(exprt &expr)
 {
   gen_binary(expr, "or", false);
 }
-
-/*******************************************************************\
-
-Function: symbol_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt symbol_expr(const symbolt &symbol)
 {
@@ -357,18 +189,6 @@ exprt symbol_expr(const symbolt &symbol)
   return tmp;
 }
 
-/*******************************************************************\
-
-Function: gen_pointer_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 pointer_typet gen_pointer_type(const typet &subtype)
 {
   pointer_typet tmp;
@@ -376,36 +196,12 @@ pointer_typet gen_pointer_type(const typet &subtype)
   return tmp;
 }
 
-/*******************************************************************\
-
-Function: gen_address_of
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt gen_address_of(const exprt &op)
 {
   exprt tmp("address_of", gen_pointer_type(op.type()));
   tmp.copy_to_operands(op);
   return tmp;
 }
-
-/*******************************************************************\
-
-Function: make_next_state
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void make_next_state(exprt &expr)
 {
@@ -415,18 +211,6 @@ void make_next_state(exprt &expr)
   if(expr.id()=="symbol")
     expr.id("next_symbol");
 }
-
-/*******************************************************************\
-
-Function: make_binary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt make_binary(const exprt &expr)
 {

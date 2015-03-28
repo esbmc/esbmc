@@ -17,13 +17,11 @@ class cpp_languaget:public languaget
 {
 public:
   virtual bool preprocess(
-    std::istream &instream,
     const std::string &path,
     std::ostream &outstream,
     message_handlert &message_handler);
 
   virtual bool parse(
-    std::istream &instream,
     const std::string &path,
     message_handlert &message_handler);
 

@@ -32,7 +32,7 @@
 #include "config.h"
 #include "manifest.h"
 
-#ifndef ONAMAC
+#ifndef __APPLE__
  
 #ifndef HAVE_STRLCAT
 /*

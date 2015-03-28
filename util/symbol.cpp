@@ -9,34 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "symbol.h"
 #include "location.h"
 
-/*******************************************************************\
-
-Function: symbolt::show
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symbolt::dump()
 {
   show(std::cout);
 }
-
-/*******************************************************************\
-
-Function: symbolt::show
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symbolt::show(std::ostream &out) const
 {
@@ -66,36 +42,12 @@ void symbolt::show(std::ostream &out) const
   out << std::endl;
 }
 
-/*******************************************************************\
-
-Function: operator<<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::ostream &operator<<(std::ostream &out,
                          const symbolt &symbol)
 {
   symbol.show(out);
   return out;
 }
-
-/*******************************************************************\
-
-Function: symbolt::to_irep
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symbolt::to_irep(irept &dest) const
 {
@@ -125,18 +77,6 @@ void symbolt::to_irep(irept &dest) const
   if (is_extern) dest.is_extern(true);
   if (is_volatile) dest.is_volatile(true);
 }
-
-/*******************************************************************\
-
-Function: symbolt::from_irep
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symbolt::from_irep(const irept &src)
 {

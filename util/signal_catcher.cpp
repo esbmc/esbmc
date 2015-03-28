@@ -19,18 +19,6 @@ Date:
 
 #include "signal_catcher.h"
 
-/*******************************************************************\
-
-Function: install_signal_catcher
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void install_signal_catcher()
 {
   #if defined(_WIN32)
@@ -46,18 +34,6 @@ void install_signal_catcher()
   sigaction(SIGTERM, &act, NULL);
   #endif
 }
-
-/*******************************************************************\
-
-Function: signal_catcher
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void signal_catcher(int sig)
 {

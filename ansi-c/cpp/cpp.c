@@ -50,7 +50,7 @@
 
 #include "compat.h"
 #include "cpp.h"
-#include "y.tab.h"
+#include "cpy.h"
 
 #include "iface.h"
 

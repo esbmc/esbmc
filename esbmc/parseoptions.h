@@ -11,7 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <langapi/language_ui.h>
 #include <ui_message.h>
-#include <parseoptions.h>
+#include <util/parseoptions.h>
+#include "parseoptions.h"
 
 #include <options.h>
 #include <cmdline.h>

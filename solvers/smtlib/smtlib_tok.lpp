@@ -1,0 +1,84 @@
+%option nounput
+%option noyywrap
+
+%{
+
+// A scanner for lexing smtlib2 responses from SMT solvers
+
+#include <string>
+#include <list>
+#include "smtlib_conv.h"
+#include "smtlib.hpp"
+
+#define YY_DECL int smtliblex(int startsym)
+
+int smtlib_send_start_code = 0;
+%}
+
+%{
+  // Basic lexicon
+%}
+
+lparen        \(
+rparen        \)
+numeral       (0|[1-9][0-9]*)
+decimal       {numeral}.0*{numeral}
+hexnum        #x[a-fA-F0-9]+
+binnum        #b[01]+
+stringlit     \"((.|\\\\|\\\")*)\"
+
+symtext       [-~!@%^&*_+=<>.?/a-zA-Z]
+symchars      [-0-9~!@%^&*_+=<>.?/a-zA-Z]
+simplesym     {symtext}{symchars}*
+quotedsym     \|[^\\|]*\|
+keyword       :{symchars}+
+
+%%
+
+%{
+  yy_set_interactive(1);
+  if (smtlib_send_start_code != 0) {
+    smtlib_send_start_code = 0;
+    return startsym;
+  }
+%}
+
+[\t]+                   { /* discard */ }
+[ ]+                    { /* discard */ }
+[\n]+                    { /* discard */ }
+
+"par"                 { return TOK_KW_PAR; }
+"NUMERAL"             { return TOK_KW_NUMERAL; }
+"DECIMAL"             { return TOK_KW_DECIMAL; }
+"STRING"              { return TOK_KW_STRING; }
+"_"                   { return TOK_KW_USCORE; }
+"!"                   { return TOK_KW_EXCL; }
+"as"                  { return TOK_KW_AS; }
+"let"                 { return TOK_KW_LET; }
+"forall"              { return TOK_KW_FORALL; }
+"exists"              { return TOK_KW_EXISTS; }
+"unsupported"         { return TOK_KW_UNSUPPORTED; }
+"success"             { return TOK_KW_SUCCESS; }
+"error"               { return TOK_KW_ERROR; }
+"immediate-exit"      { return TOK_KW_IMMEXIT; }
+"continued-execution" { return TOK_KW_CONEXECUTION; }
+"memout"              { return TOK_KW_MEMOUT; }
+"incomplete"          { return TOK_KW_INCOMPLETE; }
+"sat"                 { smtliblval.text = strdup(yytext); return TOK_KW_SAT; }
+"unsat"               { smtliblval.text = strdup(yytext); return TOK_KW_UNSAT; }
+"unknown"             { smtliblval.text = strdup(yytext);return TOK_KW_UNKNOWN;}
+"true"                { return TOK_KW_TRUE; }
+"false"               { return TOK_KW_FALSE; }
+
+{lparen}              { return TOK_LPAREN; }
+{rparen}              { return TOK_RPAREN; }
+{numeral}             { smtliblval.text = strdup(yytext); return TOK_NUMERAL; }
+{decimal}             { smtliblval.text = strdup(yytext); return TOK_DECIMAL; }
+{hexnum}              { smtliblval.text = strdup(yytext); return TOK_HEXNUM; }
+{binnum}              { smtliblval.text = strdup(yytext); return TOK_BINNUM; }
+{stringlit}           { smtliblval.text = strdup(yytext); return TOK_STRINGLIT;}
+{simplesym}           { smtliblval.text = strdup(yytext); return TOK_SIMPLESYM;}
+{quotedsym}           { smtliblval.text = strdup(yytext); return TOK_QUOTEDSYM;}
+{keyword}             { smtliblval.text = strdup(yytext); return TOK_KEYWORD;}
+
+%%

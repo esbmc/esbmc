@@ -115,10 +115,10 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     tmp_bv.round(fixedbv_spect(bits*2, bits));
 
     // If we're converting to a signedbv, the top bit being set means negative.
-    if (is_signedbv_type(type)) {
+    if (is_signedbv_type(type) && !tmp.is_negative()) {
       assert(type->get_width() <= 64);
       uint64_t top_bit = 1ULL << (type->get_width()-1);
-      int64_t cur_val = tmp_bv.to_integer().to_int64();
+      uint64_t cur_val = tmp_bv.to_integer().to_uint64();
       if (cur_val >= top_bit) {
         // Construct some bit mask gumpf as a sign extension
         int64_t large_int = -1;
@@ -126,6 +126,9 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
         large_int |= cur_val;
         tmp_bv.from_integer(large_int);
       }
+    } else if (is_signedbv_type(type)) {
+      int64_t theval = tmp.to_int64();
+      tmp_bv.from_integer(theval);
     } else if (is_unsignedbv_type(type) && tmp_bv.to_integer().is_negative()) {
       // Need to switch this number to being an unsigned representation of the
       // same bit vector.
@@ -515,7 +518,7 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 expr2tc
-neg2t::do_simplify(bool second) const
+neg2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (!is_constant_expr(value))
@@ -788,8 +791,11 @@ index2t::do_simplify(bool second __attribute__((unused))) const
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
     // model. We don't have to think about this now though.
-    long the_idx = idx.as_long();
-    if (the_idx >= arr.datatype_members.size() || the_idx < 0)
+    if (idx.constant_value.is_negative())
+      return expr2tc();
+
+    unsigned long the_idx = idx.as_ulong();
+    if (the_idx >= arr.datatype_members.size())
       return expr2tc();
 
     return arr.datatype_members[the_idx];
@@ -1051,7 +1057,7 @@ bitnxor2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 static int64_t
-do_bitnot_op(int64_t op1, int64_t op2)
+do_bitnot_op(int64_t op1, int64_t op2 __attribute__((unused)))
 {
   return ~op1;
 }

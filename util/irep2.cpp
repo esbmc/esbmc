@@ -674,6 +674,9 @@ symbol_data::get_symbol_name(void) const
     // Global name with l2 details
     return thename.as_string() + "&" + i2string(node_num)
                                + "#" + i2string(level2_num);
+  default:
+    std::cerr << "Unrecognized renaming level enum" << std::endl;
+    abort();
   }
 }
 
@@ -763,8 +766,10 @@ type_poolt::type_poolt(bool yolo __attribute__((unused)))
   return;
 }
 
+// XXX why did I disable this cache?
 static const type2tc &
-get_type_from_pool(const typet &val, std::map<typet, type2tc> &map)
+get_type_from_pool(const typet &val,
+    std::map<typet, type2tc> &map __attribute__((unused)))
 {
 #if 0
   std::map<const typet, type2tc>::const_iterator it = map.find(val);
@@ -924,6 +929,9 @@ type_to_string(const symbol_data::renaming_level &theval,
     return "Level 1 (global)";
   case symbol_data::level2_global:
     return "Level 2 (global)";
+  default:
+    std::cerr << "Unrecognized renaming level enum" << std::endl;
+    abort();
   }
 }
 
@@ -998,26 +1006,6 @@ type_to_string(const std::vector<irep_idt> &theval,
 }
 
 static inline __attribute__((always_inline)) std::string
-type_to_string(const std::vector<unsigned int> &theval,
-               int indent __attribute__((unused)))
-{
-  char buffer[64];
-  std::string astring = "\n";
-  int i;
-
-  i = 0;
-  for (std::vector<unsigned int>::const_iterator it = theval.begin();
-       it != theval.end(); it++) {
-    snprintf(buffer, 63, "%d", i);
-    buffer[63] = '\0';
-    astring += indent_str(indent) + std::string(buffer) + ": " + i2string(*it) + "\n";
-    i++;
-  }
-
-  return astring;
-}
-
-static inline __attribute__((always_inline)) std::string
 type_to_string(const expr2tc &theval, int indent)
 {
 
@@ -1040,18 +1028,6 @@ static inline __attribute__((always_inline)) std::string
 type_to_string(const irep_idt &theval, int indent __attribute__((unused)))
 {
   return theval.as_string();
-}
-
-static inline __attribute__((always_inline)) std::string
-type_to_string(const type2t::type_ids &id, int indent __attribute__((unused)))
-{
-  return "";
-}
-
-static inline __attribute__((always_inline)) std::string
-type_to_string(const expr2t::expr_ids &id, int indent __attribute__((unused)))
-{
-  return "";
 }
 
 static inline __attribute__((always_inline)) bool
@@ -1115,13 +1091,6 @@ do_type_cmp(const std::vector<irep_idt> &side1,
 }
 
 static inline __attribute__((always_inline)) bool
-do_type_cmp(const std::vector<unsigned int> &side1,
-            const std::vector<unsigned int> &side2)
-{
-  return (side1 == side2);
-}
-
-static inline __attribute__((always_inline)) bool
 do_type_cmp(const expr2tc &side1, const expr2tc &side2)
 {
   if (side1.get() == side2.get())
@@ -1149,13 +1118,15 @@ do_type_cmp(const irep_idt &side1, const irep_idt &side2)
 }
 
 static inline __attribute__((always_inline)) bool
-do_type_cmp(const type2t::type_ids &id, const type2t::type_ids &id2)
+do_type_cmp(const type2t::type_ids &id __attribute__((unused)),
+            const type2t::type_ids &id2 __attribute__((unused)))
 {
   return true; // Dummy field comparison.
 }
 
 static inline __attribute__((always_inline)) bool
-do_type_cmp(const expr2t::expr_ids &id, const expr2t::expr_ids &id2)
+do_type_cmp(const expr2t::expr_ids &id __attribute__((unused)),
+            const expr2t::expr_ids &id2 __attribute__((unused)))
 {
   return true; // Dummy field comparison.
 }
@@ -1271,17 +1242,6 @@ do_type_lt(const std::vector<irep_idt> &side1,
 }
 
 static inline __attribute__((always_inline)) int
-do_type_lt(const std::vector<unsigned int> &side1,
-           const std::vector<unsigned int> &side2)
-{
-  if (side1 < side2)
-    return -1;
-  else if (side2 < side1)
-    return 1;
-  return 0;
-}
-
-static inline __attribute__((always_inline)) int
 do_type_lt(const expr2tc &side1, const expr2tc &side2)
 {
   if (side1.get() == side2.get())
@@ -1318,13 +1278,15 @@ do_type_lt(const irep_idt &side1, const irep_idt &side2)
 }
 
 static inline __attribute__((always_inline)) int
-do_type_lt(const type2t::type_ids &id, const type2t::type_ids &id2)
+do_type_lt(const type2t::type_ids &id __attribute__((unused)),
+           const type2t::type_ids &id2 __attribute__((unused)))
 {
   return 0; // Dummy field comparison
 }
 
 static inline __attribute__((always_inline)) int
-do_type_lt(const expr2t::expr_ids &id, const expr2t::expr_ids &id2)
+do_type_lt(const expr2t::expr_ids &id __attribute__((unused)),
+           const expr2t::expr_ids &id2 __attribute__((unused)))
 {
   return 0; // Dummy field comparison
 }
@@ -1578,34 +1540,33 @@ do_type_hash(const irep_idt &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const type2t::type_ids &i, size_t seed)
+do_type_crc(const type2t::type_ids &i __attribute__((unused)), size_t seed)
 {
   return seed; // Dummy field crc
 }
 
 static inline __attribute__((always_inline)) void
-do_type_hash(const type2t::type_ids &i, crypto_hash &hash)
+do_type_hash(const type2t::type_ids &i __attribute__((unused)),
+             crypto_hash &hash __attribute__((unused)))
 {
   return; // Dummy field crc
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const expr2t::expr_ids &i, size_t seed)
+do_type_crc(const expr2t::expr_ids &i __attribute__((unused)), size_t seed)
 {
   return seed; // Dummy field crc
 }
 
 static inline __attribute__((always_inline)) void
-do_type_hash(const expr2t::expr_ids &i, crypto_hash &hash)
+do_type_hash(const expr2t::expr_ids &i __attribute__((unused)),
+             crypto_hash &hash __attribute__((unused)))
 {
   return; // Dummy field crc
 }
 
 static inline __attribute__((always_inline)) void do_type_list_operands(const symbol_data::renaming_level &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<unsigned int> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const std::list<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const bool &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const sideeffect_data::allockind  &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const unsigned int &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1616,10 +1577,7 @@ static inline __attribute__((always_inline)) void do_type_list_operands(const ex
 static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<irep_idt> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 
 static inline __attribute__((always_inline)) void do_type_list_operands(symbol_data::renaming_level &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<unsigned int> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(std::list<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(bool &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(sideeffect_data::allockind &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(unsigned int &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1679,20 +1637,24 @@ do_type2string(const T &thething, unsigned int idx,
 
 template <>
 void
-do_type2string<type2t::type_ids>(const type2t::type_ids &thething,
-                                 unsigned int idx,
-                                 std::string (&names)[esbmct::num_type_fields],
-                                 list_of_memberst &vec, unsigned int indent)
+do_type2string<type2t::type_ids>(
+    const type2t::type_ids &thething __attribute__((unused)),
+    unsigned int idx __attribute__((unused)),
+    std::string (&names)[esbmct::num_type_fields] __attribute__((unused)),
+    list_of_memberst &vec __attribute__((unused)),
+    unsigned int indent __attribute__((unused)))
 {
   // Do nothing; this is a dummy member.
 }
 
 template <>
 void
-do_type2string<const expr2t::expr_ids>(const expr2t::expr_ids &thething,
-                                 unsigned int idx,
-                                 std::string (&names)[esbmct::num_type_fields],
-                                 list_of_memberst &vec, unsigned int indent)
+do_type2string<const expr2t::expr_ids>(
+    const expr2t::expr_ids &thething __attribute__((unused)),
+    unsigned int idx __attribute__((unused)),
+    std::string (&names)[esbmct::num_type_fields] __attribute__((unused)),
+    list_of_memberst &vec __attribute__((unused)),
+    unsigned int indent __attribute__((unused)))
 {
   // Do nothing; this is a dummy member.
 }

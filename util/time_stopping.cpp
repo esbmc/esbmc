@@ -38,18 +38,6 @@ void gettimeofday(struct timeval* p, struct timezone *tz) {
 }
 #endif
 
-/*******************************************************************\
-
-Function: current_time
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 fine_timet current_time()
 {
   struct timeval tv;
@@ -60,34 +48,10 @@ fine_timet current_time()
   return tv.tv_usec/1000+(fine_timet)tv.tv_sec*1000;
 }
 
-/*******************************************************************\
-
-Function: outout_time
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void output_time(const fine_timet &fine_time, std::ostream &out)
 {
   out << std::setiosflags(std::ios::fixed) << std::setprecision(3) << (double)(fine_time)/1000;
 }
-
-/*******************************************************************\
-
-Function: time2string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string time2string(const fine_timet &fine_time)
 {

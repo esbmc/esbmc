@@ -13,68 +13,20 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "cmdline.h"
 
-/*******************************************************************\
-
-Function:
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 cmdlinet::cmdlinet()
 {
 }
-
-/*******************************************************************\
-
-Function:
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 cmdlinet::~cmdlinet()
 {
   clear();
 }
 
-/*******************************************************************\
-
-Function:
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cmdlinet::clear()
 {
   options.clear();
   args.clear();
 }
-
-/*******************************************************************\
-
-Function:
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cmdlinet::isset(char option) const
 {
@@ -85,18 +37,6 @@ bool cmdlinet::isset(char option) const
   return options[i].isset;
 }
 
-/*******************************************************************\
-
-Function:
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cmdlinet::isset(const char *option) const
 {
   int i;
@@ -105,18 +45,6 @@ bool cmdlinet::isset(const char *option) const
   if(i<0) return false;
   return options[i].isset;
 }
-
-/*******************************************************************\
-
-Function: cmdlinet::getval
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 const char *cmdlinet::getval(char option) const
 {
@@ -128,18 +56,6 @@ const char *cmdlinet::getval(char option) const
   return options[i].values.front().c_str();
 }
 
-/*******************************************************************\
-
-Function: cmdlinet::get_values
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const std::list<std::string> &cmdlinet::get_values(char option) const
 {
   int i;
@@ -148,18 +64,6 @@ const std::list<std::string> &cmdlinet::get_values(char option) const
   assert(i>=0);
   return options[i].values;
 }
-
-/*******************************************************************\
-
-Function: cmdlinet::getval
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 const char *cmdlinet::getval(const char *option) const
 {
@@ -171,18 +75,6 @@ const char *cmdlinet::getval(const char *option) const
   return options[i].values.front().c_str();
 }
 
-/*******************************************************************\
-
-Function: cmdlinet::get_values
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const std::list<std::string>&cmdlinet::get_values(const char *option) const
 {
   int i;
@@ -191,18 +83,6 @@ const std::list<std::string>&cmdlinet::get_values(const char *option) const
   assert(i>=0);
   return options[i].values;
 }
-
-/*******************************************************************\
-
-Function: cmdlinet::getoptnr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 int cmdlinet::getoptnr(char option) const
 {
@@ -213,18 +93,6 @@ int cmdlinet::getoptnr(char option) const
   return -1;
 }
 
-/*******************************************************************\
-
-Function: cmdlinet::getoptnr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 int cmdlinet::getoptnr(const char *option) const
 {
   for(unsigned i=0; i<options.size(); i++)
@@ -233,18 +101,6 @@ int cmdlinet::getoptnr(const char *option) const
   
   return -1;
 }
-
-/*******************************************************************\
-
-Function: cmdlinet::parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
 {

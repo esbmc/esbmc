@@ -12,51 +12,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "language.h"
 #include "language_file.h"
 
-/*******************************************************************\
-
-Function: language_filet::~language_filet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 language_filet::~language_filet()
 {
   if(language!=NULL) delete language;
 }
 
-/*******************************************************************\
-
-Function: language_filet::get_modules
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void language_filet::get_modules()
 {
   language->modules_provided(modules);
 }
-
-/*******************************************************************\
-
-Function: language_filest::show_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void language_filest::show_parse(std::ostream &out)
 {
@@ -65,24 +29,12 @@ void language_filest::show_parse(std::ostream &out)
     it->second.language->show_parse(out);
 }
 
-/*******************************************************************\
-
-Function: language_filest::parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool language_filest::parse()
 {
   for(filemapt::iterator it=filemap.begin();
       it!=filemap.end(); it++)
   {
-    // open file
+    // Check that file exists
 
     std::ifstream infile(it->first.c_str());
 
@@ -96,7 +48,7 @@ bool language_filest::parse()
 
     languaget &language=*(it->second.language);
 
-    if(language.parse(infile, it->first, *get_message_handler()))
+    if(language.parse(it->first, *get_message_handler()))
     {
       error("Parsing of "+it->first+" failed");
       return true;
@@ -109,18 +61,6 @@ bool language_filest::parse()
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: language_filest::typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool language_filest::typecheck(contextt &context)
 {
@@ -174,18 +114,6 @@ bool language_filest::typecheck(contextt &context)
   return false;
 }
 
-/*******************************************************************\
-
-Function: language_filest::final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool language_filest::final(
   contextt &context)
 {
@@ -204,18 +132,6 @@ bool language_filest::final(
   return false;
 }
 
-/*******************************************************************\
-
-Function: language_filest::interfaces
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool language_filest::interfaces(
   contextt &context __attribute__((unused)))
 {
@@ -229,18 +145,6 @@ bool language_filest::interfaces(
 #endif
   return false;
 }
-
-/*******************************************************************\
-
-Function: language_filest::typecheck_module
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool language_filest::typecheck_module(
   contextt &context,
@@ -258,18 +162,6 @@ bool language_filest::typecheck_module(
 
   return typecheck_module(context, it->second);
 }
-
-/*******************************************************************\
-
-Function: language_filest::typecheck_module
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool language_filest::typecheck_module(
   contextt &context,
@@ -323,18 +215,6 @@ bool language_filest::typecheck_module(
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: language_filest::typecheck_virtual_methods
-
-  Inputs: contextt&
-
- Outputs:
-
- Purpose: Check if virtual methods have implementation or are pure virtual
-
-\*******************************************************************/
 
 void language_filest::typecheck_virtual_methods(contextt &context)
 {

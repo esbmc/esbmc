@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <c_misc.h>
 
-/*******************************************************************\
-
-Function: MetaChar
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void MetaChar(std::string &out, char c, bool inString)
 {
   switch (c)
@@ -90,18 +78,6 @@ void MetaChar(std::string &out, char c, bool inString)
       break;
   }
 }
-
-/*******************************************************************\
-
-Function: MetaString
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void MetaString(std::string &out, const std::string &in)
 {

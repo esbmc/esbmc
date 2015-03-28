@@ -1655,7 +1655,7 @@ Function: simplify_exprt::simplify_switch
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_switch(exprt &expr)
+bool simplify_exprt::simplify_switch(exprt &expr __attribute__((unused)))
 {
   return true;
 }
@@ -2477,7 +2477,7 @@ Function: simplify_exprt::simplify_ieee_float_relation
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_ieee_float_relation(exprt &expr)
+bool simplify_exprt::simplify_ieee_float_relation(exprt &expr __attribute__((unused)))
 {
   std::cerr << "floatbv currently unsupported, sorry" << std::endl;
   abort();

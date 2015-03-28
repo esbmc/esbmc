@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "type_eq.h"
 
-/*******************************************************************\
-
-Function: type_eq
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool type_eq(const typet &type1, const typet &type2, const namespacet &ns)
 {
   if(type1==type2)

@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 
-#include <parser.h>
+#include <util/parser.h>
 #include <expr.h>
 #include <hash_cont.h>
 #include <string_hash.h>

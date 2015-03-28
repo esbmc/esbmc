@@ -315,27 +315,6 @@ Function: goto_convert
 \*******************************************************************/
 
 void goto_convert(
-  codet &code,
-  contextt &context,
-  const optionst &options,
-  goto_functionst &functions,
-  message_handlert &message_handler)
-{
-}
-
-/*******************************************************************\
-
-Function: goto_convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convert(
   contextt &context,
   const optionst &options,
   goto_functionst &functions,

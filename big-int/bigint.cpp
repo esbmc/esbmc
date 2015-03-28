@@ -607,11 +607,13 @@ BigInt::as_string (char *p, unsigned l, onedig_t b) const
     }
   while (len);
   // Maybe attach sign.
-  if (!positive)
-    if (l == 0)
+  if (!positive) {
+    if (l == 0) {
       return 0;
-    else
+    } else {
       p[--l] = '-';
+    }
+  }
   // Return pointer to start of number.
   return p + l;
 }
@@ -691,7 +693,11 @@ BigInt::is_long() const
     return true;
   if (length > small)
     return false;
-  const onedig_t max = onedig_t (1) << single_bits - 1;
+
+  // jmorse: will truncate to whatever size full of bits onedig_t is.
+  // More ideally, this code would pre-define what the maximum is.
+  onedig_t max = (onedig_t)0xFFFFFFFFFFFFFFFFULL;
+
   if (digit[small - 1] < max)
     return true;
   if (positive || digit[small - 1] > max)
@@ -803,7 +809,7 @@ BigInt::add (onedig_t const *dig, unsigned len, bool pos)
   onedig_t const *d2;
   unsigned l1, l2;
   bool gt = (length > len ||
-	     length == len && digit_cmp (digit, dig, len) >= 0);
+	    (length == len && digit_cmp (digit, dig, len) >= 0));
   if (gt)
     {
       d1 = digit;

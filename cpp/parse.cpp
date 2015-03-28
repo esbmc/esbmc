@@ -272,7 +272,7 @@ bool Parser::SyntaxError()
 
     message+="'";
 
-    parser->print(1, message, -1, location);
+    parser->print(1, message, location);
   }
 
   return bool(++number_of_errors < MaxErrors);
@@ -900,7 +900,7 @@ bool Parser::rTempArgDeclaration(cpp_declarationt &declaration)
    extern.template.decl
    : EXTERN TEMPLATE declaration
 */
-bool Parser::rExternTemplateDecl(irept &decl)
+bool Parser::rExternTemplateDecl(irept &decl __attribute__((unused)))
 {
   Token tk1, tk2;
 
@@ -1197,10 +1197,10 @@ bool Parser::rIntegralDeclaration(
 }
 
 bool Parser::rConstDeclaration(
-  cpp_declarationt &declaration,
-  cpp_storage_spect &storage_spec,
-  cpp_member_spect &member_spec,
-  typet &cv_q)
+  cpp_declarationt &declaration __attribute__((unused)),
+  cpp_storage_spect &storage_spec __attribute__((unused)),
+  cpp_member_spect &member_spec __attribute__((unused)),
+  typet &cv_q __attribute__((unused)))
 {
   #ifdef DEBUG
   std::cout << "Parser::rConstDeclaration\n";
@@ -2073,7 +2073,7 @@ bool Parser::rDeclaratorQualifier()
 bool Parser::rDeclarator(
   cpp_declaratort &declarator,
   DeclKind kind,
-  bool recursive,
+  bool recursive __attribute__((unused)),
   bool should_be_declarator,
   bool is_statement)
 {
@@ -3519,7 +3519,7 @@ bool Parser::rClassMember(cpp_itemt &member)
   access.decl
   : name ';'                e.g. <qualified class>::<member name>;
 */
-bool Parser::rAccessDecl(irept &mem)
+bool Parser::rAccessDecl(irept &mem __attribute__((unused)))
 {
   irept name;
   Token tk;
@@ -6083,7 +6083,7 @@ bool Parser::rTryStatement(codet &statement)
         location.set_file(op.filename);
         location.set_line(i2string(op.line_no));
 
-        parser->print(1, message, -1, location);
+        parser->print(1, message, location);
         return false;
       }
 

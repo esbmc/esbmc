@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "array_name.h"
 
-/*******************************************************************\
-
-Function: goto_checkt::array_name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string array_name(
   const namespacet &ns,
   const exprt &expr)

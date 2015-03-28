@@ -1,0 +1,23 @@
+#if @ESBMC_ENABLE_z3@
+#define Z3
+#endif
+
+#if @ESBMC_ENABLE_minisat@
+#define MINISAT
+#endif
+
+#if @ESBMC_ENABLE_boolector@
+#define BOOLECTOR
+#endif
+
+#if @ESBMC_ENABLE_cvc4@
+#define USECVC
+#endif
+
+#if @ESBMC_ENABLE_mathsat@
+#define MATHSAT
+#endif
+
+#if @ESBMC_ENABLE_yices@
+#define YICES
+#endif

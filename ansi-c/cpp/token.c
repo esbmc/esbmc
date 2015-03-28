@@ -40,18 +40,20 @@
  *	- unch() pushes back a character to the input stream.
  */
 
+#include <ac_config.h>
+
 #include "config.h"
 
 #include <stdlib.h>
 #include <string.h>
-#ifdef HAVE_UNISTD_H
+#ifdef HAVE_UNISTD
 #include <unistd.h>
 #endif
 #include <fcntl.h>
 
 #include "compat.h"
 #include "cpp.h"
-#include "y.tab.h"
+#include "cpy.h"
 
  void cvtdig(int rad);
  int charcon(usch *);

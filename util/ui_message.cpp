@@ -14,18 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "ui_message.h"
 
-/*******************************************************************\
-
-Function: ui_message_handlert::level_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const char *ui_message_handlert::level_string(unsigned level)
 {
   if(level==1)
@@ -36,18 +24,6 @@ const char *ui_message_handlert::level_string(unsigned level)
     return "STATUS-MESSAGE";
 }
 
-/*******************************************************************\
-
-Function: ui_message_handlert::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ui_message_handlert::print(
   unsigned level,
   const std::string &message)
@@ -56,7 +32,7 @@ void ui_message_handlert::print(
   {
     locationt location;
     location.make_nil();
-    print(level, message, -1, location);
+    print(level, message, location);
   }
   else
   {
@@ -67,22 +43,9 @@ void ui_message_handlert::print(
   }
 }
 
-/*******************************************************************\
-
-Function: ui_message_handlert::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ui_message_handlert::print(
   unsigned level,
   const std::string &message,
-  int sequence_number,
   const locationt &location)
 {
   if(get_ui()==OLD_GUI || get_ui()==XML_UI)
@@ -94,84 +57,40 @@ void ui_message_handlert::print(
   
     const char *type=level_string(level);
     
-    std::string sequence_number_str=
-      sequence_number>=0?i2string(sequence_number):"";
-
-    ui_msg(type, tmp_message, sequence_number_str, location);
+    ui_msg(type, tmp_message, location);
   }
   else
   {
-    message_handlert::print(
-      level, message, sequence_number, location);
+    message_handlert::print(level, message, location);
   }
 }
-
-/*******************************************************************\
-
-Function: ui_message_handlert::old_gui_msg
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ui_message_handlert::old_gui_msg(
   const std::string &type,
   const std::string &msg1,
-  const std::string &msg2,
   const locationt &location)
 {
   std::cout << type   << std::endl
             << msg1   << std::endl
-            << msg2   << std::endl
             << location.get_file() << std::endl
             << location.get_line() << std::endl
             << location.get_column() << std::endl;
 }
 
-/*******************************************************************\
-
-Function: ui_message_handlert::ui_msg
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ui_message_handlert::ui_msg(
   const std::string &type,
   const std::string &msg1,
-  const std::string &msg2,
   const locationt &location)
 {
   if(get_ui()==OLD_GUI)
-    old_gui_msg(type, msg1, msg2, location);
+    old_gui_msg(type, msg1, location);
   else
-    xml_ui_msg(type, msg1, msg2, location);
+    xml_ui_msg(type, msg1, location);
 }
-
-/*******************************************************************\
-
-Function: ui_message_handlert::xml_ui_msg
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ui_message_handlert::xml_ui_msg(
   const std::string &type,
   const std::string &msg1,
-  const std::string &msg2 __attribute__((unused)),
   const locationt &location)
 {
   xmlt xml;

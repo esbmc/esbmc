@@ -139,7 +139,7 @@ static const char *cpp_normal_defs[] = {
 // mingw sched/pthread headers choke and die upon this.
 // Mac's attempt to spam inline assembly everywhere if this is defined, to
 // alias some deprecated function symbols
-#if !defined(__WIN32__) && !defined(ONAMAC)
+#if !defined(__WIN32__) && !defined(__APPLE__)
 "_POSIX_C_SOURCE=200112L",
 #endif
 "__GNUC__",
@@ -168,6 +168,7 @@ static const char *cpp_linux_defs[] = {
 NULL
 };
 
+#ifdef __APPLE__
 static const char *cpp_mac_defs[] = {
 "__APPLE__",
 "__GNUC__",
@@ -175,13 +176,16 @@ static const char *cpp_mac_defs[] = {
 "_FORTIFY_SOURCE=0",
 NULL,
 };
+#endif
 
+#ifdef WIN32
 static const char *cpp_windows_defs[] = {
 "_WIN32",
 "__restrict__=/**/",
 "__restrict=/**/",
 NULL
 };
+#endif
 
 static const char *cpp_ansic_defs[] = {
 "__STDC_VERSION__=199901L",
@@ -217,7 +221,6 @@ void setup_cpp_defs(const char **defs)
 #include <sys/wait.h>
 
 bool c_preprocess(
-  std::istream &instream,
   const std::string &path,
   std::ostream &outstream,
   bool is_cpp,
@@ -282,7 +285,7 @@ bool c_preprocess(
 
 
   const char **defs;
-#ifdef ONAMAC
+#ifdef __APPLE__
   defs = cpp_mac_defs;
 #else
   defs = cpp_linux_defs;
@@ -296,7 +299,6 @@ bool c_preprocess(
 #include <io.h>
 
 bool c_preprocess(
-  std::istream &instream,
   const std::string &path,
   std::ostream &outstream,
   bool is_cpp,
@@ -388,8 +390,7 @@ configure_and_run_cpp(const char *out_file_buf, std::string path,
     exit(1);
   }
 
-  const unsigned char *ourpath = (const unsigned char *)path.c_str();
-  ret = pushfile2(ourpath, ourpath, 0, NULL);
+  ret = pushfile2(path.c_str(), path.c_str(), 0, NULL);
   fin();
 
   return ret;

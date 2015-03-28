@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <memory>
 
+#include <ac_config.h>
+
 #ifndef _WIN32
 extern "C" {
 #include <ctype.h>
@@ -17,10 +19,10 @@ extern "C" {
 #include <signal.h>
 #include <unistd.h>
 
-#include <sys/resource.h>
-#ifndef ONAMAC
+#ifdef HAVE_SENDFILE
 #include <sys/sendfile.h>
 #endif
+#include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
 }
@@ -38,7 +40,6 @@ extern "C" {
 #include <goto-programs/set_claims.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/string_abstraction.h>
-#include <goto-programs/string_instrumentation.h>
 #include <goto-programs/loop_numbers.h>
 
 #include <goto-programs/add_race_assertions.h>
@@ -54,7 +55,7 @@ extern "C" {
 
 #include "parseoptions.h"
 #include "bmc.h"
-#include "version.h"
+#include <ac_config.h>
 
 #include "kinduction_parallel.h"
 #include <fstream>
@@ -87,7 +88,8 @@ timeout_handler(int dummy __attribute__((unused)))
     else
       r.step=INDUCTIVE_STEP;
 
-    write(commPipe[1], &r, sizeof(r));
+    unsigned int len = write(commPipe[1], &r, sizeof(r));
+    assert(len == sizeof(r) && "short write");
   }
 
   std::cout << "Timed out" << std::endl;
@@ -208,6 +210,12 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("git-hash")) {
     std::cout << version_string << std::endl;
+    exit(0);
+  }
+
+  if (cmdline.isset("list-solvers")) {
+    // Generated for us by autoconf,
+    std::cout << "Available solvers: " << ESBMC_AVAILABLE_SOLVERS << std::endl;
     exit(0);
   }
 
@@ -419,6 +427,7 @@ int cbmc_parseoptionst::doit()
 int cbmc_parseoptionst::doit_k_induction_parallel()
 {
   _k_induction=true;
+  unsigned int len = 0;
 
   if(cmdline.isset("version"))
   {
@@ -732,13 +741,15 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         r = bc.startSolving();
 
         // Write result
-        write(commPipe[1], &r, sizeof(r));
+        len = write(commPipe[1], &r, sizeof(r));
+        assert(len == sizeof(r) && "short write");
 
         if(r.result) return r.result;
       }
 
       r.finished=true;
-      write(commPipe[1], &r, sizeof(r));
+      len = write(commPipe[1], &r, sizeof(r));
+      assert(len == sizeof(r) && "short write");
 
       std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
 
@@ -800,13 +811,15 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         r = fc.startSolving();
 
         // Write result
-        write(commPipe[1], &r, sizeof(r));
+        len = write(commPipe[1], &r, sizeof(r));
+        assert(len == sizeof(r) && "short write");
 
         if(!r.result) return r.result;
       }
 
       r.finished=true;
-      write(commPipe[1], &r, sizeof(r));
+      len = write(commPipe[1], &r, sizeof(r));
+      assert(len == sizeof(r) && "short write");
 
       std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
 
@@ -866,13 +879,15 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           r = is.startSolving();
 
           // Write result
-          write(commPipe[1], &r, sizeof(r));
+          len = write(commPipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
 
           if(!r.result) return r.result;
         }
       }
       r.finished=true;
-      write(commPipe[1], &r, sizeof(r));
+      len = write(commPipe[1], &r, sizeof(r));
+      assert(len == sizeof(r) && "short write");
 
       std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
 
@@ -1232,15 +1247,15 @@ void cbmc_parseoptionst::preprocessing()
 
     std::string filename=cmdline.args[0];
 
+    // To test that the file exists,
     std::ifstream infile(filename.c_str());
-
     if(!infile)
     {
       error("failed to open input file");
       return;
     }
 
-    if (c_preprocess(infile, filename, std::cout, false, *get_message_handler()))
+    if (c_preprocess(filename, std::cout, false, *get_message_handler()))
       error("PREPROCESSING ERROR");
   }
 
@@ -1543,12 +1558,6 @@ bool cbmc_parseoptionst::process_goto_program(
 {
   try
   {
-    if(cmdline.isset("string-abstraction"))
-    {
-      string_instrumentation(
-        context, *get_message_handler(), goto_functions);
-    }
-
     namespacet ns(context);
 
     // do partial inlining
@@ -1662,7 +1671,7 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 
   bool res = bmc1.run();
 
-#if !defined(_WIN32) && !defined(ONAMAC)
+#ifdef HAVE_SENDFILE
   if (bmc1.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, NULL, 100000);
@@ -1768,5 +1777,6 @@ void cbmc_parseoptionst::help()
     " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
     " --timeout                    configure time limit, integer followed by {s,m,h}\n"
     " --enable-core-dump           don't disable core dump output\n"
+    " --list-solvers               List available solvers and exit\n"
     "\n";
 }
