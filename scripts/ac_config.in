@@ -16,8 +16,35 @@
 /* Define to 1 if you have the `alarm' function. */
 #undef HAVE_ALARM
 
+/* Define to 1 if you have the `argz_add' function. */
+#undef HAVE_ARGZ_ADD
+
+/* Define to 1 if you have the `argz_append' function. */
+#undef HAVE_ARGZ_APPEND
+
+/* Define to 1 if you have the `argz_count' function. */
+#undef HAVE_ARGZ_COUNT
+
+/* Define to 1 if you have the `argz_create_sep' function. */
+#undef HAVE_ARGZ_CREATE_SEP
+
+/* Define to 1 if you have the <argz.h> header file. */
+#undef HAVE_ARGZ_H
+
+/* Define to 1 if you have the `argz_insert' function. */
+#undef HAVE_ARGZ_INSERT
+
+/* Define to 1 if you have the `argz_next' function. */
+#undef HAVE_ARGZ_NEXT
+
+/* Define to 1 if you have the `argz_stringify' function. */
+#undef HAVE_ARGZ_STRINGIFY
+
 /* Define to 1 if you have the `atexit' function. */
 #undef HAVE_ATEXIT
+
+/* define if the Boost library is available */
+#undef HAVE_BOOST
 
 /* Define to 1 if you have the <boost/crc.hpp> header file. */
 #undef HAVE_BOOST_CRC_HPP
@@ -44,6 +71,9 @@
 /* Define to 1 if you have the `clock_gettime' function. */
 #undef HAVE_CLOCK_GETTIME
 
+/* Define to 1 if you have the `closedir' function. */
+#undef HAVE_CLOSEDIR
+
 /* define if the compiler supports basic C++11 syntax */
 #undef HAVE_CXX11
 
@@ -63,14 +93,23 @@
    */
 #undef HAVE_DECL_TZNAME
 
+/* Define to 1 if you have the <dirent.h> header file. */
+#undef HAVE_DIRENT_H
+
 /* Define if you have the GNU dld library. */
 #undef HAVE_DLD
+
+/* Define to 1 if you have the <dld.h> header file. */
+#undef HAVE_DLD_H
 
 /* Define to 1 if you have the `dlerror' function. */
 #undef HAVE_DLERROR
 
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #undef HAVE_DLFCN_H
+
+/* Define to 1 if you have the <dl.h> header file. */
+#undef HAVE_DL_H
 
 /* Define to 1 if you have the `dup2' function. */
 #undef HAVE_DUP2
@@ -80,6 +119,9 @@
 
 /* Define to 1 if you have the <eigen3/Eigen/Eigen> header file. */
 #undef HAVE_EIGEN3_EIGEN_EIGEN
+
+/* Define to 1 if the system has the type `error_t'. */
+#undef HAVE_ERROR_T
 
 /* Define to 1 if you have the `euidaccess' function. */
 #undef HAVE_EUIDACCESS
@@ -153,6 +195,12 @@
 /* Define to 1 if you have the `localtime_r' function. */
 #undef HAVE_LOCALTIME_R
 
+/* Define this if a modern libltdl is already installed */
+#undef HAVE_LTDL
+
+/* Define to 1 if you have the <mach-o/dyld.h> header file. */
+#undef HAVE_MACH_O_DYLD_H
+
 /* Define to 1 if you have the `mblen' function. */
 #undef HAVE_MBLEN
 
@@ -189,17 +237,26 @@
 /* Define to 1 if libc includes obstacks. */
 #undef HAVE_OBSTACK
 
+/* Define to 1 if you have the `opendir' function. */
+#undef HAVE_OPENDIR
+
 /* Define to 1 if you have the `pathconf' function. */
 #undef HAVE_PATHCONF
 
 /* Define to 1 if you have the `pow' function. */
 #undef HAVE_POW
 
+/* Define if libtool can extract symbol lists from object files. */
+#undef HAVE_PRELOADED_SYMBOLS
+
 /* Define to 1 if the system has the type `ptrdiff_t'. */
 #undef HAVE_PTRDIFF_T
 
 /* Define to 1 if you have the `putenv' function. */
 #undef HAVE_PUTENV
+
+/* Define to 1 if you have the `readdir' function. */
+#undef HAVE_READDIR
 
 /* Define to 1 if you have the `realpath' function. */
 #undef HAVE_REALPATH
@@ -329,6 +386,9 @@
    `HAVE_STRUCT_STAT_ST_BLOCKS' instead. */
 #undef HAVE_ST_BLOCKS
 
+/* Define to 1 if you have the <sys/dl.h> header file. */
+#undef HAVE_SYS_DL_H
+
 /* Define to 1 if you have the <sys/param.h> header file. */
 #undef HAVE_SYS_PARAM_H
 
@@ -367,6 +427,9 @@
 /* Define to 1 if you have the <vfork.h> header file. */
 #undef HAVE_VFORK_H
 
+/* This value is set to 1 to indicate that the system argz facility works */
+#undef HAVE_WORKING_ARGZ
+
 /* Define to 1 if `fork' works. */
 #undef HAVE_WORKING_FORK
 
@@ -380,9 +443,34 @@
    slash. */
 #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
 
+/* Define if the OS needs help to load dependent libraries for dlopen(). */
+#undef LTDL_DLOPEN_DEPLIBS
+
+/* Define to the system default library search path. */
+#undef LT_DLSEARCH_PATH
+
+/* The archive extension */
+#undef LT_LIBEXT
+
+/* The archive prefix */
+#undef LT_LIBPREFIX
+
+/* Define to the extension used for runtime loadable modules, say, ".so". */
+#undef LT_MODULE_EXT
+
+/* Define to the name of the environment variable that determines the run-time
+   module search path. */
+#undef LT_MODULE_PATH_VAR
+
 /* Define to the sub-directory in which libtool stores uninstalled libraries.
    */
 #undef LT_OBJDIR
+
+/* Define to the shared library suffix, say, ".dylib". */
+#undef LT_SHARED_EXT
+
+/* Define if dlsym() requires a leading underscore in symbol names. */
+#undef NEED_USCORE
 
 /* Name of package */
 #undef PACKAGE
@@ -473,6 +561,12 @@
    <pthread.h>, or <semaphore.h> is not used. If the typedef were allowed, the
    #define below would cause a syntax error. */
 #undef _UINT8_T
+
+/* Define so that glibc/gnulib argp.h does not typedef error_t. */
+#undef __error_t_defined
+
+/* Define to a type to use for `error_t' if it is not otherwise available. */
+#undef error_t
 
 /* Define to `int' if <sys/types.h> doesn't define. */
 #undef gid_t
