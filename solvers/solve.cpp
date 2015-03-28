@@ -77,7 +77,7 @@ create_solver(std::string the_solver,
   abort();
 }
 
-static const std::string &
+static const std::string
 pick_default_solver()
 {
 
