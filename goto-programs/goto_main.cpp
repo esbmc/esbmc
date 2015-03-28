@@ -66,7 +66,7 @@ Function: goto_convert
 void goto_convert(
   const codet &code,
   contextt &context,
-  const optionst &options,
+  optionst &options,
   goto_programt &dest,
   message_handlert &message_handler)
 {
@@ -110,7 +110,7 @@ Function: goto_convert
 
 void goto_convert(
   contextt &context,
-  const optionst &options,
+  optionst &options,
   goto_programt &dest,
   message_handlert &message_handler)
 {

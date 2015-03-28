@@ -1439,7 +1439,7 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
   std::cout << std::endl;
   #endif
 
-  const matcht &match=*matches.begin();
+  matcht &match=*matches.begin();
 
   // Let's check if there is more than one 0 distance match
   // This may happen when there is an template specialization on,
@@ -2673,7 +2673,7 @@ void cpp_typecheck_resolvet::apply_template_args(
     if(!code_type.arguments().empty() &&
         code_type.arguments()[0].cmt_base_name()=="this")
     {
-      const symbolt type_symb;
+      symbolt type_symb;
 
       // do we have an object?
       if(fargs.has_object)

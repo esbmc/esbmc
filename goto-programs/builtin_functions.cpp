@@ -454,7 +454,8 @@ void goto_convertt::cpp_new_initializer(
   else
   {
     initializer = (code_expressiont&)rhs.initializer();
-    rhs.remove("initializer");
+    // XXX jmorse, const-qual misery
+    const_cast<exprt&>(rhs).remove("initializer");
   }
 
   if(initializer.is_not_nil())
@@ -875,8 +876,9 @@ void goto_convertt::do_function_call_symbol(
     new_function.add("sizeof") = arguments.front();
 
     // Set return type, a allocated pointer
+    // XXX jmorse, const-qual misery
     new_function.type() = pointer_typet(
-        static_cast<const typet&>(arguments.front().add("#c_sizeof_type")));
+        static_cast<const typet&>(const_cast<exprt&>(arguments.front()).add("#c_sizeof_type")));
     new_function.type().add("#location") = function.cmt_location();
 
     do_cpp_new(lhs, new_function, dest);

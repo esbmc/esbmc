@@ -35,7 +35,7 @@ Function: goto_convert_functionst::goto_convert_functionst
 
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,
-  const optionst &_options,
+  optionst &_options,
   goto_functionst &_functions,
   message_handlert &_message_handler):
   goto_convertt(_context, _options, _message_handler),
@@ -316,7 +316,7 @@ Function: goto_convert
 
 void goto_convert(
   contextt &context,
-  const optionst &options,
+  optionst &options,
   goto_functionst &functions,
   message_handlert &message_handler)
 {

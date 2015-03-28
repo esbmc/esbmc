@@ -28,7 +28,7 @@ public:
 
   goto_convertt(
     contextt &_context,
-    const optionst &_options,
+    optionst &_options,
     message_handlert &_message_handler):
     message_streamt(_message_handler),
     context(_context),
@@ -56,7 +56,7 @@ public:
 
 protected:
   contextt &context;
-  const optionst &options;
+  optionst &options;
   namespacet ns;
   unsigned temporary_counter;
   std::string tmp_symbol_prefix;

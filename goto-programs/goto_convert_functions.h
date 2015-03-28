@@ -17,7 +17,7 @@ Date: June 2003
 // just convert it all
 void goto_convert(
   contextt &context,
-  const optionst &options,
+  optionst &options,
   goto_functionst &functions,
   message_handlert &message_handler);
   
@@ -41,7 +41,7 @@ public:
 
   goto_convert_functionst(
     contextt &_context,
-    const optionst &_options,
+    optionst &_options,
     goto_functionst &_functions,
     message_handlert &_message_handler);
   
