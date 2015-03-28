@@ -197,9 +197,9 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     # Prepend library to LIBS -- this is because the link ordering is important,
     # and the library might depend on previously detected libraries already in
     # LIBS
-    LIBS="[-L]path/libdir -l$4 $LIBS"
+    LIBS="[-L]path/libdir -l$4 $ESBMC_SOLVER_LIBS $LIBS"
     # Indirectly call local-config macro
-    indir($8, path)
+    indir($8, path, LIBS)
     AC_CHECK_LIB($4, $5, [
       AS_VAR_SET(esbmc_check_solver_libthere_${esbmc_path_name}, yes)
       AS_VAR_SET(esbmc_check_solver_libdir_${esbmc_path_name}, libdir)
@@ -207,13 +207,15 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
       AS_VAR_SET(esbmc_found_solver_$3, yes)
       AS_VAR_APPEND(esbmc_list_of_solvers, " $3")
       AS_VAR_APPEND(esbmc_list_of_backends, [" "$3/'lib'$3'.la'])
+      AS_VAR_APPEND(ESBMC_SOLVER_LIBS, " [-L]path/libdir -l$4 ")
+      indir($8, path, ESBMC_SOLVER_LIBS)
       AC_SUBST([ESBMC_ENABLE_$3], 1)
       AS_ECHO("Found solver at path/libdir")
     ], [
-      dnl Reset LIBS if not found
-      AS_VAR_SET(LIBS, $esbmc_check_solver_old_libs)
       AC_SUBST([ESBMC_ENABLE_$3], 0)
     ], [])
+    dnl Reset LIBS. Intermediate programs should not depend on solvers
+    AS_VAR_SET(LIBS, $esbmc_check_solver_old_libs)
 
     # Don't cache the library check, seeing how we're changing the env.
     AS_UNSET(ac_cv_lib_$4_$5)
@@ -306,10 +308,16 @@ dnl used -- to set additional command line options for a particular solver
 dnl candiate location
 m4_define([$$ESBMC_NOOP_CONFIG], [])
 
+ESBMC_SOLVER_LIBS=""
+
+dnl Lingeling gets it's own special position in the command line because it's
+dnl an intermediate library that a solver depends on, and thus has to go after
+dnl any solver -l$solver directives
 m4_define([$$ESBMC_BOOLECTOR_EXTRA_CONFIG], [
   dnl $1 = Path we're looking at as being the boolector installation
-  AS_VAR_APPEND(LIBS, " [-L]$1/lingeling ")
-  AS_VAR_APPEND(LIBS, " -llgl ")
+  dnl $2 = Variable we're pumping this config into
+  AS_VAR_APPEND($2, " [-L]$1/lingeling ")
+  AS_VAR_APPEND($2, " -llgl ")
 ])dnl
 
 m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
@@ -359,6 +367,7 @@ AC_DEFINE_UNQUOTED([ESBMC_AVAILABLE_SOLVERS], ["$esbmc_list_of_solvers"], [List 
 AC_SUBST([ESBMC_AVAILABLE_SOLVERS], $esbmc_list_of_solvers)
 AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
+AC_SUBST([ESBMC_SOLVER_LIBS], "$ESBMC_SOLVER_LIBS")
 
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile cpp/library/Makefile esbmc/Makefile solvers/solver_config.h])
 AC_OUTPUT
