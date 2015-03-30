@@ -354,7 +354,7 @@ void goto_convert_functionst::convert_function(const symbolt &symbol)
     }
     else if(inside_loop != nil_exprt())
     {
-      current_block == NULL;
+      current_block = NULL;
     }
   }
 }
