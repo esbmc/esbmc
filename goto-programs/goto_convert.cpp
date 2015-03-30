@@ -2651,8 +2651,7 @@ void goto_convertt::replace_cond(
 	      << "' located at line " << tmp.location().get_line()
 	      << " of " << tmp.location().get_file()
   	      << " is not supported yet" << std::endl;
-    //std::cout << tmp.pretty() << std::endl;
-    assert(0);
+    disable_k_induction();
   }
 }
 
