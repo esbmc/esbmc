@@ -46,7 +46,8 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   no_simplify(options.get_bool_option("no-simplify")),
   no_unwinding_assertions(options.get_bool_option("no-unwinding-assertions")),
   partial_loops(options.get_bool_option("partial-loops")),
-  k_induction(options.get_bool_option("k-induction")),
+  k_induction(options.get_bool_option("k-induction")
+    || options.get_bool_option("k-induction-parallel")),
   base_case(options.get_bool_option("base-case")),
   forward_condition(options.get_bool_option("forward-condition"))
 {
