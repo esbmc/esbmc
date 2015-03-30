@@ -127,6 +127,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"array-flattener",	switc,		""	},
 { 0,	"yices",		switc,		""	},
 { 0,	"force-malloc-success",	switc,		""	},
+{ 0,	"list-solvers",	switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},

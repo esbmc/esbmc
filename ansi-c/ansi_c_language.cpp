@@ -162,7 +162,6 @@ Function: ansi_c_languaget::preprocess
 \*******************************************************************/
 
 bool ansi_c_languaget::preprocess(
-  std::istream &instream,
   const std::string &path,
   std::ostream &outstream,
   message_handlert &message_handler)
@@ -188,7 +187,7 @@ bool ansi_c_languaget::preprocess(
   }
 #endif
 
-  return c_preprocess(instream, path, outstream, false, message_handler);
+  return c_preprocess(path, outstream, false, message_handler);
 }
 
 /*******************************************************************\
@@ -204,7 +203,6 @@ Function: ansi_c_languaget::parse
 \*******************************************************************/
 
 bool ansi_c_languaget::parse(
-  std::istream &instream,
   const std::string &path,
   message_handlert &message_handler)
 {
@@ -216,7 +214,7 @@ bool ansi_c_languaget::parse(
 
   std::ostringstream o_preprocessed;
 
-  if(preprocess(instream, path, o_preprocessed, message_handler))
+  if(preprocess(path, o_preprocessed, message_handler))
     return true;
 
   std::istringstream i_preprocessed(o_preprocessed.str());

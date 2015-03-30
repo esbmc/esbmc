@@ -65,5 +65,5 @@ const mode_table_et mode_table[] =
   LANGAPI_HAVE_MODE_END
 };
 
-extern "C" uint8_t buildidstring[1];
-uint8_t *version_string = buildidstring;
+extern "C" uint8_t buildidstring_buf[1];
+uint8_t *version_string = buildidstring_buf;

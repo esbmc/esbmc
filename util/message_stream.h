@@ -20,8 +20,7 @@ public:
   message_streamt(message_handlert &_message_handler):
     message_handler(_message_handler),
     error_found(false),
-    saved_error_location(static_cast<const locationt &>(get_nil_irep())),
-    sequence_number(1)
+    saved_error_location(static_cast<const locationt &>(get_nil_irep()))
   {
   }
 
@@ -50,21 +49,18 @@ public:
   {
     send_msg(1, str.str());
     clear_err();
-    sequence_number++;
   }
 
   void warning()
   {
     send_msg(2, str.str());
     clear_err();
-    sequence_number++;
   }
   
   void status()
   {
     send_msg(6, str.str());
     clear_err();
-    sequence_number++;
   }
   
   std::ostringstream str;
@@ -95,7 +91,6 @@ protected:
   message_handlert &message_handler;
   bool error_found;  
   locationt saved_error_location;
-  unsigned sequence_number;
   
   void send_msg(unsigned level, const std::string &message)
   {
@@ -104,7 +99,6 @@ protected:
     message_handler.print(
       level,
       message,
-      sequence_number,
       saved_error_location);
     saved_error_location.make_nil();
   }

@@ -2072,6 +2072,11 @@ bool cpp_typecheckt::dynamic_typecast(
     }
 
     return false;
+  } else {
+    err_location(expr.location());
+    str << "expr: " << e << std::endl;
+    str << "totype: " << type << std::endl;
+    throw "Could not cast types in dynamic cast";
   }
 
   return false;

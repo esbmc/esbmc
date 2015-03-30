@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "union_find.h"
 
-/*******************************************************************\
-
-Function: unsigned_union_find::make_union
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void unsigned_union_find::make_union(unsigned j, unsigned k)
 {
   check_index(j);
@@ -48,18 +36,6 @@ void unsigned_union_find::make_union(unsigned j, unsigned k)
     nodes[k].count=0;
   }
 }
-
-/*******************************************************************\
-
-Function: unsigned_union_find::isolate
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void unsigned_union_find::isolate(unsigned a)
 {
@@ -93,18 +69,6 @@ void unsigned_union_find::isolate(unsigned a)
   nodes[a].parent=0;
   nodes[a].count=1;
 }
-
-/*******************************************************************\
-
-Function: unsigned_union_find::re_root
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void unsigned_union_find::re_root(unsigned old_root, unsigned new_root)
 {
@@ -140,18 +104,6 @@ void unsigned_union_find::re_root(unsigned old_root, unsigned new_root)
     }
 }
 
-/*******************************************************************\
-
-Function: unsigned_union_find::get_other
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 unsigned unsigned_union_find::get_other(unsigned a)
 {
   check_index(a);
@@ -167,18 +119,6 @@ unsigned unsigned_union_find::get_other(unsigned a)
   assert(false);
   return 0;
 }
-
-/*******************************************************************\
-
-Function: unsigned_union_find::intersection
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void unsigned_union_find::intersection(
   const unsigned_union_find &other)
@@ -200,18 +140,6 @@ void unsigned_union_find::intersection(
   
   swap(new_sets);
 }
-
-/*******************************************************************\
-
-Function: unsigned_union_find::find
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 unsigned unsigned_union_find::find(unsigned a) const
 {

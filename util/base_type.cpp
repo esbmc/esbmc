@@ -12,18 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "base_type.h"
 #include "union_find.h"
 
-/*******************************************************************\
-
-Function: base_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void base_type(type2tc &type, const namespacet &ns)
 {
   if (is_symbol_type(type))
@@ -98,18 +86,6 @@ void base_type(typet &type, const namespacet &ns)
   }
 }
 
-/*******************************************************************\
-
-Function: base_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void base_type(expr2tc &expr, const namespacet &ns)
 {
   base_type(expr.get()->type, ns);
@@ -125,18 +101,6 @@ void base_type(exprt &expr, const namespacet &ns)
   Forall_operands(it, expr)
     base_type(*it, ns);
 }
-
-/*******************************************************************\
-
-Function: base_type_eqt::base_type_eq_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool base_type_eqt::base_type_eq_rec(
   const type2tc &type1,
@@ -401,18 +365,6 @@ bool base_type_eqt::base_type_eq_rec(
   return tmp1==tmp2;  
 }
 
-/*******************************************************************\
-
-Function: base_type_eqt::base_type_eq_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool base_type_eqt::base_type_eq_rec(
   const expr2tc &expr1,
   const expr2tc &expr2)
@@ -463,18 +415,6 @@ bool base_type_eqt::base_type_eq_rec(
   return true;
 }
 
-/*******************************************************************\
-
-Function: base_type_eq
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool base_type_eq(
   const type2tc &type1,
   const type2tc &type2,
@@ -492,18 +432,6 @@ bool base_type_eq(
   base_type_eqt base_type_eq(ns);
   return base_type_eq.base_type_eq(type1, type2);
 }
-
-/*******************************************************************\
-
-Function: base_type_eq
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool base_type_eq(
   const expr2tc &expr1,

@@ -13,10 +13,6 @@
 
 #endif
 
-#ifndef ONAMAC
-#include <malloc.h>
-#endif
-
 #ifndef _WIN32
 #include <alloca.h>
 #endif

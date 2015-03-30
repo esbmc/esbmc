@@ -15,33 +15,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 string_containert string_container __attribute__((init_priority(101)));
 
-/*******************************************************************\
-
-Function: string_ptrt::string_ptrt
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 string_ptrt::string_ptrt(const char *_s):s(_s), len(strlen(_s))
 {
 }
-
-/*******************************************************************\
-
-Function: operator==
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool operator==(const string_ptrt a, const string_ptrt b)
 {
@@ -49,18 +25,6 @@ bool operator==(const string_ptrt a, const string_ptrt b)
   if(a.len==0) return true;
   return memcmp(a.s, b.s, a.len)==0;
 }
-
-/*******************************************************************\
-
-Function: string_containert::get
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 unsigned string_containert::get(const char *s)
 {
@@ -84,18 +48,6 @@ unsigned string_containert::get(const char *s)
 
   return r;
 }
-
-/*******************************************************************\
-
-Function: string_containert::get
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 unsigned string_containert::get(const std::string &s)
 {

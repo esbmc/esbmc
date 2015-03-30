@@ -7,10 +7,10 @@
 #include <sstream>
 
 #include "smtlib_conv.h"
-#include "y.tab.hpp"
+#include "smtlib.hpp"
+#include "smtlib_tok.hpp"
 
 // Dec of external lexer input stream
-extern "C" FILE *smtlibin;
 int smtlibparse(int startval);
 extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
@@ -115,7 +115,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   // and crash upon.
 
   // Point lexer input at output stream
-  smtlibin = in_stream;
+  smtlib_tokin = in_stream;
 
   fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
   fprintf(out_stream, "(set-info :status unknown)\n");
@@ -445,7 +445,7 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
   std::string name = sa->symname;
 
   // XXX -- double bracing this may be a Z3 ecentricity
-  unsigned int domain_width = array->sort->domain_width;
+  unsigned long domain_width = array->sort->domain_width;
   fprintf(out_stream,
       "(get-value ((select |%s| (_ bv%" PRIu64 " %" PRIu64 "))))\n",
       name.c_str(), index, domain_width);
@@ -593,6 +593,7 @@ smtlib_convt::l_get(const smt_ast *a)
          "output without two operands");
   std::list<sexpr>::const_iterator it = pair.sexpr_list.begin();
   const sexpr &first = *it++;
+  (void)first;
   const sexpr &second = *it++;
 //  assert(first.token == TOK_SIMPLESYM && first.data == ss.str() &&
 //         "Unexpected valuation variable from smtlib solver");
@@ -740,7 +741,7 @@ smtlib_convt::mk_smt_bool(bool val)
 
 smt_ast *
 smtlib_convt::mk_array_symbol(const std::string &name, const smt_sort *s,
-                              smt_sortt array_subtype)
+                              smt_sortt array_subtype __attribute__((unused)))
 {
   return mk_smt_symbol(name, s);
 }

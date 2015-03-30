@@ -1,0 +1,509 @@
+%lex-param { int startsym }
+%parse-param { int startsym }
+%{
+  // A parser for smtlib responses
+
+#include <string>
+
+#include "smtlib_conv.h"
+
+#include "smtlib_tok.hpp"
+
+#undef yylex
+#define yylex smtliblex
+#undef yyerror
+#define yyerror smtliberror
+
+int smtliblex(int startsym);
+int smtliberror(int startsym, const std::string &error);
+
+sexpr *smtlib_output = NULL;
+%}
+
+/* Values */
+%union {
+  char *text;
+  sexpr *expr;
+  std::string *str;
+  std::list<std::string> *str_vec;
+  std::list<sexpr> *sexpr_list;
+};
+
+/* Some tokens */
+%token <text> TOK_LPAREN
+%token <text> TOK_RPAREN
+%token <text> TOK_NUMERAL
+%token <text> TOK_DECIMAL
+%token <text> TOK_HEXNUM
+%token <text> TOK_BINNUM
+%token <text> TOK_STRINGLIT
+%token <text> TOK_SIMPLESYM
+%token <text> TOK_QUOTEDSYM
+%token <text> TOK_KEYWORD
+%token <text> TOK_KW_PAR
+%token <text> TOK_KW_NUMERAL
+%token <text> TOK_KW_DECIMAL
+%token <text> TOK_KW_STRING
+%token <text> TOK_KW_USCORE
+%token <text> TOK_KW_EXCL
+%token <text> TOK_KW_AS
+%token <text> TOK_KW_LET
+%token <text> TOK_KW_FORALL
+%token <text> TOK_KW_EXISTS
+%token <text> TOK_KW_UNSUPPORTED
+%token <text> TOK_KW_SUCCESS
+%token <text> TOK_KW_ERROR
+%token <text> TOK_KW_IMMEXIT
+%token <text> TOK_KW_CONEXECUTION
+%token <text> TOK_KW_MEMOUT
+%token <text> TOK_KW_INCOMPLETE
+%token <text> TOK_KW_SAT
+%token <text> TOK_KW_UNSAT
+%token <text> TOK_KW_UNKNOWN
+%token <text> TOK_KW_TRUE
+%token <text> TOK_KW_FALSE
+
+%token <text> TOK_START_GEN
+%token <text> TOK_START_INFO
+%token <text> TOK_START_SAT
+%token <text> TOK_START_ASSERTS
+%token <text> TOK_START_UNSATS
+%token <text> TOK_START_VALUE
+%token <text> TOK_START_ASSIGN
+%token <text> TOK_START_OPTION
+
+/* Start token, for the response */
+%start response
+
+/* Types */
+
+%type <text> error_behaviour reason_unknown info_response_arg
+%type <str> symbol
+%type <str_vec> symbol_list_empt
+%type <sexpr_list> sexpr_list info_response_list
+%type <expr> s_expr spec_constant attribute attribute_value info_response
+%type <expr> get_info_response response gen_response status check_sat_response
+%type <expr> get_value_response valuation_pair valuation_pair_list term numlist
+%type <expr> identifier qual_identifier sort sort_list varbind_list var_binding
+%type <expr> term_list_empt
+%%
+
+/* Rules */
+
+response: TOK_START_GEN gen_response
+          | TOK_START_INFO get_info_response
+          {
+            yychar = YYEOF;
+            $$ = $2;
+            smtlib_output = $2;
+          }
+          | TOK_START_SAT check_sat_response
+          {
+            yychar = YYEOF;
+            $$ = $2;
+            smtlib_output = $2;
+          }
+          | TOK_START_ASSERTS get_assertions_response
+          | TOK_START_UNSATS get_unsat_core_response
+          | TOK_START_VALUE get_value_response
+          {
+            yychar = YYEOF;
+            $$ = $2;
+            smtlib_output = $2;
+          }
+          | TOK_START_ASSIGN get_assignment_response
+          | TOK_START_OPTION get_option_response
+          | TOK_START_INFO gen_response { yychar = YYEOF; smtlib_output = $2; }
+          | TOK_START_SAT gen_response { yychar = YYEOF; smtlib_output = $2; }
+          | TOK_START_ASSERTS gen_response {yychar = YYEOF; smtlib_output = $2;}
+          | TOK_START_UNSATS gen_response {yychar = YYEOF; smtlib_output = $2; }
+          | TOK_START_VALUE gen_response { yychar = YYEOF; smtlib_output = $2; }
+          | TOK_START_ASSIGN gen_response {yychar = YYEOF; smtlib_output = $2; }
+          | TOK_START_OPTION gen_response {yychar = YYEOF; smtlib_output = $2; }
+
+spec_constant: TOK_NUMERAL
+{$$ = new sexpr(); $$->token = TOK_NUMERAL;$$->data = std::string($1);free($1);}
+               | TOK_DECIMAL
+{$$ = new sexpr(); $$->token = TOK_DECIMAL;$$->data = std::string($1);free($1);}
+               | TOK_HEXNUM
+{$$ = new sexpr(); $$->token = TOK_HEXNUM;$$->data = std::string($1);free($1);}
+               | TOK_BINNUM
+{$$ = new sexpr(); $$->token = TOK_BINNUM;$$->data = std::string($1);free($1);}
+               | TOK_STRINGLIT
+{$$ = new sexpr(); $$->token = TOK_STRINGLIT; $$->data = std::string($1); free($1);}
+               | TOK_KW_TRUE
+{$$ = new sexpr(); $$->token = TOK_KW_TRUE; }
+               | TOK_KW_FALSE
+{$$ = new sexpr(); $$->token = TOK_KW_FALSE; }
+
+symbol: TOK_SIMPLESYM { $$ = new std::string($1); free($1); }
+        | TOK_QUOTEDSYM {
+           // Strip off the | characters.
+           std::string tmp($1);
+           free($1);
+           std::string substr = tmp.substr(1, tmp.size() - 2);
+           $$ = new std::string(substr);
+         }
+
+symbol_list_empt:
+         {
+           $$ = new std::list<std::string>();
+         }
+         | symbol_list_empt symbol
+         {
+           $1->push_back(*$2);
+           delete $2;
+           $$ = $1;
+         }
+
+numlist: TOK_NUMERAL
+         {
+           $$ = new sexpr();
+           sexpr tok;
+           tok.token = TOK_NUMERAL;
+           tok.data = std::string($1);
+           $$->sexpr_list.push_back(tok);
+           free($1);
+         }
+         | numlist TOK_NUMERAL
+         {
+           $$ = $1;
+           sexpr tok;
+           tok.token = TOK_NUMERAL;
+           tok.data = std::string($2);
+           $$->sexpr_list.push_back(tok);
+           free($2);
+         }
+
+identifier: symbol
+         {
+           $$ = new sexpr();
+           $$->token = TOK_SIMPLESYM;
+           $$->data = *$1;
+           delete $1;
+         }
+       | TOK_LPAREN TOK_KW_USCORE symbol numlist TOK_RPAREN
+         {
+           $$ = new sexpr();
+           sexpr uscore;
+           $$->token = 0;
+           uscore.token = TOK_KW_USCORE;
+           $$->sexpr_list.push_back(uscore);
+           uscore.token = TOK_SIMPLESYM;
+           uscore.data = *$3;
+           delete $3;
+           $$->sexpr_list.push_back(uscore);
+           $$->sexpr_list.push_back(*$4);
+           delete $4;
+         }
+
+sexpr_list:
+         {
+           $$ = new std::list<sexpr>();
+         }
+         | sexpr_list s_expr
+         {
+           $$ = $1;
+           $1->push_back(*$2);
+           delete $2;
+         }
+
+s_expr: spec_constant
+       | symbol
+         {
+           $$ = new sexpr();
+           $$->token = TOK_SIMPLESYM;
+           $$->data = std::string(*$1);
+           delete $1;
+         }
+       | TOK_KEYWORD
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KEYWORD;
+           $$->data = std::string($1);
+           free($1);
+         }
+       | TOK_LPAREN sexpr_list TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->sexpr_list = *$2;
+           delete $2;
+           $$->token = 0;
+         }
+
+attribute_value: spec_constant
+       | symbol
+         {
+           $$ = new sexpr();
+           $$->data = *$1;
+           delete $1;
+           $$->token = TOK_SIMPLESYM;
+         }
+       | TOK_LPAREN sexpr_list TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->sexpr_list = *$2;
+           $$->token = 0;
+           delete $2;
+         }
+
+attribute: TOK_KEYWORD
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KEYWORD;
+           $$->data = std::string($1);
+           free($1);
+         }
+       | TOK_KEYWORD attribute_value
+         {
+           sexpr *s = new sexpr();
+           s->token = TOK_KEYWORD;
+           s->data = std::string($1);
+           free($1);
+           $$ = new sexpr();
+           $$->sexpr_list.push_front(*s);
+           if ($2->token == 0)
+             $$->sexpr_list.push_back(*$2);
+           else
+             $$->sexpr_list.push_back(*$2);
+           delete $2;
+           delete s;
+         }
+
+attr_list: attribute | attr_list attribute
+
+sort_list: sort
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           $$->sexpr_list.push_back(*$1);
+           delete $1;
+         }
+       | sort_list sort
+         {
+           $$ = $1;
+           $$->sexpr_list.push_back(*$2);
+           delete $2;
+         }
+
+sort: identifier
+       | TOK_LPAREN identifier sort_list TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           $$->sexpr_list.push_back(*$2);
+           $$->sexpr_list.push_back(*$3);
+           delete $2;
+           delete $3;
+         }
+
+qual_identifier: identifier
+       | TOK_LPAREN TOK_KW_AS identifier sort TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           sexpr tok;
+           tok.token = TOK_KW_AS;
+           $$->sexpr_list.push_back(*$3);
+           $$->sexpr_list.push_back(*$4);
+           delete $3;
+           delete $4;
+         }
+
+var_binding: TOK_LPAREN symbol term TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           sexpr tok;
+           tok.token = TOK_SIMPLESYM;
+           tok.data = *$2;
+           $$->sexpr_list.push_back(tok);
+           $$->sexpr_list.push_back(*$3);
+           delete $2;
+           delete $3;
+         }
+
+varbind_list: var_binding
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           $$->sexpr_list.push_back(*$1);
+           delete $1;
+         }
+       | varbind_list var_binding
+         {
+           $$ = $1;
+           $$->sexpr_list.push_back(*$2);
+           delete $2;
+         }
+
+sorted_var: TOK_LPAREN symbol sort TOK_RPAREN
+
+sortvar_list: sorted_var | sortvar_list sorted_var
+
+term_list: term | term_list term
+
+term_list_empt: { $$ = new sexpr(); } | term | term_list term
+
+term: spec_constant
+       | qual_identifier
+       | TOK_LPAREN qual_identifier term_list_empt TOK_RPAREN
+         {
+           $$ = $2;
+           $$->sexpr_list.splice($$->sexpr_list.begin(), $3->sexpr_list);
+         }
+       | TOK_LPAREN TOK_KW_LET TOK_LPAREN varbind_list TOK_RPAREN term TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           sexpr tok;
+           tok.token = TOK_KW_LET;
+           $$->sexpr_list.push_back(tok);
+           $$->sexpr_list.push_back(*$4);
+           $$->sexpr_list.push_back(*$6);
+           delete $4;
+           delete $6;
+         }
+       | TOK_LPAREN TOK_KW_FORALL TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
+         {
+           std::cerr << "Not handling forall in smtlib output" << std::endl;
+           abort();
+         }
+       | TOK_LPAREN TOK_KW_EXISTS TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
+         {
+           std::cerr << "Not handling exists in smtlib output" << std::endl;
+           abort();
+         }
+       | TOK_LPAREN TOK_KW_EXCL term attr_list TOK_RPAREN
+         {
+           std::cerr << "Not handling '!' in smtlib output" << std::endl;
+           abort();
+         }
+
+gen_response: TOK_KW_UNSUPPORTED
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_UNSUPPORTED;
+         }
+        | TOK_KW_SUCCESS
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_SUCCESS;
+         }
+        | TOK_LPAREN TOK_KW_ERROR TOK_STRINGLIT TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_ERROR;
+           $$->data = std::string($3);
+           free($3);
+         }
+
+error_behaviour: TOK_KW_IMMEXIT | TOK_KW_CONEXECUTION
+
+reason_unknown: TOK_KW_MEMOUT | TOK_KW_INCOMPLETE
+
+status: TOK_KW_SAT
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_SAT;
+           free($1);
+         }
+        | TOK_KW_UNSAT
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_UNSAT;
+           free($1);
+         }
+        | TOK_KW_UNKNOWN
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_UNKNOWN;
+           free($1);
+         }
+
+info_response_arg: error_behaviour | reason_unknown
+
+info_response: attribute
+       | TOK_KEYWORD info_response_arg
+         {
+           $$ = new sexpr();
+           sexpr *s = new sexpr();
+           s->token = TOK_KEYWORD;
+           s->data = std::string($1);
+           free($1);
+           $$->token = 0;
+           $$->sexpr_list.push_front(*s);
+           free(s);
+           s = new sexpr();
+           s->token = TOK_KEYWORD;
+           s->data = std::string($2);
+           $$->sexpr_list.push_back(*s);
+           free($2);
+         }
+
+info_response_list: info_response
+         {
+           $$ = new std::list<sexpr>();
+           $$->push_back(*$1);
+           delete $1;
+         }
+       | info_response_list info_response
+         {
+           $$ = $1;
+           $$->push_back(*$2);
+           delete $2;
+         }
+
+get_info_response: TOK_LPAREN info_response_list TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->sexpr_list = *$2;
+           $$->token = 0;
+           delete $2;
+         }
+
+check_sat_response: status
+
+get_assertions_response: TOK_LPAREN term_list_empt TOK_RPAREN
+
+/* get_proof_response: we're not going to be doing this */
+
+get_unsat_core_response: TOK_LPAREN symbol_list_empt TOK_RPAREN
+
+valuation_pair: TOK_LPAREN term term TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           $$->sexpr_list.push_back(*$2);
+           $$->sexpr_list.push_back(*$3);
+           delete $2;
+           delete $3;
+         }
+
+valuation_pair_list: valuation_pair
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           $$->sexpr_list.push_back(*$1);
+           delete $1;
+         }
+       | valuation_pair_list valuation_pair
+         {
+           $$->sexpr_list.push_back(*$2);
+           delete $2;
+         }
+
+get_value_response: TOK_LPAREN valuation_pair_list TOK_RPAREN
+         {
+           $$ = $2;
+         }
+
+b_value: TOK_KW_TRUE | TOK_KW_FALSE
+
+t_valuation_pair: TOK_LPAREN symbol b_value TOK_RPAREN
+
+t_valuation_pair_empt: | t_valuation_pair_empt t_valuation_pair
+
+get_assignment_response: TOK_LPAREN t_valuation_pair_empt TOK_RPAREN
+
+get_option_response: attribute_value

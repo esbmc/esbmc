@@ -451,7 +451,8 @@ void goto_convertt::cpp_new_initializer(
   else
   {
     initializer = (code_expressiont&)rhs.initializer();
-    rhs.remove("initializer");
+    // XXX jmorse, const-qual misery
+    const_cast<exprt&>(rhs).remove("initializer");
   }
 
   if(initializer.is_not_nil())
@@ -485,7 +486,7 @@ Function: goto_convertt::do_exit
 \*******************************************************************/
 
 void goto_convertt::do_exit(
-  const exprt &lhs,
+  const exprt &lhs __attribute__((unused)),
   const exprt &function,
   const exprt::operandst &arguments,
   goto_programt &dest)
@@ -516,7 +517,7 @@ Function: goto_convertt::do_abort
 \*******************************************************************/
 
 void goto_convertt::do_abort(
-  const exprt &lhs,
+  const exprt &lhs __attribute__((unused)),
   const exprt &function,
   const exprt::operandst &arguments,
   goto_programt &dest)
@@ -532,50 +533,6 @@ void goto_convertt::do_abort(
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
   t_a->guard = false_expr;
   t_a->location=function.location();
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::do_array_set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::do_array_set(
-  const exprt &lhs,
-  const exprt &function,
-  const exprt::operandst &arguments,
-  goto_programt &dest)
-{
-  if(arguments.size()!=2)
-    throw "array_set expects two arguments";
-
-  const exprt &array_ptr=arguments[0];
-  const exprt &value=arguments[1];
-
-  if(array_ptr.id()!="implicit_address_of")
-    throw "array_set expects array-pointer as first argument";
-
-  if(!array_ptr.op0().type().is_array())
-    throw "array_set expects array as first argument";
-
-  const exprt &array=array_ptr.op0();
-
-  exprt assignment_rhs("array_of", array.type());
-  assignment_rhs.copy_to_operands(value);
-
-  codet assignment("assign");
-
-  assignment.reserve_operands(2);
-  assignment.copy_to_operands(array);
-  assignment.move_to_operands(assignment_rhs);
-
-  convert(assignment, dest);
 }
 
 /*******************************************************************\
@@ -792,10 +749,6 @@ void goto_convertt::do_function_call_symbol(
     assignment.location()=function.location();
     copy(assignment, ASSIGN, dest);
   }
-  else if(has_prefix(id2string(identifier), CPROVER_PREFIX "array_set"))
-  {
-    do_array_set(lhs, function, arguments, dest);
-  }
   else if(identifier=="c::exit")
   {
     do_exit(lhs, function, arguments, dest);
@@ -909,8 +862,9 @@ void goto_convertt::do_function_call_symbol(
     new_function.add("sizeof") = arguments.front();
 
     // Set return type, a allocated pointer
+    // XXX jmorse, const-qual misery
     new_function.type() = pointer_typet(
-        static_cast<const typet&>(arguments.front().add("#c_sizeof_type")));
+        static_cast<const typet&>(const_cast<exprt&>(arguments.front()).add("#c_sizeof_type")));
     new_function.type().add("#location") = function.cmt_location();
 
     do_cpp_new(lhs, new_function, dest);

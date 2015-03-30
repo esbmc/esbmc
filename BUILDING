@@ -1,0 +1,94 @@
+From v1.26 ESBMC has been autoconfiscated -- build configuration is performed
+by a configure script in the root project directory and a set of Makefile.in's.
+These files are generated thorugh the use of autotools and all it's minions.
+Two scripts exist to operate autotools:
+
+    scripts/autoboot.sh bootstraps relevant autotool config files and
+        synthesizes the configure script and Makefile.in's, as necessary
+    scripts/autopurge.sh deletes all the config and synthesized files
+
+You only need to run these scripts if you've received a distribution without
+the configure script or Makefile.in's.
+
+~
+
+When in posession of a configure script, first decide where you want to put the
+build tree (possibly not in the source directory), and navigate to that
+directory. Then run the configure script from the source directory. It will
+detect required libraries, solvers, and create a set of makefiles to with which
+to build ESBMC. Run "make" in the build tree to compile everything, resulting
+in an 'esbmc' binary in the 'esbmc' directory.
+
+Currently there's no fully-sane and automated way of producing a binary
+distribution, this may materialise in the future.
+
+Errata:
+ - clang++ will be selected over g++ if both are available, however on older
+   operating system distributions (hello debian) clang++ may not support
+   everything ESBMC needs to build. You can override which compiler is selected
+   by appending "CXX+g++" or similar to the configure command line
+ - On Mac OS if you need to use libc++ rather than libstdc++, you must specify
+   "-stdlib=libc++" in CXXFLAGS (see below)
+ - If you're using a steaming-new version of clang or gcc, you'll likely get a
+   bunch of new warnings that are then turned into errors by -Werror. You can
+   disable this behaviour with the --disable-werror switch to configure. You
+   should take great care if developing code with werror turned off though.
+
+~
+
+Configuration comes in three broad strands:
+ - Build flags for ESBMC object files
+ - Platform libraries that will be linked into ESBMC
+ - Solvers that ESBMC will use
+
+ESBMC object files are affected by compiler flags given in CXXFLAGS. Common
+options include optimisation levels, debug flags, and profiling options. To
+specify these, append a variable assignment to the configuration command line,
+for example:
+
+  ../configure CXXFLAGS="-g -O0"
+
+Other build variables like LDFLAGS, LIBS, CFLAGS etc can be specified in the
+same way.
+
+Most necessary platform libraries will be autodetected by the configure script.
+The only abnormal things ESBMC requires are:
+ * Compiler tools such as yacc and lex
+ * Eigen for certain DSP functions (optional)
+ * Boost
+ * OpenSSL for state hashing (optional)
+
+Of these, the only that is likely to cause problems is boost. You may need to
+point the configure script at it with the --with-boost=... option.
+
+~
+
+Solver configuration is a substantial problem: most are not part of operating
+system distribution repositories (and those that are tend to be out of date).
+This is unlikely to change, given licensing restrictions. Most binary
+distributions tend to follow the usual hier(7)-style, but some have their own
+eccentricities. Most problematic however is that, without operating system
+packages, there is no standard location for them to be in.
+
+The simplest way to get solvers working is this:
+ * Create a directory to put SMT solvers in, say $HOME/sat
+ * Configure the SATDIR{,64} environmental variable to point at that dir
+ * Drop all desired solver into that dir. Each should be in a directory named
+   after the solver (i.e. 'z3' for Z3, for a list examine the contents of the
+   'solvers' directory in the ESBMC source tree). Each solver dir should contain
+   a hier(7) like structure.
+
+ESBMCs configure script will examine SATDIR{,64} and HOME for supported solvers
+and print a summary once configuration has completed. If none are found, or
+an undesired version is found, you can specify exactly where a particular solver
+is installed with the "--with-solver=..." option, for example
+
+  ../configure --with-z3=$HOME/z3
+
+You can also disable support for a particular solver with the
+"--disable-$solver" option.
+
+If you get a build error when compiling in support for a solver, chances are
+that something is broken (or slightly different) in the latest release of that
+solver, and an older version may work. Failing that, you should get in contact
+with the ESBMC maintainers.

@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "string2array.h"
 
-/*******************************************************************\
-
-Function: string2array
-
-  Inputs:
-
- Outputs:
-
- Purpose: convert string into array constant
-
-\*******************************************************************/
-
 void string2array(const exprt &src, exprt &dest)
 {
   const std::string &str=src.value().as_string();

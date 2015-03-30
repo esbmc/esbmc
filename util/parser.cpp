@@ -16,18 +16,6 @@ int isatty(int f)
 }
 #endif
 
-/*******************************************************************\
-
-Function: _newstack
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt &_newstack(parsert &parser, unsigned &x)
 {
   x=parser.stack.size();
@@ -39,18 +27,6 @@ exprt &_newstack(parsert &parser, unsigned &x)
   return parser.stack.back();
 }
 
-/*******************************************************************\
-
-Function:
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void parsert::parse_error(
   const std::string &message,
   const std::string &before)
@@ -60,6 +36,6 @@ void parsert::parse_error(
   location.set_line(i2string(line_no));
   std::string tmp=message;
   if(before!="") tmp+=" before `"+before+"'";
-  print(1, tmp, -1, location);
+  print(1, tmp, location);
 }
 

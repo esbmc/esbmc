@@ -3,6 +3,15 @@
 
 #include "intrinsics.h"
 
+// Because of macs,
+#undef strcpy
+#undef strncpy
+#undef strcat
+#undef strncat
+#undef memcpy
+#undef memset
+#undef memmove
+
 char *strcpy(char *dst, const char *src)
 {
   __ESBMC_HIDE:;

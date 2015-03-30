@@ -4,3 +4,11 @@ y.tab.cpp
 y.tab.h
 *.goto
 c2goto
+Makefile
+Makefile.in
+parser.cpp
+parser.hpp
+scanner.cpp
+scanner.hpp
+clib32.c
+clib64.c

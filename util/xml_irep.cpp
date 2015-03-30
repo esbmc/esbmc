@@ -10,18 +10,6 @@ Author: Daniel Kroening
 
 #include "xml_irep.h"
 
-/*******************************************************************\
- 
-Function: convert
- 
-  Inputs:
- 
- Outputs:
- 
- Purpose:
- 
-\*******************************************************************/
-
 void convert(
   const irept &irep,
   xmlt &xml)
@@ -49,18 +37,6 @@ void convert(
     convert(it->second, x_com);
   }
 }
-
-/*******************************************************************\
- 
-Function: convert
- 
-  Inputs:
- 
- Outputs:
- 
- Purpose:
- 
-\*******************************************************************/
 
 void convert(
   const xmlt &xml,

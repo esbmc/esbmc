@@ -208,7 +208,6 @@ protected:
 
   void check_template_restrictions(
     const irept &cpp_name,
-    const irep_idt &final_identifier,
     const typet &final_type);
 
   void convert_template_declaration(cpp_declarationt &declaration);
@@ -497,6 +496,7 @@ protected:
   // for function overloading
   irep_idt function_identifier(const typet &type);
 
+  using c_typecheck_baset::zero_initializer;
   void zero_initializer(
     const exprt &object,
     const typet &type,

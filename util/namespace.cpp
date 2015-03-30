@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "namespace.h"
 
-/*******************************************************************\
-
-Function: get_max
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 unsigned get_max(const std::string &prefix, const symbolst &symbols)
 {
   unsigned max_nr=0;
@@ -36,18 +24,6 @@ unsigned get_max(const std::string &prefix, const symbolst &symbols)
   return max_nr;
 }
 
-/*******************************************************************\
-
-Function: namespacet::get_max
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 unsigned namespacet::get_max(const std::string &prefix) const
 {
   unsigned m=0;
@@ -60,18 +36,6 @@ unsigned namespacet::get_max(const std::string &prefix) const
 
   return m;
 }
-
-/*******************************************************************\
-
-Function: namespacet::lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool namespacet::lookup(
   const irep_idt &name,
@@ -104,18 +68,6 @@ bool namespacet::lookup(
   return true;
 }
 
-/*******************************************************************\
-
-Function: namespacet::follow_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void namespacet::follow_symbol(irept &irep) const
 {
   while(irep.id()=="symbol")
@@ -139,18 +91,6 @@ void namespacet::follow_symbol(irept &irep) const
   }
 }
 
-/*******************************************************************\
-
-Function: namespacet::follow
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const typet &namespacet::follow(const typet &src) const
 {
   if(src.id()!="symbol") return src;
@@ -165,18 +105,6 @@ const typet &namespacet::follow(const typet &src) const
     symbol=&lookup(symbol->type);
   }
 }
-
-/*******************************************************************\
-
-Function: namespacet::follow_macros
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void namespacet::follow_macros(exprt &expr) const
 {

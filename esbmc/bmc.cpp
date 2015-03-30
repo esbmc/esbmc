@@ -41,7 +41,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include "bmc.h"
 #include "document_subgoals.h"
-#include "version.h"
+#include <ac_config.h>
 
 static volatile bool checkpoint_sig = false;
 

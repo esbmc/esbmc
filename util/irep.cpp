@@ -27,36 +27,12 @@ irept::dump(void) const
   return;
 }
 
-/*******************************************************************\
-
-Function: get_nil_irep
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const irept &get_nil_irep()
 {
   if(nil_rep_storage.id().empty()) // initialized?
     nil_rep_storage.id("nil");
   return nil_rep_storage;
 }
-
-/*******************************************************************\
-
-Function: irept::irept
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 #ifdef SHARING
 irept::irept(const irep_idt &_id):data(new dt)
@@ -73,18 +49,6 @@ irept::irept(const irep_idt &_id)
   id(_id);
 }
 #endif
-
-/*******************************************************************\
-
-Function: irept::detatch
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 #ifdef SHARING
 void irept::detatch()
@@ -123,18 +87,6 @@ void irept::detatch()
 }
 #endif
 
-/*******************************************************************\
-
-Function: irept::read
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 #ifdef SHARING
 const irept::dt &irept::read() const
 {
@@ -148,18 +100,6 @@ const irept::dt &irept::read() const
   return *data;
 }
 #endif
-
-/*******************************************************************\
-
-Function: irept::remove_ref
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 #include <iostream>
 
@@ -194,18 +134,6 @@ void irept::remove_ref(dt *old_data)
 }
 #endif
 
-/*******************************************************************\
-
-Function: irept::clear
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void irept::clear()
 {
   #ifdef SHARING
@@ -216,18 +144,6 @@ void irept::clear()
   #endif
 }
 
-/*******************************************************************\
-
-Function: irept::move_to_named_sub
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void irept::move_to_named_sub(const irep_namet &name, irept &irep)
 {
   #ifdef SHARING
@@ -237,18 +153,6 @@ void irept::move_to_named_sub(const irep_namet &name, irept &irep)
   irep.clear();
 }
 
-/*******************************************************************\
-
-Function: irept::move_to_sub
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void irept::move_to_sub(irept &irep)
 {
   #ifdef SHARING
@@ -257,18 +161,6 @@ void irept::move_to_sub(irept &irep)
   get_sub().push_back(get_nil_irep());
   get_sub().back().swap(irep);
 }
-
-/*******************************************************************\
-
-Function: irept::get
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 const irep_idt &irept::get(const irep_namet &name) const
 {
@@ -286,51 +178,15 @@ const irep_idt &irept::get(const irep_namet &name) const
   return it->second.id();
 }
 
-/*******************************************************************\
-
-Function: irept::get_bool
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool irept::get_bool(const irep_namet &name) const
 {
   return atoi(get(name).c_str());
 }
 
-/*******************************************************************\
-
-Function: irept::set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void irept::set(const irep_namet &name, const long value)
 {
   add(name).id(i2string((int)value));
 }
-
-/*******************************************************************\
-
-Function: irept::remove
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void irept::remove(const irep_namet &name)
 {
@@ -342,34 +198,10 @@ void irept::remove(const irep_namet &name)
   if(it!=s.end()) s.erase(it);
 }
 
-/*******************************************************************\
-
-Function: irept::set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void irept::set(const irep_namet &name, const irept &irep)
 {
   add(name)=irep;
 }
-
-/*******************************************************************\
-
-Function: irept::find
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 const irept &irept::find(const irep_namet &name) const
 {
@@ -384,18 +216,6 @@ const irept &irept::find(const irep_namet &name) const
   return it->second;
 }
 
-/*******************************************************************\
-
-Function: irept::add
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 irept &irept::add(const irep_namet &name)
 {
   named_subt &s=
@@ -403,18 +223,6 @@ irept &irept::add(const irep_namet &name)
 
   return s[name];
 }
-
-/*******************************************************************\
-
-Function: operator==
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool operator==(const irept &i1, const irept &i2)
 {
@@ -432,18 +240,6 @@ bool operator==(const irept &i1, const irept &i2)
 
   return true;
 }
-
-/*******************************************************************\
-
-Function: full_eq
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool full_eq(const irept &i1, const irept &i2)
 {
@@ -491,53 +287,16 @@ bool full_eq(const irept &i1, const irept &i2)
   return true;
 }
 
-/*******************************************************************\
-
-Function: irept::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-
 std::string irept::to_string() const
 {
   return pretty(0);
 }
-
-/*******************************************************************\
-
-Function: operator<<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::ostream& operator<< (std::ostream& out, const irept &irep)
 {
   out << irep.to_string();
   return out;
 }
-
-/*******************************************************************\
-
-Function: ordering
-
-  Inputs:
-
- Outputs:
-
- Purpose: defines ordering on the internal represenation
-
-\*******************************************************************/
 
 bool ordering(const irept &X, const irept &Y)
 {
@@ -592,18 +351,6 @@ bool ordering(const irept &X, const irept &Y)
   #endif
 }
 
-/*******************************************************************\
-
-Function: irept::compare
-
-  Inputs:
-
- Outputs:
-
- Purpose: defines ordering on the internal represenation
-
-\*******************************************************************/
-
 int irept::compare(const irept &i) const
 {
   int r;
@@ -657,34 +404,10 @@ int irept::compare(const irept &i) const
   return 0;
 }
 
-/*******************************************************************\
-
-Function: operator<
-
-  Inputs:
-
- Outputs:
-
- Purpose: defines ordering on the internal represenation
-
-\*******************************************************************/
-
 bool operator<(const irept &X, const irept &Y)
 {
   return ordering(X, Y);
 }
-
-/*******************************************************************\
-
-Function: irept::hash
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 size_t irept::hash() const
 {
@@ -700,18 +423,6 @@ size_t irept::hash() const
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: irept::full_hash
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 size_t irept::full_hash() const
 {
@@ -734,35 +445,11 @@ size_t irept::full_hash() const
   return result;
 }
 
-/*******************************************************************\
-
-Function: indent
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void indent_str(std::string &s, unsigned indent)
 {
   for(unsigned i=0; i<indent; i++)
     s+=' ';
 }
-
-/*******************************************************************\
-
-Function: irept::pretty
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string irept::pretty(unsigned indent) const
 {

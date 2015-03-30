@@ -20,10 +20,7 @@ class languaget
 public:
   // parse file
 
-  virtual bool preprocess() { return false; }
-
   virtual bool parse(
-    std::istream &instream,
     const std::string &path,
     message_handlert &message_handler)=0;
 
@@ -56,17 +53,10 @@ public:
     const std::string &module,
     message_handlert &message_handler)=0;
 
-  // merge two contextt's
-
-  virtual bool merge_context() const
-  {
-    throw "Language front-end does not support context merging";
-  }
-
   // language id / description
 
-  virtual std::string id() { return ""; }
-  virtual std::string description() { return ""; }
+  virtual std::string id() const { return ""; }
+  virtual std::string description() const { return ""; }
 
   // show parse tree
 

@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "string_hash.h"
 
-/*******************************************************************\
-
-Function: hash_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 size_t hash_string(const std::string &s)
 {
   size_t h=0;
@@ -30,18 +18,6 @@ size_t hash_string(const std::string &s)
 
   return h;
 }
-
-/*******************************************************************\
-
-Function: hash_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 size_t hash_string(const char *s)
 {

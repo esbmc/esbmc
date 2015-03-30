@@ -1156,7 +1156,7 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheckt::typecheck_expr_typecast(exprt &expr)
+void cpp_typecheckt::typecheck_expr_typecast(exprt &expr __attribute__((unused)))
 {
   // should not be called
   #if 0

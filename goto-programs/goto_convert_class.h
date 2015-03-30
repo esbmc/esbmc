@@ -29,7 +29,7 @@ public:
 
   goto_convertt(
     contextt &_context,
-    const optionst &_options,
+    optionst &_options,
     message_handlert &_message_handler):
     message_streamt(_message_handler),
     context(_context),
@@ -53,7 +53,7 @@ public:
 
 protected:
   contextt &context;
-  const optionst &options;
+  optionst &options;
   namespacet ns;
   unsigned temporary_counter;
   std::string tmp_symbol_prefix;
@@ -417,7 +417,6 @@ protected:
   void do_free          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_sync          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_exit          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-  void do_array_set     (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
 
   protected:

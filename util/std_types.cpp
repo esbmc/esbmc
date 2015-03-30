@@ -10,35 +10,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "std_types.h"
 
-/*******************************************************************\
-
-Function: bv_typet::get_width
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 unsigned bv_typet::get_width() const
 {
   return atoi(get("width").c_str());
 
 }
-
-/*******************************************************************\
-
-Function: fixedbv_typet::get_integer_bits
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 unsigned fixedbv_typet::get_integer_bits() const
 {
@@ -47,36 +23,12 @@ unsigned fixedbv_typet::get_integer_bits() const
   return atoi(integer_bits.c_str());
 }
 
-/*******************************************************************\
-
-Function: floatbv_typet::get_f
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 unsigned floatbv_typet::get_f() const
 {
   const std::string &f=get_string("f");
   assert(f!="");
   return atoi(f.c_str());
 }
-
-/*******************************************************************\
-
-Function: struct_union_typet::component_number
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 unsigned struct_union_typet::component_number(
   const irep_idt &component_name) const
@@ -100,18 +52,6 @@ unsigned struct_union_typet::component_number(
   return 0;
 }
 
-/*******************************************************************\
-
-Function: struct_union_typet::get_component
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const struct_union_typet::componentt &struct_union_typet::get_component(
   const irep_idt &component_name) const
 {
@@ -131,18 +71,6 @@ const struct_union_typet::componentt &struct_union_typet::get_component(
   return static_cast<const componentt &>(get_nil_irep());
 }
 
-/*******************************************************************\
-
-Function: struct_union_typet::component_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet struct_union_typet::component_type(
   const irep_idt &component_name) const
 {
@@ -150,18 +78,6 @@ typet struct_union_typet::component_type(
   assert(c.is_not_nil());
   return c.type();
 }
-
-/*******************************************************************\
-
-Function: struct_typet::is_prefix_of
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool struct_typet::is_prefix_of(const struct_typet &other) const
 {
@@ -192,34 +108,10 @@ bool struct_typet::is_prefix_of(const struct_typet &other) const
   return true; // ok, *this is a prefix of ot
 }
 
-/*******************************************************************\
-
-Function: is_reference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool is_reference(const typet &type)
 {
   return type.id()=="pointer" && type.reference();
 }
-
-/*******************************************************************\
-
-Function: is_rvalue_reference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool is_rvalue_reference(const typet &type)
 {

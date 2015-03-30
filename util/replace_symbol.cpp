@@ -9,49 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "replace_symbol.h"
 #include <std_types.h>
 
-/*******************************************************************\
-
-Function: replace_symbolt::replace_symbolt
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 replace_symbolt::replace_symbolt()
 {
 }
 
-/*******************************************************************\
-
-Function: replace_symbolt::~replace_symbolt
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 replace_symbolt::~replace_symbolt()
 {
 }
-
-/*******************************************************************\
-
-Function: replace_symbolt::replace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool replace_symbolt::replace(exprt &dest)
 {
@@ -76,18 +40,6 @@ bool replace_symbolt::replace(exprt &dest)
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: replace_symbolt::replace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool replace_symbolt::replace(typet &dest)
 {

@@ -13,18 +13,6 @@ Date: May 2007
 #include "irep_serialization.h" 
 #include "string_hash.h"
 
-/*******************************************************************\
- 
-Function: irep_serializationt::write_irep
- 
-  Inputs:
- 
- Outputs:
- 
- Purpose:
- 
-\*******************************************************************/
-
 void irep_serializationt::write_irep(
   std::ostream &out,
   const irept &irep)
@@ -54,18 +42,6 @@ void irep_serializationt::write_irep(
   out.put(0); // terminator
 }
 
-/*******************************************************************\
- 
-Function: irep_serializationt::reference_convert
- 
-  Inputs:
- 
- Outputs:
- 
- Purpose:
- 
-\*******************************************************************/
-
 void irep_serializationt::reference_convert(
   std::istream &in,
   irept &irep)
@@ -83,18 +59,6 @@ void irep_serializationt::reference_convert(
     ireps_container.ireps_on_read[id] = irep;
   }
 }
-
-/*******************************************************************\
- 
-Function: irep_serializationt::read_irep
- 
-  Inputs:
- 
- Outputs:
- 
- Purpose:
- 
-\*******************************************************************/
 
 void irep_serializationt::read_irep(
   std::istream &in,
@@ -130,18 +94,6 @@ void irep_serializationt::read_irep(
   }
 }
 
-/*******************************************************************\
- 
-Function: irep_serializationt::reference_convert
- 
-  Inputs:
- 
- Outputs:
- 
- Purpose:
- 
-\*******************************************************************/
-
 void irep_serializationt::reference_convert(
   const irept &irep,
   std::ostream &out)
@@ -162,18 +114,6 @@ void irep_serializationt::reference_convert(
   write_irep(out, irep);
 }
 
-/*******************************************************************\
- 
-Function: write_long
-
-  Inputs: an output stream and a number
- 
- Outputs: nothing
- 
- Purpose: outputs 4 characters for a long.
- 
-\*******************************************************************/
-
 void write_long( std::ostream& out, unsigned u )
 {
    out.put((u & 0xFF000000) >> 24); 
@@ -181,18 +121,6 @@ void write_long( std::ostream& out, unsigned u )
    out.put((u & 0x0000FF00) >> 8);
    out.put(u & 0x000000FF);
 }
-
-/*******************************************************************\
- 
-Function: irep_serializationt::read_long
-
-  Inputs: a stream
- 
- Outputs: a long
- 
- Purpose: reads 4 characters and builds a long int from them
- 
-\*******************************************************************/
 
 unsigned irep_serializationt::read_long( std::istream& in )
 {
@@ -204,18 +132,6 @@ unsigned irep_serializationt::read_long( std::istream& in )
   return res;
 }
 
-/*******************************************************************\
- 
-Function: write_string
-
-  Inputs: an output stream and a string
- 
- Outputs: nothing
- 
- Purpose: outputs the string and then a zero byte.
- 
-\*******************************************************************/
-
 void write_string( std::ostream& out, const std::string& s)
 {
   for (unsigned i=0; i<s.size(); i++)
@@ -226,18 +142,6 @@ void write_string( std::ostream& out, const std::string& s)
 
   out.put(0);
 }
-
-/*******************************************************************\
- 
-Function: irep_serializationt::read_string
-
-  Inputs: a stream
- 
- Outputs: a string
- 
- Purpose: reads a string from the stream
- 
-\*******************************************************************/
 
 dstring irep_serializationt::read_string( std::istream& in )
 {  
@@ -260,18 +164,6 @@ dstring irep_serializationt::read_string( std::istream& in )
   return dstring(&(read_buffer[0]));
 }
 
-/*******************************************************************\
- 
-Function: irep_serializationt::write_string_ref
-
-  Inputs: an output stream and a string
- 
- Outputs: nothing
- 
- Purpose: outputs the string reference and then a zero byte.
- 
-\*******************************************************************/
-
 void irep_serializationt::write_string_ref( 
   std::ostream& out, 
   const dstring& s )
@@ -289,18 +181,6 @@ void irep_serializationt::write_string_ref(
     write_string(out, s.as_string());
   }
 }
-
-/*******************************************************************\
- 
-Function: irep_serializationt::read_string_ref
-
-  Inputs: a stream
- 
- Outputs: a string
- 
- Purpose: reads a string reference from the stream
- 
-\*******************************************************************/
 
 irep_idt irep_serializationt::read_string_ref( std::istream& in )
 {  
