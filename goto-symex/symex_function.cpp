@@ -53,7 +53,6 @@ goto_symext::get_unwind_recursion(
 
     std::cout << msg << std::endl;
   }
-  #endif
 
   return this_loop_max_unwind != 0 &&
          unwind >= this_loop_max_unwind;
