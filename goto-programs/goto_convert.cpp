@@ -3188,8 +3188,7 @@ Function: goto_convertt::replace_ifthenelse
 
 \*******************************************************************/
 
-void goto_convertt::replace_ifthenelse(
-		exprt &expr)
+void goto_convertt::replace_ifthenelse(exprt &expr)
 {
   Forall_operands(it, expr)
     replace_ifthenelse(*it);
@@ -3694,11 +3693,6 @@ void goto_convertt::pop_loop_block()
     current_block = loop_stack.top();
   else
     current_block = NULL;
-}
-
-bool goto_convertt::is_inductive_step_active()
-{
-  return inductive_step && (current_block != NULL) && current_block->is_active();
 }
 
 bool goto_convertt::loop_block::is_active() const

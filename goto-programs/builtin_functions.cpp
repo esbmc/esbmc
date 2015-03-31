@@ -686,6 +686,16 @@ void goto_convertt::do_function_call_symbol(
     t->location=function.location();
     t->location.user_provided(true);
 
+    if (is_assume && is_inductive_step_active())
+    {
+      exprt cond = arguments.front();
+      replace_ifthenelse(cond);
+      goto_programt::targett t=dest.add_instruction(ASSUME);
+      migrate_expr(cond, t->guard);
+      t->location=function.location();
+      t->location.user_provided(true);
+    }
+
     if(is_assert)
       t->location.property("assertion");
 

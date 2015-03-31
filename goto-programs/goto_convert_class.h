@@ -211,7 +211,11 @@ protected:
   void disable_k_induction(void);
   void print_msg_mem_alloc(void);
 
-  inline bool is_inductive_step_active();
+  inline bool is_inductive_step_active()
+  {
+    return inductive_step && (current_block != NULL)
+      && current_block->is_active();
+  }
 
   typedef std::map<irep_idt, const exprt> loop_varst;
 
