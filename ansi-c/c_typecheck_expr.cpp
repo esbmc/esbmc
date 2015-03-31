@@ -343,10 +343,12 @@ void c_typecheck_baset::mark_functions_inside_loops(exprt &expr)
       if(symbol.value.is_nil())
         return;
 
-      if(symbol.value.find("inside_loop") == true_exprt())
+      const exprt& inside_loop = symbol.value.find_expr("inside_loop");
+
+      if(!atoi(inside_loop.id().c_str()))
         return;
 
-      symbol.value.add("inside_loop") = true_exprt();
+      symbol.value.set("inside_loop", "0");
 
       // We must search now for nested functions inside the
       // this function, so recursively look for it

@@ -848,8 +848,8 @@ void goto_convertt::look_for_variables_changes(const exprt &expr)
       assert(symbol.value.add("inside_loop") != nil_exprt());
 
       // Update the value with the loop number
-      symbol.value.add("inside_loop") = constant_exprt(
-        integer2string(current_block->get_state_counter()), int_type());
+      symbol.value.set("inside_loop",
+        integer2string(current_block->get_state_counter()));
 
       // Look through the function body for variables
       look_for_variables_changes(symbol.value);

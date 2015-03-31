@@ -236,18 +236,21 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   {
     const exprt& inside_loop = symbol.value.find_expr("inside_loop");
 
-    // If the value is true, than we must place it on the list to be
-    // converted later
-    if(inside_loop == true_exprt())
+    switch(atoi(inside_loop.id().c_str()))
     {
-      delayed_functions.push_back(&symbol);
-      return;
-    }
-    else if(inside_loop != nil_exprt())
-    {
-      // Restore current_block
-      assert(current_block == NULL);
-      current_block = states_map[atoi(inside_loop.value().c_str())];
+      case 0:
+        symbol.value.set("inside_loop", "-1");
+        delayed_functions.push_back(&symbol);
+        return;
+
+      default:
+        // Restore current_block
+        assert(current_block == NULL);
+        current_block = states_map[atoi(inside_loop.id().c_str())];
+        break;
+
+      case -1:
+        break;
     }
   }
 
@@ -350,14 +353,15 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   {
     const exprt& inside_loop = symbol.value.find_expr("inside_loop");
 
-    // If the value is true, than we must place it on the list to be
-    // converted later
-    if(inside_loop == true_exprt())
+    switch(atoi(inside_loop.id().c_str()))
     {
-    }
-    else if(inside_loop != nil_exprt())
-    {
-      current_block = NULL;
+      case 0:
+      case -1:
+        break;
+
+      default:
+        current_block = NULL;
+        break;
     }
   }
 }
