@@ -345,7 +345,7 @@ void c_typecheck_baset::mark_functions_inside_loops(exprt &expr)
 
       const exprt& inside_loop = symbol.value.find_expr("inside_loop");
 
-      if(!atoi(inside_loop.id().c_str()))
+      if((inside_loop != nil_exprt()) && !atoi(inside_loop.id().c_str()))
         return;
 
       symbol.value.set("inside_loop", "0");

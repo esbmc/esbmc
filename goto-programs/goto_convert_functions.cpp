@@ -236,21 +236,24 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   {
     const exprt& inside_loop = symbol.value.find_expr("inside_loop");
 
-    switch(atoi(inside_loop.id().c_str()))
+    if(inside_loop.is_not_nil())
     {
-      case 0:
-        symbol.value.set("inside_loop", "-1");
-        delayed_functions.push_back(&symbol);
-        return;
+      switch(atoi(inside_loop.id().c_str()))
+      {
+        case 0:
+          symbol.value.set("inside_loop", "-1");
+          delayed_functions.push_back(&symbol);
+          return;
 
-      default:
-        // Restore current_block
-        assert(current_block == NULL);
-        current_block = states_map[atoi(inside_loop.id().c_str())];
-        break;
+        default:
+          // Restore current_block
+          assert(current_block == NULL);
+          current_block = states_map[atoi(inside_loop.id().c_str())];
+          break;
 
-      case -1:
-        break;
+        case -1:
+          break;
+      }
     }
   }
 
