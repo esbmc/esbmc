@@ -806,15 +806,28 @@ Function: goto_convertt::look_for_variables_changes
 
 void goto_convertt::look_for_variables_changes(const exprt &expr)
 {
-  if (expr.statement() == "assign"
-      || expr.statement() == "postincrement"
-      || expr.statement() == "postdecrement"
-      || expr.statement() == "preincrement"
-      || expr.statement() == "predecrement")
+  const irep_idt &statement=expr.statement();
+
+  if (statement == "assign"
+      || statement == "assign+"
+      || statement == "assign-"
+      || statement == "assign*"
+      || statement == "assign_div"
+      || statement == "assign_mod"
+      || statement == "assign_shl"
+      || statement == "assign_ashr"
+      || statement == "assign_lshr"
+      || statement == "assign_bitand"
+      || statement == "assign_bitxor"
+      || statement == "assign_bitor"
+      || statement == "postincrement"
+      || statement == "postdecrement"
+      || statement == "preincrement"
+      || statement == "predecrement")
   {
     get_loop_variables(expr);
   }
-  else if (expr.statement() == "function_call")
+  else if (statement == "function_call")
   {
     irep_idt identifier;
     if (expr.is_code())
