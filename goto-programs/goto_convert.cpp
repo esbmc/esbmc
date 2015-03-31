@@ -3643,7 +3643,7 @@ void goto_convertt::pop_loop_block()
   // Then state_vector s
   // Its type is incomplete array
   typet incomplete_array_type("incomplete_array");
-  incomplete_array_type.subtype() = struct_typet();
+  incomplete_array_type.subtype() = current_block->get_state();
 
   symbolt state_vector_symbol;
   state_vector_symbol.name="s$"+i2string(i);
@@ -3655,13 +3655,10 @@ void goto_convertt::pop_loop_block()
   context.move(state_vector_symbol, symbol_ptr);
 
   // Finally, the current state cs
-  typet state_type("struct");
-  state_type.tag("state$vector"+i2string(i));
-
   symbolt current_state_symbol;
   current_state_symbol.name="cs$"+i2string(i);
   current_state_symbol.base_name="cs$"+i2string(i);
-  current_state_symbol.type=state_type;
+  current_state_symbol.type=current_block->get_state();
   current_state_symbol.static_lifetime=true;
   current_state_symbol.lvalue=true;
 
