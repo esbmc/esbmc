@@ -1920,7 +1920,10 @@ void goto_convertt::convert_for(
 
   // do the t label
   if (is_inductive_step_active())
+  {
+    look_for_variables_changes(code.op2());
     look_for_variables_changes(code.op3());
+  }
 
   goto_programt sideeffects;
 
