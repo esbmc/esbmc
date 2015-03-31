@@ -274,7 +274,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-div-by-zero-check", true);
     options.set_option("no-pointer-check", true);
     options.set_option("no-unwinding-assertions", true);
-    //options.set_option("partial-loops", true);
+    options.set_option("partial-loops", false);
   }
 
   if(cmdline.isset("forward-condition") ||
