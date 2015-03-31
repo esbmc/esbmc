@@ -26,10 +26,10 @@ class goto_convert_functionst:public goto_convertt
 public:
   typedef std::map<irep_idt, std::set<irep_idt> > typename_mapt;
   typedef std::set<irep_idt> typename_sett;
-  typedef std::list<const symbolt*> symbol_listt;
+  typedef std::list<symbolt*> symbol_listt;
 
   void goto_convert();
-  void convert_function(const symbolt &symbol);
+  void convert_function(symbolt &symbol);
   void convert_function(const irep_idt &identifier);
   void thrash_type_symbols(void);
   void collect_type(const irept &type, typename_sett &set);

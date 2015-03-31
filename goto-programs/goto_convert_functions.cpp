@@ -84,13 +84,13 @@ void goto_convert_functionst::goto_convert()
 
   symbol_listt symbol_list;
 
-  forall_symbols(it, context.symbols)
+  Forall_symbols(it, context.symbols)
   {
     if(!it->second.is_type && it->second.type.is_code())
       symbol_list.push_back(&it->second);
   }
 
-  for(symbol_listt::const_iterator
+  for(symbol_listt::iterator
       it=symbol_list.begin();
       it!=symbol_list.end();
       it++)
@@ -101,7 +101,7 @@ void goto_convert_functionst::goto_convert()
   // Check if there is any delayed function to be converted
   if(inductive_step && delayed_functions.size())
   {
-    for(symbol_listt::const_iterator
+    for(symbol_listt::iterator
         it=delayed_functions.begin();
         it!=delayed_functions.end();
         it++)
@@ -209,7 +209,10 @@ Function: goto_convert_functionst::convert_function
 
 void goto_convert_functionst::convert_function(const irep_idt &identifier)
 {
-  convert_function(ns.lookup(identifier));
+  symbolst::iterator s_it=context.symbols.find(identifier);
+  assert(s_it != context.symbols.end());
+
+  convert_function(s_it->second);
 }
 
 /*******************************************************************\
@@ -224,7 +227,7 @@ Function: goto_convert_functionst::convert_function
 
 \*******************************************************************/
 
-void goto_convert_functionst::convert_function(const symbolt &symbol)
+void goto_convert_functionst::convert_function(symbolt &symbol)
 {
   // Trying to convert a function during inductive step
   // If the function is inside a loop, we must know which loop to
