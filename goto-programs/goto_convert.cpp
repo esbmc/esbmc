@@ -2376,7 +2376,7 @@ void goto_convertt::check_loop_cond(
     // allow transformations on infinite loops
     current_block->set_active(true);
   }
-  else if (expr.is_false() || expr.is_constant())
+  else if (expr.is_false() || expr.is_constant() || expr.is_index())
   {
 
   }
