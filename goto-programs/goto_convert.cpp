@@ -2380,7 +2380,8 @@ void goto_convertt::check_loop_cond(
   {
 
   }
-  else if (exprid == ">" ||  exprid == ">=" || expr.is_typecast())
+  else if (exprid == ">" || exprid == ">=" || expr.is_typecast()
+    || expr.is_not())
   {
     if (!check_expr_const(expr.op0()))
       current_block->set_active(true);
