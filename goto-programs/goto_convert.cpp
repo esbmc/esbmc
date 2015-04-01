@@ -2399,9 +2399,9 @@ void goto_convertt::check_loop_cond(
   else
   {
     std::cerr << "warning: the expression '" << expr.id()
-	      << "' located at line " << expr.location().get_line()
-	      << " of " << expr.location().get_file()
-  	      << " is not supported yet" << std::endl;
+      << "' located at line " << expr.location().get_line() << " of "
+      << expr.location().get_file() << " is not supported yet" << std::endl
+      << "warning: inductive step will be disabled" << std::endl;
     disable_k_induction();
   }
 }
