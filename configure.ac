@@ -42,9 +42,13 @@ AC_CHECK_LIB([rt], [timer_create],
     [AS_VAR_APPEND(LIBS, " -lrt ")], [], []
 )
 
-AC_CHECK_LIB([gomp], [omp_get_num_threads],
-             [AS_VAR_APPEND(LIBS, " -lgomp ")],
-             [AC_MSG_WARN([No libgomp found: Z3 may want this])], [])
+AC_CHECK_LIB([gomp], [omp_get_num_threads], [
+             AS_VAR_APPEND(LIBS, " -lgomp ")
+             dnl Might need pthread too, if it's installed, link against it
+             AC_CHECK_LIB([pthread], [pthread_create], [
+                           AS_VAR_APPEND(LIBS, " -lpthread ")
+             ])
+             ], [AC_MSG_WARN([No libgomp found: Z3 may want this])], [])
 
 AC_CHECK_LIB([gmp], [__gmpz_cmp],
              [AS_VAR_APPEND(LIBS, " -lgmp ")],
