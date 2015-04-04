@@ -6,6 +6,18 @@
 
 #include "yices_conv.h"
 
+// From yices 2.3 (I think) various API calls have had new non-binary
+// operand versions added. The maintainers have chosen to break backwards
+// compatibility in the process by moving the old functions to new names, and
+// using the old names for the non-binary version. (This is a design decision).
+
+#if __YICES_VERSION > 2 || (__YICES_VERSION == 2 && __YICES_VERSION_MAJOR >= 3)
+#define yices_bvxor yices_bvxor2
+#define yices_bvconcat yices_bvconcat2
+#define yices_bvand yices_bvand2
+#define yices_bvor yices_bvor2
+#endif
+
 smt_convt *
 create_new_yices_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                               const optionst &opts __attribute__((unused)),
