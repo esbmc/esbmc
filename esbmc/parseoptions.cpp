@@ -690,6 +690,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // Let's start the sequential approach
         for(short i=0; i<3; ++i)
           kill(children_pid[i], SIGKILL);
+
+        return doit_k_induction();
       }
 
       break;
