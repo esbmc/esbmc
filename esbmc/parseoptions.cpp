@@ -758,6 +758,12 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
       std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
 
+      if(cmdline.isset("k-induction-busy-wait")  ||
+        opts1.get_bool_option("k-induction-busy-wait"))
+      {
+        while(1) { sleep(1); }
+      }
+
       return res;
 
       break;
@@ -828,6 +834,12 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
       std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
 
+      if(cmdline.isset("k-induction-busy-wait")  ||
+        opts2.get_bool_option("k-induction-busy-wait"))
+      {
+        while(1) { sleep(1); }
+      }
+
       return res;
 
       break;
@@ -895,6 +907,12 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       assert(len == sizeof(r) && "short write");
 
       std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
+
+      if(cmdline.isset("k-induction-busy-wait")  ||
+        opts3.get_bool_option("k-induction-busy-wait"))
+      {
+        while(1) { sleep(1); }
+      }
 
       return res;
 
