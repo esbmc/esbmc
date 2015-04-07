@@ -115,12 +115,9 @@ AC_CHECK_FUNC(strlcpy, [AC_DEFINE([HAVE_STRLCPY], [true], [strlcpy present])], [
 
 LT_LIB_DLLOAD
 
-dnl A special dance to enable static binary linking if --enable-static is
-dnl passed to configure. Without this, only libraries are built static.
-dnl We also have to use a special LDFLAGS, because this'll be passed down
-dnl to configured projects that don't used libtool, which croak on -all-static
+AC_ARG_ENABLE(static-link, [AS_HELP_STRING([--enable-static-link], Build a static version of esbmc)])
 AS_VAR_SET(ESBMC_LDFLAGS, "")
-AS_IF([test "${enable_static+set}" = set], [
+AS_IF([test "${enable_static_link}" = "yes"], [
   AS_VAR_SET(ESBMC_LDFLAGS, " -all-static ")
 ])
 AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)
