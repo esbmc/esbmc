@@ -42,9 +42,11 @@ AC_CHECK_LIB([rt], [timer_create],
     [AS_VAR_APPEND(LIBS, " -lrt ")], [], []
 )
 
-AC_CHECK_LIB([gomp], [omp_get_num_threads],
-             [AS_VAR_APPEND(LIBS, " -lgomp ")],
-             [AC_MSG_WARN([No libgomp found: Z3 may want this])], [])
+AC_CHECK_LIB([pthread], [pthread_create], [AS_VAR_APPEND(LIBS, " -lpthread ")])
+
+AC_CHECK_LIB([gomp], [omp_get_num_threads], [
+             AS_VAR_SET(LIBS, " -lgomp $LIBS ")
+             ], [AC_MSG_WARN([No libgomp found: Z3 may want this])], [])
 
 AC_CHECK_LIB([gmp], [__gmpz_cmp],
              [AS_VAR_APPEND(LIBS, " -lgmp ")],
@@ -111,6 +113,16 @@ AC_CHECK_FUNC(strlcat, [AC_DEFINE([HAVE_STRLCAT], [true], [strlcat present])], [
 AC_CHECK_FUNC(strlcpy, [AC_DEFINE([HAVE_STRLCPY], [true], [strlcpy present])], [])
 
 LT_LIB_DLLOAD
+
+dnl A special dance to enable static binary linking if --enable-static is
+dnl passed to configure. Without this, only libraries are built static.
+dnl We also have to use a special LDFLAGS, because this'll be passed down
+dnl to configured projects that don't used libtool, which croak on -all-static
+AS_VAR_SET(ESBMC_LDFLAGS, "")
+AS_IF([test "${enable_static+set}" = set], [
+  AS_VAR_SET(ESBMC_LDFLAGS, " -all-static ")
+])
+AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)
 
 AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build flag)])
 

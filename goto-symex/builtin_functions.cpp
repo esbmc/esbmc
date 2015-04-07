@@ -539,8 +539,7 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
-
-  if (k_induction) {
+  if (options.get_bool_option("inductive-step")) {
     std::cerr << "warning: this program is multithreaded,"
               << " so we are not applying the inductive step to this program!"
               << std::endl;

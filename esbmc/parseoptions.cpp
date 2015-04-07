@@ -661,7 +661,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
         if(bc_res[solution_found])
         {
-          std::cout << std::endl << "Solution found by the base case" << std::endl;
+          std::cout << std::endl << "Solution found by the base case "
+                    << "(k = " << solution_found  << ")"<< std::endl;
           std::cout << "VERIFICATION FAILED" << std::endl;
           return res;
         }
@@ -669,14 +670,16 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // Successful!
         if(!bc_res[solution_found] && !fc_res[solution_found])
         {
-          std::cout << std::endl << "Solution found by the forward condition" << std::endl;
+          std::cout << std::endl << "Solution found by the forward condition "
+                    << "(k = " << solution_found  << ")"<< std::endl;
           std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
           return res;
         }
 
         if(!bc_res[solution_found] && !is_res[solution_found])
         {
-          std::cout << std::endl << "Solution found by the inductive step" << std::endl;
+          std::cout << std::endl << "Solution found by the inductive step "
+                    << "(k = " << solution_found  << ")"<< std::endl;
           std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
           return res;
         }
@@ -687,6 +690,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // Let's start the sequential approach
         for(short i=0; i<3; ++i)
           kill(children_pid[i], SIGKILL);
+
+        return doit_k_induction();
       }
 
       break;
@@ -752,6 +757,13 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       assert(len == sizeof(r) && "short write");
 
       std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
+
+      if(cmdline.isset("k-induction-busy-wait")  ||
+        opts1.get_bool_option("k-induction-busy-wait"))
+      {
+        while(1) { sleep(1); }
+      }
+
       return res;
       break;
     }
@@ -819,6 +831,13 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       assert(len == sizeof(r) && "short write");
 
       std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+
+      if(cmdline.isset("k-induction-busy-wait")  ||
+        opts2.get_bool_option("k-induction-busy-wait"))
+      {
+        while(1) { sleep(1); }
+      }
+
       return res;
       break;
     }
@@ -885,6 +904,13 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       assert(len == sizeof(r) && "short write");
 
       std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
+
+      if(cmdline.isset("k-induction-busy-wait")  ||
+        opts3.get_bool_option("k-induction-busy-wait"))
+      {
+        while(1) { sleep(1); }
+      }
+
       return res;
       break;
     }
