@@ -39,7 +39,8 @@ AC_LANG(C++)
 
 AC_CHECK_LIB([m], [fabs])
 AC_CHECK_LIB([rt], [timer_create],
-    [AS_VAR_APPEND(LIBS, " -lrt ")], [], []
+    [AS_VAR_APPEND(LIBS, " -lrt ")],
+    [AC_MSG_ERROR([No librt found])], []
 )
 
 AC_CHECK_LIB([pthread], [pthread_create], [AS_VAR_APPEND(LIBS, " -lpthread ")])
