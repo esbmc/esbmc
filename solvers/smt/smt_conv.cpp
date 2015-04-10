@@ -870,6 +870,7 @@ smt_convt::convert_sort(const type2tc &type)
   case type2t::signedbv_id:
   {
     unsigned int width = type->get_width();
+    assert(width != 0);
     result = mk_int_bv_sort(width);
   }
   break;
