@@ -2400,6 +2400,15 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
 const expr2tc true_expr;
 const expr2tc false_expr;
 
+const constant_int2tc zero_u32;
+const constant_int2tc one_u32;
+const constant_int2tc zero_32;
+const constant_int2tc one_32;
+const constant_int2tc zero_u64;
+const constant_int2tc one_u64;
+const constant_int2tc zero_64;
+const constant_int2tc one_64;
+
 const constant_int2tc zero_ulong;
 const constant_int2tc one_ulong;
 const constant_int2tc zero_long;
@@ -2412,14 +2421,24 @@ init_expr_constants(void)
   const_cast<expr2tc&>(true_expr) = expr2tc(new constant_bool2t(true));
   const_cast<expr2tc&>(false_expr) = expr2tc(new constant_bool2t(false));
 
-  const_cast<constant_int2tc&>(zero_ulong)
-    = constant_int2tc(type_pool.get_uint(config.ansi_c.word_size), BigInt(0));
-  const_cast<constant_int2tc&>(one_ulong)
-    = constant_int2tc(type_pool.get_uint(config.ansi_c.word_size), BigInt(1));
-  const_cast<constant_int2tc&>(zero_long)
-    = constant_int2tc(type_pool.get_int(config.ansi_c.word_size), BigInt(0));
-  const_cast<constant_int2tc&>(one_long)
-    = constant_int2tc(type_pool.get_int(config.ansi_c.word_size), BigInt(1));
+  const_cast<constant_int2tc&>(zero_u32)
+    = constant_int2tc(type_pool.get_uint(32), BigInt(0));
+  const_cast<constant_int2tc&>(one_u32)
+    = constant_int2tc(type_pool.get_uint(32), BigInt(1));
+  const_cast<constant_int2tc&>(zero_32)
+    = constant_int2tc(type_pool.get_int(32), BigInt(0));
+  const_cast<constant_int2tc&>(one_32)
+    = constant_int2tc(type_pool.get_int(32), BigInt(1));
+
+  const_cast<constant_int2tc&>(zero_u64)
+    = constant_int2tc(type_pool.get_uint(64), BigInt(0));
+  const_cast<constant_int2tc&>(one_u64)
+    = constant_int2tc(type_pool.get_uint(64), BigInt(1));
+  const_cast<constant_int2tc&>(zero_64)
+    = constant_int2tc(type_pool.get_int(64), BigInt(0));
+  const_cast<constant_int2tc&>(one_64)
+    = constant_int2tc(type_pool.get_int(64), BigInt(1));
+
 }
 
 std::string bool_type2t::field_names [esbmct::num_type_fields]  = {"","","","", ""};
