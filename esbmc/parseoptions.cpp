@@ -237,6 +237,10 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    else
      options.set_option("context-switch", -1);
 
+   if(cmdline.isset("lock-order-check"))
+     options.set_option("lock-order-check", true);
+
+
    if(cmdline.isset("deadlock-check"))
    {
      options.set_option("deadlock-check", true);
@@ -1769,6 +1773,7 @@ void cbmc_parseoptionst::help()
     " --overflow-check             enable arithmetic over- and underflow check\n"
     " --deadlock-check             enable global and local deadlock check with mutex\n"
     " --data-races-check           enable data races check\n"
+    " --lock-order-check           enable for lock acquisition ordering check\n"
     " --atomicity-check            enable atomicity check at visible assignments\n\n"
     " --- k-induction----------------------------------------------------------------\n\n"
     " --base-case                  check the base case\n"
@@ -1786,7 +1791,6 @@ void cbmc_parseoptionst::help()
     " --context-switch nr          limit number of context switches for each thread \n"
     " --state-hashing              enable state-hashing, prunes duplicate states\n"
     " --control-flow-test          enable context switch before control flow tests\n"
-    " --no-lock-check              do not do lock acquisition ordering check\n"
     " --no-por                     do not do partial order reduction\n"
     #ifdef _WIN32
     " --i386-macos                 set MACOS/I386 architecture\n"

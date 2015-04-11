@@ -61,7 +61,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"i386-win32",		switc,		""	},
 { 0,	"ppc-macos",		switc,		""	},
 { 0,	"unsigned-char",	switc,		""	},
-{ 0,	"no-lock-check",	switc,		""	},
+{ 0,	"lock-order-check",	switc,		""	},
 { 0,	"deadlock-check",	switc,		""	},
 { 0,	"string-abstraction",	switc,		""	},
 { 0,	"no-arch",		switc,		""	},
