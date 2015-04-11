@@ -38,12 +38,14 @@ LTDL_INIT
 AC_LANG(C++)
 
 AC_CHECK_LIB([m], [fabs])
-AC_CHECK_LIB([rt], [timer_create],
-    [AS_VAR_APPEND(LIBS, " -lrt ")],
-    [AC_MSG_ERROR([No librt found])], []
-)
 
 AC_CHECK_LIB([pthread], [pthread_create], [AS_VAR_APPEND(LIBS, " -lpthread ")])
+
+dnl Some librt's depend on pthread, so prepend it to the libs
+AC_CHECK_LIB([rt], [timer_create],
+    [AS_VAR_SET(LIBS, " -lrt $LIBS")],
+    [AC_MSG_ERROR([No librt found])], []
+)
 
 AC_CHECK_LIB([gomp], [omp_get_num_threads], [
              AS_VAR_SET(LIBS, " -lgomp $LIBS ")
