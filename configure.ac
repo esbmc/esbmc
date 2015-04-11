@@ -22,6 +22,14 @@ AC_PROG_YACC
 AC_PROG_LEX
 AC_PROG_MAKE_SET
 
+AC_CHECK_PROG(esbmc_has_yacc, $YACC, "yes", "no")
+AS_IF([test "x$esbmc_has_yacc" = "xno"], [AC_MSG_ERROR([Cannot find yacc])])
+AC_CHECK_PROG(esbmc_has_lex, $LEX, "yes", "no")
+AS_IF([test "x$esbmc_has_lex" = "xno"], [AC_MSG_ERROR([Cannot find lex])])
+AC_CHECK_PROG(esbmc_has_awk, $AWK, "yes", "no")
+AS_IF([test "x$esbmc_has_awk" = "xno"], [AC_MSG_ERROR([Cannot find awk])])
+dnl Don't seem to be able to test for sed
+
 AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
 
 AX_BOOST_BASE(1.47, [], [AC_MSG_ERROR([Cannot find boost base dir, please pass it in --with-boost argument or set BOOST_ROOT])])
