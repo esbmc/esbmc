@@ -449,7 +449,8 @@ static inline std::string get_type_id(const type2tc &type)
  *  In this base, contains an expression id used for distinguishing different
  *  classes of expr, in addition we have a type as all exprs should have types.
  */
-class expr2t
+class expr2t;
+class expr2t : public std::enable_shared_from_this<expr2t>
 {
 public:
   /** Enumeration identifying each sort of expr.
