@@ -972,8 +972,6 @@ int cbmc_parseoptionst::doit_k_induction()
   }
 
   // do actual BMC
-  bool res=0;
-  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
 
   //
   // do the base case
@@ -1079,11 +1077,14 @@ int cbmc_parseoptionst::doit_k_induction()
   namespacet ns_forward_condition(context_forward_condition);
   namespacet ns_inductive_step(context_inductive_step);
 
+  bool res=0;
+  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+
   do {
     if(base_case)
     {
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
+      std::cout << opts1.get_option("unwind");
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking base case" << std::endl;
 
@@ -1107,7 +1108,7 @@ int cbmc_parseoptionst::doit_k_induction()
     else if (forward_condition)
     {
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
+      std::cout << opts2.get_option("unwind");
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking forward condition" << std::endl;
 
@@ -1121,6 +1122,8 @@ int cbmc_parseoptionst::doit_k_induction()
       if (!res)
         return res;
 
+      ++k_step;
+
       forward_condition = false; //disable forward condition
     }
     else
@@ -1128,7 +1131,7 @@ int cbmc_parseoptionst::doit_k_induction()
       if(!opts3.get_bool_option("disable-inductive-step"))
       {
         std::cout << std::endl << "*** K-Induction Loop Iteration ";
-        std::cout << i2string((unsigned long) k_step);
+        std::cout << opts3.get_option("unwind");
         std::cout << " ***" << std::endl;
         std::cout << "*** Checking inductive step" << std::endl;
 
@@ -1142,6 +1145,8 @@ int cbmc_parseoptionst::doit_k_induction()
         if (!res)
           return res;
       }
+
+      --k_step;
 
       base_case = true; //enable base case
     }
