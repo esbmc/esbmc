@@ -410,6 +410,15 @@ int cbmc_parseoptionst::doit()
   if(get_goto_program(opts, goto_functions))
     return 6;
 
+  if((cmdline.isset("inductive-step") ||
+    opts.get_bool_option("inductive-step")) &&
+    opts.get_bool_option("disable-inductive-step"))
+  {
+    status("Unable to prove or falsify the property, giving up.");
+    status("VERIFICATION UNKNOWN");
+    return 0;
+  }
+
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
