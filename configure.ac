@@ -22,6 +22,14 @@ AC_PROG_YACC
 AC_PROG_LEX
 AC_PROG_MAKE_SET
 
+AC_CHECK_PROG(esbmc_has_yacc, $YACC, "yes", "no")
+AS_IF([test "x$esbmc_has_yacc" = "xno"], [AC_MSG_ERROR([Cannot find yacc])])
+AC_CHECK_PROG(esbmc_has_lex, $LEX, "yes", "no")
+AS_IF([test "x$esbmc_has_lex" = "xno"], [AC_MSG_ERROR([Cannot find lex])])
+AC_CHECK_PROG(esbmc_has_awk, $AWK, "yes", "no")
+AS_IF([test "x$esbmc_has_awk" = "xno"], [AC_MSG_ERROR([Cannot find awk])])
+dnl Don't seem to be able to test for sed
+
 AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
 
 AX_BOOST_BASE(1.47, [], [AC_MSG_ERROR([Cannot find boost base dir, please pass it in --with-boost argument or set BOOST_ROOT])])
@@ -32,17 +40,20 @@ AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS")
 AM_PROG_AR
 AM_PROG_LEX
 
-LT_INIT
+LT_INIT(static)
 LTDL_INIT
 
 AC_LANG(C++)
 
 AC_CHECK_LIB([m], [fabs])
-AC_CHECK_LIB([rt], [timer_create],
-    [AS_VAR_APPEND(LIBS, " -lrt ")], [], []
-)
 
 AC_CHECK_LIB([pthread], [pthread_create], [AS_VAR_APPEND(LIBS, " -lpthread ")])
+
+dnl Some librt's depend on pthread, so prepend it to the libs
+AC_CHECK_LIB([rt], [timer_create],
+    [AS_VAR_SET(LIBS, " -lrt $LIBS")],
+    [AC_MSG_ERROR([No librt found])], []
+)
 
 AC_CHECK_LIB([gomp], [omp_get_num_threads], [
              AS_VAR_SET(LIBS, " -lgomp $LIBS ")
@@ -114,12 +125,9 @@ AC_CHECK_FUNC(strlcpy, [AC_DEFINE([HAVE_STRLCPY], [true], [strlcpy present])], [
 
 LT_LIB_DLLOAD
 
-dnl A special dance to enable static binary linking if --enable-static is
-dnl passed to configure. Without this, only libraries are built static.
-dnl We also have to use a special LDFLAGS, because this'll be passed down
-dnl to configured projects that don't used libtool, which croak on -all-static
+AC_ARG_ENABLE(static-link, [AS_HELP_STRING([--enable-static-link], Build a static version of esbmc)])
 AS_VAR_SET(ESBMC_LDFLAGS, "")
-AS_IF([test "${enable_static+set}" = set], [
+AS_IF([test "${enable_static_link}" = "yes"], [
   AS_VAR_SET(ESBMC_LDFLAGS, " -all-static ")
 ])
 AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)

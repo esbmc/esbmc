@@ -238,8 +238,12 @@ void add_cprover_library(
     }
   }
 
-  ansi_c_language.merge_context(
-      context, store_ctx, message_handler, "<built-in-library>");
+  if (ansi_c_language.merge_context(
+      context, store_ctx, message_handler, "<built-in-library>")) {
+    // Merging failed
+    std::cerr << "Failed to merge C library" << std::endl;
+    abort();
+  }
 
 }
 #endif

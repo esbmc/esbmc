@@ -237,6 +237,10 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    else
      options.set_option("context-switch", -1);
 
+   if(cmdline.isset("lock-order-check"))
+     options.set_option("lock-order-check", true);
+
+
    if(cmdline.isset("deadlock-check"))
    {
      options.set_option("deadlock-check", true);
@@ -405,6 +409,15 @@ int cbmc_parseoptionst::doit()
 
   if(get_goto_program(opts, goto_functions))
     return 6;
+
+  if((cmdline.isset("inductive-step") ||
+    opts.get_bool_option("inductive-step")) &&
+    opts.get_bool_option("disable-inductive-step"))
+  {
+    status("Unable to prove or falsify the property, giving up.");
+    status("VERIFICATION UNKNOWN");
+    return 0;
+  }
 
   if(cmdline.isset("show-claims"))
   {
@@ -955,8 +968,6 @@ int cbmc_parseoptionst::doit_k_induction()
   }
 
   // do actual BMC
-  bool res=0;
-  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
 
   //
   // do the base case
@@ -1062,11 +1073,14 @@ int cbmc_parseoptionst::doit_k_induction()
   namespacet ns_forward_condition(context_forward_condition);
   namespacet ns_inductive_step(context_inductive_step);
 
+  bool res=0;
+  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+
   do {
     if(base_case)
     {
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
+      std::cout << opts1.get_option("unwind");
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking base case" << std::endl;
 
@@ -1090,7 +1104,7 @@ int cbmc_parseoptionst::doit_k_induction()
     else if (forward_condition)
     {
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
+      std::cout << opts2.get_option("unwind");
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking forward condition" << std::endl;
 
@@ -1104,6 +1118,8 @@ int cbmc_parseoptionst::doit_k_induction()
       if (!res)
         return res;
 
+      ++k_step;
+
       forward_condition = false; //disable forward condition
     }
     else
@@ -1111,7 +1127,7 @@ int cbmc_parseoptionst::doit_k_induction()
       if(!opts3.get_bool_option("disable-inductive-step"))
       {
         std::cout << std::endl << "*** K-Induction Loop Iteration ";
-        std::cout << i2string((unsigned long) k_step);
+        std::cout << opts3.get_option("unwind");
         std::cout << " ***" << std::endl;
         std::cout << "*** Checking inductive step" << std::endl;
 
@@ -1125,6 +1141,8 @@ int cbmc_parseoptionst::doit_k_induction()
         if (!res)
           return res;
       }
+
+      --k_step;
 
       base_case = true; //enable base case
     }
@@ -1765,6 +1783,7 @@ void cbmc_parseoptionst::help()
     " --overflow-check             enable arithmetic over- and underflow check\n"
     " --deadlock-check             enable global and local deadlock check with mutex\n"
     " --data-races-check           enable data races check\n"
+    " --lock-order-check           enable for lock acquisition ordering check\n"
     " --atomicity-check            enable atomicity check at visible assignments\n\n"
     " --- k-induction----------------------------------------------------------------\n\n"
     " --base-case                  check the base case\n"
@@ -1782,7 +1801,6 @@ void cbmc_parseoptionst::help()
     " --context-switch nr          limit number of context switches for each thread \n"
     " --state-hashing              enable state-hashing, prunes duplicate states\n"
     " --control-flow-test          enable context switch before control flow tests\n"
-    " --no-lock-check              do not do lock acquisition ordering check\n"
     " --no-por                     do not do partial order reduction\n"
     #ifdef _WIN32
     " --i386-macos                 set MACOS/I386 architecture\n"

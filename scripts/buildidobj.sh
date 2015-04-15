@@ -23,4 +23,4 @@ else
   echo -n " (dirty tree)" >> $SFILE;
 fi
 
-echo "0x00" | xxd -r >> $SFILE;
+dd if=/dev/zero bs=c count=1 >> $SFILE;

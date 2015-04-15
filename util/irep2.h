@@ -449,7 +449,8 @@ static inline std::string get_type_id(const type2tc &type)
  *  In this base, contains an expression id used for distinguishing different
  *  classes of expr, in addition we have a type as all exprs should have types.
  */
-class expr2t
+class expr2t;
+class expr2t : public std::enable_shared_from_this<expr2t>
 {
 public:
   /** Enumeration identifying each sort of expr.
@@ -4651,6 +4652,14 @@ void init_expr_constants(void);
 
 extern const expr2tc true_expr;
 extern const expr2tc false_expr;
+extern const constant_int2tc zero_u32;
+extern const constant_int2tc one_u32;
+extern const constant_int2tc zero_32;
+extern const constant_int2tc one_32;
+extern const constant_int2tc zero_u64;
+extern const constant_int2tc one_u64;
+extern const constant_int2tc zero_64;
+extern const constant_int2tc one_64;
 extern const constant_int2tc zero_ulong;
 extern const constant_int2tc one_ulong;
 extern const constant_int2tc zero_long;

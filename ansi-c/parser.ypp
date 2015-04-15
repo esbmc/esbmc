@@ -1661,6 +1661,22 @@ gcc_asm_statement:
 	  $$->flavor("gcc");
 	  mto($$, $3);
 	}
+	| TOK_GCC_ASM_PAREN volatile_opt '(' gcc_asm_commands ')' ';'
+	{
+          $$=$1;
+	  statement(*$$, "asm");
+	  $$->flavor("gcc");
+	  $$->operands().swap($4->operands());
+	}
+	| TOK_GCC_ASM_PAREN '{' TOK_ASM_STRING '}'
+	{
+	  $$=$1;
+	  statement(*$$, "asm");
+	  $$->flavor("gcc");
+	  statement(*$$, "asm");
+	  $$->flavor("gcc");
+	  mto($$, $3);
+	}
 	;
 
 
