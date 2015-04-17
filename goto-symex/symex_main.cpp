@@ -127,14 +127,14 @@ goto_symext::symex_step(reachability_treet & art)
       do_simplify(tmp);
 
       if (!is_true(tmp)) {
-	expr2tc tmp2 = tmp;
+        expr2tc tmp2 = tmp;
         expr2tc tmp3 = tmp2;
-	cur_state->guard.guard_expr(tmp2);
+        cur_state->guard.guard_expr(tmp2);
 
         assume(tmp2);
 
-	// we also add it to the state guard
-	cur_state->guard.add(tmp3);
+        // we also add it to the state guard
+        cur_state->guard.add(tmp3);
       }
     }
     cur_state->source.pc++;
@@ -143,17 +143,17 @@ goto_symext::symex_step(reachability_treet & art)
   case ASSERT:
     if (!cur_state->guard.is_false()) {
       if (!no_assertions ||
-          !cur_state->source.pc->location.user_provided()
-          || deadlock_check) {
+        !cur_state->source.pc->location.user_provided()
+        || deadlock_check) {
 
-	std::string msg = cur_state->source.pc->location.comment().as_string();
-	if (msg == "") msg = "assertion";
+        std::string msg = cur_state->source.pc->location.comment().as_string();
+        if (msg == "") msg = "assertion";
 
         expr2tc tmp = instruction.guard;
-	replace_nondet(tmp);
+        replace_nondet(tmp);
 
-	dereference(tmp, false);
-	replace_dynamic_allocation(tmp);
+        dereference(tmp, false);
+        replace_dynamic_allocation(tmp);
 
         claim(tmp, msg);
       }
@@ -186,7 +186,7 @@ goto_symext::symex_step(reachability_treet & art)
 
       replace_nondet(deref_code);
 
-      code_assign2t &assign = to_code_assign2t(deref_code); 
+      code_assign2t &assign = to_code_assign2t(deref_code);
 
       dereference(assign.target, true);
       dereference(assign.source, false);
