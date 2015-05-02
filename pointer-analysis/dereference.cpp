@@ -636,18 +636,11 @@ dereferencet::build_reference_to(
   if (mode == FREE)
     return expr2tc();
 
-  // Try to pull additional offset out of the reference, i.e., member and index
-  // expressions. XXX does this make any difference, surely the offset is in
-  // the offset field.
-  expr2tc additional_offset = compute_pointer_offset(value);
-  expr2tc add = add2tc(o.offset->type, o.offset, additional_offset);
+  expr2tc final_offset = o.offset;
 #if 0
   // FIXME: benchmark this, on tacas.
-  dereference_callback.rename(add);
+  dereference_callback.rename(final_offset);
 #endif
-  expr2tc final_offset = add->simplify();
-  if (is_nil_expr(final_offset))
-    final_offset = add;
 
   // Finally, construct a reference against the base object. value set tracking
   // emits objects with some cruft built on top of them.
