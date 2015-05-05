@@ -306,10 +306,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("k-induction")
      || cmdline.isset("k-induction-parallel"))
   {
-    options.set_option("no-bounds-check", true);
-    options.set_option("no-div-by-zero-check", true);
-    options.set_option("no-pointer-check", true);
-    options.set_option("no-unwinding-assertions", true);
     options.set_option("unwind", i2string(k_step));
   }
 
