@@ -826,6 +826,9 @@ void goto_convertt::look_for_variables_changes(const exprt &expr)
           it != argument_types.end();
           it++)
       {
+        if(it->find("#identifier") == irept())
+          continue;
+
         exprt arg=*it;
         arg.identifier(arg.find("#identifier").id());
         arg.id("symbol");
