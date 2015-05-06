@@ -98,6 +98,8 @@ void goto_convert_functionst::goto_convert()
     convert_function(**it);
   }
 
+  std::cout << "COMEÇOU OUTROS" << std::endl;
+
   // Check if there is any delayed function to be converted
   if(inductive_step && delayed_functions.size())
   {

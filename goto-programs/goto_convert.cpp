@@ -817,8 +817,24 @@ void goto_convertt::look_for_variables_changes(const exprt &expr)
       get_loop_variables(expr.op0());
 
       // Get args variables
-      forall_operands(it, expr.op2())
-        get_loop_variables(*it);
+      const code_typet::argumentst &argument_types =
+        to_code_type(expr.op1().type()).arguments();
+
+      // iterates over the types of the arguments
+      for(code_typet::argumentst::const_iterator
+          it = argument_types.begin();
+          it != argument_types.end();
+          it++)
+      {
+        exprt arg=*it;
+        arg.identifier(arg.find("#identifier").id());
+        arg.id("symbol");
+        arg.remove("#identifier");
+        arg.remove("#base_name");
+        arg.remove("#location");
+
+        get_loop_variables(arg);
+      }
 
       identifier = expr.op1().identifier();
     }
