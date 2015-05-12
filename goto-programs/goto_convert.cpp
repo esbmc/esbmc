@@ -868,6 +868,11 @@ void goto_convertt::look_for_variables_changes(const exprt &expr)
       look_for_variables_changes(symbol.value);
     }
   }
+  if(statement == "decl")
+  {
+    if(expr.operands().size() == 2)
+      get_loop_variables(expr.op0());
+  }
   else
   {
     forall_operands(it, expr)
