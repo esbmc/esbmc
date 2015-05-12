@@ -98,8 +98,6 @@ void goto_convert_functionst::goto_convert()
     convert_function(**it);
   }
 
-  std::cout << "COMEÇOU OUTROS" << std::endl;
-
   // Check if there is any delayed function to be converted
   if(inductive_step && delayed_functions.size())
   {
@@ -116,7 +114,7 @@ void goto_convert_functionst::goto_convert()
 
   if (disable_inductive_step && inductive_step)
   {
-    std::cerr << "warning: esbmc couldn't find any non-deterministic loop "
+    std::cerr << "warning: esbmc couldn't find any infinite loop "
                 << ", so we are not applying the inductive step to this program!"
                 << std::endl;
     disable_k_induction();

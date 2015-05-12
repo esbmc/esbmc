@@ -2378,59 +2378,10 @@ void goto_convertt::check_loop_cond(
 {
   assert(current_block != NULL);
 
-  irep_idt exprid = expr.id();
-
   if (expr.is_true())
   {
     // allow transformations on infinite loops
     current_block->set_active(true);
-  }
-  else if (expr.is_false() || expr.is_constant() || expr.is_index())
-  {
-
-  }
-  else if (exprid == ">" || exprid == ">=" || expr.is_typecast()
-    || expr.is_not())
-  {
-    if (!check_expr_const(expr.op0()))
-      current_block->set_active(true);
-  }
-  else if (exprid == "<" ||  exprid == "<=")
-  {
-    if (!check_expr_const(expr.op1()))
-      current_block->set_active(true);
-  }
-  else if (expr.is_and() || expr.is_or()
-    || exprid == "-" || exprid == "+"
-    || exprid == "*" || exprid == "/"
-    || expr.is_notequal())
-  {
-    assert(expr.operands().size()==2);
-
-    check_loop_cond(expr.op0());
-    check_loop_cond(expr.op1());
-  }
-  else if (expr.is_dereference())
-  {
-    check_loop_cond(expr.op0());
-  }
-  else if (expr.is_symbol())
-  {
-    if (!check_expr_const(expr))
-      current_block->set_active(true);
-  }
-  else if (expr.is_code())
-  {
-    if(expr.statement() == "assign")
-      check_loop_cond(expr.op1());
-  }
-  else
-  {
-    std::cerr << "warning: the expression '" << expr.id()
-      << "' located at line " << expr.location().get_line() << " of "
-      << expr.location().get_file() << " is not supported yet" << std::endl
-      << "warning: inductive step will be disabled" << std::endl;
-    disable_k_induction();
   }
 }
 

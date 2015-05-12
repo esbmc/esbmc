@@ -214,7 +214,7 @@ protected:
   inline bool is_inductive_step_active()
   {
     return inductive_step && (current_block != NULL)
-      && current_block->is_active();
+      && current_block->is_active() && !current_block->has_break();
   }
 
   typedef std::map<irep_idt, const exprt> loop_varst;
