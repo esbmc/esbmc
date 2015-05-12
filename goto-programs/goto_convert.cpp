@@ -900,6 +900,10 @@ void goto_convertt::get_loop_variables(const exprt &expr, bool is_global)
     if(found != std::string::npos)
       return;
 
+    found = expr.identifier().as_string().find("__CPROVER");
+    if(found != std::string::npos)
+      return;
+
     found = expr.identifier().as_string().find("return_value___");
     if(found != std::string::npos)
       return;
