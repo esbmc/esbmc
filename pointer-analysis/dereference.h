@@ -227,7 +227,7 @@ public:
     const type2tc &type,
     const guardt &guard,
     modet mode,
-    std::list<expr2tc> *scalar_step_list);
+    const expr2tc &extra_offset);
 
   /** Does the given expression have a dereference in it somewhere?
    *  @param expr The expression to check for existance of a dereference.
@@ -342,8 +342,9 @@ private:
    *         pointer variable or similar).
    *  @param type The desired outcome type from this dereference.
    *  @param guard The guard of this dereference occuring.
-   *  @param scalar_step_list Optional list of scalar steps that extract a
-   *         scalar expression out of the base object being dereferenced.
+   *  @param lexical_offset Offset introduced by lexical expressions, i.e.
+   *         indexes and member operations applied to a dereferenced struct or
+   *         union.
    *  @param pointer_guard Output expression: this is set to be the guard
    *         against the pointer variable being the same object as the referred
    *         to type.
@@ -356,7 +357,7 @@ private:
     const expr2tc &deref_expr,
     const type2tc &type,
     const guardt &guard,
-    std::list<expr2tc> *scalar_step_list,
+    const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
 
   static const expr2tc &get_symbol(const expr2tc &object);

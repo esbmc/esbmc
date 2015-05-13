@@ -294,7 +294,6 @@ void
 dereferencet::dereference_deref(expr2tc &expr, guardt &guard, modet mode)
 {
   if (is_dereference2t(expr)) {
-    std::list<expr2tc> scalar_step_list;
 
     dereference2t &deref = to_dereference2t(expr);
     // first make sure there are no dereferences in there
@@ -315,8 +314,7 @@ dereferencet::dereference_deref(expr2tc &expr, guardt &guard, modet mode)
     }
 
     expr2tc tmp_obj = deref.value;
-    expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
-                                 &scalar_step_list);
+    expr2tc result = dereference(tmp_obj, deref.type, guard, mode, expr2tc());
     expr = result;
   }
   else
@@ -333,7 +331,7 @@ dereferencet::dereference_deref(expr2tc &expr, guardt &guard, modet mode)
 
     add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
     // Result discarded.
-    expr = dereference(tmp, tmp->type, guard, mode, &scalar_step_list);
+    expr = dereference(tmp, tmp->type, guard, mode, expr2tc());
   }
 }
 
@@ -359,13 +357,9 @@ dereferencet::dereference_expr_nonscalar(
     // first make sure there are no dereferences in there
     dereference_expr(deref.value, guard, dereferencet::READ);
 
-    // Take into account additional offset caused by these nonscalar ops
-    typecast2tc tobytes(type2tc(new pointer_type2t(get_uint8_type())),
-                        deref.value);
-    add2tc obj_with_offs(tobytes->type, tobytes, offset_to_scalar);
-
     const type2tc &to_type = scalar_step_list.back()->type;
-    expr2tc result = dereference(obj_with_offs, to_type, guard, mode, NULL);
+    expr2tc result = dereference(deref.value, to_type, guard, mode,
+        offset_to_scalar);
     return result;
   }
   else if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
@@ -386,13 +380,8 @@ dereferencet::dereference_expr_nonscalar(
 
     add2tc tmp(index.source_value->type, index.source_value, index.index);
 
-    // Take into account additional offset caused by these nonscalar ops
-    typecast2tc tobytes(type2tc(new pointer_type2t(get_uint8_type())),
-                        tmp);
-    add2tc obj_with_offs(tobytes->type, tobytes, offset_to_scalar);
-
     const type2tc &to_type = scalar_step_list.back()->type;
-    expr2tc result = dereference(obj_with_offs, to_type, guard, mode, NULL);
+    expr2tc result = dereference(tmp, to_type, guard, mode, offset_to_scalar);
     return result;
   }
   else if (is_non_scalar_expr(expr))
@@ -467,16 +456,12 @@ dereferencet::dereference(
   const type2tc &to_type,
   const guardt &guard,
   modet mode,
-  std::list<expr2tc> *scalar_step_list)
+  const expr2tc &lexical_offset)
 {
   assert(is_pointer_type(src));
   internal_items.clear();
 
-  // Target type is either a scalar type passed down to us, or we have a chain
-  // of scalar steps available that end up at a scalar type. The result of this
-  // dereference should be a scalar, via whatever means.
-  type2tc type = (!is_nil_type(to_type))
-    ? to_type : scalar_step_list->back()->type;
+  type2tc type = to_type;
 
   // collect objects dest may point to
   value_setst::valuest points_to_set;
@@ -496,7 +481,7 @@ dereferencet::dereference(
     expr2tc new_value, pointer_guard;
 
     new_value = build_reference_to(*it, mode, src, type, guard,
-                                   scalar_step_list, pointer_guard);
+                                   lexical_offset, pointer_guard);
 
     if (!is_nil_expr(new_value))
     {
@@ -599,7 +584,7 @@ dereferencet::build_reference_to(
   const expr2tc &deref_expr,
   const type2tc &type,
   const guardt &guard,
-  std::list<expr2tc> *scalar_step_list,
+  const expr2tc &lexical_offset,
   expr2tc &pointer_guard)
 {
   expr2tc value;
@@ -675,19 +660,17 @@ dereferencet::build_reference_to(
   value = get_base_object(value);
 
   // If offset is unknown, or whatever, instead we have to consider it
-  // nondeterministic, and let the reference builders deal with it. The exact
-  // offset is the offset in the base pointer, plus any additional offset
-  // introduced by the dereferencing expression.
+  // nondeterministic, and let the reference builders deal with it.
   if (!is_constant_int2t(final_offset)) {
     assert(o.alignment != 0);
     final_offset = pointer_offset2tc(pointer_type2(), deref_expr);
-
-    if (scalar_step_list && scalar_step_list->size()) {
-      expr2tc extra_offs = compute_pointer_offset(scalar_step_list->back());
-      extra_offs = typecast2tc(pointer_type2(), extra_offs);
-      final_offset = add2tc(final_offset->type, final_offset, extra_offs);
-    }
   }
+
+  // Add any offset introduced lexically at the dereference site, i.e. member
+  // or index exprs, like foo->bar[3]. If bar is of integer type, we translate
+  // that to be a dereference of foo + extra_offset, resulting in an integer.
+  if (!is_nil_expr(lexical_offset))
+    final_offset = add2tc(final_offset->type, final_offset, lexical_offset);
 
   // If we're in internal mode, collect all of our data into one struct, insert
   // it into the list of internal data, and then bail. The caller does not want
@@ -710,8 +693,7 @@ dereferencet::build_reference_to(
     check_data_obj_access(value, final_offset, type, tmp_guard);
   }
 
-  build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment,
-                      scalar_step_list);
+  build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment);
 
   return value;
 }
