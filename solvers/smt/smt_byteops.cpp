@@ -54,6 +54,10 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
       ;
     } else if (is_fixedbv_type(data.source_value)) {
       ;
+    } else if (is_bool_type(data.source_value)) {
+      // We cdan extract a byte from a bool -- zero or one.
+      typecast2tc cast(get_uint8_type(), data.source_value);
+      source = convert_ast(cast);
     } else {
       std::cerr << "Unrecognized type in operand to byte extract." << std::endl;
       data.dump();
