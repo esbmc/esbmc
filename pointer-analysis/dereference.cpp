@@ -347,24 +347,52 @@ dereferencet::dereference_expr_nonscalar(
 
   if (is_dereference2t(expr))
   {
+    // Determine offset accumulated to this point
+    expr2tc size_check_expr = expr;
+    wrap_in_scalar_step_list(size_check_expr, &scalar_step_list, guard);
+    expr2tc offset_to_scalar = compute_pointer_offset(size_check_expr);
+    expr2tc tmp = offset_to_scalar->simplify();
+    if (!is_nil_expr(tmp))
+      offset_to_scalar = tmp;
+
     dereference2t &deref = to_dereference2t(expr);
     // first make sure there are no dereferences in there
     dereference_expr(deref.value, guard, dereferencet::READ);
-    expr2tc result = dereference(deref.value, type2tc(), guard, mode,
-                                 &scalar_step_list);
+
+    // Take into account additional offset caused by these nonscalar ops
+    typecast2tc tobytes(type2tc(new pointer_type2t(get_uint8_type())),
+                        deref.value);
+    add2tc obj_with_offs(tobytes->type, tobytes, offset_to_scalar);
+
+    const type2tc &to_type = scalar_step_list.back()->type;
+    expr2tc result = dereference(obj_with_offs, to_type, guard, mode, NULL);
     return result;
   }
   else if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
   {
     index2t &index = to_index2t(expr);
 
+    // Determine offset accumulated to this point
+    expr2tc size_check_expr = expr;
+    wrap_in_scalar_step_list(size_check_expr, &scalar_step_list, guard);
+    expr2tc offset_to_scalar = compute_pointer_offset(size_check_expr);
+    expr2tc tmp_offs = offset_to_scalar->simplify();
+    if (!is_nil_expr(tmp_offs))
+      offset_to_scalar = tmp_offs;
+
     // first make sure there are no dereferences in there
     dereference_expr(index.source_value, guard, dereferencet::READ);
     dereference_expr(index.index, guard, dereferencet::READ);
 
     add2tc tmp(index.source_value->type, index.source_value, index.index);
-    expr2tc result = dereference(tmp, type2tc(), guard, mode,
-                                 &scalar_step_list);
+
+    // Take into account additional offset caused by these nonscalar ops
+    typecast2tc tobytes(type2tc(new pointer_type2t(get_uint8_type())),
+                        tmp);
+    add2tc obj_with_offs(tobytes->type, tobytes, offset_to_scalar);
+
+    const type2tc &to_type = scalar_step_list.back()->type;
+    expr2tc result = dereference(obj_with_offs, to_type, guard, mode, NULL);
     return result;
   }
   else if (is_non_scalar_expr(expr))
