@@ -669,8 +669,12 @@ dereferencet::build_reference_to(
   // Add any offset introduced lexically at the dereference site, i.e. member
   // or index exprs, like foo->bar[3]. If bar is of integer type, we translate
   // that to be a dereference of foo + extra_offset, resulting in an integer.
-  if (!is_nil_expr(lexical_offset))
+  if (!is_nil_expr(lexical_offset)) {
     final_offset = add2tc(final_offset->type, final_offset, lexical_offset);
+    expr2tc foo = final_offset->simplify();
+    if (!is_nil_expr(foo))
+      final_offset = foo;
+  }
 
   // If we're in internal mode, collect all of our data into one struct, insert
   // it into the list of internal data, and then bail. The caller does not want
