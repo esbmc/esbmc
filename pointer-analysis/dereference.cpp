@@ -707,8 +707,7 @@ dereferencet::build_reference_to(
 void
 dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
                     const type2tc &type, const guardt &guard,
-                    modet mode, unsigned long alignment,
-                    std::list<expr2tc> *scalar_step_list)
+                    modet mode, unsigned long alignment)
 {
   bool is_const_offs = is_constant_int2t(offset);
 
@@ -717,58 +716,12 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     return;
   }
 
-  // Specialised cases: struct refs to which we apply scalar steps, and
-  // attempting to treat a byte array as a struct.
-  if (is_constant_expr(offset)) {
-    if (scalar_step_list && scalar_step_list->size() != 0) {
-      // Base must be struct or array. However we're going to burst into flames
-      // if we access a byte array as a struct; except that's legitimate when
-      // we've just malloc'd it. So, special case that too.
-      type2tc base_type_of_steps =
-        (*scalar_step_list->front()->get_sub_expr(0))->type;
-
-      // The base type might be symbolic, btw. This is due to the return type
-      // of some dereferences being symbol types; something to chase and
-      // eliminate at a later date.
-      base_type_of_steps = ns.follow(base_type_of_steps);
-
-      if (is_array_type(value->type) &&
-          to_array_type(value->type).subtype->get_width() == 8 &&
-          (!is_array_type(base_type_of_steps) ||
-           !(to_array_type(base_type_of_steps).subtype->get_width() != 8))) {
-        // Right, we're going to be accessing a byte array as not-a-byte-array.
-        // Switch this access together.
-        expr2tc offset_the_third =
-          compute_pointer_offset(scalar_step_list->back());
-#if 0
-        dereference_callback.rename(offset_the_third);
-#endif
-
-        add2tc add2(offset->type, offset, offset_the_third);
-        expr2tc new_offset = add2->simplify();
-        if (is_nil_expr(new_offset))
-          new_offset = add2;
-
-        stitch_together_from_byte_array(value, type, new_offset);
-      } else {
-        construct_struct_ref_from_const_offset(value, offset,
-                                               base_type_of_steps, guard);
-        wrap_in_scalar_step_list(value, scalar_step_list, guard);
-      }
-
-      return;
-    }
-  }
-
   // All struct references to be built should be filtered out immediately
   if (is_structure_type(type)) {
     if (is_const_offs) {
       construct_struct_ref_from_const_offset(value, offset, type, guard);
     } else {
-      construct_struct_ref_from_dyn_offset(value, offset, type, guard,
-                                           scalar_step_list);
-      if (scalar_step_list && scalar_step_list->size() != 0)
-        wrap_in_scalar_step_list(value, scalar_step_list, guard);
+      construct_struct_ref_from_dyn_offset(value, offset, type, guard);
     }
     return;
   }
@@ -790,8 +743,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     assert(uni_type.members.size() != 0);
     value = member2tc(uni_type.members[0], value, uni_type.member_names[0]);
 
-    build_reference_rec(value, offset, type, guard, mode, alignment,
-                        scalar_step_list);
+    build_reference_rec(value, offset, type, guard, mode, alignment);
     return;
   }
 
@@ -1308,8 +1260,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
 void
 dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
-             const expr2tc &offs, const type2tc &type, const guardt &guard,
-             std::list<expr2tc> *scalar_step_list __attribute__((unused)))
+             const expr2tc &offs, const type2tc &type, const guardt &guard)
 {
   // This is much more complicated -- because we don't know the offset here,
   // we need to go through all the possible fields that this might (legally)

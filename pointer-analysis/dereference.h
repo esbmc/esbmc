@@ -381,8 +381,7 @@ private:
 
   void build_reference_rec(expr2tc &value, const expr2tc &offset,
                            const type2tc &type, const guardt &guard, modet mode,
-                           unsigned long alignment = 0,
-                           std::list<expr2tc> *scalar_step_list = NULL);
+                           unsigned long alignment = 0);
   void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                    const type2tc &type);
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
@@ -411,8 +410,7 @@ private:
   void construct_struct_ref_from_dyn_offset(expr2tc &value,
                                         const expr2tc &offs,
                                         const type2tc &type,
-                                        const guardt &guard,
-                                        std::list<expr2tc> *scalar_step_list);
+                                        const guardt &guard);
   void construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
                               const expr2tc &offs, const type2tc &type,
                               const expr2tc &accuml_guard,
