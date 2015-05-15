@@ -726,12 +726,12 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       if(set_claims(goto_functions_base_case))
         return 7;
 
-      context_base_case = context;
-      namespacet ns_base_case(context_base_case);
+      context_base_case_forward_condition = context;
+      namespacet ns_base_case(context_base_case_forward_condition);
       migrate_namespace_lookup = &ns_base_case;
 
       bmct bmc_base_case(goto_functions_base_case, opts1,
-        context_base_case, ui_message_handler);
+        context_base_case_forward_condition, ui_message_handler);
       set_verbosity_msg(bmc_base_case);
 
       context.clear(); // We need to clear the previous context
@@ -801,12 +801,12 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       if(set_claims(goto_functions_forward_condition))
         return 7;
 
-      context_forward_condition = context;
-      namespacet ns_forward_condition(context_forward_condition);
+      context_base_case_forward_condition = context;
+      namespacet ns_forward_condition(context_base_case_forward_condition);
       migrate_namespace_lookup = &ns_forward_condition;
 
       bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
-        context_forward_condition, ui_message_handler);
+        context_base_case_forward_condition, ui_message_handler);
       set_verbosity_msg(bmc_forward_condition);
 
       context.clear(); // We need to clear the previous context
@@ -970,8 +970,8 @@ int cbmc_parseoptionst::doit_k_induction()
   // do the base case
   //
 
-  status("\n*** Generating Base Case ***");
-  goto_functionst goto_functions_base_case;
+  status("\n*** Generating Base Case and Forward Condition ***");
+  goto_functionst goto_functions_base_case_forward_conditions;
 
   optionst opts1;
   opts1.set_option("base-case", true);
@@ -979,23 +979,23 @@ int cbmc_parseoptionst::doit_k_induction()
   opts1.set_option("inductive-step", false);
   get_command_line_options(opts1);
 
-  if(get_goto_program(opts1, goto_functions_base_case))
+  if(get_goto_program(opts1, goto_functions_base_case_forward_conditions))
     return 6;
 
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, get_ui(), goto_functions_base_case);
+    show_claims(ns, get_ui(), goto_functions_base_case_forward_conditions);
     return 0;
   }
 
-  if(set_claims(goto_functions_base_case))
+  if(set_claims(goto_functions_base_case_forward_conditions))
     return 7;
 
-  context_base_case = context;
+  context_base_case_forward_condition = context;
 
-  bmct bmc_base_case(goto_functions_base_case, opts1,
-      context_base_case, ui_message_handler);
+  bmct bmc_base_case(goto_functions_base_case_forward_conditions, opts1,
+    context_base_case_forward_condition, ui_message_handler);
   set_verbosity_msg(bmc_base_case);
 
   context.clear(); // We need to clear the previous context
@@ -1004,32 +1004,14 @@ int cbmc_parseoptionst::doit_k_induction()
   // do the forward condition
   //
 
-  status("\n*** Generating Forward Condition ***");
-  goto_functionst goto_functions_forward_condition;
-
   optionst opts2;
   opts2.set_option("base-case", false);
   opts2.set_option("forward-condition", true);
   opts2.set_option("inductive-step", false);
   get_command_line_options(opts2);
 
-  if(get_goto_program(opts2, goto_functions_forward_condition))
-    return 6;
-
-  if(cmdline.isset("show-claims"))
-  {
-    const namespacet ns(context);
-    show_claims(ns, get_ui(), goto_functions_forward_condition);
-    return 0;
-  }
-
-  if(set_claims(goto_functions_forward_condition))
-    return 7;
-
-  context_forward_condition = context;
-
-  bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
-      context_forward_condition, ui_message_handler);
+  bmct bmc_forward_condition(goto_functions_base_case_forward_conditions, opts2,
+    context_base_case_forward_condition, ui_message_handler);
   set_verbosity_msg(bmc_forward_condition);
 
   context.clear(); // We need to clear the previous context
@@ -1066,8 +1048,7 @@ int cbmc_parseoptionst::doit_k_induction()
       context_inductive_step, ui_message_handler);
   set_verbosity_msg(bmc_inductive_step);
 
-  namespacet ns_base_case(context_base_case);
-  namespacet ns_forward_condition(context_forward_condition);
+  namespacet ns_base_case_forward_condition(context_base_case_forward_condition);
   namespacet ns_inductive_step(context_inductive_step);
 
   do {
@@ -1079,11 +1060,11 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << "*** Checking base case" << std::endl;
 
       // We need to set the right context
-      context.clear();
-      context = context_base_case;
+//      context.clear();
+      context = context_base_case_forward_condition;
 
       // Sins of the fathers, etc
-      migrate_namespace_lookup = &ns_base_case;
+      migrate_namespace_lookup = &ns_base_case_forward_condition;
 
       res = do_bmc(bmc_base_case);
 
@@ -1102,11 +1083,6 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking forward condition" << std::endl;
 
-      // We need to set the right context
-      context.clear();
-      context = context_forward_condition;
-
-      migrate_namespace_lookup = &ns_forward_condition;
       res = do_bmc(bmc_forward_condition);
 
       if (!res)
