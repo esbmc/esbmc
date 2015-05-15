@@ -69,7 +69,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"control-flow-test",	switc,		""	},
 { 0,	"context-switch",	number,		"-1"	},
 { 0,	"time-slice",   	number,		"1"	},
-{ 0,	"k-step",   	number,		"50"	},
+{ 0,	"k-step",   	number,		"100000"	},
 { 0,	"no-por",		switc,		""	},
 { 0,	"data-races-check",	switc,		""	},
 { 0,	"DFS",			switc,		""	},
