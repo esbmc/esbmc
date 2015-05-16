@@ -759,6 +759,179 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   }
 }
 
+enum target_flags {
+  flag_src_scalar = 0,
+  flag_src_array = 1,
+  flag_src_struct = 2, // Unions in future?
+  flag_src_union = 3,
+
+  flag_dst_scalar = 0,
+  flag_dst_array = 4,
+  flag_dst_struct = 8,
+  flag_dst_union = 0xC,
+
+  flag_is_const_offs = 0x10,
+  flag_is_dyn_offs = 0,
+};
+
+void
+dereferencet::build_reference_rec2(expr2tc &value, const expr2tc &offset,
+                    const type2tc &type, const guardt &guard,
+                    modet mode, unsigned long alignment)
+{
+  int flags = 0;
+  if (is_constant_int2t(offset))
+    flags |= flag_is_const_offs;
+
+  // All accesses to code need no further construction
+  if (is_code_type(value) || is_code_type(type)) {
+    return;
+  }
+
+  if (is_struct_type(type))
+    flags |= flag_dst_struct;
+  else if (is_union_type(type))
+    flags |= flag_dst_union;
+  else if (is_scalar_type(type))
+    flags |= flag_dst_scalar;
+  else if (is_array_type(type) || is_string_type(type)) {
+    std::cerr << "Can't construct rvalue reference to array type during dereference";
+    std::cerr << std::endl;
+    std::cerr << "(It isn't allowed by C anyway)";
+    std::cerr << std::endl;
+    abort();
+  } else {
+    std::cerr << "Unrecognized dest type during dereference" << std::endl;
+    type->dump();
+    abort();
+  }
+
+  if (is_struct_type(value))
+    flags |= flag_src_struct;
+  else if (is_union_type(value))
+    flags |= flag_src_union;
+  else if (is_scalar_type(value))
+    flags |= flag_src_scalar;
+  else if (is_array_type(value) || is_string_type(value))
+    flags |= flag_src_array;
+  else {
+    std::cerr << "Unrecognized src type during dereference" << std::endl;
+    value->type->dump();
+    abort();
+  }
+
+  // Consider the myriad of reference construction cases here
+  switch (flags) {
+  case flag_src_scalar | flag_dst_scalar | flag_is_const_offs:
+    // Access a scalar from a scalar.
+    construct_from_const_offset(value, offset, type);
+    break;
+  case flag_src_struct | flag_dst_scalar | flag_is_const_offs:
+    // Extract a scalar from within a structure
+    construct_from_const_struct_offset(value, offset, type, guard, mode);
+    break;
+  case flag_src_array | flag_dst_scalar | flag_is_const_offs:
+    // Extract a scalar from within an array
+    construct_from_array(value, offset, type, guard, mode, alignment);
+    break;
+
+  case flag_src_scalar | flag_dst_struct | flag_is_const_offs:
+    // Attempt to extract a structure from within a scalar. This is not
+    // permitted as the base data objects have incompatible types
+    std::cerr << "Extracting struct from scalar" << std::endl;
+    abort();
+    // XXX FIXME, this should become a smt-time assertion
+  case flag_src_struct | flag_dst_struct | flag_is_const_offs:
+  case flag_src_array | flag_dst_struct | flag_is_const_offs:
+    // Extract a structure from inside an array or another struct. Single
+    // function supports both (which is bad).
+    construct_struct_ref_from_const_offset(value, offset, type, guard);
+    break;
+
+  case flag_src_scalar | flag_dst_union | flag_is_const_offs:
+    // Attempt to extract a union from within a scalar. This is not
+    // permitted as the base data objects have incompatible types
+    std::cerr << "Extracting union from scalar" << std::endl;
+    abort();
+    // XXX FIXME, this should become a smt-time assertion
+  case flag_src_struct | flag_dst_union | flag_is_const_offs:
+  case flag_src_array | flag_dst_union | flag_is_const_offs:
+    // Extract a structure from inside an array or another struct. Single
+    // function supports both (which is bad).
+    construct_struct_ref_from_const_offset(value, offset, type, guard);
+    break;
+
+
+  case flag_src_scalar | flag_dst_scalar | flag_is_dyn_offs:
+    // Access a scalar within a scalar (dyn offset)
+    construct_from_dyn_offset(value, offset, type);
+    break;
+  case flag_src_struct | flag_dst_scalar | flag_is_dyn_offs:
+    // Extract a scalar from within a structure (dyn offset)
+    construct_from_dyn_struct_offset(value, offset, type, guard, alignment,
+                                     mode);
+    break;
+  case flag_src_array | flag_dst_scalar | flag_is_dyn_offs:
+    // Extract a scalar from within an array (dyn offset)
+    construct_from_array(value, offset, type, guard, mode, alignment);
+    break;
+
+  case flag_src_scalar | flag_dst_struct | flag_is_dyn_offs:
+    // Attempt to extract a structure from within a scalar. This is not
+    // permitted as the base data objects have incompatible types
+    std::cerr << "Extracting struct from scalar" << std::endl;
+    abort();
+    // XXX FIXME, this should become a smt-time assertion
+  case flag_src_struct | flag_dst_struct | flag_is_dyn_offs:
+  case flag_src_array | flag_dst_struct | flag_is_dyn_offs:
+    // Extract a structure from inside an array or another struct. Single
+    // function supports both (which is bad).
+    construct_struct_ref_from_dyn_offset(value, offset, type, guard);
+    break;
+
+  case flag_src_scalar | flag_dst_union | flag_is_dyn_offs:
+    // Attempt to extract a union from within a scalar. This is not
+    // permitted as the base data objects have incompatible types
+    std::cerr << "Extracting union from scalar" << std::endl;
+    abort();
+    // XXX FIXME, this should become a smt-time assertion
+  case flag_src_struct | flag_dst_union | flag_is_dyn_offs:
+  case flag_src_array | flag_dst_union | flag_is_dyn_offs:
+    // Extract a structure from inside an array or another struct. Single
+    // function supports both (which is bad).
+    construct_struct_ref_from_dyn_offset(value, offset, type, guard);
+    break;
+
+
+  case flag_src_union | flag_dst_union | flag_is_const_offs:
+    construct_struct_ref_from_const_offset(value, offset, type, guard);
+    break;
+  case flag_src_union | flag_dst_union | flag_is_dyn_offs:
+    construct_struct_ref_from_dyn_offset(value, offset, type, guard);
+    break;
+
+  // All union-src situations are currently approximations
+  case flag_src_union | flag_dst_scalar | flag_is_const_offs:
+  case flag_src_union | flag_dst_struct | flag_is_const_offs:
+  case flag_src_union | flag_dst_scalar | flag_is_dyn_offs:
+  case flag_src_union | flag_dst_struct | flag_is_dyn_offs:
+  {
+    // Just perform an access to the first element thing.
+    const union_type2t &uni_type = to_union_type(value->type);
+    assert(uni_type.members.size() != 0);
+    value = member2tc(uni_type.members[0], value, uni_type.member_names[0]);
+
+    build_reference_rec(value, offset, type, guard, mode, alignment);
+    break;
+  }
+
+  // No scope for constructing references to arrays
+  default:
+    std::cerr << "Unrecognized input to build_reference_rec" << std::endl;
+    abort();
+  }
+}
+
 void
 dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
                                    const type2tc &type, const guardt &guard,
