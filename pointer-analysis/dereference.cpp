@@ -704,61 +704,6 @@ dereferencet::build_reference_to(
 
 /************************** Rereference building code *************************/
 
-void
-dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
-                    const type2tc &type, const guardt &guard,
-                    modet mode, unsigned long alignment)
-{
-  bool is_const_offs = is_constant_int2t(offset);
-
-  // All accesses to code need no further construction
-  if (is_code_type(value) || is_code_type(type)) {
-    return;
-  }
-
-  // All struct references to be built should be filtered out immediately
-  if (is_structure_type(type)) {
-    if (is_const_offs) {
-      construct_struct_ref_from_const_offset(value, offset, type, guard);
-    } else {
-      construct_struct_ref_from_dyn_offset(value, offset, type, guard);
-    }
-    return;
-  }
-
-  if (is_struct_type(value)) {
-    assert(!is_struct_type(type));
-    if (is_const_offs) {
-      construct_from_const_struct_offset(value, offset, type, guard, mode);
-    } else {
-      construct_from_dyn_struct_offset(value, offset, type, guard, alignment,
-                                       mode);
-    }
-    return;
-  }
-
-  if (is_union_type(value)) {
-    // Huuurrrr. Just perform an access to the first element thing.
-    const union_type2t &uni_type = to_union_type(value->type);
-    assert(uni_type.members.size() != 0);
-    value = member2tc(uni_type.members[0], value, uni_type.member_names[0]);
-
-    build_reference_rec(value, offset, type, guard, mode, alignment);
-    return;
-  }
-
-  if (is_array_type(value) || is_string_type(value)) {
-    construct_from_array(value, offset, type, guard, mode, alignment);
-    return;
-  }
-
-  if (is_const_offs) {
-    construct_from_const_offset(value, offset, type);
-  } else {
-    construct_from_dyn_offset(value, offset, type);
-  }
-}
-
 enum target_flags {
   flag_src_scalar = 0,
   flag_src_array = 1,
@@ -775,7 +720,7 @@ enum target_flags {
 };
 
 void
-dereferencet::build_reference_rec2(expr2tc &value, const expr2tc &offset,
+dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
                     const type2tc &type, const guardt &guard,
                     modet mode, unsigned long alignment)
 {
