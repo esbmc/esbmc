@@ -1194,6 +1194,21 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
   assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
   assert(is_scalar_type(value));
 
+  // If source and dest types match, then this access either is a direct hit
+  // with offset == 0, or is out of bounds and should be a free value.
+  if (base_type_eq(value->type, type, ns)) {
+    // Is offset zero?
+    constant_int2tc zero_val(offset->type, BigInt(0));
+    equality2tc eq(offset, zero_val);
+
+    // Yes -> value, no -> free value
+    expr2tc free_result = make_failed_symbol(type);
+    if2tc result(type, eq, value, free_result);
+
+    value = result;
+    return;
+  }
+
   // Ensure we're dealing with a BV.
   if (!is_number_type(value->type)) {
     value = typecast2tc(get_uint_type(value->type->get_width()), value);
