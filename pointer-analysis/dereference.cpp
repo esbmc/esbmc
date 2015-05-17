@@ -920,51 +920,21 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
   //  2) Stitch everything together with extracts and concats.
 
   // Can we just select this out?
-  if ((is_const_offset && deref_size <= subtype_size) ||
-      (!is_const_offset && alignment >= subtype_size && deref_size <= subtype_size)) {
-    // We're fine for just indexing and applying appropriate casts/extracts.
-    // And here it is:
-    value = index2tc(arr_subtype, value, div2);
-
-    // Now assert that the appropriate alignment was used. There must be some
-    // much more efficient way of doing this.
-    // XXX short circuit byte accesses. Also, alignment might already guarentee
-    // this.
-    expr2tc mask_expr = gen_ulong(deref_size -1);
-    bitand2tc anded(mask_expr->type, mask_expr, mod2);
-    notequal2tc neq(anded, gen_ulong(0));
-
-    guardt tmp_guard = guard;
-    tmp_guard.add(neq);
-    alignment_failure("Incorrect alignment when accessing array element",
-                      tmp_guard);
-
-    // Finally, coerce the element to the final type. We may need to typecast
-    // it; we might also need to byte extract it.
-    if (deref_size == subtype_size) {
-      // Just need to cast -- XXX this might break with endianness concerns.
-      // If the condition here holds, it doesn't matter whether or not we're
-      // const or dynamic offset.
-      if (type != arr_subtype)
-        value = typecast2tc(type, value);
-    } else {
-      // Badness has occurred; byte extract is needed.
-      // XXX -- this should actually extract and stitch.
-      if (type->get_width() == 8)
-        // You can always read a byte out of anything.
-        value = byte_extract2tc(get_uint_type(deref_size * 8), value, mod2,
-                                is_big_endian);
-      else
-        // XXX XXX XXX -- bail for the moment. We're now producing invalid
-        // formula as a result of the fact that byte extract always gets
-        // converted to one byte, rather than what we request.
-        value = make_failed_symbol(type);
-    }
+  bool is_correctly_aligned = false;
+  if (is_const_offset) {
+    // Constant offset is aligned with array boundaries?
+    uint64_t offs = to_constant_int2t(offset).constant_value.to_ulong();
+    is_correctly_aligned = ((offs % subtype_size) == 0);
   } else {
-    // This either isn't aligned or is the wrong size. That might be fine if
-    // further alignment rules are observed, so perform relevant assertions
-    // and then stitch together from byte extracts.
+    // Dyn offset -- is alignment guarantee strong enough?
+    is_correctly_aligned = (alignment >= subtype_size);
+  }
 
+  // Additional complexity occurs if it's aligned but overflows boundaries
+  bool overflows_boundaries = (deref_size > subtype_size);
+
+  // No alignment guarantee: assert that it's correct.
+  if (!is_correctly_aligned) {
     expr2tc mask_expr = gen_ulong(deref_size -1);
     bitand2tc anded(mask_expr->type, mask_expr, mod2);
     notequal2tc neq(anded, gen_ulong(0));
@@ -973,7 +943,16 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
     tmp_guard.add(neq);
     alignment_failure("Incorrect alignment when accessing array element",
                       tmp_guard);
+  }
 
+  if (!overflows_boundaries) {
+    // Just extract an element and apply other standard extraction stuff.
+    // No scope for stitching being required.
+    value = index2tc(arr_subtype, value, div2);
+    build_reference_rec(value, mod2, type, guard, mode, alignment);
+  } else {
+    // Might read from more than one element, legitimately. Requires stitching.
+    // Alignment assertion / guarantee ensures we don't do something silly.
     // This will construct from whatever the subtype is...
     stitch_together_from_byte_array(value, type, div2);
   }
