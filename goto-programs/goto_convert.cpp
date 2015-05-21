@@ -2574,83 +2574,15 @@ Function: goto_convertt::replace_cond
 
 void goto_convertt::replace_cond(
   exprt &tmp,
-  goto_programt &dest)
+  goto_programt &dest __attribute__((unused)))
 {
-  irep_idt exprid = tmp.id();
-
   if (tmp.is_true())
   {
     //replace_infinite_loop(tmp, dest);
   }
-  else if (exprid == ">" ||  exprid == ">=")
-  {
-    assert(tmp.operands().size()==2);
-    if (is_for_block()) {
-      if (check_op_const(tmp.op0(), tmp.location()))
-        return ;
-    } else if (tmp.op0().is_typecast() || tmp.op1().is_typecast())
-    	return ;
-
-    set_expr_to_nondet(tmp, dest);
-
-  }
-  else if (exprid == "<" ||  exprid == "<=")
-  {
-    if (is_for_block() || is_while_block())
-      if (check_op_const(tmp.op1(), tmp.location()))
-        return ;
-
-    nondet_varst::const_iterator cache_result;
-    if (tmp.op1().is_constant())
-    {
-      cache_result = nondet_vars.find(tmp.op0());
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(tmp.op0(), dest);
-    }
-    else
-    {
-      cache_result = nondet_vars.find(tmp.op1());
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(tmp.op1(), dest);
-    }
-  }
-  else if (tmp.is_and() || tmp.is_or())
-  {
-    assert(tmp.operands().size()==2);
-
-    //check whether we have the same variable
-    if (!tmp.op0().op0().is_constant())
-    {
-      if ((tmp.op0().op0() == tmp.op1().op0()) ||
-          (tmp.op0().op0() == tmp.op1().op1()))
-      {
-        print_msg(tmp);
-      }
-    }
-    else if (!tmp.op0().op1().is_constant())
-    {
-      if ((tmp.op0().op1() == tmp.op1().op0()) ||
-          (tmp.op0().op1() == tmp.op1().op1()))
-      {
-        print_msg(tmp);
-      }
-    }
-    replace_cond(tmp.op0(),dest);
-    replace_cond(tmp.op1(),dest);
-  }
-  else if (tmp.is_notequal() || tmp.is_typecast())
-  {
-    if (!tmp.op0().is_symbol())
-      print_msg(tmp);
-
-    set_expr_to_nondet(tmp, dest);
-  }
   else
   {
-    std::cerr << "warning: the expression '" << tmp.id()
-	      << "' located at line " << tmp.location().get_line()
-	      << " of " << tmp.location().get_file()
-  	      << " is not supported yet" << std::endl;
+    std::cerr << "Warning: Inductive step is only applied on infinite loops" << std::endl;
     disable_k_induction();
   }
 }
