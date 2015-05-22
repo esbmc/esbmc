@@ -471,6 +471,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
   // do actual BMC
   bool res=0;
   u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+  if(cmdline.isset("unlimited-k-steps"))
+    max_k_step = -1;
+
   int whoAmI=-1;
 
   if (pipe(commPipe))
@@ -962,10 +965,6 @@ int cbmc_parseoptionst::doit_k_induction()
     return 0;
   }
 
-  // do actual BMC
-  bool res=0;
-  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
-
   //
   // do the base case
   //
@@ -1050,6 +1049,11 @@ int cbmc_parseoptionst::doit_k_induction()
 
   namespacet ns_base_case_forward_condition(context_base_case_forward_condition);
   namespacet ns_inductive_step(context_inductive_step);
+
+  bool res=0;
+  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+  if(cmdline.isset("unlimited-k-steps"))
+    max_k_step = -1;
 
   do {
     if(base_case)
@@ -1756,9 +1760,10 @@ void cbmc_parseoptionst::help()
     " --forward-condition          check the forward condition\n"
     " --inductive-step             check the inductive step\n"
     " --k-induction                prove by k-induction \n"
-    " --k-induction-parallel       prove by k-induction, running ech step on a separate process\n"
+    " --k-induction-parallel       prove by k-induction, running each step on a separate process\n"
     " --constrain-all-states       remove all redundant states in the inductive step\n"
-    " --k-step nr                  set the k time step (default is 50) \n\n"
+    " --k-step nr                  set max k-step (default is 50) \n\n"
+    " --unlimited-k-steps          set max k-step to 4,294,967,295"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
     " --round-robin                use the round robin scheduling approach\n"
