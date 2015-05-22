@@ -583,6 +583,8 @@ bool bmct::run_thread()
     }
 
     ret = run_solver(*equation, runtime_solver);
+    delete equation;
+    delete result;
     return ret;
   }
 
