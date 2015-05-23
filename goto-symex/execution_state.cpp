@@ -1042,7 +1042,7 @@ dfs_execution_statet::~dfs_execution_statet(void)
   // Delete target; or if we're encoding at runtime, pop a context.
   if (smt_during_symex)
     target->pop_ctx();
-  else
+  else if (target != NULL)
     delete target;
 }
 

@@ -580,6 +580,8 @@ bool bmct::run_thread()
     }
 
     ret = run_solver(*equation, runtime_solver);
+
+    symex->get_cur_state().target = NULL;
     delete equation;
     delete result;
     return ret;
