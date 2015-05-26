@@ -2,8 +2,27 @@
 
 set -x
 
+output_suffix=""
+while getopts "n:" opt; do
+  case $opt in
+    n)
+      output_suffix=$OPTARG
+      ;;
+    :)
+      echo "Option -$OPTARG requires argument" >&2
+      exit 1
+      ;;
+    \?)
+      echo "Invalid option -$OPTARG" >&2
+      exit 1
+      ;;
+  esac
+done
+
+shift $((OPTIND-1))
+
 if test $# != 1; then
-  echo "Usage: scripts/export-pub.sh output.tgz" >&2
+  echo "Usage: scripts/export-pub.sh [-n outputsuffix] output.tgz" >&2
   exit 1
 fi
 
@@ -15,10 +34,16 @@ fi
 # 5) Tar back up as a release
 
 tmpfile=`mktemp /tmp/esbmc_export_XXXXXX`
+
 tmpdir=`mktemp -d /tmp/esbmc_export_XXXXXX`
+origtmpdir=$tmpdir
+if test ! -z "$output_suffix"; then
+  tmpdir="$tmpdir/$output_suffix"
+  mkdir $tmpdir
+fi
 
 function fin () {
-  rm -rf $tmpdir
+  rm -rf $origtmpdir
   if rm $tmpfile 2>/dev/null; then
     echo "" > /dev/null;
   fi
