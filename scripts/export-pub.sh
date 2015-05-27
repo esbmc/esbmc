@@ -67,6 +67,7 @@ sh -c "cd $tmpdir; scripts/autoboot.sh"
 rm -rf $tmpdir/regression
 rm -rf $tmpdir/papers
 rm -rf $tmpdir/scripts/export-pub.sh
+rm -rf $tmpdir/docs
 
 # Done. Tar back up.
 
