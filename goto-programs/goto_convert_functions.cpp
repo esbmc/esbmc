@@ -77,9 +77,6 @@ Function: goto_convert_functionst::goto_convert
 
 void goto_convert_functionst::goto_convert()
 {
-  // If it is the inductive step, it will add the global variables to the statet
-  add_global_variable_to_state();
-
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
@@ -98,27 +95,7 @@ void goto_convert_functionst::goto_convert()
     convert_function(**it);
   }
 
-  // Check if there is any delayed function to be converted
-  if(inductive_step && delayed_functions.size())
-  {
-    for(symbol_listt::iterator
-        it=delayed_functions.begin();
-        it!=delayed_functions.end();
-        it++)
-    {
-      convert_function(**it);
-    }
-  }
-
   functions.compute_location_numbers();
-
-  if (disable_inductive_step && inductive_step)
-  {
-    std::cerr << "warning: esbmc couldn't find any infinite loop "
-                << ", so we are not applying the inductive step to this program!"
-                << std::endl;
-    disable_k_induction();
-  }
 }
 
 /*******************************************************************\
@@ -229,34 +206,6 @@ Function: goto_convert_functionst::convert_function
 
 void goto_convert_functionst::convert_function(symbolt &symbol)
 {
-  // Trying to convert a function during inductive step
-  // If the function is inside a loop, we must know which loop to
-  // correct replace if/switchs
-  if (inductive_step)
-  {
-    const exprt& inside_loop = symbol.value.find_expr("inside_loop");
-
-    if(inside_loop.is_not_nil())
-    {
-      switch(atoi(inside_loop.id().c_str()))
-      {
-        case 0:
-          symbol.value.set("inside_loop", "-1");
-          delayed_functions.push_back(&symbol);
-          return;
-
-        default:
-          // Restore current_block
-          assert(current_block == NULL);
-          current_block = states_map[atoi(inside_loop.id().c_str())];
-          break;
-
-        case -1:
-          break;
-      }
-    }
-  }
-
   irep_idt identifier = symbol.name;
 
   // Apply a SFINAE test: discard unused C++ templates.
@@ -351,22 +300,6 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   if(hide(f.body))
     f.type.hide(true);
-
-  if (inductive_step)
-  {
-    const exprt& inside_loop = symbol.value.find_expr("inside_loop");
-
-    switch(atoi(inside_loop.id().c_str()))
-    {
-      case 0:
-      case -1:
-        break;
-
-      default:
-        current_block = NULL;
-        break;
-    }
-  }
 }
 
 /*******************************************************************\

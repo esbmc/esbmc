@@ -546,13 +546,6 @@ void goto_convertt::convert_sideeffect(
       throw 0;
     }
 
-    if((current_block != NULL) && inductive_step)
-    {
-      symbolst::iterator it=context.symbols.find(expr.op0().identifier());
-      if(it!=context.symbols.end())
-        it->second.value.add("assignment_inside_loop")=irept("1");
-    }
-
     exprt rhs;
 
     if(statement=="postincrement" ||
@@ -794,154 +787,6 @@ void goto_convertt::convert_expression(
 
 /*******************************************************************\
 
-Function: goto_convertt::look_for_variables_changes
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::look_for_variables_changes(const exprt &expr)
-{
-  const irep_idt &statement=expr.statement();
-
-  if (statement == "function_call")
-  {
-    irep_idt identifier;
-    if (expr.is_code())
-    {
-      // Get return
-      get_loop_variables(expr.op0());
-
-      // Get args variables
-      const code_typet::argumentst &argument_types =
-        to_code_type(expr.op1().type()).arguments();
-
-      // iterates over the types of the arguments
-      for(code_typet::argumentst::const_iterator
-          it = argument_types.begin();
-          it != argument_types.end();
-          it++)
-      {
-        if(it->find("#identifier") == irept())
-          continue;
-
-        exprt arg=*it;
-        arg.identifier(arg.find("#identifier").id());
-        arg.id("symbol");
-        arg.remove("#identifier");
-        arg.remove("#base_name");
-        arg.remove("#location");
-
-        get_loop_variables(arg);
-      }
-
-      identifier = expr.op1().identifier();
-    }
-    else if (expr.id() == "sideeffect")
-    {
-      // Get args variables
-      forall_operands(it, expr.op1())
-        get_loop_variables(*it);
-
-      identifier = expr.op0().identifier();
-    }
-
-    symbolst::iterator s_it=context.symbols.find(identifier);
-    if(s_it!=context.symbols.end())
-    {
-      symbolt &symbol=s_it->second;
-      if(symbol.value.is_nil())
-        return;
-
-      // It must be marked to be inside a loop
-      assert(symbol.value.add("inside_loop") != nil_exprt());
-
-      // Update the value with the loop number
-      symbol.value.set("inside_loop",
-        integer2string(current_block->get_state_counter()));
-
-      // Look through the function body for variables
-      look_for_variables_changes(symbol.value);
-    }
-  }
-  if(statement == "decl")
-  {
-    if(expr.operands().size() == 2)
-      get_loop_variables(expr.op0());
-  }
-  else
-  {
-    forall_operands(it, expr)
-      look_for_variables_changes(*it);
-  }
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::get_struct_components
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::get_loop_variables(const exprt &expr, bool is_global)
-{
-  if (expr.is_symbol() && expr.type().id() != "code")
-  {
-    std::size_t found = expr.identifier().as_string().find("__ESBMC_");
-    if(found != std::string::npos)
-      return;
-
-    found = expr.identifier().as_string().find("__CPROVER");
-    if(found != std::string::npos)
-      return;
-
-    found = expr.identifier().as_string().find("return_value___");
-    if(found != std::string::npos)
-      return;
-
-    if(expr.identifier().as_string() == "c::__func__"
-       || expr.identifier().as_string() == "c::__PRETTY_FUNCTION__"
-       || expr.identifier().as_string() == "c::__LINE__"
-       || expr.identifier().as_string() == "c::pthread_lib::num_total_threads"
-       || expr.identifier().as_string() == "c::pthread_lib::num_threads_running")
-      return;
-
-    if(expr.location().file().as_string() == "<built-in>"
-       || expr.cmt_location().file().as_string() == "<built-in>"
-       || expr.type().location().file().as_string() == "<built-in>"
-       || expr.type().cmt_location().file().as_string() == "<built-in>")
-      return;
-
-    // That means that we're trying to insert the global variables, but
-    // there is no state created here, so add to the global_vars and return
-    if (is_global)
-    {
-      global_vars.insert(
-        std::pair<irep_idt, const exprt>(expr.identifier(), expr));
-      return;
-    }
-
-    if (current_block != NULL)
-      current_block->add_expr_to_state(expr);
-  }
-  else
-  {
-    forall_operands(it, expr)
-      get_loop_variables(*it, is_global);
-  }
-}
-
-/*******************************************************************\
-
 Function: goto_convertt::convert_decl
 
   Inputs:
@@ -1081,13 +926,6 @@ void goto_convertt::convert_assign(
     throw "assignment statement takes two operands";
   }
 
-  if((current_block != NULL) && inductive_step)
-  {
-    symbolst::iterator it=context.symbols.find(code.op0().identifier());
-    if(it!=context.symbols.end())
-      it->second.value.add("assignment_inside_loop")=irept("1");
-  }
-
   exprt lhs=code.lhs(),
         rhs=code.rhs();
 
@@ -1159,9 +997,6 @@ void goto_convertt::convert_assign(
       if(atomic == -1)
         dest.add_instruction(ATOMIC_END);
   }
-
-  if (inductive_step && current_block != NULL && lhs.type().id() != "empty")
-    get_loop_variables(lhs);
 }
 
 /*******************************************************************\
@@ -1671,231 +1506,10 @@ void goto_convertt::convert_assume(
   t->location=code.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::update_state_vector
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::update_state_vector(
-  array_typet state_vector,
-  goto_programt &dest)
-{
-  //set the type of the state vector
-  state_vector.subtype() = current_block->get_state();
-
-  std::string identifier;
-  identifier = "kindice$"+i2string(current_block->get_state_counter());
-
-  exprt lhs_index = symbol_exprt(identifier, int_type());
-  exprt new_expr(exprt::with, state_vector);
-  exprt lhs_array("symbol", state_vector);
-  exprt rhs("symbol", current_block->get_state());
-
-  std::string identifier_lhs, identifier_rhs;
-  identifier_lhs = "s$"+i2string(current_block->get_state_counter());
-  identifier_rhs = "cs$"+i2string(current_block->get_state_counter());
-
-  lhs_array.identifier(identifier_lhs);
-  rhs.identifier(identifier_rhs);
-
-  //s[k]=cs
-  new_expr.reserve_operands(3);
-  new_expr.copy_to_operands(lhs_array);
-  new_expr.copy_to_operands(lhs_index);
-  new_expr.move_to_operands(rhs);
-  code_assignt new_assign(lhs_array,new_expr);
-  copy(new_assign, ASSIGN, dest);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::assume_all_state_vector
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::assume_all_state_vector(
-  array_typet state_vector,
-  goto_programt &dest)
-{
-  // Temp symbol that will be used to count up to kindice
-  exprt tmp_symbol = gen_zero(int_type());
-  make_temp_symbol(tmp_symbol, dest);
-
-  // Condition (tmp_symbol <= kindice)
-  exprt lhs_index =
-    symbol_exprt("kindice$"+i2string(current_block->get_state_counter()), int_type());
-  exprt cond("<=", typet("bool"));
-  cond.copy_to_operands(tmp_symbol, lhs_index);
-
-  // save break/continue targets
-  break_continue_targetst old_targets(targets);
-
-  // do the v label
-  goto_programt tmp_v;
-  goto_programt::targett v=tmp_v.add_instruction();
-
-  // do the z label
-  goto_programt tmp_z;
-  goto_programt::targett z=tmp_z.add_instruction(SKIP);
-
-  // Increment (tmp_symbol++)
-  side_effect_exprt postincrement("postincrement");
-  postincrement.type() = int_type();
-  postincrement.copy_to_operands(tmp_symbol);
-
-  code_expressiont increment_expression;
-  increment_expression.copy_to_operands(postincrement);
-
-  // do the x label
-  goto_programt tmp_x;
-  convert(to_code(increment_expression), tmp_x);
-
-  // do the u label
-    goto_programt::targett u=v;
-
-  // set the targets
-  targets.set_break(z);
-  targets.set_continue(tmp_x.instructions.begin());
-
-  // v: if(!c) goto z;
-  v->make_goto(z);
-  expr2tc tmp_cond;
-  migrate_expr(cond, tmp_cond);
-  tmp_cond = not2tc(tmp_cond);
-  v->guard = tmp_cond;
-
-  // do the w label
-  goto_programt tmp_w;
-  //set the type of the state vector
-  state_vector.subtype() = current_block->get_state();
-
-  exprt new_expr(exprt::index, current_block->get_state());
-  exprt lhs_array("symbol", state_vector);
-  exprt rhs("symbol", current_block->get_state());
-
-  lhs_array.identifier("s$"+i2string(current_block->get_state_counter()));
-  rhs.identifier("cs$"+i2string(current_block->get_state_counter()));
-
-  //s[k]
-  new_expr.reserve_operands(2);
-  new_expr.copy_to_operands(lhs_array);
-  new_expr.copy_to_operands(tmp_symbol);
-
-  //assume(s[k]!=cs)
-  exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
-  assume_cond(result_expr, false, tmp_w);
-
-  // y: goto u;
-  goto_programt tmp_y;
-  goto_programt::targett y=tmp_y.add_instruction();
-  y->make_goto(u);
-  y->guard = true_expr;
-
-  dest.destructive_append(tmp_v);
-  dest.destructive_append(tmp_w);
-  dest.destructive_append(tmp_x);
-  dest.destructive_append(tmp_y);
-  dest.destructive_append(tmp_z);
-
-  // restore break/continue
-  targets.restore(old_targets);
-
-  //kindice=kindice+1
-  exprt one_expr = gen_one(int_type());
-  exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
-  code_assignt new_assign_plus(lhs_index,rhs_expr);
-  copy(new_assign_plus, ASSIGN, dest);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::assume_state_vector
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::assume_state_vector(
-  array_typet state_vector,
-  goto_programt &dest)
-{
-  if(assume_all_states)
-  {
-    assume_all_state_vector(state_vector, dest);
-    return;
-  }
-
-  //set the type of the state vector
-  state_vector.subtype() = current_block->get_state();
-
-  std::string identifier;
-  identifier = "kindice$"+i2string(current_block->get_state_counter());
-
-  exprt lhs_index = symbol_exprt(identifier, int_type());
-  exprt new_expr(exprt::index, current_block->get_state());
-  exprt lhs_array("symbol", state_vector);
-  exprt rhs("symbol", current_block->get_state());
-
-  std::string identifier_lhs, identifier_rhs;
-
-  identifier_lhs = "s$"+i2string(current_block->get_state_counter());
-  identifier_rhs = "cs$"+i2string(current_block->get_state_counter());
-
-  lhs_array.identifier(identifier_lhs);
-  rhs.identifier(identifier_rhs);
-
-  //s[k]
-  new_expr.reserve_operands(2);
-  new_expr.copy_to_operands(lhs_array);
-  new_expr.copy_to_operands(lhs_index);
-
-  //assume(s[k]!=cs)
-  exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
-  assume_cond(result_expr, false, dest);
-
-  //kindice=kindice+1
-  exprt one_expr = gen_one(int_type());
-  exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
-  code_assignt new_assign_plus(lhs_index,rhs_expr);
-  copy(new_assign_plus, ASSIGN, dest);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_for
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
-  if (inductive_step || base_case || forward_condition)
-    push_new_loop_block();
-
   if(code.operands().size()!=4)
   {
     err_location(code);
@@ -1906,17 +1520,11 @@ void goto_convertt::convert_for(
   //  A; while(c) { P; B; }
   //-----------------------------
   //    A;
-  // t: cs=nondet
   // u: sideeffects in c
-  // c: k=0
   // v: if(!c) goto z;
-  // f: s[k]=cs
   // w: P;
   // x: B;               <-- continue target
-  // d: cs assign
-  // e: assume
   // y: goto u;
-  // z: ;                <-- break target
   // g: assume(!c)
 
   // A;
@@ -1929,24 +1537,7 @@ void goto_convertt::convert_for(
 
   exprt tmp=code.op1();
 
-  if (inductive_step)
-  {
-    exprt tmp_op0 = code.op0();
-    check_loop_cond(tmp_op0);
-    check_loop_cond(tmp);
-  }
-
   exprt cond=tmp;
-
-  array_typet state_vector;
-
-  // do the t label
-  if (is_inductive_step_active())
-  {
-    look_for_variables_changes(code.op2());
-    look_for_variables_changes(code.op3());
-  }
-
   goto_programt sideeffects;
 
   remove_sideeffects(cond, sideeffects);
@@ -1995,12 +1586,6 @@ void goto_convertt::convert_for(
   goto_programt tmp_w;
   convert(to_code(code.op3()), tmp_w);
 
-  if (is_inductive_step_active())
-  {
-    make_nondet_assign(dest);
-    init_k_indice(dest);
-  }
-
   // y: goto u;
   goto_programt tmp_y;
   goto_programt::targett y=tmp_y.add_instruction();
@@ -2010,379 +1595,13 @@ void goto_convertt::convert_for(
 
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
-
-  // do the f label
-  if (is_inductive_step_active())
-    update_state_vector(state_vector, dest);
-
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
-
-  // do the d label
-  if (is_inductive_step_active())
-    assign_current_state(dest);
-
-  // do the e label
-  if (is_inductive_step_active())
-    assume_state_vector(state_vector, dest);
-
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 
-  //do the g label
-  if (inductive_step || base_case)
-    assume_cond(cond, true, dest); //assume(!c)
-  else if (forward_condition)
-    assert_cond(cond, true, dest); //assert(!c)
-
   // restore break/continue
   targets.restore(old_targets);
-
-  if (inductive_step || base_case || forward_condition)
-    pop_loop_block();
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::add_global_variable_to_state
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::add_global_variable_to_state()
-{
-  if(!inductive_step)
-    return;
-
-  forall_symbols(it, context.symbols) {
-    if(it->second.static_lifetime && !it->second.type.is_pointer())
-    {
-      exprt s = symbol_expr(it->second);
-      if(it->second.value.id()==irep_idt("array_of"))
-        s.type()=it->second.value.type();
-      get_loop_variables(s, true);
-    }
-  }
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::make_nondet_assign
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::make_nondet_assign(
-  goto_programt &dest)
-{
-  unsigned int component_size = current_block->get_state().components().size();
-  for (unsigned int j = 0; j < component_size; j++)
-  {
-    exprt rhs_expr = side_effect_expr_nondett(
-      current_block->get_state().components()[j].type());
-    exprt new_expr(exprt::with, current_block->get_state());
-    exprt lhs_expr("symbol", current_block->get_state());
-
-    if (current_block->get_state().components()[j].type().is_array())
-      rhs_expr = side_effect_expr_nondett(
-        current_block->get_state().components()[j].type());
-
-    std::string identifier;
-    identifier = "cs$" + i2string(current_block->get_state_counter());
-    lhs_expr.identifier(identifier);
-
-    new_expr.reserve_operands(3);
-    new_expr.copy_to_operands(lhs_expr);
-    new_expr.copy_to_operands(exprt("member_name"));
-    new_expr.move_to_operands(rhs_expr);
-
-    if (!current_block->get_state().components()[j].has_operands())
-    {
-      new_expr.op1().component_name(
-        current_block->get_state().components()[j].identifier());
-      assert(!new_expr.op1().get_string("component_name").empty());
-    }
-    else
-    {
-      forall_operands(it, current_block->get_state().components()[j])
-      {
-        new_expr.op1().component_name(it->identifier());
-        assert(!new_expr.op1().get_string("component_name").empty());
-      }
-    }
-    code_assignt new_assign(lhs_expr, new_expr);
-    copy(new_assign, ASSIGN, dest);
-  }
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::assign_current_state
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::assign_current_state(
-  goto_programt &dest)
-{
-  unsigned int component_size = current_block->get_state().components().size();
-  for (unsigned int j = 0; j < component_size; j++)
-  {
-    exprt rhs_expr(current_block->get_state().components()[j]);
-    exprt new_expr(exprt::with, current_block->get_state());
-    exprt lhs_expr("symbol", current_block->get_state());
-
-    std::string identifier;
-
-    identifier = "cs$" + i2string(current_block->get_state_counter());
-
-    lhs_expr.identifier(identifier);
-
-    new_expr.reserve_operands(3);
-    new_expr.copy_to_operands(lhs_expr);
-    new_expr.copy_to_operands(exprt("member_name"));
-    new_expr.move_to_operands(rhs_expr);
-
-    if (!current_block->get_state().components()[j].has_operands())
-    {
-      new_expr.op1().component_name(
-        current_block->get_state().components()[j].identifier());
-      assert(!new_expr.op1().get_string("component_name").empty());
-    }
-    else
-    {
-      forall_operands(it, current_block->get_state().components()[j])
-      {
-        new_expr.op1().component_name(it->identifier());
-        assert(!new_expr.op1().get_string("component_name").empty());
-      }
-    }
-
-    code_assignt new_assign(lhs_expr, new_expr);
-    copy(new_assign, ASSIGN, dest);
-  }
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::init_k_indice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::init_k_indice(
-  goto_programt &dest)
-{
-  std::string identifier;
-  identifier = "kindice$"+i2string(current_block->get_state_counter());
-  exprt lhs_index = symbol_exprt(identifier, int_type());
-  exprt zero_expr = gen_zero(int_type());
-  code_assignt new_assign(lhs_index,zero_expr);
-  copy(new_assign, ASSIGN, dest);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::assume_cond
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::assume_cond(
-  const exprt &cond,
-  const bool &neg,
-  goto_programt &dest)
-{
-  // If the loop was not transformed, don't assume
-  if (inductive_step && !current_block->is_active())
-    return;
-
-  // We don't assume false if there is a break inside a infinite loop
-  if (cond.is_true() && current_block->has_break())
-    return;
-
-  goto_programt tmp_e;
-  goto_programt::targett e=tmp_e.add_instruction(ASSUME);
-  exprt result_expr = cond;
-  if (neg)
-    result_expr.make_not();
-
-  remove_sideeffects(result_expr, dest, true);
-
-  migrate_expr(result_expr, e->guard);
-
-  dest.destructive_append(tmp_e);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::assert_cond
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::assert_cond(
-  const exprt &cond,
-  const bool &neg,
-  goto_programt &dest)
-{
-  // We don't assert false if there is a break inside a infinite loop
-  if(cond.is_true() && current_block->has_break())
-    return;
-
-  goto_programt tmp_e;
-  goto_programt::targett e=tmp_e.add_instruction(ASSERT);
-  exprt result_expr = cond;
-  if (neg)
-    result_expr.make_not();
-
-  migrate_expr(result_expr, e->guard);
-
-  dest.destructive_append(tmp_e);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::disable_k_induction
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::disable_k_induction()
-{
-  options.set_option("disable-inductive-step", true);
-  inductive_step=false;
-  base_case=false;
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::print_msg_mem_alloc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::print_msg_mem_alloc(void)
-{
-  std::cerr << "warning: this program contains dynamic memory allocation,"
-            << " so we are not applying the inductive step to this program!"
-            << std::endl;
-  disable_k_induction();
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::print_msg
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::print_msg(
-  const exprt &tmp)
-{
-  std::cerr << "warning: this program " << tmp.location().get_file()
-            << " contains a '" << tmp.id() << "' operator at line "
-            << tmp.location().get_line()
-            << ", so we are not applying the inductive step to this program!"
-            << std::endl;
-  disable_k_induction();
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::check_op_const
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool goto_convertt::check_expr_const(
-  const exprt &expr)
-{
-  if (expr.is_constant() || expr.type().id() == "pointer")
-    return true;
-
-  if(expr.is_symbol())
-  {
-    exprt value = ns.lookup(expr.identifier()).value;
-    if (value.is_constant())
-      return true;
-  }
-
-  return false;
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::check_loop_cond
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::check_loop_cond(
-  exprt &expr)
-{
-  assert(current_block != NULL);
-
-  if (expr.is_true())
-  {
-    // allow transformations on infinite loops
-    current_block->set_active(true);
-  }
 }
 
 /*******************************************************************\
@@ -2401,9 +1620,6 @@ void goto_convertt::convert_while(
   const codet &code,
   goto_programt &dest)
 {
-  if (inductive_step || base_case || forward_condition)
-    push_new_loop_block();
-
   if(code.operands().size()!=2)
   {
     err_location(code);
@@ -2412,30 +1628,16 @@ void goto_convertt::convert_while(
 
   exprt tmp=code.op0();
 
-  if (inductive_step)
-    check_loop_cond(tmp);
-
   array_typet state_vector;
   const exprt *cond=&tmp;
   const locationt &location=code.location();
 
   //    while(c) P;
   //--------------------
-  // t: cs=nondet
-  // v: sideeffects in c
-  // c: k=0
   // v: if(!c) goto z;
-  // f: s[k]=cs
   // x: P;
-  // d: cs assign
-  // e: assume
   // y: goto v;          <-- continue target
   // z: ;                <-- break target
-  // g: assume(!c)
-
-  // do the t label
-  if (is_inductive_step_active())
-    look_for_variables_changes(code.op1());
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -2468,44 +1670,13 @@ void goto_convertt::convert_while(
   y->guard = true_expr;
   y->location=code.location();
 
-  //do the c label
-  if (is_inductive_step_active())
-  {
-    make_nondet_assign(dest);
-    init_k_indice(dest);
-  }
-
   dest.destructive_append(tmp_branch);
-
-  // do the f label
-  if (is_inductive_step_active())
-    update_state_vector(state_vector, dest);
-
   dest.destructive_append(tmp_x);
-
-  // do the d label
-  if (is_inductive_step_active())
-    assign_current_state(dest);
-
-  // do the e label
-  if (is_inductive_step_active())
-    assume_state_vector(state_vector, dest);
-
   dest.destructive_append(tmp_y);
-
   dest.destructive_append(tmp_z);
-
-  //do the g label
-  if (inductive_step || base_case)
-    assume_cond(*cond, true, dest); //assume(!c)
-  else if (forward_condition)
-    assert_cond(tmp, true, dest); //assert(!c)
 
   // restore break/continue
   targets.restore(old_targets);
-
-  if (inductive_step || base_case || forward_condition)
-    pop_loop_block();
 }
 
 /*******************************************************************\
@@ -2524,9 +1695,6 @@ void goto_convertt::convert_dowhile(
   const codet &code,
   goto_programt &dest)
 {
-  if (inductive_step || base_case || forward_condition)
-    push_new_loop_block();
-
   if(code.operands().size()!=2)
   {
     err_location(code);
@@ -2541,28 +1709,15 @@ void goto_convertt::convert_dowhile(
   goto_programt sideeffects;
   remove_sideeffects(tmp, sideeffects);
 
-  if (inductive_step)
-    check_loop_cond(tmp);
-
   array_typet state_vector;
   const exprt &cond=tmp;
 
   //    do P while(c);
   //--------------------
-  // t: cs=nondet
   // w: P;
   // x: sideeffects in c   <-- continue target
-  // c: k=0
   // y: if(c) goto w;
-  // f: s[k]=cs
-  // d: cs assign
-  // e: assume
   // z: ;                  <-- break target
-  // g: assume(!c)
-
-  // do the t label
-  if (is_inductive_step_active())
-    look_for_variables_changes(code.op1());
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -2592,59 +1747,18 @@ void goto_convertt::convert_dowhile(
   convert(to_code(code.op1()), tmp_w);
   goto_programt::targett w=tmp_w.instructions.begin();
 
-  //do the c label
-  if (is_inductive_step_active())
-  {
-    init_k_indice(dest);
-    make_nondet_assign(dest);
-  }
+  // y: if(c) goto w;
+  y->make_goto(w);
+  migrate_expr(cond, y->guard);
+  y->location=condition_location;
 
   dest.destructive_append(tmp_w);
   dest.destructive_append(sideeffects);
-
-#if 0
-  if(options.get_bool_option("atomicity-check"))
-  {
-    unsigned int globals = get_expr_number_globals(cond);
-    if(globals > 0)
-	  break_globals2assignments(cond, dest,code.location());
-  }
-#endif
-
-  // y: if(c) goto w;
-  y->make_goto(w);
-
-  migrate_expr(cond, y->guard);
-
-  y->location=condition_location;
-
   dest.destructive_append(tmp_y);
-
-  // do the f label
-  if (is_inductive_step_active())
-    update_state_vector(state_vector, dest);
-
-  // do the d label
-  if (is_inductive_step_active())
-    assign_current_state(dest);
-
-  // do the e label
-  if (is_inductive_step_active())
-    assume_state_vector(state_vector, dest);
-
   dest.destructive_append(tmp_z);
-
-  //do the g label
-  if (inductive_step || base_case)
-    assume_cond(cond, true, dest); //assume(!c)
-  else if (forward_condition)
-    assert_cond(tmp, true, dest); //assert(!c)
 
   // restore break/continue targets
   targets.restore(old_targets);
-
-  if (inductive_step || base_case || forward_condition)
-    pop_loop_block();
 }
 
 /*******************************************************************\
@@ -2816,9 +1930,6 @@ void goto_convertt::convert_break(
   goto_programt::targett t=dest.add_instruction();
   t->make_goto(targets.break_target);
   t->location=code.location();
-
-  if (current_block != NULL)
-    current_block->set_break(true);
 }
 
 /*******************************************************************\
@@ -3111,57 +2222,6 @@ void goto_convertt::generate_ifthenelse(
 
 /*******************************************************************\
 
-Function: goto_convertt::get_cs_member
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::replace_by_cs_member(exprt &expr)
-{
-  exprt lhs_struct("symbol", current_block->get_state());
-  lhs_struct.identifier("cs$" + i2string(current_block->get_state_counter()));
-
-  exprt new_expr(exprt::member, expr.type());
-  new_expr.reserve_operands(1);
-  new_expr.copy_to_operands(lhs_struct);
-  new_expr.identifier(expr.identifier());
-  new_expr.component_name(expr.identifier());
-
-  assert(!new_expr.get_string("component_name").empty());
-
-  expr = new_expr;
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::replace_ifthenelse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::replace_ifthenelse(exprt &expr)
-{
-  Forall_operands(it, expr)
-    replace_ifthenelse(*it);
-
-  if(current_block->is_expr_in_state(expr))
-  {
-    replace_by_cs_member(expr);
-  }
-}
-
-/*******************************************************************\
-
 Function: goto_convertt::convert_ifthenelse
 
   Inputs:
@@ -3239,14 +2299,6 @@ void goto_convertt::convert_ifthenelse(
     tmp_guard=code.op0();
 
   remove_sideeffects(tmp_guard, dest);
-  if (inductive_step && (current_block != NULL) && current_block->is_active())
-  {
-    replace_ifthenelse(tmp_guard);
-
-    if (!tmp_guard.type().is_bool())
-      tmp_guard.make_typecast(bool_typet());
-  }
-
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 }
 
@@ -3571,160 +2623,4 @@ void goto_convertt::guard_program(
   tmp.destructive_append(dest);
 
   tmp.swap(dest);
-}
-
-void goto_convertt::push_new_loop_block()
-{
-  // Add new block to stack
-  loop_block *block = new loop_block(total_states, global_vars);
-  loop_stack.push(block);
-
-  // Update current_block reference
-  current_block = block;
-
-  // Increment total number of states
-  ++total_states;
-}
-
-void goto_convertt::pop_loop_block()
-{
-  assert(loop_stack.size() > 0);
-
-  // Create symbol for the state$vector
-  symbolt *symbol_ptr=NULL;
-  unsigned int i = current_block->get_state_counter();
-
-  symbolt state_symbol;
-  state_symbol.name="c::state$vector"+i2string(i);
-  state_symbol.base_name="state$vector"+i2string(i);
-  state_symbol.is_type=true;
-  state_symbol.type=current_block->get_state();
-  state_symbol.mode="C";
-  state_symbol.module="main";
-  state_symbol.pretty_name="struct state$vector"+i2string(i);
-
-  context.move(state_symbol, symbol_ptr);
-
-  // Create new symbol for this state
-  // First is kindice
-  symbolt kindice_symbol;
-  kindice_symbol.name="kindice$"+i2string(i);
-  kindice_symbol.base_name="kindice$"+i2string(i);
-  kindice_symbol.type=uint_type();
-  kindice_symbol.static_lifetime=true;
-  kindice_symbol.lvalue=true;
-
-  context.move(kindice_symbol, symbol_ptr);
-
-  // Then state_vector s
-  // Its type is incomplete array
-  typet incomplete_array_type("incomplete_array");
-  incomplete_array_type.subtype() = current_block->get_state();
-
-  symbolt state_vector_symbol;
-  state_vector_symbol.name="s$"+i2string(i);
-  state_vector_symbol.base_name="s$"+i2string(i);
-  state_vector_symbol.type=incomplete_array_type;
-  state_vector_symbol.static_lifetime=true;
-  state_vector_symbol.lvalue=true;
-
-  context.move(state_vector_symbol, symbol_ptr);
-
-  // Finally, the current state cs
-  symbolt current_state_symbol;
-  current_state_symbol.name="cs$"+i2string(i);
-  current_state_symbol.base_name="cs$"+i2string(i);
-  current_state_symbol.type=current_block->get_state();
-  current_state_symbol.static_lifetime=true;
-  current_state_symbol.lvalue=true;
-
-  context.move(current_state_symbol, symbol_ptr);
-
-  // Update flag to disable inductive step
-  if(current_block->is_active())
-    disable_inductive_step = false;
-
-  states_map[current_block->get_state_counter()] = current_block;
-
-  // Pop block from stack
-  loop_stack.pop();
-
-  // Update reference
-  if(loop_stack.size())
-    current_block = loop_stack.top();
-  else
-    current_block = NULL;
-}
-
-bool goto_convertt::loop_block::is_active() const
-{
-  return _active;
-}
-
-void goto_convertt::loop_block::set_active(bool active)
-{
-  this->_active = active;
-}
-
-bool goto_convertt::loop_block::has_break() const
-{
-  return _break;
-}
-
-void goto_convertt::loop_block::set_break(bool _break)
-{
-  this->_break = _break;
-}
-
-struct_typet& goto_convertt::loop_block::get_state()
-{
-  return _state;
-}
-
-void goto_convertt::loop_block::set_state(const struct_typet& state)
-{
-  _state = state;
-}
-
-unsigned int goto_convertt::loop_block::get_state_counter() const
-{
-  return _state_counter;
-}
-
-void goto_convertt::loop_block::set_state_counter(unsigned int state_counter)
-{
-  _state_counter = state_counter;
-}
-
-void goto_convertt::loop_block::add_expr_to_state(const exprt expr)
-{
-  if(is_expr_in_state(expr))
-    return;
-
-  _loop_vars.insert(
-    std::pair<irep_idt, const exprt>(expr.identifier(), expr));
-
-  unsigned int size = _state.components().size();
-  _state.components().resize(size+1);
-  _state.components()[size] = (struct_typet::componentt &) expr;
-  _state.components()[size].set_name(expr.identifier());
-  _state.components()[size].pretty_name(expr.identifier());
-}
-
-bool goto_convertt::loop_block::is_expr_in_state(exprt expr)
-{
-  return _loop_vars.find(expr.identifier()) != _loop_vars.end();
-}
-
-void goto_convertt::loop_block::dump_loop_vars()
-{
-  std::cout << "current_block loop variables:" << std::endl;
-
-  u_int i = 0;
-  for (std::pair<irep_idt, const exprt> expr : _loop_vars)
-  {
-    std::cout << ++i << ". \t" << "identifier: " << expr.first << std::endl
-      << " \t" << expr.second << std::endl << std::endl;
-  }
-  std::cout << std::endl;
 }

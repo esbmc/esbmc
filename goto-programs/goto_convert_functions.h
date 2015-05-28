@@ -61,9 +61,6 @@ protected:
     goto_functiont &f,
     const locationt &location);
 
-  // k-induction
-  symbol_listt delayed_functions;
-
 private:
   bool inlining;
 

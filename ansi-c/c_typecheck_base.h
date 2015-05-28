@@ -28,8 +28,7 @@ public:
     namespacet(_context),
     context(_context),
     module(_module),
-    mode("C"),
-    is_loop(false)
+    mode("C")
   {
   }
 
@@ -42,8 +41,7 @@ public:
     namespacet(_context1, _context2),
     context(_context1),
     module(_module),
-    mode("C"),
-    is_loop(false)
+    mode("C")
   {
   }
 
@@ -194,7 +192,6 @@ protected:
   bool case_is_allowed;
   typet switch_op_type;
   typet return_type;
-  bool is_loop;
 
   // expressions
   virtual void typecheck_expr_builtin_va_arg(exprt &expr);
@@ -231,8 +228,6 @@ protected:
   virtual void make_constant(exprt &expr);
   virtual void make_constant_index(exprt &expr);
   virtual void make_constant_rec(exprt &expr);
-
-  virtual void mark_functions_inside_loops(exprt &expr);
 
   // types
   virtual void typecheck_type(typet &type);

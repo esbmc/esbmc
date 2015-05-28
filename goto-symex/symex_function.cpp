@@ -32,15 +32,6 @@ goto_symext::get_unwind_recursion(
 
   if (unwind != 0)
   {
-    if (options.get_bool_option("inductive-step"))
-    {
-      std::cerr << "warning: this program is recursive,"
-        << " so we are not applying the inductive step to this program!"
-        << std::endl;
-      std::cerr  << std::endl;
-      const_cast<optionst&>(options).set_option("disable-inductive-step", true);
-    }
-
     const symbolt &symbol = ns.lookup(identifier);
 
     std::string msg = "Unwinding recursion " + id2string(symbol.display_name())
@@ -184,7 +175,6 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
       not2tc not_now(now_guard);
       target->assumption(now_guard, not_now, cur_state->source);
     }
-
 
     cur_state->source.pc++;
     return;

@@ -36,14 +36,7 @@ public:
     options(_options),
     ns(_context),
     temporary_counter(0),
-    tmp_symbol_prefix("goto_convertt::"),
-    current_block(NULL),
-    inductive_step(options.get_bool_option("inductive-step")),
-    base_case(options.get_bool_option("base-case")),
-    forward_condition(options.get_bool_option("forward-condition")),
-    assume_all_states(options.get_bool_option("constrain-all-states")),
-    disable_inductive_step(true),
-    total_states(1)
+    tmp_symbol_prefix("goto_convertt::")
   {
   }
 
@@ -188,90 +181,6 @@ protected:
   void convert_catch(const codet &code,goto_programt &dest);
   void convert_throw_decl(const exprt &expr, goto_programt &dest);
   void convert_throw_decl_end(const exprt &expr, goto_programt &dest);
-
-  //
-  // k-induction conversion
-  //
-  void add_global_variable_to_state();
-  void make_nondet_assign(goto_programt &dest);
-  void init_k_indice(goto_programt &dest);
-  void assign_current_state(goto_programt &dest);
-  void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
-  void replace_ifthenelse(exprt &expr);
-  void replace_by_cs_member(exprt &expr);
-  void get_loop_variables(const exprt &exp, bool is_global = false);
-  void check_loop_cond(exprt &cond);
-  void look_for_variables_changes(const exprt &expr);
-  void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
-  bool check_expr_const(const exprt &expr);
-  void assume_state_vector(array_typet state_vector, goto_programt &dest);
-  void assume_all_state_vector(array_typet state_vector, goto_programt &dest);
-  void update_state_vector(array_typet state_vector, goto_programt &dest);
-  void print_msg(const exprt &tmp);
-  void disable_k_induction(void);
-  void print_msg_mem_alloc(void);
-
-  inline bool is_inductive_step_active()
-  {
-    return inductive_step && (current_block != NULL)
-      && current_block->is_active() && !current_block->has_break();
-  }
-
-  typedef std::map<irep_idt, const exprt> loop_varst;
-
-  class loop_block
-  {
-    public:
-      loop_block(unsigned int _state_counter, loop_varst _global_vars)
-    : _break(false),
-      _active(false),
-      _state_counter(_state_counter),
-      _state(struct_typet())
-    {
-      // If there is no global or static variables,
-      // no need to add them to the state (static and globals)
-      if (!_global_vars.size())
-        return;
-
-      for (std::pair<irep_idt, const exprt> expr : _global_vars)
-        add_expr_to_state(expr.second);
-    }
-
-    bool is_active() const;
-    void set_active(bool active);
-
-    bool has_break() const;
-    void set_break(bool _break);
-
-    struct_typet& get_state();
-    void set_state(const struct_typet& state);
-
-    unsigned int get_state_counter() const;
-    void set_state_counter(unsigned int state_counter);
-
-    bool is_expr_in_state(exprt expr);
-    void add_expr_to_state(const exprt expr);
-
-    void dump_loop_vars();
-
-  private:
-    bool _break, _active;
-    unsigned int _state_counter;
-    struct_typet _state;
-    loop_varst _loop_vars;
-  };
-
-  typedef std::stack<loop_block*> loop_stackt;
-  loop_stackt loop_stack;
-
-  loop_block* current_block;
-  loop_varst global_vars;
-
-  typedef std::map<unsigned int, loop_block*> statest;
-  statest states_map;
-
-  void push_new_loop_block();
-  void pop_loop_block();
 
   //
   // gotos
@@ -422,12 +331,6 @@ protected:
   void do_sync          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_exit          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-
-  protected:
-    bool inductive_step, base_case, forward_condition, assume_all_states;
-    bool disable_inductive_step;
-
-    unsigned int total_states;
 };
 
 #endif

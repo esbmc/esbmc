@@ -396,9 +396,6 @@ Function: c_typecheck_baset::typecheck_for
 
 void c_typecheck_baset::typecheck_for(codet &code)
 {
-  bool last_is_loop = is_loop;
-  is_loop = true;
-
   if(code.operands().size()!=4)
     throw "for expected to have four operands";
 
@@ -441,8 +438,6 @@ void c_typecheck_baset::typecheck_for(codet &code)
     break_is_allowed = old_break_is_allowed;
     continue_is_allowed = old_continue_is_allowed;
   }
-
-  is_loop = last_is_loop;
 }
 
 /*******************************************************************\
@@ -667,9 +662,6 @@ Function: c_typecheck_baset::typecheck_while
 
 void c_typecheck_baset::typecheck_while(codet &code)
 {
-  bool last_is_loop = is_loop;
-  is_loop = true;
-
   if(code.operands().size()!=2)
     throw "while expected to have two operands";
 
@@ -687,6 +679,4 @@ void c_typecheck_baset::typecheck_while(codet &code)
   // restore flags
   break_is_allowed=old_break_is_allowed;
   continue_is_allowed=old_continue_is_allowed;
-
-  is_loop = last_is_loop;
 }

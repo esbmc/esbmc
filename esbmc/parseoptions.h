@@ -29,6 +29,9 @@ public:
   virtual int doit();
   virtual void help();
 
+  virtual int doit_k_induction();
+  virtual int doit_k_induction_parallel();
+
   cbmc_parseoptionst(int argc, const char **argv):
     parseoptions_baset(esbmc_options, argc, argv),
     language_uit(cmdline)
@@ -63,10 +66,6 @@ protected:
   void add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, expr2tc> >monitors);
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
-
-  // k-induction related
-  int doit_k_induction();
-  int doit_k_induction_parallel();
 };
 
 #endif
