@@ -1,6 +1,11 @@
 #!/bin/bash -e
 
-VER=1.24.99
+if test $# != 1; then
+  echo "Usage: scripts/debprep.sh version-num" >&2
+  exit 1
+fi
+
+VER=$1
 
 if test ! -e .git; then
   echo "Please run from ESBMC root dir";
