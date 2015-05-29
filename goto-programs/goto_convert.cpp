@@ -1114,7 +1114,6 @@ void goto_convertt::convert_assign(
       lhs.swap(tmp);
     }
 
-
     int atomic = 0;
     if(options.get_bool_option("atomicity-check"))
     {
@@ -1124,6 +1123,9 @@ void goto_convertt::convert_assign(
       if(globals > 0 && (lhs.identifier().as_string().find("tmp$") == std::string::npos))
         break_globals2assignments(atomic,lhs,rhs, dest,code.location());
     }
+
+    if (inductive_step)
+      replace_recursively(rhs);
 
     code_assignt new_assign(code);
     new_assign.lhs()=lhs;
@@ -3486,6 +3488,31 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr, bool &found)
   }
 
   if (!found) new_expr = expr;
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::replace_ifthenelse
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::replace_recursively(
+    exprt &expr, bool is_if_cond)
+{
+  Forall_operands(it, expr)
+    replace_recursively(*it, is_if_cond);
+
+  if(expr.id()=="if")
+    replace_recursively(expr.op0(), true);
+
+  if(is_expr_in_state(expr) && is_if_cond)
+    replace_ifthenelse(expr);
 }
 
 /*******************************************************************\

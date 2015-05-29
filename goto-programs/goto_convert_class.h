@@ -203,6 +203,7 @@ protected:
   void assign_current_state(/*const struct_typet &state,*/ goto_programt &dest);
   void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
   void replace_ifthenelse(exprt &expr);
+  void replace_recursively(exprt &expr, bool is_if_cond = false);
   void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
   void get_new_expr(exprt &expr, exprt &new_expr, bool &found);
   void set_goto(bool opt) {goto_stmt=opt;}
