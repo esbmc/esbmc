@@ -477,7 +477,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
   bool res=0;
   u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
   if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = -1;
+    max_k_step = 100000;
 
   int whoAmI=-1;
 
@@ -1777,8 +1777,8 @@ void cbmc_parseoptionst::help()
     " --k-induction                prove by k-induction \n"
     " --k-induction-parallel       prove by k-induction, running each step on a separate process\n"
     " --constrain-all-states       remove all redundant states in the inductive step\n"
-    " --k-step nr                  set max k-step (default is 50) \n\n"
-    " --unlimited-k-steps          set max k-step to 4,294,967,295"
+    " --k-step nr                  set max k-step (default is 50) \n"
+    " --unlimited-k-steps          set max k-step to 4,294,967,295 (sequential) or 100.000 (parallel)\n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
     " --round-robin                use the round robin scheduling approach\n"
