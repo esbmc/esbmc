@@ -265,7 +265,15 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
   if (cache_result != smt_cache.end())
     return (cache_result->ast);
 
-  // add object won't duplicate objs for identical exprs (it's a map)
+  // Has this been touched by realloc / been re-numbered?
+  renumber_mapt::iterator it = renumber_map.back().find(symbol);
+  if (it != renumber_map.back().end()) {
+    // Yes -- take current obj num and we're done.
+    return it->second;
+  }
+
+  // New object. add_object won't duplicate objs for identical exprs
+  // (it's a map)
   obj_num = pointer_logic.back().add_object(expr);
 
   // Produce a symbol representing this.
