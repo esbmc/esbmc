@@ -34,6 +34,10 @@ goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
   if (unwinding_recursion_assumption)
     return ;
 
+  // Can happen when evaluating certain special intrinsics. Gulp.
+  if (cur_state->guard.is_false())
+    return;
+
   total_claims++;
 
   expr2tc new_expr = claim_expr;
