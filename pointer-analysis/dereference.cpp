@@ -1543,6 +1543,22 @@ dereferencet::extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
   return exprs;
 }
 
+expr2tc *
+dereferencet::extract_bytes_from_scalar(const expr2tc &object,
+    unsigned int num_bytes, unsigned int offset)
+{
+  assert((is_number_type(object) || is_bool_type(object)) &&
+      "Can't extract bytes out of non-scalars"); // Or, not trivially
+  const type2tc &bytetype = get_uint8_type();
+
+  expr2tc *bytes = new expr2tc[num_bytes];
+
+  for (unsigned int i = offset, j = 0; i < offset + num_bytes; i++, j++)
+    bytes[j] = byte_extract2tc(bytetype, object, gen_ulong(offset), is_big_endian);
+
+  return bytes;
+}
+
 void
 dereferencet::stitch_together_from_byte_array(expr2tc &value,
                                               const type2tc &type,

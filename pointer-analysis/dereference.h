@@ -366,6 +366,8 @@ private:
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
   expr2tc * extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
       const expr2tc &offset);
+  expr2tc * extract_bytes_from_scalar(const expr2tc &object, unsigned int bytes,
+      unsigned int offset);
   void stitch_together_from_byte_array(expr2tc &value, const type2tc &type,
                                        const expr2tc *bytes);
   void wrap_in_scalar_step_list(expr2tc &value,
