@@ -954,7 +954,10 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
     // Might read from more than one element, legitimately. Requires stitching.
     // Alignment assertion / guarantee ensures we don't do something silly.
     // This will construct from whatever the subtype is...
-    stitch_together_from_byte_array(value, type, div2);
+    unsigned int num_bytes = type->get_width() / 8;
+    expr2tc *bytes = extract_bytes_from_array(value, num_bytes, div2);
+    stitch_together_from_byte_array(value, type, bytes);
+    delete[] bytes;
   }
 
   return;
@@ -1518,33 +1521,40 @@ dereferencet::alignment_failure(const std::string &error_name,
   }
 }
 
+expr2tc*
+dereferencet::extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
+    const expr2tc &offset)
+{
+  expr2tc *exprs = new expr2tc[bytes];
+
+  assert(bytes <= 8 && "Too many bytes for extraction/stitching in deref");
+  assert(is_array_type(array) && "Can only extract bytes for stitching from arrays");
+  type2tc subtype = to_array_type(array->type).subtype;
+  assert(subtype->get_width() == 8 && "Can only extract bytes for stitching from byte array");
+  // XXX -- this doesn't allow for scenarios where we read, say, a uint32 from
+  // an array of uint16s.
+
+  expr2tc accuml_offs = offset;
+  for (unsigned int i = 0; i < bytes; i++) {
+    exprs[i] = index2tc(subtype, array, accuml_offs);
+    accuml_offs = add2tc(offset->type, accuml_offs, gen_ulong(1));
+  }
+
+  return exprs;
+}
+
 void
 dereferencet::stitch_together_from_byte_array(expr2tc &value,
                                               const type2tc &type,
-                                              const expr2tc &offset)
+                                              const expr2tc *bytes)
 {
-  const array_type2t &arr_type = to_array_type(value->type);
-  // Unstructured array access. First, check alignment.
-  unsigned int subtype_sz = arr_type.subtype->get_width() / 8;
+  unsigned int num_bytes = type->get_width() / 8;
 
-  unsigned int target_bytes = type->get_width() / 8;
-  expr2tc accuml;
-  expr2tc accuml_offs = offset;
-  type2tc subtype = arr_type.subtype;
-
-  for (unsigned int i = 0; i < target_bytes; i += subtype_sz) {
-    expr2tc elem = index2tc(subtype, value, accuml_offs);
-
-    if (is_nil_expr(accuml)) {
-      accuml = elem;
-    } else {
-      // XXX -- byte order.
-      type2tc res_type =
-        get_uint_type(accuml->type->get_width() + (subtype_sz * 8));
-      accuml = concat2tc(res_type, accuml, elem);
-    }
-
-    accuml_offs = add2tc(offset->type, accuml_offs, gen_ulong(1));
+  expr2tc accuml = bytes[0];
+  for (unsigned int i = 1; i < num_bytes; i++) {
+    // XXX -- byte order.
+    type2tc res_type = get_uint_type(accuml->type->get_width() + 8);
+    accuml = concat2tc(res_type, accuml, bytes[i]);
   }
 
   // That's going to come out as a bitvector;

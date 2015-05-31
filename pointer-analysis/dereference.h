@@ -364,8 +364,10 @@ private:
   void bounds_check(const expr2tc &expr, const expr2tc &offset,
                     const type2tc &type, const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
+  expr2tc * extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
+      const expr2tc &offset);
   void stitch_together_from_byte_array(expr2tc &value, const type2tc &type,
-                                       const expr2tc &offset);
+                                       const expr2tc *bytes);
   void wrap_in_scalar_step_list(expr2tc &value,
                                 std::list<expr2tc> *scalar_step_list,
                                 const guardt &guard);
