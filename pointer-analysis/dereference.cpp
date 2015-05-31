@@ -1217,11 +1217,10 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     value = typecast2tc(get_uint_type(value->type->get_width()), value);
   }
 
-  const type2tc &bytetype = get_uint8_type();
-  value = byte_extract2tc(bytetype, value, offset, is_big_endian);
-
-  // XXX jmorse - temporary, while byte extract is still covered in bees.
-  value = typecast2tc(type, value);
+  expr2tc *bytes =
+    extract_bytes_from_scalar(value, type->get_width() / 8, offset);
+  stitch_together_from_byte_array(value, type, bytes);
+  delete[] bytes;
 }
 
 void
