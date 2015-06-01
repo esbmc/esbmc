@@ -229,7 +229,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
     # LIBS
     LIBS="[-L]path/libdir -l$4 $ESBMC_SOLVER_LIBS $LIBS"
     # Indirectly call local-config macro
-    indir($8, path, LIBS)
+    indir($8, path, "path/libdir", LIBS)
     AC_CHECK_LIB($4, $5, [
       AS_VAR_SET(esbmc_check_solver_libthere_${esbmc_path_name}, yes)
       AS_VAR_SET(esbmc_check_solver_libdir_${esbmc_path_name}, libdir)
@@ -238,7 +238,7 @@ AC_DEFUN([ESBMC_CHECK_SOLVER], [
       AS_VAR_APPEND(esbmc_list_of_solvers, " $3")
       AS_VAR_APPEND(esbmc_list_of_backends, [" "$3/'lib'$3'.la'])
       AS_VAR_APPEND(ESBMC_SOLVER_LIBS, " [-L]path/libdir -l$4 ")
-      indir($8, path, ESBMC_SOLVER_LIBS)
+      indir($8, path, "path/libdir", ESBMC_SOLVER_LIBS)
       AC_SUBST([ESBMC_ENABLE_$3], 1)
       AS_ECHO("Found solver at path/libdir")
     ], [
@@ -345,9 +345,10 @@ dnl an intermediate library that a solver depends on, and thus has to go after
 dnl any solver -l$solver directives
 m4_define([$$ESBMC_BOOLECTOR_EXTRA_CONFIG], [
   dnl $1 = Path we're looking at as being the boolector installation
-  dnl $2 = Variable we're pumping this config into
-  AS_VAR_APPEND($2, " [-L]$1/lingeling ")
-  AS_VAR_APPEND($2, " -llgl ")
+  dnl $2 = libdir path
+  dnl $3 = Variable we're pumping this config into
+  AS_VAR_APPEND($3, " [-L]$1/lingeling ")
+  AS_VAR_APPEND($3, " -llgl ")
 ])dnl
 
 m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
@@ -357,9 +358,11 @@ m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
   dnl juggling to install such a symlink.
   dnl Yes this is appalling, not very many other ways of doing it though.
   AS_IF([test -d $1], [
-    AS_IF([test ! -z "`ls $1/lib | grep libyices.so.2*`"], [
-      AS_VAR_SET(yices_setting_tmp, [`ls $1/lib | grep libyices\.so\.[[0-9]]\.[[0-9]]\.[[0-9]]`])
-      ln -s $1/lib/$yices_setting_tmp $1/lib/libyices.so
+    AS_IF([test ! -z "`ls $2 | grep libyices.so.2*`"], [
+      AS_IF([test ! -e "$2/libyices.so"], [
+        AC_MSG_ERROR([Found yices, but cannot link against it. A shared object exists in $2, however you need to symlink a "libyices.so" to it to work. Or, specify --disable-yices])
+        exit 1
+      ])
     ])
   ])
 ])dnl
