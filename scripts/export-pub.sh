@@ -65,7 +65,6 @@ sh -c "cd $tmpdir; scripts/autoboot.sh"
 # Autobooted; delete private stuff
 
 rm -rf $tmpdir/regression
-rm -rf $tmpdir/papers
 rm -rf $tmpdir/scripts/export-pub.sh
 rm -rf $tmpdir/docs
 
