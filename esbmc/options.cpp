@@ -6,6 +6,7 @@
 
 const struct opt_templ esbmc_options[] = {
 { 0,	"no-inlining",		switc,		""	},
+{ 0,  "full-inlining",    switc,    ""  },
 { 0,	"program-only",		switc,		""	},
 { 0,	"program-too",		switc,		""	},
 { 0,	"function",		string,		""	},

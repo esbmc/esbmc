@@ -1407,7 +1407,12 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
-      goto_partial_inline(goto_functions, ns, ui_message_handler);
+    {
+      if(cmdline.isset("full-inlining"))
+        goto_inline(goto_functions, ns, ui_message_handler);
+      else
+        goto_partial_inline(goto_functions, ns, ui_message_handler);
+    }
 
     goto_check(ns, options, goto_functions);
 
@@ -1544,6 +1549,7 @@ void cbmc_parseoptionst::help()
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
     " --no-inlining                disable inlining function calls\n"
+    " --full-inlining              perform full inlining of function calls\n"
     " --program-only               only show program expression\n"
     " --all-claims                 keep all claims\n"
     " --show-loops                 show the loops in the program\n"
@@ -1562,7 +1568,6 @@ void cbmc_parseoptionst::help()
     " --witnesspath filename       output counterexample in graphML format\n"
     " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
     "                              program for graphML generation\n\n"
-
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"
