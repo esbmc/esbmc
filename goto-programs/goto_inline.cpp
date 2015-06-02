@@ -73,14 +73,12 @@ void goto_inlinet::parameter_assignments(
     }
 
     {
-      const symbolt &symbol=ns.lookup(identifier);
-
       goto_programt::targett decl=dest.add_instruction();
       decl->make_other();
-      exprt tmp = code_declt(symbol_expr(symbol));
+      exprt tmp = code_declt(symbol_exprt(identifier, arg_type));
       migrate_expr(tmp, decl->code);
       decl->location=location;
-      decl->function=location.get_function(); 
+      decl->function=location.get_function();
       decl->local_variables=local_variables;
     }
 
