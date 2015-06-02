@@ -572,6 +572,17 @@ void goto_inline(
   
   if(goto_inline.get_error_found())
     throw 0;
+
+  // clean up
+  for(goto_functionst::function_mapt::iterator
+      it=goto_functions.function_map.begin();
+      it!=goto_functions.function_map.end();
+      it++)
+    if(it->first!="main")
+    {
+      it->second.body_available=false;
+      it->second.body.clear();
+    }
 }
 
 /*******************************************************************\
