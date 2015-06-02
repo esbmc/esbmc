@@ -366,11 +366,16 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
 int cbmc_parseoptionst::doit()
 {
+  //
+  // Print a banner
+  //
+  std::cout << "ESBMC version " << ESBMC_VERSION " "
+            << sizeof(void *)*8 << "-bit "
+            << config.this_architecture() << " "
+            << config.this_operating_system() << std::endl;
+
   if(cmdline.isset("version"))
-  {
-    std::cout << ESBMC_VERSION << std::endl;
     return 0;
-  }
 
   //
   // unwinding of transition systems

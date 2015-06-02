@@ -64,6 +64,9 @@ public:
   bool set(const cmdlinet &cmdline);
 
   optionst options;
+
+  static std::string this_architecture();
+  static std::string this_operating_system();
 };
 
 extern configt config;
