@@ -50,10 +50,7 @@ Function: language_uit::language_uit
 
 language_uit::language_uit(const cmdlinet &__cmdline):
   ui_message_handler(get_ui_cmdline(__cmdline)),
-  _cmdline(__cmdline),
-  k_step(1),
-  base_case(true),
-  forward_condition(false)
+  _cmdline(__cmdline)
 {
   set_message_handler(&ui_message_handler);
 }

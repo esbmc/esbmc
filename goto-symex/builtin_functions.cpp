@@ -256,7 +256,7 @@ void goto_symext::symex_printf(
         const std::string &fmt =
           to_constant_string2t(idx.source_value).value.as_string();
 
-        std::list<expr2tc> args; 
+        std::list<expr2tc> args;
         forall_operands2(it, idx, new_rhs) {
           expr2tc tmp = *it;
           do_simplify(tmp);
@@ -539,15 +539,6 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
-
-  if (options.get_bool_option("inductive-step")) {
-    std::cerr << "warning: this program is multithreaded,"
-              << " so we are not applying the inductive step to this program!"
-              << std::endl;
-    std::cerr  << std::endl;
-    const_cast<optionst&>(options).set_option("disable-inductive-step", true);
-  }
-
   // As an argument, we expect the address of a symbol.
   const expr2tc &addr = call.operands[0];
   assert(is_address_of2t(addr));

@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <list>
 #include <queue>
+#include <stack>
 #include <namespace.h>
 #include <guard.h>
 #include <std_code.h>
@@ -37,17 +38,6 @@ public:
     temporary_counter(0),
     tmp_symbol_prefix("goto_convertt::")
   {
-    goto_stmt=false;
-    break_stmt=false;
-    is_thread=false;
-    ifthenelse_block=false;
-    for_block=false;
-    while_block=false;
-    state_counter=1;
-    k_induction=false;
-    inductive_step = options.get_bool_option("inductive-step");
-    base_case = options.get_bool_option("base-case");
-    assume_all_states = options.get_bool_option("constrain-all-states");
   }
 
   virtual ~goto_convertt()
@@ -191,47 +181,6 @@ protected:
   void convert_catch(const codet &code,goto_programt &dest);
   void convert_throw_decl(const exprt &expr, goto_programt &dest);
   void convert_throw_decl_end(const exprt &expr, goto_programt &dest);
-
-  //
-  // k-induction conversion
-  //
-  void add_global_variable_to_state();
-  void add_new_variables_to_context();
-  void make_nondet_assign(goto_programt &dest);
-  void init_k_indice(goto_programt &dest);
-  void assign_state_vector(const array_typet &state_vector, goto_programt &dest);
-  void assign_current_state(/*const struct_typet &state,*/ goto_programt &dest);
-  void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
-  void replace_ifthenelse(exprt &expr);
-  void replace_recursively(exprt &expr, bool is_if_cond = false);
-  void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
-  void get_new_expr(exprt &expr, exprt &new_expr, bool &found);
-  void set_goto(bool opt) {goto_stmt=opt;}
-  bool is_goto() const {return goto_stmt;}
-  void set_break(bool opt) {break_stmt=opt;}
-  bool is_break() const {return break_stmt;}
-  void set_for_block(bool opt) {for_block=opt;}
-  bool is_for_block() const {return for_block;}
-  void set_while_block(bool opt) {while_block=opt;}
-  void set_ifthenelse_block(bool opt) {ifthenelse_block=opt;}
-  bool is_ifthenelse_block() {return ifthenelse_block;}
-  bool is_while_block() const {return while_block;}
-  bool nondet_initializer(exprt &value, const typet &type, exprt &rhs_expr) const;
-  bool is_expr_in_state(const exprt &expr);
-  void get_struct_components(const exprt &exp);
-  void replace_cond(exprt &tmp, goto_programt &dest);
-  void increment_var(const exprt &var, goto_programt &dest);
-  void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
-  bool check_op_const(const exprt &tmp, const locationt &loc);
-  void assume_state_vector(array_typet state_vector, goto_programt &dest);
-  void assume_all_state_vector(array_typet state_vector, goto_programt &dest);
-  void update_state_vector(array_typet state_vector, goto_programt &dest);
-  void init_nondet_expr(exprt &tmp, goto_programt &dest);
-  void print_msg(const exprt &tmp);
-  void replace_infinite_loop(exprt &tmp, goto_programt &dest);
-  void disable_k_induction(void);
-  void print_msg_mem_alloc(void);
-  void set_expr_to_nondet(exprt &tmp, goto_programt &dest);
 
   //
   // gotos
@@ -382,20 +331,6 @@ protected:
   void do_sync          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_exit          (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
-
-  protected:
-    bool k_induction, inductive_step, base_case, assume_all_states;
-    struct_typet state;
-
-    typedef std::set<exprt> loop_varst;
-    loop_varst loop_vars;
-    unsigned int state_counter;
-
-  private:
-    bool is_thread, for_block, break_stmt,
-         goto_stmt, while_block, ifthenelse_block;
-    typedef std::map<exprt, exprt> nondet_varst;
-    nondet_varst nondet_vars;
 };
 
 #endif

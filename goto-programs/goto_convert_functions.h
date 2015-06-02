@@ -20,14 +20,16 @@ void goto_convert(
   optionst &options,
   goto_functionst &functions,
   message_handlert &message_handler);
-  
+
 class goto_convert_functionst:public goto_convertt
 {
 public:
   typedef std::map<irep_idt, std::set<irep_idt> > typename_mapt;
   typedef std::set<irep_idt> typename_sett;
+  typedef std::list<symbolt*> symbol_listt;
 
   void goto_convert();
+  void convert_function(symbolt &symbol);
   void convert_function(const irep_idt &identifier);
   void thrash_type_symbols(void);
   void collect_type(const irept &type, typename_sett &set);
@@ -44,16 +46,16 @@ public:
     optionst &_options,
     goto_functionst &_functions,
     message_handlert &_message_handler);
-  
+
   virtual ~goto_convert_functionst();
 
 protected:
   goto_functionst &functions;
-  
+
   static bool hide(const goto_programt &goto_program);
 
   //
-  // function calls  
+  // function calls
   //
   void add_return(
     goto_functiont &f,

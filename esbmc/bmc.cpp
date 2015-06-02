@@ -312,7 +312,6 @@ void bmct::show_program(symex_target_equationt &equation)
       std::cout << "(" << count << ") " << string_value << std::endl;
       count++;
     }
-#if 1
     else if(it->is_assert())
     {
       std::string string_value;
@@ -333,8 +332,6 @@ void bmct::show_program(symex_target_equationt &equation)
                    from_expr(ns, "", it->lhs) << std::endl;
       count++;
     }
-#
-#endif
   }
 }
 

@@ -23,8 +23,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_convert_class.h"
 
-#define TSE_PAPER 1
-
 /*******************************************************************\
 
 Function: get_alloc_type_rec
@@ -283,10 +281,6 @@ void goto_convertt::do_malloc(
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;
   t_n->location=location;
-
-  // the k-induction does not support dynamic memory allocation yet
-  if (inductive_step)
-    print_msg_mem_alloc();
 }
 
 /*******************************************************************\
@@ -361,12 +355,9 @@ void goto_convertt::do_cpp_new(
   valid_expr.copy_to_operands(lhs);
   exprt neg_valid_expr=gen_not(valid_expr);
 
-  //tse paper
-#if TSE_PAPER
   exprt deallocated_expr("deallocated_object", typet("bool"));
   deallocated_expr.copy_to_operands(lhs);
   exprt neg_deallocated_expr=gen_not(deallocated_expr);
-#endif
 
   exprt pointer_offset_expr("pointer_offset", pointer_type());
   pointer_offset_expr.copy_to_operands(lhs);
@@ -398,14 +389,11 @@ void goto_convertt::do_cpp_new(
   migrate_expr(assign, t_s_a->code);
   t_s_a->location=rhs.find_location();
 
-  //tse paper
-#if TSE_PAPER
   //now set deallocated bit
   goto_programt::targett t_d_i=dest.add_instruction(ASSIGN);
   codet tmp = code_assignt(deallocated_expr, false_exprt());
   migrate_expr(tmp, t_d_i->code);
   t_d_i->location=rhs.find_location();
-#endif
 
   // run initializer
   dest.destructive_append(tmp_initializer);
@@ -685,17 +673,6 @@ void goto_convertt::do_function_call_symbol(
 
     t->location=function.location();
     t->location.user_provided(true);
-
-    if (is_assume && inductive_step
-    	&& (is_while_block() || is_for_block()))
-    {
-      exprt cond = arguments.front();
-      replace_ifthenelse(cond);
-      goto_programt::targett t=dest.add_instruction(ASSUME);
-      migrate_expr(cond, t->guard);
-      t->location=function.location();
-      t->location.user_provided(true);
-    }
 
     if(is_assert)
       t->location.property("assertion");

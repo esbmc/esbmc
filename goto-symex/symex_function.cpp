@@ -32,21 +32,10 @@ goto_symext::get_unwind_recursion(
 
   if (unwind != 0)
   {
-    if (options.get_bool_option("inductive-step"))
-    {
-      std::cerr << "warning: this program is recursive,"
-        << " so we are not applying the inductive step to this program!"
-        << std::endl;
-      std::cerr  << std::endl;
-      const_cast<optionst&>(options).set_option("disable-inductive-step", true);
-    }
-
     const symbolt &symbol = ns.lookup(identifier);
 
-    std::string msg =
-      "Unwinding recursion " +
-      id2string(symbol.display_name()) +
-      " iteration " + i2string(unwind);
+    std::string msg = "Unwinding recursion " + id2string(symbol.display_name())
+      + " iteration " + i2string(unwind);
 
     if (this_loop_max_unwind != 0)
       msg += " (" + i2string(this_loop_max_unwind) + " max)";
@@ -54,8 +43,7 @@ goto_symext::get_unwind_recursion(
     std::cout << msg << std::endl;
   }
 
-  return this_loop_max_unwind != 0 &&
-         unwind >= this_loop_max_unwind;
+  return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
 void
@@ -181,15 +169,12 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     if (!no_unwinding_assertions)
       claim(false_expr,
             "recursion unwinding assertion");
-    else if (base_case)
-			unwinding_recursion_assumption=true;
     else {
       // Add an unwinding assumption.
       expr2tc now_guard = cur_state->guard.as_expr();
       not2tc not_now(now_guard);
       target->assumption(now_guard, not_now, cur_state->source);
     }
-
 
     cur_state->source.pc++;
     return;
