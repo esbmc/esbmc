@@ -1,3 +1,0 @@
-main.c
---atomicity-check --context-switch 3
-^VERIFICATION FAILED$

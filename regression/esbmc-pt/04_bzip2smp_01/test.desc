@@ -1,3 +1,0 @@
-main.c
---unwind 1 --depth 100 --no-pointer-check --no-bounds-check
-^VERIFICATION FAILED$

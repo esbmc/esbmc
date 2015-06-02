@@ -1,3 +1,0 @@
-main.c
---unwind 4 --no-unwinding-assertions
-^VERIFICATION SUCCESSFUL$

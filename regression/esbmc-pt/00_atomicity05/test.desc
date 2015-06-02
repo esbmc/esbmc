@@ -1,5 +1,0 @@
-main.c
---atomicity-check
-^VERIFICATION SUCCESSFUL$
---
-^VERIFICATION FAILURE$

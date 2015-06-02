@@ -1,5 +1,0 @@
-main.c
---no-slice --context-switch 4
-^VERIFICATION SUCCESSFUL$
---
-^VERIFICATION FAILURE$

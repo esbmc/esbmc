@@ -1,5 +1,0 @@
-main.c
---data-races-check
-^VERIFICATION SUCCESSFUL$
---
-^VERIFICATION FAILURE$

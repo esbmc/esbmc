@@ -1,3 +1,0 @@
-main.c
---decide --overflow-check
-^VERIFICATION FAILED$
