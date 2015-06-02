@@ -396,11 +396,6 @@ int cbmc_parseoptionst::doit()
 
   set_verbosity_msg(*this);
 
-  goto_functionst goto_functions;
-
-  optionst opts;
-  get_command_line_options(opts);
-
   // Depends on command line options and config
   init_expr_constants();
 
@@ -409,6 +404,15 @@ int cbmc_parseoptionst::doit()
     preprocessing();
     return 0;
   }
+
+  if(cmdline.isset("k-induction")
+    || cmdline.isset("k-induction-parallel"))
+    return doit_k_induction();
+
+  goto_functionst goto_functions;
+
+  optionst opts;
+  get_command_line_options(opts);
 
   if(get_goto_program(opts, goto_functions))
     return 6;
@@ -855,36 +859,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 int cbmc_parseoptionst::doit_k_induction()
 {
   assert(0 && "k-induction is disabled for this release.");
-
-  if(cmdline.isset("version"))
-  {
-    std::cout << ESBMC_VERSION << std::endl;
-    return 0;
-  }
-
-  //
-  // unwinding of transition systems
-  //
-
-  if(cmdline.isset("module")
-     || cmdline.isset("gen-interface"))
-  {
-    error("This version has no support for "
-          " hardware modules.");
-    return 1;
-  }
-
-  //
-  // command line options
-  //
-
-  set_verbosity_msg(*this);
-
-  if(cmdline.isset("preprocess"))
-  {
-    preprocessing();
-    return 0;
-  }
 
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
