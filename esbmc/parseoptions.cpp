@@ -36,6 +36,7 @@ extern "C" {
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/goto_inline.h>
+#include <goto-programs/goto_unwind.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/read_goto_binary.h>
@@ -1468,6 +1469,11 @@ bool cbmc_parseoptionst::process_goto_program(
 
       value_set_analysis.
         update(goto_functions);
+    }
+
+    if(cmdline.isset("unroll-goto-loops"))
+    {
+      goto_unwind(goto_functions, ns, ui_message_handler);
     }
 
     // show it?
