@@ -21,7 +21,6 @@ void goto_unwind(
 
 void goto_unwindt::goto_unwind_rec()
 {
-
 }
 
 void goto_unwindt::find_function_loops()
@@ -45,21 +44,31 @@ void goto_unwindt::create_function_loop(
   unsigned int loop_head,
   unsigned int loop_exit)
 {
-  std::cout << "loop_head: " << loop_head << std::endl;
-  std::cout << "loop_exit: " << loop_exit << std::endl;
-
   goto_programt::instructionst::iterator
     it=goto_function.body.instructions.begin();
 
   // Find loop head
   while (it->location_number != loop_head) it++;
 
-  goto_programt loop_body;
+  goto_programt::instructiont head = *it;
 
+  // Copy the loop body
+  goto_programt loop_body;
   while (it->location_number != loop_exit)
   {
     goto_programt::targett new_instruction=loop_body.add_instruction();
     *new_instruction=*it;
+    new_instruction->target_number = unsigned(-1);
+    new_instruction->targets.clear();
     ++it;
   }
+
+  // Update labels
+  loop_body.update();
+
+  std::pair<goto_programt::instructiont, goto_programt> p(head, goto_programt());
+  function_loops.insert(p);
+
+  // Save on the map
+  function_loops[head].copy_from(loop_body);
 }

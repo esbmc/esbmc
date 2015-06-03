@@ -35,17 +35,15 @@ public:
     find_function_loops();
 
     // unwind loops
-    goto_unwind_rec();
+    if(function_loops.size())
+      goto_unwind_rec();
   }
 
 protected:
   goto_functiont &goto_function;
   const namespacet &ns;
 
-  typedef unsigned int loop_head;
-  typedef unsigned int loop_exit;
-  typedef std::map<loop_head, loop_exit> loops;
-
+  typedef std::map<goto_programt::instructiont, goto_programt> loops;
   loops function_loops;
 
   void find_function_loops();
