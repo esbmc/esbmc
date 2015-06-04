@@ -43,11 +43,13 @@ protected:
   goto_functiont &goto_function;
   const namespacet &ns;
 
-  typedef std::map<goto_programt::instructiont, goto_programt> loops;
-  loops function_loops;
+  typedef std::map<goto_programt::instructiont, goto_programt> function_loopst;
+  function_loopst function_loops;
 
   void find_function_loops();
-  void create_function_loop(unsigned int loop_head, unsigned int loop_exit);
+  void create_function_loop(
+    goto_programt::instructionst::iterator loop_head,
+    goto_programt::instructionst::iterator loop_exit);
 
   void goto_unwind_rec();
 };
