@@ -11,16 +11,24 @@
 
 void goto_unwind(
   goto_functionst& goto_functions,
+  unsigned unwind,
   const namespacet& ns,
   message_handlert& message_handler)
 {
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
-      goto_unwindt(it->second, ns, message_handler);
+      goto_unwindt(it->second, unwind, ns, message_handler);
 }
 
 void goto_unwindt::goto_unwind_rec()
 {
+  for(function_loopst::iterator
+      it=function_loops.begin();
+      it!=function_loops.end();
+      it++)
+    {
+      it->second.output(std::cout);
+    }
 }
 
 void goto_unwindt::find_function_loops()

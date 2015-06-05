@@ -1473,7 +1473,11 @@ bool cbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("unroll-goto-loops"))
     {
-      goto_unwind(goto_functions, ns, ui_message_handler);
+      goto_unwind(
+        goto_functions,
+        atol(options.get_option("unwind").c_str()),
+        ns,
+        ui_message_handler);
     }
 
     // show it?

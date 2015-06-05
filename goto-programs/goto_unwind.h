@@ -17,6 +17,7 @@
 
 void goto_unwind(
   goto_functionst &goto_functions,
+  unsigned unwind,
   const namespacet &ns,
   message_handlert &message_handler);
 
@@ -25,10 +26,12 @@ class goto_unwindt:public message_streamt
 public:
   goto_unwindt(
     goto_functiont &_goto_function,
+    unsigned _unwind,
     const namespacet &_ns,
-    message_handlert &_message_handler):
+    message_handlert &_message_handler) :
     message_streamt(_message_handler),
     goto_function(_goto_function),
+    unwind(_unwind),
     ns(_ns)
   {
     // Find loops
@@ -41,6 +44,7 @@ public:
 
 protected:
   goto_functiont &goto_function;
+  unsigned unwind;
   const namespacet &ns;
 
   typedef std::map<goto_programt::instructiont, goto_programt> function_loopst;
