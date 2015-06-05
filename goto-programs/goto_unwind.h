@@ -32,14 +32,15 @@ public:
     message_streamt(_message_handler),
     goto_function(_goto_function),
     unwind(_unwind),
-    ns(_ns)
+    ns(_ns),
+    tmp_goto_program(goto_programt())
   {
     // Find loops
     find_function_loops();
 
     // unwind loops
     if(function_loops.size())
-      goto_unwind_rec();
+      goto_unwind();
   }
 
 protected:
@@ -47,7 +48,9 @@ protected:
   unsigned unwind;
   const namespacet &ns;
 
-  typedef std::map<goto_programt::instructiont, goto_programt> function_loopst;
+  goto_programt tmp_goto_program;
+
+  typedef std::map<unsigned, goto_programt> function_loopst;
   function_loopst function_loops;
 
   void find_function_loops();
@@ -55,7 +58,13 @@ protected:
     goto_programt::instructionst::iterator loop_head,
     goto_programt::instructionst::iterator loop_exit);
 
-  void goto_unwind_rec();
+  void handle_nested_loops();
+  void handle_nested_loops_rec(
+    function_loopst::iterator,
+    bool rec);
+
+  void goto_unwind();
+
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_UNWIND_H_ */
