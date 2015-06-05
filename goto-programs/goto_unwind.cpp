@@ -170,3 +170,22 @@ void goto_unwindt::create_function_loop(
     ++it;
   }
 }
+
+void goto_unwindt::output(std::ostream &out)
+{
+  for(function_loopst::const_iterator h_it=function_loops.begin();
+      h_it!=function_loops.end(); ++h_it)
+  {
+    unsigned n=h_it->first;
+
+    out << n << " is head of { ";
+    for(goto_programt::instructionst::const_iterator l_it=
+        h_it->second.instructions.begin();
+        l_it!=h_it->second.instructions.end(); ++l_it)
+    {
+      if(l_it!=h_it->second.instructions.begin()) out << ", ";
+      out << (*l_it).location_number;
+    }
+    out << " }\n";
+  }
+}

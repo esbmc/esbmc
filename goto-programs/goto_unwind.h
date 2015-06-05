@@ -64,7 +64,7 @@ protected:
     bool rec);
 
   void goto_unwind();
-
+  void output(std::ostream &out);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_UNWIND_H_ */
