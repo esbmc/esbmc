@@ -52,23 +52,27 @@ void goto_unwindt::create_function_loop(
 {
   goto_programt::instructionst::iterator it=loop_head;
 
-  // Copy the loop body
-  goto_programt loop_body;
-  while (it != loop_exit)
-  {
-    goto_programt::targett new_instruction=loop_body.add_instruction();
-    *new_instruction=*it;
-    new_instruction->target_number = unsigned(-1);
-    new_instruction->targets.clear();
-    ++it;
-  }
-
-  // Update labels
-  loop_body.update();
-
-  std::pair<goto_programt::instructiont, goto_programt> p(*loop_head, goto_programt());
+  std::pair<goto_programt::instructiont, goto_programt>
+    p(*loop_head, goto_programt());
   function_loops.insert(p);
 
-  // Save on the map
-  function_loops[*loop_head].copy_from(loop_body);
+  // We'll copy head and remove target number
+  goto_programt::targett new_instruction=function_loops[p.first].add_instruction();
+  *new_instruction=*it;
+
+  // Remove head target number, there will be no backward loop
+  // Duplicate code for the sake of OPTIMIZATION (no real gain on this, I guess)
+  if(it == loop_head)
+    new_instruction->target_number = unsigned(-1);
+
+  // Next instruction
+  ++it;
+
+  // Copy the loop body
+  while (it != loop_exit)
+  {
+    goto_programt::targett new_instruction=function_loops[p.first].add_instruction();
+    *new_instruction=*it;
+    ++it;
+  }
 }
