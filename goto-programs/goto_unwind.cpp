@@ -33,7 +33,7 @@ void goto_unwindt::find_function_loops()
       it++)
   {
     // Record location number and targets
-    if (it->is_goto())
+    if (it->is_target())
       targets[it->location_number] = it;
 
     // We found a loop, let's record its instructions
