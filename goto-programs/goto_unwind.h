@@ -65,6 +65,9 @@ protected:
 
   void goto_unwind();
   void output(std::ostream &out);
+
+  void create_copies(function_loopst::iterator);
+
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_UNWIND_H_ */

@@ -97,23 +97,7 @@ void goto_unwindt::handle_nested_loops_rec(
   if(!rec)
     return;
 
-  goto_programt copies;
-
-  // Create k copies of the loop
-  for(unsigned i=0; i < unwind; ++i)
-  {
-    for(goto_programt::instructionst::const_iterator
-        l_it=superset->second.instructions.begin();
-        l_it!=superset->second.instructions.end();
-        ++l_it)
-    {
-      goto_programt::targett copied_t=copies.add_instruction();
-      *copied_t=*l_it;
-    }
-  }
-
-  // Save copy to be added to upper loop
-  tmp_goto_program.destructive_append(copies);
+  create_copies(superset);
 }
 
 void goto_unwindt::find_function_loops()
@@ -189,4 +173,25 @@ void goto_unwindt::output(std::ostream &out)
     }
     out << " }\n";
   }
+}
+
+void goto_unwindt::create_copies(function_loopst::iterator superset)
+{
+  goto_programt copies;
+
+  // Create k copies of the loop
+  for(unsigned i=0; i < unwind; ++i)
+  {
+    for(goto_programt::instructionst::const_iterator
+        l_it=superset->second.instructions.begin();
+        l_it!=superset->second.instructions.end();
+        ++l_it)
+    {
+      goto_programt::targett copied_t=copies.add_instruction();
+      *copied_t=*l_it;
+    }
+  }
+
+  // Save copy to be added to upper loop
+  tmp_goto_program.destructive_append(copies);
 }
