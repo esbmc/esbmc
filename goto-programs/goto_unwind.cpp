@@ -85,8 +85,9 @@ void goto_unwindt::handle_nested_loops_rec(
         // Cleanup set
         found->second.clear();
 
-        // And remove the last loop
-        while(loop_head->location_number <= nested_loop_exit)
+        // Finally, remove the last loop and one extra instruction
+        // which is the backward goto
+        while(loop_head->location_number <= (nested_loop_exit+1))
           loop_head = superset->second.instructions.erase(loop_head);
       }
     }
