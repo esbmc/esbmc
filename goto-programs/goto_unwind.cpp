@@ -187,6 +187,10 @@ void goto_unwindt::create_copies(function_loopst::iterator superset)
         l_it!=superset->second.instructions.end();
         ++l_it)
     {
+      // Dont add duplicate decls
+      if(i > 0 && l_it->is_other() && is_code_decl2t(l_it->code))
+        continue;
+
       goto_programt::targett copied_t=copies.add_instruction();
       *copied_t=*l_it;
     }
