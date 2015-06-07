@@ -967,9 +967,7 @@ void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                           const type2tc &type)
 {
-
   const constant_int2t &theint = to_constant_int2t(offset);
-  const type2tc &bytetype = get_uint8_type();
 
   assert(is_scalar_type(value));
   // We're accessing some kind of scalar type; might be a valid, correct
@@ -987,10 +985,10 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     value = expr2tc();
   } else {
     // Either nonzero offset, or a smaller / bigger read.
-    // XXX -- refactor to become concat based.
-    value = byte_extract2tc(bytetype, value, offset, is_big_endian);
-    if (type->get_width() != 8)
-      value = typecast2tc(type, value);
+    expr2tc *bytes =
+      extract_bytes_from_scalar(value, type->get_width() / 8, offset);
+    stitch_together_from_byte_array(value, type, bytes);
+    delete[] bytes;
   }
 }
 
@@ -1165,10 +1163,11 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       // XXX -- stitch together with concats?
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
-      field = byte_extract2tc(get_uint8_type(), field, new_offset,
-                              is_big_endian);
-      if (type->get_width() != 8)
-        field = typecast2tc(type, field);
+
+      expr2tc *bytes =
+        extract_bytes_from_scalar(field, type->get_width() / 8, new_offset);
+      stitch_together_from_byte_array(field, type, bytes);
+      delete[] bytes;
 
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     }
