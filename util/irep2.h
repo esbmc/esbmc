@@ -4765,4 +4765,14 @@ get_array_subtype(const type2tc &type)
   return to_array_type(type).subtype;
 }
 
+inline const type2tc &
+get_base_array_subtype(const type2tc &type)
+{
+  const auto &subtype = to_array_type(type).subtype;
+  if (is_array_type(subtype))
+    return get_base_array_subtype(subtype);
+  else
+    return subtype;
+}
+
 #endif /* _UTIL_IREP2_H_ */
