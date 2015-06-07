@@ -787,10 +787,11 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     abort();
     // XXX FIXME, this should become a smt-time assertion
   case flag_src_struct | flag_dst_struct | flag_is_const_offs:
-  case flag_src_array | flag_dst_struct | flag_is_const_offs:
-    // Extract a structure from inside an array or another struct. Single
-    // function supports both (which is bad).
+    // Extract a structure from inside another struct.
     construct_struct_ref_from_const_offset(value, offset, type, guard);
+  case flag_src_array | flag_dst_struct | flag_is_const_offs:
+    // Extract a structure from inside an array.
+    construct_struct_ref_from_const_offset_array(value, offset, type, guard, mode, alignment);
     break;
 
   case flag_src_scalar | flag_dst_union | flag_is_const_offs:
@@ -800,10 +801,11 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     abort();
     // XXX FIXME, this should become a smt-time assertion
   case flag_src_struct | flag_dst_union | flag_is_const_offs:
-  case flag_src_array | flag_dst_union | flag_is_const_offs:
-    // Extract a structure from inside an array or another struct. Single
-    // function supports both (which is bad).
+    // Extract a union from inside a structure.
     construct_struct_ref_from_const_offset(value, offset, type, guard);
+  case flag_src_array | flag_dst_union | flag_is_const_offs:
+    // Extract a union from inside an array.
+    construct_struct_ref_from_const_offset_array(value, offset, type, guard, mode, alignment);
     break;
 
 
@@ -1257,6 +1259,57 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
 }
 
 void
+dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
+             const expr2tc &offset, const type2tc &type, const guardt &guard,
+             modet mode, unsigned long alignment)
+{
+  const constant_int2t &intref = to_constant_int2t(offset);
+
+  assert(is_array_type(value->type));
+  const type2tc &base_subtype = get_base_array_subtype(value->type);
+
+  // All in all: we don't care, what's being accessed at this level, unless
+  // this struct/union is being constructed out of a byte array. If that's
+  // not the case, just let the array recursive handler handle it. It'll bail
+  // if access is unaligned, and reduced us to constructing a constant
+  // reference from the base subtype, through the correct recursive handler.
+  if (base_subtype->get_width() != 8) {
+    construct_from_array(value, offset, type, guard, mode, alignment);
+    return;
+  }
+
+  // Access is creating a structure or union reference from on top of a byte
+  // array. Clearly, this is an expensive operation, but one that may possibly
+  // turn up in things like C++, where one might pass-by-value a structure
+  // that's been malloc'd? Either way, these turn up.
+  // Don't implement for unions; in the near future they're going to become
+  // byte arrays themselves.
+  if (is_union_type(type)) {
+      dereference_failure("Memory model",
+                          "Object accessed with incompatible base type", guard);
+      return;
+  }
+
+  // We are left with constructing a structure from a byte array.
+  std::vector<expr2tc> fields;
+  assert(is_struct_type(type));
+  const struct_type2t &structtype = to_struct_type(type);
+  uint64_t struct_offset = intref.constant_value.to_uint64();
+  forall_types(it, structtype.members) {
+    const type2tc &target_type = *it;
+    expr2tc target = value; // The byte array;
+    build_reference_rec(target, gen_ulong(struct_offset), target_type, guard,
+        mode);
+    fields.push_back(target);
+    struct_offset += type_byte_size(*target_type).to_uint64();
+  }
+
+  // We now have a vector of fields reconstructed from the byte array
+  value = constant_struct2tc(type, fields);
+  return;
+}
+
+void
 dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
              const expr2tc &offs, const type2tc &type, const guardt &guard)
 {
@@ -1264,30 +1317,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
   // incompatible type, we do.
   const constant_int2t &intref = to_constant_int2t(offs);
 
-  if (is_array_type(value->type)) {
-    const array_type2t &arr_type = to_array_type(value->type);
-
-    if (!is_struct_type(arr_type.subtype) && !is_array_type(arr_type.subtype)) {
-      // Can't handle accesses to anything else.
-      dereference_failure("Memory model",
-                          "Object accessed with incompatible base type", guard);
-      return;
-    }
-
-    // Create an access to an array index. Alignment will be handled at a lower
-    // layer, because we might not be able to detect that it's valid (structs
-    // within structs).
-    mp_integer subtype_size = type_byte_size(*arr_type.subtype.get());
-    mp_integer idx = intref.constant_value / subtype_size;
-    mp_integer mod = intref.constant_value % subtype_size;
-
-    expr2tc idx_expr = gen_ulong(idx.to_ulong());
-    expr2tc mod_expr = gen_ulong(mod.to_ulong());
-
-    value = index2tc(arr_type.subtype, value, idx_expr);
-
-    construct_struct_ref_from_const_offset(value, mod_expr, type, guard);
-  } else if (is_struct_type(value->type)) {
+  if (is_struct_type(value->type)) {
     // Right. In this situation, there are several possibilities. First, if the
     // offset is zero, and the struct type is compatible, we've succeeded.
     // If the offset isn't zero, then there are some possibilities:
@@ -1518,6 +1548,7 @@ dereferencet::extract_bytes_from_array(const expr2tc &array, unsigned int bytes,
   assert(bytes <= 8 && "Too many bytes for extraction/stitching in deref");
   assert(is_array_type(array) && "Can only extract bytes for stitching from arrays");
   type2tc subtype = to_array_type(array->type).subtype;
+  assert(!is_array_type(subtype) && "Can't extract bytes from multi-dimensional arrays");
   assert(subtype->get_width() == 8 && "Can only extract bytes for stitching from byte array");
   // XXX -- this doesn't allow for scenarios where we read, say, a uint32 from
   // an array of uint16s.

@@ -407,6 +407,11 @@ private:
                                         const guardt &guard,
                                         unsigned long alignment,
                                         modet mode);
+  void construct_struct_ref_from_const_offset_array(expr2tc &value,
+                                        const expr2tc &offs,
+                                        const type2tc &type,
+                                        const guardt &guard,
+                                        modet mode, unsigned long alignment);
   void construct_struct_ref_from_const_offset(expr2tc &value,
                                         const expr2tc &offs,
                                         const type2tc &type,
