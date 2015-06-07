@@ -1274,16 +1274,6 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
       return;
     }
 
-    // Crazyness: we might be returning a reference to an array, not a struct,
-    // because this method needs renaming.
-    if (is_array_type(type)) {
-      const array_type2t target_type = to_array_type(type);
-      // If subtype sizes match, then we're as good as we're going to be for
-      // returning a reference to the desired subarray.
-      if (target_type.subtype->get_width() == arr_type.subtype->get_width())
-        return;
-    }
-
     // Create an access to an array index. Alignment will be handled at a lower
     // layer, because we might not be able to detect that it's valid (structs
     // within structs).
