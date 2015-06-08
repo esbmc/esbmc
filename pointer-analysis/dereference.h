@@ -421,10 +421,11 @@ private:
   void construct_struct_ref_from_dyn_offset(expr2tc &value,
                                         const expr2tc &offs,
                                         const type2tc &type,
-                                        const guardt &guard);
+                                        const guardt &guard,
+                                        modet mode);
   void construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
                               const expr2tc &offs, const type2tc &type,
-                              const expr2tc &accuml_guard,
+                              const expr2tc &accuml_guard, modet mode,
                               std::list<std::pair<expr2tc, expr2tc> > &output);
   void construct_from_array(expr2tc &value, const expr2tc &offset,
                             const type2tc &type, const guardt &guard,

@@ -835,7 +835,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   case flag_src_array | flag_dst_struct | flag_is_dyn_offs:
     // Extract a structure from inside an array or another struct. Single
     // function supports both (which is bad).
-    construct_struct_ref_from_dyn_offset(value, offset, type, guard);
+    construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
     break;
 
   case flag_src_scalar | flag_dst_union | flag_is_dyn_offs:
@@ -848,7 +848,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   case flag_src_array | flag_dst_union | flag_is_dyn_offs:
     // Extract a structure from inside an array or another struct. Single
     // function supports both (which is bad).
-    construct_struct_ref_from_dyn_offset(value, offset, type, guard);
+    construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
     break;
 
 
@@ -856,7 +856,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     construct_struct_ref_from_const_offset(value, offset, type, guard);
     break;
   case flag_src_union | flag_dst_union | flag_is_dyn_offs:
-    construct_struct_ref_from_dyn_offset(value, offset, type, guard);
+    construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
     break;
 
   // All union-src situations are currently approximations
@@ -1389,7 +1389,8 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
 void
 dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
-             const expr2tc &offs, const type2tc &type, const guardt &guard)
+             const expr2tc &offs, const type2tc &type, const guardt &guard,
+             modet mode)
 {
   // This is much more complicated -- because we don't know the offset here,
   // we need to go through all the possible fields that this might (legally)
@@ -1397,7 +1398,7 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
   // So:
   std::list<std::pair<expr2tc, expr2tc> > resolved_list;
 
-  construct_struct_ref_from_dyn_offs_rec(value, offs, type, true_expr,
+  construct_struct_ref_from_dyn_offs_rec(value, offs, type, true_expr, mode,
                                          resolved_list);
 
   if (resolved_list.size() == 0) {
@@ -1433,7 +1434,7 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
 void
 dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
                               const expr2tc &offs, const type2tc &type,
-                              const expr2tc &accuml_guard,
+                              const expr2tc &accuml_guard, modet mode,
                               std::list<std::pair<expr2tc, expr2tc> > &output)
 {
   // Look for all the possible offsets that could result in a legitimate access
@@ -1441,7 +1442,9 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
   // based on the 'offs' argument, that identifies when this field is legally
   // accessed.
 
-  if (is_array_type(value->type)) {
+  // Is this a non-byte-array array?
+  if (is_array_type(value->type) &&
+      get_base_array_subtype(value->type)->get_width() != 8) {
     const array_type2t &arr_type = to_array_type(value->type);
     // We can legally access various offsets into arrays. Generate an index
     // and recurse. The complicate part is the new offset and guard: we need
@@ -1463,7 +1466,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
 
     construct_struct_ref_from_dyn_offs_rec(index, new_offset, type, range_guard,
-                                           output);
+                                           mode, output);
     return;
   } else if (is_struct_type(value->type)) {
     // OK. If this type is compatible and matches, we're good. There can't
@@ -1501,9 +1504,37 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
       expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
 
       construct_struct_ref_from_dyn_offs_rec(memb, new_offset, type,
-                                             range_guard, output);
+                                             range_guard, mode, output);
       i++;
     }
+  } else if (is_array_type(value->type) &&
+      get_base_array_subtype(value->type)->get_width() == 8) {
+    // This is a byte array. We can reconstruct a structure from this, if
+    // we don't overflow bounds. Start by encoding an assertion.
+    guardt tmp;
+    tmp.add(accuml_guard);
+    bounds_check(value, offs, type, tmp);
+
+    // We are left with constructing a structure from a byte array. XXX, this
+    // is duplicated from above, refactor?
+    std::vector<expr2tc> fields;
+    assert(is_struct_type(type));
+    const struct_type2t &structtype = to_struct_type(type);
+    expr2tc array_offset = offs;
+    forall_types(it, structtype.members) {
+      const type2tc &target_type = *it;
+      expr2tc target = value; // The byte array;
+      build_reference_rec(target, array_offset, target_type, tmp, mode);
+      fields.push_back(target);
+
+      // Update dynamic offset into array
+      array_offset = add2tc(array_offset->type, array_offset,
+          gen_ulong(type_byte_size(*target_type).to_uint64()));
+    }
+
+    // We now have a vector of fields reconstructed from the byte array
+    constant_struct2tc the_struct(type, fields);
+    output.push_back(std::pair<expr2tc, expr2tc>(accuml_guard, the_struct));
   } else {
     // Not legal
     return;
