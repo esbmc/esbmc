@@ -1287,9 +1287,8 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
   // Don't implement for unions; in the near future they're going to become
   // byte arrays themselves.
   if (is_union_type(type)) {
-      dereference_failure("Memory model",
-                          "Object accessed with incompatible base type", guard);
-      return;
+    bad_base_type_failure(guard, "struct", "union");
+    return;
   }
 
   // We are left with constructing a structure from a byte array.
@@ -1382,12 +1381,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
       }
       i++;
     }
-    dereference_failure("Memory model",
-                        "Object accessed with incompatible base type",
-                        guard);
-  } else {
-    dereference_failure("Memory model",
-                        "Object accessed with incompatible base type", guard);
+    bad_base_type_failure(guard, "simple union", "complex union");
   }
 
   return;
@@ -1409,8 +1403,7 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
   if (resolved_list.size() == 0) {
     // No legal accesses.
     value = expr2tc();
-    dereference_failure("Memory model",
-                        "Object accessed with incompatible base type", guard);
+    bad_base_type_failure(guard, "legal dynamic offset", "nothing");
     return;
   }
 
@@ -1434,8 +1427,7 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
   accuml = not2tc(accuml); // Creates a new 'not' expr. Doesn't copy construct.
   guardt tmp_guard = guard;
   tmp_guard.add(accuml);
-  dereference_failure("Memory model",
-                      "Object accessed with incompatible base type", tmp_guard);
+  bad_base_type_failure(tmp_guard, "legal dynamic offset", "illegal offset");
 }
 
 void
@@ -1529,6 +1521,15 @@ dereferencet::dereference_failure(const std::string &error_class,
   if(!options.get_bool_option("no-pointer-check")) {
     dereference_callback.dereference_failure( error_class, error_name, guard);
   }
+}
+
+void
+dereferencet::bad_base_type_failure(const guardt &guard,
+    const std::string &wants, const std::string &have)
+{
+  std::stringstream ss;
+  ss << "Object accessed with incompatible base type. Wanted " << wants << " but got " << have;
+  dereference_failure("Memory model", ss.str(), guard);
 }
 
 void
@@ -1747,8 +1748,8 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
     // XXX -- there's a line in the C spec, appendix G or whatever, saying that
     // accessing an object with an (incompatible) type other than its base type
     // is undefined behaviour. Should totally put that in the error message.
-    dereference_failure("Memory model",
-                        "Object accessed with incompatible base type", guard);
+    bad_base_type_failure(guard, get_type_id(*value->type),
+        get_type_id(*base_of_steps_type));
     value = expr2tc();
   }
 }
