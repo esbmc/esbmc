@@ -227,6 +227,8 @@ void goto_symext::symex_assign_rec(
     symex_assign_byte_extract(lhs, rhs, guard);
   } else if (is_concat2t(lhs)) {
     symex_assign_concat(lhs, rhs, guard);
+  } else if (is_constant_struct2t(lhs)) {
+    symex_assign_structure(lhs, rhs, guard);
   } else {
     std::cerr <<  "assignment to " << get_expr_id(lhs) << " not handled"
               << std::endl;
@@ -267,6 +269,28 @@ void goto_symext::symex_assign_symbol(
     cur_state->gen_stack_trace(),
     symex_targett::STATE);
 
+}
+
+void goto_symext::symex_assign_structure(
+  const expr2tc &lhs,
+  expr2tc &rhs,
+  guardt &guard)
+{
+  const struct_type2t &structtype = to_struct_type(lhs->type);
+  const constant_struct2t &the_structure = to_constant_struct2t(lhs);
+
+  // Explicitly project lhs fields out of structure, assignment will just undo
+  // any member operations. If user is assigning to a structure literal, we
+  // will croak after recursing. Otherwise, we are assigning to a re-constituted
+  // structure, through dereferencing.
+  unsigned int i = 0;
+  forall_types(it, structtype.members) {
+    const expr2tc &lhs_memb = the_structure.datatype_members[i];
+    member2tc rhs_memb(*it, rhs, structtype.member_names[i]);
+    symex_assign_rec(lhs_memb, rhs_memb, guard);
+
+    i++;
+  }
 }
 
 void goto_symext::symex_assign_typecast(
