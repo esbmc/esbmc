@@ -93,13 +93,6 @@ smt_convt::convert_byte_update(const expr2tc &expr)
          "scalar variables now");
 
   if (!is_constant_int2t(data.source_offset)) {
-    if (is_pointer_type(data.type)) {
-      // Just return a free pointer. Seriously, this is going to be faster,
-      // easier, and probably accurate than anything else.
-      smt_sortt s = convert_sort(data.type);
-      return mk_fresh(s, "updated_ptr");
-    }
-
     expr2tc source = data.source_value;
     unsigned int src_width = source->type->get_width();
     if (!is_bv_type(source))
