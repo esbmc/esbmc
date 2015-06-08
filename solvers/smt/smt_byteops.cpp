@@ -23,7 +23,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     // offset distance. The rest of these calculations will still apply.
     if (data.big_endian) {
       auto data_size = type_byte_size(*source->type);
-      constant_int2tc data_size_expr(source->type, data_size);
+      constant_int2tc data_size_expr(source->type, data_size - 1);
       sub2tc sub(source->type, data_size_expr, offs);
       offs = sub;
     }
@@ -111,7 +111,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     // offset distance. The rest of these calculations will still apply.
     if (data.big_endian) {
       auto data_size = type_byte_size(*source->type);
-      constant_int2tc data_size_expr(source->type, data_size);
+      constant_int2tc data_size_expr(source->type, data_size - 1);
       sub2tc sub(source->type, data_size_expr, offs);
       offs = sub;
     }
@@ -155,7 +155,8 @@ smt_convt::convert_byte_update(const expr2tc &expr)
 
   // Flip location if we're in big-endian mode
   if (data.big_endian) {
-    unsigned int data_size =type_byte_size(*data.source_value->type).to_ulong();
+    unsigned int data_size =
+      type_byte_size(*data.source_value->type).to_ulong() - 1;
     src_offset = data_size - src_offset;
   }
 
