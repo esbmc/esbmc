@@ -18,6 +18,16 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     // appropriate amount, according to the source offset, and select out the
     // bottom byte.
     expr2tc offs = data.source_offset;
+
+    // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
+    // offset distance. The rest of these calculations will still apply.
+    if (data.big_endian) {
+      auto data_size = type_byte_size(*source->type);
+      constant_int2tc data_size_expr(source->type, data_size);
+      sub2tc sub(source->type, data_size_expr, offs);
+      offs = sub;
+    }
+
     if (offs->type->get_width() != src_width)
       // Z3 requires these two arguments to be the same width
       offs = typecast2tc(source->type, data.source_offset);
@@ -96,6 +106,16 @@ smt_convt::convert_byte_update(const expr2tc &expr)
       source = typecast2tc(get_uint_type(src_width), source);
 
     expr2tc offs = data.source_offset;
+
+    // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
+    // offset distance. The rest of these calculations will still apply.
+    if (data.big_endian) {
+      auto data_size = type_byte_size(*source->type);
+      constant_int2tc data_size_expr(source->type, data_size);
+      sub2tc sub(source->type, data_size_expr, offs);
+      offs = sub;
+    }
+
     if (offs->type->get_width() != src_width)
       offs = typecast2tc(get_uint_type(src_width), offs);
 
@@ -132,6 +152,12 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   width_op2 = data.update_value->type->get_width();
   width_op0 = data.source_value->type->get_width();
   src_offset = to_constant_int2t(data.source_offset).constant_value.to_ulong();
+
+  // Flip location if we're in big-endian mode
+  if (data.big_endian) {
+    unsigned int data_size =type_byte_size(*data.source_value->type).to_ulong();
+    src_offset = data_size - src_offset;
+  }
 
   if (int_encoding) {
     std::cerr << "Can't byte update in integer mode; rerun in bitvector mode"
