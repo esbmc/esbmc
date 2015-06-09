@@ -8,6 +8,7 @@
 #include <util/std_expr.h>
 
 #include "goto_unwind.h"
+#include "remove_skip.h"
 
 void goto_unwind(
   goto_functionst& goto_functions,
@@ -22,82 +23,159 @@ void goto_unwind(
 
 void goto_unwindt::goto_unwind()
 {
-  handle_nested_loops();
-}
-
-void goto_unwindt::handle_nested_loops()
-{
+  // Full unwind the program
   for(function_loopst::iterator
     it = function_loops.begin();
     it != function_loops.end();
     ++it)
   {
-    // Possible superset that we're looking in
-    handle_nested_loops_rec(it, false);
+    assert(!it->second.empty());
+    unwind_program(goto_function.body, it);
+
+    // remove skips
+    remove_skip(goto_function.body);
   }
 
-  // Clean up
-  for(function_loopst::iterator
-      it = function_loops.begin();
-      it != function_loops.end();
-      ++it)
-    {
-      if(it->second.empty())
-        function_loops.erase(it);
-    }
+  goto_function.body.update();
 }
 
-void goto_unwindt::handle_nested_loops_rec(
-  function_loopst::iterator superset,
-  bool rec)
+void goto_unwindt::unwind_program(
+  goto_programt& goto_program,
+  function_loopst::iterator loop)
 {
-  // If the set is empty, then we already expanded it
-  if(superset->second.empty())
-    return;
+  // Get loop exit goto number
+  unsigned exit_number = (--loop->second.instructions.end())->location_number;
 
-  goto_programt::instructionst::iterator loop_head =
-    superset->second.instructions.begin();
+  // Increment pointer by 2, the first increment will point to the backward
+  // GOTO and the second point to the first instruction after the end of
+  // the loop
+  exit_number += 2;
 
-  goto_programt::instructionst::iterator loop_exit =
-    superset->second.instructions.end();
-
-  // Alright, can we get to the end of it, without finding another loop?
-  while(++loop_head != loop_exit)
+  // So we can get the instruction after the exit
+  goto_programt::targett loop_exit;
+  for(goto_programt::instructionst::iterator
+      it=goto_function.body.instructions.begin();
+      it!=goto_function.body.instructions.end();
+      it++)
   {
-    function_loopst::iterator found =
-      function_loops.find(loop_head->location_number);
-
-    if(found != function_loops.end())
+    if(it->location_number == exit_number)
     {
-      // Nested loops, handle them before finish the current one
-      handle_nested_loops_rec(found, true);
+      loop_exit = it;
+      break;
+    }
+  }
 
-      // Insert copies before the current upper loop
-      if(!tmp_goto_program.empty())
+  std::vector<goto_programt::targett> iteration_points;
+
+  assert(unwind!=0);
+  iteration_points.resize(unwind);
+
+  if(loop_exit!=goto_program.instructions.begin())
+  {
+    goto_programt::targett t_before=loop_exit;
+    t_before--;
+
+    if(t_before->is_goto() && is_true(t_before->guard))
+    {
+      // no 'fall-out'
+    }
+    else
+    {
+      // guard against 'fall-out'
+      goto_programt::targett t_goto=goto_program.insert(loop_exit);
+
+      t_goto->make_goto(loop_exit);
+      t_goto->location=loop_exit->location;
+      t_goto->function=loop_exit->function;
+      t_goto->guard=true_expr;
+    }
+  }
+
+  goto_programt::targett t_skip=goto_program.insert(loop_exit);
+  goto_programt::targett loop_iter=t_skip;
+
+  const goto_programt::targett loop_head = loop->first;
+
+  t_skip->make_skip();
+  t_skip->location=loop_head->location;
+  t_skip->function=loop_head->function;
+
+  // record the exit point of first iteration
+  iteration_points[0]=loop_iter;
+
+  // build a map for branch targets inside the loop
+  std::map<goto_programt::targett, unsigned> target_map;
+
+  {
+    unsigned count=0;
+    for(goto_programt::targett t=loop_head;
+        t!=loop_exit; t++, count++)
+    {
+      assert(t!=goto_program.instructions.end());
+      target_map[t]=count;
+    }
+  }
+
+  // re-direct any branches that go to loop_head to loop_iter
+
+  for(goto_programt::targett t=loop_head;
+      t!=loop_iter; t++)
+  {
+    assert(t!=goto_program.instructions.end());
+    for(goto_programt::instructiont::targetst::iterator
+        t_it=t->targets.begin();
+        t_it!=t->targets.end();
+        t_it++)
+      if(*t_it==loop_head) *t_it=loop_iter;
+  }
+
+  // we make k-1 copies, to be inserted before loop_exit
+  goto_programt copies;
+
+  for(unsigned i=1; i<unwind; i++)
+  {
+    // make a copy
+    std::vector<goto_programt::targett> target_vector;
+    target_vector.reserve(target_map.size());
+
+    for(goto_programt::targett t=loop_head;
+        t!=loop_exit; t++)
+    {
+      assert(t!=goto_program.instructions.end());
+      goto_programt::targett copied_t=copies.add_instruction();
+      *copied_t=*t;
+      target_vector.push_back(copied_t);
+    }
+
+    // record exit point of this copy
+    iteration_points[i]=target_vector.back();
+
+    // adjust the intra-loop branches
+
+    for(unsigned i=0; i<target_vector.size(); i++)
+    {
+      goto_programt::targett t=target_vector[i];
+
+      for(goto_programt::instructiont::targetst::iterator
+          t_it=t->targets.begin();
+          t_it!=t->targets.end();
+          t_it++)
       {
-        // Insert GOTO instructions
-        superset->second.destructive_insert(loop_head, tmp_goto_program);
-
-        // Get the number of the nested loop exit
-        unsigned nested_loop_exit =
-          (--found->second.instructions.end())->location_number;
-
-        // Cleanup set
-        found->second.clear();
-
-        // Finally, remove the last loop and one extra instruction
-        // which is the backward goto
-        while(loop_head->location_number <= (nested_loop_exit+1))
-          loop_head = superset->second.instructions.erase(loop_head);
+        std::map<goto_programt::targett, unsigned>::const_iterator
+          m_it=target_map.find(*t_it);
+        if(m_it!=target_map.end()) // intra-loop?
+        {
+          assert(m_it->second<target_vector.size());
+          *t_it=target_vector[m_it->second];
+        }
       }
     }
   }
 
-  // Only create copies of nested loops
-  if(!rec)
-    return;
+  assert(copies.instructions.size()==(unwind-1)*target_map.size());
 
-  create_copies(superset);
+  // now insert copies before loop_exit
+  goto_program.destructive_insert(loop_exit, copies);
 }
 
 void goto_unwindt::find_function_loops()
@@ -129,22 +207,9 @@ void goto_unwindt::create_function_loop(
 {
   goto_programt::instructionst::iterator it=loop_head;
 
-  std::pair<unsigned, goto_programt>
-    p(loop_head->location_number, goto_programt());
+  std::pair<goto_programt::targett, goto_programt>
+    p(loop_head, goto_programt());
   function_loops.insert(p);
-
-  // We'll copy head and remove target number
-  goto_programt::targett new_instruction=
-    function_loops[p.first].add_instruction();
-  *new_instruction=*it;
-
-  // Remove head target number, there will be no backward loop
-  // Duplicate code for the sake of OPTIMIZATION (no real gain on this, I guess)
-  if(it == loop_head)
-    new_instruction->target_number = unsigned(-1);
-
-  // Next instruction
-  ++it;
 
   // Copy the loop body
   while (it != loop_exit)
@@ -158,10 +223,12 @@ void goto_unwindt::create_function_loop(
 
 void goto_unwindt::output(std::ostream &out)
 {
-  for(function_loopst::const_iterator h_it=function_loops.begin();
-      h_it!=function_loops.end(); ++h_it)
+  for(function_loopst::const_iterator
+      h_it=function_loops.begin();
+      h_it!=function_loops.end();
+      ++h_it)
   {
-    unsigned n=h_it->first;
+    unsigned n=h_it->first->location_number;
 
     out << n << " is head of { ";
     for(goto_programt::instructionst::const_iterator l_it=
@@ -173,29 +240,4 @@ void goto_unwindt::output(std::ostream &out)
     }
     out << " }\n";
   }
-}
-
-void goto_unwindt::create_copies(function_loopst::iterator superset)
-{
-  goto_programt copies;
-
-  // Create k copies of the loop
-  for(unsigned i=0; i < unwind; ++i)
-  {
-    for(goto_programt::instructionst::const_iterator
-        l_it=superset->second.instructions.begin();
-        l_it!=superset->second.instructions.end();
-        ++l_it)
-    {
-      // Dont add duplicate decls
-      if(i > 0 && l_it->is_other() && is_code_decl2t(l_it->code))
-        continue;
-
-      goto_programt::targett copied_t=copies.add_instruction();
-      *copied_t=*l_it;
-    }
-  }
-
-  // Save copy to be added to upper loop
-  tmp_goto_program.destructive_append(copies);
 }

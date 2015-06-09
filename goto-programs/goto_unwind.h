@@ -50,24 +50,20 @@ protected:
 
   goto_programt tmp_goto_program;
 
-  typedef std::map<unsigned, goto_programt> function_loopst;
+  typedef std::map<goto_programt::targett, goto_programt> function_loopst;
   function_loopst function_loops;
+
+  void goto_unwind();
+  void unwind_program(
+    goto_programt &goto_program,
+    function_loopst::iterator loop);
+
+  void output(std::ostream &out);
 
   void find_function_loops();
   void create_function_loop(
     goto_programt::instructionst::iterator loop_head,
     goto_programt::instructionst::iterator loop_exit);
-
-  void handle_nested_loops();
-  void handle_nested_loops_rec(
-    function_loopst::iterator,
-    bool rec);
-
-  void goto_unwind();
-  void output(std::ostream &out);
-
-  void create_copies(function_loopst::iterator);
-
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_UNWIND_H_ */
