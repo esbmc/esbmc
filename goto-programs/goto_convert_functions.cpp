@@ -14,6 +14,7 @@ Date: June 2003
 #include <prefix.h>
 #include <std_code.h>
 #include <std_expr.h>
+#include <type_byte_size.h>
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
@@ -592,6 +593,31 @@ goto_convert_functionst::rewrite_union_variables(void)
 
       new_variables.push_back(
           std::make_pair(new_sym.name.as_string(), new_sym));
+
+      // Declare a variable with byte array type, to act as storage for the
+      // union. Because we can't get an accurate size out of string-irep right
+      // now, we must migrate the type upwards.
+      symbolt byte_arr_sym = it->second;
+
+      type2tc unitype;
+      migrate_type(it->second.type, unitype);
+      auto arrsize = type_byte_size(*unitype);
+      expr2tc arrsize_expr = gen_ulong(arrsize.to_ulong());
+      type2tc arrtype(new array_type2t(get_uint8_type(), arrsize_expr, false));
+
+      byte_arr_sym.type = migrate_type_back(arrtype);
+      std::stringstream ss3, ss4;
+      ss3 << it->second.name.as_string() << ".unistorage";
+      ss4 << it->second.pretty_name.as_string() << ".unistorage";
+      byte_arr_sym.name = ss3.str();
+      byte_arr_sym.pretty_name = ss4.str();
+
+      new_variables.push_back(
+          std::make_pair(byte_arr_sym.name.as_string(), byte_arr_sym));
+
+      // The initialization of the byte array will happen via the union variable
+      // declaration. That should be rewritten into an assignment to the
+      // dereferenced pointer.
     }
   }
 
