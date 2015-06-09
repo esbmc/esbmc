@@ -19,14 +19,16 @@ void goto_unwind(
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
       goto_unwindt(it->second, unwind, ns, message_handler);
+
+  goto_functions.update();
 }
 
 void goto_unwindt::goto_unwind()
 {
   // Full unwind the program
-  for(function_loopst::iterator
-    it = function_loops.begin();
-    it != function_loops.end();
+  for(function_loopst::reverse_iterator
+    it = function_loops.rbegin();
+    it != function_loops.rend();
     ++it)
   {
     assert(!it->second.empty());
@@ -35,13 +37,11 @@ void goto_unwindt::goto_unwind()
     // remove skips
     remove_skip(goto_function.body);
   }
-
-  goto_function.body.update();
 }
 
 void goto_unwindt::unwind_program(
   goto_programt& goto_program,
-  function_loopst::iterator loop)
+  function_loopst::reverse_iterator loop)
 {
   // Get loop exit goto number
   unsigned exit_number = (--loop->second.instructions.end())->location_number;
