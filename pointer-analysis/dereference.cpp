@@ -1620,13 +1620,25 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
                                               const type2tc &type,
                                               const expr2tc *bytes)
 {
-  unsigned int num_bytes = type->get_width() / 8;
+  int num_bytes = type->get_width() / 8;
 
-  expr2tc accuml = bytes[0];
-  for (unsigned int i = 1; i < num_bytes; i++) {
-    // XXX -- byte order.
-    type2tc res_type = get_uint_type(accuml->type->get_width() + 8);
-    accuml = concat2tc(res_type, accuml, bytes[i]);
+  // We are composing a larger data type out of bytes -- we must consider
+  // what byte order we are giong to stitch it together out of.
+  expr2tc accuml;
+  if (is_big_endian) {
+    // First bytes at top of accumulated bitstring
+    accuml = bytes[0];
+    for (int i = 1; i < num_bytes; i++) {
+      type2tc res_type = get_uint_type(accuml->type->get_width() + 8);
+      accuml = concat2tc(res_type, accuml, bytes[i]);
+    }
+  } else {
+    // Little endian, accumulate in reverse order
+    accuml = bytes[num_bytes - 1];
+    for (int i = num_bytes - 2; i >= 0; i--) {
+      type2tc res_type = get_uint_type(accuml->type->get_width() + 8);
+      accuml = concat2tc(res_type, accuml, bytes[i]);
+    }
   }
 
   // That's going to come out as a bitvector;
