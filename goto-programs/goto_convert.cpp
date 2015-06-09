@@ -823,6 +823,9 @@ void goto_convertt::convert_decl(
      symbol.type.is_code())
 	  return; // this is a SKIP!
 
+  if (symbol.type.id() == "union")
+    handle_auto_union_decl(code, symbol, dest);
+
   if(code.operands().size()==1)
   {
     copy(code, OTHER, dest);
@@ -902,6 +905,33 @@ void goto_convertt::convert_decl(
     assign.location()=tmp.location();
     copy(assign, ASSIGN, dest);
   }
+}
+
+void
+goto_convertt::handle_auto_union_decl(const codet &code, const symbolt &symbol,
+    goto_programt &dest)
+{
+  // When declaring a union, initialize a pointer to the corresponding
+  // byte array.
+  // Generate name of pointer variable, and corresponding storage.
+  std::stringstream ss, ss2;
+  ss << symbol.name << ".uniptr";
+  ss2 << symbol.name << ".unistorage";
+
+  const symbolt &ptrsym = ns.lookup(ss.str());
+  const symbolt &storagesym = ns.lookup(ss2.str());
+  symbol_exprt ptrsym_expr(ptrsym.name, ptrsym.type);
+  symbol_exprt ptrstorage_expr(storagesym.name, storagesym.type);
+
+  // Produce address-of-storage expression and assign it to the pointer symbol
+  exprt addrof = address_of_exprt(ptrstorage_expr);
+  exprt assign = code_assignt(ptrsym_expr, addrof);
+  expr2tc assign2;
+  migrate_expr(assign, assign2);
+
+  goto_programt::targett t_c=dest.add_instruction(ASSIGN);
+  t_c->code = assign2;
+  t_c->location=code.location();
 }
 
 /*******************************************************************\
