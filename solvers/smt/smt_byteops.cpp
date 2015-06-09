@@ -18,6 +18,16 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     // appropriate amount, according to the source offset, and select out the
     // bottom byte.
     expr2tc offs = data.source_offset;
+
+    // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
+    // offset distance. The rest of these calculations will still apply.
+    if (data.big_endian) {
+      auto data_size = type_byte_size(*source->type);
+      constant_int2tc data_size_expr(source->type, data_size - 1);
+      sub2tc sub(source->type, data_size_expr, offs);
+      offs = sub;
+    }
+
     if (offs->type->get_width() != src_width)
       // Z3 requires these two arguments to be the same width
       offs = typecast2tc(source->type, data.source_offset);
@@ -54,6 +64,10 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
       ;
     } else if (is_fixedbv_type(data.source_value)) {
       ;
+    } else if (is_bool_type(data.source_value)) {
+      // We cdan extract a byte from a bool -- zero or one.
+      typecast2tc cast(get_uint8_type(), data.source_value);
+      source = convert_ast(cast);
     } else {
       std::cerr << "Unrecognized type in operand to byte extract." << std::endl;
       data.dump();
@@ -79,19 +93,22 @@ smt_convt::convert_byte_update(const expr2tc &expr)
          "scalar variables now");
 
   if (!is_constant_int2t(data.source_offset)) {
-    if (is_pointer_type(data.type)) {
-      // Just return a free pointer. Seriously, this is going to be faster,
-      // easier, and probably accurate than anything else.
-      smt_sortt s = convert_sort(data.type);
-      return mk_fresh(s, "updated_ptr");
-    }
-
     expr2tc source = data.source_value;
     unsigned int src_width = source->type->get_width();
     if (!is_bv_type(source))
       source = typecast2tc(get_uint_type(src_width), source);
 
     expr2tc offs = data.source_offset;
+
+    // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
+    // offset distance. The rest of these calculations will still apply.
+    if (data.big_endian) {
+      auto data_size = type_byte_size(*source->type);
+      constant_int2tc data_size_expr(source->type, data_size - 1);
+      sub2tc sub(source->type, data_size_expr, offs);
+      offs = sub;
+    }
+
     if (offs->type->get_width() != src_width)
       offs = typecast2tc(get_uint_type(src_width), offs);
 
@@ -128,6 +145,13 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   width_op2 = data.update_value->type->get_width();
   width_op0 = data.source_value->type->get_width();
   src_offset = to_constant_int2t(data.source_offset).constant_value.to_ulong();
+
+  // Flip location if we're in big-endian mode
+  if (data.big_endian) {
+    unsigned int data_size =
+      type_byte_size(*data.source_value->type).to_ulong() - 1;
+    src_offset = data_size - src_offset;
+  }
 
   if (int_encoding) {
     std::cerr << "Can't byte update in integer mode; rerun in bitvector mode"

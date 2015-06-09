@@ -228,9 +228,8 @@ void goto_program_dereferencet::dereference_instruction(
 
       guardt guard;
       // Result discarded
-      std::list<expr2tc> scalar_step_list;
       dereference.dereference(operand, operand->type, guard, dereferencet::FREE,
-                              &scalar_step_list);
+                              expr2tc());
     }
   }
 }

@@ -512,6 +512,25 @@ protected:
   void symex_assign_symbol(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
+   *  Perform assignment to a structure.
+   *  Performed when a constant structure appears on the left hand side.
+   *  These kinds of assignments are permitted by C99, and some C++ fudge.
+   *  Decomposes structure into each particular field, and encodes an assignment
+   *  for each pair of fields.
+   *
+   *  (It's not intuitive that one may assign to a /constant/ structure, however
+   *  a number of pieces of code need to be able to create structures out of
+   *  thin air, or more often an array of bytes. In lieu of better distinction
+   *  between a struct literal and a group of values arranged as a structure,
+   *  the constant_struct irep is used).
+   *
+   *  @param lhs Symbol to assign to
+   *  @param rhs Value to assign to symbol
+   *  @param guard Guard; intent unknown
+   */
+  void symex_assign_structure(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+
+  /**
    *  Perform assignment to a typecast irep.
    *  This just ends up moving the typecast from the lhs to the rhs.
    *  @param lhs Typecast to assign to
