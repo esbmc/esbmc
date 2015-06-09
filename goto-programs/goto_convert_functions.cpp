@@ -326,6 +326,7 @@ void goto_convert(
   try
   {
     goto_convert_functions.thrash_type_symbols();
+    goto_convert_functions.rewrite_union_variables();
     goto_convert_functions.goto_convert();
   }
 
@@ -560,6 +561,43 @@ goto_convert_functionst::thrash_type_symbols(void)
     rename_types(it->second.type, it->second, it->first);
     rename_exprs(it->second.value, it->second, it->first);
   }
+
+  return;
+}
+
+void
+goto_convert_functionst::rewrite_union_variables(void)
+{
+  // Iterate over all symbols, making a list of new symbols to add. For each
+  // union variable in the program, add a corresponding pointer variable with
+  // union type.
+  std::list<std::pair<std::string, symbolt> > new_variables;
+
+  forall_symbols(it, context.symbols) {
+    if (it->second.type.id() == "union") {
+      symbolt new_sym = it->second;
+
+      new_sym.type = pointer_typet(it->second.type);
+      std::stringstream ss, ss2;
+      ss << it->second.name.as_string() << ".uniptr";
+      ss2 << it->second.pretty_name.as_string() << ".uniptr";
+      new_sym.name = ss.str();
+      new_sym.pretty_name = ss2.str();
+
+      // If this is a global variable, it requires an initializer
+      if (new_sym.static_lifetime) {
+        symbol_exprt sym(it->second.name, it->second.type);
+        new_sym.value = address_of_exprt(sym);
+      }
+
+      new_variables.push_back(
+          std::make_pair(new_sym.name.as_string(), new_sym));
+    }
+  }
+
+  // Insert all those new symbols into the symbol table.
+  for (const auto &pair : new_variables)
+    context.symbols.insert(std::make_pair(pair.first, pair.second));
 
   return;
 }
