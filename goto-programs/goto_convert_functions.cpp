@@ -530,7 +530,7 @@ goto_convert_functionst::thrash_type_symbols(void)
   typename_sett names;
   forall_symbols(it, context.symbols) {
     collect_expr(it->second.value, names);
-    collect_expr(it->second.type, names);
+    collect_type(it->second.type, names);
   }
 
   // Try to compute their dependencies.
@@ -541,7 +541,7 @@ goto_convert_functionst::thrash_type_symbols(void)
     if (names.find(it->second.name) != names.end()) {
       typename_sett list;
       collect_expr(it->second.value, list);
-      collect_expr(it->second.type, list);
+      collect_type(it->second.type, list);
       typenames[it->second.name] = list;
     }
   }
