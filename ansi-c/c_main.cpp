@@ -30,32 +30,50 @@ Function: static_lifetime_init
 
 \*******************************************************************/
 
+static void
+init_variable(codet &dest, const symbolt &sym)
+{
+  const exprt &value = sym.value;
+
+  if(value.is_not_nil())
+  {
+    assert(!value.type().is_code());
+
+    exprt symbol("symbol", sym.type);
+    symbol.identifier(sym.name);
+
+    code_assignt code(symbol, sym.value);
+    code.location() = sym.location;
+
+    dest.move_to_operands(code);
+  }
+}
+
 void static_lifetime_init(
   const contextt &context,
   codet &dest)
 {
   dest=code_blockt();
 
-  // do assignments based on "value"
+  // Do assignments based on "value". Defer union assignments to allow pointer
+  // initialization.
+  std::list<const symbolt *> union_syms;
 
-  forall_symbols(it, context.symbols)
+  forall_symbols(it, context.symbols) {
     if(it->second.static_lifetime)
     {
-      const exprt &value=it->second.value;
-
-      if(value.is_not_nil())
-      {
-        assert(!value.type().is_code());
-
-        exprt symbol("symbol", it->second.type);
-        symbol.identifier(it->second.name);
-
-        code_assignt code(symbol, it->second.value);
-        code.location()=it->second.location;
-
-        dest.move_to_operands(code);
+      if (it->second.type.id() == "union") {
+        union_syms.push_back(&it->second);
+        continue;
       }
+
+      init_variable(dest, it->second);
     }
+  }
+
+  // Now do union initialization, through the corresponding union-typed pointers
+  for (const symbolt *sym : union_syms)
+    init_variable(dest, *sym);
 
   // call designated "initialization" functions
 
