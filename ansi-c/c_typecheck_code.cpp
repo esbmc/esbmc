@@ -77,8 +77,6 @@ void c_typecheck_baset::typecheck_code(codet &code)
     typecheck_return(code);
   else if(statement=="decl")
     typecheck_decl(code);
-  else if(statement=="decl-block")
-    typecheck_decl_block(code);
   else if(statement=="assign")
     typecheck_assign(code);
   else if(statement=="skip")
@@ -155,24 +153,6 @@ void c_typecheck_baset::typecheck_assign(codet &code)
 
 /*******************************************************************\
 
-Function: c_typecheck_baset::typecheck_decl_block
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void c_typecheck_baset::typecheck_decl_block(codet &code)
-{
-  Forall_operands(it, code)
-    typecheck_code(to_code(*it));
-}
-
-/*******************************************************************\
-
 Function: c_typecheck_baset::typecheck_block
 
   Inputs:
@@ -199,13 +179,7 @@ void c_typecheck_baset::typecheck_block(codet &code)
 
     codet &code_op=to_code(*it1);
 
-    if(code_op.get_statement()=="decl-block")
-    {
-      Forall_operands(it2, code_op)
-        if(it2->is_not_nil())
-          new_ops.move_to_operands(*it2);
-    }
-    else if(code_op.get_statement()=="label")
+    if(code_op.get_statement()=="label")
     {
       // these may be nested
       codet *code_ptr=&code_op;
@@ -216,23 +190,7 @@ void c_typecheck_baset::typecheck_block(codet &code)
         code_ptr=&to_code(code_ptr->op0());
       }
 
-      codet &label_op=*code_ptr;
-
-      // move declaration out of label
-      if(label_op.get_statement()=="decl-block")
-      {
-        codet tmp;
-        tmp.swap(label_op);
-        label_op=codet("skip");
-
-        new_ops.move_to_operands(code_op);
-
-        Forall_operands(it2, tmp)
-          if(it2->is_not_nil())
-            new_ops.move_to_operands(*it2);
-      }
-      else
-        new_ops.move_to_operands(code_op);
+      new_ops.move_to_operands(code_op);
     }
     else
       new_ops.move_to_operands(code_op);
@@ -438,8 +396,6 @@ Function: c_typecheck_baset::typecheck_for
 
 void c_typecheck_baset::typecheck_for(codet &code)
 {
-  is_loop=true;
-
   if(code.operands().size()!=4)
     throw "for expected to have four operands";
 
@@ -454,48 +410,34 @@ void c_typecheck_baset::typecheck_for(codet &code)
   //
   //   { a; for(;b;c) d; }
 
-  if(code.op0().is_nil())
-  {
-    if(code.op1().is_nil())
-      code.op1().make_true();
-    else
-    {
-      typecheck_expr(code.op1());
-      implicit_typecast_bool(code.op1());
-    }
+  if(code.op0().is_not_nil())
+    typecheck_code(to_code(code.op0()));
 
-    if(code.op2().is_not_nil())
-      typecheck_code(to_code(code.op2()));
-
-    if(code.op3().is_not_nil())
-    {
-      // save & set flags
-      bool old_break_is_allowed(break_is_allowed);
-      bool old_continue_is_allowed(continue_is_allowed);
-
-      break_is_allowed=continue_is_allowed=true;
-
-      typecheck_code(to_code(code.op3()));
-
-      // restore flags
-      break_is_allowed=old_break_is_allowed;
-      continue_is_allowed=old_continue_is_allowed;
-    }
-  }
+  if (code.op1().is_nil())
+    code.op1().make_true();
   else
   {
-    code_blockt code_block;
-    code_block.location()=code.location();
-
-    code_block.reserve_operands(2);
-    code_block.move_to_operands(code.op0());
-    code.op0().make_nil();
-    code_block.move_to_operands(code);
-    code.swap(code_block);
-    typecheck_code(code); // recursive call
+    typecheck_expr(code.op1());
+    implicit_typecast_bool(code.op1());
   }
 
-  is_loop=false;
+  if (code.op2().is_not_nil())
+    typecheck_code(to_code(code.op2()));
+
+  if (code.op3().is_not_nil())
+  {
+    // save & set flags
+    bool old_break_is_allowed(break_is_allowed);
+    bool old_continue_is_allowed(continue_is_allowed);
+
+    break_is_allowed = continue_is_allowed = true;
+
+    typecheck_code(to_code(code.op3()));
+
+    // restore flags
+    break_is_allowed = old_break_is_allowed;
+    continue_is_allowed = old_continue_is_allowed;
+  }
 }
 
 /*******************************************************************\
@@ -720,8 +662,6 @@ Function: c_typecheck_baset::typecheck_while
 
 void c_typecheck_baset::typecheck_while(codet &code)
 {
-  is_loop=true;
-
   if(code.operands().size()!=2)
     throw "while expected to have two operands";
 
@@ -739,6 +679,4 @@ void c_typecheck_baset::typecheck_while(codet &code)
   // restore flags
   break_is_allowed=old_break_is_allowed;
   continue_is_allowed=old_continue_is_allowed;
-
-  is_loop=false;
 }

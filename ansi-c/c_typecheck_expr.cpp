@@ -295,11 +295,6 @@ void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
     // don't do function operand
     assert(expr.operands().size()==2);
 
-    if(is_loop && config.options.get_bool_option("inductive-step"))
-    {
-      mark_functions_inside_loops(expr);
-    }
-
     typecheck_expr(expr.op1()); // arguments
   }
   else if(expr.id()=="sideeffect" &&
@@ -311,53 +306,6 @@ void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
   {
     Forall_operands(it, expr)
       typecheck_expr(*it);
-  }
-}
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::mark_functions_inside_loops
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void c_typecheck_baset::mark_functions_inside_loops(exprt &expr)
-{
-  // If it is an function, search for its symbol and mark
-  // it as inside a loop
-  if(expr.id()=="sideeffect" &&
-     expr.statement()=="function_call")
-  {
-    irep_idt identifier=expr.op0().identifier();
-
-    symbolst::iterator s_it=context.symbols.find(identifier);
-    if(s_it!=context.symbols.end())
-    {
-      symbolt &symbol=s_it->second;
-
-      if(symbol.value.is_nil())
-        return;
-
-      if(symbol.value.find("inside_loop") == true_exprt())
-        return;
-
-      symbol.value.add("inside_loop") = true_exprt();
-
-      // We must search now for nested functions inside the
-      // this function, so recursively look for it
-      Forall_operands(it, symbol.value)
-        mark_functions_inside_loops(*it);
-    }
-  }
-  else
-  {
-    Forall_operands(it, expr)
-      mark_functions_inside_loops(*it);
   }
 }
 

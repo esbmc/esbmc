@@ -49,14 +49,6 @@ public:
 
 protected:
   const cmdlinet &_cmdline;
-
-  // k-induction related
-  u_int k_step;
-  bool base_case;
-  bool forward_condition;
-
-  contextt context_base_case_forward_condition;
-  contextt context_inductive_step;
 };
 
 #endif

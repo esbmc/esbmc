@@ -77,32 +77,25 @@ Function: goto_convert_functionst::goto_convert
 
 void goto_convert_functionst::goto_convert()
 {
-  // If it is the inductive step, it will add the global variables to the statet
-  add_global_variable_to_state();
-
   // warning! hash-table iterators are not stable
 
-  typedef std::list<irep_idt> symbol_listt;
   symbol_listt symbol_list;
 
-  forall_symbols(it, context.symbols)
+  Forall_symbols(it, context.symbols)
   {
     if(!it->second.is_type && it->second.type.is_code())
-      symbol_list.push_back(it->first);
+      symbol_list.push_back(&it->second);
   }
 
-  for(symbol_listt::const_iterator
+  for(symbol_listt::iterator
       it=symbol_list.begin();
       it!=symbol_list.end();
       it++)
   {
-    convert_function(*it);
+    convert_function(**it);
   }
 
   functions.compute_location_numbers();
-
-  // If it is the inductive step, it will add the new variables to context
-  add_new_variables_to_context();
 }
 
 /*******************************************************************\
@@ -193,8 +186,27 @@ Function: goto_convert_functionst::convert_function
 
 void goto_convert_functionst::convert_function(const irep_idt &identifier)
 {
-  goto_functiont &f=functions.function_map[identifier];
-  const symbolt &symbol=ns.lookup(identifier);
+  symbolst::iterator s_it=context.symbols.find(identifier);
+  assert(s_it != context.symbols.end());
+
+  convert_function(s_it->second);
+}
+
+/*******************************************************************\
+
+Function: goto_convert_functionst::convert_function
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convert_functionst::convert_function(symbolt &symbol)
+{
+  irep_idt identifier = symbol.name;
 
   // Apply a SFINAE test: discard unused C++ templates.
   if (symbol.value.get("#speculative_template") == "1" &&
@@ -205,6 +217,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
   tmp_symbol_prefix=id2string(symbol.name)+"::$tmp::";
   temporary_counter=0;
 
+  goto_functiont &f=functions.function_map[identifier];
   f.type=to_code_type(symbol.type);
   f.body_available=symbol.value.is_not_nil();
 
@@ -226,19 +239,6 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
       it!=arguments.end();
       it++)
   {
-    if(inductive_step)
-    {
-      // Fix for of arguments
-      exprt arg=*it;
-      arg.identifier(arg.find("#identifier").id());
-      arg.id("symbol");
-      arg.remove("#identifier");
-      arg.remove("#base_name");
-      arg.remove("#location");
-
-      get_struct_components(arg);
-    }
-
     const irep_idt &identifier=it->get_identifier();
     assert(identifier!="");
     arg_ids.push_back(identifier);

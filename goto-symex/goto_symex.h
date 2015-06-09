@@ -722,7 +722,7 @@ protected:
    *  the option --partial-loops */
   bool partial_loops;
   /** Flag as to whether we're doing a k-induction. Corresponds to
-   *  the option --k-induction */
+   *  the options --k-induction and --k-induction-parallel */
   bool k_induction;
   /** Flag as to whether we're doing a k-induction base case. Corresponds to
    *  the option --base-case */

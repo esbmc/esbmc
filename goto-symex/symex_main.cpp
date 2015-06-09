@@ -184,7 +184,17 @@ goto_symext::symex_step(reachability_treet & art)
 
       // XXX jmorse -- this is not fully symbolic.
       if (thrown_obj_map.find(cur_state->source.pc) != thrown_obj_map.end()) {
-        deref_code.get()->source = thrown_obj_map[cur_state->source.pc];
+        symbol2tc thrown_obj = thrown_obj_map[cur_state->source.pc];
+
+        if (is_pointer_type(deref_code.get()->target.get()->type)
+            && !is_pointer_type(thrown_obj.get()->type))
+        {
+          expr2tc new_thrown_obj(new address_of2t(thrown_obj.get()->type, thrown_obj));
+          deref_code.get()->source = new_thrown_obj;
+        }
+        else
+          deref_code.get()->source = thrown_obj;
+
         thrown_obj_map.erase(cur_state->source.pc);
       }
 

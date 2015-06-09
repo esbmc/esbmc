@@ -164,8 +164,7 @@ void ansi_c_convertt::convert_code(codet &code)
       code.case_irep(tmp);
     }
   }
-  else if(statement=="block" ||
-          statement=="decl-block")
+  else if(statement=="block")
   {
     Forall_operands(it, code)
       convert_code(to_code(*it));
