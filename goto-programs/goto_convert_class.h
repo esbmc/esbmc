@@ -175,9 +175,6 @@ protected:
   void convert(const codet &code, goto_programt &dest);
   void copy(const codet &code, goto_program_instruction_typet type, goto_programt &dest);
 
-  void handle_auto_union_decl(const codet &code, const symbolt &sym,
-      goto_programt &dest);
-
   //
   // Try-catch conversion
   //

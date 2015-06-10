@@ -14,7 +14,6 @@ Date: June 2003
 #include <prefix.h>
 #include <std_code.h>
 #include <std_expr.h>
-#include <type_byte_size.h>
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
@@ -327,7 +326,6 @@ void goto_convert(
   try
   {
     goto_convert_functions.thrash_type_symbols();
-    goto_convert_functions.rewrite_union_variables();
     goto_convert_functions.goto_convert();
   }
 
@@ -562,68 +560,6 @@ goto_convert_functionst::thrash_type_symbols(void)
     rename_types(it->second.type, it->second, it->first);
     rename_exprs(it->second.value, it->second, it->first);
   }
-
-  return;
-}
-
-void
-goto_convert_functionst::rewrite_union_variables(void)
-{
-  // Iterate over all symbols, making a list of new symbols to add. For each
-  // union variable in the program, add a corresponding pointer variable with
-  // union type.
-  std::list<std::pair<std::string, symbolt> > new_variables;
-
-  forall_symbols(it, context.symbols) {
-    if (it->second.type.id() == "union") {
-      symbolt new_sym = it->second;
-
-      new_sym.type = pointer_typet(it->second.type);
-      std::stringstream ss, ss2;
-      ss << it->second.name.as_string() << ".uniptr";
-      ss2 << it->second.pretty_name.as_string() << ".uniptr";
-      new_sym.name = ss.str();
-      new_sym.pretty_name = ss2.str();
-
-      // If this is a global variable, it requires an initializer
-      if (new_sym.static_lifetime) {
-        symbol_exprt sym(it->second.name, it->second.type);
-        new_sym.value = address_of_exprt(sym);
-      }
-
-      new_variables.push_back(
-          std::make_pair(new_sym.name.as_string(), new_sym));
-
-      // Declare a variable with byte array type, to act as storage for the
-      // union. Because we can't get an accurate size out of string-irep right
-      // now, we must migrate the type upwards.
-      symbolt byte_arr_sym = it->second;
-
-      type2tc unitype;
-      migrate_type(it->second.type, unitype);
-      auto arrsize = type_byte_size(*unitype);
-      expr2tc arrsize_expr = gen_ulong(arrsize.to_ulong());
-      type2tc arrtype(new array_type2t(get_uint8_type(), arrsize_expr, false));
-
-      byte_arr_sym.type = migrate_type_back(arrtype);
-      std::stringstream ss3, ss4;
-      ss3 << it->second.name.as_string() << ".unistorage";
-      ss4 << it->second.pretty_name.as_string() << ".unistorage";
-      byte_arr_sym.name = ss3.str();
-      byte_arr_sym.pretty_name = ss4.str();
-
-      new_variables.push_back(
-          std::make_pair(byte_arr_sym.name.as_string(), byte_arr_sym));
-
-      // The initialization of the byte array will happen via the union variable
-      // declaration. That should be rewritten into an assignment to the
-      // dereferenced pointer.
-    }
-  }
-
-  // Insert all those new symbols into the symbol table.
-  for (const auto &pair : new_variables)
-    context.symbols.insert(std::make_pair(pair.first, pair.second));
 
   return;
 }
