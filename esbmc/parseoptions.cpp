@@ -42,6 +42,7 @@ extern "C" {
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/string_abstraction.h>
 #include <goto-programs/loop_numbers.h>
+#include <goto-programs/goto_k_induction.h>
 
 #include <goto-programs/add_race_assertions.h>
 
@@ -1413,6 +1414,18 @@ bool cbmc_parseoptionst::process_goto_program(
         goto_inline(goto_functions, ns, ui_message_handler);
       else
         goto_partial_inline(goto_functions, ns, ui_message_handler);
+    }
+
+    if(cmdline.isset("inductive-step"))
+    {
+      // Always full inline the code
+      if(!cmdline.isset("full-inlining"))
+        goto_inline(goto_functions, ns, ui_message_handler);
+
+      goto_k_induction(
+        goto_functions,
+        ns,
+        ui_message_handler);
     }
 
     goto_check(ns, options, goto_functions);
