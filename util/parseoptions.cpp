@@ -47,9 +47,5 @@ int parseoptions_baset::main()
   // install signal catcher
   install_signal_catcher();
 
-  if(cmdline.isset("k-induction")
-    || cmdline.isset("k-induction-parallel"))
-    return doit_k_induction();
-
   return doit();
 }

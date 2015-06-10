@@ -1,3 +1,0 @@
-main.c
---no-bounds-check --round-robin --context-switch 22
-^VERIFICATION FAILED$

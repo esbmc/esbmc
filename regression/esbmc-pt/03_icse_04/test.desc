@@ -1,3 +1,0 @@
-main.c
---control-flow-test --no-slice
-^VERIFICATION FAILED$

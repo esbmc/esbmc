@@ -1,3 +1,0 @@
-Tests that the data returned from pthread_join representing thread exit data is accurate - it points at what it should, and doesn't point at what it shouldn't.
-
-(And it does this even in the presence of nondeterminism)

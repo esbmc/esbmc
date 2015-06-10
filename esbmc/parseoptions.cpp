@@ -36,6 +36,7 @@ extern "C" {
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/goto_inline.h>
+#include <goto-programs/goto_unwind.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/read_goto_binary.h>
@@ -366,11 +367,16 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
 int cbmc_parseoptionst::doit()
 {
+  //
+  // Print a banner
+  //
+  std::cout << "ESBMC version " << ESBMC_VERSION " "
+            << sizeof(void *)*8 << "-bit "
+            << config.this_architecture() << " "
+            << config.this_operating_system() << std::endl;
+
   if(cmdline.isset("version"))
-  {
-    std::cout << ESBMC_VERSION << std::endl;
     return 0;
-  }
 
   //
   // unwinding of transition systems
@@ -391,11 +397,6 @@ int cbmc_parseoptionst::doit()
 
   set_verbosity_msg(*this);
 
-  goto_functionst goto_functions;
-
-  optionst opts;
-  get_command_line_options(opts);
-
   // Depends on command line options and config
   init_expr_constants();
 
@@ -404,6 +405,15 @@ int cbmc_parseoptionst::doit()
     preprocessing();
     return 0;
   }
+
+  if(cmdline.isset("k-induction")
+    || cmdline.isset("k-induction-parallel"))
+    return doit_k_induction();
+
+  goto_functionst goto_functions;
+
+  optionst opts;
+  get_command_line_options(opts);
 
   if(get_goto_program(opts, goto_functions))
     return 6;
@@ -850,36 +860,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 int cbmc_parseoptionst::doit_k_induction()
 {
   assert(0 && "k-induction is disabled for this release.");
-
-  if(cmdline.isset("version"))
-  {
-    std::cout << ESBMC_VERSION << std::endl;
-    return 0;
-  }
-
-  //
-  // unwinding of transition systems
-  //
-
-  if(cmdline.isset("module")
-     || cmdline.isset("gen-interface"))
-  {
-    error("This version has no support for "
-          " hardware modules.");
-    return 1;
-  }
-
-  //
-  // command line options
-  //
-
-  set_verbosity_msg(*this);
-
-  if(cmdline.isset("preprocess"))
-  {
-    preprocessing();
-    return 0;
-  }
 
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
@@ -1428,7 +1408,12 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
-      goto_partial_inline(goto_functions, ns, ui_message_handler);
+    {
+      if(cmdline.isset("full-inlining"))
+        goto_inline(goto_functions, ns, ui_message_handler);
+      else
+        goto_partial_inline(goto_functions, ns, ui_message_handler);
+    }
 
     goto_check(ns, options, goto_functions);
 
@@ -1484,6 +1469,18 @@ bool cbmc_parseoptionst::process_goto_program(
 
       value_set_analysis.
         update(goto_functions);
+    }
+
+    if(cmdline.isset("unroll-loops"))
+    {
+      assert(atol(options.get_option("unwind").c_str()) != 0
+        && "Max unwind must be set to unroll loops");
+
+      goto_unwind(
+        goto_functions,
+        atol(options.get_option("unwind").c_str()),
+        ns,
+        ui_message_handler);
     }
 
     // show it?
@@ -1565,6 +1562,7 @@ void cbmc_parseoptionst::help()
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
     " --no-inlining                disable inlining function calls\n"
+    " --full-inlining              perform full inlining of function calls\n"
     " --program-only               only show program expression\n"
     " --all-claims                 keep all claims\n"
     " --show-loops                 show the loops in the program\n"
@@ -1583,7 +1581,6 @@ void cbmc_parseoptionst::help()
     " --witnesspath filename       output counterexample in graphML format\n"
     " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
     "                              program for graphML generation\n\n"
-
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"

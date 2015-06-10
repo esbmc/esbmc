@@ -29,9 +29,6 @@ public:
   virtual int doit();
   virtual void help();
 
-  virtual int doit_k_induction();
-  virtual int doit_k_induction_parallel();
-
   cbmc_parseoptionst(int argc, const char **argv):
     parseoptions_baset(esbmc_options, argc, argv),
     language_uit(cmdline)
@@ -49,6 +46,9 @@ protected:
   virtual bool process_goto_program(
     optionst &options,
     goto_functionst &goto_functions);
+
+  int doit_k_induction();
+  int doit_k_induction_parallel();
 
   bool read_goto_binary(goto_functionst &goto_functions);
 

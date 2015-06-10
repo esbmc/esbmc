@@ -1,3 +1,0 @@
-main.c
---fixedbv --ir --z3
-^VERIFICATION SUCCESSFUL$

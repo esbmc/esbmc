@@ -1,5 +1,0 @@
-main.c
---context-switch 2
-^VERIFICATION SUCCESSFUL$
---
-^VERIFICATION FAILURE$

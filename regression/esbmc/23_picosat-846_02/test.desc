@@ -1,3 +1,0 @@
-main.c
-app.c picosat.c --unwind 1 --partial-loops --function picosat_print --bv
-^VERIFICATION SUCCESSFUL$

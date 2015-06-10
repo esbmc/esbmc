@@ -73,14 +73,12 @@ void goto_inlinet::parameter_assignments(
     }
 
     {
-      const symbolt &symbol=ns.lookup(identifier);
-
       goto_programt::targett decl=dest.add_instruction();
       decl->make_other();
-      exprt tmp = code_declt(symbol_expr(symbol));
+      exprt tmp = code_declt(symbol_exprt(identifier, arg_type));
       migrate_expr(tmp, decl->code);
       decl->location=location;
-      decl->function=location.get_function(); 
+      decl->function=location.get_function();
       decl->local_variables=local_variables;
     }
 
@@ -574,6 +572,17 @@ void goto_inline(
   
   if(goto_inline.get_error_found())
     throw 0;
+
+  // clean up
+  for(goto_functionst::function_mapt::iterator
+      it=goto_functions.function_map.begin();
+      it!=goto_functions.function_map.end();
+      it++)
+    if(it->first!="main")
+    {
+      it->second.body_available=false;
+      it->second.body.clear();
+    }
 }
 
 /*******************************************************************\
