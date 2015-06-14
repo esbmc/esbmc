@@ -642,6 +642,13 @@ goto_convert_functionst::fix_union_expr(exprt &expr)
       Forall_operands(it, expr)
         fix_union_expr(*it);
     }
+  } else if (expr.is_union()) {
+    // A union expr is a constant/literal union. This needs to be flattened
+    // out at this stage. Handle this by migrating immediately (which will
+    // eliminate anything on union type), and overwriting this expression.
+    expr2tc new_expr;
+    migrate_expr(expr, new_expr);
+    expr = migrate_expr_back(new_expr);
   } else {
     // Default action: recurse and beat types.
 
