@@ -567,31 +567,21 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
       flatten_to_bytes(migrate_expr_back(memb), bytes);
     }
   } else if (is_union_type(new_expr)) {
-    // Might not be a union literal.
-    if (is_constant_union2t(new_expr)) {
-      // This is a literal union. Decompose as we are right now.
-      new_expr = flatten_union(expr);
-      assert(is_constant_array2t(new_expr) &&
-          "flatten_union produced non-array");
-      const constant_array2t &constarray = to_constant_array2t(new_expr);
-      bytes.insert(bytes.end(), constarray.datatype_members.begin(),
-                   constarray.datatype_members.end());
-    } else {
-      // This is an expression that evaluates to a union -- probably a symbol
-      // name. In this circumstance we are *not* required to actually perform
-      // any flattening, because something else in the union transformation
-      // should have transformed it to a byte array. Simply take the address
-      // (it has to have storage), cast to byte array, and index.
-      BigInt size = type_byte_size(*new_expr->type);
-      address_of2tc addrof(new_expr->type, new_expr);
-      type2tc byteptr(new pointer_type2t(get_uint8_type()));
-      typecast2tc cast(byteptr, addrof);
+    // This is an expression that evaluates to a union -- probably a symbol
+    // name. It can't be a union literal, because that would have been
+    // recursively flattened. In this circumstance we are *not* required to
+    // actually perform any flattening, because something else in the union
+    // transformation should have transformed it to a byte array. Simply take
+    // the address (it has to have storage), cast to byte array, and index.
+    BigInt size = type_byte_size(*new_expr->type);
+    address_of2tc addrof(new_expr->type, new_expr);
+    type2tc byteptr(new pointer_type2t(get_uint8_type()));
+    typecast2tc cast(byteptr, addrof);
 
-      // Produce N bytes
-      for (unsigned long i = 0; i < size.to_uint64(); i++) {
-        index2tc idx(get_uint8_type(), cast, gen_ulong(i));
-        flatten_to_bytes(migrate_expr_back(idx), bytes);
-      }
+    // Produce N bytes
+    for (unsigned long i = 0; i < size.to_uint64(); i++) {
+      index2tc idx(get_uint8_type(), cast, gen_ulong(i));
+      flatten_to_bytes(migrate_expr_back(idx), bytes);
     }
   } else if (is_number_type(new_expr) || is_bool_type(new_expr) ||
              is_pointer_type(new_expr)) {
