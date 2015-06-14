@@ -1077,7 +1077,8 @@ smt_convt::convert_member(const expr2tc &expr, smt_astt src)
   const member2t &member = to_member2t(expr);
   unsigned int idx = -1;
 
-  assert(is_struct_type(member.source_value));
+  assert(is_struct_type(member.source_value) ||
+         is_pointer_type(member.source_value));
   idx = get_member_name_field(member.source_value->type, member.member);
 
   return src->project(this, idx);
