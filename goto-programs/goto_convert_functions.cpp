@@ -606,6 +606,9 @@ goto_convert_functionst::fix_union_type(typet &type, bool is_pointer)
   } else {
     Forall_irep(it, type.get_sub())
       fix_union_type((typet&)*it, false);
+    Forall_named_irep(it, type.get_named_sub())
+      fix_union_type((typet&)it->second, false);
+
   }
 }
 
