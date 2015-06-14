@@ -630,8 +630,9 @@ goto_convert_functionst::fix_union_expr(exprt &expr)
       address_of2tc addrof(array_type, dataobj);
       typecast2tc cast(union_pointer, addrof);
       dereference2tc deref(union_type, cast);
-      expr = migrate_expr_back(deref);
+      expr.op0() = migrate_expr_back(deref);
 
+      // Fix type -- it needs to remain a union at the top level
       fix_union_type(expr.type(), false);
       fix_union_expr(expr.op0());
     } else {
