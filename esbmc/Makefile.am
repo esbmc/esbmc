@@ -9,3 +9,5 @@ AM_LDFLAGS = @ESBMC_LDFLAGS@
 buildidstring.o:
 	$(top_srcdir)/scripts/buildidobj.sh .
 	$(top_srcdir)/ansi-c/headers/flail.sh buildidstring .//buildidobj.txt | $(CC) $(CFLAGS) -x c - -c -o ./buildidstring.o
+
+.PHONY: buildidstring.o
