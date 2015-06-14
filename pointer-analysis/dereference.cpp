@@ -582,8 +582,6 @@ bool dereferencet::dereference_type_compare(
     }
   }
 
-  // XXX - are there such things as compatible unions?
-
   // really different
 
   return false;
@@ -1114,25 +1112,6 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       construct_from_dyn_struct_offset(field, new_offset, type, guard,
                                        alignment, mode, &failed_container);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
-    } else if (is_union_type(*it)) {
-      // Take the union, take the first field, and consider a dynamiclly offset
-      // assignment into the first element. This is a massive approximation;
-      // what we really need is a well-reasoned representation of unions. Like
-      // the byte model, say
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
-      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
-
-      const union_type2t &uni_type = to_union_type(field->type);
-      assert(uni_type.members.size() != 0);
-      field = member2tc(uni_type.members[0], field, uni_type.member_names[0]);
-      if (is_struct_type(field)) {
-        construct_from_dyn_struct_offset(field, new_offset, type, guard,
-                                         alignment, mode, &failed_container);
-      } else {
-        build_reference_rec(field, new_offset, type, guard, mode, alignment);
-      }
-
-      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     } else if (is_array_type(*it)) {
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
@@ -1262,7 +1241,7 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
   const type2tc &base_subtype = get_base_array_subtype(value->type);
 
   // All in all: we don't care, what's being accessed at this level, unless
-  // this struct/union is being constructed out of a byte array. If that's
+  // this struct is being constructed out of a byte array. If that's
   // not the case, just let the array recursive handler handle it. It'll bail
   // if access is unaligned, and reduced us to constructing a constant
   // reference from the base subtype, through the correct recursive handler.
@@ -1271,16 +1250,10 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
     return;
   }
 
-  // Access is creating a structure or union reference from on top of a byte
+  // Access is creating a structure reference from on top of a byte
   // array. Clearly, this is an expensive operation, but one that may possibly
   // turn up in things like C++, where one might pass-by-value a structure
   // that's been malloc'd? Either way, these turn up.
-  // Don't implement for unions; in the near future they're going to become
-  // byte arrays themselves.
-  if (is_union_type(type)) {
-    bad_base_type_failure(guard, "struct", "union");
-    return;
-  }
 
   // We are left with constructing a structure from a byte array.
   std::vector<expr2tc> fields;
@@ -1355,24 +1328,11 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
     // padding.
     dereference_failure("Memory model", "Object accessed with illegal offset",
                         guard);
-  } else if (is_union_type(value)) {
-    // XXX -- this only deals with a very shallow level of unioning.
-
-    if (base_type_eq(value->type, type, ns))
       return;
-
-    const union_type2t &uni = to_union_type(value->type);
-    unsigned int i = 0;
-    forall_types(it, uni.members) {
-      if (base_type_eq(*it, type, ns)) {
-        // We have a subtype that matches the type we want to be getting.
-        member2tc memb(*it, value, uni.member_names[i]);
-        value = memb;
-        return;
-      }
-      i++;
-    }
-    bad_base_type_failure(guard, "simple union", "complex union");
+  } else {
+    std::cerr << "Unexpectedly " << get_type_id(value->type) << " type'd";
+    std::cerr << " argument to construct_struct_ref" << std::endl;
+    abort();
   }
 
   return;
