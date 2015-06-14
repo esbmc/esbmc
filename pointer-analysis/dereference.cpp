@@ -512,11 +512,23 @@ dereferencet::dereference(
 expr2tc
 dereferencet::make_failed_symbol(const type2tc &out_type)
 {
+  type2tc the_type;
+
+  if (is_union_type(out_type)) {
+    // Instead, create a byte array, all unions are now reduced to byte arrays.
+    BigInt size = type_byte_size(*out_type);
+    type2tc array_type(new array_type2t(get_uint8_type(),
+          get_ulong(size.to_uint64()), false));
+    the_type = array_type;
+  } else {
+    the_type = out_type;
+  }
+
   // else, do new symbol
   symbolt symbol;
   symbol.name="symex::invalid_object"+i2string(invalid_counter++);
   symbol.base_name="invalid_object";
-  symbol.type=migrate_type_back(out_type);
+  symbol.type=migrate_type_back(the_type);
 
   // make it a lvalue, so we can assign to it
   symbol.lvalue=true;
