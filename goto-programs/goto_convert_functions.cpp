@@ -590,7 +590,7 @@ goto_convert_functionst::fixup_unions(void)
 void
 goto_convert_functionst::fix_union_type(typet &type, bool is_pointer)
 {
-return;
+
   if (!is_pointer && type.is_union()) {
     // Replace with byte array. Must use migrated type though, because we need
     // one authorative type_byte_size function
