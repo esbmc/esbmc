@@ -53,7 +53,7 @@ smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
     idx++;
   }
   assert(idx != data_ref.member_names.size() &&
-         "Member name of with expr not found in struct/union type");
+         "Member name of with expr not found in struct type");
 
   return idx;
 }
@@ -434,10 +434,9 @@ expr_handle_table:
     break;
   }
   case expr2t::constant_union_id:
-  {
-    a = tuple_api->union_create(expr);
-    break;
-  }
+    std::cerr << "Post-parse union literals are deprecated and broken, sorry";
+    std::cerr << std::endl;
+    abort();
   case expr2t::constant_array_id:
   case expr2t::constant_array_of_id:
   {
@@ -467,8 +466,7 @@ expr_handle_table:
         is_constant_array2t(expr))
       flat_expr = flatten_array_body(expr);
 
-    if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
-        is_pointer_type(arr.subtype))
+    if (is_struct_type(arr.subtype) || is_pointer_type(arr.subtype))
       a = tuple_array_create_despatch(flat_expr, domain);
     else
       a = array_create(flat_expr);
