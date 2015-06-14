@@ -72,6 +72,12 @@ goto_symext::symex_malloc(
 
   if (is_nil_type(type))
     type = char_type2();
+  else if (is_union_type(type)) {
+    // Filter out creation of instantiated unions. They're now all byte arrays.
+    size_is_one = false;
+    type = char_type2();
+  }
+
 
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
