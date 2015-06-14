@@ -518,7 +518,7 @@ dereferencet::make_failed_symbol(const type2tc &out_type)
     // Instead, create a byte array, all unions are now reduced to byte arrays.
     BigInt size = type_byte_size(*out_type);
     type2tc array_type(new array_type2t(get_uint8_type(),
-          get_ulong(size.to_uint64()), false));
+          gen_ulong(size.to_uint64()), false));
     the_type = array_type;
   } else {
     the_type = out_type;
