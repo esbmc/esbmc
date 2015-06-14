@@ -240,52 +240,6 @@ smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
 }
 
 smt_astt
-smt_tuple_node_flattener::union_create(const expr2tc &unidef)
-{
-  // Unions are known to be brok^W fragile. Create a free new structure, and
-  // assign in any members where the type matches the single member of the
-  // initializer members. No need to worry about subtypes; this is a union.
-  std::string name = ctx->mk_fresh_name("union_create::");
-  // Add a . suffix because this is of tuple type.
-  name += ".";
-  symbol2tc result(unidef->type, irep_idt(name));
-
-  const constant_union2t &uni = to_constant_union2t(unidef);
-  const struct_union_data &def = ctx->get_type_def(uni.type);
-  assert(uni.datatype_members.size() == 1 && "Unexpectedly full union "
-         "initializer");
-  const expr2tc &init = uni.datatype_members[0];
-  smt_astt result_ast = ctx->convert_ast(result);
-  smt_astt init_ast = ctx->convert_ast(init);
-
-  tuple_node_smt_ast *result_t_ast =
-    const_cast<tuple_node_smt_ast *>(to_tuple_node_ast(result_ast));
-  result_t_ast->elements.resize(def.members.size());
-
-  unsigned int i = 0;
-  forall_types(it, def.members) {
-    if (base_type_eq(*it, init->type, ns)) {
-      // Assign in.
-      result_t_ast->elements[i] = init_ast;
-    } else {
-      // XXX indirection
-      if (is_tuple_ast_type(*it)) {
-        result_t_ast->elements[i] = ctx->tuple_api->tuple_fresh(ctx->convert_sort(*it));
-      } else if (is_tuple_array_ast_type(*it)) {
-        std::string newname = ctx->mk_fresh_name("");
-        smt_sortt subsort = ctx->convert_sort(get_array_subtype(*it));
-        result_t_ast->elements[i] =
-          array_conv.mk_array_symbol(newname, ctx->convert_sort(*it), subsort);
-      }
-    }
-    i++;
-  }
-
-  return new tuple_node_smt_ast(*this, ctx, ctx->convert_sort(unidef->type),
-                                name);
-}
-
-smt_astt
 smt_tuple_node_flattener::tuple_fresh(smt_sortt s, std::string name)
 {
   if (name == "")
@@ -478,12 +432,6 @@ smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
   } else {
     return new tuple_smt_sort(type);
   }
-}
-
-smt_sortt
-smt_tuple_node_flattener::mk_union_sort(const type2tc &type)
-{
-  return new tuple_smt_sort(type);
 }
 
 void

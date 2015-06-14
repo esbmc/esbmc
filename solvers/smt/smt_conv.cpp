@@ -541,7 +541,7 @@ expr_handle_table:
     const with2t &with = to_with2t(expr);
 
     // We reach here if we're with'ing a struct, not an array. Or a bool.
-    if (is_struct_type(expr) || is_union_type(expr) || is_pointer_type(expr)) {
+    if (is_struct_type(expr) || is_pointer_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       smt_astt srcval = convert_ast(with.source_value);
       a = srcval->update(this, convert_ast(with.update_value), idx);
@@ -827,9 +827,6 @@ smt_convt::convert_sort(const type2tc &type)
     break;
   case type2t::struct_id:
     result = tuple_api->mk_struct_sort(type);
-    break;
-  case type2t::union_id:
-    result = tuple_api->mk_union_sort(type);
     break;
   case type2t::code_id:
   case type2t::pointer_id:
@@ -1802,7 +1799,6 @@ smt_convt::get(const expr2tc &expr)
   case type2t::array_id:
     return get_array(convert_ast(expr), expr->type);
   case type2t::struct_id:
-  case type2t::union_id:
   case type2t::pointer_id:
     return tuple_api->tuple_get(expr);
   default:
