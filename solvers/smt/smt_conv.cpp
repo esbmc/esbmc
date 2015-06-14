@@ -205,8 +205,6 @@ smt_convt::pop_ctx(void)
 
   // Erase everything in caches added in the current context level. Everything
   // before the push is going to disappear.
-  union_varst::nth_index<1>::type &union_numindex = union_vars.get<1>();
-  union_numindex.erase(ctx_level);
   smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
   cache_numindex.erase(ctx_level);
   pointer_logic.pop_back();
@@ -327,32 +325,6 @@ smt_convt::convert_assign(const expr2tc &expr)
   // the symbol table will break.
   smt_cache_entryt e = { eq.side_1, side1, ctx_level };
   smt_cache.insert(e);
-
-  // Workaround for the fact that we don't have a good way of encoding unions
-  // into SMT. Just work out what the last assigned field is.
-  if (is_equality2t(expr)) {
-    const equality2t eq = to_equality2t(expr);
-    if (is_union_type(eq.side_1->type) && is_with2t(eq.side_2)) {
-      const symbol2t sym = to_symbol2t(eq.side_1);
-      const with2t with = to_with2t(eq.side_2);
-      const union_type2t &type = to_union_type(eq.side_1->type);
-      const std::string &ref = sym.get_symbol_name();
-      const constant_string2t &str = to_constant_string2t(with.update_field);
-
-      unsigned int idx = 0;
-      forall_names(it, type.member_names) {
-        if (*it == str.value)
-          break;
-        idx++;
-      }
-
-      assert(idx != type.member_names.size() &&
-             "Member name of with expr not found in struct/union type");
-
-      union_var_mapt mapentry = { ref, idx, 0 };
-      union_vars.insert(mapentry);
-    }
-  }
 }
 
 smt_astt
@@ -1110,39 +1082,8 @@ smt_convt::convert_member(const expr2tc &expr, smt_astt src)
   const member2t &member = to_member2t(expr);
   unsigned int idx = -1;
 
-  if (is_union_type(member.source_value->type)) {
-    union_varst::const_iterator cache_result;
-    const union_type2t &data_ref = to_union_type(member.source_value->type);
-
-    if (is_symbol2t(member.source_value)) {
-      const symbol2t &sym = to_symbol2t(member.source_value);
-      cache_result = union_vars.find(sym.get_symbol_name().c_str());
-    } else {
-      cache_result = union_vars.end();
-    }
-
-    if (cache_result != union_vars.end()) {
-      const std::vector<type2tc> &members = data_ref.get_structure_members();
-
-      const type2tc source_type = members[cache_result->idx];
-      if (source_type == member.type) {
-        // Type we're fetching from union matches expected type; just return it.
-        idx = cache_result->idx;
-      } else {
-        // Union field and expected type mismatch. Need to insert a cast.
-        // Duplicate expr as we're changing it
-        member2tc memb2(source_type, member.source_value, member.member);
-        typecast2tc cast(member.type, memb2);
-        return convert_ast(cast);
-      }
-    } else {
-      // If no assigned result available, we're probably broken for whatever
-      // reason, just go haywire.
-      idx = get_member_name_field(member.source_value->type, member.member);
-    }
-  } else {
-    idx = get_member_name_field(member.source_value->type, member.member);
-  }
+  assert(is_struct_type(member.source_value));
+  idx = get_member_name_field(member.source_value->type, member.member);
 
   return src->project(this, idx);
 }
