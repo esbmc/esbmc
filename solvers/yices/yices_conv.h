@@ -18,7 +18,7 @@ public:
                  unsigned long d, const yices_smt_sort *rangetype)
     : smt_sort(i, w, d), type(_t), tuple_type(), arr_range(rangetype) { }
 
-  // Constructor for structs / unions. Bitwidth is set to 1 as an estople
+  // Constructor for structs. Bitwidth is set to 1 as an estople
   // that... it's a valid domain sort. Uhu. Not the greatest design.
   yices_smt_sort(smt_sort_kind i, type_t _t, const type2tc &s)
     : smt_sort(i, 1), type(_t), tuple_type(s), arr_range(NULL) { }
@@ -96,9 +96,7 @@ public:
   void pop_array_ctx(void);
 
   virtual smt_sortt mk_struct_sort(const type2tc &type);
-  virtual smt_sortt mk_union_sort(const type2tc &type);
   virtual smt_astt tuple_create(const expr2tc &structdef);
-  virtual smt_astt union_create(const expr2tc &unidef);
   virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "");
   virtual smt_astt tuple_array_create(const type2tc &array_type,
                               smt_astt *inputargs,
