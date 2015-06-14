@@ -578,11 +578,7 @@ goto_convert_functionst::fixup_unions(void)
   // dereference layer.
 
    Forall_symbols(it, context.symbols) {
-    if (it->second.type.is_union())
-      fix_union_type(it->second.type, true);
-    else
-      fix_union_type(it->second.type, false);
-
+    fix_union_type(it->second.type, false);
     fix_union_expr(it->second.value);
   }
 }
