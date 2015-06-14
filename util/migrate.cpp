@@ -592,7 +592,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     for (unsigned long i = 0; i < size.to_uint64(); i++) {
       byte_extract2tc ext(get_uint8_type(), new_expr, gen_ulong(i),
           is_big_endian);
-      flatten_to_bytes(migrate_expr_back(ext), bytes);
+      bytes.push_back(ext);
     }
   } else {
     std::cerr << "Unrecognized type " << get_type_id(*new_expr->type);
