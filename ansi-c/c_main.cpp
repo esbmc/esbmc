@@ -55,25 +55,10 @@ void static_lifetime_init(
 {
   dest=code_blockt();
 
-  // Do assignments based on "value". Defer union assignments to allow pointer
-  // initialization.
-  std::list<const symbolt *> union_syms;
-
-  forall_symbols(it, context.symbols) {
+  // Do assignments based on "value".
+  forall_symbols(it, context.symbols)
     if(it->second.static_lifetime)
-    {
-      if (it->second.type.id() == "union") {
-        union_syms.push_back(&it->second);
-        continue;
-      }
-
       init_variable(dest, it->second);
-    }
-  }
-
-  // Now do union initialization, through the corresponding union-typed pointers
-  for (const symbolt *sym : union_syms)
-    init_variable(dest, *sym);
 
   // call designated "initialization" functions
 
