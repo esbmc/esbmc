@@ -395,12 +395,6 @@ bitblast_convt::mk_struct_sort(const type2tc &t __attribute__((unused)))
     abort();
 }
 
-smt_sort*
-bitblast_convt::mk_union_sort(const type2tc &t __attribute__((unused)))
-{
-    abort();
-}
-
 smt_ast*
 bitblast_convt::mk_extract(smt_astt src, unsigned int high,
                           unsigned int low, smt_sortt s)
