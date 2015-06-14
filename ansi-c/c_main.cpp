@@ -35,18 +35,18 @@ init_variable(codet &dest, const symbolt &sym)
 {
   const exprt &value = sym.value;
 
-  if(value.is_not_nil())
-  {
-    assert(!value.type().is_code());
+  if(value.is_nil())
+    return;
 
-    exprt symbol("symbol", sym.type);
-    symbol.identifier(sym.name);
+  assert(!value.type().is_code());
 
-    code_assignt code(symbol, sym.value);
-    code.location() = sym.location;
+  exprt symbol("symbol", sym.type);
+  symbol.identifier(sym.name);
 
-    dest.move_to_operands(code);
-  }
+  code_assignt code(symbol, sym.value);
+  code.location() = sym.location;
+
+  dest.move_to_operands(code);
 }
 
 void static_lifetime_init(
