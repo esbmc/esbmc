@@ -14,7 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <arith_tools.h>
 #include <std_code.h>
 #include <config.h>
-#include <type_byte_size.h>
 
 #include "c_types.h"
 #include "c_main.h"
@@ -30,63 +29,6 @@ Function: static_lifetime_init
  Purpose:
 
 \*******************************************************************/
-
-static void
-scan_for_union_init(exprt &value, const expr2tc &access, std::list<std::pair<expr2tc, expr2tc> > &hoisted_unions)
-{
-
-  if (value.is_constant() && value.type().is_union()) {
-    // OK -- this is an assignment of a union constant / literal to a value of
-    // union type. This must be removed. We replace with a constant array of
-    // zeros, because later type rewriting in goto_convert_functionst will
-    // resolve the storage for this constant union to being an array.
-    // The actual data in the union literal is hoisted out, and made a problem
-    // for a different function.
-    expr2tc union_value;
-    migrate_expr(value, union_value);
-    hoisted_unions.push_back(std::make_pair(access, union_value));
-
-    // Produce array of bytes.
-    BigInt size = type_byte_size(*union_value->type);
-    type2tc arraytype(new array_type2t(get_uint8_type(),
-          gen_ulong(size.to_uint64()), false));
-    constant_int2tc zerobyte(get_uint8_type(), BigInt(0));
-    constant_array_of2tc arrayof(arraytype, zerobyte);
-    value = migrate_expr_back(arrayof);
-
-    // Cease recursion
-    return;
-  } else {
-    for (unsigned int i = 0; i < value.operands().size(); i++) {
-      // Build access expression. Construct in irep2 for type sanity. First
-      // convert existing expressions,
-      exprt &operand = value.operands()[i];
-      expr2tc new_access, operand_expr2;
-      type2tc new_type;
-
-      migrate_expr(operand, operand_expr2);
-      migrate_type(operand.type(), new_type);
-
-      // Construct an expression accessing the field that we're about to scan
-      if (value.type().is_array()) {
-        new_access = index2tc(new_type, operand_expr2, gen_ulong(i));
-      } else if (value.type().is_struct()) {
-        expr2tc value_expr2;
-        migrate_expr(value, value_expr2);
-        const struct_type2t &struct_type = to_struct_type(value_expr2->type);
-        new_access =
-          member2tc(new_type, operand_expr2, struct_type.member_names[i]);
-      } else {
-        std::cerr << "Unrecognized type " << value.type().id() << " when ";
-        std::cerr << "rewriting union initialization" << std::endl;
-        abort();
-      }
-
-      // Continue scanning for union initialization
-      scan_for_union_init(operand, new_access, hoisted_unions);
-    }
-  }
-}
 
 static void
 init_variable(codet &dest, const symbolt &sym)
