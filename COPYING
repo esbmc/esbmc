@@ -26,7 +26,7 @@ To briefly summarise each solver:
     licenses.
   MathSAT: Academic free, non-commercial.
   Yices: Personal use, non-commercial
-  Z3: Microsoft research license, non-commercial
+  Z3: MIT license
 
 In all circumstances you should refer to the specific license of the solver you
 are using.
