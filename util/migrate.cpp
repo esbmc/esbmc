@@ -559,11 +559,10 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     }
   } else if (is_struct_type(new_expr)) {
     // Iterate over each field.
-    const constant_struct2t &thestruct = to_constant_struct2t(new_expr);
-    const struct_type2t &structtype = to_struct_type(thestruct.type);
+    const struct_type2t &structtype = to_struct_type(new_expr->type);
     for (unsigned long i = 0; i < structtype.members.size(); i++) {
-      member2tc memb(structtype.members[i], thestruct.datatype_members[i],
-          structtype.member_names[i]);
+      member2tc memb(structtype.members[i], new_expr,
+                     structtype.member_names[i]);
       flatten_to_bytes(migrate_expr_back(memb), bytes);
     }
   } else if (is_union_type(new_expr)) {
