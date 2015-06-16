@@ -1,5 +1,4 @@
 # TODO:
-# Not injecting arbitary symlinks
 # Sometimes libtool cracks up if we re-configure and don't make clean.
 # (This may be a libtool feature)
 
