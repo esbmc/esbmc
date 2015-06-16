@@ -66,6 +66,7 @@ sh -c "cd $tmpdir; scripts/autoboot.sh"
 
 rm -rf $tmpdir/regression
 rm -rf $tmpdir/docs
+rm -rf $tmpdir/.git
 
 # Done. Tar back up.
 
