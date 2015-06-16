@@ -3,6 +3,11 @@
 # Sometimes libtool cracks up if we re-configure and don't make clean.
 # (This may be a libtool feature)
 
+# To bump the ESBMC version: edit esbmc/version to be whatever version required,
+# and commit it. The m4 below will suck the version out of that file. Note that
+# things will break if that file has an end-of-line -- use ":set binary" and
+# ":set noeol" in vim to enforce that.
+
 m4_define([esbmcversion], m4_include([esbmc/version]))
 AC_INIT([ESBMC], [esbmcversion], [esbmc-users@googlegroups.com])
 AC_DEFINE([ESBMC_VERSION], ["AC_PACKAGE_VERSION"], [ESBMC version number])
