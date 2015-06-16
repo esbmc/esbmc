@@ -54,7 +54,7 @@ fin () {
 
 trap fin EXIT
 
-scripts/export-pub.sh $tmpfile
+scripts/export-pub.sh -n buildrelease $tmpfile
 
 # 3
 
@@ -69,7 +69,7 @@ do_build () {
   # 3b) Run configure apropriately
   mkdir $builddir/$releasename
   cd $builddir/$releasename
-  $srcdir/configure $configureflags
+  $srcdir/buildrelease/configure $configureflags
 
   # Pause to get user to confirm solver sanity
   echo "Your solver configuration is shown above. Please confirm that the specified solver paths contain the correct solver versions for this release, and hit enter. Hit ctrl+c otherwise."
