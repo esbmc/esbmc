@@ -36,21 +36,74 @@ fi
 # 2
 
 tmpfile=`mktemp /tmp/esbmc_release_XXXXXX`
+srcdir=`mktemp /tmp/esbmc_release_XXXXXX`
+builddir=`mktemp /tmp/esbmc_release_XXXXXX`
+destdir=`mktemp /tmp/esbmc_release_XXXXXX`
+here=`pwd`
+releasedir="$here/.release"
+mkdir $outputdir 2>/dev/null
+
+fin () {
+  rm $tmpfile
+  rm -rf $srcdir
+  rm -rf $builddir
+  rm -rf $destdir
+}
+
+trap fin EXIT
+
 scripts/export-pub.sh $tmpfile
 
 # 3
 
+# 3a) Extract to an arbitary dir
+tar -xzf $tmpfile -C $srcdir
+
 do_build () {
   releasename=$1
   configureflags=$2
+  buildhere=`pwd`
 
-  exit 1
+  # 3b) Run configure apropriately
+  mkdir $builddir/$releasename
+  cd $builddir/$releasename
+  $srcdir/configure $configureflags
+
+  # Pause to get user to confirm solver sanity
+  echo "Your solver configuration is shown above. Please confirm that the specified solver paths contain the correct solver versions for this release, and hit enter. Hit ctrl+c otherwise."
+  read bees;
+
+  # 3c) make
+  # How many jobs?
+  procs=`cat /proc/cpuinfo | grep ^processor | awk '{print $3;}' | sort | tail -n 1`
+  make -j $procs
+  # Will croak if that failed.
+
+  # 3d) Manufacture release tree
+  destname="$destdir/$releasename"
+  mkdir $destname
+  DESTDIR="$destname" make install
+
+
+  # 3e) Tar up
+  cd $destdir
+  tar -czf "$releasedir/${releasename}.tgz" $releasename
+
+  # Fini
+  cd $buildhere
 }
 
 solver_opts="--disable-yices --disable-cvc --disable-mathsat --enable-z3 --enable-boolector"
 x86flags="CXXFLAGS='-m32' CFLAGS='-m32' LDFLFAGS='-m32'"
 
 do_build "esbmc-v${esbmcversion}-linux-64" "CXX=g++ $solver_opts"
+if test $? != 0; then exit 1; fi
+
 do_build "esbmc-v${esbmcversion}-linux-32" "CXX=g++ $solver_opts $x86flags"
+if test $? != 0; then exit 1; fi
+
 do_build "esbmc-v${esbmcversion}-linux-static-64" "CXX=g++ $solver_opts --enable-static-link"
+if test $? != 0; then exit 1; fi
+
 do_build "esbmc-v${esbmcversion}-linux-static-32" "CXX=g++ $solver_opts $x86flags --enable-static-link"
+if test $? != 0; then exit 1; fi
