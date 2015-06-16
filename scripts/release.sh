@@ -95,7 +95,7 @@ do_build () {
   cd $buildhere
 }
 
-solver_opts="--disable-yices --disable-cvc --disable-mathsat --enable-z3 --enable-boolector"
+solver_opts="--disable-yices --disable-cvc4 --disable-mathsat --enable-z3 --enable-boolector"
 x86flags="CXXFLAGS='-m32' CFLAGS='-m32' LDFLFAGS='-m32'"
 
 do_build "esbmc-v${esbmcversion}-linux-64" "CXX=g++ $solver_opts"
