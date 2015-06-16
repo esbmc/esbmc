@@ -1,5 +1,7 @@
 #!/bin/bash -e
 
+set -x
+
 if test ! -e .git; then
   echo "Please run from ESBMC root dir";
   exit 1
@@ -41,7 +43,7 @@ builddir=`mktemp /tmp/esbmc_release_XXXXXX`
 destdir=`mktemp /tmp/esbmc_release_XXXXXX`
 here=`pwd`
 releasedir="$here/.release"
-mkdir $outputdir 2>/dev/null
+mkdir $outputdir 2>/dev/null || true # Allow failure
 
 fin () {
   rm $tmpfile
