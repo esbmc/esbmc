@@ -43,7 +43,7 @@ builddir=`mktemp -d /tmp/esbmc_release_XXXXXX`
 destdir=`mktemp -d /tmp/esbmc_release_XXXXXX`
 here=`pwd`
 releasedir="$here/.release"
-mkdir $outputdir 2>/dev/null || true # Allow failure
+mkdir $releasedir 2>/dev/null || true # Allow failure
 
 fin () {
   rm $tmpfile
