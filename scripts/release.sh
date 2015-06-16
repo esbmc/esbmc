@@ -1,4 +1,9 @@
-#!/bin/bash
+#!/bin/bash -e
+
+if test ! -e .git; then
+  echo "Please run from ESBMC root dir";
+  exit 1
+fi
 
 # Procedure:
 # 1) Tell the user what's about to happen
@@ -10,3 +15,42 @@
 # 3d) Manufacture release tree
 # 3e) Tar up
 # 4) Clear up
+
+# 1
+
+echo "Will now produce a source distribution and compile into a release. Any local uncommitted changes will be ignored".
+
+esbmcversion=`cat esbmc/version`
+echo "ESBMC version: $esbmcversion"
+
+if test `uname -m` != "x86_64"; then
+  echo "You must build ESBMC releases on a 64 bit machine, sorry"
+  exit 1
+fi
+
+if test `uname -s` != "Linux"; then
+  echo "Not building on linux is not a supported operation; good luck"
+  exit 1
+fi
+
+# 2
+
+tmpfile=`mktemp /tmp/esbmc_release_XXXXXX`
+scripts/export-pub.sh $tmpfile
+
+# 3
+
+do_build () {
+  releasename=$1
+  configureflags=$2
+
+  exit 1
+}
+
+solver_opts="--disable-yices --disable-cvc --disable-mathsat --enable-z3 --enable-boolector"
+x86flags="CXXFLAGS='-m32' CFLAGS='-m32' LDFLFAGS='-m32'"
+
+do_build "esbmc-v${esbmcversion}-linux-64" "CXX=g++ $solver_opts"
+do_build "esbmc-v${esbmcversion}-linux-32" "CXX=g++ $solver_opts $x86flags"
+do_build "esbmc-v${esbmcversion}-linux-static-64" "CXX=g++ $solver_opts --enable-static-link"
+do_build "esbmc-v${esbmcversion}-linux-static-32" "CXX=g++ $solver_opts $x86flags --enable-static-link"
