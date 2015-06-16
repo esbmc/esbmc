@@ -3,7 +3,7 @@
 # Sometimes libtool cracks up if we re-configure and don't make clean.
 # (This may be a libtool feature)
 
-AC_INIT([ESBMC], [1.25.4], [esbmc@ecs.soton.ac.uk])
+AC_INIT([ESBMC], [1.25.4], [esbmc-users@googlegroups.com])
 AC_DEFINE([ESBMC_VERSION], ["1.25.4"], [ESBMC version number])
 dnl Numerous things croak unless we do this immediately:
 AC_CONFIG_AUX_DIR([scripts/build-aux])
