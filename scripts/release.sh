@@ -38,9 +38,9 @@ fi
 # 2
 
 tmpfile=`mktemp /tmp/esbmc_release_XXXXXX`
-srcdir=`mktemp /tmp/esbmc_release_XXXXXX`
-builddir=`mktemp /tmp/esbmc_release_XXXXXX`
-destdir=`mktemp /tmp/esbmc_release_XXXXXX`
+srcdir=`mktemp -d /tmp/esbmc_release_XXXXXX`
+builddir=`mktemp -d /tmp/esbmc_release_XXXXXX`
+destdir=`mktemp -d /tmp/esbmc_release_XXXXXX`
 here=`pwd`
 releasedir="$here/.release"
 mkdir $outputdir 2>/dev/null || true # Allow failure
