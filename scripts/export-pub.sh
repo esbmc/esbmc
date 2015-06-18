@@ -62,17 +62,18 @@ mkdir $tmpdir/.git
 
 sh -c "cd $tmpdir; scripts/autoboot.sh"
 
-# Autobooted; delete private stuff
+# Autobooted; delete non-public stuff
 
 rm -rf $tmpdir/regression
-rm -rf $tmpdir/scripts/export-pub.sh
 rm -rf $tmpdir/docs
+rm -rf $tmpdir/.git
 
 # Done. Tar back up.
 
 workdir_parent=`dirname $tmpdir`
 workdir_basename=`basename $tmpdir`
 here=`pwd`
-sh -c "cd $workdir_parent; tar -czf $here/$1 $workdir_basename"
+sh -c "cd $workdir_parent; tar -czf $tmpfile $workdir_basename"
+mv $tmpfile $1
 
 # Everything else deleted when script exits

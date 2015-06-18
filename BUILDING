@@ -10,6 +10,11 @@ Two scripts exist to operate autotools:
 You only need to run these scripts if you've received a distribution without
 the configure script or Makefile.in's.
 
+Note that to ease binary identification, the current git hash and details about
+the host machine are compiled into ESBMC, including hostname and username. If
+you don't wish this to happen, delete the relevant calls in
+scripts/buildidobj.sh
+
 ~
 
 When in posession of a configure script, first decide where you want to put the
