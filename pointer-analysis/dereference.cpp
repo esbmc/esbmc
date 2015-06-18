@@ -452,14 +452,22 @@ dereferencet::dereference_expr_nonscalar(
 
 expr2tc
 dereferencet::dereference(
-  const expr2tc &src,
+  const expr2tc &orig_src,
   const type2tc &to_type,
   const guardt &guard,
   modet mode,
   const expr2tc &lexical_offset)
 {
-  assert(is_pointer_type(src));
   internal_items.clear();
+
+  // Awkwardly, the pointer might not be of pointer type, for example with
+  // nested dereferences that point at crazy locations. Happily this is not
+  // a real problem: just cast to a pointer, and let the dereference handlers
+  // cope with the fact that this expression doesn't point at anything. Of
+  // course, if it does point at something, dereferencing continues.
+  expr2tc src = orig_src;
+  if (!is_pointer_type(orig_src))
+    src = typecast2tc(type2tc(new pointer_type2t(get_empty_type())), src);
 
   type2tc type = to_type;
 
