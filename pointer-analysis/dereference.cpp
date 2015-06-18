@@ -1031,31 +1031,9 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
         value = expr2tc();
         return;
       } else {
-        // This is a valid access to this field. Is it another struct?
-        if (!is_scalar_type(*it)) {
-          // We have to do even more extraction...
-          build_reference_rec(value, gen_ulong(0), type, guard, mode);
-          return;
-        }
-
-        // Good, this is now a scalar. Do we under-read it?
-        if (access_size < m_size) {
-          // Under-read: decompose to byte representation model and stitch
-          // back into the desired data type.
-          value = member2tc(*it, value, struct_type.member_names[i]);
-          expr2tc *bytes = extract_bytes_from_scalar(value,
-              access_size.to_ulong() * 8, zero_ulong);
-          stitch_together_from_byte_array(value, type, bytes);
-          delete[] bytes;
-        } else {
-          // Exact match. There are no need for further alignment concerns
-          value = member2tc(*it, value, struct_type.member_names[i]);
-
-          if (!base_type_eq(*it, type, ns)) {
-            // Incompatible types; insert a cast.
-            value = typecast2tc(type, value);
-          }
-        }
+        // This is a valid access to this field. Extract it, recurse.
+        value = member2tc(*it, value, struct_type.member_names[i]);
+        build_reference_rec(value, zero_ulong, type, guard, mode);
       }
       return;
     } else if (int_offset > m_offs &&
