@@ -162,6 +162,13 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   assert(width_op2 == 8 && "Can't byte update non-byte operations");
   assert(width_op2 != width_op0 && "Can't byte update bytes, sorry");
 
+  // Bail if this is an invalid update. This might be legitimate, in that one
+  // can update a padding byte in a struct, leading to a crazy out of bounds
+  // update. Either way, leave it to the dereference layer to decide on
+  // invalidity.
+  if (src_offset >= (width_op0 / 8))
+    return convert_ast(data.source_value);
+
   smt_astt top, middle, bottom;
 
   // Build in three parts: the most significant bits, any in the middle, and
