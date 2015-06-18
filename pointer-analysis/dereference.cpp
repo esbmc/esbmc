@@ -1030,20 +1030,26 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
                             "Over-sized read of struct field", guard);
         value = expr2tc();
         return;
+      } else if (access_size < m_size) {
+        // Under-read: decompose to byte representation model and stitch
+        // back into the desired data type.
+        value = member2tc(*it, value, struct_type.member_names[i]);
+        expr2tc *bytes = extract_bytes_from_scalar(value,
+            access_size.to_ulong() * 8, zero_ulong);
+        stitch_together_from_byte_array(value, type, bytes);
+        delete[] bytes;
+      } else {
+        // Exact match. There are no need for further alignment concerns
+        value = member2tc(*it, value, struct_type.member_names[i]);
+
+        if (!is_scalar_type(*it)) {
+          // We have to do even more extraction...
+          build_reference_rec(value, gen_ulong(0), type, guard, mode);
+        } else if (!base_type_eq(*it, type, ns)) {
+          // Incompatible types; insert a cast.
+          value = typecast2tc(type, value);
+        }
       }
-
-      // XXX -- what about under-reads?
-
-      // If it's at the start of a field, there's no need for further alignment
-      // concern.
-      expr2tc res = member2tc(*it, value, struct_type.member_names[i]);
-
-      if (!is_scalar_type(*it)) {
-        // We have to do even more extraction...
-        build_reference_rec(res, gen_ulong(0), type, guard, mode);
-      }
-
-      value = res;
       return;
     } else if (int_offset > m_offs &&
               (int_offset - m_offs + access_size <= m_size)) {
