@@ -655,6 +655,14 @@ goto_convert_functionst::fix_union_expr(exprt &expr)
     expr2tc new_expr;
     migrate_expr(expr, new_expr);
     expr = migrate_expr_back(new_expr);
+  } else if (expr.is_dereference()) {
+    // Don't rewrite the type of this expression -- we want the dereference
+    // of a union pointer to evaluate to a union type, as that can be picked
+    // apart by the pointer handling code. Trying to change the dereference
+    // to evaluate to an array will require a lot more code rewriting.
+    // Instead, recurse further into the expression.
+    Forall_operands(it, expr)
+      fix_union_expr(*it);
   } else {
     // Default action: recurse and beat types.
 
