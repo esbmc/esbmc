@@ -548,7 +548,7 @@ expr_handle_table:
 #ifndef NDEBUG
       const struct_union_data &data = get_type_def(with.type);
       assert(idx < data.members.size() && "Out of bounds with expression");
-      assert(data.members[idx] == with.type &&
+      assert(base_type_eq(data.members[idx],  with.type, ns) &&
              "Assigned tuple member has type mismatch");
 #endif
 
