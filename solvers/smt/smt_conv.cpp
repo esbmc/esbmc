@@ -548,8 +548,10 @@ expr_handle_table:
 #ifndef NDEBUG
       const struct_union_data &data = get_type_def(with.type);
       assert(idx < data.members.size() && "Out of bounds with expression");
-      assert(base_type_eq(data.members[idx], with.update_value->type, ns) &&
-             "Assigned tuple member has type mismatch");
+      // Base type eq examines pointer types to closely
+      assert((base_type_eq(data.members[idx], with.update_value->type, ns) ||
+              (is_pointer_type(data.members[idx]) && is_pointer_type(with.update_value)))
+                && "Assigned tuple member has type mismatch");
 #endif
 
       a = srcval->update(this, convert_ast(with.update_value), idx);
