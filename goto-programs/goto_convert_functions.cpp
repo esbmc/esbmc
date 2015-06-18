@@ -649,6 +649,10 @@ goto_convert_functionst::fix_union_expr(exprt &expr)
     expr2tc new_expr;
     migrate_expr(expr, new_expr);
     expr = migrate_expr_back(new_expr);
+
+    // There may be union types embedded within this type; those need their
+    // types fixing too.
+    fix_union_expr(expr);
     fix_union_type(expr.type(), false);
   } else {
     // Default action: recurse and beat types.
