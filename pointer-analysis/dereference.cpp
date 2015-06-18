@@ -1550,8 +1550,8 @@ expr2tc *
 dereferencet::extract_bytes_from_scalar(const expr2tc &object,
     unsigned int num_bytes, const expr2tc &offset)
 {
-  assert((is_number_type(object) || is_bool_type(object)) &&
-      "Can't extract bytes out of non-scalars"); // Or, not trivially
+  assert(is_scalar_type(object) && "Can't extract bytes out of non-scalars");
+  // Or, not trivially
   const type2tc &bytetype = get_uint8_type();
 
   expr2tc *bytes = new expr2tc[num_bytes];
