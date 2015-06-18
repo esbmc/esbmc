@@ -1913,19 +1913,49 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
 
   // So: we have an array_of, that we have to convert into a bunch of stores.
   // However, it might be a nested array. If that's the case, then we're
-  // guarenteed to have another array_of in the initializer (which in turn might
-  // be nested). In that case, flatten to a single array of whatever's at the
-  // bottom of the array_of.
+  // guarenteed to have another array_of in the initializer which we can flatten
+  // to a single array of whatever's at the bottom of the array_of. Or, it's
+  // a constant_array, in which case we can just copy the contents.
   if (is_array_type(arrtype.subtype)) {
-    type2tc flat_type = flatten_array_type(expr->type);
-    const array_type2t &arrtype2 = to_array_type(flat_type);
-    array_size = calculate_array_domain_width(arrtype2);
-
     expr2tc rec_expr = expr;
-    while (is_constant_array_of2t(rec_expr))
-      rec_expr = to_constant_array_of2t(rec_expr).initializer;
 
-    base_init = rec_expr;
+    if (is_constant_array_of2t(to_constant_array_of2t(rec_expr).initializer)) {
+      type2tc flat_type = flatten_array_type(expr->type);
+      const array_type2t &arrtype2 = to_array_type(flat_type);
+      array_size = calculate_array_domain_width(arrtype2);
+
+      while (is_constant_array_of2t(rec_expr))
+        rec_expr = to_constant_array_of2t(rec_expr).initializer;
+
+      base_init = rec_expr;
+    } else {
+      const constant_array_of2t &arrof = to_constant_array_of2t(rec_expr);
+      assert(is_constant_array2t(arrof.initializer));
+      const constant_array2t &constarray =
+        to_constant_array2t(arrof.initializer);
+      const array_type2t &constarray_type = to_array_type(constarray.type);
+
+      // Duplicate contents repeatedly.
+      assert(is_constant_int2t(arrtype.array_size) &&
+          "Cannot have complex nondet-sized array_of initializers");
+      const BigInt &size = to_constant_int2t(arrtype.array_size).constant_value;
+
+      std::vector<expr2tc> new_contents;
+      for (uint64_t i = 0; i < size.to_uint64(); i++)
+        new_contents.insert(new_contents.end(),
+            constarray.datatype_members.begin(),
+            constarray.datatype_members.end());
+
+      // Create new expression, convert and return that.
+      mul2tc newsize(arrtype.array_size->type, arrtype.array_size,
+          constarray_type.array_size);
+      expr2tc simplified = newsize->simplify();
+      assert(!is_nil_expr(simplified));
+      type2tc new_arr_type(new array_type2t(constarray_type.subtype,
+            simplified,false));
+      constant_array2tc new_const_array(new_arr_type, new_contents);
+      return convert_ast(new_const_array);
+    }
   } else {
     base_init = arrof.initializer;
     array_size = calculate_array_domain_width(arrtype);
