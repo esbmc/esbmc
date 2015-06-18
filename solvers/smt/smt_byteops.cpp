@@ -68,6 +68,10 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
       // We cdan extract a byte from a bool -- zero or one.
       typecast2tc cast(get_uint8_type(), data.source_value);
       source = convert_ast(cast);
+    } else if (is_pointer_type(data.source_value)) {
+      // Cast this pointer to a bit representation.
+      typecast2tc cast(machine_ptr, data.source_value);
+      source = convert_ast(cast);
     } else {
       std::cerr << "Unrecognized type in operand to byte extract." << std::endl;
       data.dump();
@@ -91,6 +95,19 @@ smt_convt::convert_byte_update(const expr2tc &expr)
 
   assert(is_scalar_type(data.source_value) && "Byte update only works on "
          "scalar variables now");
+  assert(data.type == data.source_value->type);
+
+  if (!is_number_type(data.type)) {
+    // This is a pointer or a bool, or something. We don't want to handle
+    // casting of it in the body of this function, so wrap it up as a bitvector
+    // and re-apply.
+    type2tc bit_type = get_uint_type(data.type->get_width());
+    typecast2tc src_obj(bit_type, data.source_value);
+    byte_update2tc new_update(bit_type, src_obj, data.source_offset,
+        data.update_value, data.big_endian);
+    typecast2tc cast_back(data.type, new_update);
+    return convert_ast(cast_back);
+  }
 
   if (!is_constant_int2t(data.source_offset)) {
     expr2tc source = data.source_value;
