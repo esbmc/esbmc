@@ -544,6 +544,14 @@ expr_handle_table:
     if (is_struct_type(expr) || is_pointer_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       smt_astt srcval = convert_ast(with.source_value);
+
+#ifndef NDEBUG
+      const struct_union_data &data = get_type_def(with.type);
+      assert(idx < data.members.size() && "Out of bounds with expression");
+      assert(data.members[idx] == with.type &&
+             "Assigned tuple member has type mismatch");
+#endif
+
       a = srcval->update(this, convert_ast(with.update_value), idx);
     } else {
       a = convert_array_store(expr);
