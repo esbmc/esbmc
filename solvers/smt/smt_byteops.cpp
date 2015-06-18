@@ -4,16 +4,15 @@ smt_astt
 smt_convt::convert_byte_extract(const expr2tc &expr)
 {
   const byte_extract2t &data = to_byte_extract2t(expr);
+  expr2tc source = data.source_value;
+  unsigned int src_width = source->type->get_width();
+
+  if (!is_number_type(source))
+    source = typecast2tc(get_uint_type(src_width), source);
 
   assert(is_scalar_type(data.source_value) && "Byte extract now only works on "
          "scalar variables");
   if (!is_constant_int2t(data.source_offset)) {
-    expr2tc source = data.source_value;
-    unsigned int src_width = source->type->get_width();
-    if (!is_bv_type(source)) {
-      source = typecast2tc(get_uint_type(src_width), source);
-    }
-
     // The approach: the argument is now a bitvector. Just shift it the
     // appropriate amount, according to the source offset, and select out the
     // bottom byte.
@@ -53,37 +52,19 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
 
-  smt_astt source = convert_ast(data.source_value);;
+  smt_astt source_ast = convert_ast(data.source_value);
 
   if (int_encoding) {
     std::cerr << "Refusing to byte extract in integer mode; re-run in "
                  "bitvector mode" << std::endl;
     abort();
   } else {
-    if (is_bv_type(data.source_value)) {
-      ;
-    } else if (is_fixedbv_type(data.source_value)) {
-      ;
-    } else if (is_bool_type(data.source_value)) {
-      // We cdan extract a byte from a bool -- zero or one.
-      typecast2tc cast(get_uint8_type(), data.source_value);
-      source = convert_ast(cast);
-    } else if (is_pointer_type(data.source_value)) {
-      // Cast this pointer to a bit representation.
-      typecast2tc cast(machine_ptr, data.source_value);
-      source = convert_ast(cast);
-    } else {
-      std::cerr << "Unrecognized type in operand to byte extract." << std::endl;
-      data.dump();
-      abort();
-    }
-
     unsigned int sort_sz = data.source_value->type->get_width();
     if (sort_sz <= upper) {
       smt_sortt s = mk_sort(SMT_SORT_BV, 8, false);
       return mk_smt_symbol("out_of_bounds_byte_extract", s);
     } else {
-      return mk_extract(source, upper, lower, convert_sort(expr->type));
+      return mk_extract(source_ast, upper, lower, convert_sort(expr->type));
     }
   }
 }
