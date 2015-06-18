@@ -643,17 +643,18 @@ goto_convert_functionst::fix_union_expr(exprt &expr)
         fix_union_expr(*it);
     }
   } else if (expr.is_union()) {
+    // There may be union types embedded within this type; those need their
+    // types fixing too.
+    Forall_operands(it, expr)
+      fix_union_expr(*it);
+    fix_union_type(expr.type(), false);
+
     // A union expr is a constant/literal union. This needs to be flattened
     // out at this stage. Handle this by migrating immediately (which will
     // eliminate anything on union type), and overwriting this expression.
     expr2tc new_expr;
     migrate_expr(expr, new_expr);
     expr = migrate_expr_back(new_expr);
-
-    // There may be union types embedded within this type; those need their
-    // types fixing too.
-    fix_union_expr(expr);
-    fix_union_type(expr.type(), false);
   } else {
     // Default action: recurse and beat types.
 
