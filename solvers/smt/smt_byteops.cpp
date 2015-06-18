@@ -52,7 +52,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
 
-  smt_astt source_ast = convert_ast(data.source_value);
+  smt_astt source_ast = convert_ast(source);
 
   if (int_encoding) {
     std::cerr << "Refusing to byte extract in integer mode; re-run in "
