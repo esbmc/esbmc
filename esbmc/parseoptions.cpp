@@ -1241,7 +1241,7 @@ expr2tc cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::
 void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, expr2tc> >monitors)
 {
 
-  // So the plan: we've been handed an instruction, look for assignments to a
+  // We've been handed an instruction, look for assignments to the
   // symbol we're looking for. When we find one, append a goto instruction that
   // re-evaluates a proposition expression. Because there can be more than one,
   // we put re-evaluations in atomic blocks.
@@ -1251,8 +1251,8 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
   code_assign2t &assign = to_code_assign2t(insn->code);
 
-  // XXX - this means that we can't make propositions about things like
-  // the contents of an array and suchlike.
+  // Don't allow propositions about things like the contents of an array and
+  // suchlike.
   if (!is_symbol2t(assign.target))
     return;
 
@@ -1289,7 +1289,6 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
     new_insn.code = code_assign2tc(newsym, hack_cast);
     new_insn.function = insn->function;
 
-    // new_insn location field not set - I believe it gets numbered later.
     insn_list.insert(insn, new_insn);
   }
 
@@ -1421,8 +1420,8 @@ bool cbmc_parseoptionst::process_goto_program(
 
 #if 0
     // This disabled code used to run the pointer static analysis and produce
-    // pointer assertions appropriately. Disable now that we can run it at
-    // symex time.
+    // pointer assertions appropriately. Disabled now that assertions are all
+    // performed at symex time.
     status("Pointer Analysis");
     value_set_analysist value_set_analysis(ns);
     value_set_analysis(goto_functions);
