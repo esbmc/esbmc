@@ -1,6 +1,10 @@
 #ifndef _ESBMC_UTIL_MIGRATE_H_
 #define _ESBMC_UTIL_MIGRATE_H_
 
+// "Migration" refers to the process of moving an expression from the prior
+// string-based internal representation to the newer typed representation.
+// There's a full mapping in both directions.
+
 #include "irep2.h"
 
 #include "std_expr.h"
