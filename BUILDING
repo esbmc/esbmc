@@ -1,4 +1,4 @@
-From v1.26 ESBMC has been autoconfiscated -- build configuration is performed
+From v1.25.4 ESBMC has been autoconfiscated -- build configuration is performed
 by a configure script in the root project directory and a set of Makefile.in's.
 These files are generated thorugh the use of autotools and all it's minions.
 Two scripts exist to operate autotools:
