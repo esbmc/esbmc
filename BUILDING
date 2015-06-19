@@ -32,7 +32,7 @@ Errata:
  - clang++ will be selected over g++ if both are available, however on older
    operating system distributions clang++ may not support
    everything ESBMC needs to build. You can override which compiler is selected
-   by appending "CXX+g++" or similar to the configure command line
+   by appending "CXX=g++" or similar to the configure command line
  - On Mac OS if you need to use libc++ rather than libstdc++, you must specify
    "-stdlib=libc++" in CXXFLAGS (see below)
  - If you're using a steaming-new version of clang or gcc, you'll likely get a
