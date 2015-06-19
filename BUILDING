@@ -24,7 +24,9 @@ detect required libraries, solvers, and create a set of makefiles to with which
 to build ESBMC. Run "make" in the build tree to compile everything, resulting
 in an 'esbmc' binary in the 'esbmc' directory.
 
-Binary releases are produced by the scripts/release.sh script, with the caveat that it'll build it from the latest git version, not your potentially-dirty working copy.
+Binary releases are produced by the scripts/release.sh script, with the caveat
+that it'll build it from the latest git version, not your potentially-dirty
+working copy.
 
 Errata:
  - clang++ will be selected over g++ if both are available, however on older
