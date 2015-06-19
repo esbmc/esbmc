@@ -28,7 +28,7 @@ Binary releases are produced by the scripts/release.sh script, with the caveat t
 
 Errata:
  - clang++ will be selected over g++ if both are available, however on older
-   operating system distributions (hello debian) clang++ may not support
+   operating system distributions clang++ may not support
    everything ESBMC needs to build. You can override which compiler is selected
    by appending "CXX+g++" or similar to the configure command line
  - On Mac OS if you need to use libc++ rather than libstdc++, you must specify
