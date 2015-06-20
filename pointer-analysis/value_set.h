@@ -49,10 +49,10 @@ Author: Daniel Kroening, kroening@kroening.com
  *  The only data element stored is a map from l1 variable names (as strings)
  *  to a record of what objects are stored. Data objects are numbered, with the
  *  mapping for that stored in a global variable, value_sett::object_numbering,
- *  which will explode into multithreaded death cakes in the future. The primary
- *  interfaces to the value_sett object itself are the 'assign' method (for
- *  interpreting a variable assignment) and the get_value_set method, that takes
- *  a variable and returns the set of things it might point at.
+ *  (which will explode into multithreaded death cakes in the future). The
+ *  primary interfaces to the value_sett object itself are the 'assign' method
+ *  (for interpreting a variable assignment) and the get_value_set method, that
+ *  takes a variable and returns the set of things it might point at.
  */
 
 class value_sett
@@ -237,7 +237,7 @@ public:
       do {
         // Repeatedly decrease the word size by powers of two, and test to see
         // whether the offset meets that alignment. This will always succeed
-        // and exist the loop when the alignment reaches 1.
+        // and exit the loop when the alignment reaches 1.
         if ((m % max_align) == 0)
           return max_align;
         max_align /= 2;
