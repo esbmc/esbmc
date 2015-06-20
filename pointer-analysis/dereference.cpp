@@ -300,6 +300,8 @@ dereferencet::dereference_deref(expr2tc &expr, guardt &guard, modet mode)
   }
   else
   {
+    // This is an index applied to a pointer, which is essentially a dereference
+    // with an offset.
     assert(is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value));
     std::list<expr2tc> scalar_step_list;
     assert((is_scalar_type(expr) || is_code_type(expr))
@@ -654,11 +656,10 @@ dereferencet::build_reference_to(
   dereference_callback.rename(final_offset);
 #endif
 
-  // Finally, construct a reference against the base object. value set tracking
-  // emits objects with some cruft built on top of them.
+  // Value set tracking emits objects with some cruft built on top of them.
   value = get_base_object(value);
 
-  // If offset is unknown, or whatever, instead we have to consider it
+  // If offset is unknown, or whatever, we have to consider it
   // nondeterministic, and let the reference builders deal with it.
   if (!is_constant_int2t(final_offset)) {
     assert(o.alignment != 0);
@@ -696,6 +697,8 @@ dereferencet::build_reference_to(
     check_data_obj_access(value, final_offset, type, tmp_guard);
   }
 
+  // Call reference building methods. For the given data object in value,
+  // an expression of type type will be constructed that reads from it.
   build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment);
 
   return value;
