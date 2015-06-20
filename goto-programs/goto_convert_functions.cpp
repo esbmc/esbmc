@@ -641,6 +641,7 @@ goto_convert_functionst::fix_union_expr(exprt &expr)
     } else {
       Forall_operands(it, expr)
         fix_union_expr(*it);
+      fix_union_type(expr.type(), false);
     }
   } else if (expr.is_union()) {
     // There may be union types embedded within this type; those need their
