@@ -803,9 +803,8 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   case flag_src_scalar | flag_dst_struct | flag_is_const_offs:
     // Attempt to extract a structure from within a scalar. This is not
     // permitted as the base data objects have incompatible types
-    std::cerr << "Extracting struct from scalar" << std::endl;
-    abort();
-    // XXX FIXME, this should become a smt-time assertion
+    alignment_failure("Structure pointer pointed at scalar", guard);
+    break;
   case flag_src_struct | flag_dst_struct | flag_is_const_offs:
     // Extract a structure from inside another struct.
     construct_struct_ref_from_const_offset(value, offset, type, guard);
@@ -818,9 +817,8 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   case flag_src_scalar | flag_dst_union | flag_is_const_offs:
     // Attempt to extract a union from within a scalar. This is not
     // permitted as the base data objects have incompatible types
-    std::cerr << "Extracting union from scalar" << std::endl;
-    abort();
-    // XXX FIXME, this should become a smt-time assertion
+    alignment_failure("Union pointer pointed at scalar", guard);
+    break;
   case flag_src_struct | flag_dst_union | flag_is_const_offs:
     // Extract a union from inside a structure.
     construct_struct_ref_from_const_offset(value, offset, type, guard);
@@ -848,9 +846,8 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   case flag_src_scalar | flag_dst_struct | flag_is_dyn_offs:
     // Attempt to extract a structure from within a scalar. This is not
     // permitted as the base data objects have incompatible types
-    std::cerr << "Extracting struct from scalar" << std::endl;
-    abort();
-    // XXX FIXME, this should become a smt-time assertion
+    alignment_failure("Struct pointer pointed at scalar", guard);
+    break;
   case flag_src_struct | flag_dst_struct | flag_is_dyn_offs:
   case flag_src_array | flag_dst_struct | flag_is_dyn_offs:
     // Extract a structure from inside an array or another struct. Single
@@ -861,9 +858,8 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   case flag_src_scalar | flag_dst_union | flag_is_dyn_offs:
     // Attempt to extract a union from within a scalar. This is not
     // permitted as the base data objects have incompatible types
-    std::cerr << "Extracting union from scalar" << std::endl;
-    abort();
-    // XXX FIXME, this should become a smt-time assertion
+    alignment_failure("Union pointer pointed at scalar", guard);
+    break;
   case flag_src_struct | flag_dst_union | flag_is_dyn_offs:
   case flag_src_array | flag_dst_union | flag_is_dyn_offs:
     // Extract a structure from inside an array or another struct. Single
