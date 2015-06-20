@@ -787,7 +787,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   case flag_src_scalar | flag_dst_struct | flag_is_const_offs:
     // Attempt to extract a structure from within a scalar. This is not
     // permitted as the base data objects have incompatible types
-    dereference_failure("Structure pointer pointed at scalar", guard);
+    dereference_failure("Bad dereference", "Structure pointer pointed at scalar", guard);
     break;
   case flag_src_struct | flag_dst_struct | flag_is_const_offs:
     // Extract a structure from inside another struct.
@@ -801,7 +801,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   case flag_src_scalar | flag_dst_union | flag_is_const_offs:
     // Attempt to extract a union from within a scalar. This is not
     // permitted as the base data objects have incompatible types
-    dereference_failure("Union pointer pointed at scalar", guard);
+    dereference_failure("Bad dereference", "Union pointer pointed at scalar", guard);
     break;
   case flag_src_struct | flag_dst_union | flag_is_const_offs:
     // Extract a union from inside a structure.
@@ -830,7 +830,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   case flag_src_scalar | flag_dst_struct | flag_is_dyn_offs:
     // Attempt to extract a structure from within a scalar. This is not
     // permitted as the base data objects have incompatible types
-    dereference_failure("Struct pointer pointed at scalar", guard);
+    dereference_failure("Bad dereference", "Struct pointer pointed at scalar", guard);
     break;
   case flag_src_struct | flag_dst_struct | flag_is_dyn_offs:
   case flag_src_array | flag_dst_struct | flag_is_dyn_offs:
@@ -842,7 +842,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   case flag_src_scalar | flag_dst_union | flag_is_dyn_offs:
     // Attempt to extract a union from within a scalar. This is not
     // permitted as the base data objects have incompatible types
-    dereference_failure("Union pointer pointed at scalar", guard);
+    dereference_failure("Bad dereference", "Union pointer pointed at scalar", guard);
     break;
   case flag_src_struct | flag_dst_union | flag_is_dyn_offs:
   case flag_src_array | flag_dst_union | flag_is_dyn_offs:
