@@ -1020,7 +1020,6 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
               (int_offset - m_offs + access_size <= m_size)) {
       // This access is in the bounds of this member, but isn't at the start.
       // XXX that might be an alignment error.
-      // In the meantime, byte extract.
       expr2tc memb = member2tc(*it, value, struct_type.member_names[i]);
       constant_int2tc new_offs(pointer_type2(), int_offset - m_offs);
 
