@@ -234,8 +234,13 @@ compute_pointer_offset(const expr2tc &expr)
         gen_ulong(BigInt(sub_size * index_val.constant_value).to_ulong());
     } else {
       // Non constant, create multiply.
-      constant_int2tc tmp_size(pointer_type2(), sub_size);
-      result = mul2tc(pointer_type2(), tmp_size, index.index);
+      // Index operand needs to be the bitwidth of a 'long'.
+      expr2tc the_index = index.index;
+      if (the_index->type != zero_ulong->type)
+        the_index = typecast2tc(zero_ulong->type, the_index);
+
+      constant_int2tc tmp_size(zero_ulong->type, sub_size);
+      result = mul2tc(zero_ulong->type, tmp_size, the_index);
     }
 
     // Also accumulate any pointer offset in the source object.
