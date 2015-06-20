@@ -12,11 +12,12 @@
 
 // File for old irep -> new irep conversions.
 
-// Why do we need a namespace you say? Because there are now @ symbols embedded
-// in variable names, so we can't detect the renaming level of a variable
-// effectively. So, perform some hacks, by getting the top level parseoptions
-// code to give us the global namespace, and use that to detect whether the
-// symbol is renamed at all.
+// Due to the sins of the fathers, we need to have a namespace available during
+// migration. There are now @ symbols embedded in variable names, so we can't
+// detect the renaming level of a variable effectively. So, perform some hacks,
+// by getting the top level parseoptions code to give us the global namespace,
+// and use that to detect whether the symbol is renamed at all.
+//
 // Why is this a global? Because there are over three hundred call sites to
 // migrate_expr, and it's a huge task to fix them all up to pass a namespace
 // down.
@@ -318,7 +319,6 @@ migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns,
     new_type_ref = type_pool.get_empty();
   } else if (type.id() == "cpp-name") {
     real_migrate_type(type, new_type_ref, ns, cache);
-    // No caching; no reason, just not doing it right now.
   } else if (type.id() == "ellipsis") {
     real_migrate_type(type, new_type_ref, ns, cache);
   } else if (type.id() == "incomplete_array") {
@@ -385,6 +385,9 @@ decide_on_expr_type(const exprt &side1, const exprt &side2)
     return side2.type();
 }
 
+// Called when we have an expression (such as 'add') with more than two
+// operands. irep2 only allows for binary expressions, so these have to be
+// decomposed into a chain of add expressions, or similar.
 static exprt
 splice_expr(const exprt &expr)
 {
@@ -531,6 +534,8 @@ sym_name_to_symbol(irep_idt init, type2tc type)
                               level2_num, thread_num, node_num));
 }
 
+// Functions to flatten union literals to not contain anything of union type.
+// Everything should become a byte array, as we slowly purge concrete unions
 static expr2tc flatten_union(const exprt &expr);
 
 static void
