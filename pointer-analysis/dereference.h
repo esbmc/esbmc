@@ -90,7 +90,9 @@ Author: Daniel Kroening, kroening@kroening.com
  *     of the underlying type if possible, instead of having to compute a
  *     reference to a struct or array in dereference code.
  *   * In that vein, building a reference to a struct only happens as a last
- *     resort, and is vigorously asserted against.
+ *     resort, and is vigorously asserted against. An exception to this rule
+ *     is when the underlying object is a byte array: we have to support this
+ *     so that one can malloc memory for structure objects.
  *   * Sometimes in the worst case scenario, we're unable to access a data
  *     object in any sane way (like an int access to a short array), and end up
  *     needing to reconstruct the desired type from the byte representation.
