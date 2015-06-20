@@ -264,10 +264,7 @@ typedef std::list<member_entryt> list_of_memberst;
 class type2t
 {
 public:
-  /** Enumeration identifying each sort of type.
-   *  The idea being that we might (for whatever reason) at runtime need to fall
-   *  back onto identifying a type through just one field, for some reason. It's
-   *  also highly useful for debugging */
+  /** Enumeration identifying each sort of type. */
   enum type_ids {
     bool_id,
     empty_id,
@@ -454,9 +451,6 @@ class expr2t : public std::enable_shared_from_this<expr2t>
 {
 public:
   /** Enumeration identifying each sort of expr.
-   *  The idea being to permit runtime identification of a type for debugging or
-   *  otherwise.
-   *  @see type2t::type_ids.
    */
   enum expr_ids {
     constant_int_id,
@@ -498,7 +492,7 @@ public:
     modulus_id,
     shl_id,
     ashr_id,
-    dynamic_object_id, // Not converted in Z3, only in goto-symex
+    dynamic_object_id, // Not converted in SMT, only in goto-symex
     same_object_id,
     pointer_offset_id,
     pointer_object_id,
@@ -1373,7 +1367,7 @@ public:
   bv_data(type2t::type_ids id, unsigned int w) : type2t(id), width(w)
   {
     // assert(w != 0 && "Must have nonzero width for integer type");
-    // XXX -- zero sized bitfields are permissible. Wat.
+    // XXX -- zero sized bitfields are permissible. Oh my.
   }
   bv_data(const bv_data &ref) : type2t(ref), width(ref.width) { }
 
@@ -1759,7 +1753,7 @@ public:
 
 /** C++ Name type.
  *  Contains a type name, but also a vector of template parameters.
- *  I assume something in the C++ frontend uses this.
+ *  Something in the C++ frontend uses this; it's precise purpose is unclear.
  *  @extends cpp_name_data
  */
 class cpp_name_type2t : public cpp_name_type_methods
@@ -1781,11 +1775,7 @@ public:
 
 // Generate some "is-this-a-blah" macros, and type conversion macros. This is
 // fine in terms of using/ keywords in syntax, because the preprocessor
-// preprocesses everything out. One more used to C++ templates might raise their
-// eyebrows at using the preprocessor; nuts to you, this works.
-#ifdef NDEBUG
-#define dynamic_cast static_cast
-#endif
+// preprocesses everything out.
 #define type_macros(name) \
   inline bool is_##name##_type(const expr2tc &e) \
     { return e->type->type_id == type2t::name##_id; } \
@@ -2113,8 +2103,6 @@ public:
   // So: I want to make this private, however then all the templates accessing
   // it can't access it; and the typedef for symbol_expr_methods further down
   // can't access it too, no matter how many friends I add.
-  //
-  // So, let's pretend that this is private, even though it can't be enforced.
   irep_idt thename;
   renaming_level rlevel;
   unsigned int level1_num; // Function activation record
@@ -2690,9 +2678,7 @@ public:
 // expression methods, but also the container class which needs the template
 // parameters too.
 // Given how otherwise this means typing a large amount of template arguments
-// again and again, this gets macro'd. I have no problem with this given how
-// it's essentially the same lexical goo being repeated. It's, as far as I know,
-// exactly the kind of thing that macros are for.
+// again and again, this gets macro'd.
 
 #define irep_typedefs(basename, superclass, type, ...) \
   typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
@@ -2709,8 +2695,6 @@ public:
   typedef esbmct::expr_methods<basename##2t, superclass \
                                > basename##_expr_methods;
 
-// New rule: anything containing an expr2tc must be first in the template list,
-// everything else afterwards. This is to simplify iterating over subexprs.
 irep_typedefs(constant_int, constant_int_data, esbmct::takestype,
               BigInt, constant_int_data, &constant_int_data::constant_value);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data, esbmct::takestype,
@@ -3771,14 +3755,13 @@ public:
 
 /** Extract byte from data. From a particular data structure, extracts a single
  *  byte from its byte representation, at a particular offset into the data
- *  structure. Currently, Z3 backend throws its cookies if the offset isn't
- *  a constant value.
+ *  structure. Must only evaluate to byte types.
  *  @extends byte_extract_data */
 class byte_extract2t : public byte_extract_expr_methods
 {
 public:
   /** Primary constructor.
-   *  @param type Type of this expression. Presumably a 8 bit integer.
+   *  @param type Type of this expression. May only ever be an 8 bit integer
    *  @param is_big_endian Whether or not to use big endian byte representation
    *         of source object.
    *  @param source Object to extract data from. Any type.
@@ -3796,8 +3779,7 @@ public:
 /** Update byte. Takes a data object and updates the value of a particular
  *  byte in its byte representation, at a particular offset into the data object.
  *  Output of expression is a new copy of the source object, with the updated
- *  value. Currently, Z3 backend throws its cookies if the offset isn't a
- *  constant value. @extends byte_update_data */
+ *  value. @extends byte_update_data */
 class byte_update2t : public byte_update_expr_methods
 {
 public:
@@ -3879,7 +3861,7 @@ public:
 };
 
 /** Is string zero operation. Checks to see whether string operand is zero or
- *  not? In reality I've no idea, this is something string-abstraction related.
+ *  not. This is something string-abstraction related.
  *  Boolean result. @extends string_ops */
 class zero_string2t : public zero_string_expr_methods
 {
@@ -3893,9 +3875,7 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Check for zero length string. No idea how this is different from zero_string,
- *  but it has a different irep in old stringy irep, so here we are. Boolean
- *  result. @extends string_ops */
+/** Check for zero length string. Boolean result. @extends string_ops */
 class zero_length_string2t : public zero_length_string_expr_methods
 {
 public:
@@ -3981,9 +3961,7 @@ public:
 };
 
 /** Record unknown data value. Exclusively for use in pointer analysis to record
- *  the fact that we point at an unknown item of data. No idea why it has to be
- *  part of irep, but it was in the past, so it will be now. Ideally in the
- *  future this should change. @extends expr2t */
+ *  the fact that we point at an unknown item of data. @extends expr2t */
 class unknown2t : public unknown_expr_methods
 {
 public:
@@ -3998,7 +3976,6 @@ public:
 
 /** Record invalid data value. Exclusively for use in pointer analysis to record
  *  the fact that what we point at is guarenteed to be invalid or nonexistant.
- *  Like unknown2t, ideally in the future shouldn't subclass expr2t.
  *  @extends expr2t */
 class invalid2t : public invalid_expr_methods
 {
@@ -4012,8 +3989,7 @@ public:
 };
 
 /** Record null pointer value. Exclusively for use in pointer analysis to record
- *  the fact that a pointer can be NULL. Like unknown2t, should in the future
- *  become a non-expr2t subclass. @extends expr2t */
+ *  the fact that a pointer can be NULL. @extends expr2t */
 class null_object2t : public null_object_expr_methods
 {
 public:
@@ -4111,12 +4087,13 @@ public:
 
 /** Irep for various side effects. Stores data about various things that can
  *  cause side effects, such as memory allocations, nondeterministic value
- *  allocations (nondet_* funcs,), and for some reason function calls.
+ *  allocations (nondet_* funcs,).
  *
- *  Function calls are the one thing that stand out here as being weird; it seems
- *  they get stored in expressions and then pulled out in GOTO conversion to be
- *  evaluated in front of the current expression. However, in one or two places
- *  they seem to escape and reach the solver, which is bad.
+ *  Also allows for function-calls to be represented. This side-effect
+ *  expression is how function calls inside expressions are represented during
+ *  parsing, and are all flattened out prior to GOTO program creation. However,
+ *  under certain circumstances irep2 needs to represent such function calls,
+ *  so this facility is preserved in irep2.
  *
  *  @extends sideeffect_data */
 class sideeffect2t : public sideeffect_expr_methods
@@ -4678,8 +4655,6 @@ gen_ulong(unsigned long val)
   constant_int2tc v(type_pool.get_uint(config.ansi_c.word_size), BigInt(val));
   return v;
 }
-
-
 
 inline const type2tc &
 get_uint8_type(void)
