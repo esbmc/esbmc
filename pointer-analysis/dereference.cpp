@@ -1110,9 +1110,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
         field = typecast2tc(type, field);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     } else {
-      // Not fully aligned; devolve to byte extract. There may be ways to
-      // optimise this further, but that's quite meh right now.
-      // XXX -- stitch together with concats?
+      // Not fully aligned; devolve to byte extract.
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
 
@@ -1185,8 +1183,7 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
   const array_type2t arr_type = get_arr_type(value);
 
   // Right: any access across the boundry of the outer dimension of this array
-  // is an alignment violation, I think. (It isn't for byte arrays, worry about
-  // that later XXX).
+  // is an alignment violation as that can posess extra padding.
   // So, divide the offset by size of the inner dimention, make an index2t, and
   // construct a reference to that.
   mp_integer subtype_sz = type_byte_size(*arr_type.subtype);
@@ -1218,10 +1215,10 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
   assert(is_array_type(value->type));
   const type2tc &base_subtype = get_base_array_subtype(value->type);
 
-  // All in all: we don't care, what's being accessed at this level, unless
+  // All in all: we don't care what's being accessed at this level, unless
   // this struct is being constructed out of a byte array. If that's
   // not the case, just let the array recursive handler handle it. It'll bail
-  // if access is unaligned, and reduced us to constructing a constant
+  // if access is unaligned, and reduces us to constructing a constant
   // reference from the base subtype, through the correct recursive handler.
   if (base_subtype->get_width() != 8) {
     construct_from_array(value, offset, type, guard, mode, alignment);
@@ -1229,11 +1226,8 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
   }
 
   // Access is creating a structure reference from on top of a byte
-  // array. Clearly, this is an expensive operation, but one that may possibly
-  // turn up in things like C++, where one might pass-by-value a structure
-  // that's been malloc'd? Either way, these turn up.
-
-  // We are left with constructing a structure from a byte array.
+  // array. Clearly, this is an expensive operation, but it's necessary for
+  // the implementation of malloc.
   std::vector<expr2tc> fields;
   assert(is_struct_type(type));
   const struct_type2t &structtype = to_struct_type(type);
@@ -1271,7 +1265,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
     if (intref.constant_value == 0) {
       // Success?
       if (dereference_type_compare(value, type)) {
-        // Good, just return this expression. Uh. Yeah, that is all.
+        // Good, just return this expression.
         return;
       }
     }
@@ -1376,7 +1370,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
       get_base_array_subtype(value->type)->get_width() != 8) {
     const array_type2t &arr_type = to_array_type(value->type);
     // We can legally access various offsets into arrays. Generate an index
-    // and recurse. The complicate part is the new offset and guard: we need
+    // and recurse. The complicated part is the new offset and guard: we need
     // to guard for offsets that are inside this array, and modulus the offset
     // by the array size.
     mp_integer subtype_size = type_byte_size(*arr_type.subtype.get());
@@ -1400,7 +1394,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
   } else if (is_struct_type(value->type)) {
     // OK. If this type is compatible and matches, we're good. There can't
     // be any subtypes in this struct that match because then it'd be defined
-    // recursively (XXX -- is this true?).
+    // recursively.
     expr2tc tmp = value;
     if (dereference_type_compare(tmp, type)) {
       // Excellent. Guard that the offset is zero and finish.
@@ -1530,7 +1524,6 @@ dereferencet::extract_bytes_from_scalar(const expr2tc &object,
     unsigned int num_bytes, const expr2tc &offset)
 {
   assert(is_scalar_type(object) && "Can't extract bytes out of non-scalars");
-  // Or, not trivially
   const type2tc &bytetype = get_uint8_type();
 
   expr2tc *bytes = new expr2tc[num_bytes];
@@ -1572,10 +1565,6 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
 
   // That's going to come out as a bitvector;
   if (type != accuml->type) {
-    // XXX -- we might be selecting a char out of an int array, or something
-    //        This really needs to consider the initial offset into these array
-    //        elements. Use alignment and apply a byte extract?
-    // XXX -- byte order.
     //assert(type->get_width() == accuml->type->get_width());
     accuml = typecast2tc(type, accuml);
   }
@@ -1716,10 +1705,7 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
     }
     value = accuml;
   } else {
-    // We can't reconstruct this. Go crazy instead.
-    // XXX -- there's a line in the C spec, appendix G or whatever, saying that
-    // accessing an object with an (incompatible) type other than its base type
-    // is undefined behaviour. Should totally put that in the error message.
+    // We can't reconstruct this. The base types are incompatible.
     bad_base_type_failure(guard, get_type_id(*value->type),
         get_type_id(*base_of_steps_type));
     value = expr2tc();
