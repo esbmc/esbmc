@@ -452,14 +452,22 @@ dereferencet::dereference_expr_nonscalar(
 
 expr2tc
 dereferencet::dereference(
-  const expr2tc &src,
+  const expr2tc &orig_src,
   const type2tc &to_type,
   const guardt &guard,
   modet mode,
   const expr2tc &lexical_offset)
 {
-  assert(is_pointer_type(src));
   internal_items.clear();
+
+  // Awkwardly, the pointer might not be of pointer type, for example with
+  // nested dereferences that point at crazy locations. Happily this is not
+  // a real problem: just cast to a pointer, and let the dereference handlers
+  // cope with the fact that this expression doesn't point at anything. Of
+  // course, if it does point at something, dereferencing continues.
+  expr2tc src = orig_src;
+  if (!is_pointer_type(orig_src))
+    src = typecast2tc(type2tc(new pointer_type2t(get_empty_type())), src);
 
   type2tc type = to_type;
 
@@ -512,11 +520,23 @@ dereferencet::dereference(
 expr2tc
 dereferencet::make_failed_symbol(const type2tc &out_type)
 {
+  type2tc the_type;
+
+  if (is_union_type(out_type)) {
+    // Instead, create a byte array, all unions are now reduced to byte arrays.
+    BigInt size = type_byte_size(*out_type);
+    type2tc array_type(new array_type2t(get_uint8_type(),
+          gen_ulong(size.to_uint64()), false));
+    the_type = array_type;
+  } else {
+    the_type = out_type;
+  }
+
   // else, do new symbol
   symbolt symbol;
   symbol.name="symex::invalid_object"+i2string(invalid_counter++);
   symbol.base_name="invalid_object";
-  symbol.type=migrate_type_back(out_type);
+  symbol.type=migrate_type_back(the_type);
 
   // make it a lvalue, so we can assign to it
   symbol.lvalue=true;
@@ -569,8 +589,6 @@ bool dereferencet::dereference_type_compare(
       return true; // ok, dt is a prefix of ot
     }
   }
-
-  // XXX - are there such things as compatible unions?
 
   // really different
 
@@ -707,8 +725,8 @@ dereferencet::build_reference_to(
 enum target_flags {
   flag_src_scalar = 0,
   flag_src_array = 1,
-  flag_src_struct = 2, // Unions in future?
-  flag_src_union = 3,
+  flag_src_struct = 2,
+  // Union sources are now illegal
 
   flag_dst_scalar = 0,
   flag_dst_array = 4,
@@ -753,8 +771,10 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
 
   if (is_struct_type(value))
     flags |= flag_src_struct;
-  else if (is_union_type(value))
-    flags |= flag_src_union;
+  else if (is_union_type(value)) {
+    std::cerr << "Dereference target of type union is now illegal" << std::endl;
+    abort();
+  }
   else if (is_scalar_type(value))
     flags |= flag_src_scalar;
   else if (is_array_type(value) || is_string_type(value))
@@ -850,29 +870,6 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     // function supports both (which is bad).
     construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
     break;
-
-
-  case flag_src_union | flag_dst_union | flag_is_const_offs:
-    construct_struct_ref_from_const_offset(value, offset, type, guard);
-    break;
-  case flag_src_union | flag_dst_union | flag_is_dyn_offs:
-    construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
-    break;
-
-  // All union-src situations are currently approximations
-  case flag_src_union | flag_dst_scalar | flag_is_const_offs:
-  case flag_src_union | flag_dst_struct | flag_is_const_offs:
-  case flag_src_union | flag_dst_scalar | flag_is_dyn_offs:
-  case flag_src_union | flag_dst_struct | flag_is_dyn_offs:
-  {
-    // Just perform an access to the first element thing.
-    const union_type2t &uni_type = to_union_type(value->type);
-    assert(uni_type.members.size() != 0);
-    value = member2tc(uni_type.members[0], value, uni_type.member_names[0]);
-
-    build_reference_rec(value, offset, type, guard, mode, alignment);
-    break;
-  }
 
   // No scope for constructing references to arrays
   default:
@@ -1033,20 +1030,11 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
                             "Over-sized read of struct field", guard);
         value = expr2tc();
         return;
+      } else {
+        // This is a valid access to this field. Extract it, recurse.
+        value = member2tc(*it, value, struct_type.member_names[i]);
+        build_reference_rec(value, zero_ulong, type, guard, mode);
       }
-
-      // XXX -- what about under-reads?
-
-      // If it's at the start of a field, there's no need for further alignment
-      // concern.
-      expr2tc res = member2tc(*it, value, struct_type.member_names[i]);
-
-      if (!is_scalar_type(*it)) {
-        // We have to do even more extraction...
-        build_reference_rec(res, gen_ulong(0), type, guard, mode);
-      }
-
-      value = res;
       return;
     } else if (int_offset > m_offs &&
               (int_offset - m_offs + access_size <= m_size)) {
@@ -1122,25 +1110,6 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
       construct_from_dyn_struct_offset(field, new_offset, type, guard,
                                        alignment, mode, &failed_container);
-      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
-    } else if (is_union_type(*it)) {
-      // Take the union, take the first field, and consider a dynamiclly offset
-      // assignment into the first element. This is a massive approximation;
-      // what we really need is a well-reasoned representation of unions. Like
-      // the byte model, say
-      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
-      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
-
-      const union_type2t &uni_type = to_union_type(field->type);
-      assert(uni_type.members.size() != 0);
-      field = member2tc(uni_type.members[0], field, uni_type.member_names[0]);
-      if (is_struct_type(field)) {
-        construct_from_dyn_struct_offset(field, new_offset, type, guard,
-                                         alignment, mode, &failed_container);
-      } else {
-        build_reference_rec(field, new_offset, type, guard, mode, alignment);
-      }
-
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     } else if (is_array_type(*it)) {
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
@@ -1271,7 +1240,7 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
   const type2tc &base_subtype = get_base_array_subtype(value->type);
 
   // All in all: we don't care, what's being accessed at this level, unless
-  // this struct/union is being constructed out of a byte array. If that's
+  // this struct is being constructed out of a byte array. If that's
   // not the case, just let the array recursive handler handle it. It'll bail
   // if access is unaligned, and reduced us to constructing a constant
   // reference from the base subtype, through the correct recursive handler.
@@ -1280,16 +1249,10 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
     return;
   }
 
-  // Access is creating a structure or union reference from on top of a byte
+  // Access is creating a structure reference from on top of a byte
   // array. Clearly, this is an expensive operation, but one that may possibly
   // turn up in things like C++, where one might pass-by-value a structure
   // that's been malloc'd? Either way, these turn up.
-  // Don't implement for unions; in the near future they're going to become
-  // byte arrays themselves.
-  if (is_union_type(type)) {
-    bad_base_type_failure(guard, "struct", "union");
-    return;
-  }
 
   // We are left with constructing a structure from a byte array.
   std::vector<expr2tc> fields;
@@ -1364,24 +1327,11 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
     // padding.
     dereference_failure("Memory model", "Object accessed with illegal offset",
                         guard);
-  } else if (is_union_type(value)) {
-    // XXX -- this only deals with a very shallow level of unioning.
-
-    if (base_type_eq(value->type, type, ns))
       return;
-
-    const union_type2t &uni = to_union_type(value->type);
-    unsigned int i = 0;
-    forall_types(it, uni.members) {
-      if (base_type_eq(*it, type, ns)) {
-        // We have a subtype that matches the type we want to be getting.
-        member2tc memb(*it, value, uni.member_names[i]);
-        value = memb;
-        return;
-      }
-      i++;
-    }
-    bad_base_type_failure(guard, "simple union", "complex union");
+  } else {
+    std::cerr << "Unexpectedly " << get_type_id(value->type) << " type'd";
+    std::cerr << " argument to construct_struct_ref" << std::endl;
+    abort();
   }
 
   return;
@@ -1600,8 +1550,8 @@ expr2tc *
 dereferencet::extract_bytes_from_scalar(const expr2tc &object,
     unsigned int num_bytes, const expr2tc &offset)
 {
-  assert((is_number_type(object) || is_bool_type(object)) &&
-      "Can't extract bytes out of non-scalars"); // Or, not trivially
+  assert(is_scalar_type(object) && "Can't extract bytes out of non-scalars");
+  // Or, not trivially
   const type2tc &bytetype = get_uint8_type();
 
   expr2tc *bytes = new expr2tc[num_bytes];

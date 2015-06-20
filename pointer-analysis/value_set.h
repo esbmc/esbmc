@@ -101,6 +101,7 @@ public:
       if (offset_set) {
         offset_is_set = true;
         offset = mp_integer(operand);
+        offset_alignment = 1;
       } else {
         offset_is_set = false;
         offset_alignment = operand;
@@ -114,6 +115,7 @@ public:
       offset_is_set(true)
     {
       assert(offset_set);
+      offset_alignment = 1;
       // offset_set = offset_set;
     }
 

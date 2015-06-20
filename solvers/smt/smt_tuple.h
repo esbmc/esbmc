@@ -13,20 +13,11 @@ public:
    *  @return The tuple representation of the type, wrapped in an smt_sort. */
   virtual smt_sortt mk_struct_sort(const type2tc &type) = 0;
 
-  /** Create a sort representing a union. i.e., a tuple. Ideally this should
-   *  actually be part of the overridden tuple api, but due to history it isn't
-   *  yet. If solvers don't support tuples, implement this to abort.
-   *  @param type The union type to create a tuple representation of.
-   *  @return The tuple representation of the type, wrapped in an smt_sort. */
-  virtual smt_sortt mk_union_sort(const type2tc &type) = 0;
-
   /** Create a new tuple from a struct definition.
    *  @param structdef A constant_struct2tc, describing all the members of the
    *         tuple to create.
    *  @return AST representing the created tuple */
   virtual smt_astt tuple_create(const expr2tc &structdef) = 0;
-
-  virtual smt_astt union_create(const expr2tc &unidef) = 0;
 
   /** Create a fresh tuple, with freely valued fields.
    *  @param s Sort of the tuple to create

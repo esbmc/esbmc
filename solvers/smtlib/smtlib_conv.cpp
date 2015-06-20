@@ -778,13 +778,6 @@ smtlib_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
   abort();
 }
 
-smt_sort *
-smtlib_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
-{
-  std::cerr << "Attempted to make union type in smtlib conversion" << std::endl;
-  abort();
-}
-
 smt_ast *
 smtlib_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
                          const smt_sort *s)

@@ -53,7 +53,7 @@ smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
     idx++;
   }
   assert(idx != data_ref.member_names.size() &&
-         "Member name of with expr not found in struct/union type");
+         "Member name of with expr not found in struct type");
 
   return idx;
 }
@@ -205,8 +205,6 @@ smt_convt::pop_ctx(void)
 
   // Erase everything in caches added in the current context level. Everything
   // before the push is going to disappear.
-  union_varst::nth_index<1>::type &union_numindex = union_vars.get<1>();
-  union_numindex.erase(ctx_level);
   smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
   cache_numindex.erase(ctx_level);
   pointer_logic.pop_back();
@@ -327,32 +325,6 @@ smt_convt::convert_assign(const expr2tc &expr)
   // the symbol table will break.
   smt_cache_entryt e = { eq.side_1, side1, ctx_level };
   smt_cache.insert(e);
-
-  // Workaround for the fact that we don't have a good way of encoding unions
-  // into SMT. Just work out what the last assigned field is.
-  if (is_equality2t(expr)) {
-    const equality2t eq = to_equality2t(expr);
-    if (is_union_type(eq.side_1->type) && is_with2t(eq.side_2)) {
-      const symbol2t sym = to_symbol2t(eq.side_1);
-      const with2t with = to_with2t(eq.side_2);
-      const union_type2t &type = to_union_type(eq.side_1->type);
-      const std::string &ref = sym.get_symbol_name();
-      const constant_string2t &str = to_constant_string2t(with.update_field);
-
-      unsigned int idx = 0;
-      forall_names(it, type.member_names) {
-        if (*it == str.value)
-          break;
-        idx++;
-      }
-
-      assert(idx != type.member_names.size() &&
-             "Member name of with expr not found in struct/union type");
-
-      union_var_mapt mapentry = { ref, idx, 0 };
-      union_vars.insert(mapentry);
-    }
-  }
 }
 
 smt_astt
@@ -462,10 +434,9 @@ expr_handle_table:
     break;
   }
   case expr2t::constant_union_id:
-  {
-    a = tuple_api->union_create(expr);
-    break;
-  }
+    std::cerr << "Post-parse union literals are deprecated and broken, sorry";
+    std::cerr << std::endl;
+    abort();
   case expr2t::constant_array_id:
   case expr2t::constant_array_of_id:
   {
@@ -495,8 +466,7 @@ expr_handle_table:
         is_constant_array2t(expr))
       flat_expr = flatten_array_body(expr);
 
-    if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
-        is_pointer_type(arr.subtype))
+    if (is_struct_type(arr.subtype) || is_pointer_type(arr.subtype))
       a = tuple_array_create_despatch(flat_expr, domain);
     else
       a = array_create(flat_expr);
@@ -571,9 +541,19 @@ expr_handle_table:
     const with2t &with = to_with2t(expr);
 
     // We reach here if we're with'ing a struct, not an array. Or a bool.
-    if (is_struct_type(expr) || is_union_type(expr) || is_pointer_type(expr)) {
+    if (is_struct_type(expr) || is_pointer_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       smt_astt srcval = convert_ast(with.source_value);
+
+#ifndef NDEBUG
+      const struct_union_data &data = get_type_def(with.type);
+      assert(idx < data.members.size() && "Out of bounds with expression");
+      // Base type eq examines pointer types to closely
+      assert((base_type_eq(data.members[idx], with.update_value->type, ns) ||
+              (is_pointer_type(data.members[idx]) && is_pointer_type(with.update_value)))
+                && "Assigned tuple member has type mismatch");
+#endif
+
       a = srcval->update(this, convert_ast(with.update_value), idx);
     } else {
       a = convert_array_store(expr);
@@ -858,9 +838,6 @@ smt_convt::convert_sort(const type2tc &type)
   case type2t::struct_id:
     result = tuple_api->mk_struct_sort(type);
     break;
-  case type2t::union_id:
-    result = tuple_api->mk_union_sort(type);
-    break;
   case type2t::code_id:
   case type2t::pointer_id:
     result = tuple_api->mk_struct_sort(pointer_struct);
@@ -928,7 +905,8 @@ smt_convt::convert_sort(const type2tc &type)
   case type2t::symbol_id:
   case type2t::empty_id:
   default:
-    std::cerr << "Unexpected type ID reached SMT conversion" << std::endl;
+    std::cerr << "Unexpected type ID " << get_type_id(type);
+    std::cerr << " reached SMT conversion" << std::endl;
     abort();
   }
 
@@ -1110,39 +1088,9 @@ smt_convt::convert_member(const expr2tc &expr, smt_astt src)
   const member2t &member = to_member2t(expr);
   unsigned int idx = -1;
 
-  if (is_union_type(member.source_value->type)) {
-    union_varst::const_iterator cache_result;
-    const union_type2t &data_ref = to_union_type(member.source_value->type);
-
-    if (is_symbol2t(member.source_value)) {
-      const symbol2t &sym = to_symbol2t(member.source_value);
-      cache_result = union_vars.find(sym.get_symbol_name().c_str());
-    } else {
-      cache_result = union_vars.end();
-    }
-
-    if (cache_result != union_vars.end()) {
-      const std::vector<type2tc> &members = data_ref.get_structure_members();
-
-      const type2tc source_type = members[cache_result->idx];
-      if (source_type == member.type) {
-        // Type we're fetching from union matches expected type; just return it.
-        idx = cache_result->idx;
-      } else {
-        // Union field and expected type mismatch. Need to insert a cast.
-        // Duplicate expr as we're changing it
-        member2tc memb2(source_type, member.source_value, member.member);
-        typecast2tc cast(member.type, memb2);
-        return convert_ast(cast);
-      }
-    } else {
-      // If no assigned result available, we're probably broken for whatever
-      // reason, just go haywire.
-      idx = get_member_name_field(member.source_value->type, member.member);
-    }
-  } else {
-    idx = get_member_name_field(member.source_value->type, member.member);
-  }
+  assert(is_struct_type(member.source_value) ||
+         is_pointer_type(member.source_value));
+  idx = get_member_name_field(member.source_value->type, member.member);
 
   return src->project(this, idx);
 }
@@ -1863,7 +1811,6 @@ smt_convt::get(const expr2tc &expr)
   case type2t::array_id:
     return get_array(convert_ast(expr), expr->type);
   case type2t::struct_id:
-  case type2t::union_id:
   case type2t::pointer_id:
     return tuple_api->tuple_get(expr);
   default:
@@ -1968,19 +1915,49 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
 
   // So: we have an array_of, that we have to convert into a bunch of stores.
   // However, it might be a nested array. If that's the case, then we're
-  // guarenteed to have another array_of in the initializer (which in turn might
-  // be nested). In that case, flatten to a single array of whatever's at the
-  // bottom of the array_of.
+  // guarenteed to have another array_of in the initializer which we can flatten
+  // to a single array of whatever's at the bottom of the array_of. Or, it's
+  // a constant_array, in which case we can just copy the contents.
   if (is_array_type(arrtype.subtype)) {
-    type2tc flat_type = flatten_array_type(expr->type);
-    const array_type2t &arrtype2 = to_array_type(flat_type);
-    array_size = calculate_array_domain_width(arrtype2);
-
     expr2tc rec_expr = expr;
-    while (is_constant_array_of2t(rec_expr))
-      rec_expr = to_constant_array_of2t(rec_expr).initializer;
 
-    base_init = rec_expr;
+    if (is_constant_array_of2t(to_constant_array_of2t(rec_expr).initializer)) {
+      type2tc flat_type = flatten_array_type(expr->type);
+      const array_type2t &arrtype2 = to_array_type(flat_type);
+      array_size = calculate_array_domain_width(arrtype2);
+
+      while (is_constant_array_of2t(rec_expr))
+        rec_expr = to_constant_array_of2t(rec_expr).initializer;
+
+      base_init = rec_expr;
+    } else {
+      const constant_array_of2t &arrof = to_constant_array_of2t(rec_expr);
+      assert(is_constant_array2t(arrof.initializer));
+      const constant_array2t &constarray =
+        to_constant_array2t(arrof.initializer);
+      const array_type2t &constarray_type = to_array_type(constarray.type);
+
+      // Duplicate contents repeatedly.
+      assert(is_constant_int2t(arrtype.array_size) &&
+          "Cannot have complex nondet-sized array_of initializers");
+      const BigInt &size = to_constant_int2t(arrtype.array_size).constant_value;
+
+      std::vector<expr2tc> new_contents;
+      for (uint64_t i = 0; i < size.to_uint64(); i++)
+        new_contents.insert(new_contents.end(),
+            constarray.datatype_members.begin(),
+            constarray.datatype_members.end());
+
+      // Create new expression, convert and return that.
+      mul2tc newsize(arrtype.array_size->type, arrtype.array_size,
+          constarray_type.array_size);
+      expr2tc simplified = newsize->simplify();
+      assert(!is_nil_expr(simplified));
+      type2tc new_arr_type(new array_type2t(constarray_type.subtype,
+            simplified,false));
+      constant_array2tc new_const_array(new_arr_type, new_contents);
+      return convert_ast(new_const_array);
+    }
   } else {
     base_init = arrof.initializer;
     array_size = calculate_array_domain_width(arrtype);

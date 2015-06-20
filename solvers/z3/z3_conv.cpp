@@ -214,10 +214,9 @@ z3_convt::check2_z3_properties(void)
 }
 
 void
-z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
+z3_convt::convert_struct_type(const std::vector<type2tc> &members,
                                     const std::vector<irep_idt> &member_names,
-                                    const irep_idt &struct_name, bool uni,
-                                    z3::sort &sort)
+                                    const irep_idt &struct_name, z3::sort &sort)
 {
   z3::symbol mk_tuple_name, *proj_names;
   z3::sort *proj_types;
@@ -226,14 +225,12 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
   u_int num_elems;
 
   num_elems = members.size();
-  if (uni)
-    num_elems++;
 
   proj_names = new z3::symbol[num_elems];
   proj_types = new z3::sort[num_elems];
   proj_decls = new Z3_func_decl[num_elems];
 
-  name = ((uni) ? "union" : "struct" );
+  name = "struct";
   name += "_type_" + struct_name.as_string();
   mk_tuple_name = z3::symbol(ctx, name.c_str());
 
@@ -249,14 +246,6 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
   {
     proj_names[i] = z3::symbol(ctx, mname->as_string().c_str());
     convert_type(*it, proj_types[i]);
-  }
-
-  if (uni) {
-    // ID field records last value written to union
-    proj_names[num_elems - 1] = z3::symbol(ctx, "id");
-    // XXXjmorse - must this field really become a bitfield, ever? It's internal
-    // tracking data, not program data.
-    proj_types[num_elems - 1] = ctx.esbmc_int_sort();
   }
 
   // Unpack pointers from Z3++ objects.
@@ -292,12 +281,12 @@ z3_convt::setup_pointer_sort(void)
 }
 
 void
-z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
-                               const std::vector<type2tc> &member_types,
-                               const type2tc &type, z3::expr &output)
+z3_convt::convert_struct(const std::vector<expr2tc> &members,
+                         const std::vector<type2tc> &member_types,
+                         const type2tc &type, z3::expr &output)
 {
 
-  // Converts a static struct/union - IE, one that hasn't had any "with"
+  // Converts a static struct - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
   u_int i = 0;
@@ -310,19 +299,13 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
   z3::expr *args = new z3::expr[size];
 
   unsigned int numoperands = members.size();
-  // Populate tuple with members of that struct/union
-  forall_types(it, member_types) {
-    if (i < numoperands) {
-      const z3_smt_ast *tmp = z3_smt_downcast(convert_ast(members[i]));
-      args[i] = tmp->e;
-    } else {
-      // Turns out that unions don't necessarily initialize all members.
-      // If no initialization give, use free (fresh) variable.
-      z3::sort s;
-      convert_type(*it, s);
-      args[i] = ctx.fresh_const(NULL, s);
-    }
+  assert(numoperands == member_types.size() &&
+         "Too many / few struct fields for struct type");
 
+  // Populate tuple with members of that struct
+  forall_types(it, member_types) {
+    const z3_smt_ast *tmp = z3_smt_downcast(convert_ast(members[i]));
+    args[i] = tmp->e;
     i++;
   }
 
@@ -345,15 +328,7 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   case type2t::struct_id:
   {
     const struct_type2t &strct = to_struct_type(type);
-    convert_struct_union_type(strct.members, strct.member_names, strct.name,
-                              false, sort);
-    break;
-  }
-  case type2t::union_id:
-  {
-    const union_type2t &uni = to_union_type(type);
-    convert_struct_union_type(uni.members, uni.member_names, uni.name,
-                              true, sort);
+    convert_struct_type(strct.members, strct.member_names, strct.name, sort);
     break;
   }
   case type2t::array_id:
@@ -783,14 +758,6 @@ z3_convt::mk_struct_sort(const type2tc &type)
   }
 }
 
-smt_sort *
-z3_convt::mk_union_sort(const type2tc &type)
-{
-  z3::sort s;
-  convert_type(type, s);
-  return new z3_smt_sort(SMT_SORT_UNION, s, type);
-}
-
 const smt_ast *
 z3_convt::z3_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
 {
@@ -864,16 +831,9 @@ z3_convt::tuple_create(const expr2tc &structdef)
   const struct_union_data &type =
     static_cast<const struct_union_data &>(*strct.type);
 
-  convert_struct_union(strct.datatype_members, type.members, strct.type, e);
+  convert_struct(strct.datatype_members, type.members, strct.type, e);
   smt_sort *s = mk_struct_sort(structdef->type);
   return new_ast(e, s);
-}
-
-smt_astt
-z3_convt::union_create(const expr2tc &unidef __attribute__((unused)))
-{
-  std::cerr << "Union create in z3_convt called" << std::endl;
-  abort();
 }
 
 smt_astt

@@ -72,7 +72,6 @@ public:
   virtual smt_ast* mk_smt_bool(bool boolval);
   virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *sort);
   virtual smt_sort* mk_struct_sort(const type2tc &t);
-  virtual smt_sort* mk_union_sort(const type2tc&t);
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
                               unsigned int low, const smt_sort *s);
   virtual const smt_ast *make_disjunct(const smt_convt::ast_vec &v);

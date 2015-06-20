@@ -4,16 +4,15 @@ smt_astt
 smt_convt::convert_byte_extract(const expr2tc &expr)
 {
   const byte_extract2t &data = to_byte_extract2t(expr);
+  expr2tc source = data.source_value;
+  unsigned int src_width = source->type->get_width();
+
+  if (!is_number_type(source))
+    source = typecast2tc(get_uint_type(src_width), source);
 
   assert(is_scalar_type(data.source_value) && "Byte extract now only works on "
          "scalar variables");
   if (!is_constant_int2t(data.source_offset)) {
-    expr2tc source = data.source_value;
-    unsigned int src_width = source->type->get_width();
-    if (!is_bv_type(source)) {
-      source = typecast2tc(get_uint_type(src_width), source);
-    }
-
     // The approach: the argument is now a bitvector. Just shift it the
     // appropriate amount, according to the source offset, and select out the
     // bottom byte.
@@ -53,33 +52,19 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
 
-  smt_astt source = convert_ast(data.source_value);;
+  smt_astt source_ast = convert_ast(source);
 
   if (int_encoding) {
     std::cerr << "Refusing to byte extract in integer mode; re-run in "
                  "bitvector mode" << std::endl;
     abort();
   } else {
-    if (is_bv_type(data.source_value)) {
-      ;
-    } else if (is_fixedbv_type(data.source_value)) {
-      ;
-    } else if (is_bool_type(data.source_value)) {
-      // We cdan extract a byte from a bool -- zero or one.
-      typecast2tc cast(get_uint8_type(), data.source_value);
-      source = convert_ast(cast);
-    } else {
-      std::cerr << "Unrecognized type in operand to byte extract." << std::endl;
-      data.dump();
-      abort();
-    }
-
     unsigned int sort_sz = data.source_value->type->get_width();
     if (sort_sz <= upper) {
       smt_sortt s = mk_sort(SMT_SORT_BV, 8, false);
       return mk_smt_symbol("out_of_bounds_byte_extract", s);
     } else {
-      return mk_extract(source, upper, lower, convert_sort(expr->type));
+      return mk_extract(source_ast, upper, lower, convert_sort(expr->type));
     }
   }
 }
@@ -91,6 +76,19 @@ smt_convt::convert_byte_update(const expr2tc &expr)
 
   assert(is_scalar_type(data.source_value) && "Byte update only works on "
          "scalar variables now");
+  assert(data.type == data.source_value->type);
+
+  if (!is_number_type(data.type)) {
+    // This is a pointer or a bool, or something. We don't want to handle
+    // casting of it in the body of this function, so wrap it up as a bitvector
+    // and re-apply.
+    type2tc bit_type = get_uint_type(data.type->get_width());
+    typecast2tc src_obj(bit_type, data.source_value);
+    byte_update2tc new_update(bit_type, src_obj, data.source_offset,
+        data.update_value, data.big_endian);
+    typecast2tc cast_back(data.type, new_update);
+    return convert_ast(cast_back);
+  }
 
   if (!is_constant_int2t(data.source_offset)) {
     expr2tc source = data.source_value;
@@ -163,6 +161,13 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   // on bytes that are going into non-byte words
   assert(width_op2 == 8 && "Can't byte update non-byte operations");
   assert(width_op2 != width_op0 && "Can't byte update bytes, sorry");
+
+  // Bail if this is an invalid update. This might be legitimate, in that one
+  // can update a padding byte in a struct, leading to a crazy out of bounds
+  // update. Either way, leave it to the dereference layer to decide on
+  // invalidity.
+  if (src_offset >= (width_op0 / 8))
+    return convert_ast(data.source_value);
 
   smt_astt top, middle, bottom;
 

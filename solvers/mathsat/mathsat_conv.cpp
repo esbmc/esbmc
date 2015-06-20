@@ -461,12 +461,6 @@ mathsat_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
   abort();
 }
 
-smt_sort *
-mathsat_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
-{
-  abort();
-}
-
 smt_ast *
 mathsat_convt::mk_extract(const smt_ast *a, unsigned int high,
                           unsigned int low, const smt_sort *s)
