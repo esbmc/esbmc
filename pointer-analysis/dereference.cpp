@@ -294,20 +294,6 @@ dereferencet::dereference_deref(expr2tc &expr, guardt &guard, modet mode)
     // first make sure there are no dereferences in there
     dereference_expr(deref.value, guard, dereferencet::READ);
 
-    if (is_array_type(to_pointer_type(deref.value->type).subtype)) {
-      // Dereferencing yeilding an array means we're actually performing pointer
-      // arithmetic, on a multi-dimensional array. The operand is performing
-      // said arith. Simply drop this dereference, and massage the type.
-      expr2tc tmp = deref.value;
-      const array_type2t &arr =
-        to_array_type(to_pointer_type(deref.value->type).subtype);
-
-      tmp.get()->type = type2tc(new pointer_type2t(arr.subtype));
-      expr = tmp;
-//XXX -- test this! nonscalar handles this now?
-      return;
-    }
-
     expr2tc tmp_obj = deref.value;
     expr2tc result = dereference(tmp_obj, deref.type, guard, mode, expr2tc());
     expr = result;
