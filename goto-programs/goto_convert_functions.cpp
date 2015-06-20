@@ -657,13 +657,16 @@ goto_convert_functionst::fix_union_expr(exprt &expr)
     migrate_expr(expr, new_expr);
     expr = migrate_expr_back(new_expr);
   } else if (expr.is_dereference()) {
-    // Don't rewrite the type of this expression -- we want the dereference
-    // of a union pointer to evaluate to a union type, as that can be picked
-    // apart by the pointer handling code. Trying to change the dereference
-    // to evaluate to an array will require a lot more code rewriting.
-    // Instead, recurse further into the expression.
+    // We want the dereference of a union pointer to evaluate to a union type,
+    // as that can be picked apart by the pointer handling code. However, do
+    // rewrite types if it points at a struct that contains a union, because
+    // the correct type of a struct reference with a union is it, has it's
+    // fields rewritten to be arrays. Actual accesses to that union field will
+    // be transformed into a dereference to one of the fields _within_ the
+    // union, so we never up constructing a union reference.
     Forall_operands(it, expr)
       fix_union_expr(*it);
+    fix_union_type(expr.type(), true);
   } else {
     // Default action: recurse and beat types.
 
