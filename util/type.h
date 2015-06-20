@@ -74,8 +74,8 @@ class typet:public irept
   static irep_idt t_fixedbv;
   static irep_idt t_bool;
   static irep_idt t_empty;
-  static irep_idt t_symbol; // So there're expressions of id "symbol" and types
-                            // of id "symbol". Great.
+  static irep_idt t_symbol; // There're expressions of id "symbol" and types
+                            // of id "symbol".
   static irep_idt t_struct;
   static irep_idt t_union;
   static irep_idt t_class;
