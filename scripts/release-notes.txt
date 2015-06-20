@@ -1,5 +1,21 @@
 Release Notes of the ESBMC model checker
 
+*** Version 2.0.0
++ Released ESBMC open source at https://github.com/esbmc/esbmc
++ Build with autoconf
++ Adjust union implementation: because SMT does not have a good way of
+  representing unions, we now allocate a byte array as storage for unions, and
+  force all union accesses to be performed through pointers. The dereference
+  layer handles the decomposition of these accesses to byte array accesses.
+  This seems to work well; the only limitation is that assignments of type
+  union become assignments of type array, which the dereference layer can't
+  handle. This will be fixed in a future release
++ Support assignments with structure type better, and dereferences that
+  evaluate to a structure
++ Fix a number of byte-order inaccuracies. The "byte_extract" and update ireps
+  will now only operate on scalars; the pointer layer handles all other
+  circumstances where the byte model representation is required
+
 *** Version 1.25
 + Bugfixes for the k-induction implementation.
 + Boolector is now the default solver.
