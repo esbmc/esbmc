@@ -991,7 +991,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
     if (int_offset < m_offs) {
       // The offset is behind this field, but wasn't accepted by the previous
       // member. That means that the offset falls in the undefined gap in the
-      // middled. Which might be an error -- reading from it definitely is,
+      // middle. Which might be an error -- reading from it definitely is,
       // but we might write to it in the course of memset.
       value = expr2tc();
       if (mode == WRITE) {
