@@ -241,8 +241,6 @@ dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode)
 
   // turn &*p to p
   // this has *no* side effect!
-  // XXX jmorse -- how does this take account of an intervening member
-  // operation? i.e. &foo->bar;
   address_of2t &addrof = to_address_of2t(expr);
 
   if (is_dereference2t(addrof.ptr_obj)) {
@@ -268,8 +266,7 @@ dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode)
 
       offs = typecast2tc(pointer_type2(), offs);
 
-      // Cast to a byte pointer; add; cast back. Can't think of a better way
-      // to produce safe pointer arithmetic right now.
+      // Cast to a byte pointer; add; cast back. Is essentially pointer arith.
       expr2tc output =
         typecast2tc(type2tc(new pointer_type2t(get_uint8_type())), base);
       output = add2tc(output->type, output, offs);
