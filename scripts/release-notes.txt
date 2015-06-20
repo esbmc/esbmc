@@ -15,6 +15,8 @@ Release Notes of the ESBMC model checker
 + Fix a number of byte-order inaccuracies. The "byte_extract" and update ireps
   will now only operate on scalars; the pointer layer handles all other
   circumstances where the byte model representation is required
+- For this release, K-Induction support is disabled. Please use a previous
+  version for kinduction.
 
 *** Version 1.25
 + Bugfixes for the k-induction implementation.
