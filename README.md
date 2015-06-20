@@ -4,6 +4,12 @@ ESBMC, the efficient SMT based model checker, is a software verification tool fo
 
 To build ESBMC, please see the BUILDING file. For getting started, we recommend first reading some of the background material / publications, to understand exactly what this technique can provide, for example our SV-COMP tool papers.
 
+The cannonical public location of ESBMCs source is on github:
+
+    https://github.com/esbmc/esbmc
+
+While our main website is esbmc.org
+
 ### Features
 
 ESBMC aims to support all of C99, and detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of problems that can be detected include:
