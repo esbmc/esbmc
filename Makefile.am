@@ -5,3 +5,6 @@ SUBDIRS = big-int util langapi solvers goto-symex pointer-analysis \
 
 licensedir = $(prefix)/license
 license_DATA = scripts/licenses/BOOLECTOR_LICENSE.txt scripts/licenses/Z3_LICENSE.txt COPYING
+
+maindir = $(prefix)
+main_DATA = scripts/README
