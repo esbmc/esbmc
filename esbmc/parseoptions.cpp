@@ -88,6 +88,7 @@ timeout_handler(int dummy __attribute__((unused)))
 
     unsigned int len = write(commPipe[1], &r, sizeof(r));
     assert(len == sizeof(r) && "short write");
+    (void)len; // ndebug
   }
 
   std::cout << "Timed out" << std::endl;
@@ -735,6 +736,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // Write result
         u_int len = write(commPipe[1], &r, sizeof(r));
         assert(len == sizeof(r) && "short write");
+        (void)len; //ndebug
 
         if(r.result)
           return r.result;
@@ -743,6 +745,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       r.finished = true;
       u_int len = write(commPipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
+      (void)len; //ndebug
 
       std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
 
@@ -780,6 +783,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // Write result
         u_int len = write(commPipe[1], &r, sizeof(r));
         assert(len == sizeof(r) && "short write");
+        (void)len; //ndebug
 
         if(!r.result)
           return r.result;
@@ -788,6 +792,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       r.finished = true;
       u_int len = write(commPipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
+      (void)len; //ndebug
 
       std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
 
@@ -828,6 +833,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // Write result
         u_int len = write(commPipe[1], &r, sizeof(r));
         assert(len == sizeof(r) && "short write");
+        (void)len; //ndebug
 
         if(!r.result)
           return r.result;
@@ -836,6 +842,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       r.finished = true;
       u_int len = write(commPipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
+      (void)len; //ndebug
 
       std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
 
