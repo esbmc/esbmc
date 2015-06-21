@@ -1441,6 +1441,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
       symbolt *symbol_ptr;
       bool res = move_symbol(new_symbol, symbol_ptr);
       assert(!res);
+      (void)res; // ndebug
 
       err_location(f_op);
       str << "function `" << identifier << "' is not declared";
