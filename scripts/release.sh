@@ -97,15 +97,16 @@ do_build () {
 
 solver_opts="--disable-yices --disable-cvc4 --disable-mathsat --enable-z3 --enable-boolector"
 x86flags="CXXFLAGS='-m32' CFLAGS='-m32' LDFLFAGS='-m32'"
+flags="CXX=g++ -DNDEBUG"
 
-do_build "esbmc-v${esbmcversion}-linux-64" "CXX=g++ $solver_opts"
+do_build "esbmc-v${esbmcversion}-linux-64" "$flags $solver_opts"
 if test $? != 0; then exit 1; fi
 
-do_build "esbmc-v${esbmcversion}-linux-32" "CXX=g++ $solver_opts $x86flags"
+do_build "esbmc-v${esbmcversion}-linux-32" "$flags $solver_opts $x86flags"
 if test $? != 0; then exit 1; fi
 
-do_build "esbmc-v${esbmcversion}-linux-static-64" "CXX=g++ $solver_opts --enable-static-link"
+do_build "esbmc-v${esbmcversion}-linux-static-64" "$flags $solver_opts --enable-static-link"
 if test $? != 0; then exit 1; fi
 
-do_build "esbmc-v${esbmcversion}-linux-static-32" "CXX=g++ $solver_opts $x86flags --enable-static-link"
+do_build "esbmc-v${esbmcversion}-linux-static-32" "$flags $solver_opts $x86flags --enable-static-link"
 if test $? != 0; then exit 1; fi
