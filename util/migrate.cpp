@@ -1589,7 +1589,8 @@ migrate_type_back(const type2tc &ref)
     return ret;
   }
   default:
-    assert(0 && "Unrecognized type in migrate_type_back");
+  std::cerr << "Unrecognized type in migrate_type_back" << std::endl;
+  abort();
   }
 }
 
