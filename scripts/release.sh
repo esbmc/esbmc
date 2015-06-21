@@ -97,7 +97,7 @@ do_build () {
 }
 
 solver_opts="--disable-yices --disable-cvc4 --disable-mathsat --enable-z3 --enable-boolector"
-x86flags="CXX=g++ 'CXXFLAGS=-m32 -DNDEBUG' 'CFLAGS=-m32 -DNDEBUG' LDFLFAGS=-m32"
+x86flags="CXX=g++ CXXFLAGS=-m32 CFLAGS=-m32 LDFLFAGS=-m32"
 flags="CXX=g++ CXXFLAGS=-DNDEBUG CFLAGS=-DNDEBUG"
 
 do_build "esbmc-v${esbmcversion}-linux-64" "$flags $solver_opts"
