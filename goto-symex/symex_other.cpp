@@ -22,14 +22,10 @@ void goto_symext::symex_other(void)
 
   if (is_code_expression2t(code2))
   {
-    // This is some kind of expression, that gets evaluated. Given the GOTO
-    // transformation, it can't contain any function calls, or have any other
-    // side effects, so it's essentially a no-op.
-    // However, it /might/ contain a dereference. And that dereference might
-    // trigger an assertion failure due to an invalid access. And that kind of
-    // tests is /definitely/ in the regression test suite (01_cmbc_String2).
-    // So, dereference the expression here to collect any assertions it may
-    // cause.
+    // Represents an expression that gets evaluated, but does not have any
+    // other effect on execution, i.e. doesn't contain a call or assignment.
+    // This can, however, cause the program to fail if it dereferences an
+    // invalid pointer. Therefore, dereference it.
     const code_expression2t &expr = to_code_expression2t(code2);
     expr2tc operand = expr.operand;
     dereference(operand, false, false);
