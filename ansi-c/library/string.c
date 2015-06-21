@@ -3,7 +3,7 @@
 
 #include "intrinsics.h"
 
-// Because of macs,
+// OSX headers,
 #undef strcpy
 #undef strncpy
 #undef strcat

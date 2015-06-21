@@ -2362,7 +2362,7 @@ bool cpp_typecheck_resolvet::guess_template_args(
               // XXX: various implicit conversions are defined by section 14.1
               // of the spec, most notably that array types become element
               // pointers. This should be refactored into a separate method
-              // and fully explored, rather than monkey-patched.
+              // and fully explored, rather than randomly patched here.
               if (t.id() == "array") {
                 // Morph irep.
                 t.id("pointer");

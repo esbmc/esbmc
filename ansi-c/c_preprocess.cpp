@@ -136,7 +136,7 @@ static const char *cpp_normal_defs[] = {
 "__ESBMC__",
 "__STRICT_ANSI__=1",
 "_POSIX_SOURCE=1",
-// mingw sched/pthread headers choke and die upon this.
+// mingw sched/pthread headers choke upon this.
 // Mac's attempt to spam inline assembly everywhere if this is defined, to
 // alias some deprecated function symbols
 #if !defined(__WIN32__) && !defined(__APPLE__)
