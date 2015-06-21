@@ -149,7 +149,8 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
   case type2t::fixedbv_id:
     return expr2tc(new constant_fixedbv2t(type, bv));
   default:
-    assert(0 && "Unexpected typed argument to from_fixedbv");
+    std::cerr << "Unexpected typed argument to from_fixedbv" << std::endl;
+    abort();
   }
 }
 
