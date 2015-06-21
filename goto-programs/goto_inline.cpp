@@ -170,7 +170,7 @@ Function: goto_inlinet::replace_return
 void goto_inlinet::replace_return(
   goto_programt &dest,
   const exprt &lhs,
-  const exprt &constrain)
+  const exprt &constrain __attribute__((unused)) /* ndebug */)
 {
   for(goto_programt::instructionst::iterator
       it=dest.instructions.begin();
