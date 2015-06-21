@@ -131,7 +131,7 @@ tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 
 smt_astt 
 tuple_node_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
-    expr2tc idx_expr) const
+    expr2tc idx_expr __attribute__((unused)) /*ndebug*/) const
 {
   smt_convt::ast_vec eqs;
   assert(is_nil_expr(idx_expr) && "Can't apply non-constant index update to "
