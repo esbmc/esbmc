@@ -359,9 +359,8 @@ m4_define([$$ESBMC_BOOLECTOR_EXTRA_CONFIG], [
 m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
   dnl $1 = Path we're looking at as being the yices installation
   dnl Yices ships with 'libyices.2.x.y', but no set of appropriate symlinks.
-  dnl So linking against it is a pain in the neck. Perform a small amount of
-  dnl juggling to install such a symlink.
-  dnl Yes this is appalling, not very many other ways of doing it though.
+  dnl So linking against it is a pain. Detect cricumstances where the
+  dnl appropriate version symlinks are not installed, and bail.
   AS_IF([test -d $1], [
     AS_IF([test ! -z "`ls $2 | grep libyices.so.2*`"], [
       AS_IF([test ! -e "$2/libyices.so"], [
