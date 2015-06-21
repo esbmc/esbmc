@@ -399,19 +399,17 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
   if (type.id() == "pointer")
     return;
 
-  // In a vastly irritating turn of events, some type symbols aren't entirely
-  // correct. This is because (in the current 27_exStbFb test) some type
-  // symbols get the module name inserted into the -- so c::int32_t becomes
-  // c::main::int32_t.
+  // Some type symbols aren't entirely correct. This is because (in the current
+  // 27_exStbFb test) some type symbols get the module name inserted into the
+  // name -- so c::int32_t becomes c::main::int32_t.
+  //
   // Now this makes entire sense, because int32_t could be something else in
   // some other file. However, because type symbols aren't squashed at type
-  // checking time (which, you know, might make sense) we now don't know
-  // what type symbol to link "c::int32_t" up to. Can't push it back to
-  // type checking either as I don't understand it, and it means touching
-  // the C++ frontend.
-  // So; instead we test to see whether a type symbol is linked correctly, and
-  // if it isn't we look up what module the current block of code came from and
-  // try to guess what type symbol it should have.
+  // checking time (which, you know, might make sense) we now don't know what
+  // type symbol to link "c::int32_t" up to. So; instead we test to see whether
+  // a type symbol is linked correctly, and if it isn't we look up what module
+  // the current block of code came from and try to guess what type symbol it
+  // should have.
 
   typet type2;
   if (type.id() == "symbol") {
@@ -557,7 +555,7 @@ goto_convert_functionst::thrash_type_symbols(void)
   for (it = typenames.begin(); it != typenames.end(); it++)
     wallop_type(it->first, typenames, it->first);
 
-  // And now all the types have a fixed form, assault all existing code.
+  // And now all the types have a fixed form, rename types in all existing code.
   Forall_symbols(it, context.symbols) {
     rename_types(it->second.type, it->second, it->first);
     rename_exprs(it->second.value, it->second, it->first);

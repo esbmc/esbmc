@@ -268,7 +268,7 @@ void goto_inlinet::expand_function_call(
       return; // simply ignore, we don't do full inlining, it's ok
     }
 
-    // it's really recursive. Uh. Buh. Give up.
+    // it's really recursive. Give up.
     err_location(function);
     warning("recursion is ignored");
     target->make_skip();
