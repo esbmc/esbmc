@@ -78,6 +78,7 @@ do_build () {
   # 3c) make
   # How many jobs?
   procs=`cat /proc/cpuinfo | grep ^processor | awk '{print $3;}' | sort | tail -n 1`
+  procs=$(($procs + 1))
   make -j $procs
   # Will croak if that failed.
 
