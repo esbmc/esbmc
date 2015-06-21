@@ -2430,6 +2430,7 @@ migrate_expr_back(const expr2tc &ref)
     return back;
   }
   default:
-    assert(0 && "Unrecognized expr in migrate_expr_back");
+    std::cerr <<  "Unrecognized expr in migrate_expr_back" << std::endl;
+    abort();
   }
 }
