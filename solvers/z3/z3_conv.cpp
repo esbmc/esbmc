@@ -298,9 +298,11 @@ z3_convt::convert_struct(const std::vector<expr2tc> &members,
 
   z3::expr *args = new z3::expr[size];
 
+#ifndef NDEBUG
   unsigned int numoperands = members.size();
   assert(numoperands == member_types.size() &&
          "Too many / few struct fields for struct type");
+#endif
 
   // Populate tuple with members of that struct
   forall_types(it, member_types) {
