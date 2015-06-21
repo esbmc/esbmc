@@ -315,7 +315,7 @@ m4_foreach(thesolver, [esbmc_all_solvers], [
 ])
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
-m4_define(z3_possible_locs, [$SATDIR64/z3, SATDIR32/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
+m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR32/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
 m4_define(z3_possible_libdirs, [lib, bin, x64])
 
 dnl Only boolector 1.6 and later are supported -- prior versions of boolector
