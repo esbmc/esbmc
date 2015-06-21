@@ -315,26 +315,26 @@ m4_foreach(thesolver, [esbmc_all_solvers], [
 ])
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
-m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
+m4_define(z3_possible_locs, [$SATDIR64/z3, SATDIR32/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
 m4_define(z3_possible_libdirs, [lib, bin, x64])
 
 dnl Only boolector 1.6 and later are supported -- prior versions of boolector
 dnl do not have a structure for knowing where lingeling / minisat are.
 
 m4_define(btor_build_headers, [boolector/boolector.h])
-m4_define(btor_possible_locs, [$SATDIR64/boolector, $SATDIR/boolector, $HOME/boolector])
+m4_define(btor_possible_locs, [$SATDIR64/boolector, $SATDIR32/boolector, $SATDIR/boolector, $HOME/boolector])
 m4_define(btor_possible_libdirs, [boolector])
 
 m4_define(yices_build_headers, [include/yices.h])
-m4_define(yices_possible_locs, [$SATDIR64/yices, $SATDIR/yices, $HOME/yices])
+m4_define(yices_possible_locs, [$SATDIR64/yices, $SATDIR32/yices, $SATDIR/yices, $HOME/yices])
 m4_define(yices_possible_libdirs, [lib])
 
 m4_define(cvc4_build_headers, [include/cvc4/cvc4.h])
-m4_define(cvc4_possible_locs, [$SATDIR64/cvc4, $SATDIR/cvc4, $HOME/cvc4])
+m4_define(cvc4_possible_locs, [$SATDIR64/cvc4, $SATDIR32/cvc4, $SATDIR/cvc4, $HOME/cvc4])
 m4_define(cvc4_possible_libdirs, [lib])
 
 m4_define(mathsat_build_headers, [include/mathsat.h])
-m4_define(mathsat_possible_locs, [$SATDIR64/mathsat, $SATDIR/mathsat, $HOME/mathsat])
+m4_define(mathsat_possible_locs, [$SATDIR64/mathsat, $SATDIR32/mathsat, $SATDIR/mathsat, $HOME/mathsat])
 m4_define(mathsat_possible_libdirs, [lib])
 
 dnl Random dollars are shoehorned into these names to ensure that M4 does not
