@@ -102,9 +102,7 @@ mathsat_convt::get_bv(const type2tc &_t __attribute__((unused)),
   assert(msat_term_is_number(env, t) && "Model value of bitvector isn't "
          "a bitvector");
 
-  // GMP rational value object. Mildly irritating that we need to use GMP
-  // directly; particularly seeing how a version incompatibility between
-  // MathSAT and the local version of GMP is now fatal.
+  // GMP rational value object.
   mpq_t val;
   mpq_init(val);
   if (msat_term_to_number(env, t, val)) {
@@ -215,7 +213,7 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     break;
   case SMT_FUNC_XOR:
   {
-    // Another thing that mathsat doesn't implement for no reasons.
+    // Another thing that mathsat doesn't implement.
     // Do this as and(or(a,b),not(and(a,b)))
     msat_term and2 = msat_make_and(env, args[0]->t, args[1]->t);
     msat_term notand2 = msat_make_not(env, and2);
@@ -231,9 +229,9 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     break;
   case SMT_FUNC_ITE:
     if (s->id == SMT_SORT_BOOL) {
-      // Once more, MathSAT shows a peculiar dislike of implementing the
-      // simplest thing with booleans. Follow CBMC's CNF flattening and make
-      // this (with c = cond, t = trueval, f = falseval):
+      // MathSAT shows a dislike of implementing this with booleans. Follow
+      // CBMC's CNF flattening and make this
+      // (with c = cond, t = trueval, f = falseval):
       //
       //   or(and(c,t),and(not(c), f))
       msat_term land1 = msat_make_and(env, args[0]->t, args[1]->t);

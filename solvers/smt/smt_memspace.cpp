@@ -5,9 +5,7 @@
 /** @file smt_memspace.cpp
  *  Modelling the memory address space of C isn't something that is handled
  *  during any of the higher levels of ESBMC; it's instead left until the
- *  conversion to SMT to be handled. This is potentially a bad piece of design,
- *  and there are a couple of things that would be better handled elsewhere,
- *  but here we are.
+ *  conversion to SMT to be handled.
  *
  *  The substance of what's done in this file orientates around the correct
  *  manipulations of anything in an expression that has a pointer type. This is
@@ -103,9 +101,8 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     case 7:
       // The C spec says that we're allowed to subtract two pointers to get
       // the offset of one from the other. However, they absolutely have to
-      // point at the same data object, or it's undefined operation. XXX XXX
-      // FIXME somewhere else we should have an assertion checking that this
-      // is the case.
+      // point at the same data object, or it's undefined operation. This is
+      // already asserted for elsewhere.
       if (expr->expr_id == expr2t::sub_id) {
         pointer_offset2tc offs1(machine_ptr, side1);
         pointer_offset2tc offs2(machine_ptr, side2);
@@ -162,7 +159,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       // Generate nonptr * constant.
       type2tc inttype = machine_ptr;
       constant_int2tc constant(inttype, type_size);
-      // Why oh why do I need to do this here?
+
       if (non_ptr_op->type->get_width() < config.ansi_c.pointer_width)
         non_ptr_op = typecast2tc(machine_ptr, non_ptr_op);
 
@@ -474,8 +471,6 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     constant_int2tc offset(machine_ptr, BigInt(offs));
     return a->update(this, convert_ast(offset), 1);
   } else if (is_symbol2t(obj.ptr_obj)) {
-// XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
-
     const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
     return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name());
   } else if (is_constant_string2t(obj.ptr_obj)) {

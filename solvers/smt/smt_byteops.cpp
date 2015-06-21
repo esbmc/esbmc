@@ -114,8 +114,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     if (update->type->get_width() != src_width)
       update = typecast2tc(get_uint_type(src_width), update);
 
-    // The approach: mask, shift and or. XXX, byte order?
-    // Massively inefficient.
+    // The approach: mask, shift and or. Quite inefficient.
 
     expr2tc eight = constant_int2tc(get_uint_type(src_width), BigInt(8));
     expr2tc effs = constant_int2tc(eight->type, BigInt(255));

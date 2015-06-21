@@ -3,6 +3,19 @@
 
 // Something to abstract the flattening of arrays to QF_BV.
 
+// jmorse: this originally began it's life as a flatten-arrays-to-bitvectors
+// implementation, largely derived from the CBMC implementation, with some
+// adjustments. It then, however, became necessary for struct arrays, because
+// while we can work around structs not being available in SMT, we need this
+// kind of array implementation to handle arrays of arbitary types.
+//
+// Even more complexity turns up with the "smt-during-symex" facility, in that
+// one must be able to perform a series of array operations and flush them into
+// the SMT solver in a way that is compatible with pushing/popping of
+// constraints.
+//
+// As a result, this particular class is due some serious maintenence.
+
 #include <set>
 
 #include <irep2.h>

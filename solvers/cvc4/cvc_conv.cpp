@@ -72,7 +72,8 @@ cvc_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a)
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
   CVC4::BitVector foo = e.getConst<CVC4::BitVector>();
-  // huuurrrrrrrr, an immense lack of uint64_t's detected.
+  // XXX, might croak on 32 bit machines. I'm not aware of a fixed-width api
+  // for CVC right now.
   uint64_t val = foo.toInteger().getUnsignedLong();
   return constant_int2tc(get_uint_type(foo.getSize()), BigInt(val));
 }
@@ -321,8 +322,7 @@ cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   const cvc_smt_sort *sort = cvc_sort_downcast(s);
 
   // If someone's making a tuple-symbol, wave our hands and do nothing. It's
-  // the tuple modelling code doing some symbol funk: FIXME, work out /why/
-  // it's doing this.
+  // the tuple modelling code doing some symbol sillyness.
   if (s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
     return NULL;
 

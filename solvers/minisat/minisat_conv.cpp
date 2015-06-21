@@ -142,7 +142,7 @@ void
 minisat_convt::assert_lit(const literalt &l)
 {
   if (l.is_true())
-    return; // XXX how about false?
+    return;
 
   if (l.is_false()) {
     false_asserted = true;

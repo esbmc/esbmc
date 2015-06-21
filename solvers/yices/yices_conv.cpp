@@ -322,7 +322,6 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
     yices_smt_sort *range = va_arg(ap, yices_smt_sort*);
     type_t t = yices_function_type(1, &dom->type, range->type);
 
-    // This must be fixed. pls.
     unsigned int tmp = range->data_width;
     if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_UNION)
       tmp = 1;

@@ -321,8 +321,8 @@ smt_convt::convert_assign(const expr2tc &expr)
 
   // Put that into the smt cache, thus preserving the assigned symbols value.
   // IMPORTANT: the cache is now a fundemental part of how some flatteners work,
-  // if this is removed, then everything that plays silly buggers outside of
-  // the symbol table will break.
+  // in that one can chose to create a set of expressions and their ASTs, then
+  // store them in the cache, rather than have a more sophisticated conversion.
   smt_cache_entryt e = { eq.side_1, side1, ctx_level };
   smt_cache.insert(e);
 }
@@ -576,7 +576,7 @@ expr_handle_table:
   case expr2t::pointer_offset_id:
   {
     const pointer_offset2t &obj = to_pointer_offset2t(expr);
-    // Can you cay super irritating?
+    // Potentially walk through some typecasts
     const expr2tc *ptr = &obj.ptr_obj;
     while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
@@ -588,7 +588,7 @@ expr_handle_table:
   case expr2t::pointer_object_id:
   {
     const pointer_object2t &obj = to_pointer_object2t(expr);
-    // Can you cay super irritating?
+    // Potentially walk through some typecasts
     const expr2tc *ptr = &obj.ptr_obj;
     while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
@@ -640,7 +640,6 @@ expr_handle_table:
   }
   case expr2t::zero_string_id:
   {
-    // Actually broken. And always has been.
     a = mk_smt_symbol("zero_string", sort);
     break;
   }
@@ -703,7 +702,6 @@ expr_handle_table:
     if (int_encoding) {
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
-      // XXX XXX XXX haven't implemented that yet.
       smt_astt powval = int_shift_op_array->select(this, ashr.side_2);
       args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
@@ -727,7 +725,6 @@ expr_handle_table:
     if (int_encoding) {
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
-      // XXX XXX XXX haven't implemented that yet.
       smt_astt powval = int_shift_op_array->select(this, lshr.side_2);
       args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
@@ -1769,7 +1766,7 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "is_int"
 };
 
-// Debis from prop_convt: to be reorganized.
+// Debris from prop_convt: to be reorganized.
 
 void
 smt_convt::pre_solve()

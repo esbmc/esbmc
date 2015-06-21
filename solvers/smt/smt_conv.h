@@ -78,6 +78,10 @@
  *    * Anything that considers the control flow guard at any point
  *    * Pointer liveness or dynamic allocation consideration
  *
+ *  A reasonable amount of SMT conversion complexity comes from the
+ *  eccentricities of different solvers. This is a necessary part of working in
+ *  the tar pit.
+ *
  *  @see smt_convt
  *  @see symex_target_equationt
  *  @see create_solver_factory

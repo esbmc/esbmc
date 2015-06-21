@@ -19,7 +19,7 @@ public:
     : smt_sort(i, w, d), type(_t), tuple_type(), arr_range(rangetype) { }
 
   // Constructor for structs. Bitwidth is set to 1 as an estople
-  // that... it's a valid domain sort. Uhu. Not the greatest design.
+  // that... it's a valid domain sort.
   yices_smt_sort(smt_sort_kind i, type_t _t, const type2tc &s)
     : smt_sort(i, 1), type(_t), tuple_type(s), arr_range(NULL) { }
 
@@ -47,7 +47,7 @@ public:
   virtual ~yices_smt_ast() { }
 
   // Provide assign semantics for arrays. While yices will swallow array
-  // equalities, it silently doesn't honour them. Apparently.
+  // equalities, it appears to silently not honour them? From observation.
   virtual void assign(smt_convt *ctx, smt_astt sym) const;
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
   virtual smt_astt update(smt_convt *ctx, smt_astt value,
