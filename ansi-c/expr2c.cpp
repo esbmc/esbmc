@@ -1313,6 +1313,7 @@ std::string expr2ct::convert_constant(
         return dest;
       }
 
+#ifndef NDEBUG
       const ansi_c_declarationt &decl = (const ansi_c_declarationt&)*it;
       const exprt &v = decl.decl_value();
 
@@ -1320,6 +1321,7 @@ std::string expr2ct::convert_constant(
         bool res = to_integer(v, i);
         assert(!res);
       }
+#endif
 
       ++i;
     }
