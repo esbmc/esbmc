@@ -162,14 +162,16 @@ tuple_node_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   // of that name, and then return that. It now names the variable that contains
   // the value of that field. If it's actually another tuple, we instead return
   // a new tuple_node_smt_ast containing its name.
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
   // If someone is projecting out of us, then now is an excellent time to
   // actually allocate all our pieces of ASTs as variables.
   const_cast<tuple_node_smt_ast*>(this)->make_free(ctx);
 
+#ifndef NDEBUG
+  tuple_smt_sortt ts = to_tuple_sort(sort);
+  const struct_union_data &data = ctx->get_type_def(ts->thetype);
   assert(idx < data.members.size() && "Out-of-bounds tuple element accessed");
+#endif
   return elements[idx];
 }
 
