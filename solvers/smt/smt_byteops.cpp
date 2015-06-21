@@ -134,12 +134,11 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   assert(is_number_type(data.source_value->type) && "Byte update of unsupported data type");
 
   smt_astt value, src_value;
-  unsigned int width_op0, width_op2, src_offset;
+  unsigned int width_op0, src_offset;
 
   value = convert_ast(data.update_value);
   src_value = convert_ast(data.source_value);
 
-  width_op2 = data.update_value->type->get_width();
   width_op0 = data.source_value->type->get_width();
   src_offset = to_constant_int2t(data.source_offset).constant_value.to_ulong();
 
@@ -158,8 +157,11 @@ smt_convt::convert_byte_update(const expr2tc &expr)
 
   // Assertion some of our assumptions, which broadly mean that we'll only work
   // on bytes that are going into non-byte words
+#ifndef NDEBUG
+  unsigned int width_op2 = data.update_value->type->get_width();
   assert(width_op2 == 8 && "Can't byte update non-byte operations");
   assert(width_op2 != width_op0 && "Can't byte update bytes, sorry");
+#endif
 
   // Bail if this is an invalid update. This might be legitimate, in that one
   // can update a padding byte in a struct, leading to a crazy out of bounds
