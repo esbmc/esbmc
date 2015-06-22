@@ -1,0 +1,1541 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: October 2012
+
+ \*******************************************************************/
+
+#ifndef __STL_LIST
+#define __STL_LIST
+
+#include "definitions.h"
+#include "vector"
+
+#define LIST_MAX_SIZE 20
+
+namespace std {
+
+#if 0
+template<class T>
+class list {
+public:
+	typedef T& reference;
+	typedef const T& const_reference;
+	typedef int size_type;
+	typedef int difference_type;
+	typedef T value_type;
+	typedef T* pointer;
+	typedef const T* const_pointer;
+
+	typedef bool (pred_double)(T, T);
+	typedef bool (pred)(T &);
+
+	struct node {
+		T data;
+		node* prev;
+		node* next;
+		node(T t, node* p, node* n) :
+				data(t), prev(p), next(n) {
+		}
+	};
+
+	node* head;
+	node* tail;
+	int _size;
+
+	class iterator {
+	public:
+		node* it;
+		int it_size;
+
+		iterator(const iterator& x) :
+				it(x.it), it_size(x.it_size) {
+		}
+		iterator() :
+				it(NULL), it_size(0) {
+		}
+		iterator& operator=(const iterator& x) {
+			this->it = new node(x.it->data, x.it->prev, x.it->next);
+			this->it_size = x.it_size;
+			return *this;
+		}
+
+		T* operator ->();
+
+		T operator *() {
+			return this->it->data;
+		}
+
+		iterator operator ++() {
+			this->it = this->it->next;
+			return *this;
+		}
+		iterator operator ++(int) {
+			this->it = this->it->next;
+			return *this;
+		}
+
+		iterator& operator --() {
+			this->it = this->it->prev;
+			return *this;
+		}
+		iterator operator --(int) {
+			this->it = this->it->prev;
+			return *this;
+		}
+
+		bool operator ==(const iterator& x) const {
+			if (this->it == NULL) {
+				return false;
+			}
+			if (x.it->next == NULL) {
+				if (this->it->prev == NULL) {
+					return false;
+				}
+				if (this->it->next == NULL) {
+					return true;
+				} else {
+					return false;
+				}
+			}
+			if (this->it->data == x.it->data)
+				return true;
+			return false;
+		}
+
+		bool operator !=(const iterator& x) const {
+			if (this->it == NULL) {
+				return false;
+			}
+			if (x.it->next == NULL) {
+				if (this->it->prev == NULL) {
+					return true;
+				}
+				if (this->it->next == NULL) {
+					return false;
+				} else {
+					return true;
+				}
+			}
+			if (this->it->data == x.it->data)
+				return false;
+			return true;
+		}
+
+		bool operator <(const iterator&) const;
+		bool operator >(const iterator&) const;
+
+		bool operator <=(const iterator&) const;
+		bool operator >=(const iterator&) const;
+
+		iterator operator +(int) const;
+		iterator operator -(int) const;
+
+		iterator& operator +=(int);
+		iterator& operator -=(int);
+	};
+
+	class reverse_iterator {
+	public:
+		node* it;
+		int it_size;
+
+		reverse_iterator(const reverse_iterator& x) :
+				it(x.it), it_size(x.it_size) {
+		}
+		reverse_iterator() :
+				it(NULL) {
+		}
+		reverse_iterator& operator=(const reverse_iterator& x) {
+			this->it = new node(x.it->data, x.it->prev, x.it->next);
+			this->it_size = x.it_size;
+			return *this;
+		}
+
+		T* operator ->();
+
+		T operator *() {
+			return this->it->data;
+		}
+
+		reverse_iterator operator ++() {
+			this->it = this->it->next;
+			return *this;
+		}
+		reverse_iterator operator ++(int) {
+			this->it = this->it->next;
+			return *this;
+		}
+
+		reverse_iterator& operator --() {
+			return *this;
+		}
+		reverse_iterator operator --(int) {
+			return *this;
+		}
+
+		bool operator ==(const reverse_iterator& x) const {
+			return (x.it == this->it && x.it_size == this->it_size);
+		}
+		bool operator !=(const reverse_iterator& x) const {
+			return (x.it != this->it && x.it_size != this->it_size);
+		}
+
+		bool operator <(const reverse_iterator&) const;
+		bool operator >(const reverse_iterator&) const;
+
+		bool operator <=(const reverse_iterator&) const;
+		bool operator >=(const reverse_iterator&) const;
+
+		reverse_iterator operator +(int) const;
+		reverse_iterator operator -(int) const;
+
+		reverse_iterator& operator +=(int);
+		reverse_iterator& operator -=(int);
+	};
+
+	explicit list() :
+			head(NULL), tail(NULL), _size(0) {
+	}
+
+	explicit list(size_type n, const T& value = T()) {
+		__ESBMC_assert(n > 0,
+				"  In the first parameter is specified the container size,\n  therefore, this parameter must be greater than zero.\n");
+		int i;
+		this->_size = 0;
+		for (i = 0; i < n; i++)
+			this->push_back(value);
+	}
+
+	explicit list(T* t1, T* t2) {
+		__ESBMC_assert(t1 != NULL,
+				"\n  In the first parameter is specified the pointer to beginning of the range,\n  therefore, this parameter must be different than NULL.\n");
+		__ESBMC_assert(t2 != NULL,
+				"\n  In the second parameter (last) is specified the pointer to final of the range,\n  therefore, this parameter must be different than NULL.\n");
+		this->_size = 0;
+		for (; t1 != t2; t1++)
+			this->push_back(*t1);
+	}
+
+	list(iterator first, iterator last) {
+		__ESBMC_assert(first.it != NULL,
+				"\n  In the first parameter (first) is specified the pointer to beginning of the range,\n  therefore, this parameter must be different than NULL.\n");
+		this->head = first.it;
+		this->tail = last.it->prev;
+		this->_size = first.it_size;
+	}
+
+	list(const list<T>& x) {
+		this->head = x.head;
+		this->tail = x.tail;
+		this->_size = x._size;
+	}
+
+	~list() {
+		while (head) {
+			node* temp(head);
+			head = head->next;
+			delete temp;
+		}
+	}
+
+	iterator begin() {
+		iterator it;
+		it.it = this->head;
+		it.it_size = this->_size;
+		return it;
+	}
+	iterator end() {
+		iterator it;
+		if (this->_size != 0) {
+			this->tail->next = new node(T(), this->tail, NULL);
+			it.it = this->tail->next;
+		} else {
+			it.it = this->tail;
+		}
+		it.it_size = this->_size;
+		return it;
+	}
+	reverse_iterator rbegin() {
+		reverse_iterator it;
+		it.it = this->tail;
+		it.it_size = this->_size;
+		return it;
+	}
+	reverse_iterator rend() {
+		reverse_iterator it;
+		it.it = this->head;
+		it.it_size = this->_size;
+		return it;
+	}
+
+	size_type size() const {
+		return this->_size;
+	}
+
+	bool empty() const {
+		if (this->_size == 0)
+			return true;
+		return false;
+	}
+
+	size_type max_size() const {
+		return this->_size;
+	}
+
+	void resize(size_type sz, T c = T()) {
+		__ESBMC_assert(sz > 0,
+				"\n  In the first parameter (n) is specified the container size,\n  therefore, this parameter must be greater than zero.\n");
+		int i;
+		int tmp_int;
+		if (this->_size > sz) {
+			tmp_int = this->_size - sz;
+			for (i = 0; i < tmp_int; i++) {
+				this->tail = this->tail->prev;
+			}
+			this->tail->next = NULL;
+			this->_size = sz;
+		} else {
+			tmp_int = sz - this->_size;
+			for (i = 0; i < tmp_int; i++) {
+				this->push_back(c);
+			}
+			this->_size = sz;
+		}
+	}
+	T& back() {
+		__ESBMC_assert(!empty(),
+				"\n  This method returns a reference to the last element in the list container.\n  Therefore, the list can't be empty.\n");
+		T tmp = this->tail->data;
+		return tmp;
+	}
+	T& front() {
+		__ESBMC_assert(!empty(),
+				"  This method returns a reference to the first element in the list container.\n  Therefore, the list can't be empty.\n");
+		T tmp = this->head->data;
+		return tmp;
+	}
+	void pop_front() {
+		__ESBMC_assert(!empty(),
+				"\n  This method removes the first element in the list container.\n  Ttherefore, the list can't be empty.\n");
+		if (this->_size == 1) {
+			this->head = this->tail = NULL;
+		} else {
+			this->head->data = this->head->next->data;
+			this->head->prev = NULL;
+			this->head->next = this->head->next->next;
+		}
+		this->_size--;
+	}
+	void pop_back() {
+		__ESBMC_assert(!empty(),
+				"\n  This method removes the last element in the list container.\n  Therefore, the list can't be empty.\n");
+		if (this->_size == 1) {
+			this->head = this->tail = NULL;
+		} else {
+			this->tail->data = this->tail->prev->data;
+			this->tail->prev = this->tail->prev->prev;
+			this->tail->next = NULL;
+		}
+		this->_size--;
+	}
+	void push_back(const T& x) {
+		if (this->empty()) {
+			this->tail = new node(x, NULL, NULL);
+			this->head = this->tail;
+		} else {
+			this->tail->next = new node(x, this->tail, NULL);
+			this->tail = this->tail->next;
+			if (this->_size == 1)
+				this->head->next == this->tail;
+		}
+		this->_size++;
+	}
+	void push_front(const T& x) {
+		if (this->empty()) {
+			this->head = new node(x, NULL, NULL);
+			this->tail = this->head;
+		} else {
+			this->head->prev = new node(x, NULL, this->head);
+			this->head = this->head->prev;
+			if (this->_size == 1)
+				this->tail->prev == this->head;
+		}
+		this->_size++;
+	}
+
+	iterator insert(iterator position, const T& x) {
+		node* tmp;
+		tmp = new node(x, position.it->prev, position.it);
+		if (position.it->prev != NULL)
+			position.it->prev->next = tmp;
+		position.it->prev = tmp;
+		position.it_size++;
+		this->_size++;
+		return position;
+	}
+	void insert(iterator position, size_type n, const T& x) {
+		__ESBMC_assert(n >= 0,
+				"The second parameter must be greater or equal than zero.");
+		int i;
+		for (i = 0; i < n; i++) {
+			this->insert(position, x);
+		}
+	}
+	void insert(iterator position, vector<T>::iterator n,
+			vector<T>::iterator x) {
+		__ESBMC_assert(n != NULL,
+				"The second parameter must be different than NULL.");
+		T tmp;
+		while (n != x) {
+			tmp = *n;
+			this->insert(position, tmp);
+			n++;
+		}
+	}
+
+	void assign(iterator first, iterator last) {
+		__ESBMC_assert(first.it != NULL,
+				"The first parameter must be different than NULL.");
+		this->head = first.it;
+		this->_size = first.it_size;
+		this->tail = last.it->prev;
+	}
+	void assign(T* first, T* last) {
+		list<T> list(first, last);
+		this->head = list.head;
+		this->_size = list._size;
+		this->tail = list.tail;
+	}
+	void assign(size_type n, const T& u) {
+		list<T> list(n, u);
+		this->head = list.head;
+		this->_size = list._size;
+		this->tail = list.tail;
+	}
+
+	iterator erase(iterator& position) {
+		__ESBMC_assert(position.it->next != NULL,
+				"The parameter must be different than NULL.");
+		if (position.it == this->head) {
+			this->pop_front();
+			position.it = new node(this->head->data, this->head->prev,
+					this->head->next);
+			position.it_size = this->_size;
+			return position;
+		}
+		if (position.it == this->tail) {
+			this->pop_back();
+			position.it = new node(this->tail->data, this->tail->prev,
+					this->tail->next);
+			position.it_size = this->_size;
+			return position;
+		}
+		node* tmp_ptr = this->head;
+
+		do {
+			tmp_ptr = tmp_ptr->next;
+		} while ((tmp_ptr != position.it) && (tmp_ptr != NULL));
+		if (tmp_ptr != NULL) {
+			position.it = tmp_ptr->next;
+			position.it_size = this->_size--;
+			if (tmp_ptr->prev != NULL)
+				tmp_ptr->prev->next = tmp_ptr->next;
+			if (tmp_ptr->next != NULL)
+				tmp_ptr->next->prev = tmp_ptr->prev;
+		}
+		return position;
+	}
+	iterator erase(iterator position, iterator last) {
+		if ((position.it == this->head) && (last.it == this->head)) {
+			this->pop_front();
+			position.it = new node(this->head->data, this->head->prev,
+					this->head->next);
+			position.it_size = this->_size;
+			return position;
+		}
+		if ((position.it == this->tail) && (last.it == this->tail)) {
+			this->pop_back();
+			position.it = new node(this->tail->data, this->tail->prev,
+					this->tail->next);
+			position.it_size = this->_size;
+			return position;
+		}
+		node* tmp_ptr = this->head;
+		int i, c2 = 0;
+
+		do {
+			tmp_ptr = tmp_ptr->next;
+		} while ((tmp_ptr != position.it) && (tmp_ptr != NULL));
+
+		if (position.it == last.it) {
+			do {
+				tmp_ptr = tmp_ptr->next;
+			} while ((tmp_ptr != position.it) && (tmp_ptr != NULL));
+			if (tmp_ptr != NULL) {
+				position.it = tmp_ptr->next;
+				position.it_size = this->_size--;
+				tmp_ptr->prev->next = tmp_ptr->next;
+				tmp_ptr->next->prev = tmp_ptr->prev;
+			}
+			return position;
+		}
+		node* tmp_ptr_last = tmp_ptr;
+		do {
+			tmp_ptr_last = tmp_ptr_last->next;
+			c2++;
+		} while ((tmp_ptr_last != last.it) && (tmp_ptr_last != NULL));
+		if (tmp_ptr != NULL) {
+			this->_size = this->_size - c2;
+			last.it_size = this->_size;
+			last.it = last.it->prev;
+			last.it->prev = tmp_ptr_last;
+			tmp_ptr->next = last.it;
+		}
+		return last;
+	}
+	void swap(list<T>& x) {
+		list<T> y;
+		y = x;
+		x = *this;
+		*this = y;
+	}
+	void clear() {
+		this->_size = 0;
+		this->head = new node(T(), NULL, NULL);
+		this->tail = new node(T(), NULL, NULL);
+	}
+
+	void splice(iterator position, list<T>& x) {
+		list<T>::iterator it1 = x.begin();
+		node* tmp;
+		int i;
+		for (i = 0; i < it1.it_size; i++) {
+			tmp = new node(it1.it->data, position.it->prev, position.it);
+			if (position.it->prev != NULL)
+				position.it->prev->next = tmp;
+			position.it->prev = tmp;
+			position.it_size++;
+			this->_size++;
+			it1++;
+		}
+		x.clear();
+	}
+	void splice(iterator position, list<T>& x, iterator i) {
+		node* tmp;
+		tmp = new node(i.it->data, position.it->prev, position.it);
+		if (position.it->prev != NULL)
+			position.it->prev->next = tmp;
+		position.it->prev = tmp;
+		position.it_size++;
+		this->_size++;
+		x.erase(i);
+	}
+	void splice(iterator position, list<T>& x, iterator first, iterator last) {
+		node* tmp;
+		T value;
+		int way;
+		if (position.it == this->head)
+			way = 1;
+		else if (position.it == this->tail)
+			way = 2;
+		else
+			way = 0;
+		if (last.it->next == NULL) {
+			last--;
+		}
+		while (first.it->prev != last.it) {
+			value = last.it->data;
+			if (way == 1) {
+				this->push_front(value);
+			} else {
+				if (way == 2) {
+					this->push_back(value);
+				} else {
+					this->insert(position, value);
+				}
+			}
+			tmp = last.it->prev;
+			last.it->prev->next = last.it->next;
+			last.it->next->prev = last.it->prev;
+			last.it = tmp;
+			this->_size--;
+		}
+	}
+	void remove(const T& value) {
+		if (value == this->head->data) {
+			this->pop_front();
+		} else {
+			if (value == this->tail->data) {
+				this->pop_back();
+			} else {
+				node* tmp_ptr = this->head;
+				int i;
+				do {
+					tmp_ptr = tmp_ptr->next;
+				} while ((tmp_ptr != NULL) && (tmp_ptr->data != value));
+				if (tmp_ptr != NULL) {
+					this->_size--;
+					tmp_ptr->prev->next = tmp_ptr->next;
+					tmp_ptr->next->prev = tmp_ptr->prev;
+				}
+			}
+		}
+	}
+
+	void remove_if(pred* x) {
+		__ESBMC_assert(x != NULL, "The parameter must be different than NULL.");
+		node* tmp = this->head;
+		T value;
+		while (tmp != NULL) {
+			value = tmp->data;
+			if (x(value)) {
+				this->_size--;
+				if (tmp->prev != NULL) {
+					tmp->prev->next = tmp->next;
+				}
+				if (tmp->next != NULL) {
+					tmp->next->prev = tmp->prev;
+				}
+			}
+			tmp = tmp->next;
+		}
+	}
+	template<class Predicate>
+	void remove_if(Predicate* pred) {
+		__ESBMC_assert(pred != NULL,
+				"The parameter must be different than NULL.");
+		node* tmp = this->head;
+		while (tmp != NULL) {
+			if (pred(tmp->data)) {
+				this->_size--;
+				if (tmp->prev != NULL) {
+					tmp->prev->next = tmp->next;
+				}
+				if (tmp->next != NULL) {
+					tmp->next->prev = tmp->prev;
+				}
+			}
+			tmp = tmp->next;
+		}
+	}
+
+	void unique() {
+		node* tmp = this->head;
+		if (this->_size != 0) {
+			while (tmp->next != NULL) {
+				if (tmp->data == tmp->next->data) {
+					tmp = tmp->next;
+					if (tmp->prev->prev != NULL) {
+						tmp->prev->prev->next = tmp;
+						tmp->prev = tmp->prev->prev;
+					} else {
+						tmp->prev = NULL;
+					}
+					this->_size--;
+				} else {
+					tmp = tmp->next;
+				}
+			}
+		}
+
+#if 0
+		node* tmp = this->head;
+		node* sec_temp = this->head;
+		int b = 0;
+		while (tmp != NULL) {
+			while (sec_temp != NULL) {
+				if (sec_temp->data == tmp->data) {
+					b++;
+				}
+				if (b == 2) {
+					break;
+				}
+				sec_temp = sec_temp->next;
+			}
+			if (b == 2) {
+				this->_size--;
+				if (tmp->prev != NULL) {
+					tmp->prev->next = tmp->next;
+				}
+				if (tmp->next != NULL) {
+					tmp->next->prev = tmp->prev;
+				}
+			}
+			b = 0;
+			sec_temp = this->head;
+			tmp = tmp->next;
+		}
+#endif
+	}
+
+	void unique(pred_double* x) {
+		__ESBMC_assert(x != NULL, "The parameter must be different than NULL.");
+		node* tmp = this->head;
+		T foo, bar;
+		if (this->_size != 0) {
+			while (tmp->next != NULL) {
+				foo = tmp->data;
+				bar = tmp->next->data;
+				if (x(foo, bar)) {
+					if (tmp->next->next != NULL) {
+						tmp->next = tmp->next->next;
+						tmp->next->next->prev = tmp;
+					} else {
+						tmp->next = NULL;
+					}
+					this->_size--;
+				} else {
+					tmp = tmp->next;
+				}
+			}
+		}
+#if 0
+		node* tmp = this->head;
+		node* sec_temp = this->head;
+		int b = 0;
+		double foo,bar;
+		while (tmp != NULL) {
+			while (sec_temp != NULL) {
+				foo = sec_temp->data;
+				bar = tmp->data;
+				if (x(foo,bar)) {
+					b++;
+				}
+				if (b == 2) {
+					break;
+				}
+				sec_temp = sec_temp->next;
+			}
+			if (b == 2) {
+				this->_size--;
+				if (tmp->prev != NULL) {
+					tmp->prev->next = tmp->next;
+				}
+				if (tmp->next != NULL) {
+					tmp->next->prev = tmp->prev;
+				}
+			}
+			b = 0;
+			sec_temp = this->head;
+			tmp = tmp->next;
+		}
+#endif
+	}
+
+	template<class Predicate>
+	void unique(Predicate pred) {
+		__ESBMC_assert(pred != NULL,
+				"The parameter must be different than NULL.");
+		node* tmp = this->head;
+		int foo, bar;
+		if (this->_size != 0) {
+			while (tmp->next != NULL) {
+				foo = tmp->data;
+				bar = tmp->next->data;
+				if (pred(foo, bar)) {
+					if (tmp->next->next != NULL) {
+						tmp->next = tmp->next->next;
+						tmp->next->next->prev = tmp;
+					} else {
+						tmp->next = NULL;
+					}
+					this->_size--;
+				} else {
+					tmp = tmp->next;
+				}
+			}
+		}
+	}
+
+	void merge(list<T>& x) {
+		int i, j;
+		node* tmp = this->head;
+		node* tmpX = x.head;
+		node* aux;
+
+		for (i = 0; i < x._size; i++) {
+			for (j = 0; j < this->_size; j++) {
+				if (tmpX->data < tmp->data) {
+					aux = new node(tmpX->data, tmp->prev, tmp);
+					if (tmp->prev != NULL) {
+						tmp->prev->next = aux;
+					} else {
+						this->head = aux;
+					}
+					tmp->prev = aux;
+					this->_size++;
+					break;
+				}
+				if (tmp->next != NULL) {
+					tmp = tmp->next;
+				} else {
+					aux = new node(tmpX->data, tmp, NULL);
+					tmp->next = aux;
+					this->_size++;
+					break;
+				}
+			}
+			tmpX = tmpX->next;
+		}
+		x.clear();
+	}
+
+	void merge(list<T>& x, pred_double* pred) {
+		__ESBMC_assert(pred != NULL,
+				"The second parameter must be different than NULL.");
+		int i, j;
+		node* tmp = this->head;
+		node* tmpX = x.head;
+		node* aux;
+		T foo;
+		T bar;
+
+		for (i = 0; i < x._size; i++) {
+			for (j = 0; j < this->_size; j++) {
+				foo = tmpX->data;
+				bar = tmp->data;
+				if (pred(foo, bar)) {
+					aux = new node(tmpX->data, tmp->prev, tmp);
+					if (tmp->prev != NULL) {
+						tmp->prev->next = aux;
+					} else {
+						this->head = aux;
+					}
+					tmp->prev = aux;
+					this->_size++;
+					break;
+				}
+				if (tmp->next != NULL) {
+					tmp = tmp->next;
+				} else {
+					aux = new node(tmpX->data, tmp, NULL);
+					tmp->next = aux;
+					this->_size++;
+					break;
+				}
+			}
+			tmpX = tmpX->next;
+		}
+		x.clear();
+	}
+
+	void sort() {
+		list<T> mylist;
+		T menor;
+		node* y;
+		node* z;
+		for (int i = 0; i < this->_size; i++) {
+			y = this->head;
+			menor = y->data;
+			y = y->next;
+			while (y != NULL) {
+				if (y->data < menor) {
+					menor = y->data;
+				}
+				y = y->next;
+			}
+			z = this->head;
+			while (z != NULL) {
+				if (z->data == menor) {
+					if (z->prev != NULL) {
+						z->prev->next = z->next;
+					} else {
+						this->head = z->next;
+					}
+					if (z->next != NULL) {
+						z->next->prev = z->prev;
+					} else {
+						this->tail = z->prev;
+					}
+					break;
+				}
+				z = z->next;
+			}
+			mylist.push_back(menor);
+		}
+		this->head = mylist.head;
+		this->tail = mylist.tail;
+	}
+
+	void reverse() {
+		list<T> tmpList;
+		node* tmpNode = this->tail;
+		int length = this->_size;
+		T tmpValue;
+		for (int i = 0; i < length; i++) {
+			tmpValue = tmpNode->data;
+			tmpList.push_back(tmpValue);
+			tmpNode = tmpNode->prev;
+		}
+		this->head = tmpList.head;
+		this->tail = tmpList.tail;
+		this->_size = tmpList._size;
+	}
+};
+
+void advance(list<unsigned int>::iterator& it, int n) {
+	__ESBMC_assert(it.it != NULL,
+			"The first parameter must be different than NULL.");
+	__ESBMC_assert(n > 0, "The second parameter must be greater than zero.");
+	int i;
+	for (i = 0; i < n; i++)
+		it.it = it.it->next;
+}
+
+void advance(list<int>::iterator& it, int n) {
+	__ESBMC_assert(it.it != NULL,
+			"The first parameter must be different than NULL.");
+	__ESBMC_assert(n > 0, "The second parameter must be greater than zero.");
+	int i;
+	for (i = 0; i < n; i++)
+		it.it = it.it->next;
+}
+
+bool operator==(const list<int>& x, const list<int>& y) {
+	if (x._size != y._size)
+		return false;
+	list<int>::node* tmpX = x.head;
+	list<int>::node* tmpY = y.head;
+	for (int i = 0; (i < x._size) && (i < y._size); i++) {
+		if (tmpX->data != tmpY->data) {
+			return false;
+		}
+		tmpX = tmpX->next;
+		tmpY = tmpY->next;
+	}
+	return true;
+}
+bool operator!=(const list<int>& x, const list<int>& y) {
+	if (x._size == y._size)
+		return false;
+	list<int>::node* tmpX = x.head;
+	list<int>::node* tmpY = y.head;
+	for (int i = 0; (i < x._size) && (i < y._size); i++) {
+		if (tmpX->data == tmpY->data) {
+			return false;
+		}
+		tmpX = tmpX->next;
+		tmpY = tmpY->next;
+	}
+	return true;
+}
+bool operator==(const list<double>& x, const list<double>& y) {
+	if (x._size != y._size)
+		return false;
+	list<double>::node* tmpX = x.head;
+	list<double>::node* tmpY = y.head;
+	for (int i = 0; (i < x._size) && (i < y._size); i++) {
+		if (tmpX->data != tmpY->data) {
+			return false;
+		}
+		tmpX = tmpX->next;
+		tmpY = tmpY->next;
+	}
+	return true;
+}
+bool operator!=(const list<double>& x, const list<double>& y) {
+	if (x._size == y._size)
+		return false;
+	list<double>::node* tmpX = x.head;
+	list<double>::node* tmpY = y.head;
+	for (int i = 0; (i < x._size) && (i < y._size); i++) {
+		if (tmpX->data == tmpY->data) {
+			return false;
+		}
+		tmpX = tmpX->next;
+		tmpY = tmpY->next;
+	}
+	return true;
+}
+#else
+
+template<class T>
+class list {
+public:
+	typedef T& reference;
+	typedef const T& const_reference;
+	typedef unsigned int size_type;
+	typedef int difference_type;
+	typedef T value_type;
+	typedef T* pointer;
+	typedef const T* const_pointer;
+
+	typedef bool (pred_double)(T, T);
+	typedef bool (pred)(T &);
+
+	value_type _list[LIST_MAX_SIZE];
+	size_type _size;
+
+	class iterator {
+	public:
+		value_type* it;
+		size_type pos;
+
+		iterator(const iterator& x){
+			this->it = x.it;
+			this->pos = x.pos;
+		}
+		iterator(){}
+		iterator& operator=(const iterator& x) {
+			this->it = x.it;
+			this->pos = x.pos;
+			return *this;
+		}
+
+		T* operator ->() {
+			return this->it;
+		}
+
+		T operator *() {
+			return *this->it;
+		}
+
+		iterator& operator ++() {
+			this->it++;
+			this->pos++;
+			return *this;
+		}
+		iterator operator ++(int) {
+			this->it++;
+			this->pos++;
+			return *this;
+		}
+
+		iterator& operator --() {
+			this->it--;
+			this->pos--;
+			return *this;
+		}
+		iterator operator --(int) {
+			this->it--;
+			this->pos--;
+			return *this;
+		}
+
+		bool operator ==(const iterator& x) const {
+			if(this->it != x.it)
+				return false;
+			return true;
+		}
+
+		bool operator !=(const iterator& x) const {
+			if(this->it == x.it)
+				return false;
+			return true;
+		}
+	};
+
+	class reverse_iterator {
+	public:
+		value_type* it;
+		size_type pos;
+
+		reverse_iterator(const reverse_iterator& x){
+			this->it = x.it;
+			this->pos = x.pos;
+		}
+		reverse_iterator(){}
+		reverse_iterator& operator=(const reverse_iterator& x) {
+			this->it = x.it;
+			this->pos = x.pos;
+			return *this;
+		}
+
+		T* operator ->() {
+			return this->it;
+		}
+
+		T operator *() {
+			return *this->it;
+		}
+
+		reverse_iterator operator ++() {
+			this->it++;
+			this->pos++;
+			return *this;
+		}
+		reverse_iterator operator ++(int) {
+			this->it++;
+			this->pos++;
+			return *this;
+		}
+
+		reverse_iterator& operator --() {
+			//todo
+			return *this;
+		}
+		reverse_iterator operator --(int) {
+			//todo
+			return *this;
+		}
+
+		bool operator ==(const reverse_iterator& x) const {
+			if(this->it != x.it)
+				return false;
+			return true;
+		}
+
+		bool operator !=(const reverse_iterator& x) const {
+			if(this->it == x.it)
+				return false;
+			return true;
+		}
+	};
+
+	list(){
+		this->_size = 0;
+	}
+
+	list(size_type n, const value_type& value = value_type()) {
+		__ESBMC_assert(n > 0,
+				"  In the first parameter is specified the container size,\n  therefore, this parameter must be greater than zero.\n");
+		for(int i = 0; i < n; i++){
+			this->_list[i] = value;
+		}
+		this->_size = n;
+	}
+
+	list(value_type* t1, value_type* t2) {
+		__ESBMC_assert(t1 != NULL,
+				"\n  In the first parameter is specified the pointer to beginning of the range,\n  therefore, this parameter must be different than NULL.\n");
+		__ESBMC_assert(t2 != NULL,
+				"\n  In the second parameter (last) is specified the pointer to final of the range,\n  therefore, this parameter must be different than NULL.\n");
+	int i;
+	for(i = 0; t1 != t2; i++){
+		this->_list[i] = *t1;
+		t1++;
+	}
+	this->_size = i;
+	}
+
+	list(iterator first, iterator last) {
+		__ESBMC_assert(first.it != NULL,
+				"\n  In the first parameter (first) is specified the pointer to beginning of the range,\n  therefore, this parameter must be different than NULL.\n");
+		int i;
+		for(i = 0; first.it != last.it; first++, i++){
+			this->_list[i] = *(first.it);
+		}
+		this->_size = i;
+	}
+
+	list(const list<T>& x) {
+		for(int i = 0; i < x._size; i++)
+			this->_list[i] = x._list[i];
+		this->_size = x._size;
+	}
+
+	~list() {
+		for(int i = 0; i < this->_size; i++){
+			this->_list[i] = T();
+		}
+		this->_size = 0;
+	}
+
+	iterator begin() {
+		iterator it;
+		it.it = &(this->_list[0]);
+		it.pos = 0;
+		return it;
+	}
+	iterator end() {
+		iterator it;
+		this->_list[this->_size] = value_type();
+		it.it = &(this->_list[this->_size]);
+		it.pos = this->_size;
+		return it;
+	}
+	reverse_iterator rbegin() {
+		reverse_iterator rit;
+		rit.it = &(this->_list[this->_size - 1]);
+		rit.pos = this->_size - 1;
+		return rit;
+	}
+	reverse_iterator rend() {
+		reverse_iterator rit;
+		rit.it = &(this->_list[0]);
+		rit.pos = 0;
+		return rit;
+	}
+
+	size_type size() const {
+		return this->_size;
+	}
+
+	bool empty() const {
+		if (this->_size == 0)
+			return true;
+		return false;
+	}
+
+
+	size_type max_size() const {
+		return this->_size;
+	}
+
+	void resize(size_type sz,value_type c = value_type()) {
+		__ESBMC_assert(sz > 0,
+				"\n  In the first parameter (n) is specified the container size,\n  therefore, this parameter must be greater than zero.\n");
+		for(size_type i = this->_size; i < sz; i++){
+			this->_list[i] = c;
+		}
+		this->_size = sz;
+	}
+
+	T& back() {
+		__ESBMC_assert(!empty(),
+				"\n  This method returns a reference to the last element in the list container.\n  Therefore, the list can't be empty.\n");
+		return this->_list[this->_size-1];
+	}
+	T& front() {
+		__ESBMC_assert(!empty(),
+				"  This method returns a reference to the first element in the list container.\n  Therefore, the list can't be empty.\n");
+		return this->_list[0];
+	}
+
+	void pop_front() {
+		__ESBMC_assert(!empty(),
+				"\n  This method removes the first element in the list container.\n  Ttherefore, the list can't be empty.\n");
+		this->_size--;
+		for(int i = 0; i < this->_size; i++){
+			this->_list[i] = this->_list[i+1];
+		}
+		this->_list[this->_size + 1] = value_type();
+	}
+
+	void pop_back() {
+		__ESBMC_assert(!empty(),
+				"\n  This method removes the last element in the list container.\n  Therefore, the list can't be empty.\n");
+		this->_list[this->_size -1] = value_type();
+		this->_size--;
+	}
+
+	void push_back(const value_type& x) {
+		this->_list[this->_size] = x;
+		this->_size++;
+	}
+
+	void push_front(const value_type& x) {
+		if (this->_size != 0) {
+			for(int i = this->_size -1; i > -1; i--){
+				this->_list[i+1] = this->_list[i];
+			}
+		}
+		this->_list[0] = x;
+		this->_size++;
+	}
+
+	iterator insert(iterator position, const value_type& x) {
+		// Backwards copy all higher elements upwards.
+		for(int i = this->_size; i > position.pos; i--) {
+			this->_list[i] = this->_list[i - 1];
+		}
+
+		this->_list[position.pos] = x;
+		this->_size++;
+
+                // Return value points at the newly created element.
+                // So pos index and pointer stays the same.
+		return position;
+	}
+
+	void insert(iterator position, size_type n, const value_type& x) {
+		__ESBMC_assert(n >= 0,
+				"The second parameter must be greater or equal than zero.");
+		int i;
+		for (i = 0; i < n; i++) {
+			this->insert(position, x);
+		}
+		position.pos--;
+		position.it = &(this->_list[position.pos]);
+	}
+
+        template <class InputIterator>
+	void insert(iterator position, InputIterator n, InputIterator x) {
+		__ESBMC_assert(n != NULL,
+				"The second parameter must be different than NULL.");
+		while (n != x) {
+			this->insert(position, *n);
+			n++;
+		}
+		position.pos--;
+		position.it = &(this->_list[position.pos]);
+	}
+
+	void assign(iterator first, iterator last) {
+		__ESBMC_assert(first.it != NULL,
+				"The first parameter must be different than NULL.");
+		*this = list(first,last);
+	}
+
+	void assign(value_type* first, value_type* last) {
+		*this = list(first, last);
+	}
+
+	void assign(size_type n, const value_type& u) {
+		*this = list(n, u);
+	}
+
+	iterator erase(iterator position) {
+		this->_size--;
+		for(int i = position.pos; i <  this->_size; i++){
+			this->_list[i] = this->_list[i+1];
+		}
+		this->_list[this->_size] = value_type();
+		position.it = &(this->_list[position.pos]);
+		return position;
+	}
+
+	iterator erase(iterator position, iterator& last) {
+		while(position.pos != last.pos){
+			this->erase(position);
+		}
+		return last;
+	}
+
+	void swap(list<value_type>& x) {
+		list<value_type> _tmp;
+		for(int i = 0; i < this->_size; i++)
+			_tmp._list[i] = this->_list[i];
+		_tmp._size = this->_size;
+		this->clear();
+		for(int i = 0; i < x._size; i++)
+			this->_list[i] = x._list[i];
+		this->_size = x._size;
+		x.clear();
+		for(int i = 0; i < _tmp._size; i++)
+			x._list[i] = _tmp._list[i];
+		x._size = _tmp._size;
+	}
+
+	void clear() {
+		this->~list();
+	}
+
+	void splice(iterator position, list<value_type>& x) {
+		size_type _tmp = x._size;
+		for(int i = 0; i < _tmp;i++){
+			this->insert(position,x.front());
+			x.pop_front();
+		}
+		x.clear();
+	}
+
+	void splice(iterator position, list<value_type>& x, iterator i) {
+		this->insert(position,*i.it);
+		x.erase(i);
+	}
+
+	void splice(iterator position, list<value_type>& x, iterator first, iterator last) {
+		if(last.pos == x._size)
+			last--;
+		for(;first.pos != last.pos;last--){
+			this->insert(position,last.it[last.pos]);
+			x.erase(last);
+		}
+	}
+
+	void remove(const value_type& value) {
+		iterator _itEnd = this->end();
+		for(iterator _it = this->begin(); _it != _itEnd; _it++)
+			if(*_it == value){
+				this->erase(_it);
+				return;
+			}
+	}
+
+
+        template<class Predicate>
+        void remove_if(Predicate pred) {
+                __ESBMC_assert(pred != ((void *)0),
+                                "The parameter must be different than NULL.");
+                for(iterator _it = this->begin(); _it.pos < this->_size;) {
+                        if(pred(*_it.it)){
+                          _it = this->erase(_it);
+                        } else {
+                          _it++;
+                        }
+                }
+        }
+
+	void unique() {
+		size_type i;
+		size_type j = 0;
+		size_type _limit = this->_size;
+		value_type _tmp[LIST_MAX_SIZE];
+		for(i = 0; (i+1) < _limit; i++){
+			if(this->_list[i] != this->_list[i+1]){
+				_tmp[j] = this->_list[i];
+				j++;
+			}else{
+				this->_size--;
+			}
+		}
+		_tmp[j] = this->_list[i];
+		for(i = 0; i < this->_size;i++){
+			this->_list[i] = _tmp[i];
+		}
+	}
+
+	void unique(pred_double* x) {
+		__ESBMC_assert(x != NULL, "The parameter must be different than NULL.");
+		size_type i;
+		size_type j = 0;
+		size_type _limit = this->_size;
+		value_type _tmp[LIST_MAX_SIZE];
+		for(i = 0; (i+1) < _limit; i++){
+			if(x(this->_list[i],this->_list[i+1])){
+				_tmp[j] = this->_list[i];
+				j++;
+			}else{
+				this->_size--;
+			}
+		}
+		_tmp[j] = this->_list[i];
+		for(i = 0; i < this->_size;i++){
+			this->_list[i] = _tmp[i];
+		}
+	}
+
+	template<class Predicate>
+	void unique(Predicate pred) {
+		__ESBMC_assert(pred != NULL,
+				"The parameter must be different than NULL.");
+		size_type i;
+		size_type j = 0;
+		size_type _limit = this->_size;
+		value_type _tmp[LIST_MAX_SIZE];
+		for(i = 0; (i+1) < _limit; i++){
+			if(pred(this->_list[i],this->_list[i+1])){
+				_tmp[j] = this->_list[i];
+				j++;
+			}else{
+				this->_size--;
+			}
+		}
+		_tmp[j] = this->_list[i];
+		for(i = 0; i < this->_size;i++){
+			this->_list[i] = _tmp[i];
+		}
+	}
+
+	void merge(list<value_type>& x) {
+		for(int i = 0; i < x._size; i++){
+			this->push_back(x._list[i]);
+		}
+		this->sort();
+		x.clear();
+	}
+
+	void merge(list<value_type>& x, pred_double* pred) {
+		__ESBMC_assert(pred != NULL,
+				"The second parameter must be different than NULL.");
+		list _tmp;
+		size_type i;
+		for(i = 0; (i <  this->_size) && (i < x._size) ; i++){
+			if(pred(this->_list[i],x._list[i])){
+				_tmp.push_back(this->_list[i]);
+				_tmp.push_back(x._list[i]);
+			}else{
+				_tmp.push_back(x._list[i]);
+				_tmp.push_back(this->_list[i]);
+			}
+		}
+		if(i != this->_size){
+			for(;i < this->_size; i++){
+				_tmp.push_back(this->_list[i]);
+			}
+		}
+		if(i != x._size){
+			for(;i < x._size; i++){
+				_tmp.push_back(x._list[i]);
+			}
+		}
+		for(i = 0; i < _tmp._size; i++){
+			this->_list[i] = _tmp._list[i];
+		}
+		this->_size = _tmp._size;
+	}
+
+	void sort() {
+		size_type i, j;
+		value_type _pivo, _tmp;
+		for(i = 0; i < this->_size; i++){
+			_pivo = this->_list[i];
+			for(j = i; j < this->_size; j++){
+				if(this->_list[j] < _pivo){
+					_tmp = _pivo;
+					_pivo = this->_list[j];
+					this->_list[j] = _tmp;
+				}
+			}
+			this->_list[i] = _pivo;
+		}
+	}
+
+	void reverse() {
+		list<value_type> _tmp;
+		for(int i = 0; i < this->_size; i++){
+			_tmp.push_front(this->_list[i]);
+		}
+		for(int i = 0; i < _tmp._size; i++)
+			this->_list[i] = _tmp._list[i];
+	}
+};
+
+void advance(list<unsigned int>::iterator& it, int n) {
+	__ESBMC_assert(it.it != NULL,
+			"The first parameter must be different than NULL.");
+	__ESBMC_assert(n > 0, "The second parameter must be greater than zero.");
+	it.pos = it.pos + n;
+	it.it = it.it+n;
+}
+
+void advance(list<int>::iterator& it, int n) {
+	__ESBMC_assert(it.it != NULL,
+			"The first parameter must be different than NULL.");
+	__ESBMC_assert(n > 0, "The second parameter must be greater than zero.");
+	it.pos = it.pos + n;
+	it.it = it.it+n;
+}
+
+bool operator==(const list<int>& x, const list<int>& y) {
+	if (x._size != y._size)
+		return false;
+	for(int i = 0; i <  x._size; i++)
+		if(x._list[i] != y._list[i])
+			return false;
+	return true;
+}
+
+bool operator!=(const list<int>& x, const list<int>& y) {
+	if (x._size != y._size)
+		return true;
+	for(int i = 0; i <  x._size; i++)
+		if(x._list[i] != y._list[i])
+			return true;
+	return false;
+}
+bool operator==(const list<double>& x, const list<double>& y) {
+	if (x._size != y._size)
+		return false;
+	for(int i = 0; i <  x._size; i++)
+		if(x._list[i] != y._list[i])
+			return false;
+	return true;
+}
+bool operator!=(const list<double>& x, const list<double>& y) {
+	if (x._size != y._size)
+		return true;
+	for(int i = 0; i <  x._size; i++)
+		if(x._list[i] != y._list[i])
+			return true;
+	return false;
+}
+#endif
+
+}
+
+#endif

@@ -1,0 +1,5 @@
+lex.yy.cpp
+Makefile
+Makefile.in
+scanner.cpp
+scanner.hpp

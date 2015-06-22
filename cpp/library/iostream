@@ -1,0 +1,30 @@
+#ifndef STL_IOSTREAM
+#define STL_IOSTREAM
+
+#include "iomanip"
+#include "definitions.h"
+#include "istream"
+#include "ostream"
+
+namespace std
+{
+	class iostream: public ostream, public istream
+	{
+	public:
+		iostream() : ostream(), istream() {}
+
+//		explicit iostream (streambuf * sb);
+//		iostream(const iostream&){ ostream(0); istream(0);} // disabled
+		virtual ~iostream (){}
+		iostream& operator=(const iostream&); // disabled
+	};
+
+	extern istream cin;
+	extern ostream cout;
+	extern ostream cerr;
+//	extern ios_base ios;
+
+//	char endl = '\n';
+}
+
+#endif

@@ -1,0 +1,281 @@
+/*******************************************************************\
+
+Module:
+
+Author: Felipe Rodrigues
+
+Date: September 2012
+
+\*******************************************************************/
+
+#ifndef STL_VALARRAY
+#define STL_VALARRAY
+
+#include "definitions.h"
+
+namespace std
+{
+
+class slice{
+	slice ();
+	slice (size_t start, size_t length, size_t stride);
+	slice (const slice& slc);
+	size_t start() const;
+	size_t size() const;
+	size_t stride() const;
+};
+
+class gslice{
+	gslice ();
+	gslice (size_t start, const valarray<size_t>& lengths, const valarray<size_t>& strides);
+	gslice (const gslice& gslc);
+	size_t start() const;
+	valarray<size_t> size() const;
+	valarray<size_t> stride() const;
+};
+
+template <class T> class slice_array {
+public:
+  typedef T value_type;
+  void operator=   (const valarray<T>&) const;
+  void operator*=  (const valarray<T>&) const;
+  void operator/=  (const valarray<T>&) const;
+  void operator%=  (const valarray<T>&) const;
+  void operator+=  (const valarray<T>&) const;
+  void operator-=  (const valarray<T>&) const;
+  void operator^=  (const valarray<T>&) const;
+  void operator&=  (const valarray<T>&) const;
+  void operator|=  (const valarray<T>&) const;
+  void operator<<= (const valarray<T>&) const;
+  void operator>>= (const valarray<T>&) const;
+  void operator=(const T&);
+  ~slice_array();
+private:
+  slice_array();
+  slice_array(const slice_array&);
+  slice_array& operator= (const slice_array&);
+};
+
+template <class T> class gslice_array {
+public:
+  typedef T value_type;
+  void operator=   (const valarray<T>&) const;
+  void operator*=  (const valarray<T>&) const;
+  void operator/=  (const valarray<T>&) const;
+  void operator%=  (const valarray<T>&) const;
+  void operator+=  (const valarray<T>&) const;
+  void operator-=  (const valarray<T>&) const;
+  void operator^=  (const valarray<T>&) const;
+  void operator&=  (const valarray<T>&) const;
+  void operator|=  (const valarray<T>&) const;
+  void operator<<= (const valarray<T>&) const;
+  void operator>>= (const valarray<T>&) const;
+  void operator=(const T&);
+  ~gslice_array();
+private:
+  gslice_array();
+  gslice_array(const gslice_array&);
+  gslice_array& operator= (const gslice_array&);
+};
+
+template <class T> class mask_array {
+public:
+  typedef T value_type;
+  void operator=   (const valarray<T>&) const;
+  void operator*=  (const valarray<T>&) const;
+  void operator/=  (const valarray<T>&) const;
+  void operator%=  (const valarray<T>&) const;
+  void operator+=  (const valarray<T>&) const;
+  void operator-=  (const valarray<T>&) const;
+  void operator^=  (const valarray<T>&) const;
+  void operator&=  (const valarray<T>&) const;
+  void operator|=  (const valarray<T>&) const;
+  void operator<<= (const valarray<T>&) const;
+  void operator>>= (const valarray<T>&) const;
+  void operator=(const T&);
+  ~mask_array();
+private:
+  mask_array();
+  mask_array(const mask_array&);
+  mask_array& operator= (const mask_array&);
+};
+
+template <class T> class indirect_array {
+public:
+  typedef T value_type;
+  void operator=   (const valarray<T>&) const;
+  void operator*=  (const valarray<T>&) const;
+  void operator/=  (const valarray<T>&) const;
+  void operator%=  (const valarray<T>&) const;
+  void operator+=  (const valarray<T>&) const;
+  void operator-=  (const valarray<T>&) const;
+  void operator^=  (const valarray<T>&) const;
+  void operator&=  (const valarray<T>&) const;
+  void operator|=  (const valarray<T>&) const;
+  void operator<<= (const valarray<T>&) const;
+  void operator>>= (const valarray<T>&) const;
+  void operator=(const T&);
+  ~indirect_array();
+private:
+  indirect_array();
+  indirect_array(const indirect_array&);
+  indirect_array& operator= (const indirect_array&);
+};
+
+template <class T> class valarray{
+	valarray();
+	explicit valarray (size_t n);
+	valarray (const T& val, size_t n);
+	valarray (const T* p, size_t n);
+	valarray (const valarray& x);
+	valarray (const slice_array<T>& sub);
+	valarray (const gslice_array<T>& sub);
+	valarray (const mask_array<T>& sub);
+	valarray (const indirect_array<T>& sub);
+	~valarray ();
+	valarray<T> operator+() const;
+	valarray<T> operator-() const;
+	valarray<T> operator~() const;
+	valarray<bool> operator!() const;
+	valarray<T>& operator*= (const valarray<T>& rhs);
+	valarray<T>& operator/= (const valarray<T>& rhs);
+	valarray<T>& operator%= (const valarray<T>& rhs);
+	valarray<T>& operator+= (const valarray<T>& rhs);
+	valarray<T>& operator-= (const valarray<T>& rhs);
+	valarray<T>& operator^= (const valarray<T>& rhs);
+	valarray<T>& operator&= (const valarray<T>& rhs);
+	valarray<T>& operator|= (const valarray<T>& rhs);
+	valarray<T>& operator<<= (const valarray<T>& rhs);
+	valarray<T>& operator>>= (const valarray<T>& rhs);
+	valarray<T>& operator*= (const T& val);
+	valarray<T>& operator/= (const T& val);
+	valarray<T>& operator%= (const T& val);
+	valarray<T>& operator+= (const T& val);
+	valarray<T>& operator-= (const T& val);
+	valarray<T>& operator^= (const T& val);
+	valarray<T>& operator&= (const T& val);
+	valarray<T>& operator|= (const T& val);
+	valarray<T>& operator<<= (const T& val);
+	valarray<T>& operator>>= (const T& val);
+	valarray<T> apply (T func(T)) const;
+	valarray<T> apply (T func(const T&)) const;
+	valarray<T> cshift (int n) const;
+	T max() const;
+	T min() const;
+	valarray<T>& operator=(const valarray<T>& x);
+	valarray<T>& operator=(const T& val);
+	valarray<T>& operator=(const slice_array<T>& sub);
+	valarray<T>& operator=(const gslice_array<T>& sub);
+	valarray<T>& operator=(const mask_array<T>& sub);
+	valarray<T>& operator=(const indirect_array<T>& sub);
+    T  operator[] (size_t n) const;
+    T& operator[] (size_t n);
+    valarray<T> operator[] (slice slc) const;
+    slice_array<T> operator[] (slice slc);
+    valarray<T> operator[] (const gslice& gslc) const;
+    gslice_array<T> operator[] (const gslice& gslc);
+    valarray<T> operator[] (const valarray<bool>& msk) const;
+    mask_array<T> operator[] (const valarray<bool>& msk);
+    valarray<T> operator[] (const valarray<size_t>& ind) const;
+    indirect_array<T> operator[] (const valarray<size_t>& ind);
+    void resize (size_t sz, T c = T());
+    valarray<T> shift (int n) const;
+    size_t size() const;
+    T sum() const;
+    template<class T> valarray<T> abs (const valarray<T>& x);
+    template<class T> valarray<T> acos (const valarray<T>& x);
+    template<class T> valarray<T> asin (const valarray<T>& x);
+    template<class T> valarray<T> atan (const valarray<T>& x);
+    template<class T> valarray<T> atan2 (const valarray<T>& y, const valarray<T>& x);
+    template<class T> valarray<T> atan2 (const valarray<T>& y, const T& x);
+    template<class T> valarray<T> atan2 (const T& y, const valarray<T>& x);
+    template<class T> valarray<T> cos (const valarray<T>& x);
+    template<class T> valarray<T> cosh (const valarray<T>& x);
+    template<class T> valarray<T> exp (const valarray<T>& x);
+    template<class T> valarray<T> log (const valarray<T>& x);
+    template<class T> valarray<T> log10 (const valarray<T>& x);
+    template<class T> valarray<T> pow (const valarray<T>& x, const valarray<T>& y);
+    template<class T> valarray<T> pow (const valarray<T>& x, const T& y);
+    template<class T> valarray<T> pow (const T& x, const valarray<T>& y);
+    template<class T> valarray<T> sin (const valarray<T>& x);
+    template<class T> valarray<T> sinh (const valarray<T>& x);
+    template<class T> valarray<T> sqrt (const valarray<T>& x);
+    template<class T> valarray<T> tan (const valarray<T>& x);
+    template<class T> valarray<T> tanh (const valarray<T>& x);
+};
+
+template <class T> valarray<T> operator* (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<T> operator* (const T& val, const valarray<T>& rhs);
+template <class T> valarray<T> operator* (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<T> operator/ (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<T> operator/ (const T& val, const valarray<T>& rhs);
+template <class T> valarray<T> operator/ (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<T> operator% (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<T> operator% (const T& val, const valarray<T>& rhs);
+template <class T> valarray<T> operator% (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<T> operator+ (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<T> operator+ (const T& val, const valarray<T>& rhs);
+template <class T> valarray<T> operator+ (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<T> operator- (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<T> operator- (const T& val, const valarray<T>& rhs);
+template <class T> valarray<T> operator- (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<T> operator^ (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<T> operator^ (const T& val, const valarray<T>& rhs);
+template <class T> valarray<T> operator^ (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<T> operator& (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<T> operator& (const T& val, const valarray<T>& rhs);
+template <class T> valarray<T> operator& (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<T> operator| (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<T> operator| (const T& val, const valarray<T>& rhs);
+template <class T> valarray<T> operator| (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<T> operator<< (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<T> operator<< (const T& val, const valarray<T>& rhs);
+template <class T> valarray<T> operator<< (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<T> operator>> (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<T> operator>> (const T& val, const valarray<T>& rhs);
+template <class T> valarray<T> operator>> (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<bool> operator&& (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<bool> operator&& (const T& val, const valarray<T>& rhs);
+template <class T> valarray<bool> operator&& (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<bool> operator|| (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<bool> operator|| (const T& val, const valarray<T>& rhs);
+template <class T> valarray<bool> operator|| (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<bool> operator== (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<bool> operator== (const T& val, const valarray<T>& rhs);
+template <class T> valarray<bool> operator== (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<bool> operator!= (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<bool> operator!= (const T& val, const valarray<T>& rhs);
+template <class T> valarray<bool> operator!= (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<bool> operator< (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<bool> operator< (const T& val, const valarray<T>& rhs);
+template <class T> valarray<bool> operator< (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<bool> operator> (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<bool> operator> (const T& val, const valarray<T>& rhs);
+template <class T> valarray<bool> operator> (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<bool> operator<= (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<bool> operator<= (const T& val, const valarray<T>& rhs);
+template <class T> valarray<bool> operator<= (const valarray<T>& lhs, const T& val);
+
+template <class T> valarray<bool> operator>= (const valarray<T>& lhs, const valarray<T>& rhs);
+template <class T> valarray<bool> operator>= (const T& val, const valarray<T>& rhs);
+template <class T> valarray<bool> operator>= (const valarray<T>& lhs, const T& val);
+
+}
+
+#endif

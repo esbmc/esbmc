@@ -1,0 +1,8 @@
+lex.yy.c
+lex.cpp.c
+y.tab.c
+y.tab.h
+Makefile
+Makefile.in
+cpy.c
+cpy.h

@@ -1,0 +1,167 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_STDLIB
+#define STL_STDLIB
+
+#define EXIT_FAILURE 0
+#define EXIT_SUCCESS 1
+
+typedef unsigned int MB_CUR_MAX;
+
+#include "cstring"
+#include "definitions.h"
+
+typedef struct {
+	int quot;
+	int rem;
+} div_t;
+
+typedef struct {
+	long quot;
+	long rem;
+} ldiv_t;
+
+extern "C" {
+void * malloc ( size_t size );
+void free(void *p);
+}
+int system(const char * command);
+
+void * bsearch(const void * key, const void * base, size_t num, size_t size,
+		int (*comparator)(const void *, const void *));
+
+void qsort(void * base, size_t num, size_t size,
+		int (*comparator)(const void *, const void *));
+
+int abs(int n);
+
+long abs(long n);
+
+void * realloc(void * ptr, size_t size);
+
+void * calloc(size_t num, size_t size);
+
+div_t div(int numerator, int denominator);
+
+ldiv_t div(long numerator, long denominator);
+
+long int labs(long int n);
+
+ldiv_t ldiv(long int numerator, long int denominator);
+
+int mblen(const char * pmb, size_t max);
+
+int mbtowc(wchar_t * pwc, const char * pmb, size_t max);
+
+int wctomb(char * pmb, wchar_t character);
+
+size_t mbstowcs(wchar_t * wcstr, const char * mbstr, size_t max);
+
+size_t wcstombs(char * mbstr, const wchar_t * wcstr, size_t max);
+
+double atof(const char * str);
+
+int atoi(const char * str);
+
+long int atol(const char * str);
+
+char get_char(int digit); //Converter from digit ie 0123456789 to char '0'......'9'
+
+void rev(char *); //reverse function ;
+
+char * itoa(int value, char * str, int base) {
+	int count = 0;
+	bool flag = true;
+	if (value < 0 && base == 10) {
+		flag = false;
+	}
+	while (value != 0) {
+		int dig = value % base;
+		value -= dig;
+		value /= base;
+
+		if (flag == true)
+			str[count] = get_char(dig);
+		else
+			str[count] = get_char(-dig);
+		count++;
+	}
+	if (flag == false) {
+		str[count] = '-';
+		count++;
+	}
+	str[count] = 0;
+	rev(str);
+	return str;
+}
+
+double strtod(const char * str, char ** endptr);
+
+long int strtol(const char * str, char ** endptr, int base);
+
+unsigned long int strtoul(const char * str, char ** endptr, int base);
+
+char * getenv(const char * name) {
+	size_t size = strlen(name) + 1;
+	char tmp[size];
+	strcpy(tmp, name);
+	return tmp;
+}
+
+void exit(int status)
+{
+  __ESBMC_assume(0);
+}
+
+void abort(void) {
+	__ESBMC_assert(0, "Sudden stop of the program");
+}
+
+int atexit(void (*function)(void));
+
+#define RAND_MAX        2147483647
+
+int rand(void);
+
+int random(void);
+
+void srand(unsigned int s);
+
+int rand(void) {
+	return nondet_uint() % RAND_MAX;
+}
+
+int random(void) {
+	return nondet_uint() % RAND_MAX;
+}
+
+#if 0
+void srand (unsigned int s)
+{
+	seed = s;
+}
+#endif
+
+char get_char(int digit) {
+	char charstr[] = "0123456789ABCDEF";
+	return charstr[digit];
+}
+
+void rev(char *p) {
+	char *q = &p[strlen(p) - 1];
+	char *r = p;
+	for (; q > r; q--, r++) {
+		char s = *q;
+		*q = *r;
+		*r = s;
+	}
+}
+
+#endif

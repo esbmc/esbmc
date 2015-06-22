@@ -1,0 +1,85 @@
+/*******************************************************************\
+
+Module:
+
+Author: Lucas Cordeiro and Felipe Rodrigues
+
+Date: September 2012
+
+\*******************************************************************/
+
+#ifndef STL_STACK
+#define STL_STACK
+
+#include "deque"
+#include "vector"
+
+namespace std
+{
+  #define STACK_CAPACITY 20
+  template<class T, class Container = deque<T> > class stack
+  { 
+    T buf[STACK_CAPACITY];
+    int _top=0;
+
+    public:
+    stack():_top(0){}
+    stack ( const Container& ctnr = Container() ):_top(0){}
+    stack ( std::deque<int> ctnr ):_top(ctnr.size()){}
+    stack ( std::vector<int> ctnr ):_top(ctnr.size()){}
+
+    void inc_top ( )
+    {
+      _top++;
+    }
+
+    void dec_top ( )
+    {
+      _top--;
+    }
+
+    int get_top ( )
+    {
+      return _top;
+    }
+
+    void push ( const T& t )
+    {
+      __ESBMC_assert(0 <= _top, "invalid top");
+      __ESBMC_assert(_top < STACK_CAPACITY, "stack overflow");
+      buf[get_top()] = t;
+      inc_top();
+    }
+
+    bool empty ( ) const
+    {
+      return (_top==0) ? true : false; 
+    }
+
+    int size() const
+    {
+      __ESBMC_assert(0 <= _top && _top <= STACK_CAPACITY, "invalid top");
+      return _top;
+    }
+
+    void pop ( )
+    {
+      __ESBMC_assert(_top>0, "stack underflow");
+      dec_top();
+    }
+
+    T& top ( )
+    {
+      assert(!empty());
+      return buf[_top-1];
+    }
+    const T& top ( ) const
+    {
+      assert(!empty());
+      return (const T&)buf[_top-1];
+    }
+
+  };
+}
+
+#endif

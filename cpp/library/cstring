@@ -1,0 +1,324 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_CSTRING
+#define STL_CSTRING
+
+#include "definitions.h"
+
+char *strcpy(char *d, const char *s) {
+	int i;
+
+	for (i = 0; s[i] != 0; i++) {
+		d[i] = s[i];
+	}
+
+	d[i] = '\0';
+
+	return d;
+}
+
+char *strncpy(char *d, const char *s, size_t n) {
+
+	size_t i=0;
+	char ch;
+	bool end;
+
+	for(end=0; i<n; i++)
+	{
+		ch=end?0:s[i];
+		d[i]=ch;
+		end=end || ch==(char)0;
+	}
+	return d;
+}
+
+char *strcat(char d[], const char s[]) {
+	int i, e;
+
+	for (e = 0; d[e] != '\0'; e++)
+		;
+
+	for (i = 0; s[i] != '\0'; i++) {
+		d[e + i] = s[i];
+	}
+
+	d[e + i] = '\0';
+
+	return d;
+}
+
+char *strncat(char d[], const char s[], size_t n) {
+	size_t i, e;
+
+	for (e = 0; d[e] != '\0'; e++)
+		;
+
+	for (i = 0; s[i] != '\0' && i < n; i++) {
+		d[e + i] = s[i];
+	}
+
+	d[e + i] = '\0';
+
+	return d;
+}
+
+int strcmp(const char *s1, const char *s2) {
+	int i;
+
+	for (i = 0;; i++) {
+		if (s1[i] == s2[i]) {
+			if (s1[i] == '\0')
+				return 0;
+			continue;
+		}
+		if (s1[i] == '\0')
+			return -1;
+		if (s2[i] == '\0')
+			return 1;
+		if (s1[i] < s2[i])
+			return -1;
+		else
+			return 1;
+	}
+}
+
+int strncmp(const char *s1, const char *s2, size_t n) {
+	int i;
+
+	for (i = 0; i < n; i++) {
+		if (s1[i] == s2[i]) {
+			if (s1[i] == '\0')
+				return 0;
+			continue;
+		}
+		if (s1[i] == '\0')
+			return -1;
+		if (s2[i] == '\0')
+			return 1;
+		if (s1[i] < s2[i])
+			return -1;
+		else
+			return 1;
+	}
+
+	return 0;
+}
+
+char *strchr(const char *s, int c) {
+	while (*s != (char) c)
+		if (!*s++)
+			return 0;
+	return (char *) s;
+}
+
+size_t strcspn(const char *s1, const char *s2) {
+	size_t ret = 0;
+	while (*s1)
+		if (strchr(s2, *s1))
+			return ret;
+		else
+			s1++, ret++;
+	return ret;
+}
+
+size_t strspn(const char *s1, const char *s2) {
+	size_t ret = 0;
+	while (*s1 && strchr(s2, *s1++))
+		ret++;
+	return ret;
+}
+
+size_t strlen(const char *s) {
+	__ESBMC_assert(s != NULL, "string must contain any character");
+	size_t len = 0;
+	while (*s != NULL) { //until the end of string
+		s++;
+		len++;
+	}
+	return len;
+}
+
+char *strtok_r(char *str, const char *delim, char **saveptr) {
+	size_t i;
+	size_t j;
+	bool delimp;
+
+	if (str) {
+		*saveptr = str;
+	} else {
+		if (!*saveptr) {
+			return NULL;
+		} else {
+			str = *saveptr;
+		}
+	}
+
+	for (i = 0; str[i]; i++) {
+		delimp = false;
+
+		for (j = 0; delim[j]; j++) {
+			if (str[i] == delim[j]) {
+				delimp = true;
+				break;
+			}
+		}
+
+		if (!delimp) {
+			break;
+		}
+	}
+
+	for (; str[i]; i++) {
+		for (j = 0; delim[j]; j++) {
+			if (str[i] == delim[j]) {
+				str[i] = '\0';
+				*saveptr = &str[i + 1];
+				return str;
+			}
+		}
+	}
+
+	*saveptr = NULL;
+	return str;
+}
+
+char *strtok(char *str, const char *delim) {
+	static char *saveptr = NULL;
+	char *token;
+
+	token = strtok_r(str, delim, &saveptr);
+
+	if (!token) {
+		saveptr = NULL;
+	}
+
+	return token;
+}
+
+static bool is_accepted(char c, const char *accept) {
+	size_t i;
+
+	for (i = 0; accept[i]; i++) {
+		if (c == accept[i]) {
+			return true;
+		}
+	}
+	return false;
+}
+
+char *strpbrk(const char *s, const char *accept) {
+	size_t i;
+
+	for (i = 0; s[i]; i++) {
+		if (is_accepted(s[i], accept)) {
+			return (char*) &s[i];
+		}
+	}
+
+	return NULL;
+}
+
+char *strrchr(const char *s, char c) {
+	size_t i;
+
+	for (i = 0; s[i]; i++)
+		;
+
+	for (; i; i--) {
+		if (s[i] == c) {
+			return (char*) &s[i];
+		}
+	}
+
+	if (s[0] == c) {
+		return (char*) s;
+	}
+
+	return NULL;
+}
+
+char *strstr(const char *s1, const char *s2) {
+	size_t i, j;
+
+	for (i = 0; s1[i]; i++) {
+		for (j = 0; s2[j] && s1[i + j]; j++) {
+			if (s1[i + j] != s2[j]) {
+				break;
+			}
+		}
+		if (s2[j] == '\0') {
+			return (char*) &s1[i];
+		}
+	}
+
+	return NULL;
+}
+
+void *memcpy(void *dst, const void *src, size_t n) {
+	__ESBMC_HIDE:
+        char *cdst = static_cast<char *>(dst);
+        const char *csrc = static_cast<const char *>(src);
+        for (size_t i = 0; i < n; i++)
+		cdst[i] = csrc[i];
+	return dst;
+}
+
+void *memmove(void *dest, const void *src, size_t n) {
+	__ESBMC_HIDE:
+        char *cdst = static_cast<char *>(dest);
+        const char *csrc = static_cast<const char *>(src);
+        if (dest - src >= n) {
+		for (size_t i = 0; i < n; i++)
+			cdst[i] = csrc[i];
+	} else {
+		for (size_t i = n; i > 0; i--)
+			cdst[i - 1] = csrc[i - 1];
+	}
+	return dest;
+}
+
+int memcmp(const void *p1, const void *p2, size_t n) {
+	char *v1 = (char*) p1;
+	char *v2 = (char*) p2;
+	size_t i;
+
+	for (i = 0; i < n; i++) {
+		if (v1[i] != v2[i]) {
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+void *memchr(void *s, int c, size_t n) {
+	size_t i;
+	char *src = (char*) s;
+
+	for (i = 0; i < n; i++) {
+		if (src[i] == c)
+			return &src[i];
+	}
+
+	return &src[i];
+}
+
+void *memset(void *s, int c, size_t n) {
+	size_t i;
+	char *src = (char*) s;
+
+	for (i = 0; i < n; i++) {
+		src[i] = c;
+	}
+
+	return src;
+}
+
+#endif

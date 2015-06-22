@@ -1,0 +1,122 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_CSTDIO
+#define STL_CSTDIO
+
+#include "definitions.h"
+#include "cstddef"
+#include "cstdarg"
+
+#ifndef EOF
+#define EOF (-1)
+#endif
+
+typedef int& fpos_t;
+
+typedef void& FILE;
+
+typedef unsigned int TMP_MAX;
+
+typedef unsigned int FILENAME_MAX;
+
+FILE * stdout;
+
+extern "C" {
+
+  FILE * tmpfile(void);
+
+  char * tmpnam(char * str);
+
+  int fflush(FILE * stream);
+
+  FILE * freopen(const char * filename, const char * mode, FILE * stream);
+
+  void setbuf(FILE * stream, char * buffer);
+
+  int setvbuf(FILE * stream, char * buffer, int mode, size_t size);
+
+  int fprintf(FILE * stream, const char * format, ...);
+
+  int fscanf(FILE * stream, const char * format, ...);
+
+  int scanf(const char * format, ...);
+
+  int sscanf(const char * str, const char * format, ...);
+
+  int vfprintf(FILE * stream, const char * format, va_list arg);
+
+  int vprintf(const char * format, va_list arg);
+
+  int vsprintf(char * str, const char * format, va_list arg);
+
+  int fgetc(FILE * stream);
+
+  int fputc(int character, FILE * stream);
+
+  int fputs(const char * str, FILE * stream);
+
+  int getc(FILE * stream);
+
+  int getchar(void);
+
+  char * gets(char * str);
+
+  int putc(int character, FILE * stream);
+
+  int putchar(int character);
+
+  int puts(const char * str);
+
+  int ungetc(int character, FILE * stream);
+
+  size_t fread(void * ptr, size_t size, size_t count, FILE * stream);
+
+  size_t fwrite(const void * ptr, size_t size, size_t count, FILE * stream);
+
+  int fgetpos(FILE * stream, fpos_t * position);
+
+  int fseek(FILE * stream, long int offset, int origin);
+
+  int fsetpos(FILE * stream, const fpos_t * pos);
+
+  long int ftell(FILE * stream);
+
+  void rewind(FILE * stream);
+
+  void clearerr(FILE * stream);
+
+  int ferror(FILE * stream);
+
+  FILE * fopen(const char * filename, const char * mode);
+
+  int fclose(FILE * stream);
+
+  void perror(const char * str);
+
+  int feof(FILE * stream);
+
+  char * fgets(char * str, int num, FILE * stream);
+
+  int remove(const char * filename);
+
+  int rename(const char * oldname, const char * newname);
+
+  int printf(const char * format, ...);
+
+  int sprintf(char * str, const char * format, ...);
+
+  int snprintf(char * s, size_t n, const char * format, ...);
+
+  int vsnprintf(char * s, size_t n, const char * format, va_list arg);
+
+  int vsnprintf(char * s, size_t n, const char * format, va_list arg);
+}
+
+#endif

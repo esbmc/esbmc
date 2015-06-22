@@ -1,0 +1,64 @@
+/*******************************************************************
+ Module:
+
+ Author: Hendrio Marques and Felipe Rodrigues
+
+ Date: Feb 2012
+
+ \*******************************************************************/
+
+#ifndef STL_UTILITY
+#define STL_UTILITY
+
+namespace std {
+
+template<class T1, class T2>
+struct pair {
+	typedef T1 first_type;
+	typedef T2 second_type;
+
+	T1 first;
+	T2 second;
+	pair() :
+			first(T1()), second(T2()) {
+	}
+	pair(const T1& x, const T2& y) :
+			first(x), second(y) {
+	}
+	bool operator!=( pair< T1,T2 >& p ){
+		if (this->first != p.first && this->second != p.second)
+			return true;
+		return false;
+	}
+
+	template<class U, class V>
+	pair(const pair<U, V> &p) :
+			first(p.first), second(p.second) {
+	}
+};
+
+template<class T1, class T2>
+pair<T1, T2> make_pair(T1 x, T2 y) {
+	return (pair<T1, T2>(x, y));
+}
+
+}
+
+namespace rel_ops {
+
+template<class T> bool operator!=(const T& x, const T& y) {
+	return !(x == y);
+}
+template<class T> bool operator>(const T& x, const T& y) {
+	return y < x;
+}
+template<class T> bool operator<=(const T& x, const T& y) {
+	return !(y < x);
+}
+template<class T> bool operator>=(const T& x, const T& y) {
+	return !(x < y);
+}
+
+}
+
+#endif

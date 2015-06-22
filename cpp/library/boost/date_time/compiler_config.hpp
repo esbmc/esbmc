@@ -1,0 +1,4 @@
+#ifndef DATE_TIME_COMPILER_CONFIG_HPP___
+#define DATE_TIME_COMPILER_CONFIG_HPP___
+
+#endif

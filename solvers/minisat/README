@@ -1,0 +1,4 @@
+Much of the CBMC flatten-to-bits features are devolved into flatteners in the
+SAT directory. These would feed into having a SAT solver such as minisat at
+the bottom level. However, the implementation is currently broken, and as a
+result minisat hasn't been moved over to autoconf.

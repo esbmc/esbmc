@@ -1,0 +1,2300 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: Feb 2012
+
+ \*******************************************************************/
+
+#ifndef STL_ALGORITHM
+#define STL_ALGORITHM
+
+//#include "iterator"
+#include "definitions.h"
+#include "utility"
+
+typedef bool (funcao)(int arg1, int arg2);
+
+namespace std {
+template<class InputIterator, class Function>
+Function for_each(InputIterator first, InputIterator last, Function f) {
+	for (; first != last; ++first)
+		f(*first);
+	return f;
+}
+
+template<class InIt, class Ty>
+InIt find(InIt first, InIt last, const Ty& value) {
+	for (; first != last; first++) {
+		if (*first == value) {
+			*first = value;
+			return first;
+		}
+	}
+	return first;
+}
+
+template<class InIt, class Ty>
+InIt* find(InIt *first, InIt *last, const Ty& value) {
+	for (; first != last; first++) {
+		if (*first == value) {
+			break;
+		}
+	}
+	return first;
+}
+
+template<class InputIterator, class Predicate>
+InputIterator find_if(InputIterator first, InputIterator last, Predicate pred) {
+	for (; first != last; first++)
+		if (pred(*first))
+			break;
+	return first;
+}
+
+template<class ForwardIterator1, class ForwardIterator2>
+ForwardIterator1 find_end(ForwardIterator1 first1, ForwardIterator1 last1,
+		ForwardIterator2 first2, ForwardIterator2 last2) {
+	if (first2 == last2)
+		return last1; // specified in C++11
+
+	ForwardIterator1 ret = last1;
+
+	while (first1 != last1) {
+		ForwardIterator1 it1 = first1;
+		ForwardIterator2 it2 = first2;
+		while (*it1 == *it2) {
+			++it1;
+			++it2;
+			if (it2 == last2) {
+				ret = first1;
+				break;
+			}
+			if (it1 == last1)
+				return ret;
+		}
+		++first1;
+	}
+	return ret;
+}
+
+template<class ForwardIterator1, class ForwardIterator2>
+ForwardIterator1 find_end(ForwardIterator1 first1, ForwardIterator1 last1,
+		ForwardIterator2 *first2, ForwardIterator2 *last2) {
+	if (first2 == last2)
+		return last1; // specified in C++11
+
+	ForwardIterator1 ret = last1;
+
+	while (first1 != last1) {
+		ForwardIterator1 it1 = first1;
+		ForwardIterator2 *it2 = first2;
+		while (*it1 == *it2) {
+			++it1;
+			++it2;
+			if (it2 == last2) {
+				ret = first1;
+				break;
+			}
+			if (it1 == last1)
+				return ret;
+		}
+		++first1;
+	}
+	return ret;
+}
+
+template<class FwdIt1, class FwdIt2, class Pr>
+FwdIt1 find_end(FwdIt1 first1, FwdIt1 last1, FwdIt2 first2, FwdIt2 last2,
+		Pr pred) {
+	if (first2 == last2)
+		return last1; // specified in C++11
+
+	FwdIt1 ret = last1;
+
+	while (first1 != last1) {
+		FwdIt1 it1 = first1;
+		FwdIt2 it2 = first2;
+		while (pred(*it1, *it2)) {
+			++it1;
+			++it2;
+			if (it2 == last2) {
+				ret = first1;
+				break;
+			}
+			if (it1 == last1)
+				return ret;
+		}
+		++first1;
+	}
+	return ret;
+}
+
+template<class FwdIt1, class FwdIt2, class Pr>
+FwdIt1 find_end(FwdIt1 first1, FwdIt1 last1, FwdIt2 *first2, FwdIt2 *last2,
+		Pr pred) {
+	if (first2 == last2)
+		return last1; // specified in C++11
+
+	FwdIt1 ret = last1;
+
+	while (first1 != last1) {
+		FwdIt1 it1 = first1;
+		FwdIt2 *it2 = first2;
+		while (pred(*it1, *it2)) {
+			++it1;
+			++it2;
+			if (it2 == last2) {
+				ret = first1;
+				break;
+			}
+			if (it1 == last1)
+				return ret;
+		}
+		++first1;
+	}
+	return ret;
+}
+
+template<class FwdIt1, class FwdIt2>
+FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1, FwdIt2 first2, FwdIt2 last2) {
+	for (; first1 != last1; ++first1)
+		for (FwdIt2 it = first2; it != last2; ++it)
+			if (*it == *first1)
+				return first1;
+	return last1;
+}
+
+template<class FwdIt1, class FwdIt2>
+FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1, FwdIt2 *first2,
+		FwdIt2 *last2) {
+	for (; first1 != last1; ++first1)
+		for (FwdIt2 *it = first2; it != last2; ++it)
+			if (*it == *first1)
+				return first1;
+	return last1;
+}
+
+template<class FwdIt1, class FwdIt2, class Pr>
+FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1, FwdIt2 first2, FwdIt2 last2,
+		Pr pred) {
+	for (; first1 != last1; ++first1)
+		for (FwdIt2 it = first2; it != last2; ++it)
+			if (pred(*it, *first1))
+				return first1;
+	return last1;
+}
+
+template<class FwdIt1, class FwdIt2, class Pr>
+FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1, FwdIt2 *first2, FwdIt2 *last2,
+		Pr pred) {
+	for (; first1 != last1; ++first1)
+		for (FwdIt2 *it = first2; it != last2; ++it)
+			if (pred(*it, *first1))
+				return first1;
+	return last1;
+}
+
+template<class FwdIt>
+FwdIt adjacent_find(FwdIt first, FwdIt last) {
+	if (first != last) {
+		FwdIt next = first;
+		++next;
+		while (next != last) {
+			if (*first == *next)
+				return first;
+			else {
+				++first;
+				++next;
+			}
+		}
+	}
+	return last;
+}
+
+template<class FwdIt, class Pr>
+FwdIt adjacent_find(FwdIt first, FwdIt last, Pr pred) {
+	if (first != last) {
+		FwdIt next = first;
+		++next;
+		while (next != last) {
+			if (pred(*first, *next))
+				return first;
+			else {
+				++first;
+				++next;
+			}
+		}
+	}
+	return last;
+}
+
+//template<class InIt, class Ty, class Dist>
+//int count(InIt first, InIt last, const Ty& val);
+
+
+template<class InputIterator, class T>
+int count(InputIterator first, InputIterator last, const T& value) {
+	int ret = 0;
+	while (first != last)
+		if (*first++ == value)
+			++ret;
+	return ret;
+}
+
+template<class InputIterator, class T>
+int count(InputIterator *first, InputIterator *last, const T& value) {
+	int ret = 0;
+	while (first != last)
+		if (*first++ == value)
+			++ret;
+	return ret;
+}
+
+template<class InputIterator, class T>
+int count_if(InputIterator first, InputIterator last, const T& pred) {
+	int ret = 0;
+	while (first != last)
+		if (pred(*first++))
+			++ret;
+	return ret;
+}
+
+template<class InIt1, class InIt2>
+pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 first2) {
+	while ((first1 != last1) && (*first1 == *first2)) {
+		++first1;
+		++first2;
+	}
+	return make_pair(first1, first2);
+}
+
+template<class InIt1, class InIt2>
+pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 *first2) {
+	while ((first1 != last1) && (*first1 == *first2)) {
+		++first1;
+		++first2;
+	}
+	return make_pair(first1, first2);
+}
+
+template<class InIt1, class InIt2, class Pr>
+pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 first2, Pr pred) {
+	while (pred(*first1, *first2)) {
+		++first1;
+		++first2;
+	}
+	return make_pair(first1, first2);
+}
+
+template<class InIt1, class InIt2>
+bool equal(InIt1 first1, InIt1 last1, InIt2 first2) {
+	while (first1 != last1) {
+		if (!(*first1 == *first2))
+			return false;
+		++first1;
+		++first2;
+	}
+	return true;
+}
+
+template<class InIt1, class InIt2>
+bool equal(InIt1 first1, InIt1 last1, InIt2 *first2) {
+	while (first1 != last1) {
+		if (!(*first1 == *first2))
+			return false;
+		++first1;
+		++first2;
+	}
+	return true;
+}
+
+template<class InIt1, class InIt2, class Pr>
+bool equal(InIt1 first1, InIt1 last1, InIt2 first2, Pr pred) {
+	while (first1 != last1) {
+		if (!pred(*first1, *first2))
+			return false;
+		++first1;
+		++first2;
+	}
+	return true;
+}
+
+template<class FwdIt1, class FwdIt2>
+FwdIt1 search(FwdIt1 first1, FwdIt1 last1, FwdIt2 first2, FwdIt2 last2) {
+	if (first2 == last2)
+		return first1; // specified in C++11
+
+	while (first1 != last1) {
+		FwdIt1 it1 = first1;
+		FwdIt2 it2 = first2;
+		while (*it1 == *it2) {
+			++it1;
+			++it2;
+			if (it2 == last2)
+				return first1;
+			if (it1 == last1)
+				return last1;
+		}
+		++first1;
+	}
+	return last1;
+}
+
+template<class FwdIt1, class FwdIt2>
+FwdIt1 search(FwdIt1 first1, FwdIt1 last1, FwdIt2 *first2, FwdIt2 *last2) {
+	if (first2 == last2)
+		return first1; // specified in C++11
+
+	while (first1 != last1) {
+		FwdIt1 it1 = first1;
+		FwdIt2 *it2 = first2;
+		while (*it1 == *it2) {
+			++it1;
+			++it2;
+			if (it2 == last2)
+				return first1;
+			if (it1 == last1)
+				return last1;
+		}
+		++first1;
+	}
+	return last1;
+}
+
+template<class FwdIt1, class FwdIt2, class Pr>
+FwdIt1 search(FwdIt1 first1, FwdIt1 last1, FwdIt2 first2, FwdIt2 last2,
+		Pr pred) {
+	if (first2 == last2)
+		return first1; // specified in C++11
+
+	while (first1 != last1) {
+		FwdIt1 it1 = first1;
+		FwdIt2 it2 = first2;
+		while (pred(*it1, *it2)) {
+			++it1;
+			++it2;
+			if (it2 == last2)
+				return first1;
+			if (it1 == last1)
+				return last1;
+		}
+		++first1;
+	}
+	return last1;
+}
+
+template<class InputIterator, class Distance>
+void advance(InputIterator& i, Distance n){
+	i = i + n;
+}
+
+template<class InputIterator>
+int distance(InputIterator first, InputIterator last){
+	int i = 0;
+	int koef = first < last ? 1 : -1;
+	InputIterator pilgrim = first < last ? first : last;
+	while(pilgrim != last){
+		pilgrim = pilgrim + koef;
+		i++;
+	}
+	return i;
+}
+
+template<class FwdIt, class Diff, class Ty>
+FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty& value) {
+
+	FwdIt it, limit;
+	size_t i;
+
+	limit=last;
+	limit = limit - count;
+
+	while (first!=limit)
+	{
+		it = first; i=0;
+		while (*it==value)
+		{	++it; if (++i==count) return first;}
+		++first;
+	}
+	return last;
+}
+
+template<class FwdIt, class Diff, class Ty, class Pr>
+FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty& val, Pr pred) {
+	FwdIt it, limit;
+	size_t i;
+
+	limit=last;
+	limit = limit - count;
+
+	while (first!=limit)
+	{
+		it = first; i=0;
+		while (pred(*it,val))
+		{	++it; if (++i==count) return first;}
+		++first;
+	}
+	return last;
+}
+
+template<class InputIterator, class OutputIterator>
+OutputIterator copy(InputIterator first, InputIterator last,
+		OutputIterator result) {
+	while (first!=last) *result++ = *first++;
+	return result;
+}
+
+template<class InIt, class OutIt>
+OutIt copy(InIt *first, InIt *last, OutIt dest) {
+	while (first != last)
+		*dest++ = *first++;
+	return dest;
+}
+
+template<class BidIt1, class BidIt2>
+BidIt2 copy_backward(BidIt1 first, BidIt1 last, BidIt2 dest) {
+	while (last != first)
+		*(--dest) = *(--last);
+	return dest;
+}
+
+template<class Ty>
+void swap(Ty& a, Ty& b) {
+	Ty c(a);
+	a = b;
+	b = c;
+}
+
+template<class FwdIt1, class FwdIt2>
+FwdIt2 swap_ranges(FwdIt1 first1, FwdIt1 last1, FwdIt2 last2) {
+	while (first1 != last1)
+		swap(*first1++, *last2++);
+	return last2;
+}
+
+template<class ForwardIterator1, class ForwardIterator2>
+void iter_swap(ForwardIterator1 a, ForwardIterator2 b) {
+	swap(*a, *b);
+}
+
+template<class InIt, class OutIt, class Fn1>
+OutIt transform(InIt first, InIt last, OutIt dest, Fn1 func) {
+	while (first != last){
+		*dest = func(*first);
+		dest++;
+		first++;
+	}
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt, class Fn2>
+OutIt transform(InIt1 first1, InIt1 last1, InIt2 first2, OutIt dest, Fn2 func) {
+	while (first1 != last1){
+		*dest = func(*first1, *first2);
+		first1++; first2++; dest++;
+	}
+	return dest;
+}
+
+template<class FwdIt, class Ty>
+void replace(FwdIt first, FwdIt last, const Ty& oldval, const Ty& newval) {
+	for (; first != last; ++first)
+		if (*first == oldval)
+			*first = newval;
+}
+
+template<class FwdIt, class Pr, class Ty>
+void replace_if(FwdIt first, FwdIt last, Pr pred, const Ty& val) {
+	for (; first != last; ++first)
+		if (pred(*first))
+			*first = val;
+}
+
+template<class InIt, class OutIt, class Ty>
+OutIt replace_copy(InIt first, InIt last, OutIt dest, const Ty& oldval,
+		const Ty& newval) {
+	for (; first != last; ++first, ++dest)
+		*dest = (*first == oldval) ? newval : *first;
+	return dest;
+}
+
+template<class InIt, class OutIt, class Ty>
+OutIt replace_copy(InIt *first, InIt *last, OutIt dest, const Ty& oldval,
+		const Ty& newval) {
+	for (; first != last; ++first, ++dest)
+		*dest = (*first == oldval) ? newval : *first;
+	return dest;
+}
+
+template<class InIt, class OutIt, class Pr, class Ty>
+OutIt replace_copy_if(InIt first, InIt last, OutIt dest, Pr pred,
+		const Ty& val) {
+	for (; first != last; ++first, ++dest)
+		*dest = (pred(*first)) ? val : *first;
+	return dest;
+}
+
+template<class FwdIt, class Ty>
+void fill(FwdIt first, FwdIt last, const Ty& val) {
+	while (first != last){
+		*first = val;
+		first++;
+	}
+}
+
+template<class OutIt, class Diff, class Ty>
+void fill_n(OutIt first, Diff n, const Ty& val) {
+	for (; n > 0; --n){
+		*first = val;
+		first++;
+	}
+}
+
+template<class FwdIt, class Fn0>
+void generate(FwdIt first, FwdIt last, Fn0 func) {
+	while (first != last)
+		*first++ = func();
+}
+
+template<class OutIt, class Diff, class Fn0>
+void generate_n(OutIt first, Diff n, Fn0 func) {
+	for (; n > 0; --n)
+		*first++ = func();
+}
+
+template<class OutIt, class Diff, class Fn0>
+void generate_n(OutIt *first, Diff n, Fn0 func) {
+	for (; n > 0; --n)
+		*first++ = func();
+}
+
+template<class FwdIt, class Ty>
+FwdIt remove(FwdIt first, FwdIt last, const Ty& val) {
+	FwdIt result = first;
+	for (; first != last; ++first)
+		if (!(*first == val))
+			*result++ = *first;
+	return result;
+}
+
+template<class FwdIt, class Pr>
+FwdIt remove_if(FwdIt first, FwdIt last, Pr pred) {
+	FwdIt result = first;
+	for (; first != last; ++first)
+		if (!pred(*first))
+			*result++ = *first;
+	return result;
+}
+
+template<class InIt, class OutIt, class Ty>
+OutIt remove_copy(InIt first, InIt last, OutIt dest, const Ty& val) {
+	for (; first != last; ++first)
+		if (!(*first == val))
+			*dest++ = *first;
+	return dest;
+}
+
+template<class InIt, class OutIt, class Ty>
+OutIt remove_copy(InIt *first, InIt *last, OutIt dest, const Ty& val) {
+	for (; first != last; ++first)
+		if (!(*first == val))
+			*dest++ = *first;
+	return dest;
+}
+
+template<class InIt, class OutIt, class Pr>
+OutIt remove_copy_if(InIt first, InIt last, OutIt dest, Pr pred) {
+	for (; first != last; ++first)
+		if (!pred(*first))
+			*dest++ = *first;
+	return dest;
+}
+
+template<class InIt, class OutIt, class Pr>
+OutIt remove_copy_if(InIt *first, InIt *last, OutIt dest, Pr pred) {
+	for (; first != last; ++first)
+		if (!pred(*first))
+			*dest++ = *first;
+	return dest;
+}
+
+template<class FwdIt>
+FwdIt unique(FwdIt first, FwdIt last) {
+	FwdIt result = first;
+	while (++first != last) {
+		if (!(*result == *first))
+			*(++result) = *first;
+	}
+	return ++result;
+}
+
+template<class FwdIt, class Pr>
+FwdIt unique(FwdIt first, FwdIt last, Pr pred) {
+	FwdIt result = first;
+	while (++first != last) {
+		if (!pred(*result, *first))
+			*(++result) = *first;
+	}
+	return ++result;
+}
+
+template<class InIt, class OutIt>
+OutIt unique_copy(InIt first, InIt last, OutIt dest) {
+	InIt value = first;
+	*dest++ = *first;
+	while (++first != last) {
+		if (!(*value == *first)){
+			*dest++ = *first;
+			value = first;
+		}
+	}
+	return dest;
+}
+
+template<class InIt, class OutIt, class Pr>
+OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
+
+        if (first == last)
+          return dest;
+
+        InIt value = first;
+        *dest++ = *first;
+	while (++first != last) {
+		if (!pred(*value, *first)){
+                        *dest++ = *first;
+                        value = first;
+		}
+	}
+	return dest;
+}
+
+template<class BidIt>
+void reverse(BidIt first, BidIt last) {
+	while ((first != last) && (first != --last))
+		swap(*first++, *last);
+}
+
+template<class BidIt>
+void reverse(BidIt *first, BidIt *last) {
+	while ((first != last) && (first != --last))
+		swap(*first++, *last);
+}
+
+template<class BidIt, class OutIt>
+OutIt reverse_copy(BidIt first, BidIt last, OutIt dest) {
+	while (first != last)
+		*dest++ = *--last;
+	return dest;
+}
+
+template<class BidIt, class OutIt>
+OutIt reverse_copy(BidIt *first, BidIt *last, OutIt dest) {
+	while (first != last)
+		*dest++ = *--last;
+	return dest;
+}
+
+template<class FwdIt>
+void rotate(FwdIt first, FwdIt middle, FwdIt last) {
+	FwdIt next = middle;
+	while (first != next) {
+		swap(*first++, *next++);
+		if (next == last)
+			next = middle;
+		else if (first == middle)
+			middle = next;
+	}
+}
+
+template<class FwdIt, class OutIt>
+OutIt rotate_copy(FwdIt first, FwdIt mid, FwdIt last, OutIt dest) {
+        FwdIt orig_mid = mid;
+	while (mid!=last) *dest++ = *mid++;
+	while (first!=orig_mid) *dest++ = *first++;
+	return dest;
+}
+
+template<class FwdIt, class OutIt>
+OutIt rotate_copy(FwdIt *first, FwdIt *mid, FwdIt *last, OutIt dest) {
+	//dest=copy (mid,last,dest);
+	//return dest; //copy (first,mid,dest);
+        FwdIt *orig_mid = mid;
+	while (mid!=last) *dest++ = *mid++;
+	while (first!=orig_mid) *dest++ = *first++;
+	return dest;
+}
+
+template<class T>
+T rand(T rand) {
+	return ((rand % 32767) + 1);
+}
+
+template<class RanIt>
+void random_shuffle(RanIt first, RanIt last) {
+#if 0
+	RanIt i, n;
+	n = (last - first);
+	for (i = n - 1; i > 0; --i)
+		swap(first+i, first+rand(i + 1));
+#endif
+}
+
+template<class RanIt, class Fn1>
+void random_shuffle(RanIt first, RanIt last, Fn1& func);
+
+template<class BidIt, class Pr>
+BidIt partition(BidIt first, BidIt last, Pr pred) {
+	while (true) {
+		while (first != last && pred(*first))
+			++first;
+		if (first == last--)
+			break;
+		while (first != last && !pred(*last))
+			--last;
+		if (first == last)
+			break;
+		swap(*first++, *last);
+	}
+	return first;
+}
+
+template<class BidIt, class Pr>
+BidIt stable_partition(BidIt first, BidIt last, Pr pred){
+	while (first <= last) {
+		while (first != last && pred(*first))
+			++first;
+		if (first == last--)
+			break;
+		while (first != last && !pred(*last))
+			--last;
+		if (first == last)
+			break;
+		swap(*first++, *last);
+	}
+	return first;
+}
+#if 0
+template<class InputIterator>
+InputIterator partition(InputIterator first, InputIterator last)
+{
+	InputIterator pivot = first + distance(first, last)/2;
+	InputIterator pilgrim, pos;
+	swap(*pivot, *first);
+	pivot = first;
+	for(pilgrim = first;pilgrim < last;pilgrim++)
+	{
+		if(*pilgrim < *pivot)
+		{
+			swap(*pilgrim, *pivot);
+			pivot = pilgrim;
+			pos = pivot - 1;
+			while(*pivot < *pos )
+			{
+				swap(*pivot, *pos);
+				pivot = pos;
+				pos--;
+			}
+		}
+	}
+	return pivot;
+}
+#endif
+
+#if 0
+template<class RanIt>
+void sort(RanIt begin, RanIt end){
+	if (begin != end) {
+		RanIt middle = partition (begin, end);
+		sort (begin, middle);
+		sort (middle+1, end);
+	}
+}
+#endif
+
+template<class RanIt>
+void sort(RanIt begin, RanIt end){
+	RanIt i,j;
+	RanIt iMin;
+	for (j = begin; j < end-1; j++) {
+		iMin = j;
+		for ( i = j+1; i < end; i++) {
+			if (*i < *iMin) {
+				iMin = i;
+			}
+		}
+		if ( iMin != j ) {
+			swap(*j, *iMin);
+		}
+	}
+}
+
+template<class RanIt>
+void sort(RanIt *begin, RanIt *end){
+	RanIt *i,*j;
+	RanIt *iMin;
+	for (j = begin; j < end-1; j++) {
+		iMin = j;
+		for ( i = j+1; i < end; i++) {
+			if (*i < *iMin) {
+				iMin = i;
+			}
+		}
+		if ( iMin != j ) {
+			swap(*j, *iMin);
+		}
+	}
+}
+
+template<class RanIt, class Pr>
+void sort(RanIt begin, RanIt end, Pr pred){
+	RanIt i,j;
+	RanIt iMin;
+	for (j = begin; j < end-1; j++) {
+		iMin = j;
+		for ( i = j+1; i < end; i++) {
+			if (pred(*i, *iMin)) {
+				iMin = i;
+			}
+		}
+		if ( iMin != j ) {
+			swap(*j, *iMin);
+		}
+	}
+}
+
+template<class RanIt, class Pr>
+void sort(RanIt *begin, RanIt *end, Pr pred){
+	RanIt *i,*j;
+	RanIt *iMin;
+	for (j = begin; j < end-1; j++) {
+		iMin = j;
+		for ( i = j+1; i < end; i++) {
+			if (pred(*i, *iMin)) {
+				iMin = i;
+			}
+		}
+		if ( iMin != j ) {
+			swap(*j, *iMin);
+		}
+	}
+}
+
+template<class BidIt>
+void stable_sort(BidIt begin, BidIt end){
+	BidIt i,j;
+	for(i = begin ; i != end ; i++){
+		j = i;
+		while(*j < *(j-1) && j != begin){
+			swap(*j, *(j-1));
+			j--;
+		}
+	}
+}
+
+template<class BidIt, class Pr>
+void stable_sort(BidIt begin, BidIt end, Pr pred){
+	BidIt i,j;
+	for(i = begin ; i != end ; i++){
+		j = i;
+		while(pred(*j, *(j-1)) && (j != begin)){
+			swap(*j, *(j-1));
+			j--;
+		}
+	}
+}
+
+template<class RanIt>
+void partial_sort(RanIt first, RanIt mid, RanIt last){
+	RanIt pilgrim, pos;
+	mid--;
+	swap(*first, *mid);
+	mid= first;
+	for(pilgrim = first+1;pilgrim < last;pilgrim++)
+	{
+		if(*pilgrim < *mid)
+		{
+			swap(*pilgrim, *mid);
+			mid = pilgrim;
+			pos = mid - 1;
+			while(*mid < *pos )
+			{
+				swap(*mid, *pos);
+				mid = pos;
+				pos--;
+			}
+		}
+	}
+	RanIt i,j;
+	RanIt iMin;
+	for (j = first; j < mid-1; j++) {
+		iMin = j;
+		for ( i = j+1; i < mid; i++) {
+			if (*i < *iMin) {
+				iMin = i;
+			}
+		}
+		if ( iMin != j ) {
+			swap(*j, *iMin);
+		}
+	}
+}
+
+template<class RanIt, class Pr>
+void partial_sort(RanIt first, RanIt mid, RanIt last, Pr pred){
+	RanIt pilgrim, pos;
+	mid--;
+	swap(*first, *mid);
+	mid= first;
+	for(pilgrim = first+1;pilgrim < last;pilgrim++)
+	{
+		if(pred(*pilgrim, *mid))
+		{
+			swap(*pilgrim, *mid);
+			mid = pilgrim;
+			pos = mid - 1;
+			while(pred(*mid, *pos) )
+			{
+				swap(*mid, *pos);
+				mid = pos;
+				pos--;
+			}
+		}
+	}
+	RanIt i,j;
+	RanIt iMin;
+	for (j = first; j < mid-1; j++) {
+		iMin = j;
+		for ( i = j+1; i < mid; i++) {
+			if (pred(*i, *iMin)) {
+				iMin = i;
+			}
+		}
+		if ( iMin != j ) {
+			swap(*j, *iMin);
+		}
+	}
+}
+
+template<class InIt, class RanIt>
+RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2){
+	InIt pilgrim1 = first1;
+	RanIt pilgrim2 = first2;
+	while(pilgrim2 < last2)
+		*pilgrim2++ = *pilgrim1++;
+	RanIt i,j;
+	for(i = first2 ; i != last2 ; i++){
+		j = i;
+		while((*j < *(j-1)) && (j != first2)){
+			std::swap(*j, *(j-1));
+			j--;
+		}
+	}
+	pilgrim2--;
+	while(pilgrim1 != last1)
+		if(*pilgrim1 < *pilgrim2){
+			*pilgrim2 = *pilgrim1;
+			for(i = first2 ; i != last2 ; i++){
+				j = i;
+				while((*j < *(j-1)) && (j != first2)){
+					std::swap(*j, *(j-1));
+					j--;
+				}
+			}
+			pilgrim1++;
+		}
+	return pilgrim2;
+}
+
+template<class InIt, class RanIt>
+RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2){
+	InIt *pilgrim1 = first1;
+	RanIt pilgrim2 = first2;
+	while(pilgrim2 < last2)
+		*pilgrim2++ = *pilgrim1++;
+	RanIt i,j;
+	for(i = first2 ; i != last2 ; i++){
+		j = i;
+		while((*j < *(j-1)) && (j != first2)){
+			std::swap(*j, *(j-1));
+			j--;
+		}
+	}
+	pilgrim2--;
+	while(pilgrim1 != last1)
+		if(*pilgrim1 < *pilgrim2){
+			*pilgrim2 = *pilgrim1;
+			for(i = first2 ; i != last2 ; i++){
+				j = i;
+				while((*j < *(j-1)) && (j != first2)){
+					std::swap(*j, *(j-1));
+					j--;
+				}
+			}
+			pilgrim1++;
+		}
+	return pilgrim2;
+}
+
+template<class InIt, class RanIt, class Pr>
+RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2,
+		Pr pred){
+	InIt pilgrim1 = first1;
+	RanIt pilgrim2 = first2;
+	while(pilgrim2 < last2)
+		*pilgrim2++ = *pilgrim1++;
+	RanIt i,j;
+	for(i = first2 ; i != last2 ; i++){
+		j = i;
+		while(pred(*j, *(j-1)) && (j != first2)){
+			std::swap(*j, *(j-1));
+			j--;
+		}
+	}
+	pilgrim2--;
+	while(pilgrim1 != last1)
+		if(pred(*pilgrim1, *pilgrim2)){
+			*pilgrim2 = *pilgrim1;
+			for(i = first2 ; i != last2 ; i++){
+				j = i;
+				while(pred(*j, *(j-1)) && (j != first2)){
+					std::swap(*j, *(j-1));
+					j--;
+				}
+			}
+			pilgrim1++;
+		}
+	return pilgrim2;
+}
+
+template<class InIt, class RanIt, class Pr>
+RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2,
+		Pr pred){
+	InIt *pilgrim1 = first1;
+	RanIt pilgrim2 = first2;
+	while(pilgrim2 < last2)
+		*pilgrim2++ = *pilgrim1++;
+	RanIt i,j;
+	for(i = first2 ; i != last2 ; i++){
+		j = i;
+		while(pred(*j, *(j-1)) && (j != first2)){
+			std::swap(*j, *(j-1));
+			j--;
+		}
+	}
+	pilgrim2--;
+	while(pilgrim1 != last1)
+		if(pred(*pilgrim1 , *pilgrim2)){
+			*pilgrim2 = *pilgrim1;
+			for(i = first2 ; i != last2 ; i++){
+				j = i;
+				while(pred(*j, *(j-1)) && (j != first2)){
+					std::swap(*j, *(j-1));
+					j--;
+				}
+			}
+			pilgrim1++;
+		}
+	return pilgrim2;
+}
+
+template<class RanIt>
+void nth_element(RanIt first, RanIt nth, RanIt last)
+{
+	RanIt pilgrim, pos;
+	swap(*first, *nth);
+	nth = first;
+	for(pilgrim = first+1;pilgrim < last;pilgrim++)
+	{
+		if(*pilgrim < *nth)
+		{
+			swap(*pilgrim, *nth);
+			nth = pilgrim;
+			pos = nth - 1;
+			while(*nth < *pos )
+			{
+				swap(*nth, *pos);
+				nth = pos;
+				pos--;
+			}
+		}
+	}
+}
+
+template<class RanIt, class Pr>
+void nth_element(RanIt first, RanIt nth, RanIt last, Pr pred){
+	RanIt pilgrim, pos;
+	swap(*first, *nth);
+	nth = first;
+	for(pilgrim = first+1;pilgrim < last;pilgrim++)
+	{
+		if(pred(*pilgrim, *nth))
+		{
+			swap(*pilgrim, *nth);
+			nth = pilgrim;
+			pos = nth - 1;
+			while(pred(*nth, *pos) )
+			{
+				swap(*nth, *pos);
+				nth = pos;
+				pos--;
+			}
+		}
+	}
+}
+
+template<class FwdIt, class Ty>
+FwdIt lower_bound(FwdIt first, FwdIt last, const Ty& val) {
+#if 0
+	FwdIt it;
+	FwdIt count, step;
+	count = distance(first,last);
+	while (count>0)
+	{
+		it = first; step=count/2; advance (it,step);
+		if (*it<val) // or: if (comp(*it,value)), for the comp version
+		{	first=++it; count-=step+1;}
+		else count=step;
+	}
+	return first;
+#endif
+	while(first != last)
+	{
+		if(val <= *first) return first;
+		else first++;
+	}
+	return first;
+
+}
+
+template<class FwdIt, class Ty, class Pr>
+FwdIt lower_bound(FwdIt first, FwdIt last, const Ty& val, Pr pred){
+	while(first != last)
+	{
+		if(pred(val, *first) || val == *first) return first;
+		else first++;
+	}
+	return first;
+}
+
+template<class FwdIt, class Ty>
+FwdIt upper_bound(FwdIt first, FwdIt last, const Ty& val) {
+	last--;
+	while(first != last)
+	{
+		if(val <= *last) return last;
+		else last--;
+	}
+	return last;
+
+}
+
+
+template<class FwdIt, class Ty, class Pr>
+FwdIt upper_bound(FwdIt first, FwdIt last, const Ty& val, Pr pred) {
+	last--;
+	while(first != last)
+	{
+          // Return the iterator _before_ the predicate becomes true.
+		if(!pred(val, *last)) return ++last;
+		else last--;
+	}
+	return last;
+}
+
+template<class FwdIt, class Ty>
+pair<FwdIt, FwdIt> equal_range(FwdIt first, FwdIt last, const Ty& val) {
+	FwdIt it = lower_bound (first,last,val);
+	return make_pair ( it, upper_bound(it,last,val) );
+
+}
+
+template<class FwdIt, class Ty, class Pr>
+pair<FwdIt, FwdIt> equal_range(FwdIt first, FwdIt last, const Ty& val, Pr pred){
+	FwdIt it = lower_bound (first,last,val,pred);
+	return make_pair ( it, upper_bound(it,last,val,pred) );
+}
+
+template<class FwdIt, class Ty>
+bool binary_search(FwdIt first, FwdIt last, const Ty& val) {
+	//first = lower_bound(first, last, val);
+	//return (first != last && !(val < *first));
+
+	for(;first!=last;first++)
+		if(*first == val) return true;
+	return false;
+
+}
+
+template<class FwdIt, class Ty, class Pr>
+bool binary_search(FwdIt first, FwdIt last, const Ty& val, Pr pred){
+	//	int size = distance(first, last), start = 1;
+	//	while(start < size)
+	//	{
+	//		int mid = (size - start)/2;
+	//		if(*(first+mid) == val) return true;
+	//		else if(pred(*(first+mid), val)) size = mid;
+	//		else start = mid + 1;
+	//	}
+	//	return false;
+	for(;first!=last;first++)
+		if(*first == val) return true;
+	return false;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt merge(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, OutIt dest) {
+	InIt1 pilgrim1 = first1;
+	InIt2 pilgrim2 = first2;
+	while(pilgrim1 != last1)
+		if(*pilgrim2 < *pilgrim1) *dest++ = *pilgrim2++;
+		else *dest++ = *pilgrim1++;
+	while(pilgrim2 < last2)
+		*dest++ = *pilgrim2++;
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt merge(InIt1 *first1, InIt1 *last1, InIt2 *first2, InIt2 *last2,
+		OutIt source) {
+	InIt1 *pilgrim1 = first1;
+	InIt2 *pilgrim2 = first2;
+	while(pilgrim1 != last1)
+		if(*pilgrim2 < *pilgrim1) *source++ = *pilgrim2++;
+		else *source++ = *pilgrim1++;
+	while(pilgrim2 < last2)
+		*source++ = *pilgrim2++;
+	return source;
+
+}
+
+template<class InIt1, class InIt2, class OutIt, class Pr>
+OutIt merge(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, OutIt source,
+		Pr pred){
+	InIt1 pilgrim1 = first1;
+	InIt2 pilgrim2 = fisrt2;
+	while(pilgrim1 != last1)
+		if(pred(*pilgrim2, *pilgrim1)) *source++ = *pilgrim2++;
+		else *source++ = *pilgrim++;
+	while(pilgrim2 < last2)
+		*source++ = *pilgrim2++;
+	return source;
+}
+
+template<class BidIt>
+void inplace_merge(BidIt first, BidIt mid, BidIt last){
+	sort(first, last);
+}
+
+template<class BidIt, class Pr>
+void inplace_merge(BidIt first, BidIt mid, BidIt last, Pr pred){
+	sort(first, last, pred);
+}
+
+template<class InIt1, class InIt2>
+bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2) {
+	while (first1 != last1) {
+		if (*first2 < *first1)
+			break;
+		else if (*first1 < *first2)
+			++first1;
+		else {
+			++first1;
+			++first2;
+		}
+		if (first2 == last2)
+			return true;
+	}
+	return false;
+}
+
+template<class InIt1, class InIt2, class Pr>
+bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, Pr pred){
+	while (first1 != last1) {
+		if (pred(*first2, *first1))
+			break;
+		else if (pred(*first1, *first2))
+			++first1;
+		else {
+			++first1;
+			++first2;
+		}
+		if (first2 == last2)
+			return true;
+	}
+	return false;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt set_union(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2,
+		OutIt dest) {
+	OutIt aux;
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1)
+		{
+			while (first2 != last2) *dest++ = *first2++;
+			aux = dest;
+			break;
+		}
+		if (first2 == last2)
+		{
+			while (first1 != last1) *dest++ = *first1++;
+			aux = dest;
+			break;
+		}
+		if (*first1 < *first2)
+			*dest++ = *first1++;
+		else if (*first2 < *first1)
+			*dest++ = *first2++;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return aux;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt* set_union(InIt1 *first1, InIt1 *last1, InIt2 *first2, InIt2 *last2,
+		OutIt *dest) {
+	OutIt* aux;
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1)
+		{
+			while (first2 != last2) *dest++ = *first2++;
+			aux = dest;
+			break;
+		}
+		if (first2 == last2)
+		{
+			while (first1 != last1) *dest++ = *first1++;
+			aux = dest;
+			break;
+		}
+		if (*first1 < *first2)
+			*dest++ = *first1++;
+		else if (*first2 < *first1)
+			*dest++ = *first2++;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return aux;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt set_union(InIt1 first1[], InIt1 *last1, InIt2 first2[], InIt2 *last2,
+		OutIt dest) {
+	OutIt aux;
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1)
+		{
+			while (first2 != last2) *dest++ = *first2++;
+			aux = dest;
+			break;
+		}
+		if (first2 == last2)
+		{
+			while (first1 != last1) *dest++ = *first1++;
+			aux = dest;
+			break;
+		}
+		if (*first1 < *first2)
+			*dest++ = *first1++;
+		else if (*first2 < *first1)
+			*dest++ = *first2++;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return aux;
+}
+
+template<class InIt1, class InIt2, class OutIt, class Pr>
+OutIt set_union(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2,
+		OutIt dest, Pr pred){
+	OutIt aux;
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1)
+		{
+			while (first2 != last2) *dest++ = *first2++;
+			aux = dest;
+			break;
+		}
+		if (first2 == last2)
+		{
+			while (first1 != last1) *dest++ = *first1++;
+			aux = dest;
+			break;
+		}
+		if (pred(*first1, *first2))
+			*dest++ = *first1++;
+		else if (pred(*first2 < *first1))
+			*dest++ = *first2++;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return aux;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt set_intersection(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2,
+		OutIt dest) {
+	while (first1 != last1 && first2 != last2) {
+		if (*first1 < *first2)
+			++first1;
+		else if (*first2 < *first1)
+			++first2;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt set_intersection(InIt1 first1[], InIt1 *last1, InIt2 first2[],
+		InIt2 *last2, OutIt dest) {
+	while (first1 != last1 && first2 != last2) {
+		if (*first1 < *first2)
+			++first1;
+		else if (*first2 < *first1)
+			++first2;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt* set_intersection(InIt1 *first1, InIt1 *last1, InIt2 *first2,
+		InIt2 *last2, OutIt *dest) {
+#if 0
+	while (first1!=last1 && first2!=last2)
+	{
+		if (*first1<*first2) ++first1;
+		else if (*first2<*first1) ++first2;
+		else {*dest++ = *first1++; first2++;}
+	}
+	return &dest;
+#endif
+	while (first1 != last1 && first2 != last2) {
+		if (*first1 < *first2)
+			++first1;
+		else if (*first2 < *first1)
+			++first2;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt, class Pr>
+OutIt set_intersection(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2,
+		OutIt dest, Pr pred){
+	while (first1 != last1 && first2 != last2) {
+		if (pred(*first1, *first2))
+			++first1;
+		else if (pred(*first2, *first1))
+			++first2;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt set_difference(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2,
+		OutIt dest) {
+	while (first1 != last1 && first2 != last2) {
+		if (*first1 < *first2)
+			*dest++ = *first1++;
+		else if (*first2 < *first1)
+			first2++;
+		else {
+			first1++;
+			first2++;
+		}
+	}
+	while (first1!=last1) *dest++ = *first1++;
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt set_difference(InIt1 first1[], InIt1 *last1, InIt2 first2[],
+		InIt2 *last2, OutIt dest) {
+	while (first1 != last1 && first2 != last2) {
+		if (*first1 < *first2)
+			*dest++ = *first1++;
+		else if (*first2 < *first1)
+			first2++;
+		else {
+			first1++;
+			first2++;
+		}
+	}
+	while (first1!=last1) *dest++ = *first1++;
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt* set_difference(InIt1 *first1, InIt1 *last1, InIt2 *first2, InIt2 *last2,
+		OutIt *dest) {
+#if 1
+	while (first1!=last1 && first2!=last2)
+	{
+		if (*first1<*first2) *dest++ = *first1++;
+		else if (*first2<*first1) first2++;
+		else {first1++; first2++;}
+	}
+	while (first1!=last1) *dest++ = *first1++;
+	return dest;
+#endif
+}
+
+template<class InIt1, class InIt2, class OutIt, class Pr>
+OutIt set_difference(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2,
+		OutIt dest, Pr pred){
+	while (first1 != last1 && first2 != last2) {
+		if (*first1 < *first2)
+			*dest++ = *first1++;
+		else if (pred(*first2, *first1))
+			first2++;
+		else {
+			first1++;
+			first2++;
+		}
+	}
+	while (first1!=last1) *dest++ = *first1++;
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt set_symmetric_difference(InIt1 first1, InIt1 last1, InIt2 first2,
+		InIt2 last2, OutIt dest) {
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+		if (first2 == last2){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+
+		if (*first1 < *first2) {
+			*dest++ = *first1++;
+		} else if (*first2 < *first1) {
+			*dest++ = *first2++;
+		} else {
+			first1++;
+			first2++;
+		}
+	}
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt* set_symmetric_difference(InIt1 *first1, InIt1 *last1, InIt2 *first2,
+		InIt2 *last2, OutIt *dest) {
+#if 0
+	while (true)
+	{
+		if (first1==last1) return copy(first2,last2,dest);
+		if (first2==last2) return copy(first1,last1,dest);
+
+		if (*first1<*first2) {*dest++ = *first1++;}
+		else if (*first2<*first1) {*dest++ = *first2++;}
+		else {first1++; first2++;}
+	}
+#endif
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+		if (first2 == last2){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+
+		if (*first1 < *first2) {
+			*dest++ = *first1++;
+		} else if (*first2 < *first1) {
+			*dest++ = *first2++;
+		} else {
+			first1++;
+			first2++;
+		}
+	}
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt>
+OutIt set_symmetric_difference(InIt1 first1[], InIt1 *last1, InIt2 first2[],
+		InIt2 *last2, OutIt dest) {
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+		if (first2 == last2){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+
+		if (*first1 < *first2) {
+			*dest++ = *first1++;
+		} else if (*first2 < *first1) {
+			*dest++ = *first2++;
+		} else {
+			first1++;
+			first2++;
+		}
+	}
+	return dest;
+}
+
+template<class InIt1, class InIt2, class OutIt, class Pr>
+OutIt set_symmetric_difference(InIt1 first1, InIt1 last1, InIt2 first2,
+		InIt2 last2, OutIt dest, Pr pred){
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+		if (first2 == last2){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+
+		if (pred(*first1, *first2)) {
+			*dest++ = *first1++;
+		} else if (pred(*first2, *first1)) {
+			*dest++ = *first2++;
+		} else {
+			first1++;
+			first2++;
+		}
+	}
+	return dest;
+}
+
+template<class RanIt>
+void push_heap(RanIt first, RanIt last){
+	int n = 0;
+	RanIt t = first;
+	while(t++!=last)
+		n++;
+	int i = n/2;
+	int pai, filho;
+	t = last;
+	for (int j = 0;j < n/2;j++){
+
+		if (i > 0){
+			i--;
+			*t = *(first+i);
+		}
+		else{
+			n--;
+			if (n == 0){
+				return;
+			}
+			*t = *(first+n);
+			*(first+n) = *first;
+		}
+		pai = i;
+		filho = i*2+1;
+		while (filho < n){
+			if ((filho + 1 < n)  &&  (*(first+filho + 1) > *(first+filho)))
+				filho++;
+			if (*(first+filho) > *t){
+				*(first+pai) = *(first+filho);
+				pai = filho;
+				filho = pai*2 + 1;
+			}
+			else
+				break;
+		}
+		*(first+pai) = *t;
+	}
+}
+
+template<class RanIt, class Pr>
+void push_heap(RanIt first, RanIt last, Pr pred){
+	int n = 0;
+	RanIt t = first;
+	while(t++!=last)
+		n++;
+	int i = n/2;
+	int pai, filho;
+	t = last;
+	for (int j = 0;j < n/2;j++){
+		if (i > 0){
+			i--;
+			*t = *(first+i);
+		}
+		else{
+			n--;
+			if (n == 0){
+				return;
+			}
+			*t = *(first+n);
+			*(first+n) = *first;
+		}
+		int aux = i*2+1;
+		pai = i;
+		filho = aux;
+		while (filho < n){
+			if ((filho + 1 < n)  &&  (pred(*(first+filho), *(first+filho + 1))))
+				filho++;
+			if (pred(*(first+filho), *t)){
+				*(first+pai) = *(first+filho);
+				pai = filho;
+				filho = pai*2 + 1;
+			}
+			else
+				break;
+		}
+		*(first+pai) = *t;
+	}
+}
+
+template<class RanIt>
+void pop_heap(RanIt first, RanIt last){
+	swap(*first,*(last-1));
+	last = last-1;
+	int n = 0;
+	RanIt t = first;
+	while(t++!=last)
+		n++;
+	int i = n/2;
+	int pai, filho;
+	t = last;
+	for (int j = 0;j < n/2;j++){
+		if (i > 0){
+			i--;
+			*t = *(first+i);
+		}
+		else{
+			n--;
+			if (n == 0){
+				return;
+			}
+			*t = *(first+n);
+			*(first+n) = *first;
+		}
+		int aux = i*2+1;
+		pai = i;
+		filho = aux;
+		while (filho < n){
+			if ((filho + 1 < n)  &&  (*(first+filho)< *(first+filho + 1)))
+				filho++;
+			if (*(first+filho)< *t){
+				*(first+pai) = *(first+filho);
+				pai = filho;
+				filho = pai*2 + 1;
+			}
+			else
+				break;
+		}
+		*(first+pai) = *t;
+	}
+}
+
+template<class RanIt, class Pr>
+void pop_heap(RanIt first, RanIt last, Pr pred){
+	swap(*first,*(last-1));
+	last = last-1;
+	int n = 0;
+	RanIt t = first;
+	while(t++!=last)
+		n++;
+	int i = n/2;
+	int pai, filho;
+	t = last;
+	for (int j = 0;j < n/2;j++){
+		if (i > 0){
+			i--;
+			*t = *(first+i);
+		}
+		else{
+			n--;
+			if (n == 0){
+				return;
+			}
+			*t = *(first+n);
+			*(first+n) = *first;
+		}
+		int aux = i*2+1;
+		pai = i;
+		filho = aux;
+		while (filho < n){
+			if ((filho + 1 < n)  &&  (pred(*(first+filho), *(first+filho + 1))))
+				filho++;
+			if (pred(*(first+filho), *t)){
+				*(first+pai) = *(first+filho);
+				pai = filho;
+				filho = pai*2 + 1;
+			}
+			else
+				break;
+		}
+		*(first+pai) = *t;
+	}
+}
+
+template<class RanIt>
+void make_heap(RanIt first, RanIt last){
+	int n = 0;
+	RanIt t = first;
+	while(t++!=last)
+		n++;
+	int i = n/2;
+	int parent, child;
+	t = last;
+	for (int j = 0;j < n/2;j++){
+
+		if (i > 0){
+			i--;
+			*t = *(first+i);
+		}
+		else{
+			n--;
+			if (n == 0){
+				return;
+			}
+			*t = *(first+n);
+			*(first+n) = *first;
+		}
+		parent = i;
+		child = i*2+1;
+		while (child < n){
+			if ((child + 1 < n)  &&  (*(first+child + 1) > *(first+child)))
+				child++;
+			if (*(first+child) > *t){
+				*(first+parent) = *(first+child);
+				parent = child;
+				child = parent*2 + 1;
+			}
+			else
+				break;
+		}
+		*(first+parent) = *t;
+	}
+}
+
+template<class RanIt, class Pr>
+void make_heap(RanIt first, RanIt last, Pr pred){
+	int n = 0;
+	RanIt t = first;
+	while(t++!=last)
+		n++;
+	int i = n/2;
+	int pai, filho;
+	t = last;
+	for (int j = 0;j < n/2;j++){
+		if (i > 0){
+			i--;
+			*t = *(first+i);
+		}
+		else{
+			n--;
+			if (n == 0){
+				return;
+			}
+			*t = *(first+n);
+			*(first+n) = *first;
+		}
+		int aux = i*2+1;
+		pai = i;
+		filho = aux;
+		while (filho < n){
+			if ((filho + 1 < n)  &&  (pred(*(first+filho), *(first+filho + 1))))
+				filho++;
+			if (pred(*(first+filho), *t)){
+				*(first+pai) = *(first+filho);
+				pai = filho;
+				filho = pai*2 + 1;
+			}
+			else
+				break;
+		}
+		*(first+pai) = *t;
+	}
+}
+
+template<class RanIt>
+void sort_heap(RanIt begin, RanIt end){
+	sort(begin,end);
+}
+
+template<class RanIt, class Pr>
+void sort_heap(RanIt first, RanIt last, Pr pred){
+	sort(first, last, pred);
+}
+
+template<class T>
+const T& max(const T& left, const T& right) {
+	if (left > right)
+		return left;
+	else
+		return right;
+}
+
+const double max(const double left, const double right) {
+	if (left > right)
+		return left;
+	else
+		return right;
+}
+
+const int max(const int left, const int right) {
+	if (left > right)
+		return left;
+	else
+		return right;
+}
+
+const char max(const char left, const char right) {
+	if (left > right)
+		return left;
+	else
+		return right;
+}
+
+template<class Ty, class Pr>
+const Ty& min(const Ty& left, const Ty& right, Pr pred);
+
+const int min(const int left, const int right) {
+	if (left < right)
+		return left;
+	else
+		return right;
+}
+
+const int min(const double left, const double right) {
+	if (left < right)
+		return left;
+	else
+		return right;
+}
+
+const char min(const char left, const char right) {
+	if (left < right)
+		return left;
+	else
+		return right;
+}
+
+template<class T>
+const T& min(const T& left, const T& right) {
+	if (left < right)
+		return left;
+	else
+		return right;
+}
+
+template<class FwdIt>
+FwdIt max_element(FwdIt first, FwdIt last) {
+	FwdIt largest = first;
+	if (first == last)
+		return last;
+	while (++first != last)
+		if (*largest < *first)
+			largest = first;
+	return largest;
+}
+
+template<class FwdIt, class Pr>
+FwdIt max_element(FwdIt first, FwdIt last, Pr pred) {
+	FwdIt largest = first;
+	if (first == last)
+		return last;
+	while (++first != last)
+		if (pred(*largest, *first))
+			largest = first;
+	return largest;
+}
+
+template<class FwdIt, class Pr>
+FwdIt* max_element(FwdIt *first, FwdIt *last, Pr pred) {
+	FwdIt *largest = first;
+	if (first == last)
+		return last;
+	while (++first != last)
+		if (pred(*largest, *first))
+			largest = first;
+	return largest;
+}
+
+int* max_element(int *first, int *last) {
+	int *largest = first;
+	if (first == last)
+		return last;
+	while (++first != last)
+		if (*largest < *first)
+			largest = first;
+	return largest;
+}
+
+template<class FwdIt>
+FwdIt min_element(FwdIt first, FwdIt last) {
+	FwdIt lowest = first;
+	if (first == last)
+		return last;
+	while (++first != last)
+		if (*first < *lowest)
+			lowest = first;
+	return lowest;
+}
+
+int* min_element(int *first, int *last) {
+	int *lowest = first;
+	if (first == last)
+		return last;
+	while (++first != last)
+		if (*first < *lowest)
+			lowest = first;
+	return lowest;
+}
+
+template<class FwdIt, class Pr>
+FwdIt min_element(FwdIt first, FwdIt last, Pr pred) {
+	FwdIt lowest = first;
+	if (first == last)
+		return last;
+	while (++first != last)
+		if (pred(*first, *lowest))
+			lowest = first;
+	return lowest;
+}
+
+template<class FwdIt, class Pr>
+FwdIt* min_element(FwdIt *first, FwdIt *last, Pr pred) {
+	FwdIt *lowest = first;
+	if (first == last)
+		return last;
+	while (++first != last)
+		if (pred(*first, *lowest))
+			lowest = first;
+	return lowest;
+}
+
+template<class InIt1, class InIt2>
+bool lexicographical_compare(InIt1 *first1, InIt1 *last1, InIt2 *first2,
+		InIt2 *last2) {
+	while (first1 != last1) {
+		if (first2 == last2 || *first2 < *first1)
+			return false;
+		else if (*first1 < *first2)
+			return true;
+		first1++;
+		first2++;
+	}
+	return (first2 != last2);
+}
+
+template<class InIt1, class InIt2, class Pr>
+bool lexicographical_compare(InIt1 first1, InIt1 last1, InIt2 first2,
+		InIt2 last2, Pr pred){
+	while (first1 != last1) {
+		if (first2 == last2 || pred(*first2, *first1))
+			return false;
+		else if (pred(*first1, *first2))
+			return true;
+		first1++;
+		first2++;
+	}
+	return (first2 != last2);
+}
+
+template<class InIt1, class InIt2, class Pr>
+bool lexicographical_compare(InIt1 *first1, InIt1 *last1, InIt2 *first2,
+		InIt2 *last2, Pr pred){
+	while (first1 != last1) {
+		if (first2 == last2 || pred(*first2, *first1))
+			return false;
+		else if (pred(*first1, *first2))
+			return true;
+		first1++;
+		first2++;
+	}
+	return (first2 != last2);
+}
+
+template<class BidIt>
+bool next_permutation(BidIt first, BidIt last){
+	if (first == last)
+		return false;
+	BidIt i = first;
+	++i;
+	if (i == last)
+		return false;
+	i = last;
+	--i;
+
+	for(;;)
+	{
+		BidIt ii = i;
+		--i;
+		if (*i < *ii)
+		{
+			BidIt j = last;
+			while (!(*i < *--j))
+			{}
+			iter_swap(i, j);
+			while ((ii != last) && (ii != --last)){
+				swap(*ii, *last);
+				ii++;
+			}
+			return true;
+		}
+		if (i == first)
+		{
+			while ((first != last) && (first != --last)){
+				swap(*first, *last);
+				first++;
+			}
+			return false;
+		}
+	}
+}
+
+template<class BidIt>
+bool next_permutation(BidIt *first, BidIt *last){
+	if (first == last)
+		return false;
+	BidIt* i = first;
+	++i;
+	if (i == last)
+		return false;
+	i = last;
+	--i;
+
+	for(;;)
+	{
+		BidIt* ii = i;
+		--i;
+		if (*i < *ii)
+		{
+			BidIt* j = last;
+			while (!(*i < *--j))
+			{}
+			iter_swap(i, j);
+			while ((ii != last) && (ii != --last)){
+				swap(*ii, *last);
+				ii++;
+			}
+			return true;
+		}
+		if (i == first)
+		{
+			while ((first != last) && (first != --last)){
+				swap(*first, *last);
+				first++;
+			}
+			return false;
+		}
+	}
+}
+
+template<class BidIt, class Pr>
+bool next_permutation(BidIt first, BidIt last, Pr pred){
+	if (first == last)
+		return false;
+	BidIt i = first;
+	++i;
+	if (i == last)
+		return false;
+	i = last;
+	--i;
+
+	for(;;)
+	{
+		BidIt ii = i;
+		--i;
+		if (pred(*i, *ii))
+		{
+			BidIt j = last;
+			while (!pred(*i, *--j))
+			{}
+			iter_swap(i, j);
+			while ((ii != last) && (ii != --last)){
+				swap(*ii, *last);
+				ii++;
+			}
+			return true;
+		}
+		if (i == first)
+		{
+			while ((first != last) && (first != --last)){
+				swap(*first, *last);
+				first++;
+			}
+			return false;
+		}
+	}
+}
+
+template<class BidIt>
+bool prev_permutation(BidIt first, BidIt last){
+	if (first == last)
+		return false;
+	BidIt i = first;
+	++i;
+	if (i == last)
+		return false;
+	i = last;
+	--i;
+
+	for(;;)
+	{
+		BidIt ii = i;
+		--i;
+		if (*i < *ii)
+		{
+			BidIt j = last;
+			while (!(*i < *--j))
+			{}
+			iter_swap(i, j);
+			while ((ii != last) && (ii != --last)){
+				swap(*ii, *last);
+				ii++;
+			}
+			return true;
+		}
+		if (i == first)
+		{
+			while ((first != last) && (first != --last)){
+				swap(*first, *last);
+				first++;
+			}
+			return false;
+		}
+	}
+}
+
+template<class BidIt>
+bool prev_permutation(BidIt *first, BidIt *last){
+
+}
+
+template<class BidIt, class Pr>
+bool prev_permutation(BidIt first, BidIt last, Pr pred);
+
+}
+
+#endif

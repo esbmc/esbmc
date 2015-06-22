@@ -1,0 +1,135 @@
+#ifndef STL_OSTREAM
+#define STL_OSTREAM
+
+#include "ios"
+#include "definitions.h"
+//#include "iomanip"
+//#include "cstring"
+
+namespace std
+{
+  class ostream: virtual public ios
+  {
+    typedef int streampos;
+    typedef int streamoff;
+    public:
+    explicit ostream (streambuf * sb);
+    ostream() {
+      _filesize = nondet_uint();
+      _filepos = 0;
+    }
+
+    virtual ~ostream(){}
+
+    streamsize width ( ) const;
+    streamsize width ( streamsize wide );
+    void fill(char c);
+    void precision(int p);
+    void put(char c);
+    //	void write(char str[], size_t n);
+    ostream& write ( const char* s , streamsize n );
+    streampos tellp ( ); //model
+    ostream& seekp ( streampos pos ); //model
+    ostream& seekp ( streamoff off, ios_base::seekdir dir ); //model
+    ostream& flush ( );
+    ios_base::fmtflags flags ( ) const;
+    ios_base::fmtflags flags ( ios_base::fmtflags fmtfl );
+
+    class sentry {
+      public:
+        explicit sentry ( ostream& os );
+        ~sentry();
+        operator bool() const;
+      private:
+        sentry (const sentry&);             // not defined
+        sentry& operator= (const sentry& ); // not defined
+    };
+    ostream& operator=(const ostream&); // disabled
+    static streamsize _filesize;
+    static ios::streampos _filepos;
+  };
+  //ios::streampos ostream::_filepos = 0;
+
+  // Ostream shift output operators: these are explicitly enumerated by the
+  // spec, and thus we can't template them, or crazy things happen. Until
+  // someone knows how much of this to model, just discard the data for now.
+
+  inline ostream& operator<< ( ostream& o, bool val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, short val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, unsigned short val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, int val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, unsigned int val )
+  { return o; }
+#if __WORDSIZE == 64 // Is the same type as 'int' otherwise.
+  inline ostream& operator<< ( ostream& o, long val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, unsigned long val )
+  { return o; }
+#endif
+  inline ostream& operator<< ( ostream& o, float val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, double val )
+  { return o; }
+#if 0
+  // Identical to double under ESBMC.
+  inline ostream& operator<< ( ostream& o, long double val )
+  { return o; }
+#endif
+  inline ostream& operator<< ( ostream& o, void *val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, const smanip &val )
+  { return o; }
+
+}
+
+namespace std
+{
+  void ostream::fill(char c)
+  {
+    //		setfill(c);
+  }
+
+  void ostream::precision(int p)
+  {
+    //		setprecision(p);
+  }
+
+  void ostream::put(char c)
+  {
+  }
+
+  //	void ostream::write(char str[], size_t n)
+  ostream& ostream::write ( const char* s , streamsize n )
+  {
+    _filepos = n;
+    return *this;
+  }
+
+  ostream& ostream::seekp ( ios::streampos pos ) {
+    //__ESBMC_assert (pos<=_filesize, "Invalid stream position");
+    _filepos = pos;
+    return *this;
+  }
+  ostream& ostream::seekp ( ios::streamoff off, ios_base::seekdir dir ) {
+    if (dir==ios::beg) {_filepos=off;}
+    if (dir==ios::cur) {_filepos+=off;}
+    if (dir==ios::end) {_filepos=_filesize-off;}
+    return *this;
+  }
+  ios::streampos ostream::tellp ( ) {
+    __ESBMC_assert (_filepos>=0, "Invalid stream position");
+    return _filepos;
+  }
+}
+
+namespace std {
+  //Output manipulators
+  ostream& endl ( ostream& os ) { return os; }
+  ostream& ends ( ostream& os ) {  }
+}
+
+#endif

@@ -1,0 +1,132 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_MEMORY
+#define STL_MEMORY
+
+#include "cstddef"
+#include "iterator"
+
+#if 0
+template<class T> class allocator {
+	T value_type;
+	T* pointer;
+	T& reference;
+	const T* const_pointer;
+	const T& const_reference;
+	unsigned int size_type;
+	ptrdiff_t difference_type;
+
+	allocator() throw ();
+	allocator(const allocator&) throw ();
+	template<class U>
+	allocator(const allocator<U>&) throw ();
+	pointer address(reference x) const;
+	const_pointer address(const_reference x) const;
+	pointer allocate(size_type n, allocator<void>::const_pointer hint = 0);
+	void deallocate(pointer p, size_type n);
+	size_type max_size() const throw ();
+	void construct(pointer p, const_reference val) {
+		new ((void*) p) T(val);
+	}
+	void destroy(pointer p) {
+		((T*) p)->~T();
+	}
+};
+#endif
+
+namespace std
+{
+template <class X> class auto_ptr{
+  X* ptr;
+	public:
+	explicit auto_ptr (X* p=0) throw()
+	{
+   ptr=p;
+		//model
+	}
+	auto_ptr (auto_ptr& a) throw()
+	{
+		//model
+	}
+ 	template<class Y>
+		auto_ptr (auto_ptr<Y>& a) throw()
+		{
+		//model
+		}
+	X* operator->() const throw()
+	{
+		//model
+    return ptr;
+	}
+	X& operator*() const throw()
+	{
+		//model
+    X& ptr2 = *ptr;
+    return ptr2;
+	}
+	auto_ptr& operator=(auto_ptr& a) throw ();
+	template<class Y>
+	auto_ptr& operator=(auto_ptr<Y>& a) throw ();
+	X* release() throw ();
+	void reset(X* p = 0) throw ();
+	template<class Y> operator auto_ptr<Y>() throw ();
+};
+
+template<class T> pair<T*, ptrdiff_t> get_temporary_buffer(ptrdiff_t n);
+
+template<class T> void return_temporary_buffer(T* p);
+
+template<class InputIterator, class ForwardIterator, class OutputIterator>
+OutputIterator copy(InputIterator first, InputIterator last,
+		ForwardIterator result) {
+	for (; first != last; ++result, ++first)
+		new (static_cast<void*>(&*result)) typename iterator_traits<
+				ForwardIterator>::value_type(*first);
+	return result;
+}
+
+template<class ForwardIterator, class T>
+void fill(ForwardIterator first, ForwardIterator last, const T& x) {
+	for (; first != last; ++first)
+		new (static_cast<void*>(&*first)) typename iterator_traits<
+				ForwardIterator>::value_type(x);
+}
+
+template<class ForwardIterator, class Size, class T>
+void fill(ForwardIterator first, Size n, const T& x) {
+	for (; n--; ++first)
+		new (static_cast<void*>(&*first)) typename iterator_traits<
+				ForwardIterator>::value_type(x);
+}
+
+#if 0
+template <class OutputIterator, class T>
+class raw_storage_iterator :
+public iterator<output_iterator_tag,void,void,void,void>
+{
+protected:
+	OutputIterator iter;
+
+public:
+	explicit raw_storage_iterator (OutputIterator x) : iter(x) {}
+	raw_storage_iterator<OutputIterator,T>& operator* ()
+	{	return *this;}
+	raw_storage_iterator<OutputIterator,T>& operator= (const T& element)
+	{	new (static_cast<void*>(&*iter)) T (element); return *this;}
+	raw_storage_iterator<OutputIterator,T>& operator++ ()
+	{	++iter; return *this;}
+	raw_storage_iterator<OutputIterator,T> operator++ (int)
+	{	raw_storage_iterator<OutputIterator,T> tmp = *this; ++iter; return tmp;}
+};
+#endif
+
+}
+
+#endif

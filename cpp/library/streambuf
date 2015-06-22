@@ -1,0 +1,90 @@
+#ifndef STL_STREAMBUF
+#define STL_STREAMBUF
+
+#include "definitions.h"
+//#include "ios"
+#include "cstdio"
+
+namespace std
+{
+
+class locale{};
+
+class streambuf{
+
+	typedef int streampos;
+	typedef int streamoff;
+	typedef int openmode;
+	typedef int seekdir;
+
+	static const openmode in     =  1L << 3;
+	static const openmode out    =  1L << 4;
+public:
+//  Locales
+	locale pubimbue ( const locale & loc );
+	locale getloc ( ) const;
+
+//  Buffer management and positioning:
+	streambuf* pubsetbuf ( char* s, streamsize n );
+	streampos pubseekoff ( streamoff off, seekdir way, openmode which = in | out );
+	streampos pubseekpos ( streampos pos, openmode which = in | out );
+	int pubsync ( );
+
+//  Input functions (get):
+	streamsize in_avail ( );
+	int snextc ( );
+	int sbumpc ( );
+	int sgetc ( );
+	streamsize sgetn ( char * s, streamsize n );
+	int sputbackc ( char c );
+	int sungetc ( );
+
+//  Output functions (put):
+	int sputc ( char c );
+	streamsize sputn ( const char * s, streamsize n );
+
+//Protected member functions
+protected:
+	streambuf ( );
+	virtual ~streambuf ( ){}
+
+//	Input sequence (get):
+	char * eback ( ) const;
+	char * gptr ( ) const;
+	char * egptr ( ) const;
+	void gbump ( int n );
+	void setg ( char* gbeg, char* gnext, char* gend );
+
+//	Output sequence (put):
+	char * pbase ( ) const;
+	char * pptr ( ) const;
+	char * epptr ( ) const;
+	void pbump ( int n );
+	void setp ( char* pbeg, char* pend );
+
+//Virtual protected member functions
+//	Locales
+	virtual void imbue ( const locale & loc ){}
+
+//	Buffer management and positioning:
+	virtual streambuf * setbuf ( char * s, streamsize n ){}
+	virtual streampos seekoff ( streamoff off, seekdir way, openmode which = in | out ){}
+	virtual streampos seekpos ( streampos sp, openmode which = in | out ){}
+	virtual int sync ( ){}
+
+//	Input functions (get):
+	virtual streamsize showmanyc ( ){}
+	virtual streamsize xsgetn ( char * s, streamsize n ){}
+	virtual int underflow ( ){}
+	virtual int uflow ( ){}
+	virtual int pbackfail ( int c = EOF ){}
+
+//	Output functions (put):
+	virtual streamsize xsputn ( const char * s, streamsize n ){}
+	virtual int overflow ( int c = EOF ){}
+
+
+};
+}
+
+#endif

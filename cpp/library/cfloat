@@ -1,0 +1,16 @@
+/*******************************************************************\
+
+Module: 
+
+Author: Lucas Cordeiro
+
+Date: August 2012
+
+\*******************************************************************/
+
+#ifndef STL_CFLOAT
+#define STL_CFLOAT
+
+#include <float.h>
+
+#endif

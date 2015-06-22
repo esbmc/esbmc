@@ -1,0 +1,19 @@
+#ifndef __STL_PAIR
+#define __STL_PAIR
+#include <utility>
+namespace std {
+/*
+template<class T1, class T2>
+struct pair {
+  typedef T1 first_type;
+  typedef T2 second_type;
+  T1 first;
+  T2 second;
+  pair(){}
+  pair(const T1& f, const T2& s):first(f), second(s){}
+  ~pair();
+};
+*/
+}
+
+#endif

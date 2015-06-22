@@ -1,0 +1,2 @@
+As SAT is a second class citizen in ESBMC, and is alas slightly broken right
+now, it hasn't survived the switch to autoconf, and will not build.
