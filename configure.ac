@@ -81,6 +81,10 @@ AC_CHECK_HEADERS([sys/sendfile.h], [AC_DEFINE([HAVE_SENDFILE], [], [Has sendfile
 AC_CHECK_HEADERS([unistd.h], [AC_DEFINE([HAVE_UNISTD], [], [Has unistd.h header])], [])
 AC_CHECK_HEADERS([eigen3/Eigen/Eigen], [AC_DEFINE([EIGEN_LIB], [], [Have Eigen library])], [])
 
+dnl We don't link directly against openssl, instead chosing to open at runtime.
+dnl However, don't try and build for it without openssl headers
+AC_CHECK_HEADERS([openssl/sha.h], [AC_DEFINE([OPENSSL_HEADERS], [], [Have openssl headers])], [])
+
 AC_HEADER_STDBOOL
 AC_TYPE_UID_T
 AC_C_INLINE

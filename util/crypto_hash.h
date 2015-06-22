@@ -1,6 +1,11 @@
 #ifndef _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 #define _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 
+#include <ac_config.h>
+
+#ifndef HAVE_OPENSSL
+#define NO_OPENSSL
+#endif
 
 extern "C" {
 #include <stdio.h>
