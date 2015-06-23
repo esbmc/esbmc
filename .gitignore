@@ -9,7 +9,6 @@
 .cproject
 .ctags
 .cscope
-config.*
 configure
 Makefile
 Makefile.in
