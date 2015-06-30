@@ -44,10 +44,10 @@ public:
     std::cout << std::endl;
   }
 
+  typedef std::map<irep_idt, const exprt> loop_varst;
+
 protected:
   goto_programt goto_program;
-
-  typedef std::map<irep_idt, const exprt> loop_varst;
   loop_varst loop_vars;
 };
 
