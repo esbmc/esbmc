@@ -49,6 +49,15 @@ void goto_loopst::create_function_loop(
   {
     goto_programt::targett new_instruction=
       it1->second.get_goto_program().add_instruction();
+
+    // This should be done only when we're running k-induction
+    // Maybe a flag on the class?
+    if(it->is_assign())
+    {
+      const code_assign2t &assign = to_code_assign2t(it->code);
+      add_loop_var(it1->second, migrate_expr_back(assign.target));
+    }
+
     *new_instruction=*it;
     ++it;
   }
@@ -72,5 +81,19 @@ void goto_loopst::output(std::ostream &out)
         out << (*l_it).location_number;
     }
     out << " }\n";
+  }
+}
+
+void goto_loopst::add_loop_var(loopst &loop, const exprt& expr)
+{
+  if (expr.is_symbol() && expr.type().id() != "code")
+  {
+    if(check_var_name(expr))
+      loop.add_var_to_loop(expr);
+  }
+  else
+  {
+    forall_operands(it, expr)
+      add_loop_var(loop, *it);
   }
 }

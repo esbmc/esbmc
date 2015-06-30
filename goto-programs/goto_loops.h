@@ -64,6 +64,8 @@ protected:
   void create_function_loop(
     goto_programt::instructionst::iterator loop_head,
     goto_programt::instructionst::iterator loop_exit);
+
+  void add_loop_var(loopst &loop, const exprt &expr);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_LOOPS_H_ */
