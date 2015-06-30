@@ -207,7 +207,7 @@ void make_next_state(exprt &expr)
 {
   Forall_operands(it, expr)
     make_next_state(*it);
-    
+
   if(expr.id()=="symbol")
     expr.id("next_symbol");
 }
@@ -219,7 +219,7 @@ exprt make_binary(const exprt &expr)
   if(operands.size()<=2) return expr;
 
   exprt previous=operands[0];
-  
+
   for(unsigned i=1; i<operands.size(); i++)
   {
     exprt tmp=expr;
@@ -229,7 +229,36 @@ exprt make_binary(const exprt &expr)
     tmp.op1()=operands[i];
     previous.swap(tmp);
   }
-  
+
   return previous;
 }
 
+bool check_var_name(const exprt &expr)
+{
+  std::size_t found = expr.identifier().as_string().find("__ESBMC_");
+  if(found != std::string::npos)
+    return false;
+
+  found = expr.identifier().as_string().find("__CPROVER");
+  if(found != std::string::npos)
+    return false;
+
+  found = expr.identifier().as_string().find("return_value___");
+  if(found != std::string::npos)
+    return false;
+
+  if(expr.identifier().as_string() == "c::__func__"
+     || expr.identifier().as_string() == "c::__PRETTY_FUNCTION__"
+     || expr.identifier().as_string() == "c::__LINE__"
+     || expr.identifier().as_string() == "c::pthread_lib::num_total_threads"
+     || expr.identifier().as_string() == "c::pthread_lib::num_threads_running")
+    return false;
+
+  if(expr.location().file().as_string() == "<built-in>"
+     || expr.cmt_location().file().as_string() == "<built-in>"
+     || expr.type().location().file().as_string() == "<built-in>"
+     || expr.type().cmt_location().file().as_string() == "<built-in>")
+    return false;
+
+  return true;
+}
