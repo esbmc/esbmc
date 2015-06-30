@@ -40,17 +40,14 @@ public:
       goto_k_induction();
   }
 
-  typedef std::map<irep_idt, const exprt> loop_varst;
-
 protected:
   const namespacet &ns;
-  loop_varst loop_vars;
 
   unsigned int state_counter;
   struct_typet state;
 
   void goto_k_induction();
-
+  void convert_loop();
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

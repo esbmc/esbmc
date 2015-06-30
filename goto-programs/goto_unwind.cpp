@@ -30,7 +30,7 @@ void goto_unwindt::goto_unwind()
     it != function_loops.rend();
     ++it)
   {
-    assert(!it->second.empty());
+    assert(!it->second.get_goto_program().empty());
     unwind_program(goto_function.body, it);
 
     // remove skips
@@ -43,7 +43,8 @@ void goto_unwindt::unwind_program(
   function_loopst::reverse_iterator loop)
 {
   // Get loop exit goto number
-  unsigned exit_number = (--loop->second.instructions.end())->location_number;
+  unsigned exit_number =
+    (--loop->second.get_goto_program().instructions.end())->location_number;
 
   // Increment pointer by 2, the first increment will point to the backward
   // GOTO and the second point to the first instruction after the end of

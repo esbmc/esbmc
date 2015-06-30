@@ -15,6 +15,25 @@
 
 #include "goto_functions.h"
 
+class loopst
+{
+public:
+  loopst(goto_programt _goto_program) :
+    goto_program(_goto_program)
+  {}
+
+  goto_programt& get_goto_program()
+  {
+    return goto_program;
+  }
+
+private:
+  goto_programt goto_program;
+
+  typedef std::map<irep_idt, const exprt> loop_varst;
+  loop_varst loop_vars;
+};
+
 class goto_loopst : public message_streamt
 {
 public:
@@ -33,7 +52,7 @@ public:
 protected:
   goto_functiont &goto_function;
 
-  typedef std::map<goto_programt::targett, goto_programt> function_loopst;
+  typedef std::map<goto_programt::targett, loopst> function_loopst;
   function_loopst function_loops;
 
   void create_function_loop(

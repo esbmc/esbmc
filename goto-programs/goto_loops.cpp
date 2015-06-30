@@ -7,6 +7,8 @@
 
 #include "goto_loops.h"
 
+#include <util/expr_util.h>
+
 void goto_loopst::find_function_loops()
 {
   std::map<unsigned int, goto_programt::instructionst::iterator> targets;
@@ -36,15 +38,17 @@ void goto_loopst::create_function_loop(
 {
   goto_programt::instructionst::iterator it=loop_head;
 
-  std::pair<goto_programt::targett, goto_programt>
-    p(loop_head, goto_programt());
-  function_loops.insert(p);
+  std::pair<goto_programt::targett, loopst>
+    p(loop_head, loopst(goto_programt()));
+
+  std::map<goto_programt::targett, loopst>::iterator it1 =
+    function_loops.insert(p).first;
 
   // Copy the loop body
   while (it != loop_exit)
   {
     goto_programt::targett new_instruction=
-      function_loops[p.first].add_instruction();
+      it1->second.get_goto_program().add_instruction();
     *new_instruction=*it;
     ++it;
   }
@@ -52,7 +56,7 @@ void goto_loopst::create_function_loop(
 
 void goto_loopst::output(std::ostream &out)
 {
-  for(function_loopst::const_iterator
+  for(function_loopst::iterator
       h_it=function_loops.begin();
       h_it!=function_loops.end();
       ++h_it)
@@ -60,12 +64,12 @@ void goto_loopst::output(std::ostream &out)
     unsigned n=h_it->first->location_number;
 
     out << n << " is head of { ";
-    for(goto_programt::instructionst::const_iterator l_it=
-        h_it->second.instructions.begin();
-        l_it!=h_it->second.instructions.end(); ++l_it)
+    for(goto_programt::instructionst::iterator l_it=
+        h_it->second.get_goto_program().instructions.begin();
+        l_it!=h_it->second.get_goto_program().instructions.end(); ++l_it)
     {
-      if(l_it!=h_it->second.instructions.begin()) out << ", ";
-      out << (*l_it).location_number;
+      if(l_it!=h_it->second.get_goto_program().instructions.begin()) out << ", ";
+        out << (*l_it).location_number;
     }
     out << " }\n";
   }
