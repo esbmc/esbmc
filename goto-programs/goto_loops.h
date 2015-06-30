@@ -33,6 +33,17 @@ public:
       std::pair<irep_idt, const exprt>(expr.identifier(), expr));
   }
 
+  void dump_loop_vars()
+  {
+    std::cout << "Loop variables:" << std::endl;
+
+    u_int i = 0;
+    for (std::pair<irep_idt, const exprt> expr : loop_vars)
+      std::cout << ++i << ". \t" << "identifier: " << expr.first << std::endl
+      << " " << expr.second << std::endl << std::endl;
+    std::cout << std::endl;
+  }
+
 protected:
   goto_programt goto_program;
 

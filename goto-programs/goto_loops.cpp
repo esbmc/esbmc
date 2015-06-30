@@ -81,6 +81,8 @@ void goto_loopst::output(std::ostream &out)
         out << (*l_it).location_number;
     }
     out << " }\n";
+
+    h_it->second.dump_loop_vars();
   }
 }
 
