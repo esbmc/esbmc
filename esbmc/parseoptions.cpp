@@ -1486,8 +1486,11 @@ bool cbmc_parseoptionst::process_goto_program(
 
     if(cmdline.isset("unroll-loops"))
     {
-      assert(atol(options.get_option("unwind").c_str()) != 0
-        && "Max unwind must be set to unroll loops");
+      if(!atol(options.get_option("unwind").c_str()))
+      {
+        std::cerr << "Max unwind must be set to unroll loops" << std::endl;
+        abort();
+      }
 
       goto_unwind(
         goto_functions,
