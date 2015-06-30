@@ -27,7 +27,13 @@ public:
     return goto_program;
   }
 
-private:
+  void add_var_to_loop(const exprt &expr)
+  {
+    loop_vars.insert(
+      std::pair<irep_idt, const exprt>(expr.identifier(), expr));
+  }
+
+protected:
   goto_programt goto_program;
 
   typedef std::map<irep_idt, const exprt> loop_varst;
