@@ -1424,6 +1424,7 @@ bool cbmc_parseoptionst::process_goto_program(
 
       goto_k_induction(
         goto_functions,
+        ns,
         ui_message_handler);
     }
 

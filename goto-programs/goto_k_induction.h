@@ -18,6 +18,7 @@
 
 void goto_k_induction(
   goto_functionst &goto_functions,
+  const namespacet &ns,
   message_handlert &message_handler);
 
 class goto_k_inductiont : public goto_loopst
@@ -25,10 +26,12 @@ class goto_k_inductiont : public goto_loopst
 public:
   goto_k_inductiont(
     goto_functiont &_goto_function,
+    const namespacet &_ns,
     message_handlert &_message_handler) :
     goto_loopst(
       _goto_function,
       _message_handler),
+    ns(_ns),
     state_counter(0),
     state(struct_typet())
   {
@@ -37,8 +40,10 @@ public:
       goto_k_induction();
   }
 
-protected:
   typedef std::map<irep_idt, const exprt> loop_varst;
+
+protected:
+  const namespacet &ns;
   loop_varst loop_vars;
 
   unsigned int state_counter;

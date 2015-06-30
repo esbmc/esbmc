@@ -13,11 +13,12 @@
 
 void goto_k_induction(
   goto_functionst& goto_functions,
+  const namespacet &ns,
   message_handlert& message_handler)
 {
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
-      goto_k_inductiont(it->second, message_handler);
+      goto_k_inductiont(it->second, ns, message_handler);
 
   goto_functions.update();
 }
