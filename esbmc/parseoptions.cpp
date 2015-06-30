@@ -1495,7 +1495,6 @@ bool cbmc_parseoptionst::process_goto_program(
       goto_unwind(
         goto_functions,
         atol(options.get_option("unwind").c_str()),
-        ns,
         ui_message_handler);
     }
 
