@@ -78,6 +78,10 @@
  *    * Anything that considers the control flow guard at any point
  *    * Pointer liveness or dynamic allocation consideration
  *
+ *  A reasonable amount of SMT conversion complexity comes from the
+ *  eccentricities of different solvers. This is a necessary part of working in
+ *  the tar pit.
+ *
  *  @see smt_convt
  *  @see symex_target_equationt
  *  @see create_solver_factory
@@ -871,26 +875,6 @@ public:
 
   // Types
 
-  // Types for union map.
-  struct union_var_mapt {
-    std::string ident;
-    unsigned int idx;
-    unsigned int level;
-  };
-
-  typedef boost::multi_index_container<
-    union_var_mapt,
-    boost::multi_index::indexed_by<
-      boost::multi_index::hashed_unique<
-        BOOST_MULTI_INDEX_MEMBER(union_var_mapt, std::string, ident)
-      >,
-      boost::multi_index::ordered_non_unique<
-        BOOST_MULTI_INDEX_MEMBER(union_var_mapt, unsigned int, level),
-        std::greater<unsigned int>
-      >
-    >
-  > union_varst;
-
   // Type for (optional) AST cache
 
   struct smt_cache_entryt {
@@ -926,10 +910,6 @@ public:
   /** Number of un-popped context pushes encountered so far. */
   unsigned int ctx_level;
 
-  /** The set of union variables assigned in the program, along with which
-   *  element of the union has been written most recently. Danger: this isn't
-   *  actually nondeterministic :| */
-  union_varst union_vars;
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
   /** A cache of converted type2tc's to smt sorts */

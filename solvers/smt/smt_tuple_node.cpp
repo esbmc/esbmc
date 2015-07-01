@@ -8,56 +8,12 @@
 #include "smt_tuple.h"
 #include "smt_tuple_flat.h"
 
-/** @file smt_tuple.cpp
- * So, the SMT-encoding-with-no-tuple-support. SMT itself doesn't support
- * tuples, but we've been pretending that it does by using Z3 almost
- * exclusively (which does support tuples). So, we have to find some way of
- * supporting:
+/* An optimisation of the tuple flattening technique found in smt_tuple_sym.cpp,
+ * where we separate out tuple elements into their own variables without any
+ * name mangling, and avoid un-necessary operations on elements when the tuple
+ * is manipulated.
  *
- *  1) Tuples
- *  2) Arrays of tuples
- *  3) Arrays of tuples containing arrays
- *
- * 1: In all circumstances we're either creating, projecting, or updating,
- *    a set of variables that are logically grouped together as a tuple. We
- *    can generally just handle that by linking up a tuple to the actual
- *    variable that we want. To do this, we create a set of symbols /underneath/
- *    the symbol we're dealing with, corresponding to the field name. So a tuple
- *    with fields a, b, and c, with the symbol name "faces" would create:
- *
- *      c::main::1::faces.a
- *      c::main::1::faces.b
- *      c::main::1::faces.c
- *
- *    As variables with the appropriate type. Project / update redirects
- *    expressions to deal with those symbols. Equality is similar.
- *
- *    It gets more complicated with ite's though, as you can't
- *    nondeterministically switch between symbol prefixes like that. So instead
- *    we create a fresh new symbol, and create an ite for each member of the
- *    tuple, binding it into the new fresh symbol if it's enabling condition
- *    is true.
- *
- *    The basic design feature here is that in all cases where we have something
- *    of tuple type, the AST is actually a deterministic symbol that we hang
- *    additional bits of name off as appropriate.
- *
- *  2: For arrays of tuples, we do almost exactly as above, but all the new
- *     variables that are used are in fact arrays of values. Then when we
- *     perform an array operation, we either select the relevant values out into
- *     a fresh tuple, or decompose a tuple into a series of updates to make.
- *
- *  3: Tuples of arrays of tuples are currently unimplemented. But it's likely
- *     that we'll end up following 2: above, but extending the domain of the
- *     array to contain the outer and inner array index. Ugly but works
- *     (inspiration came from the internet / stackoverflow, reading other
- *     peoples work where they've done this).
- *
- * All these things could probably be made more efficient by rewriting the
- * expressions that are being converted, so that we can for example discard
- * any un-necessary equalities or assertions. However, in the meantime, this
- * slower approach works.
- */
+ * Arrays are handled by using the array flattener API */
 
 void
 tuple_node_smt_ast::make_free(smt_convt *ctx)
@@ -175,7 +131,7 @@ tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 
 smt_astt 
 tuple_node_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
-    expr2tc idx_expr) const
+    expr2tc idx_expr __attribute__((unused)) /*ndebug*/) const
 {
   smt_convt::ast_vec eqs;
   assert(is_nil_expr(idx_expr) && "Can't apply non-constant index update to "
@@ -206,14 +162,16 @@ tuple_node_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   // of that name, and then return that. It now names the variable that contains
   // the value of that field. If it's actually another tuple, we instead return
   // a new tuple_node_smt_ast containing its name.
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
   // If someone is projecting out of us, then now is an excellent time to
   // actually allocate all our pieces of ASTs as variables.
   const_cast<tuple_node_smt_ast*>(this)->make_free(ctx);
 
+#ifndef NDEBUG
+  tuple_smt_sortt ts = to_tuple_sort(sort);
+  const struct_union_data &data = ctx->get_type_def(ts->thetype);
   assert(idx < data.members.size() && "Out-of-bounds tuple element accessed");
+#endif
   return elements[idx];
 }
 
@@ -237,52 +195,6 @@ smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
   }
 
   return result;
-}
-
-smt_astt
-smt_tuple_node_flattener::union_create(const expr2tc &unidef)
-{
-  // Unions are known to be brok^W fragile. Create a free new structure, and
-  // assign in any members where the type matches the single member of the
-  // initializer members. No need to worry about subtypes; this is a union.
-  std::string name = ctx->mk_fresh_name("union_create::");
-  // Add a . suffix because this is of tuple type.
-  name += ".";
-  symbol2tc result(unidef->type, irep_idt(name));
-
-  const constant_union2t &uni = to_constant_union2t(unidef);
-  const struct_union_data &def = ctx->get_type_def(uni.type);
-  assert(uni.datatype_members.size() == 1 && "Unexpectedly full union "
-         "initializer");
-  const expr2tc &init = uni.datatype_members[0];
-  smt_astt result_ast = ctx->convert_ast(result);
-  smt_astt init_ast = ctx->convert_ast(init);
-
-  tuple_node_smt_ast *result_t_ast =
-    const_cast<tuple_node_smt_ast *>(to_tuple_node_ast(result_ast));
-  result_t_ast->elements.resize(def.members.size());
-
-  unsigned int i = 0;
-  forall_types(it, def.members) {
-    if (base_type_eq(*it, init->type, ns)) {
-      // Assign in.
-      result_t_ast->elements[i] = init_ast;
-    } else {
-      // XXX indirection
-      if (is_tuple_ast_type(*it)) {
-        result_t_ast->elements[i] = ctx->tuple_api->tuple_fresh(ctx->convert_sort(*it));
-      } else if (is_tuple_array_ast_type(*it)) {
-        std::string newname = ctx->mk_fresh_name("");
-        smt_sortt subsort = ctx->convert_sort(get_array_subtype(*it));
-        result_t_ast->elements[i] =
-          array_conv.mk_array_symbol(newname, ctx->convert_sort(*it), subsort);
-      }
-    }
-    i++;
-  }
-
-  return new tuple_node_smt_ast(*this, ctx, ctx->convert_sort(unidef->type),
-                                name);
 }
 
 smt_astt
@@ -478,12 +390,6 @@ smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
   } else {
     return new tuple_smt_sort(type);
   }
-}
-
-smt_sortt
-smt_tuple_node_flattener::mk_union_sort(const type2tc &type)
-{
-  return new tuple_smt_sort(type);
 }
 
 void

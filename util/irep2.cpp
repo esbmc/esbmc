@@ -214,13 +214,15 @@ empty_type2t::get_width(void) const
 unsigned int
 symbol_type2t::get_width(void) const
 {
-  assert(0 && "Fetching width of symbol type - invalid operation");
+  std::cerr <<"Fetching width of symbol type - invalid operation" << std::endl;
+  abort();
 }
 
 unsigned int
 cpp_name_type2t::get_width(void) const
 {
-  assert(0 && "Fetching width of cpp_name type - invalid operation");
+  std::cerr << "Fetching width of cpp_name type - invalid operation" << std::endl;
+  abort();
 }
 
 unsigned int
@@ -612,7 +614,7 @@ expr2t::pretty(unsigned int indent) const
                                                      expr_names[expr_id],
                                                      *this);
   // Dump the type on the end.
-  ret += std::string("\n") + indent_str(indent) + "  * type : "
+  ret += std::string("\n") + indent_str(indent) + "* type : "
          + type->pretty(indent+2);
   return ret;
 }
@@ -766,7 +768,7 @@ type_poolt::type_poolt(bool yolo __attribute__((unused)))
   return;
 }
 
-// XXX why did I disable this cache?
+// XXX investigate performance implications of this cache
 static const type2tc &
 get_type_from_pool(const typet &val,
     std::map<typet, type2tc> &map __attribute__((unused)))

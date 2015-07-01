@@ -42,7 +42,6 @@ smt_convt::overflow_arith(const expr2tc &expr)
                             lessthanequal2tc(overflow.operand, zero));
       return convert_ast(not2tc(and2tc(nooverflow, nounderflow)));
     } else {
-      std::cerr << "Lolunsignedoverflows"<< std::endl;
       // Just ensure the result is >= both operands.
       greaterthanequal2tc ge1(overflow.operand, opers.side_1);
       greaterthanequal2tc ge2(overflow.operand, opers.side_2);
@@ -67,7 +66,6 @@ smt_convt::overflow_arith(const expr2tc &expr)
       return convert_ast(or2tc(add_overflows, is_min_int));
     } else {
       // Just ensure the result is >= the operands.
-      std::cerr << "lolunsgnedsubs" << std::endl;
       lessthanequal2tc le1(overflow.operand, opers.side_1);
       lessthanequal2tc le2(overflow.operand, opers.side_2);
       and2tc res(le1, le2);

@@ -198,6 +198,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     symbolt *new_symbol;
     bool res = move_symbol(symbol, new_symbol);
     assert(!res);
+    (void)res; //ndebug
     
     typecheck_new_symbol(*new_symbol);
   }    

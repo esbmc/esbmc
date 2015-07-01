@@ -211,8 +211,6 @@ execution_statet::symex_step(reachability_treet &art)
   merge_gotos();
 
   if (break_insn != 0 && break_insn == instruction.location_number) {
-    // If you're developing ESBMC on a machine that isn't x86, I'll send you
-    // cookies.
 #ifndef _WIN32
     __asm__("int $3");
 #else

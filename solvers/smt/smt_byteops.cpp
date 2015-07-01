@@ -4,20 +4,29 @@ smt_astt
 smt_convt::convert_byte_extract(const expr2tc &expr)
 {
   const byte_extract2t &data = to_byte_extract2t(expr);
+  expr2tc source = data.source_value;
+  unsigned int src_width = source->type->get_width();
+
+  if (!is_number_type(source))
+    source = typecast2tc(get_uint_type(src_width), source);
 
   assert(is_scalar_type(data.source_value) && "Byte extract now only works on "
          "scalar variables");
   if (!is_constant_int2t(data.source_offset)) {
-    expr2tc source = data.source_value;
-    unsigned int src_width = source->type->get_width();
-    if (!is_bv_type(source)) {
-      source = typecast2tc(get_uint_type(src_width), source);
-    }
-
     // The approach: the argument is now a bitvector. Just shift it the
     // appropriate amount, according to the source offset, and select out the
     // bottom byte.
     expr2tc offs = data.source_offset;
+
+    // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
+    // offset distance. The rest of these calculations will still apply.
+    if (data.big_endian) {
+      auto data_size = type_byte_size(*source->type);
+      constant_int2tc data_size_expr(source->type, data_size - 1);
+      sub2tc sub(source->type, data_size_expr, offs);
+      offs = sub;
+    }
+
     if (offs->type->get_width() != src_width)
       // Z3 requires these two arguments to be the same width
       offs = typecast2tc(source->type, data.source_offset);
@@ -43,29 +52,19 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
 
-  smt_astt source = convert_ast(data.source_value);;
+  smt_astt source_ast = convert_ast(source);
 
   if (int_encoding) {
     std::cerr << "Refusing to byte extract in integer mode; re-run in "
                  "bitvector mode" << std::endl;
     abort();
   } else {
-    if (is_bv_type(data.source_value)) {
-      ;
-    } else if (is_fixedbv_type(data.source_value)) {
-      ;
-    } else {
-      std::cerr << "Unrecognized type in operand to byte extract." << std::endl;
-      data.dump();
-      abort();
-    }
-
     unsigned int sort_sz = data.source_value->type->get_width();
     if (sort_sz <= upper) {
       smt_sortt s = mk_sort(SMT_SORT_BV, 8, false);
       return mk_smt_symbol("out_of_bounds_byte_extract", s);
     } else {
-      return mk_extract(source, upper, lower, convert_sort(expr->type));
+      return mk_extract(source_ast, upper, lower, convert_sort(expr->type));
     }
   }
 }
@@ -77,21 +76,37 @@ smt_convt::convert_byte_update(const expr2tc &expr)
 
   assert(is_scalar_type(data.source_value) && "Byte update only works on "
          "scalar variables now");
+  assert(data.type == data.source_value->type);
+
+  if (!is_number_type(data.type)) {
+    // This is a pointer or a bool, or something. We don't want to handle
+    // casting of it in the body of this function, so wrap it up as a bitvector
+    // and re-apply.
+    type2tc bit_type = get_uint_type(data.type->get_width());
+    typecast2tc src_obj(bit_type, data.source_value);
+    byte_update2tc new_update(bit_type, src_obj, data.source_offset,
+        data.update_value, data.big_endian);
+    typecast2tc cast_back(data.type, new_update);
+    return convert_ast(cast_back);
+  }
 
   if (!is_constant_int2t(data.source_offset)) {
-    if (is_pointer_type(data.type)) {
-      // Just return a free pointer. Seriously, this is going to be faster,
-      // easier, and probably accurate than anything else.
-      smt_sortt s = convert_sort(data.type);
-      return mk_fresh(s, "updated_ptr");
-    }
-
     expr2tc source = data.source_value;
     unsigned int src_width = source->type->get_width();
     if (!is_bv_type(source))
       source = typecast2tc(get_uint_type(src_width), source);
 
     expr2tc offs = data.source_offset;
+
+    // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
+    // offset distance. The rest of these calculations will still apply.
+    if (data.big_endian) {
+      auto data_size = type_byte_size(*source->type);
+      constant_int2tc data_size_expr(source->type, data_size - 1);
+      sub2tc sub(source->type, data_size_expr, offs);
+      offs = sub;
+    }
+
     if (offs->type->get_width() != src_width)
       offs = typecast2tc(get_uint_type(src_width), offs);
 
@@ -99,8 +114,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     if (update->type->get_width() != src_width)
       update = typecast2tc(get_uint_type(src_width), update);
 
-    // The approach: mask, shift and or. XXX, byte order?
-    // Massively inefficient.
+    // The approach: mask, shift and or. Quite inefficient.
 
     expr2tc eight = constant_int2tc(get_uint_type(src_width), BigInt(8));
     expr2tc effs = constant_int2tc(eight->type, BigInt(255));
@@ -120,14 +134,20 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   assert(is_number_type(data.source_value->type) && "Byte update of unsupported data type");
 
   smt_astt value, src_value;
-  unsigned int width_op0, width_op2, src_offset;
+  unsigned int width_op0, src_offset;
 
   value = convert_ast(data.update_value);
   src_value = convert_ast(data.source_value);
 
-  width_op2 = data.update_value->type->get_width();
   width_op0 = data.source_value->type->get_width();
   src_offset = to_constant_int2t(data.source_offset).constant_value.to_ulong();
+
+  // Flip location if we're in big-endian mode
+  if (data.big_endian) {
+    unsigned int data_size =
+      type_byte_size(*data.source_value->type).to_ulong() - 1;
+    src_offset = data_size - src_offset;
+  }
 
   if (int_encoding) {
     std::cerr << "Can't byte update in integer mode; rerun in bitvector mode"
@@ -137,8 +157,18 @@ smt_convt::convert_byte_update(const expr2tc &expr)
 
   // Assertion some of our assumptions, which broadly mean that we'll only work
   // on bytes that are going into non-byte words
+#ifndef NDEBUG
+  unsigned int width_op2 = data.update_value->type->get_width();
   assert(width_op2 == 8 && "Can't byte update non-byte operations");
   assert(width_op2 != width_op0 && "Can't byte update bytes, sorry");
+#endif
+
+  // Bail if this is an invalid update. This might be legitimate, in that one
+  // can update a padding byte in a struct, leading to a crazy out of bounds
+  // update. Either way, leave it to the dereference layer to decide on
+  // invalidity.
+  if (src_offset >= (width_op0 / 8))
+    return convert_ast(data.source_value);
 
   smt_astt top, middle, bottom;
 

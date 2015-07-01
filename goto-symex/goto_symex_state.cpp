@@ -301,7 +301,7 @@ void goto_symex_statet::fixup_renamed_type(expr2tc &expr,
     // concrete type for. Which is incorrect.
     // So instead, if one of the subtypes is a symbol type, and it isn't
     // identical to the other type, insert a typecast. This might lead to some
-    // needless casts, but what the hell.
+    // needless casts.
     if (is_symbol_type(origsubtype) || is_symbol_type(newsubtype)) {
       if (origsubtype != newsubtype) {
         expr = typecast2tc(orig_type, expr);

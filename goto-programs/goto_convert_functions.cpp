@@ -14,6 +14,7 @@ Date: June 2003
 #include <prefix.h>
 #include <std_code.h>
 #include <std_expr.h>
+#include <type_byte_size.h>
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
@@ -326,6 +327,7 @@ void goto_convert(
   try
   {
     goto_convert_functions.thrash_type_symbols();
+    goto_convert_functions.fixup_unions();
     goto_convert_functions.goto_convert();
   }
 
@@ -397,19 +399,17 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
   if (type.id() == "pointer")
     return;
 
-  // In a vastly irritating turn of events, some type symbols aren't entirely
-  // correct. This is because (in the current 27_exStbFb test) some type
-  // symbols get the module name inserted into the -- so c::int32_t becomes
-  // c::main::int32_t.
+  // Some type symbols aren't entirely correct. This is because (in the current
+  // 27_exStbFb test) some type symbols get the module name inserted into the
+  // name -- so c::int32_t becomes c::main::int32_t.
+  //
   // Now this makes entire sense, because int32_t could be something else in
   // some other file. However, because type symbols aren't squashed at type
-  // checking time (which, you know, might make sense) we now don't know
-  // what type symbol to link "c::int32_t" up to. Can't push it back to
-  // type checking either as I don't understand it, and it means touching
-  // the C++ frontend.
-  // So; instead we test to see whether a type symbol is linked correctly, and
-  // if it isn't we look up what module the current block of code came from and
-  // try to guess what type symbol it should have.
+  // checking time (which, you know, might make sense) we now don't know what
+  // type symbol to link "c::int32_t" up to. So; instead we test to see whether
+  // a type symbol is linked correctly, and if it isn't we look up what module
+  // the current block of code came from and try to guess what type symbol it
+  // should have.
 
   typet type2;
   if (type.id() == "symbol") {
@@ -528,7 +528,7 @@ goto_convert_functionst::thrash_type_symbols(void)
   typename_sett names;
   forall_symbols(it, context.symbols) {
     collect_expr(it->second.value, names);
-    collect_expr(it->second.type, names);
+    collect_type(it->second.type, names);
   }
 
   // Try to compute their dependencies.
@@ -539,7 +539,7 @@ goto_convert_functionst::thrash_type_symbols(void)
     if (names.find(it->second.name) != names.end()) {
       typename_sett list;
       collect_expr(it->second.value, list);
-      collect_expr(it->second.type, list);
+      collect_type(it->second.type, list);
       typenames[it->second.name] = list;
     }
   }
@@ -555,11 +555,122 @@ goto_convert_functionst::thrash_type_symbols(void)
   for (it = typenames.begin(); it != typenames.end(); it++)
     wallop_type(it->first, typenames, it->first);
 
-  // And now all the types have a fixed form, assault all existing code.
+  // And now all the types have a fixed form, rename types in all existing code.
   Forall_symbols(it, context.symbols) {
     rename_types(it->second.type, it->second, it->first);
     rename_exprs(it->second.value, it->second, it->first);
   }
 
   return;
+}
+
+void
+goto_convert_functionst::fixup_unions(void)
+{
+  // Iterate over all types and expressions, replacing:
+  //  * Non-pointer union types with byte arrays of corresponding size
+  //  * All union member accesses with the following pattern:
+  //      dataobj.field => ((uniontype*)&dataobj)->field
+  // Thus ensuring that all unions become byte arrays, and all accesses to
+  // them _as_ unions get converted into byte array accesses at the pointer
+  // dereference layer.
+
+   Forall_symbols(it, context.symbols) {
+    fix_union_type(it->second.type, false);
+    fix_union_expr(it->second.value);
+  }
+}
+
+void
+goto_convert_functionst::fix_union_type(typet &type, bool is_pointer)
+{
+
+  if (!is_pointer && type.is_union()) {
+    // Replace with byte array. Must use migrated type though, because we need
+    // one authorative type_byte_size function
+    type2tc new_type;
+    migrate_type(type, new_type);
+    auto size = type_byte_size(*new_type);
+    new_type = type2tc(new array_type2t(get_uint8_type(),
+                                        gen_ulong(size.to_uint64()), false));
+    type = migrate_type_back(new_type);
+    return;
+  }
+
+  // Otherwise, recurse, taking care to handle pointers appropriately. All
+  // pointers to unions should remain union types.
+  if (type.is_pointer()) {
+    fix_union_type(type.subtype(), true);
+  } else {
+    Forall_irep(it, type.get_sub())
+      fix_union_type((typet&)*it, false);
+    Forall_named_irep(it, type.get_named_sub())
+      fix_union_type((typet&)it->second, false);
+
+  }
+}
+
+void
+goto_convert_functionst::fix_union_expr(exprt &expr)
+{
+
+  // We care about one kind of expression: member expressions that access a
+  // union field. We also need to rewrite types as we come across them.
+  if (expr.is_member()) {
+    // Are we accessing a union? If it's already a dereference, that's fine.
+    if (expr.op0().type().is_union() && !expr.op0().is_dereference()) {
+      // Rewrite 'dataobj.field' to '((uniontype*)&dataobj)->field'
+      expr2tc dataobj;
+      migrate_expr(expr.op0(), dataobj);
+      type2tc union_type = dataobj->type;
+      auto size = type_byte_size(*union_type);
+      type2tc array_type = type2tc(new array_type2t(get_uint8_type(),
+            gen_ulong(size.to_uint64()), false));
+      type2tc union_pointer(new pointer_type2t(union_type));
+
+      address_of2tc addrof(array_type, dataobj);
+      typecast2tc cast(union_pointer, addrof);
+      dereference2tc deref(union_type, cast);
+      expr.op0() = migrate_expr_back(deref);
+
+      // Fix type -- it needs to remain a union at the top level
+      fix_union_type(expr.type(), false);
+      fix_union_expr(expr.op0());
+    } else {
+      Forall_operands(it, expr)
+        fix_union_expr(*it);
+      fix_union_type(expr.type(), false);
+    }
+  } else if (expr.is_union()) {
+    // There may be union types embedded within this type; those need their
+    // types fixing too.
+    Forall_operands(it, expr)
+      fix_union_expr(*it);
+    fix_union_type(expr.type(), false);
+
+    // A union expr is a constant/literal union. This needs to be flattened
+    // out at this stage. Handle this by migrating immediately (which will
+    // eliminate anything on union type), and overwriting this expression.
+    expr2tc new_expr;
+    migrate_expr(expr, new_expr);
+    expr = migrate_expr_back(new_expr);
+  } else if (expr.is_dereference()) {
+    // We want the dereference of a union pointer to evaluate to a union type,
+    // as that can be picked apart by the pointer handling code. However, do
+    // rewrite types if it points at a struct that contains a union, because
+    // the correct type of a struct reference with a union is it, has it's
+    // fields rewritten to be arrays. Actual accesses to that union field will
+    // be transformed into a dereference to one of the fields _within_ the
+    // union, so we never up constructing a union reference.
+    Forall_operands(it, expr)
+      fix_union_expr(*it);
+    fix_union_type(expr.type(), true);
+  } else {
+    // Default action: recurse and beat types.
+
+    fix_union_type(expr.type(), false);
+
+    Forall_operands(it, expr)
+      fix_union_expr(*it);
+  }
 }

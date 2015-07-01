@@ -322,7 +322,6 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
     yices_smt_sort *range = va_arg(ap, yices_smt_sort*);
     type_t t = yices_function_type(1, &dom->type, range->type);
 
-    // This must be fixed. pls.
     unsigned int tmp = range->data_width;
     if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_UNION)
       tmp = 1;
@@ -587,23 +586,6 @@ yices_convt::mk_struct_sort(const type2tc &type)
   return new yices_smt_sort(SMT_SORT_STRUCT, tuple_sort, type);
 }
 
-smt_sortt
-yices_convt::mk_union_sort(const type2tc &type)
-{
-  // Like structs, but a union
-
-  std::vector<type_t> sorts;
-  const struct_union_data &def = get_type_def(type);
-  forall_types(it, def.members) {
-    smt_sortt s = convert_sort(*it);
-    const yices_smt_sort *sort = yices_sort_downcast(s);
-    sorts.push_back(sort->type);
-  }
-
-  type_t tuple_sort = yices_tuple_type(def.members.size(), sorts.data());
-  return new yices_smt_sort(SMT_SORT_UNION, tuple_sort, type);
-}
-
 smt_astt
 yices_convt::tuple_create(const expr2tc &structdef)
 {
@@ -619,23 +601,6 @@ yices_convt::tuple_create(const expr2tc &structdef)
 
   term_t thetuple = yices_tuple(type.members.size(), terms.data());
   return new_ast(convert_sort(strct.type), thetuple);
-}
-
-smt_astt
-yices_convt::union_create(const expr2tc &unidef)
-{
-  const constant_union2t &uni = to_constant_union2t(unidef);
-  const struct_union_data &type = get_type_def(uni.type);
-
-  std::vector<term_t> terms;
-  forall_exprs(it, uni.datatype_members) {
-    smt_astt a = convert_ast(*it);
-    const yices_smt_ast *yast = yices_ast_downcast(a);
-    terms.push_back(yast->term);
-  }
-
-  term_t thetuple = yices_tuple(type.members.size(), terms.data());
-  return new_ast(convert_sort(uni.type), thetuple);
 }
 
 smt_astt
@@ -760,7 +725,6 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
       break;
     case type2t::pointer_id:
     case type2t::struct_id:
-    case type2t::union_id:
       res = tuple_get_rec(elem, *it);
       break;
     case type2t::array_id:

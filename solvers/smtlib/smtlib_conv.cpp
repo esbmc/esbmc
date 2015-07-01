@@ -1,4 +1,4 @@
-// Standards, how do they work?
+// "Standards" workaround
 #define __STDC_FORMAT_MACROS
 
 #include <unistd.h>
@@ -65,9 +65,8 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
     return;
   }
 
-  // Setup: open a pipe to the smtlib solver. Because C++ is terrible,
-  // there's no standard way of opening a stream from an fd, we can try
-  // a nonportable way in the future if fwrite becomes unenjoyable.
+  // Setup: open a pipe to the smtlib solver. There seems to be no standard C++
+  // way of opening a stream from an fd, so use C file streams.
 
   int inpipe[2], outpipe[2];
 
@@ -775,13 +774,6 @@ smt_sort *
 smtlib_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
 {
   std::cerr << "Attempted to make struct type in smtlib conversion" <<std::endl;
-  abort();
-}
-
-smt_sort *
-smtlib_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
-{
-  std::cerr << "Attempted to make union type in smtlib conversion" << std::endl;
   abort();
 }
 

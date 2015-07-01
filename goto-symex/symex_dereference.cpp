@@ -31,7 +31,6 @@ protected:
   goto_symext::statet &state;
 
   // overloads from dereference_callbackt
-  // XXXjmorse - no it doesn't. This should be virtual pure!
   virtual bool is_valid_object(const irep_idt &identifier __attribute__((unused)))
   {
     return true;

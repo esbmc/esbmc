@@ -251,8 +251,10 @@ void cpp_typecheckt::zero_initializer(
 
       mp_integer size;
 
+#ifndef NDEBUG
       bool to_int=to_integer(size_expr, size);
       assert(!to_int);
+#endif
       assert(size>=0);
 
       exprt::operandst empty_operands;
@@ -283,8 +285,10 @@ void cpp_typecheckt::zero_initializer(
       exprt exs=c_sizeof(component.type(), *this);
 
       mp_integer size;
+#ifndef NDEBUG
       bool to_int = !to_integer(exs,size);
       assert(to_int);
+#endif
 
       if(size>comp_size)
       {

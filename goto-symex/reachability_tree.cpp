@@ -12,8 +12,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <netinet/in.h>
 #else
 #include <winsock2.h>
-#undef small // The mingw32 headers are /absolutely rubbish/, or perhaps the
-             // windows headers by themselves.
+#undef small // mingw workaround
 #endif
 
 #include "reachability_tree.h"
@@ -798,8 +797,6 @@ reachability_treet::restore_from_dfs_state(void *_dfs __attribute__((unused)))
       assert(get_cur_state().get_active_state_number() == it->cur_thread);
 
 #if 0
-// XXX jmorse: can't quite get these sequence numbers to line up when they're
-// replayed.
     if (get_cur_state().get_active_state().source.pc->location_number !=
         it->location_number) {
       std::cerr << "Interleave at unexpected location when restoring checkpoint"

@@ -175,8 +175,7 @@ protected:
    *  Handle a GOTO jump between locations. This isn't just the factor of there
    *  being jumps where the guards are nondeterministic, it's that we have to
    *  handle editing the unwind bound when these things occur, and set up state
-   *  merges in the future to handle each path thats taken. A precise
-   *  description of how this is implemented... can go somewhere else.
+   *  merges in the future to handle each path thats taken.
    *  @param old_guard Renamed guard on this jump occuring.
    */
   virtual void symex_goto(const expr2tc &old_guard);
@@ -482,7 +481,7 @@ protected:
 
   /**
    *  Decide if symbol is valid or not.
-   *  i.e., whether it's live or not. Not very well understood.
+   *  i.e., whether it's live or not.
    *  @return True if symbol is valid.
    */
   bool is_valid_object(const symbolt &symbol);
@@ -510,6 +509,25 @@ protected:
    *  @param guard Guard; intent unknown
    */
   void symex_assign_symbol(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+
+  /**
+   *  Perform assignment to a structure.
+   *  Performed when a constant structure appears on the left hand side.
+   *  These kinds of assignments are permitted by C99, and some C++ fudge.
+   *  Decomposes structure into each particular field, and encodes an assignment
+   *  for each pair of fields.
+   *
+   *  (It's not intuitive that one may assign to a /constant/ structure, however
+   *  a number of pieces of code need to be able to create structures out of
+   *  thin air, or more often an array of bytes. In lieu of better distinction
+   *  between a struct literal and a group of values arranged as a structure,
+   *  the constant_struct irep is used).
+   *
+   *  @param lhs Symbol to assign to
+   *  @param rhs Value to assign to symbol
+   *  @param guard Guard; intent unknown
+   */
+  void symex_assign_structure(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a typecast irep.
@@ -545,8 +563,6 @@ protected:
    *  Perform assignment to an "if".
    *  This ends up being two assignments, one to one branch of the if, the
    *  other to the other. The appropriate guard is executed in either case.
-   *  Possibly defunct; I'm not aware of C supporting nondeterministic
-   *  left hand side expressions.
    *  @param lhs "If" to assign to
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
@@ -646,8 +662,8 @@ protected:
   goto_symex_statet *cur_state;
   /** Symbol names for modelling arrays.
    *  These irep_idts contain the names of the arrays being used to store data
-   *  modelling what pointers are active, which are freed, and so forth. As for
-   *  why, well, that's a trainwreck. */
+   *  modelling what pointers are active, which are freed, and so forth. They
+   *  can change between C and C++, unfortunately. */
   irep_idt valid_ptr_arr_name, alloc_size_arr_name, deallocd_arr_name, dyn_info_arr_name;
   /** List of all allocated objects.
    *  Used to track what we should level memory-leak-assertions against when the

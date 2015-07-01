@@ -1309,6 +1309,7 @@ std::string expr2ct::convert_constant(
         return dest;
       }
 
+#ifndef NDEBUG
       const ansi_c_declarationt &decl = (const ansi_c_declarationt&)*it;
       const exprt &v = decl.decl_value();
 
@@ -1316,6 +1317,7 @@ std::string expr2ct::convert_constant(
         bool res = to_integer(v, i);
         assert(!res);
       }
+#endif
 
       ++i;
     }
@@ -2259,7 +2261,20 @@ std::string expr2ct::convert_code_assign(
   const codet &src,
   unsigned indent)
 {
-  std::string tmp=convert_binary(src, "=", 2, true);
+  // Union remangle: If the right hand side is a constant array, containing
+  // byte extract expressions, then it's almost 100% certain to be a flattened
+  // union literal. Precise identification isn't feasible right now, sadly.
+  // In that case, replace with a special intrinsic indicating to the user that
+  // the original code is now meaningless.
+  unsigned int precedent = 15;
+  std::string tmp=convert(src.op0(), precedent);
+  tmp += "=";
+
+  if (src.op1().id() == "constant" && src.op1().type().id() == "array" &&
+      src.op1().pretty().find("byte_extract") != std::string::npos)
+    tmp += "FLATTENED_UNION_LITERAL()";
+  else
+    tmp += convert(src.op1(), precedent);
 
   std::string dest=indent_str(indent)+tmp+";";
 

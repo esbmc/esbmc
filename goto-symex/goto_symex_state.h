@@ -38,10 +38,6 @@ class execution_statet; // foward dec
  *  number of jumps and states that are hanging around... the everything,
  *  really. Notably, we're storing all that stuff here, we're not mainpulating
  *  it. Instead, that all occurs in the goto_symext class.
- *
- *  Perhaps in the future code will start moving over from one to the other;
- *  however that'd end up with an even larger class containing everything.
- *  Ideally everything would become more segregated.
  */
 
 class goto_symex_statet
@@ -398,10 +394,10 @@ public:
 
   /**
    *  Fixup types after renaming: we might rename a symbol that we
-   *  believe to be a uint32_t ptr, to be what it statically is, the address
-   *  of a byte array. Or something. Either way, the renaming process changes
-   *  the ptr type of the expression, making all subsequent pointer arithmetic
-   *  croak.
+   *  believe to be a uint32_t ptr, to be what it points at, the address
+   *  of a byte array. The renaming process changes the ptr type of the
+   *  expression, making all subsequent pointer arithmetic croak.
+   *
    *  This used to be just for pointers, but is now for everything in general,
    *  because a variety of code (01_cbmc_Pointer7 for example) is renaming
    *  symbols to differently sized constants, which leads to Problems.

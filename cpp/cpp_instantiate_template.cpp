@@ -370,9 +370,10 @@ const symbolt &cpp_typecheckt::instantiate_template(
   if(has_incomplete_args(specialization_template_args))
   {
     // This happens when the arguments were not declared yet but the
-    // code tried to use the template. Crazy right? This can happen when
+    // code tried to use the template. This can happen when
     // typedefing for example, check esbmc-cpp/esbmc-cbmc/Templates39 for
     // an example
+    //
     // Hack: let's remove the template body so nothing will be instantiated
     // When an object is instantiated in the future, it will create the
     // right instantiated template, or will throw an error if the argument

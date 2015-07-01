@@ -594,6 +594,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
 
         bool failed = context.move(vt_symb_type);
         assert(!failed);
+        (void)failed; //ndebug
         vtit = context.symbols.find(vt_name);
 
         // add a virtual-table pointer
@@ -669,6 +670,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
           // add the argument to the symbol table
           bool failed = context.move(arg_symb);
           assert(!failed);
+          (void)failed; //ndebug
         }
 
         // do the body of the function
@@ -727,6 +729,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         {
           bool failed = context.move(func_symb);
           assert(!failed);
+          (void)failed; //ndebug
         }
 
         // next base

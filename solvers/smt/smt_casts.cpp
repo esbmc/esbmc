@@ -550,7 +550,6 @@ smt_convt::convert_typecast(const expr2tc &expr)
     }
   }
 
-  // XXXjmorse -- what about all other types, eh?
   std::cerr << "Typecast for unexpected type" << std::endl;
   abort();
 }

@@ -1,10 +1,15 @@
 # TODO:
-# Not injecting arbitary symlinks
 # Sometimes libtool cracks up if we re-configure and don't make clean.
 # (This may be a libtool feature)
 
-AC_INIT([ESBMC], [1.25.4], [esbmc@ecs.soton.ac.uk])
-AC_DEFINE([ESBMC_VERSION], ["1.25.4"], [ESBMC version number])
+# To bump the ESBMC version: edit esbmc/version to be whatever version required,
+# and commit it. The m4 below will suck the version out of that file. Note that
+# things will break if that file has an end-of-line -- use ":set binary" and
+# ":set noeol" in vim to enforce that.
+
+m4_define([esbmcversion], m4_include([esbmc/version]))
+AC_INIT([ESBMC], [esbmcversion], [esbmc-users@googlegroups.com])
+AC_DEFINE([ESBMC_VERSION], ["AC_PACKAGE_VERSION"], [ESBMC version number])
 dnl Numerous things croak unless we do this immediately:
 AC_CONFIG_AUX_DIR([scripts/build-aux])
 AC_CONFIG_MACRO_DIR([scripts/build-aux/m4])
@@ -310,26 +315,26 @@ m4_foreach(thesolver, [esbmc_all_solvers], [
 ])
 
 m4_define(z3_build_headers, [include/z3.h, include/z3++.h])
-m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
+m4_define(z3_possible_locs, [$SATDIR64/z3, $SATDIR32/z3, $SATDIR/z3, $HOME/z3, $Z3DIR])
 m4_define(z3_possible_libdirs, [lib, bin, x64])
 
 dnl Only boolector 1.6 and later are supported -- prior versions of boolector
 dnl do not have a structure for knowing where lingeling / minisat are.
 
 m4_define(btor_build_headers, [boolector/boolector.h])
-m4_define(btor_possible_locs, [$SATDIR64/boolector, $SATDIR/boolector, $HOME/boolector])
+m4_define(btor_possible_locs, [$SATDIR64/boolector, $SATDIR32/boolector, $SATDIR/boolector, $HOME/boolector])
 m4_define(btor_possible_libdirs, [boolector])
 
 m4_define(yices_build_headers, [include/yices.h])
-m4_define(yices_possible_locs, [$SATDIR64/yices, $SATDIR/yices, $HOME/yices])
+m4_define(yices_possible_locs, [$SATDIR64/yices, $SATDIR32/yices, $SATDIR/yices, $HOME/yices])
 m4_define(yices_possible_libdirs, [lib])
 
 m4_define(cvc4_build_headers, [include/cvc4/cvc4.h])
-m4_define(cvc4_possible_locs, [$SATDIR64/cvc4, $SATDIR/cvc4, $HOME/cvc4])
+m4_define(cvc4_possible_locs, [$SATDIR64/cvc4, $SATDIR32/cvc4, $SATDIR/cvc4, $HOME/cvc4])
 m4_define(cvc4_possible_libdirs, [lib])
 
 m4_define(mathsat_build_headers, [include/mathsat.h])
-m4_define(mathsat_possible_locs, [$SATDIR64/mathsat, $SATDIR/mathsat, $HOME/mathsat])
+m4_define(mathsat_possible_locs, [$SATDIR64/mathsat, $SATDIR32/mathsat, $SATDIR/mathsat, $HOME/mathsat])
 m4_define(mathsat_possible_libdirs, [lib])
 
 dnl Random dollars are shoehorned into these names to ensure that M4 does not
@@ -354,9 +359,8 @@ m4_define([$$ESBMC_BOOLECTOR_EXTRA_CONFIG], [
 m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
   dnl $1 = Path we're looking at as being the yices installation
   dnl Yices ships with 'libyices.2.x.y', but no set of appropriate symlinks.
-  dnl So linking against it is a pain in the neck. Perform a small amount of
-  dnl juggling to install such a symlink.
-  dnl Yes this is appalling, not very many other ways of doing it though.
+  dnl So linking against it is a pain. Detect cricumstances where the
+  dnl appropriate version symlinks are not installed, and bail.
   AS_IF([test -d $1], [
     AS_IF([test ! -z "`ls $2 | grep libyices.so.2*`"], [
       AS_IF([test ! -e "$2/libyices.so"], [
