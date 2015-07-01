@@ -27,9 +27,9 @@ void add_global_vars(const exprt& expr)
   }
 }
 
-void get_global_vars(const namespacet &ns)
+void get_global_vars(contextt &context)
 {
-  forall_symbols(it, ns.get_context().symbols) {
+  forall_symbols(it, context.symbols) {
     if(it->second.static_lifetime && !it->second.type.is_pointer())
     {
       exprt s = symbol_expr(it->second);
@@ -53,14 +53,14 @@ void dump_global_vars()
 
 void goto_k_induction(
   goto_functionst& goto_functions,
-  const namespacet &ns,
+  contextt &context,
   message_handlert& message_handler)
 {
-  get_global_vars(ns);
+  get_global_vars(context);
 
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
-      goto_k_inductiont(it->second, ns, message_handler);
+      goto_k_inductiont(it->second, context, message_handler);
 
   goto_functions.update();
 }

@@ -18,7 +18,7 @@
 
 void goto_k_induction(
   goto_functionst &goto_functions,
-  const namespacet &ns,
+  contextt &_context,
   message_handlert &message_handler);
 
 class goto_k_inductiont : public goto_loopst
@@ -26,12 +26,12 @@ class goto_k_inductiont : public goto_loopst
 public:
   goto_k_inductiont(
     goto_functiont &_goto_function,
-    const namespacet &_ns,
+    contextt &_context,
     message_handlert &_message_handler) :
     goto_loopst(
       _goto_function,
       _message_handler),
-    ns(_ns),
+    context(_context),
     state_counter(0),
     state(struct_typet())
   {
@@ -41,7 +41,7 @@ public:
   }
 
 protected:
-  const namespacet &ns;
+  contextt &context;
 
   unsigned int state_counter;
   struct_typet state;
