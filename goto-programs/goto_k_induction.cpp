@@ -98,6 +98,9 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   // This will be better encapsulated if we had an inductive step class
   // that inherit from loops where we could save all these information
   state.components().clear();
+
+  // Finally, increment the state counter
+  state_counter++;
 }
 
 void goto_k_inductiont::fill_state(loopst &loop)
