@@ -51,6 +51,12 @@ protected:
 
   void fill_state(loopst &loop);
   void create_symbols();
+  void make_nondet_assign();
+
+  void copy(const codet &code,
+    goto_program_instruction_typet type,
+    goto_programt &dest);
+
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

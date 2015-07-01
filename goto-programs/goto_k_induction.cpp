@@ -94,6 +94,9 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   // so the created symbol contain all variables in it.
   create_symbols();
 
+  // Create the nondet assignments on the beggining of the loop
+  make_nondet_assign();
+
   // We should clear the state by the end of the loop
   // This will be better encapsulated if we had an inductive step class
   // that inherit from loops where we could save all these information
@@ -181,4 +184,57 @@ void goto_k_inductiont::create_symbols()
   current_state_symbol.lvalue=true;
 
   context.move(current_state_symbol, symbol_ptr);
+}
+
+void goto_k_inductiont::make_nondet_assign()
+{
+  goto_programt dest;
+
+  unsigned int component_size = state.components().size();
+  for (unsigned int j = 0; j < component_size; j++)
+  {
+    exprt rhs_expr = side_effect_expr_nondett(
+      state.components()[j].type());
+    exprt new_expr(exprt::with, state);
+    exprt lhs_expr("symbol", state);
+
+    if (state.components()[j].type().is_array())
+      rhs_expr = side_effect_expr_nondett(
+        state.components()[j].type());
+
+    std::string identifier;
+    identifier = "cs$" + i2string(state_counter);
+    lhs_expr.identifier(identifier);
+
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_expr);
+    new_expr.copy_to_operands(exprt("member_name"));
+    new_expr.move_to_operands(rhs_expr);
+
+    if (!state.components()[j].has_operands())
+    {
+      new_expr.op1().component_name(state.components()[j].identifier());
+      assert(!new_expr.op1().get_string("component_name").empty());
+    }
+    else
+    {
+      forall_operands(it, state.components()[j])
+      {
+        new_expr.op1().component_name(it->identifier());
+        assert(!new_expr.op1().get_string("component_name").empty());
+      }
+    }
+
+    code_assignt new_assign(lhs_expr, new_expr);
+    copy(new_assign, ASSIGN, dest);
+  }
+}
+
+void goto_k_inductiont::copy(const codet& code,
+  goto_program_instruction_typet type,
+  goto_programt& dest)
+{
+  goto_programt::targett t=dest.add_instruction(type);
+  migrate_expr(code, t->code);
+  t->location=code.location();
 }
