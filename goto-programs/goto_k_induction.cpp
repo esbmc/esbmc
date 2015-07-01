@@ -67,4 +67,53 @@ void goto_k_induction(
 
 void goto_k_inductiont::goto_k_induction()
 {
+  // Full unwind the program
+  for(function_loopst::reverse_iterator
+    it = function_loops.rbegin();
+    it != function_loops.rend();
+    ++it)
+  {
+    assert(!it->second.get_goto_program().empty());
+    convert_loop(it->second);
+  }
+}
+
+void goto_k_inductiont::convert_loop(loopst &loop)
+{
+  // TODO: check infinite/nondet loop
+  assert(!loop.get_goto_program().instructions.empty());
+
+  // First, we need to fill the state member with the variables
+  fill_state(loop);
+
+  // We should clear the state by the end of the loop
+  // This will be better encapsulated if we had an inductive step class
+  // that inherit from loops where we could save all these information
+  state.components().clear();
+}
+
+void goto_k_inductiont::fill_state(loopst &loop)
+{
+  loopst::loop_varst loop_vars = loop.get_loop_vars();
+
+  // State size will be the number of loop vars + global vars
+  state.components().resize(loop_vars.size() + global_vars.size());
+
+  // Copy from loop vars
+  loopst::loop_varst::iterator it = loop_vars.begin();
+  for(unsigned int i=0; i<loop_vars.size(); i++, it++)
+  {
+    state.components()[i] = (struct_typet::componentt &) it->second;
+    state.components()[i].set_name(it->second.identifier());
+    state.components()[i].pretty_name(it->second.identifier());
+  }
+
+  // Copy from global vars
+  it = global_vars.begin();
+  for(unsigned int i=0; i<global_vars.size(); i++, it++)
+  {
+    state.components()[i] = (struct_typet::componentt &) it->second;
+    state.components()[i].set_name(it->second.identifier());
+    state.components()[i].pretty_name(it->second.identifier());
+  }
 }

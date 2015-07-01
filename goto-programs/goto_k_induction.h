@@ -47,7 +47,9 @@ protected:
   struct_typet state;
 
   void goto_k_induction();
-  void convert_loop();
+  void convert_loop(loopst &loop);
+
+  void fill_state(loopst &loop);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

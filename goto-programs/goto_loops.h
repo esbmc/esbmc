@@ -27,6 +27,12 @@ public:
     return goto_program;
   }
 
+  typedef std::map<irep_idt, const exprt> loop_varst;
+  loop_varst &get_loop_vars()
+  {
+    return loop_vars;
+  }
+
   void add_var_to_loop(const exprt &expr)
   {
     loop_vars.insert(
@@ -43,8 +49,6 @@ public:
       << " " << expr.second << std::endl << std::endl;
     std::cout << std::endl;
   }
-
-  typedef std::map<irep_idt, const exprt> loop_varst;
 
 protected:
   goto_programt goto_program;
