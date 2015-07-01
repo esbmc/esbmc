@@ -112,7 +112,8 @@ void goto_k_inductiont::fill_state(loopst &loop)
 
   // Copy from loop vars
   loopst::loop_varst::iterator it = loop_vars.begin();
-  for(unsigned int i=0; i<loop_vars.size(); i++, it++)
+  unsigned int i=0;
+  for(i=0; i<loop_vars.size(); i++, it++)
   {
     state.components()[i] = (struct_typet::componentt &) it->second;
     state.components()[i].set_name(it->second.identifier());
@@ -121,7 +122,7 @@ void goto_k_inductiont::fill_state(loopst &loop)
 
   // Copy from global vars
   it = global_vars.begin();
-  for(unsigned int i=0; i<global_vars.size(); i++, it++)
+  for( ; (i-loop_vars.size())<global_vars.size(); i++, it++)
   {
     state.components()[i] = (struct_typet::componentt &) it->second;
     state.components()[i].set_name(it->second.identifier());
