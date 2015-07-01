@@ -7,6 +7,9 @@
 
 #include <util/std_expr.h>
 #include <util/expr_util.h>
+#include <ansi-c/c_types.h>
+
+#include <i2string.h>
 
 #include "goto_k_induction.h"
 #include "remove_skip.h"
@@ -86,6 +89,11 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   // First, we need to fill the state member with the variables
   fill_state(loop);
 
+  // Now, create the symbol and add them to the context
+  // The states must be filled before the creation of the symbols
+  // so the created symbol contain all variables in it.
+  create_symbols();
+
   // We should clear the state by the end of the loop
   // This will be better encapsulated if we had an inductive step class
   // that inherit from loops where we could save all these information
@@ -116,4 +124,57 @@ void goto_k_inductiont::fill_state(loopst &loop)
     state.components()[i].set_name(it->second.identifier());
     state.components()[i].pretty_name(it->second.identifier());
   }
+}
+
+void goto_k_inductiont::create_symbols()
+{
+  // Create symbol for the state$vector
+  symbolt *symbol_ptr=NULL;
+  unsigned int i = state_counter;
+
+  symbolt state_symbol;
+  state_symbol.name="c::state$vector"+i2string(i);
+  state_symbol.base_name="state$vector"+i2string(i);
+  state_symbol.is_type=true;
+  state_symbol.type=state;
+  state_symbol.mode="C";
+  state_symbol.module="main";
+  state_symbol.pretty_name="struct state$vector"+i2string(i);
+
+  context.move(state_symbol, symbol_ptr);
+
+  // Create new symbol for this state
+  // First is kindice
+  symbolt kindice_symbol;
+  kindice_symbol.name="kindice$"+i2string(i);
+  kindice_symbol.base_name="kindice$"+i2string(i);
+  kindice_symbol.type=uint_type();
+  kindice_symbol.static_lifetime=true;
+  kindice_symbol.lvalue=true;
+
+  context.move(kindice_symbol, symbol_ptr);
+
+  // Then state_vector s
+  // Its type is incomplete array
+  typet incomplete_array_type("incomplete_array");
+  incomplete_array_type.subtype()=state;
+
+  symbolt state_vector_symbol;
+  state_vector_symbol.name="s$"+i2string(i);
+  state_vector_symbol.base_name="s$"+i2string(i);
+  state_vector_symbol.type=incomplete_array_type;
+  state_vector_symbol.static_lifetime=true;
+  state_vector_symbol.lvalue=true;
+
+  context.move(state_vector_symbol, symbol_ptr);
+
+  // Finally, the current state cs
+  symbolt current_state_symbol;
+  current_state_symbol.name="cs$"+i2string(i);
+  current_state_symbol.base_name="cs$"+i2string(i);
+  current_state_symbol.type=state;
+  current_state_symbol.static_lifetime=true;
+  current_state_symbol.lvalue=true;
+
+  context.move(current_state_symbol, symbol_ptr);
 }

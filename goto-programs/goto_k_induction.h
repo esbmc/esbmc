@@ -50,6 +50,7 @@ protected:
   void convert_loop(loopst &loop);
 
   void fill_state(loopst &loop);
+  void create_symbols();
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */
