@@ -39,17 +39,16 @@ void goto_unwindt::goto_unwind()
 }
 
 void goto_unwindt::unwind_program(
-  goto_programt& goto_program,
+  goto_programt &goto_program,
   function_loopst::reverse_iterator loop)
 {
   // Get loop exit goto number
   unsigned exit_number =
     (--loop->second.get_goto_program().instructions.end())->location_number;
 
-  // Increment pointer by 2, the first increment will point to the backward
-  // GOTO and the second point to the first instruction after the end of
-  // the loop
-  exit_number += 2;
+  // Increment pointer by 1, it will point to the first instruction
+  // after the end of the loop
+  ++exit_number;
 
   // So we can get the instruction after the exit
   goto_programt::targett loop_exit;

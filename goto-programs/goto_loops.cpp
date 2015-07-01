@@ -61,6 +61,11 @@ void goto_loopst::create_function_loop(
     *new_instruction=*it;
     ++it;
   }
+
+  // Finally, add the loop exit
+  goto_programt::targett new_instruction=
+    it1->second.get_goto_program().add_instruction();
+  *new_instruction=*loop_exit;
 }
 
 void goto_loopst::output(std::ostream &out)
