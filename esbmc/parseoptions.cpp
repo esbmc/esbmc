@@ -867,9 +867,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
 int cbmc_parseoptionst::doit_k_induction()
 {
-  std::cerr << "k-induction is disabled for this release." << std::endl;
-  abort();
-
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 
