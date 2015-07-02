@@ -33,6 +33,26 @@ public:
     return loop_vars;
   }
 
+  goto_programt::targett get_original_loop_exit() const
+  {
+    return original_loop_exit;
+  }
+
+  void set_original_loop_exit(goto_programt::targett _loop_exit)
+  {
+    original_loop_exit = _loop_exit;
+  }
+
+  goto_programt::targett get_original_loop_head() const
+  {
+    return original_loop_head;
+  }
+
+  void set_original_loop_head(goto_programt::targett _loop_head)
+  {
+    original_loop_head = _loop_head;
+  }
+
   void add_var_to_loop(const exprt &expr)
   {
     loop_vars.insert(
@@ -53,6 +73,9 @@ public:
 protected:
   goto_programt goto_program;
   loop_varst loop_vars;
+
+  goto_programt::targett original_loop_head;
+  goto_programt::targett original_loop_exit;
 };
 
 class goto_loopst : public message_streamt

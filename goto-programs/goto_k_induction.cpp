@@ -95,19 +95,7 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   create_symbols();
 
   // Get current loop head
-  goto_programt::targett loop_head;
-  for(goto_programt::instructionst::iterator
-      it=goto_function.body.instructions.begin();
-      it!=goto_function.body.instructions.end();
-      it++)
-  {
-    if(it->location_number ==
-        loop.get_goto_program().instructions.begin()->location_number)
-    {
-      loop_head = it;
-      break;
-    }
-  }
+  goto_programt::targett loop_head = loop.get_original_loop_head();
 
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head);

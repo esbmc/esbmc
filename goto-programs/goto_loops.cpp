@@ -44,6 +44,10 @@ void goto_loopst::create_function_loop(
   std::map<goto_programt::targett, loopst>::iterator it1 =
     function_loops.insert(p).first;
 
+  // Set original iterators
+  it1->second.set_original_loop_head(loop_head);
+  it1->second.set_original_loop_exit(loop_exit);
+
   // Copy the loop body
   while (it != loop_exit)
   {
