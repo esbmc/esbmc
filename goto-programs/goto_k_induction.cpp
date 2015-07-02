@@ -57,13 +57,18 @@ void dump_global_vars()
 void goto_k_induction(
   goto_functionst& goto_functions,
   contextt &context,
+  bool constrain_all_states,
   message_handlert& message_handler)
 {
   get_global_vars(context);
 
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
-      goto_k_inductiont(it->second, context, message_handler);
+      goto_k_inductiont(
+        it->second,
+        context,
+        constrain_all_states,
+        message_handler);
 
   goto_functions.update();
 }

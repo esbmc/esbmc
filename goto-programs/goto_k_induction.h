@@ -19,6 +19,7 @@
 void goto_k_induction(
   goto_functionst &goto_functions,
   contextt &_context,
+  bool constrain_all_states,
   message_handlert &message_handler);
 
 class goto_k_inductiont : public goto_loopst
@@ -27,13 +28,15 @@ public:
   goto_k_inductiont(
     goto_functiont &_goto_function,
     contextt &_context,
+    bool _constrain_all_states,
     message_handlert &_message_handler) :
     goto_loopst(
       _goto_function,
       _message_handler),
     context(_context),
     state_counter(0),
-    state(struct_typet())
+    state(struct_typet()),
+    constrain_all_states(_constrain_all_states)
   {
     // unwind loops
     if(function_loops.size())
@@ -42,9 +45,9 @@ public:
 
 protected:
   contextt &context;
-
   unsigned int state_counter;
   struct_typet state;
+  bool constrain_all_states;
 
   void goto_k_induction();
   void convert_loop(loopst &loop);

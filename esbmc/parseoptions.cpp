@@ -1432,6 +1432,7 @@ bool cbmc_parseoptionst::process_goto_program(
       goto_k_induction(
         goto_functions,
         context,
+        options.get_bool_option("constrain-all-states"),
         ui_message_handler);
     }
 
