@@ -267,8 +267,11 @@ void goto_k_inductiont::update_state_vector(goto_programt::targett& loop_head)
   std::string identifier;
   identifier = "kindice$"+i2string(state_counter);
 
+  array_typet state_vector;
+  state_vector.subtype() = state;
+
   exprt lhs_index = symbol_exprt(identifier, int_type());
-  exprt new_expr(exprt::with, array_typet());
+  exprt new_expr(exprt::with, state_vector);
   exprt lhs_array("symbol", state);
   exprt rhs("symbol", state);
 
