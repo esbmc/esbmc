@@ -94,8 +94,23 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   // so the created symbol contain all variables in it.
   create_symbols();
 
-  // Create the nondet assignments on the beggining of the loop
-  make_nondet_assign();
+  // Get current loop head
+  goto_programt::targett loop_head;
+  for(goto_programt::instructionst::iterator
+      it=goto_function.body.instructions.begin();
+      it!=goto_function.body.instructions.end();
+      it++)
+  {
+    if(it->location_number ==
+        loop.get_goto_program().instructions.begin()->location_number)
+    {
+      loop_head = it;
+      break;
+    }
+  }
+
+  // Create the nondet assignments on the beginning of the loop
+  make_nondet_assign(loop_head);
 
   // We should clear the state by the end of the loop
   // This will be better encapsulated if we had an inductive step class
@@ -186,7 +201,7 @@ void goto_k_inductiont::create_symbols()
   context.move(current_state_symbol, symbol_ptr);
 }
 
-void goto_k_inductiont::make_nondet_assign()
+void goto_k_inductiont::make_nondet_assign(goto_programt::targett &loop_head)
 {
   goto_programt dest;
 
@@ -228,6 +243,8 @@ void goto_k_inductiont::make_nondet_assign()
     code_assignt new_assign(lhs_expr, new_expr);
     copy(new_assign, ASSIGN, dest);
   }
+
+  goto_function.body.destructive_insert(loop_head, dest);
 }
 
 void goto_k_inductiont::copy(const codet& code,

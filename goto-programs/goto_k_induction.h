@@ -51,7 +51,7 @@ protected:
 
   void fill_state(loopst &loop);
   void create_symbols();
-  void make_nondet_assign();
+  void make_nondet_assign(goto_programt::targett &loop_head);
 
   void copy(const codet &code,
     goto_program_instruction_typet type,
