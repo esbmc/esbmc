@@ -348,3 +348,18 @@ void goto_k_inductiont::copy(const codet& code,
   migrate_expr(code, t->code);
   t->location=code.location();
 }
+
+void goto_k_inductiont::assume_cond(
+  const exprt& cond,
+  const bool& neg,
+  goto_programt& dest)
+{
+  goto_programt tmp_e;
+  goto_programt::targett e=tmp_e.add_instruction(ASSUME);
+  exprt result_expr = cond;
+  if (neg)
+    result_expr.make_not();
+
+  migrate_expr(result_expr, e->guard);
+  dest.destructive_append(tmp_e);
+}

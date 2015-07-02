@@ -60,6 +60,10 @@ protected:
     goto_program_instruction_typet type,
     goto_programt &dest);
 
+  void assume_cond(
+    const exprt &cond,
+    const bool &neg,
+    goto_programt &dest);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */
