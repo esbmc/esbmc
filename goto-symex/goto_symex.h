@@ -727,6 +727,9 @@ protected:
   /** Flag as to whether we're doing a k-induction forward condition.
    *  Corresponds to the option --forward-condition */
   bool forward_condition;
+  /** Flag as to whether we're doing a k-induction inductive step.
+   *  Corresponds to the option --inductive-step */
+  bool inductive_step;
   /** Names of functions that we've complained about missing bodies of. */
   static hash_set_cont<irep_idt, irep_id_hash> body_warnings;
   /** Set of dereference state records; this field is used as a mailbox between
