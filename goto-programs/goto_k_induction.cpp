@@ -100,6 +100,13 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head);
 
+  // Create the kindice variable and initialize it
+  init_k_indice(loop_head);
+
+  // Update the state vector, this will be inserted one instruction
+  // after the loop head
+  update_state_vector(loop_head);
+
   // We should clear the state by the end of the loop
   // This will be better encapsulated if we had an inductive step class
   // that inherit from loops where we could save all these information
@@ -233,6 +240,54 @@ void goto_k_inductiont::make_nondet_assign(goto_programt::targett &loop_head)
   }
 
   goto_function.body.destructive_insert(loop_head, dest);
+}
+
+void goto_k_inductiont::init_k_indice(goto_programt::targett& loop_head)
+{
+  goto_programt dest;
+
+  std::string identifier;
+  identifier = "kindice$"+i2string(state_counter);
+  exprt lhs_index = symbol_exprt(identifier, int_type());
+  exprt zero_expr = gen_zero(int_type());
+  code_assignt new_assign(lhs_index,zero_expr);
+  copy(new_assign, ASSIGN, dest);
+
+  goto_function.body.destructive_insert(loop_head, dest);
+}
+
+void goto_k_inductiont::update_state_vector(goto_programt::targett& loop_head)
+{
+  goto_programt dest;
+
+  std::string identifier;
+  identifier = "kindice$"+i2string(state_counter);
+
+  exprt lhs_index = symbol_exprt(identifier, int_type());
+  exprt new_expr(exprt::with, array_typet());
+  exprt lhs_array("symbol", state);
+  exprt rhs("symbol", state);
+
+  std::string identifier_lhs, identifier_rhs;
+  identifier_lhs = "s$"+i2string(state_counter);
+  identifier_rhs = "cs$"+i2string(state_counter);
+
+  lhs_array.identifier(identifier_lhs);
+  rhs.identifier(identifier_rhs);
+
+  //s[k]=cs
+  new_expr.reserve_operands(3);
+  new_expr.copy_to_operands(lhs_array);
+  new_expr.copy_to_operands(lhs_index);
+  new_expr.move_to_operands(rhs);
+  code_assignt new_assign(lhs_array,new_expr);
+  copy(new_assign, ASSIGN, dest);
+
+  // The update vector should be added one instruction after the loop head
+  goto_programt::targett head_plus_one = loop_head;
+  head_plus_one++;
+
+  goto_function.body.destructive_insert(head_plus_one, dest);
 }
 
 void goto_k_inductiont::copy(const codet& code,
