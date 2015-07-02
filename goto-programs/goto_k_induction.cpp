@@ -96,6 +96,7 @@ void goto_k_inductiont::convert_loop(loopst &loop)
 
   // Get current loop head
   goto_programt::targett loop_head = loop.get_original_loop_head();
+  goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head);
@@ -106,6 +107,9 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   // Update the state vector, this will be inserted one instruction
   // after the loop head
   update_state_vector(loop_head);
+
+  // Assign current state at the end of the loop
+  assign_current_state(loop_exit);
 
   // We should clear the state by the end of the loop
   // This will be better encapsulated if we had an inductive step class
@@ -288,6 +292,49 @@ void goto_k_inductiont::update_state_vector(goto_programt::targett& loop_head)
   head_plus_one++;
 
   goto_function.body.destructive_insert(head_plus_one, dest);
+}
+
+void goto_k_inductiont::assign_current_state(goto_programt::targett& loop_exit)
+{
+  goto_programt dest;
+
+  unsigned int component_size = state.components().size();
+  for (unsigned int j = 0; j < component_size; j++)
+  {
+    exprt rhs_expr(state.components()[j]);
+    exprt new_expr(exprt::with, state);
+    exprt lhs_expr("symbol", state);
+
+    std::string identifier;
+
+    identifier = "cs$" + i2string(state_counter);
+
+    lhs_expr.identifier(identifier);
+
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_expr);
+    new_expr.copy_to_operands(exprt("member_name"));
+    new_expr.move_to_operands(rhs_expr);
+
+    if (!state.components()[j].has_operands())
+    {
+      new_expr.op1().component_name(state.components()[j].identifier());
+      assert(!new_expr.op1().get_string("component_name").empty());
+    }
+    else
+    {
+      forall_operands(it, state.components()[j])
+      {
+        new_expr.op1().component_name(it->identifier());
+        assert(!new_expr.op1().get_string("component_name").empty());
+      }
+    }
+
+    code_assignt new_assign(lhs_expr, new_expr);
+    copy(new_assign, ASSIGN, dest);
+  }
+
+  goto_function.body.destructive_insert(loop_exit, dest);
 }
 
 void goto_k_inductiont::copy(const codet& code,

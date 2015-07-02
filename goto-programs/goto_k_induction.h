@@ -54,6 +54,7 @@ protected:
   void make_nondet_assign(goto_programt::targett &loop_head);
   void init_k_indice(goto_programt::targett &loop_head);
   void update_state_vector(goto_programt::targett &loop_head);
+  void assign_current_state(goto_programt::targett &loop_exit);
 
   void copy(const codet &code,
     goto_program_instruction_typet type,
