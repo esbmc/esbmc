@@ -940,8 +940,6 @@ int cbmc_parseoptionst::doit_k_induction()
         return res;
     }
 
-    // Inductive-step is disabled for now
-    if(false)
     {
       opts.set_option("base-case", false);
       opts.set_option("forward-condition", false);
