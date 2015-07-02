@@ -116,6 +116,9 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   // Assign current state at the end of the loop
   assign_current_state(loop_exit);
 
+  // Assume states
+  assume_state_vector(loop_exit);
+
   // We should clear the state by the end of the loop
   // This will be better encapsulated if we had an inductive step class
   // that inherit from loops where we could save all these information
@@ -168,6 +171,18 @@ void goto_k_inductiont::create_symbols()
   state_symbol.pretty_name="struct state$vector"+i2string(i);
 
   context.move(state_symbol, symbol_ptr);
+
+  if(constrain_all_states)
+  {
+    symbolt tmp_counter;
+    tmp_counter.name="tmp_counter$"+i2string(i);
+    tmp_counter.base_name="tmp_counter$"+i2string(i);
+    tmp_counter.type=uint_type();
+    tmp_counter.static_lifetime=true;
+    tmp_counter.lvalue=true;
+
+    context.move(tmp_counter, symbol_ptr);
+  }
 
   // Create new symbol for this state
   // First is kindice
@@ -341,6 +356,141 @@ void goto_k_inductiont::assign_current_state(goto_programt::targett& loop_exit)
     code_assignt new_assign(lhs_expr, new_expr);
     copy(new_assign, ASSIGN, dest);
   }
+
+  goto_function.body.destructive_insert(loop_exit, dest);
+}
+
+void goto_k_inductiont::assume_all_state_vector(goto_programt::targett& loop_exit)
+{
+  goto_programt dest;
+
+  // Temp symbol that will be used to count up to kindice
+  std::string identifier;
+  identifier = "tmp_counter$"+i2string(state_counter);
+  exprt tmp_symbol = symbol_exprt(identifier, int_type());
+  exprt zero_expr = gen_zero(int_type());
+  code_assignt new_assign(tmp_symbol, zero_expr);
+  copy(new_assign, ASSIGN, dest);
+
+  // Condition (tmp_symbol <= kindice)
+  exprt lhs_index =
+      symbol_exprt("kindice$"+i2string(state_counter), int_type());
+  exprt cond("<=", typet("bool"));
+  cond.copy_to_operands(tmp_symbol, lhs_index);
+
+  // do the v label
+  goto_programt tmp_v;
+  goto_programt::targett v=tmp_v.add_instruction();
+
+  goto_programt tmp_z;
+  goto_programt::targett z=tmp_z.add_instruction(ASSIGN);
+
+  // kindice=kindice+1
+  exprt one_expr = gen_one(int_type());
+  exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
+  code_assignt kindice_plus(lhs_index,rhs_expr);
+  expr2tc kindice_plus2;
+  migrate_expr(kindice_plus, kindice_plus2);
+  z->code = kindice_plus2;
+
+  // do the x label
+
+  rhs_expr = gen_binary(exprt::plus, int_type(), tmp_symbol, one_expr);
+  code_assignt tmp_symbol_plus(tmp_symbol, rhs_expr);
+
+  // do the u label
+  goto_programt::targett u=v;
+
+  // v: if(!c) goto z;
+  v->make_goto(z);
+  expr2tc tmp_cond;
+  migrate_expr(cond, tmp_cond);
+  tmp_cond = not2tc(tmp_cond);
+  v->guard = tmp_cond;
+
+  // do the w label
+  goto_programt tmp_w;
+
+  //set the type of the state vector
+  array_typet state_vector;
+  state_vector.subtype() = state;
+
+  exprt new_expr(exprt::index, state);
+  exprt lhs_array("symbol", state_vector);
+  exprt rhs("symbol", state);
+
+  lhs_array.identifier("s$"+i2string(state_counter));
+  rhs.identifier("cs$"+i2string(state_counter));
+
+  //s[k]
+  new_expr.reserve_operands(2);
+  new_expr.copy_to_operands(lhs_array);
+  new_expr.copy_to_operands(tmp_symbol);
+
+  //assume(s[k]!=cs)
+  exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
+  assume_cond(result_expr, false, tmp_w);
+
+  // y: goto u;
+  goto_programt tmp_y;
+  goto_programt::targett y=tmp_y.add_instruction();
+  y->make_goto(u);
+  y->guard = true_expr;
+
+  dest.destructive_append(tmp_v);
+  dest.destructive_append(tmp_w);
+  copy(tmp_symbol_plus, ASSIGN, dest);
+  dest.destructive_append(tmp_y);
+  dest.destructive_append(tmp_z);
+
+  goto_function.body.destructive_insert(loop_exit, dest);
+}
+
+void goto_k_inductiont::assume_state_vector(
+  goto_programt::targett& loop_exit)
+{
+  goto_programt dest;
+
+  if(constrain_all_states)
+  {
+    assume_all_state_vector(loop_exit);
+    return;
+  }
+
+  std::string identifier;
+  identifier = "kindice$"+i2string(state_counter);
+
+  array_typet state_vector;
+  state_vector.subtype() = state;
+
+  exprt lhs_index = symbol_exprt(identifier, int_type());
+  exprt new_expr(exprt::index, state);
+  exprt lhs_array("symbol", state_vector);
+  exprt rhs("symbol", state);
+
+  std::string identifier_lhs, identifier_rhs;
+
+  identifier_lhs = "s$"+i2string(state_counter);
+  identifier_rhs = "cs$"+i2string(state_counter);
+
+  lhs_array.identifier(identifier_lhs);
+  rhs.identifier(identifier_rhs);
+
+  // s[k]
+  new_expr.reserve_operands(2);
+  new_expr.copy_to_operands(lhs_array);
+  new_expr.copy_to_operands(lhs_index);
+
+  // assume(s[k]!=cs)
+  exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
+  assume_cond(result_expr, false, dest);
+
+  // TODO: This should be in a separate method
+  // kindice=kindice+1
+  exprt one_expr = gen_one(int_type());
+  exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
+  code_assignt new_assign_plus(lhs_index, rhs_expr);
+  copy(new_assign_plus, ASSIGN, dest);
 
   goto_function.body.destructive_insert(loop_exit, dest);
 }
