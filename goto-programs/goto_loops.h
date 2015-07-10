@@ -77,7 +77,18 @@ public:
 
   bool is_infinite_loop()
   {
-    exprt guard = migrate_expr_back(original_loop_head->guard);
+    // First, check if the loop condition is a function
+    // If it is a function, get the guard from the next instruction
+    goto_programt::targett tmp = original_loop_head;
+
+    if(original_loop_head->is_assign())
+      ++tmp;
+
+    exprt guard = migrate_expr_back(tmp->guard);
+
+    if(original_loop_head->is_assign())
+      return guard.is_true();
+
     return guard.op0().is_true();
   }
 
