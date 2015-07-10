@@ -99,7 +99,7 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   // so the created symbol contain all variables in it.
   create_symbols();
 
-  // Get current loop head
+  // Get current loop head and loop exit
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
@@ -112,6 +112,9 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   // Update the state vector, this will be inserted one instruction
   // after the loop head
   update_state_vector(loop_head);
+
+  // Convert the loop body instructions
+  convert_loop_body(loop);
 
   // Assign current state at the end of the loop
   assign_current_state(loop_exit);
@@ -394,7 +397,6 @@ void goto_k_inductiont::assume_all_state_vector(goto_programt::targett& loop_exi
   z->code = kindice_plus2;
 
   // do the x label
-
   rhs_expr = gen_binary(exprt::plus, int_type(), tmp_symbol, one_expr);
   code_assignt tmp_symbol_plus(tmp_symbol, rhs_expr);
 
@@ -493,6 +495,54 @@ void goto_k_inductiont::assume_state_vector(
   copy(new_assign_plus, ASSIGN, dest);
 
   goto_function.body.destructive_insert(loop_exit, dest);
+}
+
+void goto_k_inductiont::convert_loop_body(loopst &loop)
+{
+  // Get loop head and loop exit
+  goto_programt::targett loop_head = loop.get_original_loop_head();
+  goto_programt::targett loop_exit = loop.get_original_loop_exit();
+
+  // Increment loop_head so we don't mistakenly convert the loop condition
+  ++loop_head;
+
+  // Iterate over the loop body and convert the guard of the goto instructions
+  while(loop_head != loop_exit)
+  {
+    if(loop_head->is_goto())
+    {
+      exprt guard = migrate_expr_back(loop_head->guard);
+      replace_guard(loop, guard);
+      migrate_expr(guard, loop_head->guard);
+    }
+
+    ++loop_head;
+  }
+}
+
+void goto_k_inductiont::replace_guard(loopst &loop, exprt& expr)
+{
+  Forall_operands(it, expr)
+    replace_guard(loop, *it);
+
+  if(loop.is_loop_var(expr))
+    replace_by_cs_member(expr);
+}
+
+void goto_k_inductiont::replace_by_cs_member(exprt& expr)
+{
+  exprt lhs_struct("symbol", state);
+  lhs_struct.identifier("cs$" + i2string(state_counter));
+
+  exprt new_expr(exprt::member, expr.type());
+  new_expr.reserve_operands(1);
+  new_expr.copy_to_operands(lhs_struct);
+  new_expr.identifier(expr.identifier());
+  new_expr.component_name(expr.identifier());
+
+  assert(!new_expr.get_string("component_name").empty());
+
+  expr = new_expr;
 }
 
 void goto_k_inductiont::copy(const codet& code,
