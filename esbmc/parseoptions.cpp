@@ -898,6 +898,7 @@ int cbmc_parseoptionst::doit_k_induction()
   status("\n*** Generating Inductive Step ***");
   goto_functionst *inductive_goto_functions = new goto_functionst;
   opts.set_option("inductive-step", true);
+  opts.set_option("disable-inductive-step", true);
 
   if(get_goto_program(opts, *inductive_goto_functions))
     return 6;
@@ -967,6 +968,7 @@ int cbmc_parseoptionst::doit_k_induction()
         return res;
     }
 
+    if(!opts.get_bool_option("disable-inductive-step"))
     {
       opts.set_option("base-case", false);
       opts.set_option("forward-condition", false);
