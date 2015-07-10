@@ -896,22 +896,23 @@ int cbmc_parseoptionst::doit_k_induction()
   context.clear();
 
   status("\n*** Generating Inductive Step ***");
-  goto_functionst inductive_goto_functions;
+  goto_functionst *inductive_goto_functions = new goto_functionst;
   opts.set_option("inductive-step", true);
-  if(get_goto_program(opts, inductive_goto_functions))
+
+  if(get_goto_program(opts, *inductive_goto_functions))
     return 6;
 
-  if(process_goto_program(opts, inductive_goto_functions))
+  if(process_goto_program(opts, *inductive_goto_functions))
     return 6;
 
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
-    show_claims(ns, get_ui(), inductive_goto_functions);
+    show_claims(ns, get_ui(), *inductive_goto_functions);
     return 0;
   }
 
-  if(set_claims(inductive_goto_functions))
+  if(set_claims(*inductive_goto_functions))
     return 7;
 
   bool res = 0;
@@ -971,7 +972,7 @@ int cbmc_parseoptionst::doit_k_induction()
       opts.set_option("forward-condition", false);
       opts.set_option("inductive-step", true);
 
-      bmct bmc(inductive_goto_functions, opts, context, ui_message_handler);
+      bmct bmc(*inductive_goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
       bmc.options.set_option("unwind", i2string(k_step));
