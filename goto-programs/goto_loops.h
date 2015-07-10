@@ -70,6 +70,11 @@ public:
     std::cout << std::endl;
   }
 
+  bool is_loop_var(exprt& expr)
+  {
+    return (loop_vars.find(expr.identifier()) != loop_vars.end());
+  }
+
 protected:
   goto_programt goto_program;
   loop_varst loop_vars;
