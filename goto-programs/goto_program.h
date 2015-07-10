@@ -121,6 +121,9 @@ public:
     typedef std::list<irep_idt> labelst;
     labelst labels;
 
+    // for k-induction
+    bool converted_loop;
+
     std::set<targett> incoming_edges;
 
     //! is this node a branch target?
@@ -210,6 +213,7 @@ public:
     inline instructiont():
       location(static_cast<const locationt &>(get_nil_irep())),
       type(NO_INSTRUCTION_TYPE),
+      converted_loop(false),
       location_number(0),
       loop_number(unsigned(0)),
       target_number(unsigned(-1))
@@ -220,6 +224,7 @@ public:
     inline instructiont(goto_program_instruction_typet _type):
       location(static_cast<const locationt &>(get_nil_irep())),
       type(_type),
+      converted_loop(false),
       location_number(0),
       loop_number(unsigned(0)),
       target_number(unsigned(-1))
