@@ -903,9 +903,6 @@ int cbmc_parseoptionst::doit_k_induction()
   if(get_goto_program(opts, *inductive_goto_functions))
     return 6;
 
-  if(process_goto_program(opts, *inductive_goto_functions))
-    return 6;
-
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
