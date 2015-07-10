@@ -57,7 +57,7 @@ void dump_global_vars()
 void goto_k_induction(
   goto_functionst& goto_functions,
   contextt &context,
-  bool constrain_all_states,
+  optionst &options,
   message_handlert& message_handler)
 {
   get_global_vars(context);
@@ -67,7 +67,7 @@ void goto_k_induction(
       goto_k_inductiont(
         it->second,
         context,
-        constrain_all_states,
+        options,
         message_handler);
 
   goto_functions.update();
@@ -85,6 +85,10 @@ void goto_k_inductiont::goto_k_induction()
     if(!it->second.is_infinite_loop())
       continue;
 
+    // We're going to change the code, so enable inductive step
+    options.set_option("disable-inductive-step", false);
+
+    // Start the loop conversion
     convert_loop(it->second);
   }
 }

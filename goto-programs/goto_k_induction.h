@@ -19,7 +19,7 @@
 void goto_k_induction(
   goto_functionst &goto_functions,
   contextt &_context,
-  bool constrain_all_states,
+  optionst &options,
   message_handlert &message_handler);
 
 class goto_k_inductiont : public goto_loopst
@@ -28,7 +28,7 @@ public:
   goto_k_inductiont(
     goto_functiont &_goto_function,
     contextt &_context,
-    bool _constrain_all_states,
+    optionst &_options,
     message_handlert &_message_handler) :
     goto_loopst(
       _goto_function,
@@ -36,7 +36,8 @@ public:
     context(_context),
     state_counter(0),
     state(struct_typet()),
-    constrain_all_states(_constrain_all_states)
+    constrain_all_states(options.get_bool_option("constrain-all-states")),
+    options(_options)
   {
     // unwind loops
     if(function_loops.size())
@@ -48,6 +49,7 @@ protected:
   unsigned int state_counter;
   struct_typet state;
   bool constrain_all_states;
+  optionst &options;
 
   void goto_k_induction();
   void convert_loop(loopst &loop);
