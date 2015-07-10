@@ -36,7 +36,7 @@ public:
     context(_context),
     state_counter(0),
     state(struct_typet()),
-    constrain_all_states(options.get_bool_option("constrain-all-states")),
+    constrain_all_states(_options.get_bool_option("constrain-all-states")),
     options(_options)
   {
     // unwind loops

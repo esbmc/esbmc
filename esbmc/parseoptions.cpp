@@ -1444,7 +1444,8 @@ bool cbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, ns, ui_message_handler);
     }
 
-    if(cmdline.isset("inductive-step"))
+    if(cmdline.isset("inductive-step")
+       || options.get_bool_option("inductive-step"))
     {
       // Always full inline the code
       if(!cmdline.isset("full-inlining"))
