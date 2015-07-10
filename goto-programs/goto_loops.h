@@ -75,6 +75,31 @@ public:
     return (loop_vars.find(expr.identifier()) != loop_vars.end());
   }
 
+  bool is_infinite_loop()
+  {
+    exprt guard = migrate_expr_back(original_loop_head->guard);
+    return guard.op0().is_true();
+  }
+
+  void output(std::ostream &out = std::cout)
+  {
+    unsigned n=original_loop_head->location_number;
+
+    out << n << " is head of { ";
+
+    for(goto_programt::instructionst::iterator l_it=
+        goto_program.instructions.begin();
+        l_it != goto_program.instructions.end();
+        ++l_it)
+    {
+      if(l_it != goto_program.instructions.begin()) out << ", ";
+        out << (*l_it).location_number;
+    }
+    out << " }\n";
+
+    dump_loop_vars();
+  }
+
 protected:
   goto_programt goto_program;
   loop_varst loop_vars;

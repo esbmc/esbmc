@@ -79,19 +79,7 @@ void goto_loopst::output(std::ostream &out)
       h_it!=function_loops.end();
       ++h_it)
   {
-    unsigned n=h_it->first->location_number;
-
-    out << n << " is head of { ";
-    for(goto_programt::instructionst::iterator l_it=
-        h_it->second.get_goto_program().instructions.begin();
-        l_it!=h_it->second.get_goto_program().instructions.end(); ++l_it)
-    {
-      if(l_it!=h_it->second.get_goto_program().instructions.begin()) out << ", ";
-        out << (*l_it).location_number;
-    }
-    out << " }\n";
-
-    h_it->second.dump_loop_vars();
+    h_it->second.output(out);
   }
 }
 
