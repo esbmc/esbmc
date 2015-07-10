@@ -870,6 +870,8 @@ int cbmc_parseoptionst::doit_k_induction()
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 
+  // Generate goto functions for base case and forward condition
+  status("\n*** Generating Base Case and Forward Condition ***");
   goto_functionst goto_functions;
 
   optionst opts;
@@ -886,6 +888,30 @@ int cbmc_parseoptionst::doit_k_induction()
   }
 
   if(set_claims(goto_functions))
+    return 7;
+
+  // Generate goto functions for inductive step
+  // We'll clean the context so there is no function name clash
+  // It will generate the same context + inductive step's variables
+  context.clear();
+
+  status("\n*** Generating Inductive Step ***");
+  goto_functionst inductive_goto_functions;
+  opts.set_option("inductive-step", true);
+  if(get_goto_program(opts, inductive_goto_functions))
+    return 6;
+
+  if(process_goto_program(opts, inductive_goto_functions))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), inductive_goto_functions);
+    return 0;
+  }
+
+  if(set_claims(inductive_goto_functions))
     return 7;
 
   bool res = 0;
@@ -945,7 +971,7 @@ int cbmc_parseoptionst::doit_k_induction()
       opts.set_option("forward-condition", false);
       opts.set_option("inductive-step", true);
 
-      bmct bmc(goto_functions, opts, context, ui_message_handler);
+      bmct bmc(inductive_goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
       bmc.options.set_option("unwind", i2string(k_step));
