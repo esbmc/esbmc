@@ -82,13 +82,15 @@ void goto_k_inductiont::goto_k_induction()
     ++it)
   {
     assert(!it->second.get_goto_program().empty());
+    if(!it->second.is_infinite_loop())
+      continue;
+
     convert_loop(it->second);
   }
 }
 
 void goto_k_inductiont::convert_loop(loopst &loop)
 {
-  // TODO: check infinite/nondet loop
   assert(!loop.get_goto_program().instructions.empty());
 
   // First, we need to fill the state member with the variables
