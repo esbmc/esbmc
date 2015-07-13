@@ -45,7 +45,7 @@ void get_global_vars(contextt &context)
 
 void dump_global_vars()
 {
-  std::cout << "Loop variables:" << std::endl;
+  std::cout << "Global variables:" << std::endl;
 
   u_int i = 0;
   for (std::pair<irep_idt, const exprt> expr : global_vars)
@@ -142,24 +142,18 @@ void goto_k_inductiont::convert_loop(loopst &loop)
 
 void goto_k_inductiont::fill_state(loopst &loop)
 {
+  // Add global vars to loop map
+  loop.add_var_to_loop(global_vars);
+
   loopst::loop_varst loop_vars = loop.get_loop_vars();
 
   // State size will be the number of loop vars + global vars
-  state.components().resize(loop_vars.size() + global_vars.size());
+  state.components().resize(loop_vars.size());
 
   // Copy from loop vars
   loopst::loop_varst::iterator it = loop_vars.begin();
   unsigned int i=0;
   for(i=0; i<loop_vars.size(); i++, it++)
-  {
-    state.components()[i] = (struct_typet::componentt &) it->second;
-    state.components()[i].set_name(it->second.identifier());
-    state.components()[i].pretty_name(it->second.identifier());
-  }
-
-  // Copy from global vars
-  it = global_vars.begin();
-  for( ; (i-loop_vars.size())<global_vars.size(); i++, it++)
   {
     state.components()[i] = (struct_typet::componentt &) it->second;
     state.components()[i].set_name(it->second.identifier());

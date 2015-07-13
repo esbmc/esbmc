@@ -53,6 +53,11 @@ public:
     original_loop_head = _loop_head;
   }
 
+  void add_var_to_loop(loop_varst &_loop_vars)
+  {
+    loop_vars.insert(_loop_vars.begin(), _loop_vars.end());
+  }
+
   void add_var_to_loop(const exprt &expr)
   {
     loop_vars.insert(
