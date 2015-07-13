@@ -77,19 +77,31 @@ public:
 
   bool is_infinite_loop()
   {
-    // First, check if the loop condition is a function
-    // If it is a function, get the guard from the next instruction
     goto_programt::targett tmp = original_loop_head;
 
+    // First, check if the loop condition is a function
+    // If it is a function, get the guard from the next instruction
     if(original_loop_head->is_assign())
+    {
       ++tmp;
-
-    exprt guard = migrate_expr_back(tmp->guard);
-
-    if(original_loop_head->is_assign())
+      exprt guard = migrate_expr_back(tmp->guard);
       return guard.is_true();
+    }
+    else
+    {
+      exprt guard = migrate_expr_back(tmp->guard);
+      assert(!guard.is_nil());
 
-    return guard.op0().is_true();
+      if(guard.is_true())
+        return true;
+
+      if(guard.is_not())
+        return guard.op0().is_true();
+
+      return false;
+    }
+
+    return false;
   }
 
   void output(std::ostream &out = std::cout)
