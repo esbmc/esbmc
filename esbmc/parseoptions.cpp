@@ -903,15 +903,24 @@ int cbmc_parseoptionst::doit_k_induction()
   if(get_goto_program(opts, *inductive_goto_functions))
     return 6;
 
-  if(cmdline.isset("show-claims"))
-  {
-    const namespacet ns(context);
-    show_claims(ns, get_ui(), *inductive_goto_functions);
-    return 0;
-  }
+  bool disable_inductive_step = opts.get_bool_option("disable-inductive-step");
 
-  if(set_claims(*inductive_goto_functions))
-    return 7;
+  if(disable_inductive_step)
+  {
+    delete inductive_goto_functions;
+  }
+  else
+  {
+    if(cmdline.isset("show-claims"))
+    {
+      const namespacet ns(context);
+      show_claims(ns, get_ui(), *inductive_goto_functions);
+      return 0;
+    }
+
+    if(set_claims(*inductive_goto_functions))
+      return 7;
+  }
 
   bool res = 0;
   u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
@@ -965,7 +974,7 @@ int cbmc_parseoptionst::doit_k_induction()
         return res;
     }
 
-    if(!opts.get_bool_option("disable-inductive-step"))
+    if(!disable_inductive_step)
     {
       opts.set_option("base-case", false);
       opts.set_option("forward-condition", false);
