@@ -992,6 +992,15 @@ int cbmc_parseoptionst::doit_k_induction()
 
       res = do_bmc(bmc);
 
+      // If the inductive step was disable during symex,
+      // remember to free the inductive goto instructions
+      if(opts.get_bool_option("disable-inductive-step"))
+      {
+        disable_inductive_step = true;
+        delete inductive_goto_functions;
+        continue;
+      }
+
       if(!res)
         return res;
     }
