@@ -878,9 +878,9 @@ int cbmc_parseoptionst::doit_k_induction()
   get_command_line_options(opts);
 
   // This will be changed to true if the code contains:
-  // 1. Dynamic allocated memory
-  // 2. Multithreaded code
-  // 3. Recursion
+  // 1. Dynamic allocated memory (during goto conver)
+  // 2. Multithreaded code (during symbolic execution)
+  // 3. Recursion (during inlining)
   opts.set_option("disable-inductive-step", false);
 
   if(get_goto_program(opts, goto_functions))
@@ -914,15 +914,24 @@ int cbmc_parseoptionst::doit_k_induction()
     if(get_goto_program(opts, *inductive_goto_functions))
       return 6;
 
-    if(cmdline.isset("show-claims"))
+    // If the inductive step was disabled during inlining,
+    // remember to free the inductive goto instructions
+    if(opts.get_bool_option("disable-inductive-step"))
     {
-      const namespacet ns(context);
-      show_claims(ns, get_ui(), *inductive_goto_functions);
-      return 0;
+      disable_inductive_step = true;
+      delete inductive_goto_functions;
     }
+    else {
+      if(cmdline.isset("show-claims"))
+      {
+        const namespacet ns(context);
+        show_claims(ns, get_ui(), *inductive_goto_functions);
+        return 0;
+      }
 
-    if(set_claims(*inductive_goto_functions))
-      return 7;
+      if(set_claims(*inductive_goto_functions))
+        return 7;
+    }
   }
 
   bool res = 0;
