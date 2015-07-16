@@ -65,6 +65,7 @@ protected:
   void convert_loop_body(loopst &loop);
   void replace_guard(loopst &loop, exprt &expr);
   void replace_by_cs_member(exprt &expr);
+  void replace_ternary(loopst &loop, exprt &expr, bool is_if_cond = false);
 
   void copy(const codet &code,
     goto_program_instruction_typet type,

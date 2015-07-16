@@ -516,14 +516,24 @@ void goto_k_inductiont::convert_loop_body(loopst &loop)
   // Increment loop_head so we don't mistakenly convert the loop condition
   ++loop_head;
 
-  // Iterate over the loop body and convert the guard of the goto instructions
+  // Iterate over the loop body and convert instructions
   while(loop_head != loop_exit)
   {
+    // Convert guards on the loop (if statements)
     if(loop_head->is_goto())
     {
       exprt guard = migrate_expr_back(loop_head->guard);
       replace_guard(loop, guard);
       migrate_expr(guard, loop_head->guard);
+    }
+
+    // Look for ternary operator to be converted as well
+    if(loop_head->is_assign())
+    {
+      exprt assignment = migrate_expr_back(loop_head->code);
+      assert(assignment.operands().size() == 2);
+      replace_ternary(loop, assignment.op1());
+      migrate_expr(assignment, loop_head->code);
     }
 
     ++loop_head;
@@ -553,6 +563,21 @@ void goto_k_inductiont::replace_by_cs_member(exprt& expr)
   assert(!new_expr.get_string("component_name").empty());
 
   expr = new_expr;
+}
+
+void goto_k_inductiont::replace_ternary(
+  loopst& loop,
+  exprt& expr,
+  bool is_if_cond)
+{
+  Forall_operands(it, expr)
+    replace_ternary(loop, *it, is_if_cond);
+
+  if(expr.id()=="if")
+    replace_ternary(loop, expr.op0(), true);
+
+  if(loop.is_loop_var(expr) && is_if_cond)
+    replace_by_cs_member(expr);
 }
 
 void goto_k_inductiont::copy(const codet& code,
