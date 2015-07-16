@@ -488,7 +488,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
     abort();
   }
 
-  if(process_type != PARENT)
+  if((process_type != PARENT) && (process_type != INDUCTIVE_STEP))
   {
     get_command_line_options(opts);
 
@@ -820,29 +820,44 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Set that we are running inductive step
       opts.set_option("inductive-step", true);
 
-      // Run bmc and only send results in two occasions:
-      // 1. A proof was found, we send the step where it was found
-      // 2. It couldn't find a proof
-      for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
+      if(get_goto_program(opts, goto_functions))
+        return 6;
+
+      if(cmdline.isset("show-claims"))
       {
-        bmct bmc(goto_functions, opts, context, ui_message_handler);
-        set_verbosity_msg(bmc);
+        const namespacet ns(context);
+        show_claims(ns, get_ui(), goto_functions);
+        return 0;
+      }
 
-        bmc.options.set_option("unwind", i2string(k_step));
-        bool res = do_bmc(bmc);
+      if(set_claims(goto_functions))
+        return 7;
 
-        // Send information to parent if a bug was found
-        if(!res)
+      if(!opts.get_bool_option("disable-inductive-step"))
+      {
+        // Run bmc and only send results in two occasions:
+        // 1. A proof was found, we send the step where it was found
+        // 2. It couldn't find a proof
+        for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
         {
-          r.finished_solution_found = true;
-          r.k = k_step;
+          bmct bmc(goto_functions, opts, context, ui_message_handler);
+          set_verbosity_msg(bmc);
 
-          // Write result
-          u_int len = write(commPipe[1], &r, sizeof(r));
-          assert(len == sizeof(r) && "short write");
-          (void)len; //ndebug
+          bmc.options.set_option("unwind", i2string(k_step));
+          bool res = do_bmc(bmc);
 
-          return res;
+          // Send information to parent if a bug was found
+          if(!res)
+          {
+            r.k = k_step;
+
+            // Write result
+            u_int len = write(commPipe[1], &r, sizeof(r));
+            assert(len == sizeof(r) && "short write");
+            (void)len; //ndebug
+
+            return res;
+          }
         }
       }
 
