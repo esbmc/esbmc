@@ -281,6 +281,16 @@ void goto_convertt::do_malloc(
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;
   t_n->location=location;
+
+  if((options.get_bool_option("k-induction")
+     || options.get_bool_option("k-induction-parallel"))
+     && !options.get_bool_option("disable-inductive-step"))
+  {
+    std::cout << "**** WARNING: this program contains dynamic memory allocation,"
+              << " so we are not applying the inductive step to this program!"
+              << std::endl;
+    options.set_option("disable-inductive-step", true);
+  }
 }
 
 /*******************************************************************\

@@ -896,9 +896,11 @@ int cbmc_parseoptionst::doit_k_induction()
   if(set_claims(goto_functions))
     return 7;
 
-  // Check if the
+  goto_functionst *inductive_goto_functions;
+
+  // Check if the inductive step was disabled
   bool disable_inductive_step = opts.get_bool_option("disable-inductive-step");
-  if(disable_inductive_step)
+  if(!disable_inductive_step)
   {
     // Generate goto functions for inductive step
     // We'll clean the context so there is no function name clash
@@ -906,7 +908,7 @@ int cbmc_parseoptionst::doit_k_induction()
     context.clear();
 
     status("\n*** Generating Inductive Step ***");
-    goto_functionst *inductive_goto_functions = new goto_functionst;
+    inductive_goto_functions = new goto_functionst;
     opts.set_option("inductive-step", true);
 
     if(get_goto_program(opts, *inductive_goto_functions))
