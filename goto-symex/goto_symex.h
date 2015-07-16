@@ -56,7 +56,7 @@ public:
    */
   goto_symext(const namespacet &_ns, contextt &_new_context,
               const goto_functionst &goto_functions,
-              symex_targett *_target, const optionst &opts);
+              symex_targett *_target, optionst &opts);
   goto_symext(const goto_symext &sym);
   goto_symext& operator=(const goto_symext &sym);
 
@@ -651,7 +651,7 @@ protected:
   /** Namespace we're working in. */
   const namespacet &ns;
   /** Options we're working with */
-  const optionst &options;
+  optionst &options;
   /** Context we're working with */
   contextt &new_context;
   /** GOTO functions that we're operating over. */
