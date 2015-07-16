@@ -899,8 +899,7 @@ int cbmc_parseoptionst::doit_k_induction()
   goto_functionst *inductive_goto_functions;
 
   // Check if the inductive step was disabled
-  bool disable_inductive_step = opts.get_bool_option("disable-inductive-step");
-  if(!disable_inductive_step)
+  if(!opts.get_bool_option("disable-inductive-step"))
   {
     // Generate goto functions for inductive step
     // We'll clean the context so there is no function name clash
@@ -918,7 +917,6 @@ int cbmc_parseoptionst::doit_k_induction()
     // remember to free the inductive goto instructions
     if(opts.get_bool_option("disable-inductive-step"))
     {
-      disable_inductive_step = true;
       delete inductive_goto_functions;
     }
     else {
@@ -986,7 +984,7 @@ int cbmc_parseoptionst::doit_k_induction()
         return res;
     }
 
-    if(!disable_inductive_step)
+    if(!opts.get_bool_option("disable-inductive-step"))
     {
       opts.set_option("base-case", false);
       opts.set_option("forward-condition", false);
@@ -1008,7 +1006,6 @@ int cbmc_parseoptionst::doit_k_induction()
       // remember to free the inductive goto instructions
       if(opts.get_bool_option("disable-inductive-step"))
       {
-        disable_inductive_step = true;
         delete inductive_goto_functions;
         continue;
       }
