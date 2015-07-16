@@ -898,7 +898,7 @@ int cbmc_parseoptionst::doit_k_induction()
   get_command_line_options(opts);
 
   // This will be changed to true if the code contains:
-  // 1. Dynamic allocated memory (during goto conver)
+  // 1. Dynamic allocated memory (during goto convert)
   // 2. Multithreaded code (during symbolic execution)
   // 3. Recursion (during inlining)
   opts.set_option("disable-inductive-step", false);
@@ -1514,13 +1514,18 @@ bool cbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("inductive-step")
        || options.get_bool_option("inductive-step"))
     {
+      // If the inductive step was disabled during the conversion,
+      // there is no point spending time trying to convert it,
+      // so just give up and return
+      if(options.get_bool_option("disable-inductive-step"))
+        return false;
+
       // Always full inline the code
       if(!cmdline.isset("full-inlining"))
         goto_inline(goto_functions, options, ns, ui_message_handler);
 
       // If the inductive step was disabled during the inlining,
-      // there is no point spending time trying to convert it,
-      // so just give up and return
+      // give up and return
       if(options.get_bool_option("disable-inductive-step"))
         return false;
 
