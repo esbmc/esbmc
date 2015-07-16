@@ -32,6 +32,7 @@ extern "C" {
 #include <config.h>
 #include <expr_util.h>
 #include <time_stopping.h>
+#include <symbol.h>
 
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_check.h>
@@ -488,10 +489,10 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
     abort();
   }
 
+  get_command_line_options(opts);
+
   if((process_type != PARENT) && (process_type != INDUCTIVE_STEP))
   {
-    get_command_line_options(opts);
-
     if(get_goto_program(opts, goto_functions))
       return 6;
 
@@ -811,9 +812,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
       // Struct to keep the result
       struct resultt r = { process_type, 0 };
-
-      // Generate inductive goto instructions
-      get_command_line_options(opts);
 
       // Set that we are running inductive step
       opts.set_option("inductive-step", true);
@@ -1402,8 +1400,6 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
   return;
 }
-
-#include <symbol.h>
 
 static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
 {
