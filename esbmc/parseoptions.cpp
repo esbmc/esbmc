@@ -896,7 +896,7 @@ int cbmc_parseoptionst::doit_k_induction()
   if(set_claims(goto_functions))
     return 7;
 
-  goto_functionst *inductive_goto_functions;
+  goto_functionst *inductive_goto_functions = NULL;
 
   // Check if the inductive step was disabled
   if(!opts.get_bool_option("disable-inductive-step"))
@@ -918,6 +918,7 @@ int cbmc_parseoptionst::doit_k_induction()
     if(opts.get_bool_option("disable-inductive-step"))
     {
       delete inductive_goto_functions;
+      inductive_goto_functions = NULL;
     }
     else {
       if(cmdline.isset("show-claims"))
@@ -957,6 +958,15 @@ int cbmc_parseoptionst::doit_k_induction()
 
       res = do_bmc(bmc);
 
+      // If it was disabled during symbolic execution,
+      // remember to clean the inductive goto instructions
+      if(opts.get_bool_option("disable-inductive-step")
+         && inductive_goto_functions != NULL)
+      {
+        delete inductive_goto_functions;
+        inductive_goto_functions = NULL;
+      }
+
       if(res)
         return res;
     }
@@ -977,6 +987,15 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << i2string((unsigned long) k_step);
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking forward condition" << std::endl;
+
+      // If it was disabled during symbolic execution,
+      // remember to clean the inductive goto instructions
+      if(opts.get_bool_option("disable-inductive-step")
+         && inductive_goto_functions != NULL)
+      {
+        delete inductive_goto_functions;
+        inductive_goto_functions = NULL;
+      }
 
       res = do_bmc(bmc);
 
@@ -1007,6 +1026,7 @@ int cbmc_parseoptionst::doit_k_induction()
       if(opts.get_bool_option("disable-inductive-step"))
       {
         delete inductive_goto_functions;
+        inductive_goto_functions = NULL;
         continue;
       }
 
