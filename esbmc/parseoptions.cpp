@@ -73,7 +73,6 @@ struct resultt
 {
   PROCESS_TYPE type;
   u_int k;
-  bool finished_solution_found;
 };
 
 #ifndef _WIN32
@@ -85,7 +84,6 @@ timeout_handler(int dummy __attribute__((unused)))
     struct resultt r;
     r.type = process_type;
     r.k = -1;
-    r.finished_solution_found = false;
 
     unsigned int len = write(commPipe[1], &r, sizeof(r));
     assert(len == sizeof(r) && "short write");
@@ -622,17 +620,17 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         switch(a_result.type)
         {
           case BASE_CASE:
-            bc_finished = a_result.finished_solution_found;
+            bc_finished = true;
             bc_solution = a_result.k;
             break;
 
           case FORWARD_CONDITION:
-            fc_finished = a_result.finished_solution_found;
+            fc_finished = true;
             fc_solution = a_result.k;
             break;
 
           case INDUCTIVE_STEP:
-            is_finished = a_result.finished_solution_found;
+            is_finished = true;
             is_solution = a_result.k;
             break;
 
@@ -704,7 +702,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       close(commPipe[0]);
 
       // Struct to keep the result
-      struct resultt r = { process_type, 0, false };
+      struct resultt r = { process_type, 0 };
 
       // Set that we are running base case
       opts.set_option("base-case", true);
@@ -723,7 +721,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // Send information to parent if a bug was found
         if(res)
         {
-          r.finished_solution_found = true;
           r.k = k_step;
 
           // Write result
@@ -736,7 +733,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       }
 
       // Send information to parent that a bug was not found
-      r.finished_solution_found = false;
       r.k = 0;
 
       u_int len = write(commPipe[1], &r, sizeof(r));
@@ -761,7 +757,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       close(commPipe[0]);
 
       // Struct to keep the result
-      struct resultt r = { process_type, 0, false };
+      struct resultt r = { process_type, 0 };
 
       // Set that we are running forward condition
       opts.set_option("forward-condition", true);
@@ -780,7 +776,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // Send information to parent if a bug was found
         if(!res)
         {
-          r.finished_solution_found = true;
           r.k = k_step;
 
           // Write result
@@ -793,7 +788,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       }
 
       // Send information to parent that a bug was not found
-      r.finished_solution_found = false;
       r.k = 0;
 
       u_int len = write(commPipe[1], &r, sizeof(r));
@@ -818,7 +812,10 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       close(commPipe[0]);
 
       // Struct to keep the result
-      struct resultt r = { process_type, 0, false };
+      struct resultt r = { process_type, 0 };
+
+      // Generate inductive goto instructions
+      get_command_line_options(opts);
 
       // Set that we are running inductive step
       opts.set_option("inductive-step", true);
@@ -850,7 +847,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       }
 
       // Send information to parent that a bug was not found
-      r.finished_solution_found = false;
       r.k = 0;
 
       u_int len = write(commPipe[1], &r, sizeof(r));
@@ -860,7 +856,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
 
       if(cmdline.isset("k-induction-busy-wait")
-          || opts.get_bool_option("k-induction-busy-wait"))
+         || opts.get_bool_option("k-induction-busy-wait"))
       {
         while(1)
           sleep(1);
