@@ -268,9 +268,20 @@ void goto_inlinet::expand_function_call(
 
     // it's really recursive. Give up.
     err_location(function);
-    warning("recursion is ignored");
+    warning("Recursion is ignored when inlining");
     target->make_skip();
-    
+
+    if((options.get_bool_option("k-induction")
+        || options.get_bool_option("k-induction-parallel"))
+        && !options.get_bool_option("disable-inductive-step"))
+    {
+      std::cout << "**** WARNING: this program contains recursive function calls,"
+                << " so we are not applying the inductive step to this program!"
+                << std::endl;
+      options.set_option("disable-inductive-step", true);
+      throw 0;
+    }
+
     target++;
     return;
   }
@@ -530,11 +541,12 @@ Function: goto_inline
 
 void goto_inline(
   goto_functionst &goto_functions,
+  optionst &options,
   const namespacet &ns,
   goto_programt &dest,
   message_handlert &message_handler)
 {
-  goto_inlinet goto_inline(goto_functions, ns, message_handler);
+  goto_inlinet goto_inline(goto_functions, options, ns, message_handler);
 
   {
     // find main
@@ -599,10 +611,11 @@ Function: goto_inline
 
 void goto_inline(
   goto_functionst &goto_functions,
+  optionst &options,
   const namespacet &ns,
   message_handlert &message_handler)
 {
-  goto_inlinet goto_inline(goto_functions, ns, message_handler);
+  goto_inlinet goto_inline(goto_functions, options, ns, message_handler);
 
   try
   {
@@ -660,12 +673,14 @@ Function: goto_partial_inline
 
 void goto_partial_inline(
   goto_functionst &goto_functions,
+  optionst &options,
   const namespacet &ns,
   message_handlert &message_handler,
   unsigned _smallfunc_limit)
 {
   goto_inlinet goto_inline(
     goto_functions,
+    options,
     ns,
     message_handler);
   

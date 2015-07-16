@@ -19,12 +19,14 @@ Author: Daniel Kroening, kroening@kroening.com
 // do a full inlining
 void goto_inline(
   goto_functionst &goto_functions,
+  optionst &options,
   const namespacet &ns,
   goto_programt &dest,
   message_handlert &message_handler);
 
 void goto_inline(
   goto_functionst &goto_functions,
+  optionst &options,
   const namespacet &ns,
   message_handlert &message_handler);
 
@@ -32,6 +34,7 @@ void goto_inline(
 // and functions with less than _smallfunc_limit instructions
 void goto_partial_inline(
   goto_functionst &goto_functions,
+  optionst &options,
   const namespacet &ns,
   message_handlert &message_handler,
   unsigned _smallfunc_limit = 0);
@@ -41,11 +44,13 @@ class goto_inlinet:public message_streamt
 public:
   goto_inlinet(
     goto_functionst &_goto_functions,
+    optionst &_options,
     const namespacet &_ns,
     message_handlert &_message_handler):
     message_streamt(_message_handler),
     smallfunc_limit(0),
     goto_functions(_goto_functions),
+    options(_options),
     ns(_ns)
   {
   }
@@ -65,6 +70,7 @@ public:
 
 protected:
   goto_functionst &goto_functions;
+  optionst &options;
   const namespacet &ns;
   
   void expand_function_call(
