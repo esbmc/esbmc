@@ -642,18 +642,16 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
         // If either the base case found a bug or the forward condition
         // finds a solution, present the result
-        if(bc_finished && (bc_solution != 0))
+        if(bc_finished && (bc_solution != 0) && (bc_solution != (u_int) -1))
           break;
 
-        // If either the base case found a bug or the forward condition
-        // finds a solution, present the result
-        if(fc_finished && (fc_solution != 0))
+        if(fc_finished && (fc_solution != 0) && (fc_solution != (u_int) -1))
           break;
 
         // If the inductive step finds a solution, first check if base case
         // couldn't find a bug in that code, if there is no bug, inductive
         // step can present the result
-        if((is_finished && (is_solution != 0))
+        if((is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
           && (!bc_finished && (bc_solution == 0)))
           break;
       }
@@ -662,7 +660,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         kill(children_pid[i], SIGKILL);
 
       // Check if a solution was found by the base case
-      if(bc_finished && (bc_solution != 0))
+      if(bc_finished && (bc_solution != 0) && (bc_solution != (u_int) -1))
       {
         std::cout << std::endl << "Solution found by the base case " << "(k = "
             << bc_solution << ")" << std::endl;
@@ -671,7 +669,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       }
 
       // Check if a solution was found by the forward condition
-      if(fc_finished && (fc_solution != 0))
+      if(fc_finished && (fc_solution != 0) && (fc_solution != (u_int) -1))
       {
         std::cout << std::endl << "Solution found by the forward condition "
             << "(k = " << fc_solution << ")" << std::endl;
@@ -681,7 +679,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
       // Check if a solution was found by the inductive step and
       // the base case didn't find a bug
-      if((is_finished && (is_solution != 0))
+      if((is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
           && (!bc_finished && (bc_solution == 0)))
       {
         std::cout << std::endl << "Solution found by the inductive step "
