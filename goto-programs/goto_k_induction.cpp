@@ -62,6 +62,13 @@ void goto_k_induction(
 {
   get_global_vars(context);
 
+  // If we got this far, that means that the code does not have any
+  // dynamic allocated memory or recursive function calls, but it
+  // may also does not contain any infinite loop, so we set the
+  // disable-inductive-step and it should be set to false if there is
+  // an infinite loop in the code
+  options.set_option("disable-inductive-step", true);
+
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
       goto_k_inductiont(
