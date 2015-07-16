@@ -247,11 +247,13 @@ bool check_var_name(const exprt &expr)
   if(found != std::string::npos)
     return false;
 
+  found = expr.identifier().as_string().find("c::pthread_lib");
+  if(found != std::string::npos)
+    return false;
+
   if(expr.identifier().as_string() == "c::__func__"
      || expr.identifier().as_string() == "c::__PRETTY_FUNCTION__"
-     || expr.identifier().as_string() == "c::__LINE__"
-     || expr.identifier().as_string() == "c::pthread_lib::num_total_threads"
-     || expr.identifier().as_string() == "c::pthread_lib::num_threads_running")
+     || expr.identifier().as_string() == "c::__LINE__")
     return false;
 
   if(expr.location().file().as_string() == "<built-in>"
