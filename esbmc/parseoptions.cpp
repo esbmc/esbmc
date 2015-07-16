@@ -877,6 +877,12 @@ int cbmc_parseoptionst::doit_k_induction()
   optionst opts;
   get_command_line_options(opts);
 
+  // This will be changed to true if the code contains:
+  // 1. Dynamic allocated memory
+  // 2. Multithreaded code
+  // 3. Recursion
+  opts.set_option("disable-inductive-step", false);
+
   if(get_goto_program(opts, goto_functions))
     return 6;
 
@@ -890,27 +896,22 @@ int cbmc_parseoptionst::doit_k_induction()
   if(set_claims(goto_functions))
     return 7;
 
-  // Generate goto functions for inductive step
-  // We'll clean the context so there is no function name clash
-  // It will generate the same context + inductive step's variables
-  context.clear();
-
-  status("\n*** Generating Inductive Step ***");
-  goto_functionst *inductive_goto_functions = new goto_functionst;
-  opts.set_option("inductive-step", true);
-  opts.set_option("disable-inductive-step", true);
-
-  if(get_goto_program(opts, *inductive_goto_functions))
-    return 6;
-
+  // Check if the
   bool disable_inductive_step = opts.get_bool_option("disable-inductive-step");
-
   if(disable_inductive_step)
   {
-    delete inductive_goto_functions;
-  }
-  else
-  {
+    // Generate goto functions for inductive step
+    // We'll clean the context so there is no function name clash
+    // It will generate the same context + inductive step's variables
+    context.clear();
+
+    status("\n*** Generating Inductive Step ***");
+    goto_functionst *inductive_goto_functions = new goto_functionst;
+    opts.set_option("inductive-step", true);
+
+    if(get_goto_program(opts, *inductive_goto_functions))
+      return 6;
+
     if(cmdline.isset("show-claims"))
     {
       const namespacet ns(context);
