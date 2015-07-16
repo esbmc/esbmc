@@ -72,9 +72,8 @@ PROCESS_TYPE process_type = PARENT;
 struct resultt
 {
   PROCESS_TYPE type;
-  short result;
   u_int k;
-  bool finished;
+  bool finished_solution_found;
 };
 
 #ifndef _WIN32
@@ -85,8 +84,8 @@ timeout_handler(int dummy __attribute__((unused)))
   {
     struct resultt r;
     r.type = process_type;
-    r.k = 0;
-    r.finished = true;
+    r.k = -1;
+    r.finished_solution_found = false;
 
     unsigned int len = write(commPipe[1], &r, sizeof(r));
     assert(len == sizeof(r) && "short write");
@@ -485,8 +484,11 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
   goto_functionst goto_functions;
   optionst opts;
 
-  if(process_type == PARENT)
-    assert(num_p == 3 && "Child processes were not created sucessfully.");
+  if(process_type == PARENT && num_p != 3)
+  {
+    std::cerr << "Child processes were not created sucessfully." << std::endl;
+    abort();
+  }
 
   if(process_type != PARENT)
   {
@@ -509,7 +511,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
   // do actual BMC
   u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
   if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = 100000;
+    max_k_step = -1;
 
   // All processes were created successfully
   switch(process_type)
@@ -519,20 +521,11 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       close(commPipe[1]);
 
       struct resultt a_result;
-      bool bc_res[max_k_step], fc_res[max_k_step], is_res[max_k_step];
-
-      for(u_int i = 0; i < max_k_step; ++i)
-      {
-        bc_res[i] = false;
-        fc_res[i] = is_res[i] = true;
-      }
-
-      short solution_found = 0;
-
       bool bc_finished = false, fc_finished = false, is_finished = false;
+      u_int bc_solution = -1, fc_solution = -1, is_solution = -1;
 
       // Keep reading untill we find an answer
-      while(!(bc_finished && fc_finished && is_finished) && !solution_found)
+      while(!(bc_finished && fc_finished && is_finished))
       {
         // Perform read and interpret the number of bytes read
         int read_size;
@@ -556,7 +549,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         }
 
         // Eventually checks on each step
-        if(!bc_finished)
+        if(!bc_finished && (bc_solution == (u_int) -1))
         {
           int status;
           pid_t result = waitpid(children_pid[0], &status, WNOHANG);
@@ -570,7 +563,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
           else
           {
-            std::cout << "BASE CASE PROCESS CRASHED." << std::endl;
+            std::cout << "WARNING: **** Base case process crashed." << std::endl;
 
             bc_finished = true;
             if(cmdline.isset("dont-ignore-dead-child-process"))
@@ -578,7 +571,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
         }
 
-        if(!fc_finished)
+        if(!fc_finished && (fc_solution == (u_int) -1))
         {
           int status;
           pid_t result = waitpid(children_pid[1], &status, WNOHANG);
@@ -592,7 +585,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
           else
           {
-            std::cout << "FORWARD CONDITION PROCESS CRASHED." << std::endl;
+            std::cout << "WARNING: **** Forward condition process crashed." << std::endl;
 
             fc_finished = true;
             if(cmdline.isset("dont-ignore-dead-child-process"))
@@ -600,7 +593,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
         }
 
-        if(!is_finished)
+        if(!is_finished && (is_solution == (u_int) -1))
         {
           int status;
           pid_t result = waitpid(children_pid[2], &status, WNOHANG);
@@ -614,7 +607,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
           else
           {
-            std::cout << "INDUCTIVE STEP PROCESS CRASHED." << std::endl;
+            std::cout << "WARNING: **** Inductive step process crashed." << std::endl;
 
             is_finished = true;
             if(cmdline.isset("dont-ignore-dead-child-process"))
@@ -622,51 +615,25 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
         }
 
+        // Ignore zero sized messages
         if(read_size == 0)
           continue;
 
         switch(a_result.type)
         {
           case BASE_CASE:
-            if(a_result.finished)
-            {
-              bc_finished = true;
-              break;
-            }
-
-            bc_res[a_result.k] = a_result.result;
-
-            if(a_result.result)
-              solution_found = a_result.k;
-
+            bc_finished = a_result.finished_solution_found;
+            bc_solution = a_result.k;
             break;
 
           case FORWARD_CONDITION:
-            if(a_result.finished)
-            {
-              fc_finished = true;
-              break;
-            }
-
-            fc_res[a_result.k] = a_result.result;
-
-            if(!a_result.result)
-              solution_found = a_result.k;
-
+            fc_finished = a_result.finished_solution_found;
+            fc_solution = a_result.k;
             break;
 
           case INDUCTIVE_STEP:
-            if(a_result.finished)
-            {
-              is_finished = true;
-              break;
-            }
-
-            is_res[a_result.k] = a_result.result;
-
-            if(!a_result.result)
-              solution_found = a_result.k;
-
+            is_finished = a_result.finished_solution_found;
+            is_solution = a_result.k;
             break;
 
           default:
@@ -674,43 +641,60 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
                 << "process" << std::endl;
             abort();
         }
+
+        // If either the base case found a bug or the forward condition
+        // finds a solution, present the result
+        if(bc_finished && (bc_solution != 0))
+          break;
+
+        // If either the base case found a bug or the forward condition
+        // finds a solution, present the result
+        if(fc_finished && (fc_solution != 0))
+          break;
+
+        // If the inductive step finds a solution, first check if base case
+        // couldn't find a bug in that code, if there is no bug, inductive
+        // step can present the result
+        if((is_finished && (is_solution != 0))
+          && (!bc_finished && (bc_solution == 0)))
+          break;
       }
 
       for(short i = 0; i < 3; ++i)
         kill(children_pid[i], SIGKILL);
 
-      // No solution was found :/
-      if(!solution_found)
-      {
-        std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
-        return 0;
-      }
-
-      if(bc_res[solution_found])
+      // Check if a solution was found by the base case
+      if(bc_finished && (bc_solution != 0))
       {
         std::cout << std::endl << "Solution found by the base case " << "(k = "
-            << solution_found << ")" << std::endl;
+            << bc_solution << ")" << std::endl;
         std::cout << "VERIFICATION FAILED" << std::endl;
-        return bc_res[solution_found];
+        return true;
       }
 
-      // Successful!
-      if(!bc_res[solution_found] && !fc_res[solution_found])
+      // Check if a solution was found by the forward condition
+      if(fc_finished && (fc_solution != 0))
       {
         std::cout << std::endl << "Solution found by the forward condition "
-            << "(k = " << solution_found << ")" << std::endl;
+            << "(k = " << fc_solution << ")" << std::endl;
         std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
-        return fc_res[solution_found];
+        return false;
       }
 
-      if(!bc_res[solution_found] && !is_res[solution_found])
+      // Check if a solution was found by the inductive step and
+      // the base case didn't find a bug
+      if((is_finished && (is_solution != 0))
+          && (!bc_finished && (bc_solution == 0)))
       {
         std::cout << std::endl << "Solution found by the inductive step "
-            << "(k = " << solution_found << ")" << std::endl;
+            << "(k = " << is_solution << ")" << std::endl;
         std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
-        return is_res[solution_found];
+        return false;
       }
 
+      // Couldn't find a bug or a proof for the current deepth
+      std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
+      return false;
       break;
     }
 
@@ -720,31 +704,41 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       close(commPipe[0]);
 
       // Struct to keep the result
-      struct resultt r = { process_type, false, 0, false };
+      struct resultt r = { process_type, 0, false };
 
       // Set that we are running base case
       opts.set_option("base-case", true);
 
+      // Run bmc and only send results in two occasions:
+      // 1. A bug was found, we send the step where it was found
+      // 2. It couldn't find a bug
       for(u_int k_step = 1; k_step <= max_k_step; ++k_step)
       {
         bmct bmc(goto_functions, opts, context, ui_message_handler);
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        r.k = k_step;
+        bool res = do_bmc(bmc);
 
-        r.result = do_bmc(bmc);
+        // Send information to parent if a bug was found
+        if(res)
+        {
+          r.finished_solution_found = true;
+          r.k = k_step;
 
-        // Write result
-        u_int len = write(commPipe[1], &r, sizeof(r));
-        assert(len == sizeof(r) && "short write");
-        (void)len; //ndebug
+          // Write result
+          u_int len = write(commPipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
+          (void)len; //ndebug
 
-        if(r.result)
-          return r.result;
+          return res;
+        }
       }
 
-      r.finished = true;
+      // Send information to parent that a bug was not found
+      r.finished_solution_found = false;
+      r.k = 0;
+
       u_int len = write(commPipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
       (void)len; //ndebug
@@ -767,31 +761,41 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       close(commPipe[0]);
 
       // Struct to keep the result
-      struct resultt r = { process_type, false, 0, false };
+      struct resultt r = { process_type, 0, false };
 
       // Set that we are running forward condition
       opts.set_option("forward-condition", true);
 
+      // Run bmc and only send results in two occasions:
+      // 1. A proof was found, we send the step where it was found
+      // 2. It couldn't find a proof
       for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
       {
         bmct bmc(goto_functions, opts, context, ui_message_handler);
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        r.k = k_step;
+        bool res = do_bmc(bmc);
 
-        r.result = do_bmc(bmc);
+        // Send information to parent if a bug was found
+        if(!res)
+        {
+          r.finished_solution_found = true;
+          r.k = k_step;
 
-        // Write result
-        u_int len = write(commPipe[1], &r, sizeof(r));
-        assert(len == sizeof(r) && "short write");
-        (void)len; //ndebug
+          // Write result
+          u_int len = write(commPipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
+          (void)len; //ndebug
 
-        if(!r.result)
-          return r.result;
+          return res;
+        }
       }
 
-      r.finished = true;
+      // Send information to parent that a bug was not found
+      r.finished_solution_found = false;
+      r.k = 0;
+
       u_int len = write(commPipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
       (void)len; //ndebug
@@ -810,38 +814,45 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
     case INDUCTIVE_STEP:
     {
-      // Inductive step is disabled for now
-      assert(0);
-
       // Start communication to the parent process
       close(commPipe[0]);
 
       // Struct to keep the result
-      struct resultt r = { process_type, false, 0, false };
+      struct resultt r = { process_type, 0, false };
 
       // Set that we are running inductive step
       opts.set_option("inductive-step", true);
 
+      // Run bmc and only send results in two occasions:
+      // 1. A proof was found, we send the step where it was found
+      // 2. It couldn't find a proof
       for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
       {
         bmct bmc(goto_functions, opts, context, ui_message_handler);
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        r.k = k_step;
+        bool res = do_bmc(bmc);
 
-        r.result = do_bmc(bmc);
+        // Send information to parent if a bug was found
+        if(!res)
+        {
+          r.finished_solution_found = true;
+          r.k = k_step;
 
-        // Write result
-        u_int len = write(commPipe[1], &r, sizeof(r));
-        assert(len == sizeof(r) && "short write");
-        (void)len; //ndebug
+          // Write result
+          u_int len = write(commPipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
+          (void)len; //ndebug
 
-        if(!r.result)
-          return r.result;
+          return res;
+        }
       }
 
-      r.finished = true;
+      // Send information to parent that a bug was not found
+      r.finished_solution_found = false;
+      r.k = 0;
+
       u_int len = write(commPipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
       (void)len; //ndebug
