@@ -54,7 +54,7 @@ public:
     ns(_ns)
   {
   }
-  
+
   void goto_inline(goto_programt &dest);
   void goto_inline_rec(goto_programt &dest, bool full);
 
@@ -66,13 +66,13 @@ public:
     bool full,
     goto_programt::targett &target);
 
-  unsigned smallfunc_limit; 
+  unsigned smallfunc_limit;
 
 protected:
   goto_functionst &goto_functions;
   optionst &options;
   const namespacet &ns;
-  
+
   void expand_function_call(
     goto_programt &dest,
     goto_programt::targett &target,
@@ -81,12 +81,12 @@ protected:
     const exprt::operandst &arguments,
     const exprt &constrain,
     bool recursive);
-    
+
   void replace_return(
     goto_programt &body,
     const exprt &lhs,
     const exprt &constrain);
-    
+
   void parameter_assignments(
     const locationt &location,
     const code_typet &code_type,
@@ -95,7 +95,7 @@ protected:
 
   typedef hash_set_cont<irep_idt, irep_id_hash> recursion_sett;
   recursion_sett recursion_set;
-  
+
   typedef hash_set_cont<irep_idt, irep_id_hash> no_body_sett;
   no_body_sett no_body_set;
 
