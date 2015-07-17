@@ -251,6 +251,11 @@ bool check_var_name(const exprt &expr)
   if(found != std::string::npos)
     return false;
 
+  // Don't add variables that we created for k-induction
+  found = expr.identifier().as_string().find("$");
+  if(found != std::string::npos)
+    return false;
+
   if(expr.identifier().as_string() == "c::__func__"
      || expr.identifier().as_string() == "c::__PRETTY_FUNCTION__"
      || expr.identifier().as_string() == "c::__LINE__")
