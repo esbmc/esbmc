@@ -25,11 +25,13 @@ class goto_unwindt: public goto_loopst
 {
 public:
   goto_unwindt(
+    const irep_idt &_function_name,
     goto_functionst &_goto_functions,
     goto_functiont &_goto_function,
     unsigned _unwind,
     message_handlert &_message_handler) :
     goto_loopst(
+      _function_name,
       _goto_functions,
       _goto_function,
       _message_handler),
