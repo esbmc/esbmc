@@ -104,6 +104,10 @@ void goto_loopst::get_modified_variables(
       abort();
     }
 
+    // Avoid iterating over functions that don't have a body
+    if(!it->second.body_available)
+      return;
+
     for(goto_programt::instructionst::iterator head=
         it->second.body.instructions.begin();
         head != it->second.body.instructions.end();
