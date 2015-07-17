@@ -14,6 +14,8 @@
 #include "goto_k_induction.h"
 #include "remove_skip.h"
 
+static unsigned int state_counter = 1;
+
 loopst::loop_varst global_vars;
 void add_global_vars(const exprt& expr)
 {

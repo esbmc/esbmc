@@ -36,7 +36,6 @@ public:
       _goto_function,
       _message_handler),
     context(_context),
-    state_counter(0),
     state(struct_typet()),
     constrain_all_states(_options.get_bool_option("constrain-all-states")),
     options(_options)
@@ -48,7 +47,6 @@ public:
 
 protected:
   contextt &context;
-  unsigned int state_counter;
   struct_typet state;
   bool constrain_all_states;
   optionst &options;
