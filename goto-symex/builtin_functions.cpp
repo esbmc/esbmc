@@ -545,7 +545,9 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
-  if((k_induction || inductive_step)
+  if((options.get_bool_option("k-induction")
+    || (options.get_bool_option("k-induction-parallel")
+        && options.get_bool_option("inductive-step")))
     && !options.get_bool_option("disable-inductive-step"))
   {
     std::cout << "**** WARNING: this program is multithreaded,"
