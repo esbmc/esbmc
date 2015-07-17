@@ -840,11 +840,16 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           set_verbosity_msg(bmc);
 
           bmc.options.set_option("unwind", i2string(k_step));
-          bool res = do_bmc(bmc);
+          bool res = true;
 
-          // If the inductive step was disabled during symex,
-          // remember to free the inductive goto instructions
-          if(bmc.options.get_bool_option("disable-inductive-step")) {
+          // if there is multithreaded code, an exception will be thrown
+          // this will catch it and send the message to the parent process
+          // to stop verification
+          try {
+            res = do_bmc(bmc);
+          }
+          catch(int)
+          {
             break;
           }
 

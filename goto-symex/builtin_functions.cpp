@@ -554,6 +554,14 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
         << " so we are not applying the inductive step to this program!"
         << std::endl;
     options.set_option("disable-inductive-step", true);
+
+    // Hack to stop inductive step verification if a multithreaded code is
+    // found. It will only throw if we are running parallel k-induction
+    // and the current process is the inductive step one. It will be caught
+    // by the try catch on parseoptions.cpp
+    if(options.get_bool_option("k-induction-parallel")
+       && options.get_bool_option("inductive-step"))
+      throw 0;
   }
 
   // As an argument, we expect the address of a symbol.
