@@ -562,7 +562,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
           else
           {
-            std::cout << "WARNING: **** Base case process crashed." << std::endl;
+            std::cout << "**** WARNING: Base case process crashed." << std::endl;
 
             bc_finished = true;
             if(cmdline.isset("dont-ignore-dead-child-process"))
@@ -584,7 +584,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
           else
           {
-            std::cout << "WARNING: **** Forward condition process crashed." << std::endl;
+            std::cout << "**** WARNING: Forward condition process crashed." << std::endl;
 
             fc_finished = true;
             if(cmdline.isset("dont-ignore-dead-child-process"))
@@ -606,7 +606,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
           else
           {
-            std::cout << "WARNING: **** Inductive step process crashed." << std::endl;
+            std::cout << "**** WARNING: Inductive step process crashed." << std::endl;
 
             is_finished = true;
             if(cmdline.isset("dont-ignore-dead-child-process"))
