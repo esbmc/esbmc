@@ -842,6 +842,12 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           bmc.options.set_option("unwind", i2string(k_step));
           bool res = do_bmc(bmc);
 
+          // If the inductive step was disabled during symex,
+          // remember to free the inductive goto instructions
+          if(bmc.options.get_bool_option("disable-inductive-step")) {
+            break;
+          }
+
           // Send information to parent if a bug was found
           if(!res)
           {
@@ -1041,7 +1047,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
       // If the inductive step was disabled during symex,
       // remember to free the inductive goto instructions
-      if(opts.get_bool_option("disable-inductive-step"))
+      if(bmc.options.get_bool_option("disable-inductive-step"))
       {
         delete inductive_goto_functions;
         inductive_goto_functions = NULL;

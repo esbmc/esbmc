@@ -419,10 +419,6 @@ bool bmct::run(void)
     } while(symex->setup_next_formula());
   }
 
-  // If the inductive-step was disabled, update the option from symex
-  options.set_option("disable-inductive-step",
-    symex->options.get_bool_option("disable-inductive-step"));
-
   if (options.get_bool_option("all-runs"))
   {
     std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
