@@ -332,7 +332,7 @@ public:
   /** Namespace we're operating in */
   const namespacet &ns;
   /** Options that are enabled */
-  optionst options;
+  optionst &options;
 
 protected:
   /** Stack of execution states representing current interleaving.
