@@ -140,10 +140,12 @@ class goto_loopst : public message_streamt
 {
 public:
   goto_loopst(
-    goto_functiont &_goto_functions,
+    goto_functionst &_goto_functions,
+    goto_functiont &_goto_function,
     message_handlert &_message_handler) :
     message_streamt(_message_handler),
-    goto_function(_goto_functions)
+    goto_functions(_goto_functions),
+    goto_function(_goto_function)
   {
     find_function_loops();
   }
@@ -152,6 +154,7 @@ public:
   void output(std::ostream &out = std::cout);
 
 protected:
+  const goto_functionst &goto_functions;
   goto_functiont &goto_function;
 
   typedef std::map<goto_programt::targett, loopst> function_loopst;

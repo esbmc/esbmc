@@ -17,7 +17,7 @@ void goto_unwind(
 {
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
-      goto_unwindt(it->second, unwind, message_handler);
+      goto_unwindt(goto_functions, it->second, unwind, message_handler);
 
   goto_functions.update();
 }

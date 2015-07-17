@@ -72,6 +72,7 @@ void goto_k_induction(
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
       goto_k_inductiont(
+        goto_functions,
         it->second,
         context,
         options,

@@ -26,11 +26,13 @@ class goto_k_inductiont : public goto_loopst
 {
 public:
   goto_k_inductiont(
+    goto_functionst &_goto_functions,
     goto_functiont &_goto_function,
     contextt &_context,
     optionst &_options,
     message_handlert &_message_handler) :
     goto_loopst(
+      _goto_functions,
       _goto_function,
       _message_handler),
     context(_context),
