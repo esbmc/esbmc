@@ -56,7 +56,7 @@ void goto_loopst::create_function_loop(
 
     // This should be done only when we're running k-induction
     // Maybe a flag on the class?
-    get_modified_variables(it, it1);
+    get_modified_variables(it, it1, function_name);
 
     *new_instruction=*it;
     ++it;
@@ -70,7 +70,8 @@ void goto_loopst::create_function_loop(
 
 void goto_loopst::get_modified_variables(
   goto_programt::instructionst::iterator instruction,
-  function_loopst::iterator loop)
+  function_loopst::iterator loop,
+  const irep_idt &_function_name)
 {
   if(instruction->is_assign())
   {
@@ -89,6 +90,10 @@ void goto_loopst::get_modified_variables(
     // The run over the function body and get the modified variables there
     irep_idt &identifier = to_symbol2t(function_call.function).thename;
 
+    // This means recursion, do nothing
+    if(identifier == _function_name)
+      return;
+
     // find code in function map
     goto_functionst::function_mapt::iterator it =
       goto_functions.function_map.find(identifier);
@@ -104,7 +109,7 @@ void goto_loopst::get_modified_variables(
         head != it->second.body.instructions.end();
         ++head)
     {
-      get_modified_variables(head, loop);
+      get_modified_variables(head, loop, identifier);
     }
   }
 }

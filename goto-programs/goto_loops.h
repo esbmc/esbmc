@@ -169,7 +169,8 @@ protected:
 
   void get_modified_variables(
     goto_programt::instructionst::iterator instruction,
-    function_loopst::iterator loop);
+    function_loopst::iterator loop,
+    const irep_idt &_function_name);
 
   void add_loop_var(loopst &loop, const exprt &expr);
 };
