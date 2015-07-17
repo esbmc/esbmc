@@ -154,7 +154,7 @@ public:
   void output(std::ostream &out = std::cout);
 
 protected:
-  const goto_functionst &goto_functions;
+  goto_functionst &goto_functions;
   goto_functiont &goto_function;
 
   typedef std::map<goto_programt::targett, loopst> function_loopst;
@@ -163,6 +163,10 @@ protected:
   void create_function_loop(
     goto_programt::instructionst::iterator loop_head,
     goto_programt::instructionst::iterator loop_exit);
+
+  void get_modified_variables(
+    goto_programt::instructionst::iterator instruction,
+    function_loopst::iterator loop);
 
   void add_loop_var(loopst &loop, const exprt &expr);
 };
