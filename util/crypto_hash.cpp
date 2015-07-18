@@ -110,7 +110,6 @@ crypto_hash::to_string() const
 {
 
   abort();
-  return false;
 }
 
 crypto_hash::crypto_hash()
