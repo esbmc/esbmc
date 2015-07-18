@@ -523,24 +523,64 @@ void goto_k_inductiont::convert_loop_body(loopst &loop)
   // Iterate over the loop body and convert instructions
   while(loop_head != loop_exit)
   {
-    // Convert guards on the loop (if statements)
-    if(loop_head->is_goto())
-    {
-      exprt guard = migrate_expr_back(loop_head->guard);
-      replace_guard(loop, guard);
-      migrate_expr(guard, loop_head->guard);
-    }
-
-    // Look for ternary operator to be converted as well
-    if(loop_head->is_assign())
-    {
-      exprt assignment = migrate_expr_back(loop_head->code);
-      assert(assignment.operands().size() == 2);
-      replace_ternary(loop, assignment.op1());
-      migrate_expr(assignment, loop_head->code);
-    }
-
+    convert_instruction(loop, loop_head, function_name);
     ++loop_head;
+  }
+}
+
+void goto_k_inductiont::convert_instruction(
+  loopst &loop,
+  goto_programt::targett instruction,
+  const irep_idt &_function_name)
+{
+  // Convert guards on the loop (if statements)
+  if(instruction->is_goto())
+  {
+    exprt guard = migrate_expr_back(instruction->guard);
+    replace_guard(loop, guard);
+    migrate_expr(guard, instruction->guard);
+  }
+  // Look for ternary operator to be converted as well
+  else if(instruction->is_assign())
+  {
+    exprt assignment = migrate_expr_back(instruction->code);
+    assert(assignment.operands().size() == 2);
+    replace_ternary(loop, assignment.op1());
+    migrate_expr(assignment, instruction->code);
+  }
+  // If it is a function call, we have to iterate over its body
+  else if(instruction->is_function_call())
+  {
+    code_function_call2t &function_call =
+      to_code_function_call2t(instruction->code);
+
+    irep_idt &identifier = to_symbol2t(function_call.function).thename;
+
+    // This means recursion, do nothing
+    if(identifier == _function_name)
+      return;
+
+    // find code in function map
+    goto_functionst::function_mapt::iterator it =
+        goto_functions.function_map.find(identifier);
+
+    if (it == goto_functions.function_map.end()) {
+      std::cerr << "failed to find `" + id2string(identifier) +
+          "' in function_map";
+      abort();
+    }
+
+    // Avoid iterating over functions that don't have a body
+    if(!it->second.body_available)
+      return;
+
+    for(goto_programt::instructionst::iterator head=
+        it->second.body.instructions.begin();
+        head != it->second.body.instructions.end();
+        ++head)
+    {
+      convert_instruction(loop, head, identifier);
+    }
   }
 }
 
