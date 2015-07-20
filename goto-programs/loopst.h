@@ -46,6 +46,10 @@ protected:
 
   goto_programt::targett original_loop_head;
   goto_programt::targett original_loop_exit;
+
+private:
+  bool check_nondet(exprt &guard);
+  bool is_expr_a_constant(exprt &expr);
 };
 
 

@@ -98,6 +98,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,  "k-induction-parallel", switc, "" },
 { 0,  "k-induction-busy-wait", switc, "" },
 { 0,  "constrain-all-states", switc, ""},
+{ 0,  "k-induction-nondet-loops", switc, "" },
 { 0,  "dont-ignore-dead-child-process", switc, "" },
 { 0,  "unlimited-k-steps", switc, "" },
 { 0,  "unroll-loops", switc, "" },
