@@ -1537,8 +1537,9 @@ bool cbmc_parseoptionst::process_goto_program(
       // does not have any infinite loop, disable inductive step
       if(options.get_bool_option("disable-inductive-step"))
       {
-        std::cout << "**** WARNING: this program does not contain infinite loops,"
-                  << " so we are not applying the inductive step to this program!"
+        std::cout << "**** WARNING: this program does not contain neither infinite "
+                  << "loops nor nondet loops,  so we are not applying the inductive"
+                  << "step to this program!"
                   << std::endl;
         return false;
       }
