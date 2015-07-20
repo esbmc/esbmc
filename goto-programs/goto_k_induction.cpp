@@ -93,7 +93,8 @@ void goto_k_inductiont::goto_k_induction()
     ++it)
   {
     assert(!it->second.get_goto_program().empty());
-    if(!it->second.is_infinite_loop())
+    if(!it->second.is_infinite_loop()
+       && !it->second.is_nondet_loop())
       continue;
 
     // We're going to change the code, so enable inductive step

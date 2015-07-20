@@ -82,6 +82,11 @@ bool loopst::is_infinite_loop()
   return false;
 }
 
+bool loopst::is_nondet_loop()
+{
+  return false;
+}
+
 void loopst::output(std::ostream &out)
 {
   unsigned n=original_loop_head->location_number;

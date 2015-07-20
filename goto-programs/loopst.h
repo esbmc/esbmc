@@ -33,6 +33,7 @@ public:
 
   bool is_loop_var(exprt& expr);
   bool is_infinite_loop();
+  bool is_nondet_loop();
 
   void output(std::ostream &out = std::cout);
   void dump_loop_vars();
