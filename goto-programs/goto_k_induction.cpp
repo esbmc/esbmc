@@ -93,20 +93,20 @@ void goto_k_inductiont::goto_k_induction()
     ++it)
   {
     assert(!it->second.get_goto_program().empty());
-    if(!it->second.is_infinite_loop())
-       if(options.get_bool_option("k-induction-nondet-loops")
-         && !it->second.is_nondet_loop())
-         continue;
+    if(it->second.is_infinite_loop()
+       || (options.get_bool_option("k-induction-nondet-loops")
+           && it->second.is_nondet_loop()))
+    {
+      // We're going to change the code, so enable inductive step
+      options.set_option("disable-inductive-step", false);
 
-    // We're going to change the code, so enable inductive step
-    options.set_option("disable-inductive-step", false);
-
-    // Start the loop conversion
-    convert_loop(it->second);
+      // Start the loop conversion
+      convert_infinity_loop(it->second);
+    }
   }
 }
 
-void goto_k_inductiont::convert_loop(loopst &loop)
+void goto_k_inductiont::convert_infinity_loop(loopst &loop)
 {
   assert(!loop.get_goto_program().instructions.empty());
 
@@ -123,7 +123,7 @@ void goto_k_inductiont::convert_loop(loopst &loop)
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
 
   // Create the nondet assignments on the beginning of the loop
-  make_nondet_assign(loop_head);
+  make_nondet_state_assign(loop_head);
 
   // Create the kindice variable and initialize it
   init_k_indice(loop_head);
@@ -239,7 +239,8 @@ void goto_k_inductiont::create_symbols()
   context.move(current_state_symbol, symbol_ptr);
 }
 
-void goto_k_inductiont::make_nondet_assign(goto_programt::targett &loop_head)
+void goto_k_inductiont::make_nondet_state_assign(
+  goto_programt::targett &loop_head)
 {
   goto_programt dest;
 
