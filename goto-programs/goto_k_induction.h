@@ -33,11 +33,11 @@ public:
     optionst &_options,
     message_handlert &_message_handler) :
     goto_loopst(
+      _context,
       _function_name,
       _goto_functions,
       _goto_function,
       _message_handler),
-    context(_context),
     state(struct_typet()),
     constrain_all_states(_options.get_bool_option("constrain-all-states")),
     options(_options)
@@ -48,7 +48,6 @@ public:
   }
 
 protected:
-  contextt &context;
   struct_typet state;
   bool constrain_all_states;
   optionst &options;

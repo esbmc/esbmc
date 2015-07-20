@@ -39,7 +39,7 @@ void goto_loopst::create_function_loop(
   goto_programt::instructionst::iterator it=loop_head;
 
   std::pair<goto_programt::targett, loopst>
-    p(loop_head, loopst(goto_programt()));
+    p(loop_head, loopst(context, goto_programt()));
 
   function_loopst::iterator it1 =
     function_loops.insert(p).first;

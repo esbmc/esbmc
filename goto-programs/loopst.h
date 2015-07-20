@@ -13,7 +13,8 @@
 class loopst
 {
 public:
-  loopst(goto_programt _goto_program) :
+  loopst(contextt &_context, goto_programt _goto_program) :
+    context(_context),
     goto_program(_goto_program)
   {}
 
@@ -39,6 +40,7 @@ public:
   void dump_loop_vars();
 
 protected:
+  contextt &context;
   goto_programt goto_program;
   loop_varst loop_vars;
 
