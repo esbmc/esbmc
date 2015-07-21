@@ -61,7 +61,7 @@ AC_CHECK_LIB([rt], [timer_create],
 )
 
 AC_CHECK_LIB([gomp], [omp_get_num_threads], [
-             AS_VAR_SET(LIBS, " -lgomp $LIBS ")
+             AS_VAR_SET(LIBS, " -lgomp $LIBS")
              ], [AC_MSG_WARN([No libgomp found: Z3 may want this])], [])
 
 AC_CHECK_LIB([gmp], [__gmpz_cmp],
@@ -84,6 +84,10 @@ AC_CHECK_HEADERS([eigen3/Eigen/Eigen], [AC_DEFINE([EIGEN_LIB], [], [Have Eigen l
 dnl We don't link directly against openssl, instead chosing to open at runtime.
 dnl However, don't try and build for it without openssl headers
 AC_CHECK_HEADERS([openssl/sha.h], [AC_DEFINE([OPENSSL_HEADERS], [], [Have openssl headers])], [])
+
+dnl LLVM stuff
+AS_VAR_APPEND(LDFLAGS, " `llvm-config --ldflags`")
+AS_VAR_APPEND(LIBS, " -lclangIndex -lclangTooling -lclangDriver -lclangFrontend -lclangParse -lclangSerialization -lclangSema -lclangAnalysis -lclangEdit -lclangLex -lclangAST -lclangARCMigrate -lclangBasic -lLLVMBitReader -lLLVMOption -lLLVMMC -lLLVMMCParser -lLLVMSupport -lz -ltermcap")
 
 AC_HEADER_STDBOOL
 AC_TYPE_UID_T
