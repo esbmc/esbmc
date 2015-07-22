@@ -22,17 +22,20 @@ struct mode_table_et
 
 // List of language modes that are going to be supported in the final tool.
 // Must be declared by user of langapi, must end with HAVE_MODE_NULL.
- 
+
 extern const mode_table_et mode_table[];
 
+extern const char *extensions_llvm[];
 extern const char *extensions_ansi_c[];
 extern const char *extensions_cpp[];
 
+languaget *new_llvm_language();
 languaget *new_ansi_c_language();
 languaget *new_cpp_language();
 
 // List of language entries, one can put in the mode table:
-
+#define LANGAPI_HAVE_MODE_LLVM \
+  { "C",        &new_llvm_language,   extensions_llvm   }
 #define LANGAPI_HAVE_MODE_C \
   { "C",        &new_ansi_c_language,   extensions_ansi_c   }
 #define LANGAPI_HAVE_MODE_CPP \
