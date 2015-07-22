@@ -6,15 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <string.h>
-
-#include <sstream>
-#include <fstream>
-
-#include <config.h>
-#include <replace_symbol.h>
-
-#include "llvm_language.h"
+#include <llvm_language.h>
+#include <llvm_parser.h>
 
 void llvm_languaget::modules_provided(std::set<std::string> &modules)
 {
@@ -41,9 +34,12 @@ bool llvm_languaget::parse(
   const std::string &path,
   message_handlert &message_handler)
 {
-  std::cout << "Method " << __FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  // store the path
+
+  parse_path=path;
+
+  llvm_parser.filename=path;
+  return llvm_parser.parse();
 }
 
 bool llvm_languaget::typecheck(
