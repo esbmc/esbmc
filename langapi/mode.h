@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <language.h>
 
-// Table recording details about langauge modes
+// Table recording details about language modes
 
 struct mode_table_et
 {
