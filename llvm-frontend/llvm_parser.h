@@ -8,6 +8,9 @@
 #ifndef LLVM_FRONTEND_LLVM_PARSER_H_
 #define LLVM_FRONTEND_LLVM_PARSER_H_
 
+#include <vector>
+#include <memory>
+
 #include <clang/Frontend/ASTUnit.h>
 
 class llvm_parsert
