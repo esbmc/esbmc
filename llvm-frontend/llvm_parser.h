@@ -8,6 +8,8 @@
 #ifndef LLVM_FRONTEND_LLVM_PARSER_H_
 #define LLVM_FRONTEND_LLVM_PARSER_H_
 
+#include <clang/Frontend/ASTUnit.h>
+
 class llvm_parsert
 {
 public:
@@ -17,6 +19,9 @@ public:
   virtual ~llvm_parsert();
 
   bool parse();
+
+private:
+  std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 };
 
 extern llvm_parsert llvm_parser;
