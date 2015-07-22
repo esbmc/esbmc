@@ -23,13 +23,6 @@ void goto_convert(
   goto_functionst &functions,
   message_handlert &message_handler);
 
-void goto_convert(
-  std::vector<std::unique_ptr<clang::ASTUnit> > &clang_ast_vec,
-  contextt &context,
-  const optionst &options,
-  goto_functionst &functions,
-  message_handlert &message_handler);
-
 class goto_convert_functionst:public goto_convertt
 {
 public:

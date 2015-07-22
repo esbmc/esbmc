@@ -1126,12 +1126,6 @@ bool cbmc_parseoptionst::get_goto_program(
         return true;
       }
 
-      std::vector<std::unique_ptr<clang::ASTUnit> > clang_ast = parse_clang();
-      if (clang_ast.size() == 0) {
-        std::cerr << "Could not compile input file(s)" << std::endl;
-        exit(1);
-      }
-
       if(parse()) return true;
       if(typecheck()) return true;
       if(final()) return true;
@@ -1151,7 +1145,6 @@ bool cbmc_parseoptionst::get_goto_program(
       migrate_namespace_lookup = new namespacet(context);
 
       goto_convert(
-        clang_ast,
         context, options, goto_functions,
         ui_message_handler);
     }

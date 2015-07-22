@@ -266,26 +266,6 @@ void goto_convert(
     throw 0;
 }
 
-void goto_convert(
-  std::vector<std::unique_ptr<clang::ASTUnit> > &clang_ast_vec,
-  contextt &context,
-  const optionst &options,
-  goto_functionst &functions,
-  message_handlert &message_handler)
-{
-  // Iterate through each translation unit and their global symbols, creating
-  // symbols as we go.
-
-  for (auto &translation_unit : clang_ast_vec) {
-    clang::ASTUnit::top_level_iterator it;
-    for (it = translation_unit->top_level_begin();
-         it != translation_unit->top_level_end(); it++) {
-      std::cerr << "Got decl kind " << (*it)->getDeclKindName() << std::endl;
-    }
-  }
-  abort();
-}
-
 void
 goto_convert_functionst::collect_type(const irept &type, typename_sett &deps)
 {
