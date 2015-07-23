@@ -33,7 +33,16 @@ bool llvm_typecheckt::convert_top_level_decl()
     clang::ASTUnit::top_level_iterator it;
     for (it = translation_unit->top_level_begin();
         it != translation_unit->top_level_end(); it++) {
-      std::cerr << "Got decl kind " << (*it)->getDeclKindName() << std::endl;
+      switch ((*it)->getKind()) {
+        case clang::Decl::Typedef:
+        case clang::Decl::Function:
+        case clang::Decl::Record:
+        case clang::Decl::Var:
+        default:
+          std::cerr << "Unrecognized / unimplemented decl type ";
+          std::cerr << (*it)->getDeclKindName() << std::endl;
+          abort();
+      }
     }
   }
 }
