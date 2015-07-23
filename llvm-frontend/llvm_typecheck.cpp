@@ -86,7 +86,7 @@ void llvm_typecheckt::get_type(const clang::Type &the_type, typet &new_type)
       const clang::BuiltinType &bt = static_cast<const clang::BuiltinType&>(the_type);
       switch (bt.getKind()) {
         case clang::BuiltinType::Void:
-          abort();
+          new_type = empty_typet();
           break;
 
         case clang::BuiltinType::Bool:
