@@ -16,6 +16,7 @@ configt config;
 
 void configt::ansi_ct::set_16()
 {
+  bool_width=1*8;
   int_width=2*8;
   long_int_width=4*8;
   char_width=1*8;
@@ -34,6 +35,7 @@ void configt::ansi_ct::set_16()
 
 void configt::ansi_ct::set_32()
 {
+  bool_width=1*8;
   int_width=4*8;
   long_int_width=4*8;
   char_width=1*8;
@@ -58,6 +60,7 @@ void configt::ansi_ct::set_32()
 
 void configt::ansi_ct::set_64()
 {
+  bool_width=1*8;
   int_width=4*8;
   long_int_width=8*8;
   char_width=1*8;

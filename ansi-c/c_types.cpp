@@ -133,6 +133,24 @@ type2tc uint_type2()
 
 /*******************************************************************\
 
+Function: c_bool_type
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+typet bool_type()
+{
+  typet result=bool_typet();
+  return result;
+}
+
+/*******************************************************************\
+
 Function: long_int_type
 
   Inputs:
