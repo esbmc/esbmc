@@ -727,6 +727,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           assert(len == sizeof(r) && "short write");
           (void)len; //ndebug
 
+          std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
+
           return res;
         }
       }
@@ -772,7 +774,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         bmc.options.set_option("unwind", i2string(k_step));
         bool res = do_bmc(bmc);
 
-        // Send information to parent if a bug was found
+        // Send information to parent if no bug was found
         if(!res)
         {
           r.k = k_step;
@@ -782,11 +784,13 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           assert(len == sizeof(r) && "short write");
           (void)len; //ndebug
 
+          std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+
           return res;
         }
       }
 
-      // Send information to parent that a bug was not found
+      // Send information to parent that it couldn't prove the code
       r.k = 0;
 
       u_int len = write(commPipe[1], &r, sizeof(r));
@@ -853,7 +857,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
             break;
           }
 
-          // Send information to parent if a bug was found
+          // Send information to parent if no bug was found
           if(!res)
           {
             r.k = k_step;
@@ -863,12 +867,14 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
             assert(len == sizeof(r) && "short write");
             (void)len; //ndebug
 
+            std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
+
             return res;
           }
         }
       }
 
-      // Send information to parent that a bug was not found
+      // Send information to parent that it couldn't prove the code
       r.k = 0;
 
       u_int len = write(commPipe[1], &r, sizeof(r));
