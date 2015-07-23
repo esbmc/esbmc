@@ -27,6 +27,8 @@ using namespace llvm;
 static llvm::cl::OptionCategory esbmc_llvm("esmc_llvm");
 llvm_parsert llvm_parser;
 
+bool parse_AST();
+
 llvm_parsert::llvm_parsert()
 {
 }
@@ -55,5 +57,5 @@ bool llvm_parsert::parse()
 
   Tool.buildASTs(ASTs);
 
-  return false;
+  return parse_AST();
 }

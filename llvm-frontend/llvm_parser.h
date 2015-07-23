@@ -12,6 +12,7 @@
 #include <memory>
 
 #include <clang/Frontend/ASTUnit.h>
+#include <expr.h>
 
 class llvm_parsert
 {
