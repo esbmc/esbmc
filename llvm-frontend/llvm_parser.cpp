@@ -5,18 +5,12 @@
  *      Author: mramalho
  */
 
-#include <iostream>
-#include <string>
 #include <cstdlib>
 
 #include "expr.h"
 
 #include "llvm_parser.h"
 
-#include <clang/AST/ASTConsumer.h>
-#include <clang/Driver/Options.h>
-#include <clang/Frontend/ASTConsumers.h>
-#include <clang/Frontend/CompilerInstance.h>
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 
