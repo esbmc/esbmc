@@ -24,7 +24,6 @@ public:
 
   bool parse();
 
-private:
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 };
 
