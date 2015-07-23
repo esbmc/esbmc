@@ -23,18 +23,15 @@ private:
 
 bool ASTParser::parse()
 {
-  // Iterate through each translation unit and their global symbols, creating
-  // symbols as we go.
-
-  for (auto &translation_unit : parser->ASTs) {
-    clang::ASTUnit::top_level_iterator it;
-    for (it = translation_unit->top_level_begin();
-        it != translation_unit->top_level_end(); it++) {
-      std::cerr << "Got decl kind " << (*it) << std::endl;
+  // Use diagnostics to find errors, rather than the return code.
+  for (const auto &astunit : parser->ASTs) {
+    if (astunit->getDiagnostics().hasErrorOccurred()) {
+      std::cerr << std::endl;
+      return true;
     }
   }
 
-  return true;
+  return false;
 }
 
 bool parse_AST()
