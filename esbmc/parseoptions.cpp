@@ -653,7 +653,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // couldn't find a bug in that code, if there is no bug, inductive
         // step can present the result
         if((is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
-          && (!bc_finished && (bc_solution == 0)))
+          && (bc_finished && (bc_solution == 0)))
           break;
       }
 
@@ -681,7 +681,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Check if a solution was found by the inductive step and
       // the base case didn't find a bug
       if((is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
-          && (!bc_finished && (bc_solution == 0)))
+          && (bc_finished && (bc_solution == 0)))
       {
         std::cout << std::endl << "Solution found by the inductive step "
             << "(k = " << is_solution << ")" << std::endl;
