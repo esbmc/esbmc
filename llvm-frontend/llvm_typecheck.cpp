@@ -33,11 +33,36 @@ bool llvm_typecheckt::convert_top_level_decl()
   // symbols as we go.
 
   for (auto &translation_unit : ASTs) {
+
     clang::ASTUnit::top_level_iterator it;
     for (it = translation_unit->top_level_begin();
         it != translation_unit->top_level_end(); it++) {
+
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
+        {
+          clang::TypedefDecl *tdd = static_cast<clang::TypedefDecl*>(*it);
+          clang::QualType q_type = tdd->getUnderlyingType();
+          const clang::Type *the_type = q_type.getTypePtrOrNull();
+          assert(the_type != NULL && "No underlying typedef type?");
+
+          typet t;
+          get_type(*the_type, t);
+
+          symbolt sym;
+          sym.type = t;
+          sym.base_name = tdd->getName().str();
+          sym.name = "c::" + sym.base_name.as_string();
+          sym.is_type = true;
+
+          if (context.move(sym)) {
+            std::cerr << "Couldn't add symbol " << sym.name
+                      << " to symbol table" << std::endl;
+            abort();
+          }
+          break;
+        }
+
         case clang::Decl::Function:
         case clang::Decl::Record:
         case clang::Decl::Var:
