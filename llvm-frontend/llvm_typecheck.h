@@ -25,6 +25,8 @@ public:
 
 private:
   contextt &context;
+
+  bool convert_top_level_decl();
 };
 
 #endif /* LLVM_FRONTEND_LLVM_TYPECHECK_H_ */
