@@ -39,7 +39,12 @@ bool llvm_languaget::parse(
   parse_path=path;
 
   llvm_parser.filename=path;
-  return llvm_parser.parse();
+
+  bool res = llvm_parser.parse();
+
+  ASTs.swap(llvm_parser.ASTs);
+
+  return res;
 }
 
 bool llvm_languaget::typecheck(

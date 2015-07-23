@@ -11,6 +11,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <language.h>
 
+#include <clang/Frontend/ASTUnit.h>
+
 class llvm_languaget:public languaget
 {
 public:
@@ -75,6 +77,8 @@ protected:
   {
     return "c::main";
   }
+
+  std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 };
 
 languaget *new_llvm_language();
