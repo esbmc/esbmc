@@ -19,14 +19,14 @@ bool llvm_languaget::preprocess(
   std::ostream &outstream,
   message_handlert &message_handler)
 {
-  std::cout << "Method " << __FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
   return true;
 }
 
 void llvm_languaget::internal_additions(std::ostream &out)
 {
-  std::cout << "Method " << __FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
 }
 
@@ -47,7 +47,7 @@ bool llvm_languaget::typecheck(
   const std::string &module,
   message_handlert &message_handler)
 {
-  std::cout << "Method " << __FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
   return true;
 }
@@ -56,14 +56,14 @@ bool llvm_languaget::final(
   contextt &context,
   message_handlert &message_handler)
 {
-  std::cout << "Method " << __FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
   return true;
 }
 
 void llvm_languaget::show_parse(std::ostream &out)
 {
-  std::cout << "Method " << __FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
 }
 
@@ -77,7 +77,7 @@ bool llvm_languaget::from_expr(
   std::string &code,
   const namespacet &ns)
 {
-  std::cout << "Method " << __FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
   return true;
 }
@@ -87,7 +87,7 @@ bool llvm_languaget::from_type(
   std::string &code,
   const namespacet &ns)
 {
-  std::cout << "Method " << __FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
   return true;
 }
@@ -99,7 +99,7 @@ bool llvm_languaget::to_expr(
   message_handlert &message_handler,
   const namespacet &ns)
 {
-  std::cout << "Method " << __FUNCTION__ << " not implemented yet" << std::endl;
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
   return true;
 }
