@@ -62,7 +62,7 @@ Function: index_type
 
 typet index_type()
 {
-  return signedbv_typet(config.ansi_c.int_width);  
+  return signedbv_typet(config.ansi_c.int_width);
 }
 
 type2tc index_type2(void)
@@ -84,7 +84,7 @@ Function: enum_type
 
 typet enum_type()
 {
-  return signedbv_typet(config.ansi_c.int_width);  
+  return signedbv_typet(config.ansi_c.int_width);
 }
 
 /*******************************************************************\
@@ -101,7 +101,7 @@ Function: int_type
 
 typet int_type()
 {
-  return signedbv_typet(config.ansi_c.int_width);  
+  return signedbv_typet(config.ansi_c.int_width);
 }
 
 type2tc int_type2()
@@ -123,7 +123,7 @@ Function: uint_type
 
 typet uint_type()
 {
-  return unsignedbv_typet(config.ansi_c.int_width);  
+  return unsignedbv_typet(config.ansi_c.int_width);
 }
 
 type2tc uint_type2()
@@ -163,7 +163,7 @@ Function: long_int_type
 
 typet long_int_type()
 {
-  return signedbv_typet(config.ansi_c.long_int_width);  
+  return signedbv_typet(config.ansi_c.long_int_width);
 }
 
 /*******************************************************************\
@@ -180,7 +180,7 @@ Function: long_long_int_type
 
 typet long_long_int_type()
 {
-  return signedbv_typet(config.ansi_c.long_long_int_width);  
+  return signedbv_typet(config.ansi_c.long_long_int_width);
 }
 
 /*******************************************************************\
@@ -197,7 +197,7 @@ Function: long_uint_type
 
 typet long_uint_type()
 {
-  return unsignedbv_typet(config.ansi_c.long_int_width);  
+  return unsignedbv_typet(config.ansi_c.long_int_width);
 }
 
 /*******************************************************************\
@@ -214,7 +214,7 @@ Function: long_long_uint_type
 
 typet long_long_uint_type()
 {
-  return unsignedbv_typet(config.ansi_c.long_long_int_width);  
+  return unsignedbv_typet(config.ansi_c.long_long_int_width);
 }
 
 /*******************************************************************\
