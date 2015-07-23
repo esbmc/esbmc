@@ -10,13 +10,18 @@
 
 #include <context.h>
 
+#include <clang/Frontend/ASTUnit.h>
+
 class llvm_typecheckt
 {
 public:
   llvm_typecheckt(contextt &_context);
+
   virtual ~llvm_typecheckt();
 
   bool typecheck();
+
+  std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 
 private:
   contextt &context;

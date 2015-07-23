@@ -54,8 +54,9 @@ bool llvm_languaget::typecheck(
   message_handlert &message_handler)
 {
   contextt new_context;
-
   llvm_typecheckt typecheck(context);
+  typecheck.ASTs.swap(ASTs);
+
   return typecheck.typecheck();
 }
 
