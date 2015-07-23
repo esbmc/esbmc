@@ -1689,7 +1689,7 @@ bool cbmc_parseoptionst::parse_llvm()
 {
   for(unsigned i=0; i<_cmdline.args.size(); i++)
   {
-    if(parse(_cmdline.args[i]))
+    if(parse_llvm(_cmdline.args[i]))
       return true;
   }
 
@@ -1723,8 +1723,8 @@ bool cbmc_parseoptionst::parse_llvm(const std::string& filename)
   language_filet &lf=result.first->second;
   lf.filename=filename;
 
-  // This magic number (3) sets llvm classes to do the job
-  lf.language=mode_table[3].new_language();
+  // This magic number (2) sets llvm classes to do the job
+  lf.language=mode_table[2].new_language();
   languaget &language=*lf.language;
 
   status("Parsing", filename);
