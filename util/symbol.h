@@ -15,11 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "expr.h"
 #include "location.h"
 
-// "stack" is #defined by the parser utilities, a 100% miserable
-// situation.
-#undef stack
-#include <clang/Frontend/ASTUnit.h>
-
 class symbolt
 {
 public:
@@ -31,7 +26,6 @@ public:
   irep_idt base_name;
   irep_idt mode;
   irep_idt pretty_name;
-  clang::Decl *clang_decl;
 
   const irep_idt &display_name() const
   {
