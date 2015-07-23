@@ -1126,9 +1126,16 @@ bool cbmc_parseoptionst::get_goto_program(
         return true;
       }
 
-      if(parse()) return true;
-      if(typecheck()) return true;
-      if(final()) return true;
+      if(!cmdline.isset("llvm-frontend"))
+      {
+        if(parse()) return true;
+        if(typecheck()) return true;
+        if(final()) return true;
+      }
+      else
+      {
+        if(parse_llvm()) return true;
+      }
 
       if(cmdline.isset("show-symbol-table"))
       {
@@ -1676,6 +1683,63 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 #endif
 
   return res;
+}
+
+bool cbmc_parseoptionst::parse_llvm()
+{
+  for(unsigned i=0; i<_cmdline.args.size(); i++)
+  {
+    if(parse(_cmdline.args[i]))
+      return true;
+  }
+
+  return false;
+}
+
+bool cbmc_parseoptionst::parse_llvm(const std::string& filename)
+{
+  int mode=get_mode_filename(filename);
+
+  if(mode<0)
+  {
+    error("failed to figure out type of file", filename);
+    return true;
+  }
+
+  // Check that it opens
+  std::ifstream infile(filename.c_str());
+  if(!infile)
+  {
+    error("failed to open input file", filename);
+    return true;
+  }
+
+  language_filet language_file;
+
+  std::pair<language_filest::filemapt::iterator, bool>
+    result=language_files.filemap.insert(
+      std::pair<std::string, language_filet>(filename, language_file));
+
+  language_filet &lf=result.first->second;
+  lf.filename=filename;
+
+  // This magic number (3) sets llvm classes to do the job
+  lf.language=mode_table[3].new_language();
+  languaget &language=*lf.language;
+
+  status("Parsing", filename);
+
+  if(language.parse(filename, *get_message_handler()))
+  {
+    if(get_ui()==ui_message_handlert::PLAIN)
+      std::cerr << "PARSING ERROR" << std::endl;
+
+    return true;
+  }
+
+  lf.get_modules();
+
+  return false;
 }
 
 void cbmc_parseoptionst::help()

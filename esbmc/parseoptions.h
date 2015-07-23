@@ -37,6 +37,10 @@ public:
   {
   }
 
+  // LLVM frontend related methods
+  bool parse_llvm();
+  bool parse_llvm(const std::string &filename);
+
 protected:
   virtual void get_command_line_options(optionst &options);
   virtual int do_bmc(bmct &bmc);

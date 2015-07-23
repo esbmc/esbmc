@@ -102,6 +102,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,  "dont-ignore-dead-child-process", switc, "" },
 { 0,  "unlimited-k-steps", switc, "" },
 { 0,  "unroll-loops", switc, "" },
+{ 0,  "llvm-frontend", switc, "" },
 { 0,	"break-at",		string,		""	},
 { 0,	"decide",		switc,		""	},
 { 0,	"enable-core-dump",     switc,		""	},
