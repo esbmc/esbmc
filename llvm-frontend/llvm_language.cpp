@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <llvm_language.h>
 #include <llvm_parser.h>
+#include <llvm_typecheck.h>
 
 void llvm_languaget::modules_provided(std::set<std::string> &modules)
 {
@@ -52,9 +53,10 @@ bool llvm_languaget::typecheck(
   const std::string &module,
   message_handlert &message_handler)
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  contextt new_context;
+
+  llvm_typecheckt typecheck(context);
+  return typecheck.typecheck();
 }
 
 bool llvm_languaget::final(

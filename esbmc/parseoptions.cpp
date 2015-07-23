@@ -1135,6 +1135,7 @@ bool cbmc_parseoptionst::get_goto_program(
       else
       {
         if(parse_llvm()) return true;
+        if(typecheck()) return true;
       }
 
       if(cmdline.isset("show-symbol-table"))
