@@ -40,6 +40,13 @@ bool llvm_convertert::convert_top_level_decl()
     for (it = translation_unit->top_level_begin();
         it != translation_unit->top_level_end(); it++) {
 
+      std::string path =
+        (*it)->getASTContext().getSourceManager().getFilename(
+          (*it)->getLocation()).str();
+
+      std::string filename = get_filename_from_path(path);
+      std::string module = get_modulename_from_path(path);
+
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
         {
@@ -48,14 +55,23 @@ bool llvm_convertert::convert_top_level_decl()
           const clang::Type *the_type = q_type.getTypePtrOrNull();
           assert(the_type != NULL && "No underlying typedef type?");
 
+          // Get type
           typet t;
           get_type(*the_type, t);
 
           symbolt sym;
           sym.type = t;
           sym.base_name = tdd->getName().str();
-          sym.name = "c::" + sym.base_name.as_string();
+          sym.module = module;
+          sym.pretty_name = module + "::" + sym.base_name.as_string();
+          sym.name = "c::" + module + "::" + sym.base_name.as_string();
           sym.is_type = true;
+
+          locationt location;
+          location.set_file(filename);
+          location.set_line((*it)->getASTContext().getSourceManager().
+            getSpellingLineNumber((*it)->getLocation()));
+          sym.location = location;
 
           if (context.move(sym)) {
             std::cerr << "Couldn't add symbol " << sym.name
