@@ -60,8 +60,6 @@ public:
 
 protected:
   std::vector<std::string> files;
-  clang::tooling::CommonOptionsParser *OptionsParser;
-  clang::tooling::ClangTool *Tool;
 
   void internal_additions(std::ostream &outstream);
 

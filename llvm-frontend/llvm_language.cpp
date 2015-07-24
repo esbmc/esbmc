@@ -14,32 +14,35 @@ static llvm::cl::OptionCategory esbmc_llvm("esmc_llvm");
 llvm_languaget::llvm_languaget(std::vector<std::string> _files)
   : files(_files)
 {
-  // From the clang tool example,
-  int num_args = 2 + _files.size();
-  const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
-
-  int i=0;
-  the_args[i++] = "clang";
-  for(; i <= _files.size(); ++i)
-    the_args[i] = _files.at(i-1).c_str();
-  the_args[i] = "--";
-
-  OptionsParser = new clang::tooling::CommonOptionsParser(num_args, the_args, esbmc_llvm);
-  free(the_args);
-
-  Tool = new clang::tooling::ClangTool(OptionsParser->getCompilations(),
-    OptionsParser->getSourcePathList());
 }
 
 llvm_languaget::~llvm_languaget()
 {
-  delete OptionsParser;
-  delete Tool;
 }
 
 bool llvm_languaget::parse()
 {
-  Tool->buildASTs(ASTs);
+  // From the clang tool example,
+  int num_args = 2 + files.size();
+  const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
+
+  unsigned int i=0;
+  the_args[i++] = "clang";
+  for(; i <= files.size(); ++i)
+    the_args[i] = files.at(i-1).c_str();
+  the_args[i] = "--";
+
+  clang::tooling::CommonOptionsParser OptionsParser(
+    num_args,
+    the_args,
+    esbmc_llvm);
+  free(the_args);
+
+  clang::tooling::ClangTool Tool(
+    OptionsParser.getCompilations(),
+    OptionsParser.getSourcePathList());
+
+  Tool.buildASTs(ASTs);
 
   // Use diagnostics to find errors, rather than the return code.
   for (const auto &astunit : ASTs) {
