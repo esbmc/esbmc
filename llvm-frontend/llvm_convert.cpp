@@ -8,6 +8,8 @@
 #include "llvm_convert.h"
 
 #include <std_types.h>
+#include <expr_util.h>
+
 #include <ansi-c/c_types.h>
 
 #include <boost/filesystem.hpp>
@@ -47,6 +49,9 @@ bool llvm_convertert::convert_top_level_decl()
       std::string filename = get_filename_from_path(path);
       std::string module = get_modulename_from_path(path);
 
+      symbolt sym;
+      sym.mode = "C";
+
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
         {
@@ -59,7 +64,6 @@ bool llvm_convertert::convert_top_level_decl()
           typet t;
           get_type(*the_type, t);
 
-          symbolt sym;
           sym.type = t;
           sym.base_name = tdd->getName().str();
           sym.module = module;
@@ -81,9 +85,57 @@ bool llvm_convertert::convert_top_level_decl()
           break;
         }
 
+        case clang::Decl::Var:
+        {
+          clang::VarDecl *vd = static_cast<clang::VarDecl*>(*it);
+          clang::QualType q_type = vd->getType();
+          const clang::Type *the_type = q_type.getTypePtrOrNull();
+          assert(the_type != NULL && "No underlying typedef type?");
+
+          // Get type
+          typet t;
+          get_type(*the_type, t);
+
+          sym.type = t;
+          sym.module = module;
+          sym.base_name = vd->getName().str();
+
+          // This is not local, so has static lifetime
+          if (!vd->hasLocalStorage()) {
+            sym.static_lifetime = true;
+            sym.name = "c::" + sym.base_name.as_string();
+            sym.pretty_name = sym.base_name.as_string();
+            sym.value = gen_zero(t);
+          }
+          else
+          {
+            sym.name = "c::" + module + "::" + sym.base_name.as_string();
+            sym.pretty_name = module + "::" + sym.base_name.as_string();
+          }
+
+          locationt location;
+          location.set_file(filename);
+          location.set_line((*it)->getASTContext().getSourceManager().
+              getSpellingLineNumber((*it)->getLocation()));
+          sym.location = location;
+
+          if (vd->hasExternalStorage()) {
+            sym.is_extern = true;
+          }
+
+          sym.lvalue = true;
+
+          if (context.move(sym)) {
+            std::cerr << "Couldn't add symbol " << sym.name
+                      << " to symbol table" << std::endl;
+            abort();
+          }
+
+          break;
+        }
+
         case clang::Decl::Function:
         case clang::Decl::Record:
-        case clang::Decl::Var:
         default:
           std::cerr << "Unrecognized / unimplemented decl type ";
           std::cerr << (*it)->getDeclKindName() << std::endl;
