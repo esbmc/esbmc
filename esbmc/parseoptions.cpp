@@ -56,6 +56,8 @@ extern "C" {
 
 #include <ansi-c/c_preprocess.h>
 
+#include <llvm-frontend/llvm_language.h>
+
 #include "parseoptions.h"
 #include "bmc.h"
 #include <ac_config.h>
@@ -1690,55 +1692,35 @@ bool cbmc_parseoptionst::parse_llvm()
 {
   for(unsigned i=0; i<_cmdline.args.size(); i++)
   {
-    if(parse_llvm(_cmdline.args[i]))
+    const std::string& filename = _cmdline.args[i];
+    int mode=get_mode_filename(filename);
+
+    if(mode<0)
+    {
+      error("failed to figure out type of file", filename);
       return true;
+    }
+
+    // Check that it opens
+    std::ifstream infile(filename.c_str());
+    if(!infile)
+    {
+      error("failed to open input file", filename);
+      return true;
+    }
   }
 
-  return false;
-}
+  llvm_languaget language(_cmdline.args);
 
-bool cbmc_parseoptionst::parse_llvm(const std::string& filename)
-{
-  int mode=get_mode_filename(filename);
+  status("Parsing using clang");
 
-  if(mode<0)
-  {
-    error("failed to figure out type of file", filename);
-    return true;
-  }
-
-  // Check that it opens
-  std::ifstream infile(filename.c_str());
-  if(!infile)
-  {
-    error("failed to open input file", filename);
-    return true;
-  }
-
-  language_filet language_file;
-
-  std::pair<language_filest::filemapt::iterator, bool>
-    result=language_files.filemap.insert(
-      std::pair<std::string, language_filet>(filename, language_file));
-
-  language_filet &lf=result.first->second;
-  lf.filename=filename;
-
-  // This magic number (2) sets llvm classes to do the job
-  lf.language=mode_table[2].new_language();
-  languaget &language=*lf.language;
-
-  status("Parsing", filename);
-
-  if(language.parse(filename, *get_message_handler()))
+  if(language.parse())
   {
     if(get_ui()==ui_message_handlert::PLAIN)
       std::cerr << "PARSING ERROR" << std::endl;
 
     return true;
   }
-
-  lf.get_modules();
 
   return false;
 }

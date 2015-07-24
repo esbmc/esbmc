@@ -7,12 +7,33 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <llvm_language.h>
-#include <llvm_parser.h>
 #include <llvm_typecheck.h>
 
-void llvm_languaget::modules_provided(std::set<std::string> &modules)
+static llvm::cl::OptionCategory esbmc_llvm("esmc_llvm");
+
+llvm_languaget::llvm_languaget(std::vector<std::string> _files)
+  : files(_files)
 {
-  modules.insert(parse_path);
+  // From the clang tool example,
+  int num_args = 3;
+  const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
+
+  unsigned int i = 0;
+  the_args[i++] = "clang";
+  //    the_args[i++] = filename.c_str();
+  //    the_args[i++] = "--";
+
+  OptionsParser = new clang::tooling::CommonOptionsParser(num_args, the_args, esbmc_llvm);
+  free(the_args);
+
+  Tool = new clang::tooling::ClangTool(OptionsParser->getCompilations(),
+    OptionsParser->getSourcePathList());
+}
+
+llvm_languaget::~llvm_languaget()
+{
+  delete OptionsParser;
+  delete Tool;
 }
 
 bool llvm_languaget::preprocess(
@@ -31,21 +52,19 @@ void llvm_languaget::internal_additions(std::ostream &out)
   abort();
 }
 
-bool llvm_languaget::parse(
-  const std::string &path,
-  message_handlert &message_handler)
+bool llvm_languaget::parse()
 {
-  // store the path
+  Tool->buildASTs(ASTs);
 
-  parse_path=path;
+  // Use diagnostics to find errors, rather than the return code.
+  for (const auto &astunit : ASTs) {
+    if (astunit->getDiagnostics().hasErrorOccurred()) {
+      std::cerr << std::endl;
+      return true;
+    }
+  }
 
-  llvm_parser.filename=path;
-
-  bool res = llvm_parser.parse();
-
-  ASTs.swap(llvm_parser.ASTs);
-
-  return res;
+  return false;
 }
 
 bool llvm_languaget::typecheck(
@@ -58,26 +77,6 @@ bool llvm_languaget::typecheck(
   typecheck.ASTs.swap(ASTs);
 
   return typecheck.typecheck();
-}
-
-bool llvm_languaget::final(
-  contextt &context,
-  message_handlert &message_handler)
-{
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
-}
-
-void llvm_languaget::show_parse(std::ostream &out)
-{
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-}
-
-languaget *new_llvm_language()
-{
-  return new llvm_languaget;
 }
 
 bool llvm_languaget::from_expr(
