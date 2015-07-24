@@ -39,7 +39,6 @@ public:
 
   // LLVM frontend related methods
   bool parse_llvm();
-  bool convert_llvm();
 
 protected:
   virtual void get_command_line_options(optionst &options);

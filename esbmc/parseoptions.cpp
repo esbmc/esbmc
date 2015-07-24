@@ -1137,7 +1137,6 @@ bool cbmc_parseoptionst::get_goto_program(
       else
       {
         if(parse_llvm()) return true;
-        if(convert_llvm()) return true;
       }
 
       if(cmdline.isset("show-symbol-table"))
@@ -1722,12 +1721,18 @@ bool cbmc_parseoptionst::parse_llvm()
     return true;
   }
 
+  status("Converting LLVM AST");
+
+  if(language.convert(context))
+  {
+    if(get_ui()==ui_message_handlert::PLAIN)
+      std::cerr << "CONVERSION ERROR" << std::endl;
+
+    return true;
+  }
+
+
   return false;
-}
-
-
-bool cbmc_parseoptionst::convert_llvm()
-{
 }
 
 void cbmc_parseoptionst::help()
