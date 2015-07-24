@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_LANGUAGE_H
 #define CPROVER_CPP_LANGUAGE_H
 
+#include <set>
+
 #include <language.h>
 
 #include <clang/Frontend/ASTUnit.h>
@@ -26,10 +28,7 @@ public:
 
   bool parse();
 
-  bool typecheck(
-    contextt &context,
-    const std::string &module,
-    message_handlert &message_handler);
+  bool convert(contextt &context);
 
   // constructor, destructor
   virtual ~llvm_languaget();

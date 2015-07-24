@@ -7,7 +7,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <llvm_language.h>
-#include <llvm_typecheck.h>
+
+#include "llvm_convert.h"
 
 static llvm::cl::OptionCategory esbmc_llvm("esmc_llvm");
 
@@ -55,6 +56,15 @@ bool llvm_languaget::parse()
   return false;
 }
 
+bool llvm_languaget::convert(contextt &context)
+{
+  contextt new_context;
+  llvm_convertert converter(context);
+  converter.ASTs.swap(ASTs);
+
+  return converter.convert();
+}
+
 bool llvm_languaget::preprocess(
   const std::string &path,
   std::ostream &outstream,
@@ -69,18 +79,6 @@ void llvm_languaget::internal_additions(std::ostream &out)
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
-}
-
-bool llvm_languaget::typecheck(
-  contextt &context,
-  const std::string &module,
-  message_handlert &message_handler)
-{
-  contextt new_context;
-  llvm_typecheckt typecheck(context);
-  typecheck.ASTs.swap(ASTs);
-
-  return typecheck.typecheck();
 }
 
 bool llvm_languaget::from_expr(

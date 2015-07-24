@@ -5,21 +5,21 @@
  *      Author: mramalho
  */
 
-#include "llvm_typecheck.h"
+#include "llvm_convert.h"
 
 #include <std_types.h>
 #include <ansi-c/c_types.h>
 
-llvm_typecheckt::llvm_typecheckt(contextt &_context)
+llvm_convertert::llvm_convertert(contextt &_context)
   : context(_context)
 {
 }
 
-llvm_typecheckt::~llvm_typecheckt()
+llvm_convertert::~llvm_convertert()
 {
 }
 
-bool llvm_typecheckt::typecheck()
+bool llvm_convertert::convert()
 {
   if(convert_top_level_decl())
     return true;
@@ -27,7 +27,7 @@ bool llvm_typecheckt::typecheck()
   return false;
 }
 
-bool llvm_typecheckt::convert_top_level_decl()
+bool llvm_convertert::convert_top_level_decl()
 {
   // Iterate through each translation unit and their global symbols, creating
   // symbols as we go.
@@ -77,7 +77,7 @@ bool llvm_typecheckt::convert_top_level_decl()
   return false;
 }
 
-void llvm_typecheckt::get_type(const clang::Type &the_type, typet &new_type)
+void llvm_convertert::get_type(const clang::Type &the_type, typet &new_type)
 {
   clang::Type::TypeClass tc = the_type.getTypeClass();
   switch (tc) {

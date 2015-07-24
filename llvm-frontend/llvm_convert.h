@@ -5,21 +5,21 @@
  *      Author: mramalho
  */
 
-#ifndef LLVM_FRONTEND_LLVM_TYPECHECK_H_
-#define LLVM_FRONTEND_LLVM_TYPECHECK_H_
+#ifndef LLVM_FRONTEND_LLVM_CONVERT_H_
+#define LLVM_FRONTEND_LLVM_CONVERT_H_
 
 #include <context.h>
 
 #include <clang/Frontend/ASTUnit.h>
 
-class llvm_typecheckt
+class llvm_convertert
 {
 public:
-  llvm_typecheckt(contextt &_context);
+  llvm_convertert(contextt &_context);
 
-  virtual ~llvm_typecheckt();
+  virtual ~llvm_convertert();
 
-  bool typecheck();
+  bool convert();
 
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 
@@ -30,4 +30,4 @@ private:
   void get_type(const clang::Type &the_type, typet &new_type);
 };
 
-#endif /* LLVM_FRONTEND_LLVM_TYPECHECK_H_ */
+#endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */
