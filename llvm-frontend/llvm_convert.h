@@ -27,7 +27,10 @@ private:
   contextt &context;
 
   bool convert_top_level_decl();
+
   void get_type(const clang::Type &the_type, typet &new_type);
+  std::string get_filename_from_path(std::string path);
+  std::string get_modulename_from_path(std::string path);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */

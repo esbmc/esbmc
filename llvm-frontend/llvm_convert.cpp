@@ -10,6 +10,8 @@
 #include <std_types.h>
 #include <ansi-c/c_types.h>
 
+#include <boost/filesystem.hpp>
+
 llvm_convertert::llvm_convertert(contextt &_context)
   : context(_context)
 {
@@ -227,4 +229,14 @@ void llvm_convertert::get_type(const clang::Type &the_type, typet &new_type)
                 << the_type.getTypeClassName() << std::endl;
       abort();
   }
+}
+
+std::string llvm_convertert::get_filename_from_path(std::string path)
+{
+  return  boost::filesystem::path(path).filename().string();
+}
+
+std::string llvm_convertert::get_modulename_from_path(std::string path)
+{
+  return  boost::filesystem::path(path).stem().string();
 }
