@@ -15,13 +15,14 @@ llvm_languaget::llvm_languaget(std::vector<std::string> _files)
   : files(_files)
 {
   // From the clang tool example,
-  int num_args = 3;
+  int num_args = 2 + _files.size();
   const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
 
-  unsigned int i = 0;
+  int i=0;
   the_args[i++] = "clang";
-  //    the_args[i++] = filename.c_str();
-  //    the_args[i++] = "--";
+  for(; i <= _files.size(); ++i)
+    the_args[i] = _files.at(i-1).c_str();
+  the_args[i] = "--";
 
   OptionsParser = new clang::tooling::CommonOptionsParser(num_args, the_args, esbmc_llvm);
   free(the_args);
@@ -34,6 +35,21 @@ llvm_languaget::~llvm_languaget()
 {
   delete OptionsParser;
   delete Tool;
+}
+
+bool llvm_languaget::parse()
+{
+  Tool->buildASTs(ASTs);
+
+  // Use diagnostics to find errors, rather than the return code.
+  for (const auto &astunit : ASTs) {
+    if (astunit->getDiagnostics().hasErrorOccurred()) {
+      std::cerr << std::endl;
+      return true;
+    }
+  }
+
+  return false;
 }
 
 bool llvm_languaget::preprocess(
@@ -50,21 +66,6 @@ void llvm_languaget::internal_additions(std::ostream &out)
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
-}
-
-bool llvm_languaget::parse()
-{
-  Tool->buildASTs(ASTs);
-
-  // Use diagnostics to find errors, rather than the return code.
-  for (const auto &astunit : ASTs) {
-    if (astunit->getDiagnostics().hasErrorOccurred()) {
-      std::cerr << std::endl;
-      return true;
-    }
-  }
-
-  return false;
 }
 
 bool llvm_languaget::typecheck(
