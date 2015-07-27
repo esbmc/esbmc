@@ -80,19 +80,17 @@ void llvm_convertert::convert_typedef(clang::ASTUnit::top_level_iterator it)
 
   clang::TypedefDecl *tdd = dynamic_cast<clang::TypedefDecl*>(*it);
   clang::QualType q_type = tdd->getUnderlyingType();
-  const clang::Type *the_type = q_type.getTypePtrOrNull();
-  assert(the_type != NULL && "No underlying typedef type?");
 
   // Get type
   typet t;
-  get_type(*the_type, t);
+  get_type(q_type, t);
 
   symbol.type = t;
   symbol.base_name = tdd->getName().str();
   symbol.pretty_name =
-      symbol.module.as_string() + "::" + symbol.base_name.as_string();
+    symbol.module.as_string() + "::" + symbol.base_name.as_string();
   symbol.name =
-      "c::" + symbol.module.as_string() + "::" + symbol.base_name.as_string();
+    "c::" + symbol.module.as_string() + "::" + symbol.base_name.as_string();
   symbol.is_type = true;
 
   if (context.move(symbol)) {
@@ -109,12 +107,10 @@ void llvm_convertert::convert_var(clang::ASTUnit::top_level_iterator it)
 
   clang::VarDecl *vd = dynamic_cast<clang::VarDecl*>(*it);
   clang::QualType q_type = vd->getType();
-  const clang::Type *the_type = q_type.getTypePtrOrNull();
-  assert(the_type != NULL && "No type?");
 
   // Get type
   typet t;
-  get_type(*the_type, t);
+  get_type(q_type, t);
 
   symbol.type = t;
   symbol.base_name = vd->getName().str();
@@ -169,9 +165,9 @@ void llvm_convertert::convert_function(clang::ASTUnit::top_level_iterator it)
   code_typet type;
 
   // Return type
-  const clang::Type *ret_type = fd->getReturnType().getTypePtr();
+  const clang::QualType ret_type = fd->getReturnType();
   typet return_type;
-  get_type(*ret_type, return_type);
+  get_type(ret_type, return_type);
   type.return_type() = return_type;
 
   // The arguments
@@ -204,9 +200,9 @@ code_typet::argumentt llvm_convertert::convert_function_params(
   symbolt param_symbol;
   get_default_symbol(param_symbol, it);
 
-  const clang::Type *par_type = pdecl->getOriginalType().getTypePtr();
+  const clang::QualType q_type = pdecl->getOriginalType();
   typet param_type;
-  get_type(*par_type, param_type);
+  get_type(q_type, param_type);
 
   param_symbol.type = param_type;
 
@@ -234,8 +230,9 @@ code_typet::argumentt llvm_convertert::convert_function_params(
   return arg;
 }
 
-void llvm_convertert::get_type(const clang::Type &the_type, typet &new_type)
+void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
 {
+  const clang::Type &the_type = *q_type.getTypePtrOrNull();
   clang::Type::TypeClass tc = the_type.getTypeClass();
   switch (tc) {
     case clang::Type::Builtin:
@@ -350,7 +347,7 @@ void llvm_convertert::get_type(const clang::Type &the_type, typet &new_type)
           abort();
       }
     }
-    return;
+    break;
 
     case clang::Type::Record:
     case clang::Type::ConstantArray:
@@ -366,6 +363,9 @@ void llvm_convertert::get_type(const clang::Type &the_type, typet &new_type)
                 << the_type.getTypeClassName() << std::endl;
       abort();
   }
+
+  if(q_type.isConstQualified())
+    new_type.cmt_constant(true);
 }
 
 void llvm_convertert::get_default_symbol(symbolt& symbol, clang::ASTUnit::top_level_iterator it)

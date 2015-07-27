@@ -36,7 +36,7 @@ private:
     clang::ASTUnit::top_level_iterator it,
     clang::ParmVarDecl *pdecl);
 
-  void get_type(const clang::Type &the_type, typet &new_type);
+  void get_type(const clang::QualType &the_type, typet &new_type);
   void get_default_symbol(symbolt &symbol, clang::ASTUnit::top_level_iterator it);
 
   std::string get_filename_from_path(std::string path);
