@@ -45,20 +45,17 @@ bool llvm_convertert::convert_top_level_decl()
 
       (*it)->dump();
 
-      symbolt sym;
-      get_default_symbol(sym, it);
-
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
-          convert_typedef(sym, it);
+          convert_typedef(it);
           break;
 
         case clang::Decl::Var:
-          convert_var(sym, it);
+          convert_var(it);
           break;
 
         case clang::Decl::Function:
-          convert_function(sym, it);
+          convert_function(it);
           break;
 
         // Apparently if you insert a semicolon at the end of a
@@ -79,9 +76,11 @@ bool llvm_convertert::convert_top_level_decl()
   return false;
 }
 
-void llvm_convertert::convert_typedef(symbolt& symbol,
-  clang::ASTUnit::top_level_iterator it)
+void llvm_convertert::convert_typedef(clang::ASTUnit::top_level_iterator it)
 {
+  symbolt symbol;
+  get_default_symbol(symbol, it);
+
   clang::TypedefDecl *tdd = dynamic_cast<clang::TypedefDecl*>(*it);
   clang::QualType q_type = tdd->getUnderlyingType();
   const clang::Type *the_type = q_type.getTypePtrOrNull();
@@ -106,9 +105,11 @@ void llvm_convertert::convert_typedef(symbolt& symbol,
   }
 }
 
-void llvm_convertert::convert_var(symbolt& symbol,
-  clang::ASTUnit::top_level_iterator it)
+void llvm_convertert::convert_var(clang::ASTUnit::top_level_iterator it)
 {
+  symbolt symbol;
+  get_default_symbol(symbol, it);
+
   clang::VarDecl *vd = dynamic_cast<clang::VarDecl*>(*it);
   clang::QualType q_type = vd->getType();
   const clang::Type *the_type = q_type.getTypePtrOrNull();
@@ -150,9 +151,11 @@ void llvm_convertert::convert_var(symbolt& symbol,
   }
 }
 
-void llvm_convertert::convert_function(symbolt& symbol,
-  clang::ASTUnit::top_level_iterator it)
+void llvm_convertert::convert_function(clang::ASTUnit::top_level_iterator it)
 {
+  symbolt symbol;
+  get_default_symbol(symbol, it);
+
   clang::FunctionDecl *fd = dynamic_cast<clang::FunctionDecl*>(*it);
 
   symbol.base_name = fd->getName().str();
