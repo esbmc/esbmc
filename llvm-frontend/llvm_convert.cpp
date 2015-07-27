@@ -71,17 +71,6 @@ bool llvm_convertert::convert_top_level_decl()
           sym.name = "c::" + module + "::" + sym.base_name.as_string();
           sym.is_type = true;
 
-          locationt location;
-          location.set_file(filename);
-          location.set_line((*it)->getASTContext().getSourceManager().
-            getSpellingLineNumber((*it)->getLocation()));
-          sym.location = location;
-
-          if (context.move(sym)) {
-            std::cerr << "Couldn't add symbol " << sym.name
-                      << " to symbol table" << std::endl;
-            abort();
-          }
           break;
         }
 
@@ -113,33 +102,54 @@ bool llvm_convertert::convert_top_level_decl()
             sym.pretty_name = module + "::" + sym.base_name.as_string();
           }
 
-          locationt location;
-          location.set_file(filename);
-          location.set_line((*it)->getASTContext().getSourceManager().
-              getSpellingLineNumber((*it)->getLocation()));
-          sym.location = location;
-
           if (vd->hasExternalStorage()) {
             sym.is_extern = true;
           }
 
           sym.lvalue = true;
-
-          if (context.move(sym)) {
-            std::cerr << "Couldn't add symbol " << sym.name
-                      << " to symbol table" << std::endl;
-            abort();
-          }
-
           break;
         }
 
         case clang::Decl::Function:
+        {
+          clang::FunctionDecl *fd = static_cast<clang::FunctionDecl*>(*it);
+
+          // We need: a type, a name, and an optional body
+          clang::Stmt *body = NULL;
+          if (fd->isThisDeclarationADefinition() && fd->hasBody())
+            body = fd->getBody();
+
+          const clang::Type *ret_type = fd->getReturnType().getTypePtr();
+          typet return_type;
+          get_type(*ret_type, return_type);
+
+          sym.type = return_type;
+          sym.module = module;
+          sym.base_name = fd->getName().str();
+          sym.name = "c::" + sym.base_name.as_string();
+          sym.pretty_name = sym.base_name.as_string();
+
+          sym.lvalue = true;
+          break;
+        }
+
         case clang::Decl::Record:
         default:
           std::cerr << "Unrecognized / unimplemented decl type ";
           std::cerr << (*it)->getDeclKindName() << std::endl;
           abort();
+      }
+
+      locationt location;
+      location.set_file(filename);
+      location.set_line((*it)->getASTContext().getSourceManager().
+        getSpellingLineNumber((*it)->getLocation()));
+      sym.location = location;
+
+      if (context.move(sym)) {
+        std::cerr << "Couldn't add symbol " << sym.name
+                  << " to symbol table" << std::endl;
+        abort();
       }
     }
   }
