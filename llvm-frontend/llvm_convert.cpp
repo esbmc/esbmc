@@ -8,7 +8,6 @@
 #include "llvm_convert.h"
 
 #include <std_code.h>
-#include <std_types.h>
 #include <expr_util.h>
 
 #include <ansi-c/c_types.h>
@@ -179,38 +178,12 @@ void llvm_convertert::convert_function(clang::ASTUnit::top_level_iterator it)
 
   // The arguments
   type.arguments();
-
-  for (const auto &pdecl : fd->params()) {
-    symbolt arg_symbol;
-    get_default_symbol(arg_symbol, it);
-
-    const clang::Type *par_type = pdecl->getOriginalType().getTypePtr();
-    typet param_type;
-    get_type(*par_type, param_type);
-
-    arg_symbol.type = param_type;
-
-    std::string name = pdecl->getNameAsString();
-    arg_symbol.pretty_name = symbol.base_name.as_string() + "::" + name;
-    arg_symbol.name = "c::" + arg_symbol.pretty_name.as_string();
-    arg_symbol.base_name = name;
-
-    arg_symbol.lvalue = true;
-    arg_symbol.file_local = true;
-    arg_symbol.is_actual = true;
-
-    code_typet::argumentt arg;
-    arg.type() = param_type;
-    arg.base_name(name);
-    arg.identifier(arg_symbol.name.as_string());
-    arg.location() = arg_symbol.location;
-
-    type.arguments().push_back(arg);
-
-    if (context.move(arg_symbol)) {
-      std::cerr << "Couldn't add symbol " << symbol.name
-          << " to symbol table" << std::endl;
-      abort();
+  if(body)
+  {
+    for (const auto &pdecl : fd->params()) {
+      code_typet::argumentt param =
+        convert_function_params(symbol.base_name.as_string(), it, pdecl);
+      type.arguments().push_back(param);
     }
   }
 
@@ -223,6 +196,44 @@ void llvm_convertert::convert_function(clang::ASTUnit::top_level_iterator it)
               << " to symbol table" << std::endl;
     abort();
   }
+}
+
+code_typet::argumentt llvm_convertert::convert_function_params(
+  std::string function_name,
+  clang::ASTUnit::top_level_iterator it,
+  clang::ParmVarDecl *pdecl)
+{
+  symbolt param_symbol;
+  get_default_symbol(param_symbol, it);
+
+  const clang::Type *par_type = pdecl->getOriginalType().getTypePtr();
+  typet param_type;
+  get_type(*par_type, param_type);
+
+  param_symbol.type = param_type;
+
+  std::string name = pdecl->getNameAsString();
+  param_symbol.pretty_name = function_name + "::" + name;
+  param_symbol.name = "c::" + param_symbol.pretty_name.as_string();
+  param_symbol.base_name = name;
+
+  param_symbol.lvalue = true;
+  param_symbol.file_local = true;
+  param_symbol.is_actual = true;
+
+  if (context.move(param_symbol)) {
+    std::cerr << "Couldn't add symbol " << param_symbol.name
+        << " to symbol table" << std::endl;
+    abort();
+  }
+
+  code_typet::argumentt arg;
+  arg.type() = param_type;
+  arg.base_name(name);
+  arg.identifier(param_symbol.name.as_string());
+  arg.location() = param_symbol.location;
+
+  return arg;
 }
 
 void llvm_convertert::get_type(const clang::Type &the_type, typet &new_type)

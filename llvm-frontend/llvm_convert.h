@@ -9,6 +9,7 @@
 #define LLVM_FRONTEND_LLVM_CONVERT_H_
 
 #include <context.h>
+#include <std_types.h>
 
 #include <clang/Frontend/ASTUnit.h>
 
@@ -30,6 +31,10 @@ private:
   void convert_typedef(clang::ASTUnit::top_level_iterator it);
   void convert_var(clang::ASTUnit::top_level_iterator it);
   void convert_function(clang::ASTUnit::top_level_iterator it);
+  code_typet::argumentt convert_function_params(
+    std::string function_name,
+    clang::ASTUnit::top_level_iterator it,
+    clang::ParmVarDecl *pdecl);
 
   void get_type(const clang::Type &the_type, typet &new_type);
   void get_default_symbol(symbolt &symbol, clang::ASTUnit::top_level_iterator it);
