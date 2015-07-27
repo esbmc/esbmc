@@ -50,112 +50,16 @@ bool llvm_convertert::convert_top_level_decl()
 
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
-          return convert_typedef(sym, it);
+          convert_typedef(sym, it);
           break;
 
         case clang::Decl::Var:
-        {
-          clang::VarDecl *vd = dynamic_cast<clang::VarDecl*>(*it);
-          clang::QualType q_type = vd->getType();
-          const clang::Type *the_type = q_type.getTypePtrOrNull();
-          assert(the_type != NULL && "No type?");
-
-          // Get type
-          typet t;
-          get_type(*the_type, t);
-
-          sym.type = t;
-          sym.base_name = vd->getName().str();
-
-          // This is not local, so has static lifetime
-          if (!vd->hasLocalStorage()) {
-            sym.static_lifetime = true;
-            sym.name = "c::" + sym.base_name.as_string();
-            sym.pretty_name = sym.base_name.as_string();
-            sym.value = gen_zero(t);
-          }
-          else
-          {
-            sym.name =
-              "c::" + sym.module.as_string() + "::" + sym.base_name.as_string();
-            sym.pretty_name =
-              sym.module.as_string() + "::" + sym.base_name.as_string();
-          }
-
-          if (vd->hasExternalStorage()) {
-            sym.is_extern = true;
-          }
-
-          sym.lvalue = true;
+          convert_var(sym, it);
           break;
-        }
 
         case clang::Decl::Function:
-        {
-          clang::FunctionDecl *fd = dynamic_cast<clang::FunctionDecl*>(*it);
-
-          sym.base_name = fd->getName().str();
-          sym.name = "c::" + sym.base_name.as_string();
-          sym.pretty_name = sym.base_name.as_string();
-          sym.lvalue = true;
-
-          // We need: a type, a name, and an optional body
-          clang::Stmt *body = NULL;
-          if (fd->isThisDeclarationADefinition() && fd->hasBody())
-            body = fd->getBody();
-
-          // Build function's type
-          code_typet type;
-
-          // Return type
-          const clang::Type *ret_type = fd->getReturnType().getTypePtr();
-          typet return_type;
-          get_type(*ret_type, return_type);
-          type.return_type() = return_type;
-
-          // The arguments
-          type.arguments();
-
-          for (const auto &pdecl : fd->params()) {
-            symbolt arg_symbol;
-            get_default_symbol(arg_symbol, it);
-
-            const clang::Type *par_type = pdecl->getOriginalType().getTypePtr();
-            typet param_type;
-            get_type(*par_type, param_type);
-
-            arg_symbol.type = param_type;
-
-            std::string name = pdecl->getNameAsString();
-            arg_symbol.pretty_name = sym.base_name.as_string() + "::" + name;
-            arg_symbol.name = "c::" + arg_symbol.pretty_name.as_string();
-            arg_symbol.base_name = name;
-
-            arg_symbol.lvalue = true;
-            arg_symbol.file_local = true;
-            arg_symbol.is_actual = true;
-
-            code_typet::argumentt arg;
-            arg.type() = param_type;
-            arg.base_name(name);
-            arg.identifier(arg_symbol.name.as_string());
-            arg.location() = arg_symbol.location;
-
-            type.arguments().push_back(arg);
-
-            if (context.move(arg_symbol)) {
-              std::cerr << "Couldn't add symbol " << sym.name
-                        << " to symbol table" << std::endl;
-              abort();
-            }
-          }
-
-          // And the location
-          type.location() = sym.location;
-          sym.type = type;
-
+          convert_function(sym, it);
           break;
-        }
 
         // Apparently if you insert a semicolon at the end of a
         // function declaration, this AST is created, so just
@@ -169,19 +73,13 @@ bool llvm_convertert::convert_top_level_decl()
           std::cerr << (*it)->getDeclKindName() << std::endl;
           abort();
       }
-
-      if (context.move(sym)) {
-        std::cerr << "Couldn't add symbol " << sym.name
-                  << " to symbol table" << std::endl;
-        abort();
-      }
     }
   }
 
   return false;
 }
 
-bool llvm_convertert::convert_typedef(symbolt& symbol,
+void llvm_convertert::convert_typedef(symbolt& symbol,
   clang::ASTUnit::top_level_iterator it)
 {
   clang::TypedefDecl *tdd = dynamic_cast<clang::TypedefDecl*>(*it);
@@ -201,7 +99,127 @@ bool llvm_convertert::convert_typedef(symbolt& symbol,
       "c::" + symbol.module.as_string() + "::" + symbol.base_name.as_string();
   symbol.is_type = true;
 
-  return false;
+  if (context.move(symbol)) {
+    std::cerr << "Couldn't add symbol " << symbol.name
+              << " to symbol table" << std::endl;
+    abort();
+  }
+}
+
+void llvm_convertert::convert_var(symbolt& symbol,
+  clang::ASTUnit::top_level_iterator it)
+{
+  clang::VarDecl *vd = dynamic_cast<clang::VarDecl*>(*it);
+  clang::QualType q_type = vd->getType();
+  const clang::Type *the_type = q_type.getTypePtrOrNull();
+  assert(the_type != NULL && "No type?");
+
+  // Get type
+  typet t;
+  get_type(*the_type, t);
+
+  symbol.type = t;
+  symbol.base_name = vd->getName().str();
+
+  // This is not local, so has static lifetime
+  if (!vd->hasLocalStorage())
+  {
+    symbol.static_lifetime = true;
+    symbol.name = "c::" + symbol.base_name.as_string();
+    symbol.pretty_name = symbol.base_name.as_string();
+    symbol.value = gen_zero(t);
+  }
+  else
+  {
+    symbol.name =
+      "c::" + symbol.module.as_string() + "::" + symbol.base_name.as_string();
+    symbol.pretty_name =
+      symbol.module.as_string() + "::" + symbol.base_name.as_string();
+  }
+
+  if (vd->hasExternalStorage()) {
+    symbol.is_extern = true;
+  }
+
+  symbol.lvalue = true;
+
+  if (context.move(symbol)) {
+    std::cerr << "Couldn't add symbol " << symbol.name
+              << " to symbol table" << std::endl;
+    abort();
+  }
+}
+
+void llvm_convertert::convert_function(symbolt& symbol,
+  clang::ASTUnit::top_level_iterator it)
+{
+  clang::FunctionDecl *fd = dynamic_cast<clang::FunctionDecl*>(*it);
+
+  symbol.base_name = fd->getName().str();
+  symbol.name = "c::" + symbol.base_name.as_string();
+  symbol.pretty_name = symbol.base_name.as_string();
+  symbol.lvalue = true;
+
+  // We need: a type, a name, and an optional body
+  clang::Stmt *body = NULL;
+  if (fd->isThisDeclarationADefinition() && fd->hasBody())
+    body = fd->getBody();
+
+  // Build function's type
+  code_typet type;
+
+  // Return type
+  const clang::Type *ret_type = fd->getReturnType().getTypePtr();
+  typet return_type;
+  get_type(*ret_type, return_type);
+  type.return_type() = return_type;
+
+  // The arguments
+  type.arguments();
+
+  for (const auto &pdecl : fd->params()) {
+    symbolt arg_symbol;
+    get_default_symbol(arg_symbol, it);
+
+    const clang::Type *par_type = pdecl->getOriginalType().getTypePtr();
+    typet param_type;
+    get_type(*par_type, param_type);
+
+    arg_symbol.type = param_type;
+
+    std::string name = pdecl->getNameAsString();
+    arg_symbol.pretty_name = symbol.base_name.as_string() + "::" + name;
+    arg_symbol.name = "c::" + arg_symbol.pretty_name.as_string();
+    arg_symbol.base_name = name;
+
+    arg_symbol.lvalue = true;
+    arg_symbol.file_local = true;
+    arg_symbol.is_actual = true;
+
+    code_typet::argumentt arg;
+    arg.type() = param_type;
+    arg.base_name(name);
+    arg.identifier(arg_symbol.name.as_string());
+    arg.location() = arg_symbol.location;
+
+    type.arguments().push_back(arg);
+
+    if (context.move(arg_symbol)) {
+      std::cerr << "Couldn't add symbol " << symbol.name
+          << " to symbol table" << std::endl;
+      abort();
+    }
+  }
+
+  // And the location
+  type.location() = symbol.location;
+  symbol.type = type;
+
+  if (context.move(symbol)) {
+    std::cerr << "Couldn't add symbol " << symbol.name
+              << " to symbol table" << std::endl;
+    abort();
+  }
 }
 
 void llvm_convertert::get_type(const clang::Type &the_type, typet &new_type)
