@@ -42,15 +42,10 @@ bool llvm_convertert::convert_top_level_decl()
     for (it = translation_unit->top_level_begin();
         it != translation_unit->top_level_end(); it++) {
 
-      std::string path =
-        (*it)->getASTContext().getSourceManager().getFilename(
-          (*it)->getLocation()).str();
-
-      std::string filename = get_filename_from_path(path);
-      std::string module = get_modulename_from_path(path);
+      (*it)->dump();
 
       symbolt sym;
-      sym.mode = "C";
+      get_default_symbol(sym, it);
 
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
@@ -66,9 +61,10 @@ bool llvm_convertert::convert_top_level_decl()
 
           sym.type = t;
           sym.base_name = tdd->getName().str();
-          sym.module = module;
-          sym.pretty_name = module + "::" + sym.base_name.as_string();
-          sym.name = "c::" + module + "::" + sym.base_name.as_string();
+          sym.pretty_name =
+            sym.module.as_string() + "::" + sym.base_name.as_string();
+          sym.name =
+            "c::" + sym.module.as_string() + "::" + sym.base_name.as_string();
           sym.is_type = true;
 
           break;
@@ -86,7 +82,6 @@ bool llvm_convertert::convert_top_level_decl()
           get_type(*the_type, t);
 
           sym.type = t;
-          sym.module = module;
           sym.base_name = vd->getName().str();
 
           // This is not local, so has static lifetime
@@ -98,8 +93,10 @@ bool llvm_convertert::convert_top_level_decl()
           }
           else
           {
-            sym.name = "c::" + module + "::" + sym.base_name.as_string();
-            sym.pretty_name = module + "::" + sym.base_name.as_string();
+            sym.name =
+              "c::" + sym.module.as_string() + "::" + sym.base_name.as_string();
+            sym.pretty_name =
+              sym.module.as_string() + "::" + sym.base_name.as_string();
           }
 
           if (vd->hasExternalStorage()) {
@@ -124,11 +121,9 @@ bool llvm_convertert::convert_top_level_decl()
           get_type(*ret_type, return_type);
 
           sym.type = return_type;
-          sym.module = module;
           sym.base_name = fd->getName().str();
           sym.name = "c::" + sym.base_name.as_string();
           sym.pretty_name = sym.base_name.as_string();
-
           sym.lvalue = true;
           break;
         }
@@ -139,12 +134,6 @@ bool llvm_convertert::convert_top_level_decl()
           std::cerr << (*it)->getDeclKindName() << std::endl;
           abort();
       }
-
-      locationt location;
-      location.set_file(filename);
-      location.set_line((*it)->getASTContext().getSourceManager().
-        getSpellingLineNumber((*it)->getLocation()));
-      sym.location = location;
 
       if (context.move(sym)) {
         std::cerr << "Couldn't add symbol " << sym.name
@@ -307,6 +296,22 @@ void llvm_convertert::get_type(const clang::Type &the_type, typet &new_type)
                 << the_type.getTypeClassName() << std::endl;
       abort();
   }
+}
+
+void llvm_convertert::get_default_symbol(symbolt& symbol, clang::ASTUnit::top_level_iterator it)
+{
+  std::string path =
+    (*it)->getASTContext().getSourceManager().getFilename(
+      (*it)->getLocation()).str();
+
+  symbol.mode = "C";
+  symbol.module = get_modulename_from_path(path);
+
+  locationt location;
+  location.set_file(get_filename_from_path(path));
+  location.set_line((*it)->getASTContext().getSourceManager().
+    getSpellingLineNumber((*it)->getLocation()));
+  symbol.location = location;
 }
 
 std::string llvm_convertert::get_filename_from_path(std::string path)
