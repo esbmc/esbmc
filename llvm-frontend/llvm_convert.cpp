@@ -50,26 +50,8 @@ bool llvm_convertert::convert_top_level_decl()
 
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
-        {
-          clang::TypedefDecl *tdd = dynamic_cast<clang::TypedefDecl*>(*it);
-          clang::QualType q_type = tdd->getUnderlyingType();
-          const clang::Type *the_type = q_type.getTypePtrOrNull();
-          assert(the_type != NULL && "No underlying typedef type?");
-
-          // Get type
-          typet t;
-          get_type(*the_type, t);
-
-          sym.type = t;
-          sym.base_name = tdd->getName().str();
-          sym.pretty_name =
-            sym.module.as_string() + "::" + sym.base_name.as_string();
-          sym.name =
-            "c::" + sym.module.as_string() + "::" + sym.base_name.as_string();
-          sym.is_type = true;
-
+          return convert_typedef(sym, it);
           break;
-        }
 
         case clang::Decl::Var:
         {
@@ -195,6 +177,29 @@ bool llvm_convertert::convert_top_level_decl()
       }
     }
   }
+
+  return false;
+}
+
+bool llvm_convertert::convert_typedef(symbolt& symbol,
+  clang::ASTUnit::top_level_iterator it)
+{
+  clang::TypedefDecl *tdd = dynamic_cast<clang::TypedefDecl*>(*it);
+  clang::QualType q_type = tdd->getUnderlyingType();
+  const clang::Type *the_type = q_type.getTypePtrOrNull();
+  assert(the_type != NULL && "No underlying typedef type?");
+
+  // Get type
+  typet t;
+  get_type(*the_type, t);
+
+  symbol.type = t;
+  symbol.base_name = tdd->getName().str();
+  symbol.pretty_name =
+      symbol.module.as_string() + "::" + symbol.base_name.as_string();
+  symbol.name =
+      "c::" + symbol.module.as_string() + "::" + symbol.base_name.as_string();
+  symbol.is_type = true;
 
   return false;
 }

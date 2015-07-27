@@ -27,6 +27,7 @@ private:
   contextt &context;
 
   bool convert_top_level_decl();
+  bool convert_typedef(symbolt &symbol, clang::ASTUnit::top_level_iterator it);
 
   void get_type(const clang::Type &the_type, typet &new_type);
   void get_default_symbol(symbolt &symbol, clang::ASTUnit::top_level_iterator it);
