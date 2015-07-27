@@ -175,6 +175,12 @@ bool llvm_convertert::convert_top_level_decl()
           break;
         }
 
+        // Apparently if you insert a semicolon at the end of a
+        // function declaration, this AST is created, so just
+        // ignore it
+        case clang::Decl::Empty:
+          break;
+
         case clang::Decl::Record:
         default:
           std::cerr << "Unrecognized / unimplemented decl type ";
