@@ -51,7 +51,7 @@ bool llvm_convertert::convert_top_level_decl()
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
         {
-          clang::TypedefDecl *tdd = static_cast<clang::TypedefDecl*>(*it);
+          clang::TypedefDecl *tdd = dynamic_cast<clang::TypedefDecl*>(*it);
           clang::QualType q_type = tdd->getUnderlyingType();
           const clang::Type *the_type = q_type.getTypePtrOrNull();
           assert(the_type != NULL && "No underlying typedef type?");
@@ -73,7 +73,7 @@ bool llvm_convertert::convert_top_level_decl()
 
         case clang::Decl::Var:
         {
-          clang::VarDecl *vd = static_cast<clang::VarDecl*>(*it);
+          clang::VarDecl *vd = dynamic_cast<clang::VarDecl*>(*it);
           clang::QualType q_type = vd->getType();
           const clang::Type *the_type = q_type.getTypePtrOrNull();
           assert(the_type != NULL && "No underlying typedef type?");
@@ -110,7 +110,7 @@ bool llvm_convertert::convert_top_level_decl()
 
         case clang::Decl::Function:
         {
-          clang::FunctionDecl *fd = static_cast<clang::FunctionDecl*>(*it);
+          clang::FunctionDecl *fd = dynamic_cast<clang::FunctionDecl*>(*it);
 
           sym.base_name = fd->getName().str();
           sym.name = "c::" + sym.base_name.as_string();
