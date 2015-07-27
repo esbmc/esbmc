@@ -368,6 +368,46 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
     new_type.cmt_constant(true);
 }
 
+void llvm_convertert::get_expr(const clang::Expr& expr, exprt& new_expr)
+{
+  switch(expr.getStmtClass()) {
+    case clang::Stmt::ImplicitCastExprClass:
+    case clang::Stmt::CStyleCastExprClass:
+    case clang::Stmt::IntegerLiteralClass:
+    case clang::Stmt::DeclRefExprClass:
+    case clang::Stmt::UnaryOperatorClass:
+    case clang::Stmt::StringLiteralClass:
+    case clang::Stmt::ArraySubscriptExprClass:
+    case clang::Stmt::ParenExprClass:
+    case clang::Stmt::ConditionalOperatorClass:
+    case clang::Stmt::BinaryOperatorClass:
+    case clang::Stmt::CallExprClass:
+    case clang::Stmt::PredefinedExprClass:
+    case clang::Stmt::MemberExprClass:
+    case clang::Stmt::InitListExprClass:
+    case clang::Stmt::BinaryConditionalOperatorClass:
+    case clang::Stmt::AddrLabelExprClass:
+    case clang::Stmt::ArrayTypeTraitExprClass:
+    case clang::Stmt::AsTypeExprClass:
+    case clang::Stmt::AtomicExprClass:
+    case clang::Stmt::CompoundAssignOperatorClass:
+    case clang::Stmt::CharacterLiteralClass:
+    case clang::Stmt::ChooseExprClass:
+    case clang::Stmt::DesignatedInitExprClass:
+    case clang::Stmt::FloatingLiteralClass:
+    case clang::Stmt::OffsetOfExprClass:
+    case clang::Stmt::OpaqueValueExprClass:
+    case clang::Stmt::ParenListExprClass:
+    case clang::Stmt::SizeOfPackExprClass:
+    case clang::Stmt::UnaryExprOrTypeTraitExprClass:
+    case clang::Stmt::VAArgExprClass:
+    default:
+      std::cerr << "Conversion of unsupported clang expr: \"";
+      std::cerr << expr.getStmtClassName() << "\" to expression" << std::endl;
+      abort();
+  }
+}
+
 void llvm_convertert::get_default_symbol(symbolt& symbol, clang::ASTUnit::top_level_iterator it)
 {
   std::string path =

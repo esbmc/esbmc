@@ -12,6 +12,8 @@
 #include <std_types.h>
 
 #include <clang/Frontend/ASTUnit.h>
+#include <clang/AST/Type.h>
+#include <clang/AST/Expr.h>
 
 class llvm_convertert
 {
@@ -37,6 +39,7 @@ private:
     clang::ParmVarDecl *pdecl);
 
   void get_type(const clang::QualType &the_type, typet &new_type);
+  void get_expr(const clang::Expr &expr, exprt &new_expr);
   void get_default_symbol(symbolt &symbol, clang::ASTUnit::top_level_iterator it);
 
   std::string get_filename_from_path(std::string path);
