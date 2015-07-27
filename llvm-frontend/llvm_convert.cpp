@@ -355,32 +355,14 @@ void llvm_convertert::get_type(const clang::Type &the_type, typet &new_type)
     return;
 
     case clang::Type::Record:
-      return;
-
     case clang::Type::ConstantArray:
-      return;
-
     case clang::Type::Elaborated:
-      return;
-
     case clang::Type::Pointer:
-      return;
-
     case clang::Type::Typedef:
-      return;
-
     case clang::Type::FunctionProto:
-      return;
-
     case clang::Type::FunctionNoProto:
-      return;
-
     case clang::Type::IncompleteArray:
-      return;
-
     case clang::Type::Paren:
-      return;
-
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
