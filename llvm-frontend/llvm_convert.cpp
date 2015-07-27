@@ -42,8 +42,6 @@ bool llvm_convertert::convert_top_level_decl()
     for (it = translation_unit->top_level_begin();
         it != translation_unit->top_level_end(); it++) {
 
-      (*it)->dump();
-
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
           convert_typedef(it);
