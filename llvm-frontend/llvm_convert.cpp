@@ -76,7 +76,7 @@ bool llvm_convertert::convert_top_level_decl()
           clang::VarDecl *vd = dynamic_cast<clang::VarDecl*>(*it);
           clang::QualType q_type = vd->getType();
           const clang::Type *the_type = q_type.getTypePtrOrNull();
-          assert(the_type != NULL && "No underlying typedef type?");
+          assert(the_type != NULL && "No type?");
 
           // Get type
           typet t;
