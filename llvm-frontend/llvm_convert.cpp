@@ -7,6 +7,7 @@
 
 #include "llvm_convert.h"
 
+#include <std_code.h>
 #include <std_types.h>
 #include <expr_util.h>
 
@@ -111,20 +112,66 @@ bool llvm_convertert::convert_top_level_decl()
         {
           clang::FunctionDecl *fd = static_cast<clang::FunctionDecl*>(*it);
 
+          sym.base_name = fd->getName().str();
+          sym.name = "c::" + sym.base_name.as_string();
+          sym.pretty_name = sym.base_name.as_string();
+          sym.lvalue = true;
+
           // We need: a type, a name, and an optional body
           clang::Stmt *body = NULL;
           if (fd->isThisDeclarationADefinition() && fd->hasBody())
             body = fd->getBody();
 
+          // Build function's type
+          code_typet type;
+
+          // Return type
           const clang::Type *ret_type = fd->getReturnType().getTypePtr();
           typet return_type;
           get_type(*ret_type, return_type);
+          type.return_type() = return_type;
 
-          sym.type = return_type;
-          sym.base_name = fd->getName().str();
-          sym.name = "c::" + sym.base_name.as_string();
-          sym.pretty_name = sym.base_name.as_string();
-          sym.lvalue = true;
+          // The arguments
+          type.arguments();
+
+          for (const auto &pdecl : fd->params()) {
+            symbolt arg_symbol;
+            get_default_symbol(arg_symbol, it);
+
+            const clang::Type *par_type = pdecl->getOriginalType().getTypePtr();
+            typet param_type;
+            get_type(*par_type, param_type);
+
+            arg_symbol.type = param_type;
+
+            std::string name = pdecl->getNameAsString();
+            arg_symbol.pretty_name = sym.base_name.as_string() + "::" + name;
+            arg_symbol.name = "c::" + arg_symbol.pretty_name.as_string();
+            arg_symbol.base_name = name;
+
+            arg_symbol.lvalue = true;
+            arg_symbol.file_local = true;
+            arg_symbol.is_actual = true;
+
+            code_typet::argumentt arg;
+            arg.type() = param_type;
+            arg.base_name(name);
+            arg.identifier(arg_symbol.name.as_string());
+            arg.location() = arg_symbol.location;
+
+            type.arguments().push_back(arg);
+
+            if (context.move(arg_symbol)) {
+              std::cerr << "Couldn't add symbol " << sym.name
+                        << " to symbol table" << std::endl;
+              abort();
+            }
+          }
+
+          // And the location
+          type.location() = sym.location;
+          sym.type = type;
+
           break;
         }
 
