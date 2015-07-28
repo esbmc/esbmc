@@ -32,9 +32,9 @@ private:
   std::string current_path;
 
   bool convert_top_level_decl();
-  void convert_typedef(clang::ASTUnit::top_level_iterator it);
-  void convert_var(clang::ASTUnit::top_level_iterator it);
-  void convert_function(clang::ASTUnit::top_level_iterator it);
+  void convert_typedef(clang::TypedefDecl &tdd);
+  void convert_var(clang::VarDecl &vd);
+  void convert_function(clang::FunctionDecl &fd);
   code_typet::argumentt convert_function_params(
     std::string function_name,
     clang::ParmVarDecl *pdecl);

@@ -48,16 +48,25 @@ bool llvm_convertert::convert_top_level_decl()
 
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
-          convert_typedef(it);
+        {
+          clang::TypedefDecl *tdd = dynamic_cast<clang::TypedefDecl*>(*it);
+          convert_typedef(*tdd);
           break;
+        }
 
         case clang::Decl::Var:
-          convert_var(it);
+        {
+          clang::VarDecl *vd = dynamic_cast<clang::VarDecl*>(*it);
+          convert_var(*vd);
           break;
+        }
 
         case clang::Decl::Function:
-          convert_function(it);
+        {
+          clang::FunctionDecl *fd = dynamic_cast<clang::FunctionDecl*>(*it);
+          convert_function(*fd);
           break;
+        }
 
         // Apparently if you insert a semicolon at the end of a
         // function declaration, this AST is created, so just
@@ -77,20 +86,19 @@ bool llvm_convertert::convert_top_level_decl()
   return false;
 }
 
-void llvm_convertert::convert_typedef(clang::ASTUnit::top_level_iterator it)
+void llvm_convertert::convert_typedef(clang::TypedefDecl &tdd)
 {
   symbolt symbol;
   get_default_symbol(symbol);
 
-  clang::TypedefDecl *tdd = dynamic_cast<clang::TypedefDecl*>(*it);
-  clang::QualType q_type = tdd->getUnderlyingType();
+  clang::QualType q_type = tdd.getUnderlyingType();
 
   // Get type
   typet t;
   get_type(q_type, t);
 
   symbol.type = t;
-  symbol.base_name = tdd->getName().str();
+  symbol.base_name = tdd.getName().str();
   symbol.pretty_name =
     symbol.module.as_string() + "::" + symbol.base_name.as_string();
   symbol.name =
@@ -104,23 +112,22 @@ void llvm_convertert::convert_typedef(clang::ASTUnit::top_level_iterator it)
   }
 }
 
-void llvm_convertert::convert_var(clang::ASTUnit::top_level_iterator it)
+void llvm_convertert::convert_var(clang::VarDecl &vd)
 {
   symbolt symbol;
   get_default_symbol(symbol);
 
-  clang::VarDecl *vd = dynamic_cast<clang::VarDecl*>(*it);
-  clang::QualType q_type = vd->getType();
+  clang::QualType q_type = vd.getType();
 
   // Get type
   typet t;
   get_type(q_type, t);
 
   symbol.type = t;
-  symbol.base_name = vd->getName().str();
+  symbol.base_name = vd.getName().str();
 
   // This is not local, so has static lifetime
-  if (!vd->hasLocalStorage())
+  if (!vd.hasLocalStorage())
   {
     symbol.static_lifetime = true;
     symbol.name = "c::" + symbol.base_name.as_string();
@@ -138,13 +145,13 @@ void llvm_convertert::convert_var(clang::ASTUnit::top_level_iterator it)
       symbol.module.as_string() + "::" + symbol.base_name.as_string();
   }
 
-  if(vd->hasInit())
+  if(vd.hasInit())
   {
-    const clang::Expr *value = vd->getInit();
+    const clang::Expr *value = vd.getInit();
     get_expr(*value, symbol.value);
   }
 
-  if (vd->hasExternalStorage()) {
+  if (vd.hasExternalStorage()) {
     symbol.is_extern = true;
   }
 
@@ -157,28 +164,29 @@ void llvm_convertert::convert_var(clang::ASTUnit::top_level_iterator it)
   }
 }
 
-void llvm_convertert::convert_function(clang::ASTUnit::top_level_iterator it)
+void llvm_convertert::convert_function(clang::FunctionDecl &fd)
 {
   symbolt symbol;
   get_default_symbol(symbol);
 
-  clang::FunctionDecl *fd = dynamic_cast<clang::FunctionDecl*>(*it);
-
-  symbol.base_name = fd->getName().str();
+  symbol.base_name = fd.getName().str();
   symbol.name = "c::" + symbol.base_name.as_string();
   symbol.pretty_name = symbol.base_name.as_string();
   symbol.lvalue = true;
 
   // We need: a type, a name, and an optional body
   clang::Stmt *body = NULL;
-  if (fd->isThisDeclarationADefinition() && fd->hasBody())
-    body = fd->getBody();
+  if (fd.isThisDeclarationADefinition() && fd.hasBody())
+  {
+    body = fd.getBody();
+    get_expr(*body, symbol.value);
+  }
 
   // Build function's type
   code_typet type;
 
   // Return type
-  const clang::QualType ret_type = fd->getReturnType();
+  const clang::QualType ret_type = fd.getReturnType();
   typet return_type;
   get_type(ret_type, return_type);
   type.return_type() = return_type;
@@ -187,7 +195,7 @@ void llvm_convertert::convert_function(clang::ASTUnit::top_level_iterator it)
   type.arguments();
   if(body)
   {
-    for (const auto &pdecl : fd->params()) {
+    for (const auto &pdecl : fd.params()) {
       code_typet::argumentt param =
         convert_function_params(symbol.base_name.as_string(), pdecl);
       type.arguments().push_back(param);
