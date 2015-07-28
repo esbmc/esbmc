@@ -400,12 +400,24 @@ void llvm_convertert::get_expr(const clang::Expr& expr, exprt& new_expr)
       }
 
       new_expr.swap(bval);
-      new_expr.dump();
       break;
     }
 
     case clang::Stmt::ImplicitCastExprClass:
     case clang::Stmt::CStyleCastExprClass:
+    {
+      const clang::CastExpr &cast = static_cast<const clang::CastExpr &>(expr);
+
+      typet type;
+      get_type(cast.getType(), type);
+
+      exprt expr;
+      get_expr(*cast.getSubExpr(), expr);
+
+      new_expr = typecast_exprt(expr, type);
+      break;
+    }
+
     case clang::Stmt::DeclRefExprClass:
     case clang::Stmt::UnaryOperatorClass:
     case clang::Stmt::StringLiteralClass:
