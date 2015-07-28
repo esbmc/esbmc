@@ -32,6 +32,14 @@ private:
   std::string current_path;
 
   bool convert_top_level_decl();
+
+  void convert_decl(
+    std::string function_name,
+    const clang::Decl &decl);
+
+  void convert_decl(
+    const clang::Decl &decl);
+
   void convert_typedef(
     std::string function_name,
     const clang::TypedefDecl &tdd);

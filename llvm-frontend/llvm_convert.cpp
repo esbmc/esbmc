@@ -38,52 +38,67 @@ bool llvm_convertert::convert_top_level_decl()
   // Iterate through each translation unit and their global symbols, creating
   // symbols as we go.
 
-  for (auto &translation_unit : ASTs) {
-
-    clang::ASTUnit::top_level_iterator it;
-    for (it = translation_unit->top_level_begin();
-        it != translation_unit->top_level_end(); it++) {
-
+  for (auto &translation_unit : ASTs)
+  {
+    for (clang::ASTUnit::top_level_iterator
+      it = translation_unit->top_level_begin();
+      it != translation_unit->top_level_end();
+      it++)
+    {
       update_current_location(it);
-
-      switch ((*it)->getKind()) {
-        case clang::Decl::Typedef:
-        {
-          clang::TypedefDecl *tdd = dynamic_cast<clang::TypedefDecl*>(*it);
-          convert_typedef(*tdd);
-          break;
-        }
-
-        case clang::Decl::Var:
-        {
-          clang::VarDecl *vd = dynamic_cast<clang::VarDecl*>(*it);
-          convert_var(*vd);
-          break;
-        }
-
-        case clang::Decl::Function:
-        {
-          clang::FunctionDecl *fd = dynamic_cast<clang::FunctionDecl*>(*it);
-          convert_function(*fd);
-          break;
-        }
-
-        // Apparently if you insert a semicolon at the end of a
-        // function declaration, this AST is created, so just
-        // ignore it
-        case clang::Decl::Empty:
-          break;
-
-        case clang::Decl::Record:
-        default:
-          std::cerr << "Unrecognized / unimplemented decl type ";
-          std::cerr << (*it)->getDeclKindName() << std::endl;
-          abort();
-      }
+      convert_decl(**it);
     }
   }
 
   return false;
+}
+
+void llvm_convertert::convert_decl(const clang::Decl& decl)
+{
+  convert_decl("", decl);
+}
+
+void llvm_convertert::convert_decl(
+  std::string function_name,
+  const clang::Decl& decl)
+{
+  switch (decl.getKind()) {
+    case clang::Decl::Typedef:
+    {
+      const clang::TypedefDecl &tdd =
+        static_cast<const clang::TypedefDecl&>(decl);
+      convert_typedef(tdd);
+      break;
+    }
+
+    case clang::Decl::Var:
+    {
+      const clang::VarDecl &vd =
+        static_cast<const clang::VarDecl&>(decl);
+      convert_var(vd);
+      break;
+    }
+
+    case clang::Decl::Function:
+    {
+      const clang::FunctionDecl &fd =
+        static_cast<const clang::FunctionDecl&>(decl);
+      convert_function(fd);
+      break;
+    }
+
+    // Apparently if you insert a semicolon at the end of a
+    // function declaration, this AST is created, so just
+    // ignore it
+    case clang::Decl::Empty:
+      break;
+
+    case clang::Decl::Record:
+    default:
+      std::cerr << "Unrecognized / unimplemented decl type ";
+      std::cerr << decl.getDeclKindName() << std::endl;
+      abort();
+  }
 }
 
 void llvm_convertert::convert_typedef(const clang::TypedefDecl &tdd)
