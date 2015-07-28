@@ -203,6 +203,10 @@ void llvm_convertert::convert_var(
 
   symbol.lvalue = true;
 
+  code_declt decl;
+  decl.operands().push_back(symbol_expr(symbol));
+  new_expr = decl;
+
   if (context.move(symbol)) {
     std::cerr << "Couldn't add symbol " << symbol.name
               << " to symbol table" << std::endl;
@@ -441,6 +445,48 @@ void llvm_convertert::get_expr(const clang::Stmt& expr, exprt& new_expr)
       get_expr(*cast.getSubExpr(), expr);
 
       new_expr = typecast_exprt(expr, type);
+      break;
+    }
+
+    case clang::Stmt::CompoundStmtClass:
+    {
+      const clang::CompoundStmt &compound_stmt =
+        static_cast<const clang::CompoundStmt &>(expr);
+
+      code_blockt block;
+
+      for (const auto &stmt : compound_stmt.body()) {
+        exprt statements;
+        get_expr(*stmt, statements);
+
+        if(statements.has_operands())
+          forall_operands(it, statements)
+            block.operands().push_back(*it);
+      }
+      new_expr = block;
+      break;
+    }
+
+    case clang::Stmt::DeclStmtClass:
+    {
+      expr.dumpColor();
+      const clang::DeclStmt &decl =
+        static_cast<const clang::DeclStmt&>(expr);
+
+      const auto &declgroup = decl.getDeclGroup();
+
+      exprt decls;
+      for (clang::DeclGroupRef::const_iterator
+        it = declgroup.begin();
+        it != declgroup.end();
+        it++)
+      {
+        exprt single_decl;
+        convert_decl(**it, single_decl);
+        decls.operands().push_back(single_decl);
+      }
+
+      new_expr = decls;
       break;
     }
 
