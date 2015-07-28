@@ -66,25 +66,25 @@ bool llvm_languaget::convert(contextt &context)
 }
 
 bool llvm_languaget::preprocess(
-  const std::string &path,
-  std::ostream &outstream,
-  message_handlert &message_handler)
+  const std::string &path __attribute__((unused)),
+  std::ostream &outstream __attribute__((unused)),
+  message_handlert &message_handler __attribute__((unused)))
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
   return true;
 }
 
-void llvm_languaget::internal_additions(std::ostream &out)
+void llvm_languaget::internal_additions(std::ostream &out __attribute__((unused)))
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
 }
 
 bool llvm_languaget::from_expr(
-  const exprt &expr,
-  std::string &code,
-  const namespacet &ns)
+  const exprt &expr __attribute__((unused)),
+  std::string &code __attribute__((unused)),
+  const namespacet &ns __attribute__((unused)))
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
@@ -92,9 +92,9 @@ bool llvm_languaget::from_expr(
 }
 
 bool llvm_languaget::from_type(
-  const typet &type,
-  std::string &code,
-  const namespacet &ns)
+  const typet &type __attribute__((unused)),
+  std::string &code __attribute__((unused)),
+  const namespacet &ns __attribute__((unused)))
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
@@ -102,11 +102,11 @@ bool llvm_languaget::from_type(
 }
 
 bool llvm_languaget::to_expr(
-  const std::string &code,
+  const std::string &code __attribute__((unused)),
   const std::string &module __attribute__((unused)),
-  exprt &expr,
-  message_handlert &message_handler,
-  const namespacet &ns)
+  exprt &expr __attribute__((unused)),
+  message_handlert &message_handler __attribute__((unused)),
+  const namespacet &ns __attribute__((unused)))
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
