@@ -329,30 +329,7 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
           new_type = long_double_type();
           break;
 
-        case clang::BuiltinType::Char_S:
-        case clang::BuiltinType::Char_U:
-        case clang::BuiltinType::WChar_S:
-        case clang::BuiltinType::WChar_U:
-        case clang::BuiltinType::NullPtr:
-        case clang::BuiltinType::ObjCId:
-        case clang::BuiltinType::ObjCClass:
-        case clang::BuiltinType::ObjCSel:
-        case clang::BuiltinType::OCLImage1d:
-        case clang::BuiltinType::OCLImage1dArray:
-        case clang::BuiltinType::OCLImage1dBuffer:
-        case clang::BuiltinType::OCLImage2d:
-        case clang::BuiltinType::OCLImage2dArray:
-        case clang::BuiltinType::OCLImage3d:
-        case clang::BuiltinType::OCLSampler:
-        case clang::BuiltinType::OCLEvent:
-        case clang::BuiltinType::Dependent:
-        case clang::BuiltinType::Overload:
-        case clang::BuiltinType::BoundMember:
-        case clang::BuiltinType::PseudoObject:
-        case clang::BuiltinType::UnknownAny:
-        case clang::BuiltinType::BuiltinFn:
-        case clang::BuiltinType::ARCUnbridgedCast:
-        case clang::BuiltinType::Half:
+        default:
           std::cerr << "Unrecognized clang builtin type "
                     << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str()
                     << std::endl;
@@ -361,15 +338,6 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
     }
     break;
 
-    case clang::Type::Record:
-    case clang::Type::ConstantArray:
-    case clang::Type::Elaborated:
-    case clang::Type::Pointer:
-    case clang::Type::Typedef:
-    case clang::Type::FunctionProto:
-    case clang::Type::FunctionNoProto:
-    case clang::Type::IncompleteArray:
-    case clang::Type::Paren:
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
@@ -422,33 +390,6 @@ void llvm_convertert::get_expr(const clang::Expr& expr, exprt& new_expr)
       break;
     }
 
-    case clang::Stmt::DeclRefExprClass:
-    case clang::Stmt::UnaryOperatorClass:
-    case clang::Stmt::StringLiteralClass:
-    case clang::Stmt::ArraySubscriptExprClass:
-    case clang::Stmt::ParenExprClass:
-    case clang::Stmt::ConditionalOperatorClass:
-    case clang::Stmt::BinaryOperatorClass:
-    case clang::Stmt::CallExprClass:
-    case clang::Stmt::PredefinedExprClass:
-    case clang::Stmt::MemberExprClass:
-    case clang::Stmt::InitListExprClass:
-    case clang::Stmt::BinaryConditionalOperatorClass:
-    case clang::Stmt::AddrLabelExprClass:
-    case clang::Stmt::ArrayTypeTraitExprClass:
-    case clang::Stmt::AsTypeExprClass:
-    case clang::Stmt::AtomicExprClass:
-    case clang::Stmt::CompoundAssignOperatorClass:
-    case clang::Stmt::CharacterLiteralClass:
-    case clang::Stmt::ChooseExprClass:
-    case clang::Stmt::DesignatedInitExprClass:
-    case clang::Stmt::FloatingLiteralClass:
-    case clang::Stmt::OffsetOfExprClass:
-    case clang::Stmt::OpaqueValueExprClass:
-    case clang::Stmt::ParenListExprClass:
-    case clang::Stmt::SizeOfPackExprClass:
-    case clang::Stmt::UnaryExprOrTypeTraitExprClass:
-    case clang::Stmt::VAArgExprClass:
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << expr.getStmtClassName() << "\" to expression" << std::endl;
