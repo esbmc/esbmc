@@ -35,15 +35,21 @@ private:
 
   void convert_decl(
     std::string function_name,
-    const clang::Decl &decl);
+    const clang::Decl &decl,
+    exprt &new_expr);
 
   void convert_decl(
-    const clang::Decl &decl);
+    const clang::Decl &decl,
+    exprt &new_expr);
 
   void convert_typedef(
     std::string function_name,
-    const clang::TypedefDecl &tdd);
-  void convert_typedef(const clang::TypedefDecl &tdd);
+    const clang::TypedefDecl &tdd,
+    exprt &new_expr);
+
+  void convert_typedef(
+    const clang::TypedefDecl &tdd,
+    exprt &new_expr);
 
   void convert_var(
     std::string function_name,

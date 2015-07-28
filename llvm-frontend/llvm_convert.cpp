@@ -46,28 +46,33 @@ bool llvm_convertert::convert_top_level_decl()
       it++)
     {
       update_current_location(it);
-      convert_decl(**it);
+
+      exprt dummy_decl;
+      convert_decl(**it, dummy_decl);
     }
   }
 
   return false;
 }
 
-void llvm_convertert::convert_decl(const clang::Decl& decl)
+void llvm_convertert::convert_decl(
+  const clang::Decl& decl,
+  exprt &new_expr)
 {
-  convert_decl("", decl);
+  convert_decl("", decl, new_expr);
 }
 
 void llvm_convertert::convert_decl(
   std::string function_name,
-  const clang::Decl& decl)
+  const clang::Decl& decl,
+  exprt &new_expr)
 {
   switch (decl.getKind()) {
     case clang::Decl::Typedef:
     {
       const clang::TypedefDecl &tdd =
         static_cast<const clang::TypedefDecl&>(decl);
-      convert_typedef(tdd);
+      convert_typedef(tdd, new_expr);
       break;
     }
 
@@ -101,14 +106,17 @@ void llvm_convertert::convert_decl(
   }
 }
 
-void llvm_convertert::convert_typedef(const clang::TypedefDecl &tdd)
+void llvm_convertert::convert_typedef(
+  const clang::TypedefDecl &tdd,
+  exprt &new_expr)
 {
-  convert_typedef("", tdd);
+  convert_typedef("", tdd, new_expr);
 }
 
 void llvm_convertert::convert_typedef(
   std::string function_name,
-  const clang::TypedefDecl& tdd)
+  const clang::TypedefDecl& tdd,
+  exprt &new_expr)
 {
   symbolt symbol;
   get_default_symbol(symbol);
