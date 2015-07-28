@@ -59,10 +59,11 @@ void llvm_convertert::convert_decl(
   const clang::Decl& decl,
   exprt &new_expr)
 {
-  convert_decl("", decl, new_expr);
+  convert_decl(0, "", decl, new_expr);
 }
 
 void llvm_convertert::convert_decl(
+  unsigned int scope_number,
   std::string function_name,
   const clang::Decl& decl,
   exprt &new_expr)
@@ -110,10 +111,11 @@ void llvm_convertert::convert_typedef(
   const clang::TypedefDecl &tdd,
   exprt &new_expr)
 {
-  convert_typedef("", tdd, new_expr);
+  convert_typedef(0, "", tdd, new_expr);
 }
 
 void llvm_convertert::convert_typedef(
+  unsigned int scope_number,
   std::string function_name,
   const clang::TypedefDecl& tdd,
   exprt &new_expr)
@@ -144,10 +146,11 @@ void llvm_convertert::convert_typedef(
 
 void llvm_convertert::convert_var(const clang::VarDecl &vd)
 {
-  convert_var("", vd);
+  convert_var(0, "", vd);
 }
 
 void llvm_convertert::convert_var(
+  unsigned int scope_number,
   std::string function_name,
   const clang::VarDecl& vd)
 {

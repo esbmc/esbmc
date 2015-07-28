@@ -34,6 +34,7 @@ private:
   bool convert_top_level_decl();
 
   void convert_decl(
+    unsigned int scope_number,
     std::string function_name,
     const clang::Decl &decl,
     exprt &new_expr);
@@ -43,6 +44,7 @@ private:
     exprt &new_expr);
 
   void convert_typedef(
+    unsigned int scope_number,
     std::string function_name,
     const clang::TypedefDecl &tdd,
     exprt &new_expr);
@@ -52,9 +54,12 @@ private:
     exprt &new_expr);
 
   void convert_var(
+    unsigned int scope_number,
     std::string function_name,
     const clang::VarDecl &vd);
-  void convert_var(const clang::VarDecl &vd);
+
+  void convert_var(
+    const clang::VarDecl &vd);
 
   void convert_function(const clang::FunctionDecl &fd);
   code_typet::argumentt convert_function_params(
