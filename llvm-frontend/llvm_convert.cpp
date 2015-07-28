@@ -126,6 +126,9 @@ void llvm_convertert::convert_var(clang::ASTUnit::top_level_iterator it)
     symbol.name = "c::" + symbol.base_name.as_string();
     symbol.pretty_name = symbol.base_name.as_string();
     symbol.value = gen_zero(t);
+
+    // Add location to value since it is only added on get_expr
+    symbol.value.location() = current_location;
   }
   else
   {
@@ -224,17 +227,17 @@ code_typet::argumentt llvm_convertert::convert_function_params(
   param_symbol.file_local = true;
   param_symbol.is_actual = true;
 
-  if (context.move(param_symbol)) {
-    std::cerr << "Couldn't add symbol " << param_symbol.name
-        << " to symbol table" << std::endl;
-    abort();
-  }
-
   code_typet::argumentt arg;
   arg.type() = param_type;
   arg.base_name(name);
   arg.identifier(param_symbol.name.as_string());
   arg.location() = param_symbol.location;
+
+  if (context.move(param_symbol)) {
+    std::cerr << "Couldn't add symbol " << param_symbol.name
+        << " to symbol table" << std::endl;
+    abort();
+  }
 
   return arg;
 }
@@ -451,6 +454,8 @@ void llvm_convertert::get_expr(const clang::Expr& expr, exprt& new_expr)
       std::cerr << expr.getStmtClassName() << "\" to expression" << std::endl;
       abort();
   }
+
+  new_expr.location() = current_location;
 }
 
 void llvm_convertert::get_default_symbol(symbolt& symbol)
