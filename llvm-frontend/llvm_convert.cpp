@@ -86,7 +86,14 @@ bool llvm_convertert::convert_top_level_decl()
   return false;
 }
 
-void llvm_convertert::convert_typedef(clang::TypedefDecl &tdd)
+void llvm_convertert::convert_typedef(const clang::TypedefDecl &tdd)
+{
+  convert_typedef("", tdd);
+}
+
+void llvm_convertert::convert_typedef(
+  std::string function_name,
+  const clang::TypedefDecl& tdd)
 {
   symbolt symbol;
   get_default_symbol(symbol);
@@ -112,7 +119,14 @@ void llvm_convertert::convert_typedef(clang::TypedefDecl &tdd)
   }
 }
 
-void llvm_convertert::convert_var(clang::VarDecl &vd)
+void llvm_convertert::convert_var(const clang::VarDecl &vd)
+{
+  convert_var("", vd);
+}
+
+void llvm_convertert::convert_var(
+  std::string function_name,
+  const clang::VarDecl& vd)
 {
   symbolt symbol;
   get_default_symbol(symbol);
@@ -139,10 +153,13 @@ void llvm_convertert::convert_var(clang::VarDecl &vd)
   }
   else
   {
-    symbol.name =
-      "c::" + symbol.module.as_string() + "::" + symbol.base_name.as_string();
-    symbol.pretty_name =
-      symbol.module.as_string() + "::" + symbol.base_name.as_string();
+    std::string pretty_name = symbol.module.as_string() + "::";
+    if(function_name != "")
+      pretty_name +=  function_name + "::";
+    pretty_name += symbol.base_name.as_string();
+
+    symbol.pretty_name = pretty_name;
+    symbol.name = "c::" + symbol.pretty_name.as_string();
   }
 
   if(vd.hasInit())
@@ -164,7 +181,7 @@ void llvm_convertert::convert_var(clang::VarDecl &vd)
   }
 }
 
-void llvm_convertert::convert_function(clang::FunctionDecl &fd)
+void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
 {
   symbolt symbol;
   get_default_symbol(symbol);
