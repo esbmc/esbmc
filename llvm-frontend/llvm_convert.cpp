@@ -8,9 +8,11 @@
 #include "llvm_convert.h"
 
 #include <std_code.h>
+#include <std_expr.h>
 #include <expr_util.h>
 
 #include <ansi-c/c_types.h>
+#include <ansi-c/convert_integer_literal.h>
 
 #include <boost/filesystem.hpp>
 
@@ -129,6 +131,12 @@ void llvm_convertert::convert_var(clang::ASTUnit::top_level_iterator it)
       "c::" + symbol.module.as_string() + "::" + symbol.base_name.as_string();
     symbol.pretty_name =
       symbol.module.as_string() + "::" + symbol.base_name.as_string();
+  }
+
+  if(vd->hasInit())
+  {
+    const clang::Expr *value = vd->getInit();
+    get_expr(*value, symbol.value);
   }
 
   if (vd->hasExternalStorage()) {
@@ -371,9 +379,33 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
 void llvm_convertert::get_expr(const clang::Expr& expr, exprt& new_expr)
 {
   switch(expr.getStmtClass()) {
+    case clang::Stmt::IntegerLiteralClass:
+    {
+      const clang::IntegerLiteral &integer =
+        static_cast<const clang::IntegerLiteral&>(expr);
+      llvm::APInt val = integer.getValue();
+      assert(val.getBitWidth() <= 64 && "Too large an integer found, sorry");
+
+      typet the_type;
+      get_type(integer.getType(), the_type);
+      assert(the_type.is_unsignedbv() || the_type.is_signedbv());
+
+      exprt bval;
+      if (the_type.is_unsignedbv()) {
+        uint64_t the_val = val.getZExtValue();
+        convert_integer_literal(integer2string(the_val) + "u", bval, 10);
+      } else {
+        int64_t the_val = val.getSExtValue();
+        convert_integer_literal(integer2string(the_val), bval, 10);
+      }
+
+      new_expr.swap(bval);
+      new_expr.dump();
+      break;
+    }
+
     case clang::Stmt::ImplicitCastExprClass:
     case clang::Stmt::CStyleCastExprClass:
-    case clang::Stmt::IntegerLiteralClass:
     case clang::Stmt::DeclRefExprClass:
     case clang::Stmt::UnaryOperatorClass:
     case clang::Stmt::StringLiteralClass:
