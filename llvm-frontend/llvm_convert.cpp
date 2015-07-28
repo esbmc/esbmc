@@ -44,6 +44,8 @@ bool llvm_convertert::convert_top_level_decl()
     for (it = translation_unit->top_level_begin();
         it != translation_unit->top_level_end(); it++) {
 
+      update_current_location(it);
+
       switch ((*it)->getKind()) {
         case clang::Decl::Typedef:
           convert_typedef(it);
@@ -78,7 +80,7 @@ bool llvm_convertert::convert_top_level_decl()
 void llvm_convertert::convert_typedef(clang::ASTUnit::top_level_iterator it)
 {
   symbolt symbol;
-  get_default_symbol(symbol, it);
+  get_default_symbol(symbol);
 
   clang::TypedefDecl *tdd = dynamic_cast<clang::TypedefDecl*>(*it);
   clang::QualType q_type = tdd->getUnderlyingType();
@@ -105,7 +107,7 @@ void llvm_convertert::convert_typedef(clang::ASTUnit::top_level_iterator it)
 void llvm_convertert::convert_var(clang::ASTUnit::top_level_iterator it)
 {
   symbolt symbol;
-  get_default_symbol(symbol, it);
+  get_default_symbol(symbol);
 
   clang::VarDecl *vd = dynamic_cast<clang::VarDecl*>(*it);
   clang::QualType q_type = vd->getType();
@@ -155,7 +157,7 @@ void llvm_convertert::convert_var(clang::ASTUnit::top_level_iterator it)
 void llvm_convertert::convert_function(clang::ASTUnit::top_level_iterator it)
 {
   symbolt symbol;
-  get_default_symbol(symbol, it);
+  get_default_symbol(symbol);
 
   clang::FunctionDecl *fd = dynamic_cast<clang::FunctionDecl*>(*it);
 
@@ -184,7 +186,7 @@ void llvm_convertert::convert_function(clang::ASTUnit::top_level_iterator it)
   {
     for (const auto &pdecl : fd->params()) {
       code_typet::argumentt param =
-        convert_function_params(symbol.base_name.as_string(), it, pdecl);
+        convert_function_params(symbol.base_name.as_string(), pdecl);
       type.arguments().push_back(param);
     }
   }
@@ -202,11 +204,10 @@ void llvm_convertert::convert_function(clang::ASTUnit::top_level_iterator it)
 
 code_typet::argumentt llvm_convertert::convert_function_params(
   std::string function_name,
-  clang::ASTUnit::top_level_iterator it,
   clang::ParmVarDecl *pdecl)
 {
   symbolt param_symbol;
-  get_default_symbol(param_symbol, it);
+  get_default_symbol(param_symbol);
 
   const clang::QualType q_type = pdecl->getOriginalType();
   typet param_type;
@@ -452,28 +453,31 @@ void llvm_convertert::get_expr(const clang::Expr& expr, exprt& new_expr)
   }
 }
 
-void llvm_convertert::get_default_symbol(symbolt& symbol, clang::ASTUnit::top_level_iterator it)
+void llvm_convertert::get_default_symbol(symbolt& symbol)
 {
-  std::string path =
+  symbol.mode = "C";
+  symbol.module = get_modulename_from_path();
+  symbol.location = current_location;
+}
+
+void llvm_convertert::update_current_location(
+    clang::ASTUnit::top_level_iterator it)
+{
+  current_path =
     (*it)->getASTContext().getSourceManager().getFilename(
       (*it)->getLocation()).str();
 
-  symbol.mode = "C";
-  symbol.module = get_modulename_from_path(path);
-
-  locationt location;
-  location.set_file(get_filename_from_path(path));
-  location.set_line((*it)->getASTContext().getSourceManager().
+  current_location.set_file(get_filename_from_path());
+  current_location.set_line((*it)->getASTContext().getSourceManager().
     getSpellingLineNumber((*it)->getLocation()));
-  symbol.location = location;
 }
 
-std::string llvm_convertert::get_filename_from_path(std::string path)
+std::string llvm_convertert::get_modulename_from_path()
 {
-  return  boost::filesystem::path(path).filename().string();
+  return  boost::filesystem::path(current_path).stem().string();
 }
 
-std::string llvm_convertert::get_modulename_from_path(std::string path)
+std::string llvm_convertert::get_filename_from_path()
 {
-  return  boost::filesystem::path(path).stem().string();
+  return  boost::filesystem::path(current_path).filename().string();
 }
