@@ -40,7 +40,7 @@ private:
     clang::ParmVarDecl *pdecl);
 
   void get_type(const clang::QualType &the_type, typet &new_type);
-  void get_expr(const clang::Expr &expr, exprt &new_expr);
+  void get_expr(const clang::Stmt &expr, exprt &new_expr);
   void get_default_symbol(symbolt &symbol);
 
   void update_current_location(clang::ASTUnit::top_level_iterator it);

@@ -348,7 +348,7 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
     new_type.cmt_constant(true);
 }
 
-void llvm_convertert::get_expr(const clang::Expr& expr, exprt& new_expr)
+void llvm_convertert::get_expr(const clang::Stmt& expr, exprt& new_expr)
 {
   switch(expr.getStmtClass()) {
     case clang::Stmt::IntegerLiteralClass:
@@ -393,6 +393,7 @@ void llvm_convertert::get_expr(const clang::Expr& expr, exprt& new_expr)
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << expr.getStmtClassName() << "\" to expression" << std::endl;
+      expr.dump();
       abort();
   }
 
