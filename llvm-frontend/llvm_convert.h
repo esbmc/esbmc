@@ -56,10 +56,12 @@ private:
   void convert_var(
     unsigned int scope_number,
     std::string function_name,
-    const clang::VarDecl &vd);
+    const clang::VarDecl &vd,
+    exprt &new_expr);
 
   void convert_var(
-    const clang::VarDecl &vd);
+    const clang::VarDecl &vd,
+    exprt &new_expr);
 
   void convert_function(const clang::FunctionDecl &fd);
   code_typet::argumentt convert_function_params(

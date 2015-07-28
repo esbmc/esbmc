@@ -81,7 +81,7 @@ void llvm_convertert::convert_decl(
     {
       const clang::VarDecl &vd =
         static_cast<const clang::VarDecl&>(decl);
-      convert_var(vd);
+      convert_var(vd, new_expr);
       break;
     }
 
@@ -144,15 +144,18 @@ void llvm_convertert::convert_typedef(
   }
 }
 
-void llvm_convertert::convert_var(const clang::VarDecl &vd)
+void llvm_convertert::convert_var(
+  const clang::VarDecl &vd,
+  exprt &new_expr)
 {
-  convert_var(0, "", vd);
+  convert_var(0, "", vd, new_expr);
 }
 
 void llvm_convertert::convert_var(
   unsigned int scope_number,
   std::string function_name,
-  const clang::VarDecl& vd)
+  const clang::VarDecl& vd,
+  exprt &new_expr)
 {
   symbolt symbol;
   get_default_symbol(symbol);
