@@ -29,7 +29,7 @@ private:
   locationt current_location;
   std::string current_path;
   std::string current_function_name;
-  unsigned int current_scope;
+  int current_scope;
 
   bool convert_top_level_decl();
 

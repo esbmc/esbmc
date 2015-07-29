@@ -16,10 +16,10 @@
 
 #include <boost/filesystem.hpp>
 
-std::string repeat( const std::string &word, unsigned int times ) {
+std::string repeat( const std::string &word, int times ) {
    std::string result ;
    result.reserve(times*word.length()); // avoid repeated reallocation
-   for ( unsigned int a = 0 ; a < times ; a++ )
+   for (int a = 0 ; a < times ; a++)
       result += word ;
    return result ;
 }
