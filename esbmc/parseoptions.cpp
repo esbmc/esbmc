@@ -1107,6 +1107,12 @@ bool cbmc_parseoptionst::get_goto_program(
   fine_timet parse_start = current_time();
   try
   {
+    if(cmdline.args.size()==0)
+    {
+      error("Please provide a program to verify");
+      return true;
+    }
+
     if(cmdline.isset("binary"))
     {
       status("Reading GOTO program from file");
@@ -1120,14 +1126,18 @@ bool cbmc_parseoptionst::get_goto_program(
         return true;
       }
     }
+    else if(cmdline.isset("show-parse-tree"))
+    {
+      if(parse()) return true;
+
+      assert(language_files.filemap.size());
+      languaget &language = *language_files.filemap.begin()->second.language;
+      language.show_parse(std::cout);
+
+      return true;
+    }
     else
     {
-      if(cmdline.args.size()==0)
-      {
-        error("Please provide a program to verify");
-        return true;
-      }
-
       if(parse()) return true;
       if(typecheck()) return true;
       if(final()) return true;

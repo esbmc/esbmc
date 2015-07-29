@@ -43,6 +43,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"64",			switc,		""	},
 { 0,	"little-endian",	switc,		""	},
 { 0,	"big-endian",		switc,		""	},
+{ 0,  "show-parse-tree",  switc,    ""  },
 { 0,	"show-goto-functions",	switc,		""	},
 { 0,	"show-counter-example",	switc,		""	},
 { 0,	"show-value-sets",	switc,		""	},
