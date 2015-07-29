@@ -16,6 +16,14 @@
 
 #include <boost/filesystem.hpp>
 
+std::string repeat( const std::string &word, unsigned int times ) {
+   std::string result ;
+   result.reserve(times*word.length()); // avoid repeated reallocation
+   for ( unsigned int a = 0 ; a < times ; a++ )
+      result += word ;
+   return result ;
+}
+
 llvm_convertert::llvm_convertert(contextt &_context)
   : context(_context),
     current_location(locationt()),
@@ -161,7 +169,10 @@ void llvm_convertert::convert_var(
   {
     std::string pretty_name = symbol.module.as_string() + "::";
     if(current_function_name!= "")
-      pretty_name +=  current_function_name + "::";
+      pretty_name += current_function_name + "::";
+    if(current_scope > 0)
+      pretty_name += repeat("1::", current_scope);
+
     pretty_name += symbol.base_name.as_string();
 
     symbol.pretty_name = pretty_name;
@@ -438,8 +449,12 @@ void llvm_convertert::get_expr(
       const clang::CompoundStmt &compound_stmt =
         static_cast<const clang::CompoundStmt &>(expr);
 
-      code_blockt block;
+      // Increase current scope number, it will be used for variables' name
+      // This will be increased every time a block is parsed
+      assert(current_scope >= 0);
+      ++current_scope;
 
+      code_blockt block;
       for (const auto &stmt : compound_stmt.body()) {
         exprt statements;
         get_expr(*stmt, statements);
@@ -452,6 +467,9 @@ void llvm_convertert::get_expr(
             block.operands().push_back(*it);
       }
       new_expr = block;
+
+      --current_scope;
+      assert(current_scope >= 0);
       break;
     }
 
