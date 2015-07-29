@@ -20,8 +20,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 static llvm::cl::OptionCategory esbmc_llvm("esmc_llvm");
 
-llvm_languaget::llvm_languaget(std::vector<std::string> _files)
-  : files(_files)
+languaget *new_llvm_language()
+{
+  return new llvm_languaget;
+}
+
+llvm_languaget::llvm_languaget()
 {
 }
 
@@ -29,7 +33,9 @@ llvm_languaget::~llvm_languaget()
 {
 }
 
-bool llvm_languaget::parse(message_handlert &message_handler)
+bool llvm_languaget::parse(
+  const std::string &path,
+  message_handlert &message_handler)
 {
   // preprocessing
 
@@ -37,19 +43,18 @@ bool llvm_languaget::parse(message_handlert &message_handler)
 
   internal_additions(o_preprocessed);
 
-  if(preprocess(*files.begin(), o_preprocessed, message_handler))
+  if(preprocess(path, o_preprocessed, message_handler))
     return true;
 
   std::istringstream i_preprocessed(o_preprocessed.str());
 
   // From the clang tool example,
-  int num_args = 2 + files.size();
+  int num_args = 3;
   const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
 
   unsigned int i=0;
   the_args[i++] = "clang";
-  for(; i <= files.size(); ++i)
-    the_args[i] = files.at(i-1).c_str();
+  the_args[i++] = path.c_str();
   the_args[i] = "--";
 
   clang::tooling::CommonOptionsParser OptionsParser(
@@ -73,6 +78,28 @@ bool llvm_languaget::parse(message_handlert &message_handler)
   }
 
   return false;
+}
+
+bool llvm_languaget::typecheck(
+  contextt& context,
+  const std::string& module,
+  message_handlert& message_handler)
+{
+  return convert(context, module, message_handler);
+}
+
+void llvm_languaget::show_parse(std::ostream& out)
+{
+  for (auto &translation_unit : ASTs)
+  {
+    for (clang::ASTUnit::top_level_iterator
+      it = translation_unit->top_level_begin();
+      it != translation_unit->top_level_end();
+      it++)
+    {
+      (*it)->dump();
+    }
+  }
 }
 
 bool llvm_languaget::convert(

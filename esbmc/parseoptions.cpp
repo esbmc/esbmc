@@ -1128,16 +1128,9 @@ bool cbmc_parseoptionst::get_goto_program(
         return true;
       }
 
-      if(!cmdline.isset("llvm-frontend"))
-      {
-        if(parse()) return true;
-        if(typecheck()) return true;
-        if(final()) return true;
-      }
-      else
-      {
-        if(parse_llvm()) return true;
-      }
+      if(parse()) return true;
+      if(typecheck()) return true;
+      if(final()) return true;
 
       if(cmdline.isset("show-symbol-table"))
       {
@@ -1687,33 +1680,49 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
   return res;
 }
 
-bool cbmc_parseoptionst::parse_llvm()
+bool cbmc_parseoptionst::parse()
 {
-  for(unsigned i=0; i<_cmdline.args.size(); i++)
+  return language_uit::parse();
+}
+
+bool cbmc_parseoptionst::parse(const std::string &filename)
+{
+  if(!cmdline.isset("llvm-frontend"))
+    return language_uit::parse(filename);
+
+  int mode=get_mode_filename(filename);
+
+  if(mode<0)
   {
-    const std::string& filename = _cmdline.args[i];
-    int mode=get_mode_filename(filename);
-
-    if(mode<0)
-    {
-      error("failed to figure out type of file", filename);
-      return true;
-    }
-
-    // Check that it opens
-    std::ifstream infile(filename.c_str());
-    if(!infile)
-    {
-      error("failed to open input file", filename);
-      return true;
-    }
+    error("failed to figure out type of file", filename);
+    return true;
   }
 
-  llvm_languaget language(_cmdline.args);
+  // Check that it opens
+  std::ifstream infile(filename.c_str());
+  if(!infile)
+  {
+    error("failed to open input file", filename);
+    return true;
+  }
 
-  status("Parsing using clang");
+  language_filet language_file;
 
-  if(language.parse(*message_handler))
+  std::pair<language_filest::filemapt::iterator, bool>
+    result=language_files.filemap.insert(
+      std::pair<std::string, language_filet>(filename, language_file));
+
+  language_filet &lf=result.first->second;
+  lf.filename=filename;
+  // 2 is the magic number that represents LLVM
+  // In the future, we shall remove this and use only the llvm frontend
+  // for c and c++ code
+  lf.language=mode_table[2].new_language();
+  languaget &language=*lf.language;
+
+  status("Parsing using clang", filename);
+
+  if(language.parse(filename, *get_message_handler()))
   {
     if(get_ui()==ui_message_handlert::PLAIN)
       std::cerr << "PARSING ERROR" << std::endl;
@@ -1721,18 +1730,7 @@ bool cbmc_parseoptionst::parse_llvm()
     return true;
   }
 
-  status("Converting LLVM AST");
-
-  if(language.convert(context, "", *message_handler))
-  {
-    if(get_ui()==ui_message_handlert::PLAIN)
-      std::cerr << "CONVERSION ERROR" << std::endl;
-
-    return true;
-  }
-
-  if(language.final(context, *message_handler))
-    return true;
+  lf.get_modules();
 
   return false;
 }
