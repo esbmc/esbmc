@@ -388,8 +388,17 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
                     << std::endl;
           abort();
       }
+      break;
     }
-    break;
+
+    case clang::Type::Typedef:
+    {
+      const clang::TypedefType &pt =
+        static_cast<const clang::TypedefType &>(the_type);
+      clang::QualType q_typedef_type = pt.getDecl()->getUnderlyingType();
+      get_type(q_typedef_type, new_type);
+      break;
+    }
 
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
