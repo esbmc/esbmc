@@ -49,7 +49,6 @@ bool llvm_convertert::convert_top_level_decl()
 {
   // Iterate through each translation unit and their global symbols, creating
   // symbols as we go.
-
   for (auto &translation_unit : ASTs)
   {
     for (clang::ASTUnit::top_level_iterator
@@ -475,7 +474,6 @@ void llvm_convertert::get_expr(
 
     case clang::Stmt::DeclStmtClass:
     {
-      expr.dumpColor();
       const clang::DeclStmt &decl =
         static_cast<const clang::DeclStmt&>(expr);
 
