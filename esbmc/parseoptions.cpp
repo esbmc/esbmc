@@ -1713,7 +1713,7 @@ bool cbmc_parseoptionst::parse_llvm()
 
   status("Parsing using clang");
 
-  if(language.parse())
+  if(language.parse(*message_handler))
   {
     if(get_ui()==ui_message_handlert::PLAIN)
       std::cerr << "PARSING ERROR" << std::endl;
@@ -1723,7 +1723,7 @@ bool cbmc_parseoptionst::parse_llvm()
 
   status("Converting LLVM AST");
 
-  if(language.convert(context))
+  if(language.convert(context, "", *message_handler))
   {
     if(get_ui()==ui_message_handlert::PLAIN)
       std::cerr << "CONVERSION ERROR" << std::endl;
@@ -1731,6 +1731,8 @@ bool cbmc_parseoptionst::parse_llvm()
     return true;
   }
 
+  if(language.final(context, *message_handler))
+    return true;
 
   return false;
 }

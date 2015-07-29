@@ -26,9 +26,12 @@ public:
     std::ostream &outstream,
     message_handlert &message_handler);
 
-  bool parse();
+  bool parse(message_handlert &message_handler);
 
-  bool convert(contextt &context);
+  bool convert(
+    contextt &context,
+    const std::string &module,
+    message_handlert &message_handler);
 
   // constructor, destructor
   virtual ~llvm_languaget();
@@ -53,6 +56,10 @@ public:
     exprt &expr,
     message_handlert &message_handler,
     const namespacet &ns);
+
+  bool final(
+    contextt &context,
+    message_handlert &message_handler);
 
   std::string id() const { return "c"; }
   std::string description() const { return "C"; }
