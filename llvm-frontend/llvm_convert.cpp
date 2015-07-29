@@ -506,6 +506,14 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::BinaryOperatorClass:
+    {
+      const clang::BinaryOperator &binop =
+        static_cast<const clang::BinaryOperator&>(stmt);
+      get_binary_operator_expr(binop, new_expr);
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
@@ -514,6 +522,21 @@ void llvm_convertert::get_expr(
   }
 
   new_expr.location() = current_location;
+}
+
+
+void llvm_convertert::get_binary_operator_expr(
+  const clang::BinaryOperator& binop,
+  exprt& new_expr)
+{
+  switch(binop.getOpcode())
+  {
+    default:
+      std::cerr << "Conversion of unsupported clang binary operator: \"";
+      std::cerr << binop.getOpcodeStr().str() << "\" to expression" << std::endl;
+      binop.dump();
+      abort();
+  }
 }
 
 void llvm_convertert::get_default_symbol(symbolt& symbol)

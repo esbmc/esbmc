@@ -58,6 +58,10 @@ private:
     const clang::Stmt &stmt,
     exprt &new_expr);
 
+  void get_binary_operator_expr(
+    const clang::BinaryOperator &binop,
+    exprt &new_expr);
+
   void get_default_symbol(symbolt &symbol);
 
   void update_current_location(clang::ASTUnit::top_level_iterator it);
