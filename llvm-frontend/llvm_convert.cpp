@@ -17,7 +17,11 @@
 #include <boost/filesystem.hpp>
 
 llvm_convertert::llvm_convertert(contextt &_context)
-  : context(_context)
+  : context(_context),
+    current_location(locationt()),
+    current_path(""),
+    current_function_name(""),
+    current_scope(0)
 {
 }
 
@@ -56,15 +60,6 @@ bool llvm_convertert::convert_top_level_decl()
 }
 
 void llvm_convertert::convert_decl(
-  const clang::Decl& decl,
-  exprt &new_expr)
-{
-  convert_decl(0, "", decl, new_expr);
-}
-
-void llvm_convertert::convert_decl(
-  unsigned int scope_number,
-  std::string function_name,
   const clang::Decl& decl,
   exprt &new_expr)
 {
@@ -111,15 +106,6 @@ void llvm_convertert::convert_typedef(
   const clang::TypedefDecl &tdd,
   exprt &new_expr)
 {
-  convert_typedef(0, "", tdd, new_expr);
-}
-
-void llvm_convertert::convert_typedef(
-  unsigned int scope_number,
-  std::string function_name,
-  const clang::TypedefDecl& tdd,
-  exprt &new_expr)
-{
   symbolt symbol;
   get_default_symbol(symbol);
 
@@ -148,15 +134,6 @@ void llvm_convertert::convert_var(
   const clang::VarDecl &vd,
   exprt &new_expr)
 {
-  convert_var(0, "", vd, new_expr);
-}
-
-void llvm_convertert::convert_var(
-  unsigned int scope_number,
-  std::string function_name,
-  const clang::VarDecl& vd,
-  exprt &new_expr)
-{
   symbolt symbol;
   get_default_symbol(symbol);
 
@@ -183,8 +160,8 @@ void llvm_convertert::convert_var(
   else
   {
     std::string pretty_name = symbol.module.as_string() + "::";
-    if(function_name != "")
-      pretty_name +=  function_name + "::";
+    if(current_function_name!= "")
+      pretty_name +=  current_function_name + "::";
     pretty_name += symbol.base_name.as_string();
 
     symbol.pretty_name = pretty_name;
@@ -216,6 +193,8 @@ void llvm_convertert::convert_var(
 
 void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
 {
+  std::string old_function_name = current_function_name;
+
   symbolt symbol;
   get_default_symbol(symbol);
 
@@ -223,6 +202,8 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   symbol.name = "c::" + symbol.base_name.as_string();
   symbol.pretty_name = symbol.base_name.as_string();
   symbol.lvalue = true;
+
+  current_function_name = fd.getName().str();
 
   // We need: a type, a name, and an optional body
   clang::Stmt *body = NULL;
@@ -261,6 +242,8 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
               << " to symbol table" << std::endl;
     abort();
   }
+
+  current_function_name = old_function_name;
 }
 
 code_typet::argumentt llvm_convertert::convert_function_params(
@@ -406,7 +389,9 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
     new_type.cmt_constant(true);
 }
 
-void llvm_convertert::get_expr(const clang::Stmt& expr, exprt& new_expr)
+void llvm_convertert::get_expr(
+  const clang::Stmt& expr,
+  exprt& new_expr)
 {
   switch(expr.getStmtClass()) {
     case clang::Stmt::IntegerLiteralClass:
@@ -459,6 +444,9 @@ void llvm_convertert::get_expr(const clang::Stmt& expr, exprt& new_expr)
         exprt statements;
         get_expr(*stmt, statements);
 
+        // If the statement create is a sequence of
+        // statemens, e.g., declaration of several
+        // variable, copy operands to block operands
         if(statements.has_operands())
           forall_operands(it, statements)
             block.operands().push_back(*it);
