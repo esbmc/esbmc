@@ -403,6 +403,7 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
+      the_type.dump();
       abort();
   }
 
