@@ -135,6 +135,9 @@ void llvm_convertert::convert_typedef(
               << " to symbol table" << std::endl;
     abort();
   }
+
+  if(current_function_name!= "")
+    new_expr = code_skipt();
 }
 
 void llvm_convertert::convert_var(
