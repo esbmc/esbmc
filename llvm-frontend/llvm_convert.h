@@ -55,7 +55,7 @@ private:
     typet &new_type);
 
   void get_expr(
-    const clang::Stmt &expr,
+    const clang::Stmt &stmt,
     exprt &new_expr);
 
   void get_default_symbol(symbolt &symbol);

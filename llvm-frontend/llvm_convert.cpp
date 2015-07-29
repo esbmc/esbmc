@@ -400,14 +400,14 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
 }
 
 void llvm_convertert::get_expr(
-  const clang::Stmt& expr,
+  const clang::Stmt& stmt,
   exprt& new_expr)
 {
-  switch(expr.getStmtClass()) {
+  switch(stmt.getStmtClass()) {
     case clang::Stmt::IntegerLiteralClass:
     {
       const clang::IntegerLiteral &integer =
-        static_cast<const clang::IntegerLiteral&>(expr);
+        static_cast<const clang::IntegerLiteral&>(stmt);
       llvm::APInt val = integer.getValue();
       assert(val.getBitWidth() <= 64 && "Too large an integer found, sorry");
 
@@ -431,7 +431,7 @@ void llvm_convertert::get_expr(
     case clang::Stmt::ImplicitCastExprClass:
     case clang::Stmt::CStyleCastExprClass:
     {
-      const clang::CastExpr &cast = static_cast<const clang::CastExpr &>(expr);
+      const clang::CastExpr &cast = static_cast<const clang::CastExpr &>(stmt);
 
       typet type;
       get_type(cast.getType(), type);
@@ -446,7 +446,7 @@ void llvm_convertert::get_expr(
     case clang::Stmt::CompoundStmtClass:
     {
       const clang::CompoundStmt &compound_stmt =
-        static_cast<const clang::CompoundStmt &>(expr);
+        static_cast<const clang::CompoundStmt &>(stmt);
 
       // Increase current scope number, it will be used for variables' name
       // This will be increased every time a block is parsed
@@ -475,7 +475,7 @@ void llvm_convertert::get_expr(
     case clang::Stmt::DeclStmtClass:
     {
       const clang::DeclStmt &decl =
-        static_cast<const clang::DeclStmt&>(expr);
+        static_cast<const clang::DeclStmt&>(stmt);
 
       const auto &declgroup = decl.getDeclGroup();
 
@@ -496,8 +496,8 @@ void llvm_convertert::get_expr(
 
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
-      std::cerr << expr.getStmtClassName() << "\" to expression" << std::endl;
-      expr.dump();
+      std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
+      stmt.dump();
       abort();
   }
 
