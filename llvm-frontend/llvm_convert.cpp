@@ -236,7 +236,6 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   type.return_type() = return_type;
 
   // The arguments
-  type.arguments();
   if(body)
   {
     for (const auto &pdecl : fd.params()) {
