@@ -11,11 +11,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <llvm_language.h>
 #include <llvm_convert.h>
+#include <llvm_main.h>
 
 #include <ansi-c/cprover_library.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/c_link.h>
-#include <ansi-c/c_main.h>
 #include <ansi-c/gcc_builtin_headers.h>
 
 static llvm::cl::OptionCategory esbmc_llvm("esmc_llvm");
@@ -119,7 +119,7 @@ bool llvm_languaget::preprocess(
 bool llvm_languaget::final(contextt& context, message_handlert& message_handler)
 {
   add_cprover_library(context, message_handler);
-  if(c_main(context, "c::", "c::main", message_handler)) return true;
+  if(llvm_main(context, "c::", "c::main", message_handler)) return true;
   return false;
 }
 
