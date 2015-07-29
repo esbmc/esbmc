@@ -282,7 +282,7 @@ code_typet::argumentt llvm_convertert::convert_function_params(
   code_typet::argumentt arg;
   arg.type() = param_type;
   arg.base_name(name);
-  arg.identifier(param_symbol.name.as_string());
+  arg.cmt_identifier(param_symbol.name.as_string());
   arg.location() = param_symbol.location;
 
   if (context.move(param_symbol)) {
