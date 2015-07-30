@@ -171,17 +171,29 @@ void llvm_convertert::convert_var(
     get_var_name(symbol.base_name.as_string(), vd.hasLocalStorage());
   symbol.name = "c::" + symbol.pretty_name.as_string();
 
+  if (vd.hasExternalStorage())
+    symbol.is_extern = true;
+  symbol.lvalue = true;
+
+  // We have to add the symbol before converting the initial assignment
+  // because we might have something like 'int x = x + 1;' which is
+  // completely wrong but allowed by the language
+  if (context.move(symbol)) {
+    std::cerr << "Couldn't add symbol " << symbol.name
+              << " to symbol table" << std::endl;
+    abort();
+  }
+
+  // Now get the symbol back to continue the conversion
+  symbol = ns.lookup(
+    "c::" + get_var_name(vd.getName().str(),
+    vd.hasLocalStorage()));
+
   if(vd.hasInit())
   {
     const clang::Expr *value = vd.getInit();
     get_expr(*value, symbol.value);
   }
-
-  if (vd.hasExternalStorage()) {
-    symbol.is_extern = true;
-  }
-
-  symbol.lvalue = true;
 
   code_declt decl;
   decl.operands().push_back(symbol_expr(symbol));
@@ -190,12 +202,6 @@ void llvm_convertert::convert_var(
     decl.operands().push_back(symbol.value);
 
   new_expr = decl;
-
-  if (context.move(symbol)) {
-    std::cerr << "Couldn't add symbol " << symbol.name
-              << " to symbol table" << std::endl;
-    abort();
-  }
 }
 
 void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
