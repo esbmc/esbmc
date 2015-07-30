@@ -457,15 +457,9 @@ void llvm_convertert::get_expr(
 
       code_blockt block;
       for (const auto &stmt : compound_stmt.body()) {
-        exprt statements;
-        get_expr(*stmt, statements);
-
-        // If the statement create is a sequence of
-        // statemens, e.g., declaration of several
-        // variable, copy operands to block operands
-        if(statements.has_operands())
-          forall_operands(it, statements)
-            block.operands().push_back(*it);
+        exprt statement;
+        get_expr(*stmt, statement);
+        block.operands().push_back(statement);
       }
       new_expr = block;
 
@@ -481,7 +475,7 @@ void llvm_convertert::get_expr(
 
       const auto &declgroup = decl.getDeclGroup();
 
-      exprt decls;
+      codet decls("decl-block");
       for (clang::DeclGroupRef::const_iterator
         it = declgroup.begin();
         it != declgroup.end();
