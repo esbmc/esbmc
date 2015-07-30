@@ -578,6 +578,16 @@ std::string llvm_convertert::get_var_name(
   return pretty_name;
 }
 
+std::string llvm_convertert::get_param_name(std::string name)
+{
+  std::string pretty_name = get_modulename_from_path() + "::";
+  if(current_function_name!= "")
+    pretty_name += current_function_name + "::";
+  pretty_name += name;
+
+  return pretty_name;
+}
+
 void llvm_convertert::update_current_location(
     clang::ASTUnit::top_level_iterator it)
 {

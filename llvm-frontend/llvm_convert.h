@@ -66,6 +66,7 @@ private:
 
   void get_default_symbol(symbolt &symbol);
   std::string get_var_name(std::string name, bool is_local);
+  std::string get_param_name(std::string name);
 
   void update_current_location(clang::ASTUnit::top_level_iterator it);
   std::string get_filename_from_path();
