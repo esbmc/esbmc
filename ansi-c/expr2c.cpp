@@ -1999,6 +1999,33 @@ std::string expr2ct::convert_code_continue(
 
 /*******************************************************************\
 
+Function: expr2ct::convert_code_decl_block
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string expr2ct::convert_code_decl_block(
+  const codet &src,
+  unsigned indent)
+{
+  std::string dest=indent_str(indent);
+
+  forall_operands(it, src)
+  {
+    dest+=convert_code(to_code(*it), indent);
+    dest+="\n";
+  }
+
+  return dest;
+}
+
+/*******************************************************************\
+
 Function: expr2ct::convert_code_decl
 
   Inputs:
@@ -2103,7 +2130,7 @@ std::string expr2ct::convert_code_block(
   unsigned indent)
 {
   std::string dest=indent_str(indent);
-  dest+="{\n";
+  dest+="\n{\n";
 
   forall_operands(it, src)
   {
@@ -2221,6 +2248,9 @@ std::string expr2ct::convert_code(
 
   if(statement=="decl")
     return convert_code_decl(src, indent);
+
+  if(statement=="decl-block")
+    return convert_code_decl_block(src, indent);
 
   if(statement=="assign")
     return convert_code_assign(src, indent);
