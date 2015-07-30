@@ -185,6 +185,10 @@ void llvm_convertert::convert_var(
 
   code_declt decl;
   decl.operands().push_back(symbol_expr(symbol));
+
+  if(symbol.value.is_not_nil())
+    decl.operands().push_back(symbol.value);
+
   new_expr = decl;
 
   if (context.move(symbol)) {
