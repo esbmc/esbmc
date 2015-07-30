@@ -9,6 +9,7 @@
 #define LLVM_FRONTEND_LLVM_CONVERT_H_
 
 #include <context.h>
+#include <namespace.h>
 #include <std_types.h>
 
 #include <clang/Frontend/ASTUnit.h>
@@ -26,6 +27,7 @@ public:
 
 private:
   contextt &context;
+  namespacet ns;
   locationt current_location;
   std::string current_path;
   std::string current_function_name;
@@ -63,6 +65,7 @@ private:
     exprt &new_expr);
 
   void get_default_symbol(symbolt &symbol);
+  std::string get_var_name(std::string name, bool is_local);
 
   void update_current_location(clang::ASTUnit::top_level_iterator it);
   std::string get_filename_from_path();

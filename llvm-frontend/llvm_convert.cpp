@@ -26,6 +26,7 @@ std::string repeat( const std::string &word, int times ) {
 
 llvm_convertert::llvm_convertert(contextt &_context)
   : context(_context),
+    ns(context),
     current_location(locationt()),
     current_path(""),
     current_function_name(""),
@@ -160,26 +161,15 @@ void llvm_convertert::convert_var(
   if (!vd.hasLocalStorage())
   {
     symbol.static_lifetime = true;
-    symbol.name = "c::" + symbol.base_name.as_string();
-    symbol.pretty_name = symbol.base_name.as_string();
     symbol.value = gen_zero(t);
 
     // Add location to value since it is only added on get_expr
     symbol.value.location() = current_location;
   }
-  else
-  {
-    std::string pretty_name = symbol.module.as_string() + "::";
-    if(current_function_name!= "")
-      pretty_name += current_function_name + "::";
-    if(current_scope > 0)
-      pretty_name += repeat("1::", current_scope);
 
-    pretty_name += symbol.base_name.as_string();
-
-    symbol.pretty_name = pretty_name;
-    symbol.name = "c::" + symbol.pretty_name.as_string();
-  }
+  symbol.pretty_name =
+    get_var_name(symbol.base_name.as_string(), vd.hasLocalStorage());
+  symbol.name = "c::" + symbol.pretty_name.as_string();
 
   if(vd.hasInit())
   {
@@ -544,6 +534,23 @@ void llvm_convertert::get_default_symbol(symbolt& symbol)
   symbol.mode = "C";
   symbol.module = get_modulename_from_path();
   symbol.location = current_location;
+}
+
+std::string llvm_convertert::get_var_name(
+  std::string name,
+  bool is_local)
+{
+  if(!is_local)
+    return name;
+
+  std::string pretty_name = get_modulename_from_path() + "::";
+  if(current_function_name!= "")
+    pretty_name += current_function_name + "::";
+  if(current_scope > 0)
+    pretty_name += repeat("1::", current_scope);
+  pretty_name += name;
+
+  return pretty_name;
 }
 
 void llvm_convertert::update_current_location(
