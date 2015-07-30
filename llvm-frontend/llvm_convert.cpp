@@ -211,10 +211,7 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   // We need: a type, a name, and an optional body
   clang::Stmt *body = NULL;
   if (fd.isThisDeclarationADefinition() && fd.hasBody())
-  {
     body = fd.getBody();
-    get_expr(*body, symbol.value);
-  }
 
   // Build function's type
   code_typet type;
@@ -225,7 +222,8 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   get_type(ret_type, return_type);
   type.return_type() = return_type;
 
-  // The arguments
+  // We convert the parameters first so their symbol are added to context
+  // before converting the body, as they may appear on the function body
   if(body)
   {
     for (const auto &pdecl : fd.params()) {
@@ -233,6 +231,8 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
         convert_function_params(symbol.base_name.as_string(), pdecl);
       type.arguments().push_back(param);
     }
+
+    get_expr(*body, symbol.value);
   }
 
   // And the location
