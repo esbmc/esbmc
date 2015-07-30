@@ -261,7 +261,7 @@ code_typet::argumentt llvm_convertert::convert_function_params(
 
   param_symbol.type = param_type;
 
-  std::string name = pdecl->getNameAsString();
+  std::string name = pdecl->getName().str();
   param_symbol.pretty_name = function_name + "::" + name;
   param_symbol.name = "c::" + param_symbol.pretty_name.as_string();
   param_symbol.base_name = name;
