@@ -332,11 +332,11 @@ void goto_convertt::convert_block(
 
   forall_operands(it, code)
   {
-    const codet &code=to_code(*it);
+    const codet &code_it=to_code(*it);
 
-    if(code.get_statement()=="decl")
+    if(code_it.get_statement()=="decl")
     {
-      const exprt &op0=code.op0();
+      const exprt &op0=code_it.op0();
       assert(op0.id()=="symbol");
       const irep_idt &identifier=op0.identifier();
       const symbolt &symbol=lookup(identifier);
@@ -347,7 +347,7 @@ void goto_convertt::convert_block(
     }
 
     goto_programt tmp;
-    convert(code, tmp);
+    convert(code_it, tmp);
 
     // all the temp symbols are also local variables and they are gotten
     // via the convert process
