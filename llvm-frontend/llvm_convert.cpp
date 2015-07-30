@@ -555,6 +555,12 @@ void llvm_convertert::get_expr(
       side_effect_expr_function_callt call;
       call.function() = callee_expr;
 
+      for (const clang::Expr *arg : function_call.arguments()) {
+        exprt single_arg;
+        get_expr(*arg, single_arg);
+        call.arguments().push_back(single_arg);
+      }
+
       new_expr = call;
       break;
     }
