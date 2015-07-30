@@ -170,6 +170,8 @@ void goto_convertt::convert(
     convert_block(code, dest);
   else if(statement=="decl")
     convert_decl(code, dest);
+  else if(statement=="decl-block")
+    convert_decl_block(code, dest);
   else if(statement=="expression")
     convert_expression(code, dest);
   else if(statement=="assign")
@@ -745,6 +747,14 @@ void goto_convertt::convert_decl(
     assign.location()=tmp.location();
     copy(assign, ASSIGN, dest);
   }
+}
+
+void goto_convertt::convert_decl_block(
+  const codet& code,
+  goto_programt& dest)
+{
+  forall_operands(it, code)
+    convert(to_code(*it), dest);
 }
 
 void goto_convertt::convert_assign(
