@@ -594,6 +594,22 @@ void llvm_convertert::get_binary_operator_expr(
 {
   switch(binop.getOpcode())
   {
+    case clang::BO_Assign:
+    {
+      exprt lhs;
+      get_expr(*binop.getLHS(), lhs);
+
+      exprt rhs;
+      get_expr(*binop.getRHS(), rhs);
+
+      code_assignt assign;
+      assign.op0() = lhs;
+      assign.op1() = rhs;
+
+      new_expr = assign;
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang binary operator: \"";
       std::cerr << binop.getOpcodeStr().str() << "\" to expression" << std::endl;
