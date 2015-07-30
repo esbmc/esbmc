@@ -657,7 +657,7 @@ void llvm_convertert::get_binary_operator_expr(
     default:
       std::cerr << "Conversion of unsupported clang binary operator: \"";
       std::cerr << binop.getOpcodeStr().str() << "\" to expression" << std::endl;
-      binop.dump();
+      binop.dumpColor();
       abort();
   }
 }
