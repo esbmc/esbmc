@@ -561,6 +561,22 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::CallExprClass:
+    {
+      const clang::CallExpr &function_call =
+        static_cast<const clang::CallExpr &>(stmt);
+
+      const clang::Expr *callee = function_call.getCallee();
+      exprt callee_expr;
+      get_expr(*callee, callee_expr);
+
+      side_effect_expr_function_callt call;
+      call.function() = callee_expr;
+
+      new_expr = call;
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
