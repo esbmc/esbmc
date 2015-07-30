@@ -504,6 +504,21 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::DeclRefExprClass:
+    {
+      const clang::DeclRefExpr &decl =
+        static_cast<const clang::DeclRefExpr&>(stmt);
+      const clang::VarDecl &vd =
+        static_cast<const clang::VarDecl&>(*decl.getDecl());
+
+      irep_idt identifier =
+        "c::" + get_var_name(vd.getName().str(), vd.hasLocalStorage());
+
+      const symbolt &sym = ns.lookup(identifier);
+      new_expr = symbol_expr(sym);
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
