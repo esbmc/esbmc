@@ -443,15 +443,22 @@ void llvm_convertert::get_expr(
     case clang::Stmt::ImplicitCastExprClass:
     case clang::Stmt::CStyleCastExprClass:
     {
-      const clang::CastExpr &cast = static_cast<const clang::CastExpr &>(stmt);
-
-      typet type;
-      get_type(cast.getType(), type);
+      const clang::CastExpr &cast =
+        static_cast<const clang::CastExpr &>(stmt);
 
       exprt expr;
       get_expr(*cast.getSubExpr(), expr);
 
-      new_expr = typecast_exprt(expr, type);
+      if(cast.getCastKind() == clang::CK_FunctionToPointerDecay)
+      {
+        new_expr = expr;
+      }
+      else
+      {
+        typet type;
+        get_type(cast.getType(), type);
+        new_expr = typecast_exprt(expr, type);
+      }
       break;
     }
 
