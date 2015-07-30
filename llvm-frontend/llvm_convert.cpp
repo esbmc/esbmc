@@ -518,6 +518,21 @@ void llvm_convertert::get_expr(
       irep_idt identifier =
         "c::" + get_var_name(vd.getName().str(), vd.hasLocalStorage());
 
+      const symbolt *symbol;
+      if(ns.lookup(identifier, symbol))
+      {
+        // Maybe it is a param?
+        identifier = "c::" + get_param_name(vd.getName().str());
+
+        if(ns.lookup(identifier, symbol))
+        {
+          // Give up,
+          std::cerr << "Unable to find identifier: \"";
+          std::cerr << identifier << "\" " << std::endl;
+          abort();
+        }
+      }
+
       const symbolt &sym = ns.lookup(identifier);
       new_expr = symbol_expr(sym);
       break;
