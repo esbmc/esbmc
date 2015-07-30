@@ -518,10 +518,14 @@ void llvm_convertert::get_expr(
       const clang::ReturnStmt &ret =
         static_cast<const clang::ReturnStmt&>(stmt);
 
-      code_returnt ret_expr;
       const clang::Expr &retval = *ret.getRetValue();
-      get_expr(retval, ret_expr.op0());
+      exprt val;
+      get_expr(retval, val);
 
+      code_returnt ret_expr;
+      ret_expr.return_value() = val;
+
+      new_expr = ret_expr;
       break;
     }
 
