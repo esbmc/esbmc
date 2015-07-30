@@ -391,6 +391,15 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
       break;
     }
 
+    case clang::Type::Pointer:
+    {
+      const clang::PointerType &pt =
+        static_cast<const clang::PointerType &>(the_type);
+      const clang::QualType &pointee = pt.getPointeeType();
+      get_type(pointee, new_type);
+      break;
+    }
+
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
