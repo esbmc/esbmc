@@ -513,6 +513,18 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::ReturnStmtClass:
+    {
+      const clang::ReturnStmt &ret =
+        static_cast<const clang::ReturnStmt&>(stmt);
+
+      code_returnt ret_expr;
+      const clang::Expr &retval = *ret.getRetValue();
+      get_expr(retval, ret_expr.op0());
+
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
