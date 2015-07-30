@@ -189,17 +189,18 @@ void llvm_convertert::convert_var(
     "c::" + get_var_name(vd.getName().str(),
     vd.hasLocalStorage()));
 
-  if(vd.hasInit())
-  {
-    const clang::Expr *value = vd.getInit();
-    get_expr(*value, symbol.value);
-  }
-
   code_declt decl;
   decl.operands().push_back(symbol_expr(symbol));
 
-  if(symbol.value.is_not_nil())
-    decl.operands().push_back(symbol.value);
+  if(vd.hasInit())
+  {
+    const clang::Expr *value = vd.getInit();
+    exprt val;
+    get_expr(*value, val);
+
+    symbol.value = val;
+    decl.operands().push_back(val);
+  }
 
   new_expr = decl;
 }
