@@ -587,6 +587,46 @@ void llvm_convertert::get_expr(
   new_expr.location() = current_location;
 }
 
+void llvm_convertert::get_decl_expr(
+  const clang::Decl& decl,
+  exprt& new_expr)
+{
+  switch(decl.getKind())
+  {
+    case clang::Decl::Var:
+    {
+      const clang::VarDecl &vd =
+        static_cast<const clang::VarDecl&>(decl);
+
+      irep_idt identifier =
+        "c::" + get_var_name(vd.getName().str(), vd.hasLocalStorage());
+
+      const symbolt &symbol = ns.lookup(identifier);
+      new_expr = symbol_expr(symbol);
+      break;
+    }
+
+    case clang::Decl::ParmVar:
+    {
+      const clang::VarDecl &vd =
+        static_cast<const clang::VarDecl&>(decl);
+
+      irep_idt identifier =
+        "c::" + get_param_name(vd.getName().str());
+
+      const symbolt &symbol = ns.lookup(identifier);
+      new_expr = symbol_expr(symbol);
+      break;
+    }
+
+    default:
+      std::cerr << "Conversion of unsupported clang decl operator: \"";
+      std::cerr << decl.getDeclKindName() << "\" to expression" << std::endl;
+      decl.dump();
+      abort();
+  }
+}
+
 
 void llvm_convertert::get_binary_operator_expr(
   const clang::BinaryOperator& binop,

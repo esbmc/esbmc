@@ -60,6 +60,10 @@ private:
     const clang::Stmt &stmt,
     exprt &new_expr);
 
+  void get_decl_expr(
+    const clang::Decl &decl,
+    exprt &new_expr);
+
   void get_binary_operator_expr(
     const clang::BinaryOperator &binop,
     exprt &new_expr);
