@@ -636,83 +636,33 @@ void llvm_convertert::get_binary_operator_expr(
   const clang::BinaryOperator& binop,
   exprt& new_expr)
 {
+  exprt lhs;
+  get_expr(*binop.getLHS(), lhs);
+
+  exprt rhs;
+  get_expr(*binop.getRHS(), rhs);
+
   switch(binop.getOpcode())
   {
     case clang::BO_Assign:
-    {
-      exprt lhs;
-      get_expr(*binop.getLHS(), lhs);
-
-      exprt rhs;
-      get_expr(*binop.getRHS(), rhs);
-
-      code_assignt assign;
-      assign.op0() = lhs;
-      assign.op1() = rhs;
-
-      new_expr = assign;
+      new_expr = codet("assign");
       break;
-    }
 
     case clang::BO_Add:
-    {
-      exprt lhs;
-      get_expr(*binop.getLHS(), lhs);
-
-      exprt rhs;
-      get_expr(*binop.getRHS(), rhs);
-
-      exprt add("+");
-      add.copy_to_operands(lhs, rhs);
-
-      new_expr = add;
+      new_expr = exprt("+");
       break;
-    }
 
     case clang::BO_Sub:
-    {
-      exprt lhs;
-      get_expr(*binop.getLHS(), lhs);
-
-      exprt rhs;
-      get_expr(*binop.getRHS(), rhs);
-
-      exprt sub("-");
-      sub.copy_to_operands(lhs, rhs);
-
-      new_expr = sub;
+      new_expr = exprt("-");
       break;
-    }
 
     case clang::BO_Mul:
-    {
-      exprt lhs;
-      get_expr(*binop.getLHS(), lhs);
-
-      exprt rhs;
-      get_expr(*binop.getRHS(), rhs);
-
-      exprt mul("*");
-      mul.copy_to_operands(lhs, rhs);
-
-      new_expr = mul;
+      new_expr = exprt("*");
       break;
-    }
 
     case clang::BO_Div:
-    {
-      exprt lhs;
-      get_expr(*binop.getLHS(), lhs);
-
-      exprt rhs;
-      get_expr(*binop.getRHS(), rhs);
-
-      exprt div("/");
-      div.copy_to_operands(lhs, rhs);
-
-      new_expr = div;
+      new_expr = exprt("/");
       break;
-    }
 
     default:
       std::cerr << "Conversion of unsupported clang binary operator: \"";
@@ -720,6 +670,8 @@ void llvm_convertert::get_binary_operator_expr(
       binop.dumpColor();
       abort();
   }
+
+  new_expr.copy_to_operands(lhs, rhs);
 }
 
 void llvm_convertert::get_default_symbol(symbolt& symbol)
