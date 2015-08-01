@@ -702,6 +702,12 @@ void llvm_convertert::get_binary_operator_expr(
   exprt rhs;
   get_expr(*binop.getRHS(), rhs);
 
+  // The resultant type from the binary operation
+  // For boolean operation, we always assign bool type regardless
+  // of what llvm says
+  typet binop_type;
+  get_type(binop.getType(), binop_type);
+
   switch(binop.getOpcode())
   {
     case clang::BO_Assign:
@@ -710,87 +716,77 @@ void llvm_convertert::get_binary_operator_expr(
       break;
 
     case clang::BO_Add:
-      new_expr = exprt("+");
+      new_expr = exprt("+", binop_type);
       break;
 
     case clang::BO_Sub:
-      new_expr = exprt("-");
+      new_expr = exprt("-", binop_type);
       break;
 
     case clang::BO_Mul:
-      new_expr = exprt("*");
+      new_expr = exprt("*", binop_type);
       break;
 
     case clang::BO_Div:
-      new_expr = exprt("/");
+      new_expr = exprt("/", binop_type);
       break;
 
     case clang::BO_Shl:
-      new_expr = exprt("shl");
+      new_expr = exprt("shl", binop_type);
       break;
 
     case clang::BO_Shr:
-      new_expr = exprt("ashr");
+      new_expr = exprt("ashr", binop_type);
       break;
 
     case clang::BO_Rem:
-      new_expr = exprt("mod");
+      new_expr = exprt("mod", binop_type);
       break;
 
     case clang::BO_And:
-      new_expr = exprt("bitand");
+      new_expr = exprt("bitand", binop_type);
       break;
 
     case clang::BO_Xor:
-      new_expr = exprt("bitxor");
+      new_expr = exprt("bitxor", binop_type);
       break;
 
     case clang::BO_Or:
-      new_expr = exprt("bitor");
+      new_expr = exprt("bitor", binop_type);
       break;
 
     case clang::BO_LT:
-      new_expr = exprt("<");
-      new_expr.type() = bool_type();
+      new_expr = exprt("<", bool_type());
       break;
 
     case clang::BO_GT:
-      new_expr = exprt(">");
-      new_expr.type() = bool_type();
+      new_expr = exprt(">", bool_type());
       break;
 
     case clang::BO_LE:
-      new_expr = exprt("<=");
-      new_expr.type() = bool_type();
+      new_expr = exprt("<=", bool_type());
       break;
 
     case clang::BO_GE:
-      new_expr = exprt(">=");
-      new_expr.type() = bool_type();
+      new_expr = exprt(">=", bool_type());
       break;
 
     case clang::BO_EQ:
-      new_expr = exprt("=");
-      new_expr.type() = bool_type();
+      new_expr = exprt("=", bool_type());
       break;
 
     case clang::BO_NE:
-      new_expr = exprt("notequal");
-      new_expr.type() = bool_type();
+      new_expr = exprt("notequal", bool_type());
       break;
 
     case clang::BO_LAnd:
-      new_expr = exprt("and");
-      new_expr.type() = bool_type();
-
+      new_expr = exprt("and", bool_type());
       gen_typecast(lhs, bool_type());
       gen_typecast(rhs, bool_type());
       break;
 
     case clang::BO_LOr:
-      new_expr = exprt("or");
-      new_expr.type() = bool_type();
-
+      new_expr = exprt("or", bool_type());
       gen_typecast(lhs, bool_type());
       gen_typecast(rhs, bool_type());
       break;
