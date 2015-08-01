@@ -49,6 +49,7 @@ private:
     exprt &new_expr);
 
   void convert_function(const clang::FunctionDecl &fd);
+
   code_typet::argumentt convert_function_params(
     std::string function_name,
     clang::ParmVarDecl *pdecl);

@@ -365,8 +365,8 @@ void llvm_convertert::get_type(
 }
 
 void llvm_convertert::get_builtin_type(
-    const clang::BuiltinType& bt,
-    typet& new_type)
+  const clang::BuiltinType& bt,
+  typet& new_type)
 {
   switch (bt.getKind()) {
     case clang::BuiltinType::Void:
