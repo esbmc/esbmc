@@ -638,6 +638,36 @@ void llvm_convertert::get_decl_expr(
   new_expr = symbol_expr(symbol);
 }
 
+void llvm_convertert::get_cast_expr(
+  const clang::CastExpr& cast,
+  exprt& new_expr)
+{
+  exprt expr;
+  get_expr(*cast.getSubExpr(), expr);
+
+  typet type;
+  get_type(cast.getType(), type);
+
+  switch(cast.getCastKind())
+  {
+    case clang::CK_FunctionToPointerDecay:
+      break;
+
+    case clang::CK_FloatingToIntegral:
+    case clang::CK_LValueToRValue:
+      if(expr.type() != type)
+        expr = typecast_exprt(expr, type);
+      break;
+
+    default:
+      std::cerr << "Conversion of unsupported clang cast operator: \"";
+      std::cerr << cast.getCastKindName() << "\" to expression" << std::endl;
+      cast.dumpColor();
+      abort();
+  }
+
+  new_expr = expr;
+}
 
 void llvm_convertert::get_binary_operator_expr(
   const clang::BinaryOperator& binop,

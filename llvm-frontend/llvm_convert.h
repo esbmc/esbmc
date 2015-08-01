@@ -68,6 +68,10 @@ private:
     const clang::BinaryOperator &binop,
     exprt &new_expr);
 
+  void get_cast_expr(
+    const clang::CastExpr &cast,
+    exprt &new_expr);
+
   void get_default_symbol(symbolt &symbol);
   std::string get_var_name(std::string name, bool is_local);
   std::string get_param_name(std::string name);
