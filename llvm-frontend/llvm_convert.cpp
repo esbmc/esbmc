@@ -658,6 +658,7 @@ void llvm_convertert::get_cast_expr(
       break;
 
     case clang::CK_FloatingToIntegral:
+    case clang::CK_IntegralCast:
     case clang::CK_LValueToRValue:
       if(expr.type() != type)
         expr = typecast_exprt(expr, type);
