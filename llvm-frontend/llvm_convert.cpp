@@ -647,8 +647,7 @@ void llvm_convertert::get_cast_expr(
     case clang::CK_FloatingToIntegral:
     case clang::CK_IntegralCast:
     case clang::CK_LValueToRValue:
-      if(expr.type() != type)
-        expr = typecast_exprt(expr, type);
+      gen_typecast(expr, type);
       break;
 
     default:
@@ -675,6 +674,7 @@ void llvm_convertert::get_binary_operator_expr(
   {
     case clang::BO_Assign:
       new_expr = codet("assign");
+      gen_typecast(rhs, lhs.type());
       break;
 
     case clang::BO_Add:
@@ -701,6 +701,34 @@ void llvm_convertert::get_binary_operator_expr(
   }
 
   new_expr.copy_to_operands(lhs, rhs);
+}
+
+void llvm_convertert::gen_typecast(
+  exprt &expr,
+  typet type)
+{
+  if(expr.type() != type)
+  {
+    exprt new_expr;
+
+    // I don't think that this code is really needed,
+    // but it removes typecasts, which is good
+    // It should simplify constants to either true or
+    // false when casting them to bool
+    if(type.is_bool() and expr.is_constant())
+    {
+      mp_integer value=string2integer(expr.cformat().as_string());
+      if(value != 0)
+        new_expr = true_exprt();
+      else
+       new_expr = false_exprt();
+    }
+    else
+      new_expr = typecast_exprt(expr, type);
+
+    new_expr.location() = expr.location();
+    expr.swap(new_expr);
+  }
 }
 
 void llvm_convertert::get_default_symbol(symbolt& symbol)

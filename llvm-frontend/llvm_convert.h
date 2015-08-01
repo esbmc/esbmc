@@ -72,6 +72,10 @@ private:
     const clang::CastExpr &cast,
     exprt &new_expr);
 
+  void gen_typecast(
+    exprt &expr,
+    typet type);
+
   void get_default_symbol(symbolt &symbol);
   std::string get_var_name(std::string name, bool is_local);
   std::string get_param_name(std::string name);
