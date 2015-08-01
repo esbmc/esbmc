@@ -644,8 +644,14 @@ void llvm_convertert::get_cast_expr(
     case clang::CK_FunctionToPointerDecay:
       break;
 
-    case clang::CK_FloatingToIntegral:
     case clang::CK_IntegralCast:
+    case clang::CK_IntegralToBoolean:
+    case clang::CK_IntegralToFloating:
+
+    case clang::CK_FloatingToIntegral:
+    case clang::CK_FloatingToBoolean:
+    case clang::CK_FloatingCast:
+
     case clang::CK_LValueToRValue:
       gen_typecast(expr, type);
       break;
