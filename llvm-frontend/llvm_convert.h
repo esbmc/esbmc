@@ -57,6 +57,10 @@ private:
     const clang::QualType &the_type,
     typet &new_type);
 
+  void get_builtin_type(
+    const clang::BuiltinType &bt,
+    typet &new_type);
+
   void get_expr(
     const clang::Stmt &stmt,
     exprt &new_expr);

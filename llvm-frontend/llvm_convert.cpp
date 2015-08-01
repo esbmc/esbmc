@@ -313,99 +313,18 @@ code_typet::argumentt llvm_convertert::convert_function_params(
   return arg;
 }
 
-void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
+void llvm_convertert::get_type(
+  const clang::QualType &q_type,
+  typet &new_type)
 {
   const clang::Type &the_type = *q_type.getTypePtrOrNull();
-  clang::Type::TypeClass tc = the_type.getTypeClass();
-  switch (tc) {
+
+  switch (the_type.getTypeClass()) {
     case clang::Type::Builtin:
     {
-      const clang::BuiltinType &bt = static_cast<const clang::BuiltinType&>(the_type);
-      switch (bt.getKind()) {
-        case clang::BuiltinType::Void:
-          new_type = empty_typet();
-          break;
-
-        case clang::BuiltinType::Bool:
-          new_type = bool_type();
-          break;
-
-        case clang::BuiltinType::UChar:
-          new_type = unsignedbv_typet(config.ansi_c.char_width);
-          break;
-
-        case clang::BuiltinType::Char16:
-          new_type = unsignedbv_typet(16);
-          break;
-
-        case clang::BuiltinType::Char32:
-          new_type = unsignedbv_typet(32);
-          break;
-
-        case clang::BuiltinType::UShort:
-          new_type = unsignedbv_typet(config.ansi_c.short_int_width);
-          break;
-
-        case clang::BuiltinType::UInt:
-          new_type = uint_type();
-          break;
-
-        case clang::BuiltinType::ULong:
-          new_type = long_uint_type();
-          break;
-
-        case clang::BuiltinType::ULongLong:
-          new_type = long_long_uint_type();
-          break;
-
-        case clang::BuiltinType::UInt128:
-          // Various simplification / big-int related things use uint64_t's...
-          std::cerr << "No support for uint128's in ESBMC right now, sorry" << std::endl;
-          abort();
-
-        case clang::BuiltinType::SChar:
-          new_type = signedbv_typet(config.ansi_c.char_width);
-          break;
-
-        case clang::BuiltinType::Short:
-          new_type = signedbv_typet(config.ansi_c.short_int_width);
-          break;
-
-        case clang::BuiltinType::Int:
-          new_type = int_type();
-          break;
-
-        case clang::BuiltinType::Long:
-          new_type = long_int_type();
-          break;
-
-        case clang::BuiltinType::LongLong:
-          new_type = long_long_int_type();
-          break;
-
-        case clang::BuiltinType::Int128:
-          // Various simplification / big-int related things use uint64_t's...
-          std::cerr << "No support for uint128's in ESBMC right now, sorry" << std::endl;
-          abort();
-
-        case clang::BuiltinType::Float:
-          new_type = float_type();
-          break;
-
-        case clang::BuiltinType::Double:
-          new_type = double_type();
-          break;
-
-        case clang::BuiltinType::LongDouble:
-          new_type = long_double_type();
-          break;
-
-        default:
-          std::cerr << "Unrecognized clang builtin type "
-                    << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str()
-                    << std::endl;
-          abort();
-      }
+      const clang::BuiltinType &bt =
+        static_cast<const clang::BuiltinType&>(the_type);
+      get_builtin_type(bt, new_type);
       break;
     }
 
@@ -443,6 +362,99 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
 
   if(q_type.isConstQualified())
     new_type.cmt_constant(true);
+}
+
+void llvm_convertert::get_builtin_type(
+    const clang::BuiltinType& bt,
+    typet& new_type)
+{
+  switch (bt.getKind()) {
+    case clang::BuiltinType::Void:
+      new_type = empty_typet();
+      break;
+
+    case clang::BuiltinType::Bool:
+      new_type = bool_type();
+      break;
+
+    case clang::BuiltinType::UChar:
+      new_type = unsignedbv_typet(config.ansi_c.char_width);
+      break;
+
+    case clang::BuiltinType::Char16:
+      new_type = unsignedbv_typet(16);
+      break;
+
+    case clang::BuiltinType::Char32:
+      new_type = unsignedbv_typet(32);
+      break;
+
+    case clang::BuiltinType::UShort:
+      new_type = unsignedbv_typet(config.ansi_c.short_int_width);
+      break;
+
+    case clang::BuiltinType::UInt:
+      new_type = uint_type();
+      break;
+
+    case clang::BuiltinType::ULong:
+      new_type = long_uint_type();
+      break;
+
+    case clang::BuiltinType::ULongLong:
+      new_type = long_long_uint_type();
+      break;
+
+    case clang::BuiltinType::UInt128:
+      // Various simplification / big-int related things use uint64_t's...
+      std::cerr << "No support for uint128's in ESBMC right now, sorry" << std::endl;
+      abort();
+      break;
+
+    case clang::BuiltinType::SChar:
+      new_type = signedbv_typet(config.ansi_c.char_width);
+      break;
+
+    case clang::BuiltinType::Short:
+      new_type = signedbv_typet(config.ansi_c.short_int_width);
+      break;
+
+    case clang::BuiltinType::Int:
+      new_type = int_type();
+      break;
+
+    case clang::BuiltinType::Long:
+      new_type = long_int_type();
+      break;
+
+    case clang::BuiltinType::LongLong:
+      new_type = long_long_int_type();
+      break;
+
+    case clang::BuiltinType::Int128:
+      // Various simplification / big-int related things use uint64_t's...
+      std::cerr << "No support for uint128's in ESBMC right now, sorry" << std::endl;
+      abort();
+      break;
+
+    case clang::BuiltinType::Float:
+      new_type = float_type();
+      break;
+
+    case clang::BuiltinType::Double:
+      new_type = double_type();
+      break;
+
+    case clang::BuiltinType::LongDouble:
+      new_type = long_double_type();
+      break;
+
+    default:
+      std::cerr << "Unrecognized clang builtin type "
+      << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str()
+      << std::endl;
+      abort();
+  }
 }
 
 void llvm_convertert::get_expr(
