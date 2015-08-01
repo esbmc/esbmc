@@ -30,7 +30,8 @@ llvm_convertert::llvm_convertert(contextt &_context)
     current_location(locationt()),
     current_path(""),
     current_function_name(""),
-    current_scope(0)
+    current_scope(0),
+    sm(nullptr)
 {
 }
 
@@ -57,7 +58,8 @@ bool llvm_convertert::convert_top_level_decl()
       it != translation_unit->top_level_end();
       it++)
     {
-      update_current_location(it);
+      set_source_manager((*it)->getASTContext().getSourceManager());
+      update_current_location((*it)->getLocation());
 
       exprt dummy_decl;
       convert_decl(**it, dummy_decl);
@@ -108,6 +110,8 @@ void llvm_convertert::convert_decl(
       std::cerr << decl.getDeclKindName() << std::endl;
       abort();
   }
+
+  new_expr.location() = current_location;
 }
 
 void llvm_convertert::convert_typedef(
@@ -249,6 +253,14 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
 
     get_expr(*body, symbol.value);
   }
+
+  // Set the end location for functions, we get all the information
+  // from the current location (file, line and function name) then
+  // we change the line number
+  locationt end_location;
+  end_location = current_location;
+  end_location.set_line(sm->getSpellingLineNumber(fd.getLocEnd()));
+  symbol.value.end_location(end_location);
 
   // And the location
   type.location() = symbol.location;
@@ -437,6 +449,8 @@ void llvm_convertert::get_expr(
   const clang::Stmt& stmt,
   exprt& new_expr)
 {
+  update_current_location(stmt.getLocStart());
+
   switch(stmt.getStmtClass()) {
     case clang::Stmt::IntegerLiteralClass:
     {
@@ -841,16 +855,20 @@ std::string llvm_convertert::get_param_name(std::string name)
   return pretty_name;
 }
 
-void llvm_convertert::update_current_location(
-    clang::ASTUnit::top_level_iterator it)
+void llvm_convertert::set_source_manager(
+  clang::SourceManager& source_manager)
 {
-  current_path =
-    (*it)->getASTContext().getSourceManager().getFilename(
-      (*it)->getLocation()).str();
+  sm = &source_manager;
+}
+
+void llvm_convertert::update_current_location(
+  clang::SourceLocation source_location)
+{
+  current_path =sm->getFilename(source_location).str();
 
   current_location.set_file(get_filename_from_path());
-  current_location.set_line((*it)->getASTContext().getSourceManager().
-    getSpellingLineNumber((*it)->getLocation()));
+  current_location.set_line(sm->getSpellingLineNumber(source_location));
+  current_location.set_function(current_function_name);
 }
 
 std::string llvm_convertert::get_modulename_from_path()

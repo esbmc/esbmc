@@ -32,6 +32,7 @@ private:
   std::string current_path;
   std::string current_function_name;
   int current_scope;
+  clang::SourceManager *sm;
 
   bool convert_top_level_decl();
 
@@ -80,7 +81,8 @@ private:
   std::string get_var_name(std::string name, bool is_local);
   std::string get_param_name(std::string name);
 
-  void update_current_location(clang::ASTUnit::top_level_iterator it);
+  void set_source_manager(clang::SourceManager &source_manager);
+  void update_current_location(clang::SourceLocation source_location);
   std::string get_filename_from_path();
   std::string get_modulename_from_path();
 };
