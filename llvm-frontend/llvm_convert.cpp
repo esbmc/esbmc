@@ -693,6 +693,76 @@ void llvm_convertert::get_binary_operator_expr(
       new_expr = exprt("/");
       break;
 
+    case clang::BO_Shl:
+      new_expr = exprt("shl");
+      break;
+
+    case clang::BO_Shr:
+      new_expr = exprt("ashr");
+      break;
+
+    case clang::BO_Rem:
+      new_expr = exprt("mod");
+      break;
+
+    case clang::BO_And:
+      new_expr = exprt("bitand");
+      break;
+
+    case clang::BO_Xor:
+      new_expr = exprt("bitxor");
+      break;
+
+    case clang::BO_Or:
+      new_expr = exprt("bitor");
+      break;
+
+    case clang::BO_LT:
+      new_expr = exprt("<");
+      new_expr.type() = bool_type();
+      break;
+
+    case clang::BO_GT:
+      new_expr = exprt(">");
+      new_expr.type() = bool_type();
+      break;
+
+    case clang::BO_LE:
+      new_expr = exprt("<=");
+      new_expr.type() = bool_type();
+      break;
+
+    case clang::BO_GE:
+      new_expr = exprt(">=");
+      new_expr.type() = bool_type();
+      break;
+
+    case clang::BO_EQ:
+      new_expr = exprt("=");
+      new_expr.type() = bool_type();
+      break;
+
+    case clang::BO_NE:
+      new_expr = exprt("notequal");
+      new_expr.type() = bool_type();
+      break;
+
+    case clang::BO_LAnd:
+      new_expr = exprt("and");
+      new_expr.type() = bool_type();
+
+      gen_typecast(lhs, bool_type());
+      gen_typecast(rhs, bool_type());
+      break;
+
+    case clang::BO_LOr:
+      new_expr = exprt("or");
+      new_expr.type() = bool_type();
+
+      gen_typecast(lhs, bool_type());
+      gen_typecast(rhs, bool_type());
+      break;
+
     default:
       std::cerr << "Conversion of unsupported clang binary operator: \"";
       std::cerr << binop.getOpcodeStr().str() << "\" to expression" << std::endl;
