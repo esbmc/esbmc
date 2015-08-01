@@ -167,8 +167,10 @@ void llvm_convertert::convert_var(
     symbol.value.location() = current_location;
   }
 
-  symbol.pretty_name =
+  irep_idt identifier =
     get_var_name(symbol.base_name.as_string(), vd.hasLocalStorage());
+
+  symbol.pretty_name = identifier;
   symbol.name = "c::" + symbol.pretty_name.as_string();
 
   if (vd.hasExternalStorage())
@@ -185,12 +187,14 @@ void llvm_convertert::convert_var(
   }
 
   // Now get the symbol back to continue the conversion
-  symbol = ns.lookup(
-    "c::" + get_var_name(vd.getName().str(),
-    vd.hasLocalStorage()));
+  // The problem is that lookup returns a const symbolt,
+  // so const_cast it to symbolt, so we can add the value
+  // Maybe this could be avoided if we had an set_value method?
+  symbolt &added_symbol =
+    const_cast<symbolt&>(ns.lookup("c::" + identifier.as_string()));
 
   code_declt decl;
-  decl.operands().push_back(symbol_expr(symbol));
+  decl.operands().push_back(symbol_expr(added_symbol));
 
   if(vd.hasInit())
   {
@@ -198,7 +202,7 @@ void llvm_convertert::convert_var(
     exprt val;
     get_expr(*value, val);
 
-    symbol.value = val;
+    added_symbol.value = val;
     decl.operands().push_back(val);
   }
 
