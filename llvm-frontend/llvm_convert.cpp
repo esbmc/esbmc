@@ -411,6 +411,13 @@ void llvm_convertert::get_type(const clang::QualType &q_type, typet &new_type)
       break;
     }
 
+    // Those two here appears when we make a function call, e.g:
+    // FunctionNoProto: int x = fun()
+    // FunctionProto: int x = fun(a, b)
+    case clang::Type::FunctionNoProto:
+    case clang::Type::FunctionProto:
+      break;
+
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
