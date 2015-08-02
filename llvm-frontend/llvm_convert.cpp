@@ -585,8 +585,12 @@ void llvm_convertert::get_expr(
       exprt callee_expr;
       get_expr(*callee, callee_expr);
 
+      typet type;
+      get_type(function_call.getType(), type);
+
       side_effect_expr_function_callt call;
       call.function() = callee_expr;
+      call.type() = type;
 
       for (const clang::Expr *arg : function_call.arguments()) {
         exprt single_arg;
