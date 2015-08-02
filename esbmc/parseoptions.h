@@ -17,8 +17,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <options.h>
 #include <cmdline.h>
 
-#include <clang/Frontend/ASTUnit.h>
-
 #include "bmc.h"
 
 extern const struct opt_templ esbmc_options[];

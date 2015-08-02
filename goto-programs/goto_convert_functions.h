@@ -11,8 +11,6 @@ Date: June 2003
 #ifndef CPROVER_GOTO_CONVERT_FUNCTIONS_H
 #define CPROVER_GOTO_CONVERT_FUNCTIONS_H
 
-#include <clang/Frontend/ASTUnit.h>
-
 #include "goto_functions.h"
 #include "goto_convert_class.h"
 

@@ -18,6 +18,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <ansi-c/c_link.h>
 #include <ansi-c/gcc_builtin_headers.h>
 
+#include <clang/Tooling/CommonOptionsParser.h>
+#include <clang/Tooling/Tooling.h>
+
 static llvm::cl::OptionCategory esbmc_llvm("esmc_llvm");
 
 languaget *new_llvm_language()

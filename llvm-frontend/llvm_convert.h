@@ -8,6 +8,9 @@
 #ifndef LLVM_FRONTEND_LLVM_CONVERT_H_
 #define LLVM_FRONTEND_LLVM_CONVERT_H_
 
+#define __STDC_LIMIT_MACROS
+#define __STDC_FORMAT_MACROS
+
 #include <context.h>
 #include <namespace.h>
 #include <std_types.h>

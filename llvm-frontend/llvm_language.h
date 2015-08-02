@@ -9,14 +9,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_LANGUAGE_H
 #define CPROVER_CPP_LANGUAGE_H
 
-#include <set>
-
 #include <language.h>
 
-#include <clang/Frontend/ASTUnit.h>
+#define __STDC_LIMIT_MACROS
+#define __STDC_FORMAT_MACROS
 
-#include <clang/Tooling/CommonOptionsParser.h>
-#include <clang/Tooling/Tooling.h>
+#include <clang/Frontend/ASTUnit.h>
 
 class llvm_languaget: public languaget
 {
