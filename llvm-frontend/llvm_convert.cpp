@@ -246,8 +246,7 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   if(body)
   {
     for (const auto &pdecl : fd.params()) {
-      code_typet::argumentt param =
-        convert_function_params(symbol.base_name.as_string(), pdecl);
+      code_typet::argumentt param = convert_function_params(pdecl);
       type.arguments().push_back(param);
     }
 
@@ -276,7 +275,6 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
 }
 
 code_typet::argumentt llvm_convertert::convert_function_params(
-  std::string function_name,
   clang::ParmVarDecl *pdecl)
 {
   symbolt param_symbol;
