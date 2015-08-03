@@ -602,6 +602,17 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    // This is an expr surrounded by parenthesis, we'll ignore it for
+    // now, and check its subexpression
+    case clang::Stmt::ParenExprClass:
+    {
+      const clang::ParenExpr& p =
+        static_cast<const clang::ParenExpr &>(stmt);
+
+      get_expr(*p.getSubExpr(), new_expr);
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
