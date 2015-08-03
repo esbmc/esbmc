@@ -574,6 +574,25 @@ void llvm_convertert::get_expr(
         call.arguments().push_back(single_arg);
       }
 
+      // Let's check if the symbol for this function call is defined
+      // on the context, if it isn't, we should create and add a symbol
+      // without value, so esbmc will replace the function call by
+      // a non deterministic call later on
+      symbolst::iterator old_it=context.symbols.find(callee_expr.identifier());
+      if(old_it==context.symbols.end())
+      {
+        code_typet func_type;
+        func_type.return_type() = type;
+
+        symbolt symbol;
+        get_default_symbol(
+          symbol,
+          func_type,
+          callee_expr.name().as_string(),
+          callee_expr.name().as_string());
+        move_symbol_to_context(symbol);
+      }
+
       new_expr = call;
       break;
     }
@@ -610,7 +629,7 @@ void llvm_convertert::get_decl_expr(
   const clang::Decl& decl,
   exprt& new_expr)
 {
-  irep_idt identifier;
+  std::string identifier;
   typet type;
 
   switch(decl.getKind())
@@ -620,8 +639,7 @@ void llvm_convertert::get_decl_expr(
       const clang::VarDecl &vd =
         static_cast<const clang::VarDecl&>(decl);
 
-      identifier =
-        "c::" + get_var_name(vd.getName().str(), vd.hasLocalStorage());
+      identifier = get_var_name(vd.getName().str(), vd.hasLocalStorage());
       get_type(vd.getType(), type);
       break;
     }
@@ -631,7 +649,7 @@ void llvm_convertert::get_decl_expr(
       const clang::VarDecl &vd =
         static_cast<const clang::VarDecl&>(decl);
 
-      identifier = "c::" + get_param_name(vd.getName().str());
+      identifier = get_param_name(vd.getName().str());
       get_type(vd.getType(), type);
       break;
     }
@@ -641,7 +659,7 @@ void llvm_convertert::get_decl_expr(
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
 
-      identifier = "c::" + fd.getName().str();
+      identifier = fd.getName().str();
       get_type(fd.getType(), type);
       break;
     }
@@ -654,7 +672,8 @@ void llvm_convertert::get_decl_expr(
   }
 
   new_expr = exprt("symbol", type);
-  new_expr.identifier(identifier);
+  new_expr.identifier("c::" + identifier);
+  new_expr.name(identifier);
 }
 
 void llvm_convertert::get_cast_expr(
