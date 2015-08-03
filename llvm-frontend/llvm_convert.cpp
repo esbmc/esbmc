@@ -616,6 +616,31 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::IfStmtClass:
+    {
+      const clang::IfStmt &ifstmt =
+        static_cast<const clang::IfStmt &>(stmt);
+
+      exprt cond;
+      get_expr(*ifstmt.getCond(), cond);
+
+      exprt then;
+      get_expr(*ifstmt.getThen(), then);
+
+      codet if_expr("ifthenelse");
+      if_expr.copy_to_operands(cond, then);
+
+      if(ifstmt.getElse())
+      {
+        exprt else_expr;
+        get_expr(*ifstmt.getElse(), else_expr);
+        if_expr.copy_to_operands(else_expr);
+      }
+
+      new_expr = if_expr;
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
