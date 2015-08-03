@@ -76,6 +76,10 @@ private:
     const clang::BinaryOperator &binop,
     exprt &new_expr);
 
+  void get_unary_operator_expr(
+    const clang::UnaryOperator &uniop,
+    exprt &new_expr);
+
   void get_cast_expr(
     const clang::CastExpr &cast,
     exprt &new_expr);

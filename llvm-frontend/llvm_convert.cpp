@@ -710,6 +710,69 @@ void llvm_convertert::get_cast_expr(
   new_expr = expr;
 }
 
+void llvm_convertert::get_unary_operator_expr(
+  const clang::UnaryOperator& uniop,
+  exprt& new_expr)
+{
+  typet uniop_type;
+  get_type(uniop.getType(), uniop_type);
+
+  exprt unary_sub;
+  get_expr(*uniop.getSubExpr(), unary_sub);
+
+  switch (uniop.getOpcode())
+  {
+    case clang::UO_Plus:
+      new_expr = exprt("unary+", uniop_type);
+      break;
+
+    case clang::UO_Minus:
+      new_expr = exprt("unary-", uniop_type);
+      break;
+
+    case clang::UO_Not:
+      new_expr = exprt("bitnot", uniop_type);
+      break;
+
+    case clang::UO_LNot:
+      new_expr = exprt("not", bool_type());
+      break;
+
+    case clang::UO_PreInc:
+      new_expr = side_effect_exprt("preincrement", uniop_type);
+      break;
+
+    case clang::UO_PreDec:
+      new_expr = side_effect_exprt("predecrement", uniop_type);
+      break;
+
+    case clang::UO_PostInc:
+      new_expr = side_effect_exprt("postincrement", uniop_type);
+      break;
+
+    case clang::UO_PostDec:
+      new_expr = side_effect_exprt("postdecrement", uniop_type);
+      break;
+
+    case clang::UO_AddrOf:
+      new_expr = exprt("address_of", uniop_type);
+      break;
+
+    case clang::UO_Deref:
+      new_expr = exprt("dereference", uniop_type);
+      break;
+
+    default:
+      std::cerr << "Conversion of unsupported clang unary operator: \"";
+      std::cerr << clang::UnaryOperator::getOpcodeStr(uniop.getOpcode()).str()
+                << "\" to expression" << std::endl;
+      uniop.dumpColor();
+      abort();
+  }
+
+  new_expr.operands().push_back(unary_sub);
+}
+
 void llvm_convertert::get_binary_operator_expr(
   const clang::BinaryOperator& binop,
   exprt& new_expr)
