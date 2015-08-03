@@ -649,6 +649,7 @@ void llvm_convertert::get_decl_expr(
   exprt& new_expr)
 {
   irep_idt identifier;
+  typet type;
 
   switch(decl.getKind())
   {
@@ -659,6 +660,7 @@ void llvm_convertert::get_decl_expr(
 
       identifier =
         "c::" + get_var_name(vd.getName().str(), vd.hasLocalStorage());
+      get_type(vd.getType(), type);
       break;
     }
 
@@ -666,7 +668,9 @@ void llvm_convertert::get_decl_expr(
     {
       const clang::VarDecl &vd =
         static_cast<const clang::VarDecl&>(decl);
+
       identifier = "c::" + get_param_name(vd.getName().str());
+      get_type(vd.getType(), type);
       break;
     }
 
@@ -674,7 +678,9 @@ void llvm_convertert::get_decl_expr(
     {
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
+
       identifier = "c::" + fd.getName().str();
+      get_type(fd.getType(), type);
       break;
     }
 
@@ -685,8 +691,8 @@ void llvm_convertert::get_decl_expr(
       abort();
   }
 
-  const symbolt &symbol = ns.lookup(identifier);
-  new_expr = symbol_expr(symbol);
+  new_expr = exprt("symbol", type);
+  new_expr.identifier(identifier);
 }
 
 void llvm_convertert::get_cast_expr(
