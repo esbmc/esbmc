@@ -1086,7 +1086,7 @@ bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
     return true;
   }
 
-  catch(const std::string e)
+  catch(const std::string &e)
   {
     error(e);
     return true;
@@ -1185,7 +1185,7 @@ bool cbmc_parseoptionst::get_goto_program(
     return true;
   }
 
-  catch(const std::string e)
+  catch(const std::string &e)
   {
     error(e);
     return true;
@@ -1234,7 +1234,7 @@ void cbmc_parseoptionst::preprocessing()
     error(e);
   }
 
-  catch(const std::string e)
+  catch(const std::string &e)
   {
     error(e);
   }
@@ -1666,7 +1666,7 @@ bool cbmc_parseoptionst::process_goto_program(
     return true;
   }
 
-  catch(const std::string e)
+  catch(const std::string &e)
   {
     error(e);
     return true;
