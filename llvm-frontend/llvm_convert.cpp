@@ -131,11 +131,7 @@ void llvm_convertert::convert_typedef(
 
   symbol.is_type = true;
 
-  if (context.move(symbol)) {
-    std::cerr << "Couldn't add symbol " << symbol.name
-              << " to symbol table" << std::endl;
-    abort();
-  }
+  move_symbol_to_context(symbol);
 
   if(current_function_name!= "")
     new_expr = code_skipt();
@@ -172,11 +168,7 @@ void llvm_convertert::convert_var(
   // We have to add the symbol before converting the initial assignment
   // because we might have something like 'int x = x + 1;' which is
   // completely wrong but allowed by the language
-  if (context.move(symbol)) {
-    std::cerr << "Couldn't add symbol " << symbol.name
-              << " to symbol table" << std::endl;
-    abort();
-  }
+  move_symbol_to_context(symbol);
 
   // Now get the symbol back to continue the conversion
   // The problem is that lookup returns a const symbolt,
@@ -252,11 +244,7 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   symbolst::iterator old_it=context.symbols.find(symbol.name);
   if(old_it==context.symbols.end())
   {
-    if (context.move(symbol)) {
-      std::cerr << "Couldn't add symbol " << symbol.name
-          << " to symbol table" << std::endl;
-      abort();
-    }
+    move_symbol_to_context(symbol);
   }
   else
   {
@@ -292,11 +280,7 @@ void llvm_convertert::convert_function_params(
   param.cmt_identifier(param_symbol.name.as_string());
   param.location() = param_symbol.location;
 
-  if (context.move(param_symbol)) {
-    std::cerr << "Couldn't add symbol " << param_symbol.name
-        << " to symbol table" << std::endl;
-    abort();
-  }
+  move_symbol_to_context(param_symbol);
 }
 
 void llvm_convertert::get_type(
@@ -982,6 +966,16 @@ std::string llvm_convertert::get_modulename_from_path()
 std::string llvm_convertert::get_filename_from_path()
 {
   return  boost::filesystem::path(current_path).filename().string();
+}
+
+void llvm_convertert::move_symbol_to_context(
+  symbolt& symbol)
+{
+  if (context.move(symbol)) {
+    std::cerr << "Couldn't add symbol " << symbol.name
+        << " to symbol table" << std::endl;
+    abort();
+  }
 }
 
 void llvm_convertert::check_symbol_redefinition(

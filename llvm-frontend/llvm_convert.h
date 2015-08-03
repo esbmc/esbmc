@@ -104,6 +104,8 @@ private:
   std::string get_filename_from_path();
   std::string get_modulename_from_path();
 
+  void move_symbol_to_context(symbolt &symbol);
+
   void check_symbol_redefinition(
     symbolt &old_symbol,
     symbolt &new_symbol);
