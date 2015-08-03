@@ -19,12 +19,12 @@ public:
   codet():exprt("code", typet("code"))
   {
   }
-  
+
   codet(const irep_idt &statement):exprt("code", typet("code"))
   {
     set_statement(statement);
   }
-  
+
   void set_statement(const irep_idt &statement)
   {
     this->statement(statement);
@@ -34,7 +34,7 @@ public:
   {
     return get("statement");
   }
-  
+
   codet &first_statement();
   const codet &first_statement() const;
   codet &last_statement();
@@ -89,12 +89,12 @@ public:
   {
     operands().resize(2);
   }
-  
+
   code_assignt(const exprt &lhs, const exprt &rhs):codet("assign")
   {
     copy_to_operands(lhs, rhs);
   }
-  
+
   exprt &lhs()
   {
     return op0();
@@ -135,17 +135,17 @@ public:
   {
     operands().reserve(2);
   }
-  
+
   explicit code_declt(const exprt &lhs):codet("decl")
   {
     copy_to_operands(lhs);
   }
-  
+
   code_declt(const exprt &lhs, const exprt &rhs):codet("decl")
   {
     copy_to_operands(lhs, rhs);
   }
-  
+
   exprt &lhs()
   {
     return op0();
@@ -232,7 +232,7 @@ public:
   {
     operands().reserve(3);
   }
-  
+
   const exprt &cond() const
   {
     return op0();
@@ -260,7 +260,7 @@ public:
     lhs().make_nil();
     op2().id("arguments");
   }
-  
+
   exprt &lhs()
   {
     return op0();
@@ -313,18 +313,18 @@ public:
   {
     operands().reserve(1);
   }
-  
+
   const exprt &return_value() const
   {
     return op0();
   }
-  
+
   exprt &return_value()
   {
     operands().resize(1);
     return op0();
   }
-  
+
   bool has_return_value() const
   {
     return operands().size()==1;
@@ -360,7 +360,7 @@ public:
   {
     return static_cast<const exprt &>(case_irep()).operands();
   }
-  
+
   const irep_idt &get_label() const
   {
     return get("label");
@@ -431,7 +431,7 @@ public:
   {
     operands().reserve(1);
   }
-  
+
   friend code_expressiont &to_code_expression(codet &code)
   {
     assert(code.get_statement()=="expression");
@@ -483,7 +483,7 @@ public:
     assert(expr.id()=="sideeffect");
     return static_cast<const side_effect_exprt &>(expr);
   }
-  
+
   const irep_idt &get_statement() const
   {
     return get("statement");
