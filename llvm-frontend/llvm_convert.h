@@ -89,6 +89,12 @@ private:
     typet type);
 
   void get_default_symbol(symbolt &symbol);
+  void get_default_symbol(
+    symbolt &symbol,
+    typet type,
+    std::string base_name,
+    std::string pretty_name);
+
   std::string get_var_name(std::string name, bool is_local);
   std::string get_param_name(std::string name);
 

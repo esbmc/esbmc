@@ -118,21 +118,17 @@ void llvm_convertert::convert_typedef(
   const clang::TypedefDecl &tdd,
   exprt &new_expr)
 {
-  symbolt symbol;
-  get_default_symbol(symbol);
-
-  clang::QualType q_type = tdd.getUnderlyingType();
-
   // Get type
   typet t;
-  get_type(q_type, t);
+  get_type(tdd.getUnderlyingType(), t);
 
-  symbol.type = t;
-  symbol.base_name = tdd.getName().str();
-  symbol.pretty_name =
-    symbol.module.as_string() + "::" + symbol.base_name.as_string();
-  symbol.name =
-    "c::" + symbol.module.as_string() + "::" + symbol.base_name.as_string();
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    t,
+    tdd.getName().str(),
+    get_modulename_from_path() + "::" + tdd.getName().str());
+
   symbol.is_type = true;
 
   if (context.move(symbol)) {
@@ -149,17 +145,15 @@ void llvm_convertert::convert_var(
   const clang::VarDecl &vd,
   exprt &new_expr)
 {
-  symbolt symbol;
-  get_default_symbol(symbol);
-
-  clang::QualType q_type = vd.getType();
-
   // Get type
   typet t;
-  get_type(q_type, t);
+  get_type(vd.getType(), t);
 
-  symbol.type = t;
-  symbol.base_name = vd.getName().str();
+  std::string identifier =
+    get_var_name(vd.getName().str(), vd.hasLocalStorage());
+
+  symbolt symbol;
+  get_default_symbol(symbol, t, vd.getName().str(), identifier);
 
   // This is not local, so has static lifetime
   if (!vd.hasLocalStorage())
@@ -170,12 +164,6 @@ void llvm_convertert::convert_var(
     // Add location to value since it is only added on get_expr
     symbol.value.location() = current_location;
   }
-
-  irep_idt identifier =
-    get_var_name(symbol.base_name.as_string(), vd.hasLocalStorage());
-
-  symbol.pretty_name = identifier;
-  symbol.name = "c::" + symbol.pretty_name.as_string();
 
   if (vd.hasExternalStorage())
     symbol.is_extern = true;
@@ -195,7 +183,7 @@ void llvm_convertert::convert_var(
   // so const_cast it to symbolt, so we can add the value
   // Maybe this could be avoided if we had an set_value method?
   symbolt &added_symbol =
-    const_cast<symbolt&>(ns.lookup("c::" + identifier.as_string()));
+    const_cast<symbolt&>(ns.lookup("c::" + identifier));
 
   code_declt decl;
   decl.operands().push_back(symbol_expr(added_symbol));
@@ -216,21 +204,7 @@ void llvm_convertert::convert_var(
 void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
 {
   std::string old_function_name = current_function_name;
-
-  symbolt symbol;
-  get_default_symbol(symbol);
-
-  symbol.base_name = fd.getName().str();
-  symbol.name = "c::" + symbol.base_name.as_string();
-  symbol.pretty_name = symbol.base_name.as_string();
-  symbol.lvalue = true;
-
   current_function_name = fd.getName().str();
-
-  // We need: a type, a name, and an optional body
-  clang::Stmt *body = NULL;
-  if (fd.isThisDeclarationADefinition() && fd.hasBody())
-    body = fd.getBody();
 
   // Build function's type
   code_typet type;
@@ -243,15 +217,27 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
-  if(body)
-  {
-    for (const auto &pdecl : fd.params()) {
-      code_typet::argumentt param = convert_function_params(pdecl);
-      type.arguments().push_back(param);
-    }
-
-    get_expr(*body, symbol.value);
+  for (const auto &pdecl : fd.params()) {
+    code_typet::argumentt param = convert_function_params(pdecl);
+    type.arguments().push_back(param);
   }
+
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    type,
+    fd.getName().str(),
+    fd.getName().str());
+
+  symbol.lvalue = true;
+
+  // We need: a type, a name, and an optional body
+  clang::Stmt *body = NULL;
+  if (fd.isThisDeclarationADefinition() && fd.hasBody())
+    body = fd.getBody();
+
+  if(body)
+    get_expr(*body, symbol.value);
 
   // Set the end location for functions, we get all the information
   // from the current location (file, line and function name) then
@@ -260,10 +246,6 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   end_location = current_location;
   end_location.set_line(sm->getSpellingLineNumber(fd.getLocEnd()));
   symbol.value.end_location(end_location);
-
-  // And the location
-  type.location() = symbol.location;
-  symbol.type = type;
 
   // see if we have it already
   symbolst::iterator old_it=context.symbols.find(symbol.name);
@@ -287,20 +269,17 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
 code_typet::argumentt llvm_convertert::convert_function_params(
   clang::ParmVarDecl *pdecl)
 {
-  symbolt param_symbol;
-  get_default_symbol(param_symbol);
-
-  const clang::QualType q_type = pdecl->getOriginalType();
   typet param_type;
-  get_type(q_type, param_type);
-
-  param_symbol.type = param_type;
+  get_type(pdecl->getOriginalType(), param_type);
 
   std::string name = pdecl->getName().str();
-  param_symbol.base_name = name;
-  param_symbol.pretty_name =
-    get_param_name(param_symbol.base_name.as_string());
-  param_symbol.name = "c::" + param_symbol.pretty_name.as_string();
+
+  symbolt param_symbol;
+  get_default_symbol(
+    param_symbol,
+    param_type,
+    name,
+    get_param_name(name));
 
   param_symbol.lvalue = true;
   param_symbol.file_local = true;
@@ -938,6 +917,19 @@ void llvm_convertert::get_default_symbol(symbolt& symbol)
   symbol.mode = "C";
   symbol.module = get_modulename_from_path();
   symbol.location = current_location;
+}
+
+void llvm_convertert::get_default_symbol(
+  symbolt& symbol,
+  typet type,
+  std::string base_name,
+  std::string pretty_name)
+{
+  get_default_symbol(symbol);
+  symbol.type = type;
+  symbol.base_name = base_name;
+  symbol.pretty_name = pretty_name;
+  symbol.name = "c::" + pretty_name;
 }
 
 std::string llvm_convertert::get_var_name(
