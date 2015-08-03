@@ -976,3 +976,32 @@ std::string llvm_convertert::get_filename_from_path()
 {
   return  boost::filesystem::path(current_path).filename().string();
 }
+
+void llvm_convertert::check_symbol_redefinition(
+  symbolt& old_symbol,
+  symbolt& new_symbol)
+{
+  if(old_symbol.type.is_code())
+  {
+    if(new_symbol.value.is_not_nil())
+    {
+      if(old_symbol.value.is_not_nil())
+      {
+        std::cerr << "multiple definition of `" << new_symbol.display_name()
+                  << "':" << std::endl << "first defined: "
+                  << old_symbol.location.as_string() << std::endl
+                  << "redefinition: " << new_symbol.location.as_string()
+                  << std::endl;
+        abort();
+      }
+      else
+      {
+        // overwrite location
+        old_symbol.location=new_symbol.location;
+
+        // move body
+        old_symbol.value.swap(new_symbol.value);
+      }
+    }
+  }
+}

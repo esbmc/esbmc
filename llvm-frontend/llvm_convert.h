@@ -96,6 +96,10 @@ private:
   void update_current_location(clang::SourceLocation source_location);
   std::string get_filename_from_path();
   std::string get_modulename_from_path();
+
+  void check_symbol_redefinition(
+    symbolt &old_symbol,
+    symbolt &new_symbol);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */
