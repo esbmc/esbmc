@@ -466,6 +466,12 @@ public:
     set_statement(statement);
   }
 
+  inline side_effect_exprt(const irep_idt &statement, const typet &_type)
+    : exprt("sideeffect", _type)
+  {
+    set_statement(statement);
+  }
+
   friend side_effect_exprt &to_side_effect_expr(exprt &expr)
   {
     assert(expr.id()=="sideeffect");

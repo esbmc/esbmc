@@ -112,6 +112,13 @@ public:
 
   inline unary_exprt(
     const irep_idt &_id,
+    const typet &_type):exprt(_id, _type)
+  {
+    operands().resize(1);
+  }
+
+  inline unary_exprt(
+    const irep_idt &_id,
     const exprt &_op,
     const typet &_type):
     exprt(_id, _type)
