@@ -340,7 +340,11 @@ void llvm_convertert::get_type(
       const clang::PointerType &pt =
         static_cast<const clang::PointerType &>(the_type);
       const clang::QualType &pointee = pt.getPointeeType();
-      get_type(pointee, new_type);
+
+      typet sub_type;
+      get_type(pointee, sub_type);
+
+      new_type = gen_pointer_type(sub_type);
       break;
     }
 
