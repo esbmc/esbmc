@@ -218,7 +218,8 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
   for (const auto &pdecl : fd.params()) {
-    code_typet::argumentt param = convert_function_params(pdecl);
+    code_typet::argumentt param;
+    convert_function_params(pdecl, param);
     type.arguments().push_back(param);
   }
 
@@ -266,8 +267,9 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   current_function_name = old_function_name;
 }
 
-code_typet::argumentt llvm_convertert::convert_function_params(
-  clang::ParmVarDecl *pdecl)
+void llvm_convertert::convert_function_params(
+  clang::ParmVarDecl *pdecl,
+  code_typet::argumentt &param)
 {
   typet param_type;
   get_type(pdecl->getOriginalType(), param_type);
@@ -285,19 +287,16 @@ code_typet::argumentt llvm_convertert::convert_function_params(
   param_symbol.file_local = true;
   param_symbol.is_actual = true;
 
-  code_typet::argumentt arg;
-  arg.type() = param_type;
-  arg.base_name(name);
-  arg.cmt_identifier(param_symbol.name.as_string());
-  arg.location() = param_symbol.location;
+  param.type() = param_type;
+  param.base_name(name);
+  param.cmt_identifier(param_symbol.name.as_string());
+  param.location() = param_symbol.location;
 
   if (context.move(param_symbol)) {
     std::cerr << "Couldn't add symbol " << param_symbol.name
         << " to symbol table" << std::endl;
     abort();
   }
-
-  return arg;
 }
 
 void llvm_convertert::get_type(
