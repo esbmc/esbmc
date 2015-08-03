@@ -265,10 +265,20 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   type.location() = symbol.location;
   symbol.type = type;
 
-  if (context.move(symbol)) {
-    std::cerr << "Couldn't add symbol " << symbol.name
-              << " to symbol table" << std::endl;
-    abort();
+  // see if we have it already
+  symbolst::iterator old_it=context.symbols.find(symbol.name);
+  if(old_it==context.symbols.end())
+  {
+    if (context.move(symbol)) {
+      std::cerr << "Couldn't add symbol " << symbol.name
+          << " to symbol table" << std::endl;
+      abort();
+    }
+  }
+  else
+  {
+    symbolt &old_symbol = old_it->second;
+    check_symbol_redefinition(old_symbol, symbol);
   }
 
   current_function_name = old_function_name;
