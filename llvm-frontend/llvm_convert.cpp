@@ -437,7 +437,8 @@ void llvm_convertert::get_expr(
 {
   update_current_location(stmt.getLocStart());
 
-  switch(stmt.getStmtClass()) {
+  switch(stmt.getStmtClass())
+  {
     case clang::Stmt::IntegerLiteralClass:
     {
       const clang::IntegerLiteral &integer =
@@ -557,7 +558,7 @@ void llvm_convertert::get_expr(
       const clang::CallExpr &function_call =
         static_cast<const clang::CallExpr &>(stmt);
 
-      const clang::Expr *callee = function_call.getCallee();
+      const clang::Stmt *callee = function_call.getCallee();
       exprt callee_expr;
       get_expr(*callee, callee_expr);
 
