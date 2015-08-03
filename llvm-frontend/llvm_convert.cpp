@@ -612,8 +612,15 @@ void llvm_convertert::get_expr(
     {
       const clang::ParenExpr& p =
         static_cast<const clang::ParenExpr &>(stmt);
-
       get_expr(*p.getSubExpr(), new_expr);
+      break;
+    }
+
+    case clang::Stmt::UnaryOperatorClass:
+    {
+      const clang::UnaryOperator &uniop =
+        static_cast<const clang::UnaryOperator &>(stmt);
+      get_unary_operator_expr(uniop, new_expr);
       break;
     }
 
