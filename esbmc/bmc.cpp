@@ -481,6 +481,12 @@ bool bmct::run_thread()
     return true;
   }
 
+  catch(std::bad_alloc&)
+  {
+    std::cout << "Out of memory" << std::endl;
+    return true;
+  }
+
   fine_timet symex_stop = current_time();
 
   std::ostringstream str;
@@ -589,6 +595,12 @@ bool bmct::run_thread()
   catch(const char *error_str)
   {
     error(error_str);
+    return true;
+  }
+
+  catch(std::bad_alloc&)
+  {
+    std::cout << "Out of memory" << std::endl;
     return true;
   }
 }
