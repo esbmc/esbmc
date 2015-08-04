@@ -730,6 +730,26 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::WhileStmtClass:
+    {
+      const clang::WhileStmt &while_stmt =
+        static_cast<const clang::WhileStmt &>(stmt);
+
+      exprt cond;
+      get_expr(*while_stmt.getCond(), cond);
+      gen_typecast(cond, bool_type());
+
+      codet body;
+      get_expr(*while_stmt.getBody(), body);
+
+      code_whilet code_while;
+      code_while.cond() = cond;
+      code_while.body() = body;
+
+      new_expr = code_while;
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
