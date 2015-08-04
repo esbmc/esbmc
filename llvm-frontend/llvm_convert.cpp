@@ -750,6 +750,46 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::ForStmtClass:
+    {
+      const clang::ForStmt &for_stmt =
+        static_cast<const clang::ForStmt &>(stmt);
+
+      codet init = code_skipt();
+      if(for_stmt.getInit())
+        get_expr(*for_stmt.getInit(), init);
+
+      exprt cond = true_exprt();
+      if(for_stmt.getCond())
+      {
+        get_expr(*for_stmt.getCond(), cond);
+        gen_typecast(cond, bool_type());
+      }
+
+      exprt inc = nil_exprt();
+      if(for_stmt.getInc())
+      {
+        exprt iter;
+        get_expr(*for_stmt.getInc(), iter);
+
+        // The increment should be a code_expressiont
+        inc = codet("expression");
+        inc.copy_to_operands(iter);
+      }
+
+      codet body;
+      get_expr(*for_stmt.getBody(), body);
+
+      code_fort code_for;
+      code_for.init() = init;
+      code_for.cond() = cond;
+      code_for.iter() = inc;
+      code_for.body() = body;
+
+      new_expr = code_for;
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
