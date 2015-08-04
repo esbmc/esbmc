@@ -187,6 +187,10 @@ void llvm_convertert::convert_var(
   }
 
   new_expr = decl;
+
+  // Save the variable address and name to the object map
+  std::size_t address = reinterpret_cast<std::size_t>(&vd);
+  object_map[address] = identifier;
 }
 
 void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
@@ -248,6 +252,10 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
     check_symbol_redefinition(old_symbol, symbol);
   }
 
+  // Save the function address and name to the object map
+  std::size_t address = reinterpret_cast<std::size_t>(&fd);
+  object_map[address] = fd.getName().str();
+
   current_function_name = old_function_name;
 }
 
@@ -277,6 +285,10 @@ void llvm_convertert::convert_function_params(
   param.location() = param_symbol.location;
 
   move_symbol_to_context(param_symbol);
+
+  // Save the function's param address and name to the object map
+  std::size_t address = reinterpret_cast<std::size_t>(pdecl);
+  object_map[address] = get_param_name(name);
 }
 
 void llvm_convertert::get_type(
@@ -742,17 +754,21 @@ void llvm_convertert::get_decl_expr(
       const clang::VarDecl &vd =
         static_cast<const clang::VarDecl&>(decl);
 
-      identifier = get_var_name(vd.getName().str(), vd.hasLocalStorage());
+      std::size_t address = reinterpret_cast<std::size_t>(&vd);
+      identifier = object_map.find(address)->second;
+
       get_type(vd.getType(), type);
       break;
     }
 
     case clang::Decl::ParmVar:
     {
-      const clang::VarDecl &vd =
-        static_cast<const clang::VarDecl&>(decl);
+      const clang::ParmVarDecl &vd =
+        static_cast<const clang::ParmVarDecl&>(decl);
 
-      identifier = get_param_name(vd.getName().str());
+      std::size_t address = reinterpret_cast<std::size_t>(&vd);
+      identifier = object_map.find(address)->second;
+
       get_type(vd.getType(), type);
       break;
     }
@@ -762,7 +778,16 @@ void llvm_convertert::get_decl_expr(
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
 
-      identifier = fd.getName().str();
+      std::size_t address = reinterpret_cast<std::size_t>(&fd);
+
+      // We may not find the function's symbol, because it was
+      // not defined or is undefined at all
+      object_mapst::iterator it = object_map.find(address);
+      if(it == object_map.end())
+        identifier = fd.getName().str();
+      else
+        identifier = it->second;
+
       get_type(fd.getType(), type);
       break;
     }

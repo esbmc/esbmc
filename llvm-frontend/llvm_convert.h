@@ -37,6 +37,9 @@ private:
   int current_scope;
   clang::SourceManager *sm;
 
+  typedef std::map<int, std::string> object_mapst;
+  object_mapst object_map;
+
   bool convert_top_level_decl();
 
   void convert_decl(
