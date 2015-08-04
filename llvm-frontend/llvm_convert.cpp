@@ -171,11 +171,7 @@ void llvm_convertert::convert_var(
   move_symbol_to_context(symbol);
 
   // Now get the symbol back to continue the conversion
-  // The problem is that lookup returns a const symbolt,
-  // so const_cast it to symbolt, so we can add the value
-  // Maybe this could be avoided if we had an set_value method?
-  symbolt &added_symbol =
-    const_cast<symbolt&>(ns.lookup("c::" + identifier));
+  symbolt &added_symbol = context.symbols.find("c::" + identifier)->second;
 
   code_declt decl;
   decl.operands().push_back(symbol_expr(added_symbol));
