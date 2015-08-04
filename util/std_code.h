@@ -251,6 +251,253 @@ extern inline code_ifthenelset &to_code_ifthenelse(codet &code)
   return static_cast<code_ifthenelset &>(code);
 }
 
+/*! \brief A `switch' instruction
+*/
+class code_switcht:public codet
+{
+public:
+  inline code_switcht():codet("switch")
+  {
+    operands().resize(2);
+  }
+
+  inline const exprt &value() const
+  {
+    return op0();
+  }
+
+  inline exprt &value()
+  {
+    return op0();
+  }
+
+  inline const codet &body() const
+  {
+    return to_code(op1());
+  }
+
+  inline codet &body()
+  {
+    return static_cast<codet &>(op1());
+  }
+};
+
+static inline const code_switcht &to_code_switch(const codet &code)
+{
+  assert(code.get_statement()=="switch" &&
+         code.operands().size()==2);
+  return static_cast<const code_switcht &>(code);
+}
+
+static inline code_switcht &to_code_switch(codet &code)
+{
+  assert(code.get_statement()=="switch" &&
+         code.operands().size()==2);
+  return static_cast<code_switcht &>(code);
+}
+
+/*! \brief A `while' instruction
+*/
+class code_whilet:public codet
+{
+public:
+  inline code_whilet():codet("while")
+  {
+    operands().resize(2);
+  }
+
+  inline const exprt &cond() const
+  {
+    return op0();
+  }
+
+  inline exprt &cond()
+  {
+    return op0();
+  }
+
+  inline const codet &body() const
+  {
+    return to_code(op1());
+  }
+
+  inline codet &body()
+  {
+    return static_cast<codet &>(op1());
+  }
+};
+
+static inline const code_whilet &to_code_while(const codet &code)
+{
+  assert(code.get_statement()=="while" &&
+         code.operands().size()==2);
+  return static_cast<const code_whilet &>(code);
+}
+
+static inline code_whilet &to_code_while(codet &code)
+{
+  assert(code.get_statement()=="while" &&
+         code.operands().size()==2);
+  return static_cast<code_whilet &>(code);
+}
+
+/*! \brief A `do while' instruction
+*/
+class code_dowhilet:public codet
+{
+public:
+  inline code_dowhilet():codet("dowhile")
+  {
+    operands().resize(2);
+  }
+
+  inline const exprt &cond() const
+  {
+    return op0();
+  }
+
+  inline exprt &cond()
+  {
+    return op0();
+  }
+
+  inline const codet &body() const
+  {
+    return to_code(op1());
+  }
+
+  inline codet &body()
+  {
+    return static_cast<codet &>(op1());
+  }
+};
+
+static inline const code_dowhilet &to_code_dowhile(const codet &code)
+{
+  assert(code.get_statement()=="dowhile" &&
+         code.operands().size()==2);
+  return static_cast<const code_dowhilet &>(code);
+}
+
+static inline code_dowhilet &to_code_dowhile(codet &code)
+{
+  assert(code.get_statement()=="dowhile" &&
+         code.operands().size()==2);
+  return static_cast<code_dowhilet &>(code);
+}
+
+/*! \brief A `for' instruction
+*/
+class code_fort:public codet
+{
+public:
+  inline code_fort():codet("for")
+  {
+    operands().resize(4);
+  }
+
+  // nil or a statement
+  inline const exprt &init() const
+  {
+    return op0();
+  }
+
+  inline exprt &init()
+  {
+    return op0();
+  }
+
+  inline const exprt &cond() const
+  {
+    return op1();
+  }
+
+  inline exprt &cond()
+  {
+    return op1();
+  }
+
+  inline const exprt &iter() const
+  {
+    return op2();
+  }
+
+  inline exprt &iter()
+  {
+    return op2();
+  }
+
+  inline const codet &body() const
+  {
+    return to_code(op3());
+  }
+
+  inline codet &body()
+  {
+    return static_cast<codet &>(op3());
+  }
+};
+
+static inline const code_fort &to_code_for(const codet &code)
+{
+  assert(code.get_statement()=="for" &&
+         code.operands().size()==4);
+  return static_cast<const code_fort &>(code);
+}
+
+static inline code_fort &to_code_for(codet &code)
+{
+  assert(code.get_statement()=="for" &&
+         code.operands().size()==4);
+  return static_cast<code_fort &>(code);
+}
+
+/*! \brief A `goto' instruction
+*/
+class code_gotot:public codet
+{
+public:
+  inline code_gotot():codet("goto")
+  {
+  }
+
+  explicit inline code_gotot(const irep_idt &label):codet("goto")
+  {
+    set_destination(label);
+  }
+
+  void set_destination(const irep_idt &label)
+  {
+    set("destination", label);
+  }
+
+  const irep_idt &get_destination() const
+  {
+    return get("destination");
+  }
+};
+
+static inline const code_gotot &to_code_goto(const codet &code)
+{
+  assert(code.get_statement()=="goto" &&
+         code.operands().empty());
+  return static_cast<const code_gotot &>(code);
+}
+
+static inline code_gotot &to_code_goto(codet &code)
+{
+  assert(code.get_statement()=="goto" &&
+         code.operands().empty());
+  return static_cast<code_gotot &>(code);
+}
+
+/*! \brief A function call
+
+    The function call instruction has three operands.
+    The first is the expression that is used to store
+    the return value. The second is the function called.
+    The third is a vector of argument values.
+*/
 class code_function_callt:public codet
 {
 public:
