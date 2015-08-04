@@ -232,14 +232,6 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   if(body)
     get_expr(*body, symbol.value);
 
-  // Set the end location for functions, we get all the information
-  // from the current location (file, line and function name) then
-  // we change the line number
-  locationt end_location;
-  end_location = current_location;
-  end_location.set_line(sm->getSpellingLineNumber(fd.getLocEnd()));
-  symbol.value.end_location(end_location);
-
   // see if we have it already
   symbolst::iterator old_it=context.symbols.find(symbol.name);
   if(old_it==context.symbols.end())
@@ -496,6 +488,16 @@ void llvm_convertert::get_expr(
         get_expr(*stmt, statement);
         block.operands().push_back(statement);
       }
+
+      // Set the end location for blocks, we get all the information
+      // from the current location (file, line and function name) then
+      // we change the line number
+      locationt end_location;
+      end_location = current_location;
+      end_location.set_line(
+        sm->getSpellingLineNumber(compound_stmt.getLocEnd()));
+      block.end_location(end_location);
+
       new_expr = block;
 
       --current_scope;
