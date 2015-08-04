@@ -678,6 +678,14 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::OpaqueValueExprClass:
+    {
+      const clang::OpaqueValueExpr &opaque_expr =
+        static_cast<const clang::OpaqueValueExpr &>(stmt);
+      get_expr(*opaque_expr.getSourceExpr(), new_expr);
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
