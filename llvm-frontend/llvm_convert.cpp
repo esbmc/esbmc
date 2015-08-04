@@ -750,6 +750,26 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::DoStmtClass:
+    {
+      const clang::DoStmt &do_stmt =
+        static_cast<const clang::DoStmt &>(stmt);
+
+      exprt cond;
+      get_expr(*do_stmt.getCond(), cond);
+      gen_typecast(cond, bool_type());
+
+      codet body;
+      get_expr(*do_stmt.getBody(), body);
+
+      code_dowhilet code_while;
+      code_while.cond() = cond;
+      code_while.body() = body;
+
+      new_expr = code_while;
+      break;
+    }
+
     case clang::Stmt::ForStmtClass:
     {
       const clang::ForStmt &for_stmt =
