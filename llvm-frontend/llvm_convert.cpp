@@ -674,6 +674,42 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    // This is the gcc's ternary if extension
+    case clang::Stmt::BinaryConditionalOperatorClass:
+    {
+      const clang::BinaryConditionalOperator &ternary_if =
+        static_cast<const clang::BinaryConditionalOperator &>(stmt);
+
+      exprt cond;
+      // For some strange reason, the cond is wrapped around an integer
+      // typecast, don't really know why, so ignore it
+      if(ternary_if.getCond()->getStmtClass() == clang::Stmt::CStyleCastExprClass
+          || ternary_if.getCond()->getStmtClass() == clang::Stmt::ImplicitCastExprClass)
+      {
+        const clang::CastExpr &cast =
+            static_cast<const clang::CastExpr &>(*ternary_if.getCond());
+        get_expr(*cast.getSubExpr(), cond);
+      }
+      else
+        get_expr(*ternary_if.getCond(), cond);
+
+      // If the condition is not of boolean type, it must be casted
+      gen_typecast(cond, bool_type());
+
+      exprt then;
+      get_expr(*ternary_if.getTrueExpr(), then);
+
+      exprt if_expr("if", bool_type());
+      if_expr.copy_to_operands(cond, then);
+
+      exprt else_expr;
+      get_expr(*ternary_if.getFalseExpr(), else_expr);
+      if_expr.copy_to_operands(else_expr);
+
+      new_expr = if_expr;
+      break;
+    }
+
     case clang::Stmt::OpaqueValueExprClass:
     {
       const clang::OpaqueValueExpr &opaque_expr =
