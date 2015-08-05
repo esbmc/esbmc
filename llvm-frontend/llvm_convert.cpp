@@ -330,6 +330,28 @@ void llvm_convertert::get_type(
     case clang::Type::FunctionProto:
       break;
 
+    case clang::Type::ConstantArray:
+    {
+      const clang::ConstantArrayType &arr =
+        static_cast<const clang::ConstantArrayType &>(the_type);
+
+      llvm::APInt val = arr.getSize();
+      assert(val.getBitWidth() <= 64 && "Too large an integer found, sorry");
+
+      typet the_type;
+      get_type(arr.getElementType(), the_type);
+
+      exprt bval;
+      get_size_exprt(val, bval, signedbv_typet());
+
+      array_typet type;
+      type.size() = bval;
+      type.subtype() = the_type;
+
+      new_type = type;
+      break;
+    }
+
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
