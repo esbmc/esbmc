@@ -102,6 +102,11 @@ private:
   std::string get_var_name(std::string name, bool is_local);
   std::string get_param_name(std::string name);
 
+  void get_size_exprt(
+    llvm::APInt &val,
+    exprt &expr,
+    typet type);
+
   void set_source_manager(clang::SourceManager &source_manager);
   void update_current_location(clang::SourceLocation source_location);
   std::string get_filename_from_path();

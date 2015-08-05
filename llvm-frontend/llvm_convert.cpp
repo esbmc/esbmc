@@ -456,13 +456,7 @@ void llvm_convertert::get_expr(
       assert(the_type.is_unsignedbv() || the_type.is_signedbv());
 
       exprt bval;
-      if (the_type.is_unsignedbv()) {
-        uint64_t the_val = val.getZExtValue();
-        convert_integer_literal(integer2string(the_val) + "u", bval, 10);
-      } else {
-        int64_t the_val = val.getSExtValue();
-        convert_integer_literal(integer2string(the_val), bval, 10);
-      }
+      get_size_exprt(val, bval, the_type);
 
       new_expr.swap(bval);
       break;
@@ -1274,6 +1268,28 @@ std::string llvm_convertert::get_param_name(std::string name)
   pretty_name += name;
 
   return pretty_name;
+}
+
+void llvm_convertert::get_size_exprt(
+  llvm::APInt &val,
+  exprt &expr,
+  typet type)
+{
+  if (type.is_unsignedbv())
+  {
+    uint64_t the_val = val.getZExtValue();
+    convert_integer_literal(integer2string(the_val) + "u", expr, 10);
+  }
+  else if(type.is_signedbv())
+  {
+    int64_t the_val = val.getSExtValue();
+    convert_integer_literal(integer2string(the_val), expr, 10);
+  }
+  else
+  {
+    // This method should only be used to convert integer values
+    abort();
+  }
 }
 
 void llvm_convertert::set_source_manager(
