@@ -902,6 +902,22 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::DefaultStmtClass:
+    {
+      const clang::DefaultStmt &default_stmt =
+        static_cast<const clang::DefaultStmt &>(stmt);
+
+      exprt sub_stmt;
+      get_expr(*default_stmt.getSubStmt(), sub_stmt);
+
+      codet label("label");
+      label.set("default", true);
+      label.copy_to_operands(sub_stmt);
+
+      new_expr = label;
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
