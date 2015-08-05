@@ -338,6 +338,9 @@ void goto_convertt::convert_block(
 
     if(code_it.get_statement()=="decl")
     {
+      // TODO: This should be removed when the LLVM code
+      // is enable by default, as all the decl are wrapped
+      // inside a decl-block
       const exprt &op0=code_it.op0();
       assert(op0.id()=="symbol");
       const irep_idt &identifier=op0.identifier();
@@ -346,6 +349,20 @@ void goto_convertt::convert_block(
       if(!symbol.static_lifetime &&
          !symbol.type.is_code())
         locals.push_back(identifier);
+    }
+    else if(code_it.get_statement()=="decl-block")
+    {
+      forall_operands(it, code_it)
+      {
+        const exprt &op0=it->op0();
+        assert(op0.id()=="symbol");
+        const irep_idt &identifier=op0.identifier();
+        const symbolt &symbol=lookup(identifier);
+
+        if(!symbol.static_lifetime &&
+           !symbol.type.is_code())
+          locals.push_back(identifier);
+      }
     }
 
     goto_programt tmp;
