@@ -654,7 +654,7 @@ extern inline code_breakt &to_code_break(codet &code)
 class code_continuet:public codet
 {
 public:
-  code_continuet():codet("break")
+  code_continuet():codet("continue")
   {
   }
 };
