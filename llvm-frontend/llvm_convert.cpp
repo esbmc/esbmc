@@ -880,6 +880,28 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::CaseStmtClass:
+    {
+      const clang::CaseStmt &case_stmt =
+        static_cast<const clang::CaseStmt &>(stmt);
+
+      exprt value;
+      get_expr(*case_stmt.getLHS(), value);
+
+      exprt sub_stmt;
+      get_expr(*case_stmt.getSubStmt(), sub_stmt);
+
+      codet label("label");
+
+      exprt &case_ops=label.add_expr("case");
+      case_ops.copy_to_operands(value);
+
+      label.copy_to_operands(sub_stmt);
+
+      new_expr = label;
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
