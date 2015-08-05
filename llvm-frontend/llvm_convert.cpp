@@ -169,19 +169,18 @@ void llvm_convertert::convert_var(
     abort();
   }
 
-  // This is not local, so has static lifetime
-  if (!vd.hasLocalStorage())
-  {
-    symbol.static_lifetime = true;
-    symbol.value = gen_zero(t);
+  // Initialize with zero value, if the symbol has initial value,
+  // it will be add later on this method
+  symbol.value = gen_zero(t);
 
-    // Add location to value since it is only added on get_expr
-    symbol.value.location() = current_location;
-  }
+  // Add location to value since it is only added on get_expr
+  symbol.value.location() = current_location;
 
   if (vd.hasExternalStorage())
     symbol.is_extern = true;
+
   symbol.lvalue = true;
+  symbol.static_lifetime = !vd.hasLocalStorage();
 
   // We have to add the symbol before converting the initial assignment
   // because we might have something like 'int x = x + 1;' which is
