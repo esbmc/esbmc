@@ -883,12 +883,6 @@ void llvm_convertert::get_expr(
       break;
     }
 
-    case clang::Stmt::NullStmtClass:
-    {
-      new_expr = code_skipt();
-      break;
-    }
-
     case clang::Stmt::GotoStmtClass:
     {
       const clang::GotoStmt &goto_stmt =
@@ -983,6 +977,14 @@ void llvm_convertert::get_expr(
       new_expr = inits;
       break;
     }
+
+    case clang::Stmt::NullStmtClass:
+
+    // Apparently, esbmc ignores assembly
+    case clang::Stmt::GCCAsmStmtClass:
+    case clang::Stmt::MSAsmStmtClass:
+      new_expr = code_skipt();
+      break;
 
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
