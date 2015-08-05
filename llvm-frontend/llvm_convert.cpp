@@ -958,6 +958,32 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::InitListExprClass:
+    {
+      const clang::InitListExpr &init_stmt =
+        static_cast<const clang::InitListExpr &>(stmt);
+
+      typet t;
+      get_type(init_stmt.getType(), t);
+
+      constant_exprt inits(t);
+      unsigned int num = init_stmt.getNumInits();
+      if(t.is_array())
+      {
+        for (unsigned int i = 0; i < num; i++)
+        {
+          exprt init;
+          get_expr(*init_stmt.getInit(i), init);
+          inits.operands().push_back(init);
+        }
+      }
+      else
+        abort();
+
+      new_expr = inits;
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
