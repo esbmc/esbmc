@@ -235,7 +235,8 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
-  for (const auto &pdecl : fd.params()) {
+  for (const auto &pdecl : fd.params())
+  {
     code_typet::argumentt param;
     convert_function_params(pdecl, param);
     type.arguments().push_back(param);
