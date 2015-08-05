@@ -376,6 +376,25 @@ void llvm_convertert::get_type(
       break;
     }
 
+    case clang::Type::VariableArray:
+    {
+      const clang::VariableArrayType &arr =
+        static_cast<const clang::VariableArrayType &>(the_type);
+
+      exprt size_expr;
+      get_expr(*arr.getSizeExpr(), size_expr);
+
+      typet the_type;
+      get_type(arr.getElementType(), the_type);
+
+      array_typet type;
+      type.size() = size_expr;
+      type.subtype() = the_type;
+
+      new_type = type;
+      break;
+    }
+
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
