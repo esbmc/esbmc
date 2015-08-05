@@ -517,59 +517,6 @@ void llvm_convertert::get_expr(
       break;
     }
 
-    case clang::Stmt::CompoundStmtClass:
-    {
-      const clang::CompoundStmt &compound_stmt =
-        static_cast<const clang::CompoundStmt &>(stmt);
-
-      code_blockt block;
-      for (const auto &stmt : compound_stmt.body()) {
-        exprt statement;
-        get_expr(*stmt, statement);
-
-        // Before push the expr to the block, we must check if
-        // the code is an codet, e.g., sideeffects are exprts
-        // and must be converted
-        convert_exprt_inside_block(statement);
-
-        block.operands().push_back(statement);
-      }
-
-      // Set the end location for blocks, we get all the information
-      // from the current location (file, line and function name) then
-      // we change the line number
-      locationt end_location;
-      end_location = current_location;
-      end_location.set_line(
-        sm->getSpellingLineNumber(compound_stmt.getLocEnd()));
-      block.end_location(end_location);
-
-      new_expr = block;
-      break;
-    }
-
-    case clang::Stmt::DeclStmtClass:
-    {
-      const clang::DeclStmt &decl =
-        static_cast<const clang::DeclStmt&>(stmt);
-
-      const auto &declgroup = decl.getDeclGroup();
-
-      codet decls("decl-block");
-      for (clang::DeclGroupRef::const_iterator
-        it = declgroup.begin();
-        it != declgroup.end();
-        it++)
-      {
-        exprt single_decl;
-        convert_decl(**it, single_decl);
-        decls.operands().push_back(single_decl);
-      }
-
-      new_expr = decls;
-      break;
-    }
-
     case clang::Stmt::BinaryOperatorClass:
     {
       const clang::BinaryOperator &binop =
@@ -587,22 +534,6 @@ void llvm_convertert::get_expr(
         static_cast<const clang::Decl&>(*decl.getDecl());
 
       get_decl_expr(dcl, new_expr);
-      break;
-    }
-
-    case clang::Stmt::ReturnStmtClass:
-    {
-      const clang::ReturnStmt &ret =
-        static_cast<const clang::ReturnStmt&>(stmt);
-
-      const clang::Expr &retval = *ret.getRetValue();
-      exprt val;
-      get_expr(retval, val);
-
-      code_returnt ret_expr;
-      ret_expr.return_value() = val;
-
-      new_expr = ret_expr;
       break;
     }
 
@@ -666,31 +597,6 @@ void llvm_convertert::get_expr(
       const clang::UnaryOperator &uniop =
         static_cast<const clang::UnaryOperator &>(stmt);
       get_unary_operator_expr(uniop, new_expr);
-      break;
-    }
-
-    case clang::Stmt::IfStmtClass:
-    {
-      const clang::IfStmt &ifstmt =
-        static_cast<const clang::IfStmt &>(stmt);
-
-      exprt cond;
-      get_expr(*ifstmt.getCond(), cond);
-
-      exprt then;
-      get_expr(*ifstmt.getThen(), then);
-
-      codet if_expr("ifthenelse");
-      if_expr.copy_to_operands(cond, then);
-
-      if(ifstmt.getElse())
-      {
-        exprt else_expr;
-        get_expr(*ifstmt.getElse(), else_expr);
-        if_expr.copy_to_operands(else_expr);
-      }
-
-      new_expr = if_expr;
       break;
     }
 
@@ -775,6 +681,216 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::InitListExprClass:
+    {
+      const clang::InitListExpr &init_stmt =
+        static_cast<const clang::InitListExpr &>(stmt);
+
+      typet t;
+      get_type(init_stmt.getType(), t);
+
+      constant_exprt inits(t);
+      unsigned int num = init_stmt.getNumInits();
+      if(t.is_array())
+      {
+        for (unsigned int i = 0; i < num; i++)
+        {
+          exprt init;
+          get_expr(*init_stmt.getInit(i), init);
+          inits.operands().push_back(init);
+        }
+      }
+      else
+        abort();
+
+      new_expr = inits;
+      break;
+    }
+
+    /*
+       The following enum values are the basic elements of a program,
+       defined on the Stmt class
+    */
+
+    // Declaration of variables, it is created as a decl-block to
+    // allow declarations like int a,b;
+    case clang::Stmt::DeclStmtClass:
+    {
+      const clang::DeclStmt &decl =
+        static_cast<const clang::DeclStmt&>(stmt);
+
+      const auto &declgroup = decl.getDeclGroup();
+
+      codet decls("decl-block");
+      for (clang::DeclGroupRef::const_iterator
+        it = declgroup.begin();
+        it != declgroup.end();
+        it++)
+      {
+        exprt single_decl;
+        convert_decl(**it, single_decl);
+        decls.operands().push_back(single_decl);
+      }
+
+      new_expr = decls;
+      break;
+    }
+
+    // A NULL statement, we ignore it. An example is a lost semicolon on
+    // the program
+    case clang::Stmt::NullStmtClass:
+      break;
+
+    // A compound statement is a scope. The detail here is that all exprt
+    // added to its operands must be an codet. THIS IS REQUIRED FOR THE GOTO
+    // CONVERSION TO WORK :/
+    case clang::Stmt::CompoundStmtClass:
+    {
+      const clang::CompoundStmt &compound_stmt =
+        static_cast<const clang::CompoundStmt &>(stmt);
+
+      code_blockt block;
+      for (const auto &stmt : compound_stmt.body()) {
+        exprt statement;
+        get_expr(*stmt, statement);
+
+        // Before push the expr to the block, we must check if
+        // the code is an codet, e.g., sideeffects are exprts
+        // and must be converted
+        convert_exprt_inside_block(statement);
+
+        block.operands().push_back(statement);
+      }
+
+      // Set the end location for blocks, we get all the information
+      // from the current location (file, line and function name) then
+      // we change the line number
+      locationt end_location;
+      end_location = current_location;
+      end_location.set_line(
+        sm->getSpellingLineNumber(compound_stmt.getLocEnd()));
+      block.end_location(end_location);
+
+      new_expr = block;
+      break;
+    }
+
+    // A case statement inside a switch. The detail here is that we
+    // construct it as a label
+    case clang::Stmt::CaseStmtClass:
+    {
+      const clang::CaseStmt &case_stmt =
+        static_cast<const clang::CaseStmt &>(stmt);
+
+      exprt value;
+      get_expr(*case_stmt.getLHS(), value);
+
+      exprt sub_stmt;
+      get_expr(*case_stmt.getSubStmt(), sub_stmt);
+
+      codet label("label");
+
+      exprt &case_ops=label.add_expr("case");
+      case_ops.copy_to_operands(value);
+
+      label.copy_to_operands(sub_stmt);
+
+      new_expr = label;
+      break;
+    }
+
+    // A default statement inside a switch. Same as before, we construct
+    // as a label, the difference is that we set default to true
+    case clang::Stmt::DefaultStmtClass:
+    {
+      const clang::DefaultStmt &default_stmt =
+        static_cast<const clang::DefaultStmt &>(stmt);
+
+      exprt sub_stmt;
+      get_expr(*default_stmt.getSubStmt(), sub_stmt);
+
+      codet label("label");
+      label.set("default", true);
+      label.copy_to_operands(sub_stmt);
+
+      new_expr = label;
+      break;
+    }
+
+    // A label on the program
+    case clang::Stmt::LabelStmtClass:
+    {
+      const clang::LabelStmt &label_stmt =
+        static_cast<const clang::LabelStmt &>(stmt);
+
+      exprt sub_stmt;
+      get_expr(*label_stmt.getSubStmt(), sub_stmt);
+
+      codet label("label");
+      label.add("label") = irept(label_stmt.getName());
+      label.copy_to_operands(sub_stmt);
+
+      new_expr = label;
+      break;
+    }
+
+    // No idea when this AST is created
+    case clang::Stmt::AttributedStmtClass:
+      abort();
+      break;
+
+    // An if then else statement. The else statement may not
+    // exist, so we must check before constructing its exprt.
+    // We always to try to cast its condition to bool
+    case clang::Stmt::IfStmtClass:
+    {
+      const clang::IfStmt &ifstmt =
+        static_cast<const clang::IfStmt &>(stmt);
+
+      exprt cond;
+      get_expr(*ifstmt.getCond(), cond);
+      gen_typecast(cond, bool_type());
+
+      exprt then;
+      get_expr(*ifstmt.getThen(), then);
+
+      codet if_expr("ifthenelse");
+      if_expr.copy_to_operands(cond, then);
+
+      if(ifstmt.getElse())
+      {
+        exprt else_expr;
+        get_expr(*ifstmt.getElse(), else_expr);
+        if_expr.copy_to_operands(else_expr);
+      }
+
+      new_expr = if_expr;
+      break;
+    }
+
+    // A switch statement.
+    // TODO: Should its condition be casted to integer?
+    case clang::Stmt::SwitchStmtClass:
+    {
+      const clang::SwitchStmt &switch_stmt =
+        static_cast<const clang::SwitchStmt &>(stmt);
+
+      exprt value;
+      get_expr(*switch_stmt.getCond(), value);
+
+      codet body;
+      get_expr(*switch_stmt.getBody(), body);
+
+      code_switcht switch_code;
+      switch_code.value() = value;
+      switch_code.body() = body;
+
+      new_expr = switch_code;
+      break;
+    }
+
+    // A while statement. Even if its body is empty, an CompoundStmt
+    // is generated for it. We always try to cast its condition to bool
     case clang::Stmt::WhileStmtClass:
     {
       const clang::WhileStmt &while_stmt =
@@ -795,6 +911,8 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    // A dowhile statement. Even if its body is empty, an CompoundStmt
+    // is generated for it. We always try to cast its condition to bool
     case clang::Stmt::DoStmtClass:
     {
       const clang::DoStmt &do_stmt =
@@ -815,6 +933,10 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    // A For statement. Even if its body is empty, an CompoundStmt
+    // is generated for it. We always try to cast its condition to bool.
+    // Its parameters might be empty, so we have to check them all before
+    // converting
     case clang::Stmt::ForStmtClass:
     {
       const clang::ForStmt &for_stmt =
@@ -855,34 +977,7 @@ void llvm_convertert::get_expr(
       break;
     }
 
-    case clang::Stmt::BreakStmtClass:
-    {
-      new_expr = code_breakt();
-      break;
-    }
-
-    case clang::Stmt::ContinueStmtClass:
-    {
-      new_expr = code_continuet();
-      break;
-    }
-
-    case clang::Stmt::LabelStmtClass:
-    {
-      const clang::LabelStmt &label_stmt =
-        static_cast<const clang::LabelStmt &>(stmt);
-
-      exprt sub_stmt;
-      get_expr(*label_stmt.getSubStmt(), sub_stmt);
-
-      codet label("label");
-      label.add("label") = irept(label_stmt.getName());
-      label.copy_to_operands(sub_stmt);
-
-      new_expr = label;
-      break;
-    }
-
+    // a goto instruction to a label
     case clang::Stmt::GotoStmtClass:
     {
       const clang::GotoStmt &goto_stmt =
@@ -895,92 +990,39 @@ void llvm_convertert::get_expr(
       break;
     }
 
-    case clang::Stmt::SwitchStmtClass:
+    // No idea when this AST is created
+    case clang::Stmt::IndirectGotoStmtClass:
+      abort();
+      break;
+
+    // A continue statement
+    case clang::Stmt::ContinueStmtClass:
+      new_expr = code_continuet();
+      break;
+
+    // A break statement
+    case clang::Stmt::BreakStmtClass:
+      new_expr = code_breakt();
+      break;
+
+    // A return statement
+    case clang::Stmt::ReturnStmtClass:
     {
-      const clang::SwitchStmt &switch_stmt =
-        static_cast<const clang::SwitchStmt &>(stmt);
+      const clang::ReturnStmt &ret =
+        static_cast<const clang::ReturnStmt&>(stmt);
 
-      exprt value;
-      get_expr(*switch_stmt.getCond(), value);
+      const clang::Expr &retval = *ret.getRetValue();
+      exprt val;
+      get_expr(retval, val);
 
-      codet body;
-      get_expr(*switch_stmt.getBody(), body);
+      code_returnt ret_expr;
+      ret_expr.return_value() = val;
 
-      code_switcht switch_code;
-      switch_code.value() = value;
-      switch_code.body() = body;
-
-      new_expr = switch_code;
+      new_expr = ret_expr;
       break;
     }
 
-    case clang::Stmt::CaseStmtClass:
-    {
-      const clang::CaseStmt &case_stmt =
-        static_cast<const clang::CaseStmt &>(stmt);
-
-      exprt value;
-      get_expr(*case_stmt.getLHS(), value);
-
-      exprt sub_stmt;
-      get_expr(*case_stmt.getSubStmt(), sub_stmt);
-
-      codet label("label");
-
-      exprt &case_ops=label.add_expr("case");
-      case_ops.copy_to_operands(value);
-
-      label.copy_to_operands(sub_stmt);
-
-      new_expr = label;
-      break;
-    }
-
-    case clang::Stmt::DefaultStmtClass:
-    {
-      const clang::DefaultStmt &default_stmt =
-        static_cast<const clang::DefaultStmt &>(stmt);
-
-      exprt sub_stmt;
-      get_expr(*default_stmt.getSubStmt(), sub_stmt);
-
-      codet label("label");
-      label.set("default", true);
-      label.copy_to_operands(sub_stmt);
-
-      new_expr = label;
-      break;
-    }
-
-    case clang::Stmt::InitListExprClass:
-    {
-      const clang::InitListExpr &init_stmt =
-        static_cast<const clang::InitListExpr &>(stmt);
-
-      typet t;
-      get_type(init_stmt.getType(), t);
-
-      constant_exprt inits(t);
-      unsigned int num = init_stmt.getNumInits();
-      if(t.is_array())
-      {
-        for (unsigned int i = 0; i < num; i++)
-        {
-          exprt init;
-          get_expr(*init_stmt.getInit(i), init);
-          inits.operands().push_back(init);
-        }
-      }
-      else
-        abort();
-
-      new_expr = inits;
-      break;
-    }
-
-    case clang::Stmt::NullStmtClass:
-
-    // Apparently, esbmc ignores assembly
+    // GCC or MS Assembly instruction. We ignore them
     case clang::Stmt::GCCAsmStmtClass:
     case clang::Stmt::MSAsmStmtClass:
       new_expr = code_skipt();
