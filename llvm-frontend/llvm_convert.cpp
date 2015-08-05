@@ -11,6 +11,7 @@
 #include <std_expr.h>
 #include <expr_util.h>
 #include <mp_arith.h>
+#include <arith_tools.h>
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/convert_integer_literal.h>
@@ -198,6 +199,19 @@ void llvm_convertert::convert_var(
     const clang::Expr *value = vd.getInit();
     exprt val;
     get_expr(*value, val);
+
+    // If the symbol is an array, we must initialize all
+    // uninitialized positions to zero
+    if(t.is_array())
+    {
+      BigInt size;
+      to_integer(to_array_type(t).size(), size);
+
+      for(BigInt curr_size = val.operands().size() - 1;
+          curr_size < (size - 1);
+          ++curr_size)
+        val.operands().push_back(gen_zero(t.subtype()));
+    }
 
     added_symbol.value = val;
     decl.operands().push_back(val);
