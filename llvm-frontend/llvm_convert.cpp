@@ -726,6 +726,25 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::ArraySubscriptExprClass:
+    {
+      const clang::ArraySubscriptExpr &arr =
+        static_cast<const clang::ArraySubscriptExpr &>(stmt);
+
+      typet t;
+      get_type(arr.getType(), t);
+      t.dump();
+
+      exprt array;
+      get_expr(*arr.getLHS(), array);
+
+      exprt pos;
+      get_expr(*arr.getRHS(), pos);
+
+      new_expr = index_exprt(array, pos, t);
+      break;
+    }
+
     /*
        The following enum values are the basic elements of a program,
        defined on the Stmt class
