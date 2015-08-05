@@ -124,6 +124,7 @@ void llvm_convertert::convert_typedef(
     get_modulename_from_path() + "::" + tdd.getName().str());
 
   symbol.is_type = true;
+  symbol.is_macro = true;
 
   move_symbol_to_context(symbol);
 
@@ -1029,6 +1030,7 @@ void llvm_convertert::get_decl_expr(
   new_expr = exprt("symbol", type);
   new_expr.identifier("c::" + identifier);
   new_expr.name(identifier);
+  new_expr.lvalue(true);
 }
 
 void llvm_convertert::get_cast_expr(
