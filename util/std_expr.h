@@ -354,7 +354,7 @@ public:
     const exprt &_array,
     const exprt &_index,
     const typet &_type):
-    exprt("index", _type)
+    exprt(exprt::index, _type)
   {
     copy_to_operands(_array, _index);
   }
