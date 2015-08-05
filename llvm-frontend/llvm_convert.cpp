@@ -846,6 +846,18 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::GotoStmtClass:
+    {
+      const clang::GotoStmt &goto_stmt =
+        static_cast<const clang::GotoStmt &>(stmt);
+
+      code_gotot code_goto;
+      code_goto.set_destination(goto_stmt.getLabel()->getName().str());
+
+      new_expr = code_goto;
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
