@@ -101,6 +101,7 @@ void llvm_convertert::convert_decl(
     default:
       std::cerr << "Unrecognized / unimplemented decl type ";
       std::cerr << decl.getDeclKindName() << std::endl;
+      decl.dumpColor();
       abort();
   }
 
@@ -857,6 +858,25 @@ void llvm_convertert::get_expr(
       code_goto.set_destination(goto_stmt.getLabel()->getName().str());
 
       new_expr = code_goto;
+      break;
+    }
+
+    case clang::Stmt::SwitchStmtClass:
+    {
+      const clang::SwitchStmt &switch_stmt =
+        static_cast<const clang::SwitchStmt &>(stmt);
+
+      exprt value;
+      get_expr(*switch_stmt.getCond(), value);
+
+      codet body;
+      get_expr(*switch_stmt.getBody(), body);
+
+      code_switcht switch_code;
+      switch_code.value() = value;
+      switch_code.body() = body;
+
+      new_expr = switch_code;
       break;
     }
 
