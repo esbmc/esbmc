@@ -824,6 +824,22 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::LabelStmtClass:
+    {
+      const clang::LabelStmt &label_stmt =
+        static_cast<const clang::LabelStmt &>(stmt);
+
+      exprt sub_stmt;
+      get_expr(*label_stmt.getSubStmt(), sub_stmt);
+
+      codet label("label");
+      label.add("label") = irept(label_stmt.getName());
+      label.copy_to_operands(sub_stmt);
+
+      new_expr = label;
+      break;
+    }
+
     case clang::Stmt::NullStmtClass:
     {
       new_expr = code_skipt();
