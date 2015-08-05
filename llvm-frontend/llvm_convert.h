@@ -34,7 +34,7 @@ private:
   locationt current_location;
   std::string current_path;
   std::string current_function_name;
-  int current_scope;
+  int current_scope_var_num;
   clang::SourceManager *sm;
 
   typedef std::map<int, std::string> object_mapst;

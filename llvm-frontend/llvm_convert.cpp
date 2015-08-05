@@ -10,19 +10,12 @@
 #include <std_code.h>
 #include <std_expr.h>
 #include <expr_util.h>
+#include <mp_arith.h>
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/convert_integer_literal.h>
 
 #include <boost/filesystem.hpp>
-
-std::string repeat( const std::string &word, int times ) {
-   std::string result ;
-   result.reserve(times*word.length()); // avoid repeated reallocation
-   for (int a = 0 ; a < times ; a++)
-      result += word ;
-   return result ;
-}
 
 llvm_convertert::llvm_convertert(contextt &_context)
   : context(_context),
@@ -30,7 +23,7 @@ llvm_convertert::llvm_convertert(contextt &_context)
     current_location(locationt()),
     current_path(""),
     current_function_name(""),
-    current_scope(0),
+    current_scope_var_num(1),
     sm(nullptr)
 {
 }
@@ -191,12 +184,21 @@ void llvm_convertert::convert_var(
   // Save the variable address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&vd);
   object_map[address] = identifier;
+
+  // Increment current scope variable number. If the variable
+  // is global/static, it has no impact. If the variable is
+  // scoped, than it will force a unique name on it
+  ++current_scope_var_num;
 }
 
 void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
 {
   std::string old_function_name = current_function_name;
   current_function_name = fd.getName().str();
+
+  // Set initial variable name, it will be used for variables' name
+  // This will be reset everytime a function is parsed
+  current_scope_var_num = 1;
 
   // Build function's type
   code_typet type;
@@ -477,11 +479,6 @@ void llvm_convertert::get_expr(
       const clang::CompoundStmt &compound_stmt =
         static_cast<const clang::CompoundStmt &>(stmt);
 
-      // Increase current scope number, it will be used for variables' name
-      // This will be increased every time a block is parsed
-      assert(current_scope >= 0);
-      ++current_scope;
-
       code_blockt block;
       for (const auto &stmt : compound_stmt.body()) {
         exprt statement;
@@ -499,9 +496,6 @@ void llvm_convertert::get_expr(
       block.end_location(end_location);
 
       new_expr = block;
-
-      --current_scope;
-      assert(current_scope >= 0);
       break;
     }
 
@@ -1154,8 +1148,7 @@ std::string llvm_convertert::get_var_name(
   std::string pretty_name = get_modulename_from_path() + "::";
   if(current_function_name!= "")
     pretty_name += current_function_name + "::";
-  if(current_scope > 0)
-    pretty_name += repeat("1::", current_scope);
+  pretty_name += integer2string(current_scope_var_num) + "::";
   pretty_name += name;
 
   return pretty_name;
