@@ -1135,6 +1135,7 @@ void llvm_convertert::get_cast_expr(
   switch(cast.getCastKind())
   {
     case clang::CK_FunctionToPointerDecay:
+    case clang::CK_ArrayToPointerDecay:
       break;
 
     case clang::CK_IntegralCast:
