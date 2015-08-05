@@ -483,6 +483,12 @@ void llvm_convertert::get_expr(
       for (const auto &stmt : compound_stmt.body()) {
         exprt statement;
         get_expr(*stmt, statement);
+
+        // Before push the expr to the block, we must check if
+        // the code is an codet, e.g., sideeffects are exprts
+        // and must be converted
+        convert_exprt_inside_block(statement);
+
         block.operands().push_back(statement);
       }
 
@@ -1227,4 +1233,16 @@ void llvm_convertert::check_symbol_redefinition(
       }
     }
   }
+}
+
+void llvm_convertert::convert_exprt_inside_block(
+  exprt& expr)
+{
+  if(expr.is_code())
+    return;
+
+  codet code("expression");
+  code.copy_to_operands(expr);
+
+  expr.swap(code);
 }
