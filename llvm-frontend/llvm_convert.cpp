@@ -353,6 +353,7 @@ void llvm_convertert::get_builtin_type(
       new_type = bool_type();
       break;
 
+    case clang::BuiltinType::Char_U:
     case clang::BuiltinType::UChar:
       new_type = unsignedbv_typet(config.ansi_c.char_width);
       break;
@@ -363,6 +364,11 @@ void llvm_convertert::get_builtin_type(
 
     case clang::BuiltinType::Char32:
       new_type = unsignedbv_typet(32);
+      break;
+
+    case clang::BuiltinType::Char_S:
+    case clang::BuiltinType::SChar:
+      new_type = signedbv_typet(config.ansi_c.char_width);
       break;
 
     case clang::BuiltinType::UShort:
@@ -385,10 +391,6 @@ void llvm_convertert::get_builtin_type(
       // Various simplification / big-int related things use uint64_t's...
       std::cerr << "No support for uint128's in ESBMC right now, sorry" << std::endl;
       abort();
-      break;
-
-    case clang::BuiltinType::SChar:
-      new_type = signedbv_typet(config.ansi_c.char_width);
       break;
 
     case clang::BuiltinType::Short:
