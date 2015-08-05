@@ -1118,7 +1118,7 @@ void llvm_convertert::get_decl_expr(
   new_expr = exprt("symbol", type);
   new_expr.identifier("c::" + identifier);
   new_expr.name(identifier);
-  new_expr.lvalue(true);
+  new_expr.cmt_lvalue(true);
 }
 
 void llvm_convertert::get_cast_expr(
