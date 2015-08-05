@@ -812,6 +812,12 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::BreakStmtClass:
+    {
+      new_expr = code_breakt();
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
