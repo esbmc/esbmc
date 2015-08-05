@@ -1179,6 +1179,7 @@ void llvm_convertert::get_cast_expr(
     case clang::CK_FloatingToBoolean:
     case clang::CK_FloatingCast:
 
+    case clang::CK_ToVoid:
     case clang::CK_BitCast:
     case clang::CK_LValueToRValue:
       gen_typecast(expr, type);
