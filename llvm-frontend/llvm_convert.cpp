@@ -529,13 +529,13 @@ void llvm_convertert::get_expr(
   {
     case clang::Stmt::IntegerLiteralClass:
     {
-      const clang::IntegerLiteral &integer =
+      const clang::IntegerLiteral &integer_literal =
         static_cast<const clang::IntegerLiteral&>(stmt);
-      llvm::APInt val = integer.getValue();
+      llvm::APInt val = integer_literal.getValue();
       assert(val.getBitWidth() <= 64 && "Too large an integer found, sorry");
 
       typet the_type;
-      get_type(integer.getType(), the_type);
+      get_type(integer_literal.getType(), the_type);
       assert(the_type.is_unsignedbv() || the_type.is_signedbv());
 
       exprt bval;
@@ -547,11 +547,11 @@ void llvm_convertert::get_expr(
 
     case clang::Stmt::StringLiteralClass:
     {
-      const clang::StringLiteral &string_stmt =
+      const clang::StringLiteral &string_literal =
         static_cast<const clang::StringLiteral&>(stmt);
 
       string_constantt string;
-      string.set_value(string_stmt.getString().str());
+      string.set_value(string_literal.getString().str());
 
       new_expr = string;
       break;
