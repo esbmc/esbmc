@@ -1174,6 +1174,7 @@ void llvm_convertert::get_cast_expr(
     case clang::CK_IntegralCast:
     case clang::CK_IntegralToBoolean:
     case clang::CK_IntegralToFloating:
+    case clang::CK_IntegralToPointer:
 
     case clang::CK_FloatingToIntegral:
     case clang::CK_FloatingToBoolean:
