@@ -107,6 +107,11 @@ private:
     exprt &expr,
     typet type);
 
+  void get_size_exprt(
+    double &val,
+    exprt &expr,
+    typet type);
+
   void set_source_manager(clang::SourceManager &source_manager);
   void update_current_location(clang::SourceLocation source_location);
   std::string get_filename_from_path();

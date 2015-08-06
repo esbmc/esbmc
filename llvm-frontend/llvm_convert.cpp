@@ -7,6 +7,8 @@
 
 #include "llvm_convert.h"
 
+#include <sstream>
+
 #include <std_code.h>
 #include <std_expr.h>
 #include <expr_util.h>
@@ -15,6 +17,7 @@
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/convert_integer_literal.h>
+#include <ansi-c/convert_float_literal.h>
 #include <ansi-c/ansi_c_expr.h>
 
 #include <boost/filesystem.hpp>
@@ -1474,6 +1477,22 @@ void llvm_convertert::get_size_exprt(
     // This method should only be used to convert integer values
     abort();
   }
+}
+
+void llvm_convertert::get_size_exprt(
+  double& val,
+  exprt& expr,
+  typet type)
+{
+  std::ostringstream strs;
+  strs << val;
+
+  if(type == float_type())
+    convert_float_literal(strs.str() + "f", expr);
+  else if(type == double_type())
+    convert_float_literal(strs.str(), expr);
+  else
+    abort();
 }
 
 void llvm_convertert::set_source_manager(
