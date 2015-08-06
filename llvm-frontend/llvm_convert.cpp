@@ -15,6 +15,7 @@
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/convert_integer_literal.h>
+#include <ansi-c/ansi_c_expr.h>
 
 #include <boost/filesystem.hpp>
 
@@ -538,6 +539,18 @@ void llvm_convertert::get_expr(
       get_size_exprt(val, bval, the_type);
 
       new_expr.swap(bval);
+      break;
+    }
+
+    case clang::Stmt::StringLiteralClass:
+    {
+      const clang::StringLiteral &string_stmt =
+        static_cast<const clang::StringLiteral&>(stmt);
+
+      string_constantt string;
+      string.set_value(string_stmt.getString().str());
+
+      new_expr = string;
       break;
     }
 
