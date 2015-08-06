@@ -747,7 +747,6 @@ void llvm_convertert::get_expr(
 
       typet t;
       get_type(arr.getType(), t);
-      t.dump();
 
       exprt array;
       get_expr(*arr.getLHS(), array);
