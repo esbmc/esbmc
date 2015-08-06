@@ -557,6 +557,22 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::FloatingLiteralClass:
+    {
+      const clang::FloatingLiteral &float_literal =
+        static_cast<const clang::FloatingLiteral&>(stmt);
+
+      typet t;
+      get_type(float_literal.getType(), t);
+
+      double val = float_literal.getValueAsApproximateDouble();
+      exprt bval;
+      get_size_exprt(val, bval, t);
+
+      new_expr.swap(bval);
+      break;
+    }
+
     case clang::Stmt::ImplicitCastExprClass:
     case clang::Stmt::CStyleCastExprClass:
     {
