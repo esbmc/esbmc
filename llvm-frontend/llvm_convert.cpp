@@ -746,6 +746,7 @@ void llvm_convertert::get_expr(
 
     // Binary expression such as a+1, a-1 and assignments
     case clang::Stmt::BinaryOperatorClass:
+    case clang::Stmt::CompoundAssignOperatorClass:
     {
       const clang::BinaryOperator &binop =
         static_cast<const clang::BinaryOperator&>(stmt);
@@ -1171,7 +1172,6 @@ void llvm_convertert::get_expr(
     case clang::Stmt::OffsetOfExprClass:
     case clang::Stmt::UnaryExprOrTypeTraitExprClass:
     case clang::Stmt::MemberExprClass:
-    case clang::Stmt::CompoundLiteralExprClass:
     case clang::Stmt::AddrLabelExprClass:
     case clang::Stmt::StmtExprClass:
     case clang::Stmt::ShuffleVectorExprClass:
@@ -1468,6 +1468,42 @@ void llvm_convertert::get_binary_operator_expr(
       gen_typecast(rhs, bool_type());
       break;
 
+    case clang::BO_AddAssign:
+      new_expr = exprt("assign+", binop_type);
+      break;
+
+    case clang::BO_DivAssign:
+      new_expr = exprt("assign_div", binop_type);
+      break;
+
+    case clang::BO_RemAssign:
+      new_expr = exprt("assign_mod", binop_type);
+      break;
+
+    case clang::BO_SubAssign:
+      new_expr = exprt("assign-", binop_type);
+      break;
+
+    case clang::BO_ShlAssign:
+      new_expr = exprt("assign_shl", binop_type);
+      break;
+
+    case clang::BO_ShrAssign:
+      new_expr = exprt("assign_ashr", binop_type);
+      break;
+
+    case clang::BO_AndAssign:
+      new_expr = exprt("assign_bitand", binop_type);
+      break;
+
+    case clang::BO_XorAssign:
+      new_expr = exprt("assign_bitor", binop_type);
+      break;
+
+    case clang::BO_OrAssign:
+      new_expr = exprt("assign_bitxor", binop_type);
+      break;
+
     default:
       std::cerr << "Conversion of unsupported clang binary operator: \"";
       std::cerr << binop.getOpcodeStr().str() << "\" to expression" << std::endl;
@@ -1476,6 +1512,14 @@ void llvm_convertert::get_binary_operator_expr(
   }
 
   new_expr.copy_to_operands(lhs, rhs);
+
+  // If this is a compound assignment, we should wrap around a sideeffect
+  // TODO: This should be done after conversion
+  if(binop.getStmtClass() == clang::Stmt::CompoundAssignOperatorClass)
+  {
+    new_expr.statement(new_expr.id());
+    new_expr.id("sideeffect");
+  }
 }
 
 void llvm_convertert::get_predefined_expr(
