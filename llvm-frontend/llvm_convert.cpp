@@ -1212,6 +1212,7 @@ void llvm_convertert::get_cast_expr(
 
   switch(cast.getCastKind())
   {
+    case clang::CK_ArrayToPointerDecay:
     case clang::CK_FunctionToPointerDecay:
       break;
 
@@ -1227,7 +1228,6 @@ void llvm_convertert::get_cast_expr(
     case clang::CK_ToVoid:
     case clang::CK_BitCast:
     case clang::CK_LValueToRValue:
-    case clang::CK_ArrayToPointerDecay:
       gen_typecast(expr, type);
       break;
 
