@@ -206,6 +206,7 @@ void llvm_convertert::convert_var(
 
     // If the symbol is an array, we must initialize all
     // uninitialized positions to zero
+    // TODO: Move to a step after conversion
     if(t.is_array())
     {
       BigInt size;
@@ -279,6 +280,7 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
     exprt body_exprt;
     get_expr(*body, body_exprt);
 
+    // TODO: Move to a step after conversion
     // Before push the body to the symbol, we must check if
     // every statement is an codet, e.g., sideeffects are exprts
     // and must be converted
@@ -635,6 +637,7 @@ void llvm_convertert::get_expr(
         call.arguments().push_back(single_arg);
       }
 
+      // TODO: Move to a step after conversion
       // Let's check if the symbol for this function call is defined
       // on the context, if it isn't, we should create and add a symbol
       // without value, so esbmc will replace the function call by
@@ -684,6 +687,7 @@ void llvm_convertert::get_expr(
 
       exprt cond;
 
+      // TODO: Move to a step after conversion?
       // For some strange reason, the cond is wrapped around an integer
       // typecast, don't really know why, so ignore it
       if(ternary_if.getCond()->getStmtClass() == clang::Stmt::CStyleCastExprClass
@@ -720,6 +724,7 @@ void llvm_convertert::get_expr(
         static_cast<const clang::BinaryConditionalOperator &>(stmt);
 
       exprt cond;
+      // TODO: Move to a step after conversion?
       // For some strange reason, the cond is wrapped around an integer
       // typecast, don't really know why, so ignore it
       if(ternary_if.getCond()->getStmtClass() == clang::Stmt::CStyleCastExprClass
@@ -1579,6 +1584,7 @@ void llvm_convertert::check_symbol_redefinition(
   }
 }
 
+// TODO: Move to a step after conversion
 void llvm_convertert::convert_exprt_inside_block(
   exprt& expr)
 {
