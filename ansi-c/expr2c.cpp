@@ -2950,13 +2950,13 @@ std::string expr2ct::convert(
       return convert_binary(src, "-=", precedence=2, true);
     else if(statement=="assign*")
       return convert_binary(src, "*=", precedence=2, true);
-    else if(statement=="assign/")
+    else if(statement=="assign_div")
       return convert_binary(src, "/=", precedence=2, true);
     else if(statement=="assign_mod")
       return convert_binary(src, "%=", precedence=2, true);
     else if(statement=="assign_shl")
       return convert_binary(src, "<<=", precedence=2, true);
-    else if(statement=="assign_shr")
+    else if(statement=="assign_ashr")
       return convert_binary(src, ">>=", precedence=2, true);
     else if(statement=="assign_bitand")
       return convert_binary(src, "&=", precedence=2, true);
