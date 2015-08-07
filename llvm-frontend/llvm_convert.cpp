@@ -782,7 +782,13 @@ void llvm_convertert::get_expr(
         }
       }
       else
+      {
+        std::cerr << "Excess elements in scalar initializer"
+                  << "':" << std::endl << t.pretty() << std::endl
+                  << "at: " << current_location.as_string()
+                  << std::endl;
         abort();
+      }
 
       new_expr = inits;
       break;
