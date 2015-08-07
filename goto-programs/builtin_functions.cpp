@@ -628,13 +628,8 @@ void goto_convertt::do_function_call_symbol(
       throw "`"+id2string(identifier)+"' expected to have four arguments";
     }
 
-    std::string description = "assertion ";
-
-    //check whether the assert does not contain a member
-    if (arguments[0].id() != "address_of" &&
-    	arguments[0].op0().op0().id() != "member") {
-    	description = "assertion "+get_string_constant(arguments[0]);
-    }
+    const irep_idt description=
+      "assertion "+id2string(get_string_constant(arguments[0]));
 
     if(options.get_bool_option("no-assertions"))
       return;
