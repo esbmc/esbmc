@@ -540,7 +540,38 @@ void llvm_convertert::get_expr(
 
   switch(stmt.getStmtClass())
   {
+    /*
+       The following enum values are the the expr of a program,
+       defined on the Expr class
+    */
 
+    // Objects that are implicit defined on the code syntax.
+    // One example is the gcc ternary operator, which can be:
+    // _Bool a = 1 ? : 0; is equivalent to _Bool a = 1 ? 1 : 0;
+    // The 'then' expr is an opaque value equal to the ternary's
+    // condition
+    case clang::Stmt::OpaqueValueExprClass:
+    {
+      const clang::OpaqueValueExpr &opaque_expr =
+        static_cast<const clang::OpaqueValueExpr &>(stmt);
+      get_expr(*opaque_expr.getSourceExpr(), new_expr);
+      break;
+    }
+
+    // Reference to a declared object, such as functions or variables
+    case clang::Stmt::DeclRefExprClass:
+    {
+      const clang::DeclRefExpr &decl =
+        static_cast<const clang::DeclRefExpr&>(stmt);
+
+      const clang::Decl &dcl =
+        static_cast<const clang::Decl&>(*decl.getDecl());
+
+      get_decl_expr(dcl, new_expr);
+      break;
+    }
+
+    // Predefined MACROS as __func__ or __PRETTY_FUNCTION__
     case clang::Stmt::PredefinedExprClass:
     {
       const clang::PredefinedExpr &pred_expr =
@@ -550,6 +581,7 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    // An integer value
     case clang::Stmt::IntegerLiteralClass:
     {
       const clang::IntegerLiteral &integer_literal =
@@ -568,18 +600,7 @@ void llvm_convertert::get_expr(
       break;
     }
 
-    case clang::Stmt::StringLiteralClass:
-    {
-      const clang::StringLiteral &string_literal =
-        static_cast<const clang::StringLiteral&>(stmt);
-
-      string_constantt string;
-      string.set_value(string_literal.getString().str());
-
-      new_expr = string;
-      break;
-    }
-
+    // A float value
     case clang::Stmt::FloatingLiteralClass:
     {
       const clang::FloatingLiteral &float_literal =
@@ -596,35 +617,60 @@ void llvm_convertert::get_expr(
       break;
     }
 
-    case clang::Stmt::ImplicitCastExprClass:
-    case clang::Stmt::CStyleCastExprClass:
+    // A string
+    case clang::Stmt::StringLiteralClass:
     {
-      const clang::CastExpr &cast =
-        static_cast<const clang::CastExpr &>(stmt);
-      get_cast_expr(cast, new_expr);
+      const clang::StringLiteral &string_literal =
+        static_cast<const clang::StringLiteral&>(stmt);
+
+      string_constantt string;
+      string.set_value(string_literal.getString().str());
+
+      new_expr = string;
       break;
     }
 
-    case clang::Stmt::BinaryOperatorClass:
+    // This is an expr surrounded by parenthesis, we'll ignore it for
+    // now, and check its subexpression
+    case clang::Stmt::ParenExprClass:
     {
-      const clang::BinaryOperator &binop =
-        static_cast<const clang::BinaryOperator&>(stmt);
-      get_binary_operator_expr(binop, new_expr);
+      const clang::ParenExpr& p =
+        static_cast<const clang::ParenExpr &>(stmt);
+      get_expr(*p.getSubExpr(), new_expr);
       break;
     }
 
-    case clang::Stmt::DeclRefExprClass:
+    // An unary operator such as +a, -a, *a or &a
+    case clang::Stmt::UnaryOperatorClass:
     {
-      const clang::DeclRefExpr &decl =
-        static_cast<const clang::DeclRefExpr&>(stmt);
-
-      const clang::Decl &dcl =
-        static_cast<const clang::Decl&>(*decl.getDecl());
-
-      get_decl_expr(dcl, new_expr);
+      const clang::UnaryOperator &uniop =
+        static_cast<const clang::UnaryOperator &>(stmt);
+      get_unary_operator_expr(uniop, new_expr);
       break;
     }
 
+    // An array subscript operation, such as a[1]
+    case clang::Stmt::ArraySubscriptExprClass:
+    {
+      const clang::ArraySubscriptExpr &arr =
+        static_cast<const clang::ArraySubscriptExpr &>(stmt);
+
+      typet t;
+      get_type(arr.getType(), t);
+
+      exprt array;
+      get_expr(*arr.getLHS(), array);
+
+      exprt pos;
+      get_expr(*arr.getRHS(), pos);
+
+      new_expr = index_exprt(array, pos, t);
+      break;
+    }
+
+    // A function call expr. The symbol may be undefined so we create it here
+    // This should be moved to a step after the conversion. The conversion
+    // step should only convert the code
     case clang::Stmt::CallExprClass:
     {
       const clang::CallExpr &function_call =
@@ -671,21 +717,24 @@ void llvm_convertert::get_expr(
       break;
     }
 
-    // This is an expr surrounded by parenthesis, we'll ignore it for
-    // now, and check its subexpression
-    case clang::Stmt::ParenExprClass:
+    // Casts expression:
+    // Implicit: float f = 1; equivalent to float f = (float) 1;
+    // CStyle: int a = (int) 3.0;
+    case clang::Stmt::ImplicitCastExprClass:
+    case clang::Stmt::CStyleCastExprClass:
     {
-      const clang::ParenExpr& p =
-        static_cast<const clang::ParenExpr &>(stmt);
-      get_expr(*p.getSubExpr(), new_expr);
+      const clang::CastExpr &cast =
+        static_cast<const clang::CastExpr &>(stmt);
+      get_cast_expr(cast, new_expr);
       break;
     }
 
-    case clang::Stmt::UnaryOperatorClass:
+    // Binary expression such as a+1, a-1 and assignments
+    case clang::Stmt::BinaryOperatorClass:
     {
-      const clang::UnaryOperator &uniop =
-        static_cast<const clang::UnaryOperator &>(stmt);
-      get_unary_operator_expr(uniop, new_expr);
+      const clang::BinaryOperator &binop =
+        static_cast<const clang::BinaryOperator&>(stmt);
+      get_binary_operator_expr(binop, new_expr);
       break;
     }
 
@@ -764,14 +813,9 @@ void llvm_convertert::get_expr(
       break;
     }
 
-    case clang::Stmt::OpaqueValueExprClass:
-    {
-      const clang::OpaqueValueExpr &opaque_expr =
-        static_cast<const clang::OpaqueValueExpr &>(stmt);
-      get_expr(*opaque_expr.getSourceExpr(), new_expr);
-      break;
-    }
-
+    // An initialize statement, such as int a[3] = {1, 2, 3}
+    // TODO: If the element is not an array, we throw an error, but
+    // current compiler just give a warning.
     case clang::Stmt::InitListExprClass:
     {
       const clang::InitListExpr &init_stmt =
@@ -801,24 +845,6 @@ void llvm_convertert::get_expr(
       }
 
       new_expr = inits;
-      break;
-    }
-
-    case clang::Stmt::ArraySubscriptExprClass:
-    {
-      const clang::ArraySubscriptExpr &arr =
-        static_cast<const clang::ArraySubscriptExpr &>(stmt);
-
-      typet t;
-      get_type(arr.getType(), t);
-
-      exprt array;
-      get_expr(*arr.getLHS(), array);
-
-      exprt pos;
-      get_expr(*arr.getRHS(), pos);
-
-      new_expr = index_exprt(array, pos, t);
       break;
     }
 
@@ -940,11 +966,6 @@ void llvm_convertert::get_expr(
       new_expr = label;
       break;
     }
-
-    // No idea when this AST is created
-    case clang::Stmt::AttributedStmtClass:
-      abort();
-      break;
 
     // An if then else statement. The else statement may not
     // exist, so we must check before constructing its exprt.
@@ -1097,11 +1118,6 @@ void llvm_convertert::get_expr(
       break;
     }
 
-    // No idea when this AST is created
-    case clang::Stmt::IndirectGotoStmtClass:
-      abort();
-      break;
-
     // A continue statement
     case clang::Stmt::ContinueStmtClass:
       new_expr = code_continuet();
@@ -1135,6 +1151,31 @@ void llvm_convertert::get_expr(
       new_expr = code_skipt();
       break;
 
+    // No idea when these AST is created
+    case clang::Stmt::CharacterLiteralClass:
+    case clang::Stmt::ImaginaryLiteralClass:
+    case clang::Stmt::OffsetOfExprClass:
+    case clang::Stmt::UnaryExprOrTypeTraitExprClass:
+    case clang::Stmt::MemberExprClass:
+    case clang::Stmt::CompoundLiteralExprClass:
+    case clang::Stmt::AddrLabelExprClass:
+    case clang::Stmt::StmtExprClass:
+    case clang::Stmt::ShuffleVectorExprClass:
+    case clang::Stmt::ConvertVectorExprClass:
+    case clang::Stmt::ChooseExprClass:
+    case clang::Stmt::GNUNullExprClass:
+    case clang::Stmt::VAArgExprClass:
+    case clang::Stmt::DesignatedInitExprClass:
+    case clang::Stmt::ImplicitValueInitExprClass:
+    case clang::Stmt::ParenListExprClass:
+    case clang::Stmt::GenericSelectionExprClass:
+    case clang::Stmt::ExtVectorElementExprClass:
+    case clang::Stmt::BlockExprClass:
+    case clang::Stmt::AsTypeExprClass:
+    case clang::Stmt::PseudoObjectExprClass:
+    case clang::Stmt::AtomicExprClass:
+    case clang::Stmt::AttributedStmtClass:
+    case clang::Stmt::IndirectGotoStmtClass:
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
