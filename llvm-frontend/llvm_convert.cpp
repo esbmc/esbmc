@@ -1413,6 +1413,51 @@ void llvm_convertert::get_binary_operator_expr(
   new_expr.copy_to_operands(lhs, rhs);
 }
 
+void llvm_convertert::get_predefined_expr(
+  const clang::PredefinedExpr& pred_expr,
+  exprt& new_expr)
+{
+  typet t;
+  get_type(pred_expr.getType(), t);
+
+  std::string the_name;
+  switch (pred_expr.getIdentType())
+  {
+    case clang::PredefinedExpr::Func:
+    case clang::PredefinedExpr::Function:
+      the_name = current_function_name;
+      break;
+    case clang::PredefinedExpr::LFunction:
+      the_name = "__LFUNCTION__";
+      break;
+    case clang::PredefinedExpr::FuncDName:
+      the_name = "__FUNCDNAME__";
+      break;
+    case clang::PredefinedExpr::FuncSig:
+      the_name = "__FUNCSIG__";
+      break;
+    // TODO: Construct correct prettyfunction name
+    case clang::PredefinedExpr::PrettyFunction:
+      the_name = "__PRETTYFUNCTION__";
+      break;
+    case clang::PredefinedExpr::PrettyFunctionNoVirtual:
+      the_name = "__PRETTYFUNCTIONNOVIRTUAL__";
+      break;
+    default:
+      std::cerr << "Conversion of unsupported clang predefined expr: \""
+        << pred_expr.getIdentType() << "\" to expression" << std::endl;
+      pred_expr.dumpColor();
+      abort();
+  }
+
+  string_constantt string;
+  string.set_value(the_name);
+
+  index_exprt zero_index(string, gen_zero(int_type()), t);
+
+  new_expr = address_of_exprt(zero_index);
+}
+
 void llvm_convertert::gen_typecast(
   exprt &expr,
   typet type)
