@@ -18,6 +18,7 @@
 #include <ansi-c/c_types.h>
 #include <ansi-c/convert_integer_literal.h>
 #include <ansi-c/convert_float_literal.h>
+#include <ansi-c/convert_character_literal.h>
 #include <ansi-c/ansi_c_expr.h>
 
 #include <boost/filesystem.hpp>
@@ -600,6 +601,20 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    // A character such 'a'
+    case clang::Stmt::CharacterLiteralClass:
+    {
+      const clang::CharacterLiteral &char_literal =
+        static_cast<const clang::CharacterLiteral&>(stmt);
+
+      const char c = char_literal.getValue();
+      exprt char_expr;
+      convert_character_literal("'" + std::string(&c) + "'",char_expr);
+
+      new_expr.swap(char_expr);
+      break;
+    }
+
     // A float value
     case clang::Stmt::FloatingLiteralClass:
     {
@@ -1152,7 +1167,6 @@ void llvm_convertert::get_expr(
       break;
 
     // No idea when these AST is created
-    case clang::Stmt::CharacterLiteralClass:
     case clang::Stmt::ImaginaryLiteralClass:
     case clang::Stmt::OffsetOfExprClass:
     case clang::Stmt::UnaryExprOrTypeTraitExprClass:
