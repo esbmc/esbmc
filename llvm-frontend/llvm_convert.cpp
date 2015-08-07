@@ -540,6 +540,16 @@ void llvm_convertert::get_expr(
 
   switch(stmt.getStmtClass())
   {
+
+    case clang::Stmt::PredefinedExprClass:
+    {
+      const clang::PredefinedExpr &pred_expr =
+        static_cast<const clang::PredefinedExpr&>(stmt);
+
+      get_predefined_expr(pred_expr, new_expr);
+      break;
+    }
+
     case clang::Stmt::IntegerLiteralClass:
     {
       const clang::IntegerLiteral &integer_literal =
