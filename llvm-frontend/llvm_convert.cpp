@@ -275,7 +275,18 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
     body = fd.getBody();
 
   if(body)
-    get_expr(*body, symbol.value);
+  {
+    exprt body_exprt;
+    get_expr(*body, body_exprt);
+
+    // Before push the body to the symbol, we must check if
+    // every statement is an codet, e.g., sideeffects are exprts
+    // and must be converted
+    for(auto &statement : body_exprt.operands())
+      convert_exprt_inside_block(statement);
+
+    symbol.value = body_exprt;
+  }
 
   // see if we have it already
   symbolst::iterator old_it=context.symbols.find(symbol.name);
@@ -824,9 +835,7 @@ void llvm_convertert::get_expr(
     case clang::Stmt::NullStmtClass:
       break;
 
-    // A compound statement is a scope. The detail here is that all exprt
-    // added to its operands must be an codet. THIS IS REQUIRED FOR THE GOTO
-    // CONVERSION TO WORK :/
+    // A compound statement is a scope/block
     case clang::Stmt::CompoundStmtClass:
     {
       const clang::CompoundStmt &compound_stmt =
@@ -836,12 +845,6 @@ void llvm_convertert::get_expr(
       for (const auto &stmt : compound_stmt.body()) {
         exprt statement;
         get_expr(*stmt, statement);
-
-        // Before push the expr to the block, we must check if
-        // the code is an codet, e.g., sideeffects are exprts
-        // and must be converted
-        convert_exprt_inside_block(statement);
-
         block.operands().push_back(statement);
       }
 
