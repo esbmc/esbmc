@@ -847,14 +847,19 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
     break;
 
+  // Assignments of arrays into {arrays,structs} can occur when union
+  // assignments are rewritten to arrays, or when union assigns occur inside
+  // structures etc.
   case flag_src_struct | flag_dst_array | flag_is_const_offs:
-  case flag_src_array | flag_dst_array | flag_is_const_offs:
   case flag_src_struct | flag_dst_array | flag_is_dyn_offs:
+    construct_array_from_struct_reference(value, offset, type, guard, mode,
+        alignment);
+    break;
+  case flag_src_array | flag_dst_array | flag_is_const_offs:
   case flag_src_array | flag_dst_array | flag_is_dyn_offs:
-    // Assignments of arrays into {arrays,structs} can occur when union
-    // assignments are rewritten to arrays, or when union assigns occur inside
-    // structures etc.
-    abort();
+    construct_array_from_array_reference(value, offset, type, guard, mode,
+        alignment);
+    break;
 
   case flag_src_scalar | flag_dst_array | flag_is_const_offs:
   case flag_src_scalar | flag_dst_array | flag_is_dyn_offs:
@@ -897,13 +902,11 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
   if (is_nil_expr(mod2))
     mod2 = mod;
 
-  if (is_structure_type(arr_subtype)) {
+  if (!is_scalar_type(arr_subtype)) {
     value = index2tc(arr_subtype, value, div2);
     build_reference_rec(value, mod2, type, guard, mode, alignment);
     return;
   }
-
-  assert(is_scalar_type(arr_subtype));
 
   // Two different ways we can access elements
   //  1) Just treat them as an element and select them out, possibly with some
@@ -1473,6 +1476,98 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     return;
   }
 }
+
+void
+dereferencet::construct_array_from_array_reference(expr2tc &value,
+    const expr2tc &offset, const type2tc &type, const guardt &guard,
+    modet mode, unsigned long alignment)
+{
+  assert(is_array_type(type));
+  assert(is_array_type(value->type));
+  const array_type2t &source_array = to_array_type(value->type);
+  const array_type2t &target_array = to_array_type(type);
+  assert(!is_nil_expr(target_array.array_size) &&
+         is_constant_int2t(target_array.array_size) &&
+         "Can't construct array refs to nondet sized arrays");
+
+  // Called when we're constructing an array reference from another array.
+  // This kind of assignment isn't legal in normal C, however in circumstances
+  // such as unions being decomposed to arrays, it can occur.
+  //
+  // Much more awkward is where we're dealing with an array source corresponding
+  // to a heap hunk, which the program under test treats as a structure, which
+  // itself contains an array. We then have a circumstance where we need to
+  // construct an array reference from an offset into another array.
+
+  // Explicitly discount multidimensional arrays: arrays of unions should not
+  // be assigned as one lumps, unions of unions should decompose to one byte
+  // array.
+  if (is_array_type(target_array.subtype)) {
+    dereference_failure("Memory model", "Cannot build references of "
+        "multidimensional array type", guard);
+    value = expr2tc();
+    return;
+  }
+
+  // Check whether we exactly match the type of the target array.
+  if (base_type_eq(value->type, type, ns)) {
+    // We match; however, do we have the same size?
+    abort();
+  }
+
+  // Look for further ways to decompose.
+  if (!is_scalar_type(source_array.subtype)) {
+    // Subtype is an array of something else. Descend through this layer of
+    // array via construct_from_array. We'll end up back in this function.
+    construct_from_array(value, offset, type, guard, mode, alignment);
+    return;
+  }
+
+  // We're a scalar array. And the source and target types do not match up,
+  // given earlier checks. There's only one more legal scenario: we construct
+  // a reference of some type from a byte array, because the source type
+  // collapsed to a byte array for some reason. Annoyingly, we have to accept
+  // some offset into it.
+  if (!is_bv_type(source_array.subtype) ||
+      source_array.subtype->get_width() != 8){
+    dereference_failure("Memory model", "Building array reference to "
+        "incompatible base type", guard);
+    value = expr2tc();
+  }
+
+  // How many elements do we need? Use the target type size, which is what
+  // we need, because the source may be something completely different.
+  uint64_t num_elems =
+    to_constant_int2t(target_array.array_size).constant_value.to_uint64();
+  uint64_t subtype_size = target_array.subtype->get_width() / 8;
+  std::vector<expr2tc> extracted_elems;
+
+  // Now proceed to extract bytes from the byte array, stitch into the desired
+  // target element, and then store for later joining into an array.
+  // XXX, top level ref builder performed a bounds check, right?
+  for (uint64_t i = 0; i < num_elems; i++) {
+    expr2tc reconstituted_elem;
+    expr2tc *foo = extract_bytes_from_array(value, subtype_size, offset);
+    stitch_together_from_byte_array(reconstituted_elem, target_array.subtype,
+        foo);
+    delete[] foo;
+
+    extracted_elems.push_back(reconstituted_elem);
+  }
+
+  // Voila
+  value = constant_array2tc(type, extracted_elems);
+}
+
+void
+dereferencet::construct_array_from_struct_reference(expr2tc &value __attribute__((unused)),
+    const expr2tc &offset __attribute__((unused)), const type2tc &type __attribute__((unused)), const guardt &guard __attribute__((unused)),
+    modet mode __attribute__((unused)), unsigned long alignment __attribute__((unused)))
+{
+  // Called when we're constructing an array reference from 
+  abort();
+}
+
 
 /**************************** Dereference utilities ***************************/
 
