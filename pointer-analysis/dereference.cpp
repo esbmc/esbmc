@@ -1512,7 +1512,31 @@ dereferencet::construct_array_from_array_reference(expr2tc &value,
   // Check whether we exactly match the type of the target array.
   if (base_type_eq(value->type, type, ns)) {
     // We match; however, do we have the same size?
-    abort();
+    if (source_array.array_size != target_array.array_size) {
+      // Different sizes of arrays. In almost all contexts this is an invalid
+      // access to this data object. However, if the source is a (potentially
+      // nondeterministically sized) byte array, it's probably a malloc hunk,
+      // and we should work around that.
+      if (source_array.subtype->get_width() == 8)
+        goto handle_malloc_hunk; // Deal with it
+
+      dereference_failure("Memory model", "Accessed array as array with "
+          "different size (mismatched data object type)", guard);
+      value = expr2tc();
+      return;
+    }
+
+    // Otherwise: the types match exactly. The _only_ offset that is legitimate
+    // at this stage is zero.
+    constant_int2tc zero_offs(offset->type, BigInt(0));
+    notequal2tc zero_guard(offset, zero_offs); // Might simplify away
+    guardt new_guard(guard);
+    new_guard.add(zero_guard);
+    dereference_failure("Memory model", "Built array reference from array with "
+        "non-zero offset", new_guard);
+
+    // The given value matches.
+    return;
   }
 
   // Look for further ways to decompose.
@@ -1523,6 +1547,7 @@ dereferencet::construct_array_from_array_reference(expr2tc &value,
     return;
   }
 
+handle_malloc_hunk:
   // We're a scalar array. And the source and target types do not match up,
   // given earlier checks. There's only one more legal scenario: we construct
   // a reference of some type from a byte array, because the source type
