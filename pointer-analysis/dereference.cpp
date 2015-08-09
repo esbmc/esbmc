@@ -741,13 +741,9 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     flags |= flag_dst_union;
   else if (is_scalar_type(type))
     flags |= flag_dst_scalar;
-  else if (is_array_type(type) || is_string_type(type)) {
-    std::cerr << "Can't construct rvalue reference to array type during dereference";
-    std::cerr << std::endl;
-    std::cerr << "(It isn't allowed by C anyway)";
-    std::cerr << std::endl;
-    abort();
-  } else {
+  else if (is_array_type(type) || is_string_type(type))
+    flags |= flag_dst_array;
+  else {
     std::cerr << "Unrecognized dest type during dereference" << std::endl;
     type->dump();
     abort();
@@ -849,6 +845,20 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     // Extract a structure from inside an array or another struct. Single
     // function supports both (which is bad).
     construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
+    break;
+
+  case flag_src_struct | flag_dst_array | flag_is_const_offs:
+  case flag_src_array | flag_dst_array | flag_is_const_offs:
+  case flag_src_struct | flag_dst_array | flag_is_dyn_offs:
+  case flag_src_array | flag_dst_array | flag_is_dyn_offs:
+    // Assignments of arrays into {arrays,structs} can occur when union
+    // assignments are rewritten to arrays, or when union assigns occur inside
+    // structures etc.
+    abort();
+
+  case flag_src_scalar | flag_dst_array | flag_is_const_offs:
+  case flag_src_scalar | flag_dst_array | flag_is_dyn_offs:
+    dereference_failure("Bad dereference", "Union/array pointer pointed at scalar", guard);
     break;
 
   // No scope for constructing references to arrays
