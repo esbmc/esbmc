@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <numeric>
+
 #include <irep2.h>
 #include <migrate.h>
 #include <assert.h>
@@ -858,7 +860,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     // Use dyn-offs-cons function to iterate over each field of the struct.
     // This brings us back to this function repeatedly. No reason for
     // specialisation.
-    construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
+    construct_array_from_dyn_struct_reference(value, offset, type, guard, mode);
     break;
 
   case flag_src_array | flag_dst_array | flag_is_const_offs:
@@ -1589,6 +1591,88 @@ handle_malloc_hunk:
 
   // Voila
   value = constant_array2tc(type, extracted_elems);
+}
+
+void
+dereferencet::construct_array_from_dyn_struct_reference(expr2tc &value,
+    const expr2tc &offset, const type2tc &type, const guardt &guard,
+    modet mode, unsigned long alignment)
+{
+  // Simply iterate over each struct field and recurse. Definitely a candidate
+  // for refactoring, as this models various other recursive functions.
+
+  std::vector<std::pair<expr2tc, expr2tc> > results;
+  const struct_type2t &struct_type = to_struct_type(value->type);
+  unsigned int i = 0;
+  forall_types(it, struct_type.members) {
+    // Quickly skip over scalar subtypes.
+    if (is_scalar_type(*it))
+      continue;
+
+    mp_integer memb_offs = member_offset(struct_type,
+                                    struct_type.member_names[i]);
+    mp_integer size = type_byte_size(*(*it).get());
+    expr2tc memb_offs_expr = gen_ulong(memb_offs.to_ulong());
+    expr2tc limit_expr = gen_ulong(memb_offs.to_ulong() + size.to_ulong());
+    expr2tc memb = member2tc(*it, value, struct_type.member_names[i]);
+
+    // Compute a guard and update the offset for an access to this field.
+    // Guard is that the offset is in the range of this field. Offset has
+    // offset to this field subtracted.
+    expr2tc new_offset = sub2tc(offset->type, offset, memb_offs_expr);
+    expr2tc gte = greaterthanequal2tc(offset, memb_offs_expr);
+    expr2tc lt = lessthan2tc(offset, limit_expr);
+    expr2tc range_guard = and2tc(gte, lt);
+    guardt new_guard(guard);
+    new_guard.add(range_guard);
+
+    build_reference_rec(memb, new_offset, type, new_guard, mode, alignment);
+    results.push_back(std::make_pair(memb, new_guard.as_expr()));
+    i++;
+  }
+
+  // Suddenly, lambdas. Look over the set of feasible dereference candidates
+  // and potentially merge them.
+  auto count = std::accumulate(results.begin(), results.end(), 0,
+      [] (unsigned int op1, const std::pair<expr2tc, expr2tc> &op2) {
+        return (is_nil_expr(op2.first)) ? op1 : op1 + 1;
+      }
+      );
+
+  if (count == 0) {
+    // No results; if the offset lay in any of the possible range, then the
+    // dereference failures in other relevant portions of code will fire. If
+    // the offset is out of bounds, a top level assertion will fire.
+    value = expr2tc();
+    return;
+  } else if (count == 1) {
+    // One result: find it and return it.
+    value = std::accumulate(results.begin(), results.end(), expr2tc(),
+      [] (const expr2tc &op1, const std::pair<expr2tc, expr2tc> &op2) {
+        return (is_nil_expr(op2.first)) ? op1 : op2.first;
+      }
+      );
+    return;
+  } else {
+    // Multiple results: iterate through them, merging them into an if-then-else
+    // tree.
+    value = std::accumulate(results.begin(), results.end(), expr2tc(),
+      [] (const expr2tc &op1, const std::pair<expr2tc, expr2tc> &op2) {
+        if (!is_nil_expr(op2.first)) {
+          if (is_nil_expr(op1)) {
+            // op2 is valid, op1 is not
+            return op2.first;
+          } else {
+            // Merge both
+            return expr2tc(if2tc(op1->type, op2.second, op2.first, op1));
+          }
+        } else {
+          // op2 was nil.
+          return op1;
+        }
+      }
+      );
+  }
 }
 
 /**************************** Dereference utilities ***************************/
