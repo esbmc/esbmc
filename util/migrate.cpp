@@ -538,6 +538,22 @@ sym_name_to_symbol(irep_idt init, type2tc type)
 // Everything should become a byte array, as we slowly purge concrete unions
 static expr2tc flatten_union(const exprt &expr);
 
+static inline void
+add_padding_bytes(const type2tc &type, std::vector<expr2tc> &bytes)
+{
+  unsigned long arr_size = type->get_width() / 8;
+  unsigned long mem_size = type_byte_size(*type).to_uint64();
+  assert(mem_size >= arr_size);
+  if (mem_size == arr_size)
+    return;
+
+  unsigned long num_bytes = mem_size - arr_size;
+  for (unsigned long i = 0; i < num_bytes; i++)
+    bytes.push_back(constant_int2tc(get_uint8_type(), BigInt(0)));
+
+  return;
+}
+
 static void
 flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
 {
@@ -562,6 +578,9 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
       index2tc idx(arraytype.subtype, new_expr, gen_ulong(i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
     }
+
+    // Apply padding bytes, if present
+    add_padding_bytes(new_expr->type, bytes);
   } else if (is_struct_type(new_expr)) {
     // Iterate over each field.
     const struct_type2t &structtype = to_struct_type(new_expr->type);
@@ -570,6 +589,9 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
                      structtype.member_names[i]);
       flatten_to_bytes(migrate_expr_back(memb), bytes);
     }
+
+    // Apply padding bytes, if present
+    add_padding_bytes(new_expr->type, bytes);
   } else if (is_union_type(new_expr)) {
     // This is an expression that evaluates to a union -- probably a symbol
     // name. It can't be a union literal, because that would have been
