@@ -548,21 +548,6 @@ add_padding_bytes(unsigned long count, std::vector<expr2tc> &bytes)
   return;
 }
 
-static inline void
-add_padding_bytes(const type2tc &type, std::vector<expr2tc> &bytes)
-{
-  unsigned long arr_size = type->get_width() / 8;
-  unsigned long mem_size = type_byte_size(*type).to_uint64();
-  assert(mem_size >= arr_size);
-  if (mem_size == arr_size)
-    return;
-
-  unsigned long num_bytes = mem_size - arr_size;
-  add_padding_bytes(num_bytes, bytes);
-
-  return;
-}
-
 static void
 flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes,
     unsigned int more_padding = 0)
@@ -588,13 +573,11 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes,
       index2tc idx(arraytype.subtype, new_expr, gen_ulong(i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
     }
-
-    // Apply padding bytes, if present
-    add_padding_bytes(new_expr->type, bytes);
   } else if (is_struct_type(new_expr)) {
     // Iterate over each field.
     const struct_type2t &structtype = to_struct_type(new_expr->type);
-    for (unsigned long i = 0; i < structtype.members.size(); i++) {
+    unsigned long num_fields = structtype.members.size();
+    for (unsigned long i = 0; i < num_fields; i++) {
       // Calculate the padding gap between this and the next field
       unsigned int pad = 0;
       if (i < structtype.members.size() - 1) {
@@ -609,8 +592,13 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes,
       flatten_to_bytes(migrate_expr_back(memb), bytes, pad);
     }
 
-    // Apply padding bytes, if present
-    add_padding_bytes(new_expr->type, bytes);
+    // Apply padding bytes on end of struct, if present. Is the gap between the
+    // end of the last field and the end that type_byte_size says the struct
+    // should have.
+    unsigned long endpad = type_byte_size(structtype).to_uint64();
+    endpad -= member_offset(structtype, structtype.member_names[num_fields - 1]).to_uint64();
+    endpad -= type_byte_size(*structtype.members[num_fields - 1]).to_uint64();
+    add_padding_bytes(endpad, bytes);
   } else if (is_union_type(new_expr)) {
     // This is an expression that evaluates to a union -- probably a symbol
     // name. It can't be a union literal, because that would have been
