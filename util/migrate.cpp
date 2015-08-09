@@ -643,7 +643,17 @@ flatten_union(const exprt &expr)
   std::vector<expr2tc> byte_array;
   flatten_to_bytes(expr.op0(), byte_array);
 
-  expr2tc size = gen_ulong(byte_array.size());
+  // The array type itself will become the size (plus padding) of the largest
+  // field. Pad this byte representation up to that size, so that equalities
+  // work.
+  unsigned long repr_bytes = type_byte_size(*type).to_uint64();
+  assert(repr_bytes >= byte_array.size());
+  unsigned long pad_bytes = repr_bytes - byte_array.size();
+
+  for (unsigned long i = 0; i < pad_bytes; i++)
+    byte_array.push_back(constant_int2tc(get_uint8_type(), BigInt(0)));
+
+  expr2tc size = gen_ulong(repr_bytes);
   type2tc arraytype(new array_type2t(get_uint8_type(), size, false));
   constant_array2tc arr(arraytype, byte_array);
   return arr;
