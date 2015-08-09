@@ -539,6 +539,16 @@ sym_name_to_symbol(irep_idt init, type2tc type)
 static expr2tc flatten_union(const exprt &expr);
 
 static inline void
+add_padding_bytes(unsigned long count, std::vector<expr2tc> &bytes)
+{
+
+  for (unsigned long i = 0; i < count; i++)
+    bytes.push_back(constant_int2tc(get_uint8_type(), BigInt(0)));
+
+  return;
+}
+
+static inline void
 add_padding_bytes(const type2tc &type, std::vector<expr2tc> &bytes)
 {
   unsigned long arr_size = type->get_width() / 8;
@@ -548,14 +558,14 @@ add_padding_bytes(const type2tc &type, std::vector<expr2tc> &bytes)
     return;
 
   unsigned long num_bytes = mem_size - arr_size;
-  for (unsigned long i = 0; i < num_bytes; i++)
-    bytes.push_back(constant_int2tc(get_uint8_type(), BigInt(0)));
+  add_padding_bytes(num_bytes, bytes);
 
   return;
 }
 
 static void
-flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
+flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes,
+    unsigned int more_padding = 0)
 {
   // Migrate to irep2 for sanity. We can't have recursive unions.
   expr2tc new_expr;
@@ -585,9 +595,18 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     // Iterate over each field.
     const struct_type2t &structtype = to_struct_type(new_expr->type);
     for (unsigned long i = 0; i < structtype.members.size(); i++) {
+      // Calculate the padding gap between this and the next field
+      unsigned int pad = 0;
+      if (i < structtype.members.size() - 1) {
+        pad =
+          member_offset(structtype, structtype.member_names[i+1]).to_uint64() -
+          member_offset(structtype, structtype.member_names[i]).to_uint64();
+        pad -= type_byte_size(*structtype.members[i]).to_uint64();
+      }
+
       member2tc memb(structtype.members[i], new_expr,
                      structtype.member_names[i]);
-      flatten_to_bytes(migrate_expr_back(memb), bytes);
+      flatten_to_bytes(migrate_expr_back(memb), bytes, pad);
     }
 
     // Apply padding bytes, if present
@@ -625,6 +644,8 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     std::cerr << " when flattening union literal" << std::endl;
     abort();
   }
+
+  add_padding_bytes(more_padding, bytes);
 
   return;
 }
