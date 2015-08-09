@@ -530,6 +530,25 @@ protected:
   void symex_assign_structure(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
+   *  Perform assignment to an array.
+   *  Performed when a constant array appears on the left hand side.
+   *  Such assignments are not legal in ~anything, however due to other
+   *  transformations within ESBMC (such as decomposing unions to byte arrays)
+   *  there are limited cases where temporary array references are constructed.
+   *  An example would be where a structure contains an array of uint32's, and
+   *  we assign a structure literal to a malloc'd heap hunk.
+   *
+   *  Decomposes constant array into each element, and encodes an assignment
+   *  for each pair of elements.
+   *
+   *  @see symex_assign_structure
+   *  @param lhs Symbol to assign to
+   *  @param rhs Value to assign to symbol
+   *  @param guard Guard; intent unknown
+   */
+  void symex_assign_array(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+
+  /**
    *  Perform assignment to a typecast irep.
    *  This just ends up moving the typecast from the lhs to the rhs.
    *  @param lhs Typecast to assign to
@@ -547,7 +566,7 @@ protected:
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_array(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_index(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a struct.

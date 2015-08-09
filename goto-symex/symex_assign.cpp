@@ -211,7 +211,7 @@ void goto_symext::symex_assign_rec(
   if (is_symbol2t(lhs)) {
     symex_assign_symbol(lhs, rhs, guard);
   } else if (is_index2t(lhs)) {
-    symex_assign_array(lhs, rhs, guard);
+    symex_assign_index(lhs, rhs, guard);
   } else if (is_member2t(lhs)) {
     symex_assign_member(lhs, rhs, guard);
   } else if (is_if2t(lhs)) {
@@ -229,6 +229,8 @@ void goto_symext::symex_assign_rec(
     symex_assign_concat(lhs, rhs, guard);
   } else if (is_constant_struct2t(lhs)) {
     symex_assign_structure(lhs, rhs, guard);
+  } else if (is_constant_array2t(lhs)) {
+    symex_assign_array(lhs, rhs, guard);
   } else {
     std::cerr <<  "assignment to " << get_expr_id(lhs) << " not handled"
               << std::endl;
@@ -293,6 +295,33 @@ void goto_symext::symex_assign_structure(
   }
 }
 
+void goto_symext::symex_assign_array(
+  const expr2tc &lhs,
+  expr2tc &rhs,
+  guardt &guard)
+{
+  assert(lhs->type == rhs->type && "Array assignment with mismatching types");
+  assert(is_array_type(lhs));
+  const array_type2t &lhs_type = to_array_type(lhs->type);
+  assert(is_constant_int2t(lhs_type.array_size) &&
+      "Can't assign array with non-constant size (should not even exist)");
+  assert(is_constant_array2t(lhs));
+  const constant_array2t &lhs_array = to_constant_array2t(lhs);
+
+  uint64_t sz =
+    to_constant_int2t(lhs_type.array_size).constant_value.to_uint64();
+
+  // As with symex_assign_structure: the lhs constant array is a temporary
+  // created to contain data reconstituted from some other source. Explicitly
+  // address elements and encode one assignment for each one. Obviously
+  // expensive.
+  for (uint64_t i = 0; i < sz; i++) {
+    const expr2tc &lhs_elem = lhs_array.datatype_members[i];
+    index2tc rhs_elem(lhs_type.subtype, rhs, gen_ulong(i));
+    symex_assign_rec(lhs_elem, rhs_elem, guard);
+  }
+}
+
 void goto_symext::symex_assign_typecast(
   const expr2tc &lhs,
   expr2tc &rhs,
@@ -307,7 +336,7 @@ void goto_symext::symex_assign_typecast(
   symex_assign_rec(cast.from, rhs_typecasted, guard);
 }
 
-void goto_symext::symex_assign_array(
+void goto_symext::symex_assign_index(
   const expr2tc &lhs,
   expr2tc &rhs,
   guardt &guard)
