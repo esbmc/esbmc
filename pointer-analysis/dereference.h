@@ -436,10 +436,6 @@ private:
                             const expr2tc &offset, const type2tc &type,
                             const guardt &guard, modet mode,
                             unsigned long alignment = 0);
-  void construct_array_from_struct_reference(expr2tc &value,
-                            const expr2tc &offset, const type2tc &type,
-                            const guardt &guard, modet mode,
-                            unsigned long alignment = 0);
 };
 
 #endif

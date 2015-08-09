@@ -851,10 +851,16 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   // assignments are rewritten to arrays, or when union assigns occur inside
   // structures etc.
   case flag_src_struct | flag_dst_array | flag_is_const_offs:
-  case flag_src_struct | flag_dst_array | flag_is_dyn_offs:
-    construct_array_from_struct_reference(value, offset, type, guard, mode,
-        alignment);
+    // Use struct-ref-builder to pick the correct field and recurse.
+    construct_struct_ref_from_const_offset(value, offset, type, guard);
     break;
+  case flag_src_struct | flag_dst_array | flag_is_dyn_offs:
+    // Use dyn-offs-cons function to iterate over each field of the struct.
+    // This brings us back to this function repeatedly. No reason for
+    // specialisation.
+    construct_struct_ref_from_dyn_offset(value, offset, type, guard, mode);
+    break;
+
   case flag_src_array | flag_dst_array | flag_is_const_offs:
   case flag_src_array | flag_dst_array | flag_is_dyn_offs:
     construct_array_from_array_reference(value, offset, type, guard, mode,
@@ -1583,16 +1589,6 @@ handle_malloc_hunk:
   // Voila
   value = constant_array2tc(type, extracted_elems);
 }
-
-void
-dereferencet::construct_array_from_struct_reference(expr2tc &value __attribute__((unused)),
-    const expr2tc &offset __attribute__((unused)), const type2tc &type __attribute__((unused)), const guardt &guard __attribute__((unused)),
-    modet mode __attribute__((unused)), unsigned long alignment __attribute__((unused)))
-{
-  // Called when we're constructing an array reference from 
-  abort();
-}
-
 
 /**************************** Dereference utilities ***************************/
 
