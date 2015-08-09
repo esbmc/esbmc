@@ -787,7 +787,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     break;
   case flag_src_struct | flag_dst_struct | flag_is_const_offs:
     // Extract a structure from inside another struct.
-    construct_struct_ref_from_const_offset(value, offset, type, guard);
+    construct_struct_ref_from_const_offset(value, offset, type, guard, mode, alignment);
     break;
   case flag_src_array | flag_dst_struct | flag_is_const_offs:
     // Extract a structure from inside an array.
@@ -801,7 +801,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     break;
   case flag_src_struct | flag_dst_union | flag_is_const_offs:
     // Extract a union from inside a structure.
-    construct_struct_ref_from_const_offset(value, offset, type, guard);
+    construct_struct_ref_from_const_offset(value, offset, type, guard, mode, alignment);
     break;
   case flag_src_array | flag_dst_union | flag_is_const_offs:
     // Extract a union from inside an array.
@@ -852,7 +852,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   // structures etc.
   case flag_src_struct | flag_dst_array | flag_is_const_offs:
     // Use struct-ref-builder to pick the correct field and recurse.
-    construct_struct_ref_from_const_offset(value, offset, type, guard);
+    construct_struct_ref_from_const_offset(value, offset, type, guard, mode, alignment);
     break;
   case flag_src_struct | flag_dst_array | flag_is_dyn_offs:
     // Use dyn-offs-cons function to iterate over each field of the struct.
@@ -1267,7 +1267,8 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
 
 void
 dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
-             const expr2tc &offs, const type2tc &type, const guardt &guard)
+             const expr2tc &offs, const type2tc &type, const guardt &guard,
+             modet mode, unsigned long alignment)
 {
   // Minimal effort: the moment that we can throw this object out due to an
   // incompatible type, we do.
@@ -1309,7 +1310,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
         mp_integer new_offs = intref.constant_value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_ulong());
         value = member2tc(*it, value, struct_type.member_names[i]);
-        construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
+        build_reference_rec(value, offs_expr, type, guard, mode, alignment);
         return;
       }
       i++;

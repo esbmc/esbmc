@@ -419,7 +419,8 @@ private:
   void construct_struct_ref_from_const_offset(expr2tc &value,
                                         const expr2tc &offs,
                                         const type2tc &type,
-                                        const guardt &guard);
+                                        const guardt &guard, modet mode,
+                                        unsigned long alignment);
   void construct_struct_ref_from_dyn_offset(expr2tc &value,
                                         const expr2tc &offs,
                                         const type2tc &type,
