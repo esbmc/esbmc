@@ -57,8 +57,8 @@ private:
   void convert_function(const clang::FunctionDecl &fd);
 
   void convert_function_params(
-    clang::ParmVarDecl *pdecl,
-    code_typet::argumentt &param);
+    const clang::ParmVarDecl &pdecl,
+    exprt &param);
 
   void get_type(
     const clang::QualType &the_type,

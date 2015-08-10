@@ -89,6 +89,15 @@ void llvm_convertert::convert_decl(
       break;
     }
 
+    case clang::Decl::ParmVar:
+    {
+      const clang::ParmVarDecl &param =
+        static_cast<const clang::ParmVarDecl &>(decl);
+      convert_function_params(param, new_expr);
+      break;
+    }
+
+    // Declaration of functions
     case clang::Decl::Function:
     {
       const clang::FunctionDecl &fd =
@@ -241,7 +250,7 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   current_function_name = fd.getName().str();
 
   // Set initial variable name, it will be used for variables' name
-  // This will be reset everytime a function is parsed
+  // This will be reset every time a function is parsed
   current_scope_var_num = 1;
 
   // Build function's type
@@ -258,7 +267,7 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   for (const auto &pdecl : fd.params())
   {
     code_typet::argumentt param;
-    convert_function_params(pdecl, param);
+    convert_function_params(*pdecl, param);
     type.arguments().push_back(param);
   }
 
@@ -311,13 +320,13 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
 }
 
 void llvm_convertert::convert_function_params(
-  clang::ParmVarDecl *pdecl,
-  code_typet::argumentt &param)
+  const clang::ParmVarDecl &pdecl,
+  exprt &param)
 {
   typet param_type;
-  get_type(pdecl->getOriginalType(), param_type);
+  get_type(pdecl.getOriginalType(), param_type);
 
-  std::string name = pdecl->getName().str();
+  std::string name = pdecl.getName().str();
 
   symbolt param_symbol;
   get_default_symbol(
@@ -330,6 +339,7 @@ void llvm_convertert::convert_function_params(
   param_symbol.file_local = true;
   param_symbol.is_actual = true;
 
+  param = code_typet::argumentt();
   param.type() = param_type;
   param.base_name(name);
   param.cmt_identifier(param_symbol.name.as_string());
@@ -338,7 +348,7 @@ void llvm_convertert::convert_function_params(
   move_symbol_to_context(param_symbol);
 
   // Save the function's param address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(pdecl);
+  std::size_t address = reinterpret_cast<std::size_t>(&pdecl);
   object_map[address] = get_param_name(name);
 }
 
