@@ -61,39 +61,36 @@ bool llvm_convertert::convert_top_level_decl()
       update_current_location((*it)->getLocation());
 
       exprt dummy_decl;
-      convert_decl(**it, dummy_decl);
+      get_decl(**it, dummy_decl);
     }
   }
 
   return false;
 }
 
-void llvm_convertert::convert_decl(
+// This method convert declarations. They are called when those declarations
+// are to be added to the context. If a variable or function is being called
+// but then get_decl_expr is called instead
+void llvm_convertert::get_decl(
   const clang::Decl& decl,
   exprt &new_expr)
 {
   switch (decl.getKind()) {
-    case clang::Decl::Typedef:
-    {
-      const clang::TypedefDecl &tdd =
-        static_cast<const clang::TypedefDecl&>(decl);
-      convert_typedef(tdd, new_expr);
-      break;
-    }
-
+    // Declaration of variables
     case clang::Decl::Var:
     {
       const clang::VarDecl &vd =
         static_cast<const clang::VarDecl&>(decl);
-      convert_var(vd, new_expr);
+      get_var(vd, new_expr);
       break;
     }
 
+    // Declaration of function's parameter
     case clang::Decl::ParmVar:
     {
       const clang::ParmVarDecl &param =
         static_cast<const clang::ParmVarDecl &>(decl);
-      convert_function_params(param, new_expr);
+      get_function_params(param, new_expr);
       break;
     }
 
@@ -102,18 +99,37 @@ void llvm_convertert::convert_decl(
     {
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
-      convert_function(fd);
+      get_function(fd);
       break;
     }
 
-    // Apparently if you insert a semicolon at the end of a
-    // function declaration, this AST is created, so just
-    // ignore it
+    // Typedef declaration
+    case clang::Decl::Typedef:
+    {
+      const clang::TypedefDecl &tdd =
+        static_cast<const clang::TypedefDecl&>(decl);
+      get_typedef(tdd, new_expr);
+      break;
+    }
+
+    // This is an empty declaration. An lose semicolon on the
+    // code is an empty declaration
     case clang::Decl::Empty:
       break;
 
+    case clang::Decl::Label:
+    case clang::Decl::Namespace:
+    case clang::Decl::Field:
+    case clang::Decl::EnumConstant:
+    case clang::Decl::IndirectField:
+    case clang::Decl::TypeAlias:
+    case clang::Decl::Enum:
     case clang::Decl::Record:
-    default:
+    case clang::Decl::FileScopeAsm:
+    case clang::Decl::Block:
+    case clang::Decl::Captured:
+    case clang::Decl::Import:
+      default:
       std::cerr << "Unrecognized / unimplemented decl type ";
       std::cerr << decl.getDeclKindName() << std::endl;
       decl.dumpColor();
@@ -123,7 +139,7 @@ void llvm_convertert::convert_decl(
   new_expr.location() = current_location;
 }
 
-void llvm_convertert::convert_typedef(
+void llvm_convertert::get_typedef(
   const clang::TypedefDecl &tdd,
   exprt &new_expr)
 {
@@ -147,7 +163,7 @@ void llvm_convertert::convert_typedef(
     new_expr = code_skipt();
 }
 
-void llvm_convertert::convert_var(
+void llvm_convertert::get_var(
   const clang::VarDecl &vd,
   exprt &new_expr)
 {
@@ -244,7 +260,7 @@ void llvm_convertert::convert_var(
   ++current_scope_var_num;
 }
 
-void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
+void llvm_convertert::get_function(const clang::FunctionDecl &fd)
 {
   std::string old_function_name = current_function_name;
   current_function_name = fd.getName().str();
@@ -267,7 +283,7 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   for (const auto &pdecl : fd.params())
   {
     code_typet::argumentt param;
-    convert_function_params(*pdecl, param);
+    get_function_params(*pdecl, param);
     type.arguments().push_back(param);
   }
 
@@ -319,7 +335,7 @@ void llvm_convertert::convert_function(const clang::FunctionDecl &fd)
   current_function_name = old_function_name;
 }
 
-void llvm_convertert::convert_function_params(
+void llvm_convertert::get_function_params(
   const clang::ParmVarDecl &pdecl,
   exprt &param)
 {
@@ -578,7 +594,7 @@ void llvm_convertert::get_expr(
       const clang::Decl &dcl =
         static_cast<const clang::Decl&>(*decl.getDecl());
 
-      get_decl_expr(dcl, new_expr);
+      get_decl_ref(dcl, new_expr);
       break;
     }
 
@@ -895,7 +911,7 @@ void llvm_convertert::get_expr(
         it++)
       {
         exprt single_decl;
-        convert_decl(**it, single_decl);
+        get_decl(**it, single_decl);
         decls.operands().push_back(single_decl);
       }
 
@@ -1210,7 +1226,7 @@ void llvm_convertert::get_expr(
   new_expr.location() = current_location;
 }
 
-void llvm_convertert::get_decl_expr(
+void llvm_convertert::get_decl_ref(
   const clang::Decl& decl,
   exprt& new_expr)
 {

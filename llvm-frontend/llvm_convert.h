@@ -42,21 +42,22 @@ private:
 
   bool convert_top_level_decl();
 
-  void convert_decl(
+  void get_decl(
     const clang::Decl &decl,
     exprt &new_expr);
 
-  void convert_typedef(
+  void get_typedef(
     const clang::TypedefDecl &tdd,
     exprt &new_expr);
 
-  void convert_var(
+  void get_var(
     const clang::VarDecl &vd,
     exprt &new_expr);
 
-  void convert_function(const clang::FunctionDecl &fd);
+  void get_function(
+    const clang::FunctionDecl &fd);
 
-  void convert_function_params(
+  void get_function_params(
     const clang::ParmVarDecl &pdecl,
     exprt &param);
 
@@ -72,7 +73,7 @@ private:
     const clang::Stmt &stmt,
     exprt &new_expr);
 
-  void get_decl_expr(
+  void get_decl_ref(
     const clang::Decl &decl,
     exprt &new_expr);
 
