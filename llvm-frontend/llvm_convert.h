@@ -61,6 +61,10 @@ private:
     const clang::ParmVarDecl &pdecl,
     exprt &param);
 
+  void get_enum(
+    const clang::EnumDecl &enumd,
+    exprt &new_expr);
+
   void get_type(
     const clang::QualType &the_type,
     typet &new_type);

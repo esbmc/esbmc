@@ -112,6 +112,15 @@ void llvm_convertert::get_decl(
       break;
     }
 
+    // Enum declaration
+    case clang::Decl::Enum:
+    {
+      const clang::EnumDecl &enumd =
+        static_cast<const clang::EnumDecl &>(decl);
+      get_enum(enumd, new_expr);
+      break;
+    }
+
     // This is an empty declaration. An lose semicolon on the
     // code is an empty declaration
     case clang::Decl::Empty:
@@ -123,7 +132,6 @@ void llvm_convertert::get_decl(
     case clang::Decl::EnumConstant:
     case clang::Decl::IndirectField:
     case clang::Decl::TypeAlias:
-    case clang::Decl::Enum:
     case clang::Decl::Record:
     case clang::Decl::FileScopeAsm:
     case clang::Decl::Block:
@@ -137,6 +145,28 @@ void llvm_convertert::get_decl(
   }
 
   new_expr.location() = current_location;
+}
+
+void llvm_convertert::get_enum(
+  const clang::EnumDecl& enumd,
+  exprt& new_expr)
+{
+  typet t = enum_type();
+  t.id("c_enum");
+  t.tag("AB");
+
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    t,
+    enumd.getName().str(),
+    enumd.getName().str(),
+    true);
+
+  symbol.pretty_name = "enum " + symbol.pretty_name.as_string();
+  symbol.is_type = true;
+
+  move_symbol_to_context(symbol);
 }
 
 void llvm_convertert::get_typedef(
