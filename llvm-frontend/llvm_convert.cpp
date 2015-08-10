@@ -1621,24 +1621,22 @@ void llvm_convertert::gen_typecast(
   }
 }
 
-void llvm_convertert::get_default_symbol(symbolt& symbol)
-{
-  symbol.mode = "C";
-  symbol.module = get_modulename_from_path();
-  symbol.location = current_location;
-}
-
 void llvm_convertert::get_default_symbol(
   symbolt& symbol,
   typet type,
   std::string base_name,
-  std::string pretty_name)
+  std::string pretty_name,
+  bool is_tag)
 {
-  get_default_symbol(symbol);
+  symbol.mode = "C";
+  symbol.module = get_modulename_from_path();
+  symbol.location = current_location;
   symbol.type = type;
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
-  symbol.name = "c::" + pretty_name;
+
+  std::string name = is_tag ? "c::tag-" : "c::";
+  symbol.name = name + pretty_name;
 }
 
 std::string llvm_convertert::get_var_name(
