@@ -145,7 +145,7 @@ void llvm_convertert::get_decl(
     case clang::Decl::Captured:
     case clang::Decl::Import:
       default:
-      std::cerr << "Unrecognized / unimplemented decl type "
+      std::cerr << "Unrecognized / unimplemented decl "
                 << decl.getDeclKindName() << std::endl;
       decl.dumpColor();
       abort();
@@ -1410,7 +1410,7 @@ void llvm_convertert::get_decl_ref(
     }
 
     default:
-      std::cerr << "Conversion of unsupported clang decl operator: \"";
+      std::cerr << "Conversion of unsupported clang decl ref: \"";
       std::cerr << decl.getDeclKindName() << "\" to expression" << std::endl;
       decl.dump();
       abort();
