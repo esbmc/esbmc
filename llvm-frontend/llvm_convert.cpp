@@ -592,6 +592,7 @@ void llvm_convertert::get_type(
       break;
     }
 
+    // TODO: parse as record
     case clang::Type::Enum:
     {
       const clang::EnumType &et =
