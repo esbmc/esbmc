@@ -112,20 +112,39 @@ void llvm_convertert::get_decl(
       break;
     }
 
-    // Enum declaration
-    case clang::Decl::Enum:
-    {
-      const clang::EnumDecl &enumd =
-        static_cast<const clang::EnumDecl &>(decl);
-      get_enum(enumd, new_expr);
-      break;
-    }
-
     case clang::Decl::EnumConstant:
     {
       const clang::EnumConstantDecl &enumcd =
         static_cast<const clang::EnumConstantDecl &>(decl);
       get_enum_constants(enumcd, new_expr);
+      break;
+    }
+
+    case clang::Decl::Record:
+    {
+      const clang::TagDecl &tag =
+        static_cast<const clang::TagDecl &>(decl);
+
+      if(tag.isEnum())
+      {
+        const clang::EnumDecl &enumd =
+          static_cast<const clang::EnumDecl &>(decl);
+        get_enum(enumd, new_expr);
+      }
+      else if(tag.isStruct())
+      {
+        abort();
+      }
+      else if(tag.isUnion())
+      {
+        abort();
+      }
+      else if(tag.isClass())
+      {
+        std::cerr << "Class is not supported yet" << std::endl;
+        abort();
+      }
+
       break;
     }
 
@@ -139,12 +158,11 @@ void llvm_convertert::get_decl(
     case clang::Decl::Field:
     case clang::Decl::IndirectField:
     case clang::Decl::TypeAlias:
-    case clang::Decl::Record:
     case clang::Decl::FileScopeAsm:
     case clang::Decl::Block:
     case clang::Decl::Captured:
     case clang::Decl::Import:
-      default:
+    default:
       std::cerr << "Unrecognized / unimplemented decl "
                 << decl.getDeclKindName() << std::endl;
       decl.dumpColor();
