@@ -1478,7 +1478,7 @@ void llvm_convertert::get_expr(
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
-      stmt.dump();
+      stmt.dumpColor();
       abort();
   }
 
