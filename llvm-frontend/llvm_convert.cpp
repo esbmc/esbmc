@@ -653,7 +653,30 @@ void llvm_convertert::get_type(
       break;
     }
 
-    // TODO: parse as record
+    case clang::Type::Record:
+    {
+      const clang::TagDecl &tag =
+        *static_cast<const clang::TagType &>(the_type).getDecl();
+
+      std::size_t address;
+      if(tag.isStruct() || tag.isUnion())
+      {
+        const clang::RecordType &et =
+          static_cast<const clang::RecordType &>(the_type);
+        address = reinterpret_cast<std::size_t>(et.getDecl());
+      }
+      else if(tag.isClass())
+      {
+        std::cerr << "Class Type is not supported yet" << std::endl;
+        abort();
+      }
+
+      std::string identifier = type_map.find(address)->second;
+      new_type = symbol_typet("c::" + identifier);
+
+      break;
+    }
+
     case clang::Type::Enum:
     {
       const clang::EnumType &et =
