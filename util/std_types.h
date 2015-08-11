@@ -97,6 +97,16 @@ public:
   class componentt:public exprt
   {
   public:
+    inline componentt():exprt(a_component)
+    {
+    }
+
+    inline componentt(const irep_idt &_name, const typet &_type):exprt(a_component)
+    {
+      set_name(_name);
+      type()=_type;
+    }
+
     const irep_idt &get_name() const
     {
       return get(a_name);
