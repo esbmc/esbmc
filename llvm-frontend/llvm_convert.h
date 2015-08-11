@@ -65,6 +65,10 @@ private:
     const clang::EnumDecl &enumd,
     exprt &new_expr);
 
+  void get_enum_constants(
+    const clang::EnumConstantDecl &enumcd,
+    exprt &new_expr);
+
   void get_type(
     const clang::QualType &the_type,
     typet &new_type);

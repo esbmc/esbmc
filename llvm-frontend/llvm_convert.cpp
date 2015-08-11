@@ -121,6 +121,14 @@ void llvm_convertert::get_decl(
       break;
     }
 
+    case clang::Decl::EnumConstant:
+    {
+      const clang::EnumConstantDecl &enumcd =
+        static_cast<const clang::EnumConstantDecl &>(decl);
+      get_enum_constants(enumcd, new_expr);
+      break;
+    }
+
     // This is an empty declaration. An lose semicolon on the
     // code is an empty declaration
     case clang::Decl::Empty:
@@ -129,7 +137,6 @@ void llvm_convertert::get_decl(
     case clang::Decl::Label:
     case clang::Decl::Namespace:
     case clang::Decl::Field:
-    case clang::Decl::EnumConstant:
     case clang::Decl::IndirectField:
     case clang::Decl::TypeAlias:
     case clang::Decl::Record:
@@ -168,6 +175,55 @@ void llvm_convertert::get_enum(
   // This change on the pretty_name is just to beautify the output
   symbol.pretty_name = "enum " + enumd.getName().str();
   symbol.is_type = true;
+
+  move_symbol_to_context(symbol);
+
+  for(const auto &enumerator : enumd.enumerators())
+  {
+    // Each enumerator will become a type, so we can
+    // ignore the generated expr
+    exprt dummy_enumerator;
+    get_decl(*enumerator, dummy_enumerator);
+  }
+
+  if(current_function_name!= "")
+    new_expr = code_skipt();
+}
+
+void llvm_convertert::get_enum_constants(
+  const clang::EnumConstantDecl& enumcd,
+  exprt& new_expr)
+{
+  // The enum name is different on the old frontend
+  // Global variables have the form <language>::<variable_name>
+  // But for some reason, global enums have the form
+  // <language>::<module>::<variable_name>, on the new frontend
+  // follow the standard for global variables
+  std::string enum_value_identifier =
+    get_var_name(enumcd.getName().str(), !current_function_name.empty());
+
+  // The parent enum to construct the enum constant's type
+  std::string parent_enum_identifier;
+  if(enumcd.getDeclContext())
+  {
+    const clang::EnumDecl &enumd =
+      static_cast<const clang::EnumDecl &>(*enumcd.getDeclContext());
+
+    parent_enum_identifier =
+      get_tag_name(enumd.getName().str(), !current_function_name.empty());
+  }
+
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    symbol_typet("c::" + parent_enum_identifier),
+    enumcd.getName().str(),
+    enum_value_identifier);
+
+  exprt bval;
+  get_size_exprt(enumcd.getInitVal(), signedbv_typet(), bval);
+
+  symbol.value.swap(bval);
 
   move_symbol_to_context(symbol);
 }
