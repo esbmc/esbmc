@@ -188,6 +188,10 @@ void llvm_convertert::get_enum(
 
   if(current_function_name!= "")
     new_expr = code_skipt();
+
+  // Save the enum type address and name to the object map
+  std::size_t address = reinterpret_cast<std::size_t>(&enumd);
+  type_map[address] = identifier;
 }
 
 void llvm_convertert::get_enum_constants(
@@ -574,9 +578,11 @@ void llvm_convertert::get_type(
     {
       const clang::EnumType &et =
         static_cast<const clang::EnumType &>(the_type);
-      std::string identifier = "c::" +
-        get_tag_name(et.getDecl()->getName().str(), !current_function_name.empty());
-      new_type = symbol_typet(identifier);
+
+      std::size_t address = reinterpret_cast<std::size_t>(et.getDecl());
+      std::string identifier = type_map.find(address)->second;
+
+      new_type = symbol_typet("c::" + identifier);
       break;
     }
 

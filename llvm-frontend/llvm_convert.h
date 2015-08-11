@@ -46,6 +46,9 @@ private:
   typedef std::map<std::size_t, std::string> object_mapt;
   object_mapt object_map;
 
+  typedef std::map<std::size_t, std::string> type_mapt;
+  type_mapt type_map;
+
   bool convert_top_level_decl();
 
   void get_decl(
