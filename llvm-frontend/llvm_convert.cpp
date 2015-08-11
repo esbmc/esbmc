@@ -1111,22 +1111,11 @@ void llvm_convertert::get_expr(
 
       constant_exprt inits(t);
       unsigned int num = init_stmt.getNumInits();
-      if(t.is_array())
+      for (unsigned int i = 0; i < num; i++)
       {
-        for (unsigned int i = 0; i < num; i++)
-        {
-          exprt init;
-          get_expr(*init_stmt.getInit(i), init);
-          inits.operands().push_back(init);
-        }
-      }
-      else
-      {
-        std::cerr << "Excess elements in scalar initializer"
-                  << "':" << std::endl << t.pretty() << std::endl
-                  << "at: " << current_location.as_string()
-                  << std::endl;
-        abort();
+        exprt init;
+        get_expr(*init_stmt.getInit(i), init);
+        inits.operands().push_back(init);
       }
 
       new_expr = inits;
