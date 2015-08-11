@@ -128,6 +128,15 @@ void llvm_convertert::get_decl(
       break;
     }
 
+    // Enum declaration
+    case clang::Decl::Enum:
+    {
+      const clang::EnumDecl &enumd =
+        static_cast<const clang::EnumDecl &>(decl);
+      get_enum(enumd, new_expr);
+      break;
+    }
+
     case clang::Decl::EnumConstant:
     {
       const clang::EnumConstantDecl &enumcd =
