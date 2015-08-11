@@ -1006,6 +1006,26 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::MemberExprClass:
+    {
+      const clang::MemberExpr &member =
+        static_cast<const clang::MemberExpr &>(stmt);
+
+      member.dump();
+
+      typet t;
+      get_type(member.getType(), t);
+
+      exprt base;
+      get_expr(*member.getBase(), base);
+
+      exprt comp_name;
+      get_decl(*member.getMemberDecl(), comp_name);
+
+      new_expr = member_exprt(base, comp_name.name(), t);
+      break;
+    }
+
     // Casts expression:
     // Implicit: float f = 1; equivalent to float f = (float) 1;
     // CStyle: int a = (int) 3.0;
@@ -1437,7 +1457,6 @@ void llvm_convertert::get_expr(
     case clang::Stmt::ImaginaryLiteralClass:
     case clang::Stmt::OffsetOfExprClass:
     case clang::Stmt::UnaryExprOrTypeTraitExprClass:
-    case clang::Stmt::MemberExprClass:
     case clang::Stmt::AddrLabelExprClass:
     case clang::Stmt::StmtExprClass:
     case clang::Stmt::ShuffleVectorExprClass:
