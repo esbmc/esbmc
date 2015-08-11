@@ -31,10 +31,16 @@ public:
 private:
   contextt &context;
   namespacet ns;
+
   locationt current_location;
   std::string current_path;
+
+  // TODO: We don't need the current_function_name attribute!!!!!
+  // We can get it from the declcontext. Refactor the
+  // rest of the code to use it
   std::string current_function_name;
-  int current_scope_var_num;
+  unsigned int current_scope_var_num;
+
   clang::SourceManager *sm;
 
   typedef std::map<int, std::string> object_mapst;

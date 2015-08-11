@@ -145,8 +145,8 @@ void llvm_convertert::get_decl(
     case clang::Decl::Captured:
     case clang::Decl::Import:
       default:
-      std::cerr << "Unrecognized / unimplemented decl type ";
-      std::cerr << decl.getDeclKindName() << std::endl;
+      std::cerr << "Unrecognized / unimplemented decl type "
+                << decl.getDeclKindName() << std::endl;
       decl.dumpColor();
       abort();
   }
