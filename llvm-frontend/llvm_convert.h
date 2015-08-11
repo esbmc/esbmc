@@ -74,6 +74,10 @@ private:
     const clang::EnumDecl &enumd,
     exprt &new_expr);
 
+  void get_struct(
+    const clang::RecordDecl &structd,
+    exprt &new_expr);
+
   void get_enum_constants(
     const clang::EnumConstantDecl &enumcd,
     exprt &new_expr);

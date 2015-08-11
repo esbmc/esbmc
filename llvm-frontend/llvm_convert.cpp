@@ -149,7 +149,9 @@ void llvm_convertert::get_decl(
       }
       else if(tag.isStruct())
       {
-        abort();
+        const clang::RecordDecl &record =
+          static_cast<const clang::RecordDecl &>(decl);
+        get_struct(record, new_expr);
       }
       else if(tag.isUnion())
       {
@@ -171,7 +173,6 @@ void llvm_convertert::get_decl(
 
     case clang::Decl::Label:
     case clang::Decl::Namespace:
-    case clang::Decl::Field:
     case clang::Decl::IndirectField:
     case clang::Decl::TypeAlias:
     case clang::Decl::FileScopeAsm:
@@ -225,6 +226,41 @@ void llvm_convertert::get_enum(
 
   // Save the enum type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&enumd);
+  type_map[address] = identifier;
+}
+
+void llvm_convertert::get_struct(
+  const clang::RecordDecl& structd,
+  exprt& new_expr)
+{
+  std::string identifier =
+    get_tag_name(structd.getName().str(), !current_function_name.empty());
+
+  struct_typet t;
+  t.tag(structd.getName().str());
+
+  for(const auto &field : structd.fields())
+  {
+    struct_typet::componentt comp;
+    get_decl(*field, comp);
+    t.components().push_back(comp);
+  }
+
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    t,
+    structd.getName().str(),
+    identifier);
+
+  // This change on the pretty_name is just to beautify the output
+  symbol.pretty_name = "struct " + structd.getName().str();
+  symbol.is_type = true;
+
+  move_symbol_to_context(symbol);
+
+  // Save the enum type address and name to the object map
+  std::size_t address = reinterpret_cast<std::size_t>(&structd);
   type_map[address] = identifier;
 }
 
