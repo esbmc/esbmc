@@ -234,7 +234,7 @@ void llvm_convertert::get_typedef(
 {
   // Get type
   typet t;
-  get_type(tdd.getUnderlyingType(), t);
+  get_type(tdd.getUnderlyingType().getCanonicalType(), t);
 
   symbolt symbol;
   get_default_symbol(
@@ -476,7 +476,8 @@ void llvm_convertert::get_type(
     {
       const clang::TypedefType &pt =
         static_cast<const clang::TypedefType &>(the_type);
-      clang::QualType q_typedef_type = pt.getDecl()->getUnderlyingType();
+      clang::QualType q_typedef_type =
+        pt.getDecl()->getUnderlyingType().getCanonicalType();
       get_type(q_typedef_type, new_type);
       break;
     }
