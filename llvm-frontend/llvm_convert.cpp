@@ -472,6 +472,15 @@ void llvm_convertert::get_type(
       break;
     }
 
+    // Types using parenthesis, e.g. int (a);
+    case clang::Type::Paren:
+    {
+      const clang::ParenType &pt =
+        static_cast<const clang::ParenType&>(the_type);
+      get_type(pt.getInnerType(), new_type);
+      break;
+    }
+
     case clang::Type::Typedef:
     {
       const clang::TypedefType &pt =
