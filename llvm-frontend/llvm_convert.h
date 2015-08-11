@@ -43,8 +43,8 @@ private:
 
   clang::SourceManager *sm;
 
-  typedef std::map<int, std::string> object_mapst;
-  object_mapst object_map;
+  typedef std::map<std::size_t, std::string> object_mapt;
+  object_mapt object_map;
 
   bool convert_top_level_decl();
 

@@ -1399,7 +1399,7 @@ void llvm_convertert::get_decl_ref(
 
       // We may not find the function's symbol, because it was
       // not defined or is undefined at all
-      object_mapst::iterator it = object_map.find(address);
+      object_mapt::iterator it = object_map.find(address);
       if(it == object_map.end())
         identifier = fd.getName().str();
       else
