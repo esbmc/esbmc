@@ -567,6 +567,14 @@ void llvm_convertert::get_type(
     case clang::Type::FunctionProto:
       break;
 
+    case clang::Type::Elaborated:
+    {
+      const clang::ElaboratedType &et =
+        static_cast<const clang::ElaboratedType &>(the_type);
+      get_type(et.getNamedType(), new_type);
+      break;
+    }
+
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
