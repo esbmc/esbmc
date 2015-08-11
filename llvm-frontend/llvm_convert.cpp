@@ -463,7 +463,9 @@ void llvm_convertert::get_type(
 {
   const clang::Type &the_type = *q_type.getTypePtrOrNull();
 
-  switch (the_type.getTypeClass()) {
+  switch (the_type.getTypeClass())
+  {
+    // Builtin types like integer
     case clang::Type::Builtin:
     {
       const clang::BuiltinType &bt =
@@ -481,16 +483,7 @@ void llvm_convertert::get_type(
       break;
     }
 
-    case clang::Type::Typedef:
-    {
-      const clang::TypedefType &pt =
-        static_cast<const clang::TypedefType &>(the_type);
-      clang::QualType q_typedef_type =
-        pt.getDecl()->getUnderlyingType().getCanonicalType();
-      get_type(q_typedef_type, new_type);
-      break;
-    }
-
+    // Pointer types
     case clang::Type::Pointer:
     {
       const clang::PointerType &pt =
@@ -504,13 +497,16 @@ void llvm_convertert::get_type(
       break;
     }
 
-    // Those two here appears when we make a function call, e.g:
-    // FunctionNoProto: int x = fun()
-    // FunctionProto: int x = fun(a, b)
-    case clang::Type::FunctionNoProto:
-    case clang::Type::FunctionProto:
+    // Types adjusted by the semantic engine
+    case clang::Type::Decayed:
+    {
+      const clang::DecayedType &pt =
+        static_cast<const clang::DecayedType&>(the_type);
+      get_type(pt.getDecayedType(), new_type);
       break;
+    }
 
+    // Array with constant size, e.g., int a[3];
     case clang::Type::ConstantArray:
     {
       const clang::ConstantArrayType &arr =
@@ -533,6 +529,7 @@ void llvm_convertert::get_type(
       break;
     }
 
+    // Array with variable size, e.g., int a[n];
     case clang::Type::VariableArray:
     {
       const clang::VariableArrayType &arr =
@@ -552,14 +549,23 @@ void llvm_convertert::get_type(
       break;
     }
 
-    // Types adjusted by the semantic engine
-    case clang::Type::Decayed:
+    // Typedef type definition
+    case clang::Type::Typedef:
     {
-      const clang::DecayedType &pt =
-        static_cast<const clang::DecayedType&>(the_type);
-      get_type(pt.getDecayedType(), new_type);
+      const clang::TypedefType &pt =
+        static_cast<const clang::TypedefType &>(the_type);
+      clang::QualType q_typedef_type =
+        pt.getDecl()->getUnderlyingType().getCanonicalType();
+      get_type(q_typedef_type, new_type);
       break;
     }
+
+    // Those two here appears when we make a function call, e.g:
+    // FunctionNoProto: int x = fun()
+    // FunctionProto: int x = fun(a, b)
+    case clang::Type::FunctionNoProto:
+    case clang::Type::FunctionProto:
+      break;
 
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
