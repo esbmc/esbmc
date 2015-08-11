@@ -111,6 +111,10 @@ private:
   std::string get_var_name(std::string name, bool is_local);
   std::string get_param_name(std::string name);
 
+  std::string get_tag_name(
+    std::string name,
+    bool is_local);
+
   void get_size_exprt(
     llvm::APInt &val,
     exprt &expr,

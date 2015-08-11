@@ -1695,6 +1695,22 @@ std::string llvm_convertert::get_param_name(std::string name)
   return pretty_name;
 }
 
+std::string llvm_convertert::get_tag_name(
+  std::string name,
+  bool is_local)
+{
+  if(!is_local)
+    return "tag-" + name;
+
+  std::string pretty_name = get_modulename_from_path() + "::";
+  if(current_function_name!= "")
+    pretty_name += current_function_name + "::";
+  pretty_name += integer2string(current_scope_var_num) + "::";
+  pretty_name += "tag-" + name;
+
+  return pretty_name;
+}
+
 void llvm_convertert::get_size_exprt(
   llvm::APInt &val,
   exprt &expr,
