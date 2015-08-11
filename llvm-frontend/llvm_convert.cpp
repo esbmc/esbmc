@@ -222,10 +222,13 @@ void llvm_convertert::get_enum_constants(
 
   exprt bval;
   get_size_exprt(enumcd.getInitVal(), signedbv_typet(), bval);
-
   symbol.value.swap(bval);
 
   move_symbol_to_context(symbol);
+
+  // Save the enum constant address and name to the object map
+  std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
+  object_map[address] = enum_value_identifier;
 }
 
 void llvm_convertert::get_typedef(
