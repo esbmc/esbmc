@@ -103,6 +103,22 @@ void llvm_convertert::get_decl(
       break;
     }
 
+    // Field inside a struct/union
+    case clang::Decl::Field:
+    {
+      const clang::FieldDecl &fd =
+        static_cast<const clang::FieldDecl&>(decl);
+
+      typet t;
+      get_type(fd.getType(), t);
+
+      struct_union_typet::componentt comp(fd.getName().str(), t);
+      comp.set_pretty_name(fd.getName().str());
+
+      new_expr = comp;
+      break;
+    }
+
     // Typedef declaration
     case clang::Decl::Typedef:
     {
