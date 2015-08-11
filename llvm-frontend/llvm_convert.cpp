@@ -549,6 +549,13 @@ void llvm_convertert::get_type(
       break;
     }
 
+    // Those two here appears when we make a function call, e.g:
+    // FunctionNoProto: int x = fun()
+    // FunctionProto: int x = fun(a, b)
+    case clang::Type::FunctionNoProto:
+    case clang::Type::FunctionProto:
+      break;
+
     // Typedef type definition
     case clang::Type::Typedef:
     {
@@ -560,12 +567,15 @@ void llvm_convertert::get_type(
       break;
     }
 
-    // Those two here appears when we make a function call, e.g:
-    // FunctionNoProto: int x = fun()
-    // FunctionProto: int x = fun(a, b)
-    case clang::Type::FunctionNoProto:
-    case clang::Type::FunctionProto:
+    case clang::Type::Enum:
+    {
+      const clang::EnumType &et =
+        static_cast<const clang::EnumType &>(the_type);
+      std::string identifier = "c::" +
+        get_tag_name(et.getDecl()->getName().str(), !current_function_name.empty());
+      new_type = symbol_typet(identifier);
       break;
+    }
 
     case clang::Type::Elaborated:
     {
