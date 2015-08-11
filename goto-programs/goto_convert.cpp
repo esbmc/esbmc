@@ -354,6 +354,9 @@ void goto_convertt::convert_block(
     {
       forall_operands(it, code_it)
       {
+        if(it->statement() == "skip")
+          continue;
+
         const exprt &op0=it->op0();
         assert(op0.id()=="symbol");
         const irep_idt &identifier=op0.identifier();
