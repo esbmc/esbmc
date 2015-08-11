@@ -1412,6 +1412,18 @@ void llvm_convertert::get_decl_ref(
       break;
     }
 
+    case clang::Decl::EnumConstant:
+    {
+      const clang::EnumConstantDecl &enumcd =
+        static_cast<const clang::EnumConstantDecl &>(decl);
+
+      std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
+      identifier = object_map.find(address)->second;
+
+      get_type(enumcd.getType(), type);
+      break;
+    }
+
     default:
       std::cerr << "Conversion of unsupported clang decl ref: \"";
       std::cerr << decl.getDeclKindName() << "\" to expression" << std::endl;
