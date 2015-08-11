@@ -1101,8 +1101,6 @@ void llvm_convertert::get_expr(
     }
 
     // An initialize statement, such as int a[3] = {1, 2, 3}
-    // TODO: If the element is not an array, we throw an error, but
-    // current compiler just give a warning.
     case clang::Stmt::InitListExprClass:
     {
       const clang::InitListExpr &init_stmt =
@@ -1111,7 +1109,12 @@ void llvm_convertert::get_expr(
       typet t;
       get_type(init_stmt.getType(), t);
 
-      constant_exprt inits(t);
+      exprt inits;
+      if(t.is_array())
+        inits = constant_exprt(t);
+      else if(t.is_struct())
+        inits = exprt("struct", t);
+
       unsigned int num = init_stmt.getNumInits();
       for (unsigned int i = 0; i < num; i++)
       {
