@@ -181,7 +181,7 @@ void llvm_convertert::get_enum(
 
   typet t = enum_type();
   t.id("c_enum");
-  t.tag("AB");
+  t.tag(enumd.getName().str());
 
   symbolt symbol;
   get_default_symbol(
