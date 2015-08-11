@@ -151,6 +151,9 @@ void llvm_convertert::get_enum(
   const clang::EnumDecl& enumd,
   exprt& new_expr)
 {
+  std::string identifier =
+    get_tag_name(enumd.getName().str(), !current_function_name.empty());
+
   typet t = enum_type();
   t.id("c_enum");
   t.tag("AB");
@@ -160,10 +163,10 @@ void llvm_convertert::get_enum(
     symbol,
     t,
     enumd.getName().str(),
-    enumd.getName().str(),
-    true);
+    identifier);
 
-  symbol.pretty_name = "enum " + symbol.pretty_name.as_string();
+  // This change on the pretty_name is just to beautify the output
+  symbol.pretty_name = "enum " + enumd.getName().str();
   symbol.is_type = true;
 
   move_symbol_to_context(symbol);
@@ -454,7 +457,7 @@ void llvm_convertert::get_type(
       get_type(arr.getElementType(), the_type);
 
       exprt bval;
-      get_size_exprt(val, bval, signedbv_typet());
+      get_size_exprt(val, signedbv_typet(), bval);
 
       array_typet type;
       type.size() = bval;
@@ -651,7 +654,7 @@ void llvm_convertert::get_expr(
       assert(the_type.is_unsignedbv() || the_type.is_signedbv());
 
       exprt bval;
-      get_size_exprt(val, bval, the_type);
+      get_size_exprt(val, the_type, bval);
 
       new_expr.swap(bval);
       break;
@@ -680,9 +683,8 @@ void llvm_convertert::get_expr(
       typet t;
       get_type(float_literal.getType(), t);
 
-      double val = float_literal.getValueAsApproximateDouble();
       exprt bval;
-      get_size_exprt(val, bval, t);
+      get_size_exprt(float_literal.getValueAsApproximateDouble(), t, bval );
 
       new_expr.swap(bval);
       break;
@@ -1655,8 +1657,7 @@ void llvm_convertert::get_default_symbol(
   symbolt& symbol,
   typet type,
   std::string base_name,
-  std::string pretty_name,
-  bool is_tag)
+  std::string pretty_name)
 {
   symbol.mode = "C";
   symbol.module = get_modulename_from_path();
@@ -1664,9 +1665,7 @@ void llvm_convertert::get_default_symbol(
   symbol.type = type;
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
-
-  std::string name = is_tag ? "c::tag-" : "c::";
-  symbol.name = name + pretty_name;
+  symbol.name = "c::" + pretty_name;
 }
 
 std::string llvm_convertert::get_var_name(
@@ -1712,9 +1711,9 @@ std::string llvm_convertert::get_tag_name(
 }
 
 void llvm_convertert::get_size_exprt(
-  llvm::APInt &val,
-  exprt &expr,
-  typet type)
+  llvm::APInt val,
+  typet type,
+  exprt &expr)
 {
   if (type.is_unsignedbv())
   {
@@ -1734,9 +1733,9 @@ void llvm_convertert::get_size_exprt(
 }
 
 void llvm_convertert::get_size_exprt(
-  double& val,
-  exprt& expr,
-  typet type)
+  double val,
+  typet type,
+  exprt& expr)
 {
   std::ostringstream strs;
   strs << val;

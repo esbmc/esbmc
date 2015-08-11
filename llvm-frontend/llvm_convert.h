@@ -105,25 +105,28 @@ private:
     symbolt &symbol,
     typet type,
     std::string base_name,
-    std::string pretty_name,
-    bool is_tag = false);
+    std::string pretty_name);
 
-  std::string get_var_name(std::string name, bool is_local);
-  std::string get_param_name(std::string name);
+  std::string get_var_name(
+    std::string name,
+    bool is_local);
+
+  std::string get_param_name(
+    std::string name);
 
   std::string get_tag_name(
     std::string name,
     bool is_local);
 
   void get_size_exprt(
-    llvm::APInt &val,
-    exprt &expr,
-    typet type);
+    llvm::APInt val,
+    typet type,
+    exprt &expr);
 
   void get_size_exprt(
-    double &val,
-    exprt &expr,
-    typet type);
+    double val,
+    typet type,
+    exprt &expr);
 
   void set_source_manager(clang::SourceManager &source_manager);
   void update_current_location(clang::SourceLocation source_location);
