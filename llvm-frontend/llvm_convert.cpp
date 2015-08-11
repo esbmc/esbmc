@@ -552,6 +552,15 @@ void llvm_convertert::get_type(
       break;
     }
 
+    // Types adjusted by the semantic engine
+    case clang::Type::Decayed:
+    {
+      const clang::DecayedType &pt =
+        static_cast<const clang::DecayedType&>(the_type);
+      get_type(pt.getDecayedType(), new_type);
+      break;
+    }
+
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
