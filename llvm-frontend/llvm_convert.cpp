@@ -1398,6 +1398,13 @@ void llvm_convertert::get_expr(
       label.add("label") = irept(label_stmt.getName());
       label.copy_to_operands(sub_stmt);
 
+      // TODO: Move to a step after conversion
+      // Before push the body to the symbol, we must check if
+      // every statement is an codet, e.g., sideeffects are exprts
+      // and must be converted
+      for(auto &statement : label.operands())
+        convert_exprt_inside_block(statement);
+
       new_expr = label;
       break;
     }
