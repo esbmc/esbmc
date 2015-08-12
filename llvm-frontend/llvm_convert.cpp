@@ -274,7 +274,7 @@ void llvm_convertert::get_struct(
   if(current_function_name!= "")
     new_expr = code_skipt();
 
-  // Save the enum type address and name to the object map
+  // Save the struct type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&structd);
   type_map[address] = identifier;
 }
