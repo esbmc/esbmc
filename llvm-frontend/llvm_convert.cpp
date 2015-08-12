@@ -1119,6 +1119,18 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::CompoundLiteralExprClass:
+    {
+      const clang::CompoundLiteralExpr &compound =
+        static_cast<const clang::CompoundLiteralExpr &>(stmt);
+
+      exprt initializer;
+      get_expr(*compound.getInitializer(), initializer);
+
+      new_expr = initializer;
+      break;
+    }
+
     // Casts expression:
     // Implicit: float f = 1; equivalent to float f = (float) 1;
     // CStyle: int a = (int) 3.0;
