@@ -706,8 +706,6 @@ void llvm_convertert::get_type(
       const clang::IncompleteArrayType &arr =
         static_cast<const clang::IncompleteArrayType &>(the_type);
 
-      arr.dump();
-
       typet sub_type;
       get_type(arr.getElementType(), sub_type);
 
@@ -1135,8 +1133,6 @@ void llvm_convertert::get_expr(
     {
       const clang::MemberExpr &member =
         static_cast<const clang::MemberExpr &>(stmt);
-
-      member.dump();
 
       typet t;
       get_type(member.getType(), t);
