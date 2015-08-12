@@ -957,6 +957,26 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    // Support for __builtin_offsetof();
+    case clang::Stmt::OffsetOfExprClass:
+    {
+      const clang::OffsetOfExpr &offset =
+        static_cast<const clang::OffsetOfExpr &>(stmt);
+
+      llvm::APSInt val;
+      assert(offset.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()));
+
+      typet t;
+      get_type(offset.getType(), t);
+
+      exprt offset_value;
+      convert_integer_literal(integer2string(val.getSExtValue()), offset_value, 10);
+      gen_typecast(offset_value, t);
+
+      new_expr = offset_value;
+      break;
+    }
+
     // A function call expr. The symbol may be undefined so we create it here
     // This should be moved to a step after the conversion. The conversion
     // step should only convert the code
@@ -1455,7 +1475,6 @@ void llvm_convertert::get_expr(
 
     // No idea when these AST is created
     case clang::Stmt::ImaginaryLiteralClass:
-    case clang::Stmt::OffsetOfExprClass:
     case clang::Stmt::UnaryExprOrTypeTraitExprClass:
     case clang::Stmt::AddrLabelExprClass:
     case clang::Stmt::StmtExprClass:
