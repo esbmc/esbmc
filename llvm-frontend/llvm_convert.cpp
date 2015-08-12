@@ -80,6 +80,10 @@ void llvm_convertert::get_decl(
     // Label declaration
     case clang::Decl::Label:
     {
+      std::cerr << "ESBMC currently does not support label declaration"
+                << std::endl;
+      abort();
+
       const clang::LabelDecl &ld =
         static_cast<const clang::LabelDecl&>(decl);
 
@@ -1161,6 +1165,10 @@ void llvm_convertert::get_expr(
 
     case clang::Stmt::AddrLabelExprClass:
     {
+      std::cerr << "ESBMC currently does not support label as values"
+                << std::endl;
+      abort();
+
       const clang::AddrLabelExpr &addrlabelExpr =
         static_cast<const clang::AddrLabelExpr &>(stmt);
 
@@ -1597,6 +1605,10 @@ void llvm_convertert::get_expr(
 
     case clang::Stmt::IndirectGotoStmtClass:
     {
+      std::cerr << "ESBMC currently does not support indirect gotos"
+                << std::endl;
+      abort();
+
       const clang::IndirectGotoStmt &goto_stmt =
         static_cast<const clang::IndirectGotoStmt &>(stmt);
 
