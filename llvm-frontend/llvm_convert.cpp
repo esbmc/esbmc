@@ -1145,6 +1145,18 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::AddrLabelExprClass:
+    {
+      const clang::AddrLabelExpr &addrlabelExpr =
+        static_cast<const clang::AddrLabelExpr &>(stmt);
+
+      exprt label;
+      get_decl(*addrlabelExpr.getLabel(), label);
+
+      new_expr = address_of_exprt(label);
+      break;
+    }
+
     // Casts expression:
     // Implicit: float f = 1; equivalent to float f = (float) 1;
     // CStyle: int a = (int) 3.0;
@@ -1577,7 +1589,6 @@ void llvm_convertert::get_expr(
     // No idea when these AST is created
     case clang::Stmt::ImaginaryLiteralClass:
     case clang::Stmt::UnaryExprOrTypeTraitExprClass:
-    case clang::Stmt::AddrLabelExprClass:
     case clang::Stmt::StmtExprClass:
     case clang::Stmt::ShuffleVectorExprClass:
     case clang::Stmt::ConvertVectorExprClass:
