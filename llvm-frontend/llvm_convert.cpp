@@ -1327,6 +1327,9 @@ void llvm_convertert::get_expr(
       for (const auto &stmt : compound_stmt.body()) {
         exprt statement;
         get_expr(*stmt, statement);
+
+        // TODO: Move to later stage?
+        convert_exprt_inside_block(statement);
         block.operands().push_back(statement);
       }
 
