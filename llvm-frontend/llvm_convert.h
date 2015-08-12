@@ -64,7 +64,8 @@ private:
     exprt &new_expr);
 
   void get_function(
-    const clang::FunctionDecl &fd);
+    const clang::FunctionDecl &fd,
+    exprt &new_expr);
 
   void get_function_params(
     const clang::ParmVarDecl &pdecl,

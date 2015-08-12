@@ -99,7 +99,7 @@ void llvm_convertert::get_decl(
     {
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
-      get_function(fd);
+      get_function(fd, new_expr);
       break;
     }
 
@@ -489,7 +489,9 @@ void llvm_convertert::get_var(
   ++current_scope_var_num;
 }
 
-void llvm_convertert::get_function(const clang::FunctionDecl &fd)
+void llvm_convertert::get_function(
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
 {
   std::string old_function_name = current_function_name;
   current_function_name = fd.getName().str();
@@ -562,6 +564,11 @@ void llvm_convertert::get_function(const clang::FunctionDecl &fd)
   object_map[address] = fd.getName().str();
 
   current_function_name = old_function_name;
+
+  // If that was an declaration of a function, inside a function
+  // Add a skip
+  if(current_function_name!= "")
+    new_expr = code_skipt();
 }
 
 void llvm_convertert::get_function_params(
