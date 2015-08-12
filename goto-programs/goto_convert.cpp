@@ -696,6 +696,7 @@ void goto_convertt::convert_decl(
   else
   {
     exprt initializer;
+
     codet tmp(code);
     initializer=code.op1();
     tmp.operands().resize(1); // just resize the vector, this will get rid of op1
@@ -709,57 +710,9 @@ void goto_convertt::convert_decl(
         break_globals2assignments(initializer, dest,code.location());
     }
 
-    if(initializer.is_typecast())
-    {
-      if(initializer.get("cast")=="dynamic")
-      {
-        exprt op0 = initializer.op0();
-        initializer.swap(op0);
-
-        if(!code.op1().is_empty())
-        {
-          exprt function = code.op1();
-          // We must check if the is a exception list
-          // If there is, we must throw the exception
-          if (function.has_operands())
-          {
-            if (function.op0().has_operands())
-            {
-              const exprt& exception_list=
-                  static_cast<const exprt&>(function.op0().op0().find("exception_list"));
-
-              if(exception_list.is_not_nil())
-              {
-                // Let's create an instruction for bad_cast
-
-                // Convert current exception list to a vector of strings.
-                std::vector<irep_idt> excp_list;
-                forall_irep(it, exception_list.get_sub())
-                  excp_list.push_back(it->id());
-
-                // Add new instruction throw
-                goto_programt::targett t=dest.add_instruction(THROW);
-                t->code = code_cpp_throw2tc(expr2tc(), excp_list);
-                t->location=function.location();
-              }
-            }
-          }
-          else
-          {
-            remove_sideeffects(initializer, dest);
-          }
-
-          // break up into decl and assignment
-          copy(tmp, OTHER, dest);
-          code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
-          assign.location()=tmp.location();
-          copy(assign, ASSIGN, dest);
-          return;
-        }
-      }
-    }
     remove_sideeffects(initializer, sideeffects);
     dest.destructive_append(sideeffects);
+
     // break up into decl and assignment
     copy(tmp, OTHER, dest);
 
