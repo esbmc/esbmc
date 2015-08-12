@@ -669,6 +669,21 @@ void llvm_convertert::get_type(
       break;
     }
 
+    // Array with undefined type, as in function args
+    case clang::Type::IncompleteArray:
+    {
+      const clang::IncompleteArrayType &arr =
+        static_cast<const clang::IncompleteArrayType &>(the_type);
+
+      arr.dump();
+
+      typet sub_type;
+      get_type(arr.getElementType(), sub_type);
+
+      new_type = gen_pointer_type(sub_type);
+      break;
+    }
+
     // Array with variable size, e.g., int a[n];
     case clang::Type::VariableArray:
     {
