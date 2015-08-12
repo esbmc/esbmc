@@ -137,6 +137,7 @@ void llvm_convertert::get_decl(
       break;
     }
 
+    // Enum values
     case clang::Decl::EnumConstant:
     {
       const clang::EnumConstantDecl &enumcd =
@@ -145,6 +146,7 @@ void llvm_convertert::get_decl(
       break;
     }
 
+    // A record is a struct/union/class/enum
     case clang::Decl::Record:
     {
       const clang::TagDecl &tag =
@@ -584,7 +586,7 @@ void llvm_convertert::get_function_params(
 
   param = code_typet::argumentt();
   param.type() = param_type;
-  param.base_name(name);
+  param.cmt_base_name(name);
   param.cmt_identifier(param_symbol.name.as_string());
   param.location() = param_symbol.location;
 
