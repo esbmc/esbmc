@@ -1560,6 +1560,34 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::IndirectGotoStmtClass:
+    {
+      const clang::IndirectGotoStmt &goto_stmt =
+        static_cast<const clang::IndirectGotoStmt &>(stmt);
+
+      // LLVM was able to compute the target, so this became a
+      // common goto
+      if(goto_stmt.getConstantTarget())
+      {
+        code_gotot code_goto;
+        code_goto.set_destination(goto_stmt.getConstantTarget()->getName().str());
+
+        new_expr = code_goto;
+      }
+      else
+      {
+        exprt target;
+        get_expr(*goto_stmt.getTarget(), target);
+
+        codet code_goto("gcc_goto");
+        code_goto.copy_to_operands(target);
+
+        new_expr = code_goto;
+      }
+
+      break;
+    }
+
     // A continue statement
     case clang::Stmt::ContinueStmtClass:
       new_expr = code_continuet();
@@ -1612,7 +1640,6 @@ void llvm_convertert::get_expr(
     case clang::Stmt::PseudoObjectExprClass:
     case clang::Stmt::AtomicExprClass:
     case clang::Stmt::AttributedStmtClass:
-    case clang::Stmt::IndirectGotoStmtClass:
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
