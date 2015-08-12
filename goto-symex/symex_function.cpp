@@ -105,7 +105,7 @@ goto_symext::argument_assignments(
 	                      "\" type mismatch: got " +
 	                      get_type_id((*it1)->type)+ ", expected " +
 	                      get_type_id(arg_type);
-          std::cerr << error;
+          std::cerr << error << std::endl;
           abort();
 	}
       }
