@@ -156,20 +156,23 @@ void llvm_convertert::get_decl(
           static_cast<const clang::EnumDecl &>(decl);
         get_enum(enumd, new_expr);
       }
-      else if(tag.isStruct())
+      else
       {
         const clang::RecordDecl &record =
-          static_cast<const clang::RecordDecl &>(decl);
-        get_struct(record, new_expr);
-      }
-      else if(tag.isUnion())
-      {
-        abort();
-      }
-      else if(tag.isClass())
-      {
-        std::cerr << "Class is not supported yet" << std::endl;
-        abort();
+          static_cast<const clang::RecordDecl &>(tag);
+
+        if(tag.isStruct())
+          get_struct(record, new_expr);
+        else if(tag.isUnion())
+          get_union(record, new_expr);
+        else if(tag.isClass())
+          get_class(record, new_expr);
+        else
+        {
+          std::cerr << "Error: unknown record type at "
+                    << current_function_name << std::endl;
+          abort();
+        }
       }
 
       break;
@@ -274,6 +277,22 @@ void llvm_convertert::get_struct(
   // Save the enum type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&structd);
   type_map[address] = identifier;
+}
+
+void llvm_convertert::get_union(
+  const clang::RecordDecl& uniond,
+  exprt& new_expr)
+{
+  std::cerr << "Union is not supported yet" << std::endl;
+  abort();
+}
+
+void llvm_convertert::get_class(
+  const clang::RecordDecl& classd,
+  exprt& new_expr)
+{
+  std::cerr << "Class is not supported yet" << std::endl;
+  abort();
 }
 
 void llvm_convertert::get_enum_constants(
