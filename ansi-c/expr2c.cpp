@@ -2909,6 +2909,8 @@ std::string expr2ct::convert(
   {
     if(src.operands().size()!=1)
       return convert_norep(src, precedence);
+    else if(src.op0().id()=="label")
+      return "&&"+src.op0().get_string("identifier");
     else
       return convert_unary(src, "&", precedence=15);
   }
