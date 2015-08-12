@@ -1157,6 +1157,24 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::StmtExprClass:
+    {
+      const clang::StmtExpr &stmtExpr =
+        static_cast<const clang::StmtExpr &>(stmt);
+
+      typet t;
+      get_type(stmtExpr.getType(), t);
+
+      exprt subStmt;
+      get_expr(*stmtExpr.getSubStmt(), subStmt);
+
+      side_effect_exprt stmt_expr("statement_expression", t);
+      stmt_expr.copy_to_operands(subStmt);
+
+      new_expr = stmt_expr;
+      break;
+    }
+
     // Casts expression:
     // Implicit: float f = 1; equivalent to float f = (float) 1;
     // CStyle: int a = (int) 3.0;
@@ -1627,7 +1645,6 @@ void llvm_convertert::get_expr(
     // No idea when these AST is created
     case clang::Stmt::ImaginaryLiteralClass:
     case clang::Stmt::UnaryExprOrTypeTraitExprClass:
-    case clang::Stmt::StmtExprClass:
     case clang::Stmt::ShuffleVectorExprClass:
     case clang::Stmt::ConvertVectorExprClass:
     case clang::Stmt::ChooseExprClass:
