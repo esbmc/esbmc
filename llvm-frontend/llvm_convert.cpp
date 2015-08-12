@@ -674,7 +674,13 @@ void llvm_convertert::get_type(
         static_cast<const clang::ConstantArrayType &>(the_type);
 
       llvm::APInt val = arr.getSize();
-      assert(val.getBitWidth() <= 64 && "Too large an integer found, sorry");
+      if(val.getBitWidth() > 64)
+      {
+        std::cerr << "ESBMC currently does not support integers bigger "
+                      "than 64 bits" << std::endl;
+        abort();
+      }
+
 
       typet the_type;
       get_type(arr.getElementType(), the_type);
@@ -849,7 +855,8 @@ void llvm_convertert::get_builtin_type(
 
     case clang::BuiltinType::UInt128:
       // Various simplification / big-int related things use uint64_t's...
-      std::cerr << "No support for uint128's in ESBMC right now, sorry" << std::endl;
+      std::cerr << "ESBMC currently does not support integers bigger "
+                    "than 64 bits" << std::endl;
       abort();
       break;
 
@@ -871,7 +878,8 @@ void llvm_convertert::get_builtin_type(
 
     case clang::BuiltinType::Int128:
       // Various simplification / big-int related things use uint64_t's...
-      std::cerr << "No support for uint128's in ESBMC right now, sorry" << std::endl;
+      std::cerr << "ESBMC currently does not support integers bigger "
+                    "than 64 bits" << std::endl;
       abort();
       break;
 
@@ -950,7 +958,13 @@ void llvm_convertert::get_expr(
       const clang::IntegerLiteral &integer_literal =
         static_cast<const clang::IntegerLiteral&>(stmt);
       llvm::APInt val = integer_literal.getValue();
-      assert(val.getBitWidth() <= 64 && "Too large an integer found, sorry");
+
+      if(val.getBitWidth() > 64)
+      {
+        std::cerr << "ESBMC currently does not support integers bigger "
+                     "than 64 bits" << std::endl;
+        abort();
+      }
 
       typet the_type;
       get_type(integer_literal.getType(), the_type);
