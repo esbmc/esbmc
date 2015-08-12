@@ -75,7 +75,22 @@ void llvm_convertert::get_decl(
   const clang::Decl& decl,
   exprt &new_expr)
 {
-  switch (decl.getKind()) {
+  switch (decl.getKind())
+  {
+    // Label declaration
+    case clang::Decl::Label:
+    {
+      const clang::LabelDecl &ld =
+        static_cast<const clang::LabelDecl&>(decl);
+
+      exprt label("label", empty_typet());
+      label.identifier(ld.getName().str());
+      label.cmt_base_name(ld.getName().str());
+
+      new_expr = label;
+      break;
+    }
+
     // Declaration of variables
     case clang::Decl::Var:
     {
@@ -185,7 +200,6 @@ void llvm_convertert::get_decl(
     case clang::Decl::Empty:
       break;
 
-    case clang::Decl::Label:
     case clang::Decl::Namespace:
     case clang::Decl::IndirectField:
     case clang::Decl::TypeAlias:
