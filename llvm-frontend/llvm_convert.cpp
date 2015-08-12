@@ -283,8 +283,38 @@ void llvm_convertert::get_union(
   const clang::RecordDecl& uniond,
   exprt& new_expr)
 {
-  std::cerr << "Union is not supported yet" << std::endl;
-  abort();
+  std::string identifier =
+    get_tag_name(uniond.getName().str(), !current_function_name.empty());
+
+  union_typet t;
+  t.tag(uniond.getName().str());
+
+  for(const auto &field : uniond.fields())
+  {
+    struct_typet::componentt comp;
+    get_decl(*field, comp);
+    t.components().push_back(comp);
+  }
+
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    t,
+    uniond.getName().str(),
+    identifier);
+
+  // This change on the pretty_name is just to beautify the output
+  symbol.pretty_name = "union " + uniond.getName().str();
+  symbol.is_type = true;
+
+  move_symbol_to_context(symbol);
+
+  if(current_function_name!= "")
+    new_expr = code_skipt();
+
+  // Save the union type address and name to the object map
+  std::size_t address = reinterpret_cast<std::size_t>(&uniond);
+  type_map[address] = identifier;
 }
 
 void llvm_convertert::get_class(
@@ -1176,6 +1206,8 @@ void llvm_convertert::get_expr(
         inits = constant_exprt(t);
       else if(t.is_struct())
         inits = exprt("struct", t);
+      else if(t.is_union())
+        inits = exprt("union", t);
 
       unsigned int num = init_stmt.getNumInits();
       for (unsigned int i = 0; i < num; i++)
