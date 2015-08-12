@@ -1900,6 +1900,30 @@ std::string expr2ct::convert_code_goto(
 
 /*******************************************************************\
 
+Function: expr2ct::convert_code_gcc_goto
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string expr2ct::convert_code_gcc_goto(
+  const codet &src,
+  unsigned indent)
+{
+  std:: string dest=indent_str(indent);
+  dest+="goto ";
+  dest+=convert(src.op0(), indent);
+  dest+=";\n";
+
+  return dest;
+}
+
+/*******************************************************************\
+
 Function: expr2ct::convert_code_break
 
   Inputs:
@@ -2230,6 +2254,9 @@ std::string expr2ct::convert_code(
 
   if(statement=="goto")
     return convert_code_goto(src, indent);
+
+  if(statement=="gcc_goto")
+    return convert_code_gcc_goto(src, indent);
 
   if(statement=="printf")
     return convert_code_printf(src, indent);

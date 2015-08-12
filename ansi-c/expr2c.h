@@ -133,6 +133,7 @@ protected:
   std::string convert_code_expression(const codet &src, unsigned indent);
   std::string convert_code_return(const codet &src, unsigned indent);
   std::string convert_code_goto(const codet &src, unsigned indent);
+  std::string convert_code_gcc_goto(const codet &src, unsigned indent);
   std::string convert_code_assume(const codet &src, unsigned indent);
   std::string convert_code_assert(const codet &src, unsigned indent);
   std::string convert_code_break(const codet &src, unsigned indent);
