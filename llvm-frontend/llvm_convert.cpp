@@ -769,10 +769,21 @@ void llvm_convertert::get_type(
         abort();
       }
 
-      std::string identifier = type_map.find(address)->second;
-
-      symbolt &s = context.symbols.find("c::" + identifier)->second;
-      new_type = s.type;
+      // Search for the type on the type map
+      type_mapt::iterator it = type_map.find(address);
+      if(it != type_map.end())
+      {
+        symbolt &s = context.symbols.find("c::" + it->second)->second;
+        new_type = s.type;
+      }
+      else
+      {
+        // This probably means a recursive struct, so create a symbol
+        // for it
+        symbol_typet s("c::" +
+          get_tag_name(tag.getName().str(), !current_function_name.empty()));
+        new_type = s;
+      }
       break;
     }
 
