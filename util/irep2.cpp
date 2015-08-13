@@ -1473,23 +1473,6 @@ do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
 }
 
 static inline __attribute__((always_inline)) size_t
-do_type_crc(const std::vector<unsigned int> &theval, size_t seed)
-{
-  for (std::vector<unsigned int>::const_iterator it = theval.begin();
-       it != theval.end(); it++)
-    boost::hash_combine(seed, *it);
-  return seed;
-}
-
-static inline __attribute__((always_inline)) void
-do_type_hash(const std::vector<unsigned int> &theval, crypto_hash &hash)
-{
-  for (std::vector<unsigned int>::const_iterator it = theval.begin();
-       it != theval.end(); it++)
-    hash.ingest((void*)&(*it), sizeof(unsigned int));
-}
-
-static inline __attribute__((always_inline)) size_t
 do_type_crc(const expr2tc &theval, size_t seed)
 {
 

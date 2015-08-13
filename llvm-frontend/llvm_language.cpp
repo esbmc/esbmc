@@ -91,7 +91,7 @@ bool llvm_languaget::typecheck(
   return convert(context, module, message_handler);
 }
 
-void llvm_languaget::show_parse(std::ostream& out)
+void llvm_languaget::show_parse(std::ostream& out __attribute__((unused)))
 {
   for (auto &translation_unit : ASTs)
   {

@@ -338,8 +338,8 @@ void llvm_convertert::get_union(
 }
 
 void llvm_convertert::get_class(
-  const clang::RecordDecl& classd,
-  exprt& new_expr)
+  const clang::RecordDecl& classd __attribute__((unused)),
+  exprt& new_expr __attribute__((unused)))
 {
   std::cerr << "Class is not supported yet" << std::endl;
   abort();
@@ -347,7 +347,7 @@ void llvm_convertert::get_class(
 
 void llvm_convertert::get_enum_constants(
   const clang::EnumConstantDecl& enumcd,
-  exprt& new_expr)
+  exprt& new_expr __attribute__((unused)))
 {
   // The enum name is different on the old frontend
   // Global variables have the form <language>::<variable_name>
