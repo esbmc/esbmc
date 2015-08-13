@@ -1811,6 +1811,10 @@ void llvm_convertert::get_cast_expr(
       gen_typecast(expr, type);
       break;
 
+    case clang::CK_NullToPointer:
+      expr = gen_zero(type);
+      break;
+
     default:
       std::cerr << "Conversion of unsupported clang cast operator: \"";
       std::cerr << cast.getCastKindName() << "\" to expression" << std::endl;
