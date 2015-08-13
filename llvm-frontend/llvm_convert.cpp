@@ -795,7 +795,7 @@ void llvm_convertert::get_type(
       std::size_t address = reinterpret_cast<std::size_t>(et.getDecl());
       std::string identifier = type_map.find(address)->second;
 
-      symbolt &s =context.symbols.find("c::" + identifier)->second;
+      symbolt &s = context.symbols.find("c::" + identifier)->second;
       new_type = s.type;
       break;
     }
