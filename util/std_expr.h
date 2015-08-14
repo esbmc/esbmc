@@ -429,23 +429,22 @@ array_of_exprt &to_array_of_expr(exprt &expr);
 
 /*! \brief union constructor from single element
 */
-class union_exprt:public unary_exprt
+class union_exprt:public exprt
 {
 public:
-  inline union_exprt():unary_exprt(id_union)
+  inline union_exprt():exprt(id_union)
   {
   }
 
   explicit inline union_exprt(const typet &_type):
-    unary_exprt(id_union, _type)
+    exprt(id_union, _type)
   {
   }
 
   explicit inline union_exprt(
     const irep_idt &_component_name,
-    const exprt &_value,
     const typet &_type):
-    unary_exprt(id_union, _value, _type)
+    exprt(id_union, _type)
   {
     set_component_name(_component_name);
   }
