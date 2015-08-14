@@ -1022,6 +1022,12 @@ std::string expr2ct::convert_member(
 
   const typet &full_type=ns.follow(src.op0().type());
 
+  // It might be an flattened union
+  // This will look very odd when printing, but it's better then
+  // the norep output
+  if(full_type.id() == "array")
+    return convert_array(src, precedence);
+
   if(full_type.id()!="struct" &&
      full_type.id()!="union")
     return convert_norep(src, precedence);
