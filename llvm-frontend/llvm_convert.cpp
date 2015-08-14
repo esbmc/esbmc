@@ -1354,6 +1354,18 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::ImplicitValueInitExprClass:
+    {
+      const clang::ImplicitValueInitExpr &init_stmt =
+        static_cast<const clang::ImplicitValueInitExpr &>(stmt);
+
+      typet t;
+      get_type(init_stmt.getType(), t);
+
+      new_expr = gen_zero(t);
+      break;
+    }
+
     /*
        The following enum values are the basic elements of a program,
        defined on the Stmt class
@@ -1708,7 +1720,6 @@ void llvm_convertert::get_expr(
     case clang::Stmt::GNUNullExprClass:
     case clang::Stmt::VAArgExprClass:
     case clang::Stmt::DesignatedInitExprClass:
-    case clang::Stmt::ImplicitValueInitExprClass:
     case clang::Stmt::ParenListExprClass:
     case clang::Stmt::GenericSelectionExprClass:
     case clang::Stmt::ExtVectorElementExprClass:
