@@ -86,7 +86,6 @@ extern inline symbol_exprt &to_symbol_expr(exprt &expr)
   return static_cast<symbol_exprt &>(expr);
 }
 
-
 /*! \brief Generic base class for unary expressions
 */
 class unary_exprt:public exprt
@@ -130,9 +129,8 @@ public:
 class predicate_exprt:public exprt
 {
 public:
-  predicate_exprt()
+  predicate_exprt():exprt(irep_idt(), typet("bool"))
   {
-    type()=typet("bool");
   }
 
   predicate_exprt(const irep_idt &_id):exprt(_id, typet("bool"))
@@ -428,6 +426,116 @@ public:
 
 const array_of_exprt &to_array_of_expr(const exprt &expr);
 array_of_exprt &to_array_of_expr(exprt &expr);
+
+/*! \brief union constructor from single element
+*/
+class union_exprt:public unary_exprt
+{
+public:
+  inline union_exprt():unary_exprt(id_union)
+  {
+  }
+
+  explicit inline union_exprt(const typet &_type):
+    unary_exprt(id_union, _type)
+  {
+  }
+
+  explicit inline union_exprt(
+    const irep_idt &_component_name,
+    const exprt &_value,
+    const typet &_type):
+    unary_exprt(id_union, _value, _type)
+  {
+    set_component_name(_component_name);
+  }
+
+  friend inline const union_exprt &to_union_expr(const exprt &expr)
+  {
+    assert(expr.id()==id_union && expr.operands().size()==1);
+    return static_cast<const union_exprt &>(expr);
+  }
+
+  friend inline union_exprt &to_union_expr(exprt &expr)
+  {
+    assert(expr.id()==id_union && expr.operands().size()==1);
+    return static_cast<union_exprt &>(expr);
+  }
+
+  inline irep_idt get_component_name() const
+  {
+    return get(exprt::a_comp_name);
+  }
+
+  inline void set_component_name(const irep_idt &component_name)
+  {
+    set(exprt::a_comp_name, component_name);
+  }
+
+  inline void set_component_number(unsigned component_number)
+  {
+    set(exprt::a_comp_name, component_number);
+  }
+};
+
+/*! \brief Cast a generic exprt to a \ref union_exprt
+ *
+ * This is an unchecked conversion. \a expr must be known to be \ref
+ * union_exprt.
+ *
+ * \param expr Source expression
+ * \return Object of type \ref union_exprt
+ *
+ * \ingroup gr_std_expr
+*/
+const union_exprt &to_union_expr(const exprt &expr);
+/*! \copydoc to_union_expr(const exprt &)
+ * \ingroup gr_std_expr
+*/
+union_exprt &to_union_expr(exprt &expr);
+
+/*! \brief struct constructor from list of elements
+*/
+class struct_exprt:public exprt
+{
+public:
+  inline struct_exprt():exprt(id_struct)
+  {
+  }
+
+  explicit inline struct_exprt(const typet &_type):
+    exprt(id_struct, _type)
+  {
+  }
+
+  friend inline const struct_exprt &to_struct_expr(const exprt &expr)
+  {
+    assert(expr.id()==id_struct);
+    return static_cast<const struct_exprt &>(expr);
+  }
+
+  friend inline struct_exprt &to_struct_expr(exprt &expr)
+  {
+    assert(expr.id()==id_struct);
+    return static_cast<struct_exprt &>(expr);
+  }
+};
+
+/*! \brief Cast a generic exprt to a \ref struct_exprt
+ *
+ * This is an unchecked conversion. \a expr must be known to be \ref
+ * struct_exprt.
+ *
+ * \param expr Source expression
+ * \return Object of type \ref struct_exprt
+ *
+ * \ingroup gr_std_expr
+*/
+const struct_exprt &to_struct_expr(const exprt &expr);
+/*! \copydoc to_struct_expr(const exprt &)
+ * \ingroup gr_std_expr
+*/
+struct_exprt &to_struct_expr(exprt &expr);
 
 class object_descriptor_exprt:public exprt
 {
