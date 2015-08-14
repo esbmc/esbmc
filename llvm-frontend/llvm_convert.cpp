@@ -1317,20 +1317,22 @@ void llvm_convertert::get_expr(
       // Structs/unions/arrays put the initializer on operands
       if(t.is_struct() || t.is_union() || t.is_array())
       {
-        if(t.is_struct())
-          inits = struct_exprt(t);
-        else if(t.is_union())
-          inits = union_exprt(
-            init_stmt.getInitializedFieldInUnion()->getName().str(), t);
-        else
-          inits = constant_exprt(t);
+        inits = gen_zero(t);
 
         unsigned int num = init_stmt.getNumInits();
         for (unsigned int i = 0; i < num; i++)
         {
           exprt init;
           get_expr(*init_stmt.getInit(i), init);
-          inits.operands().push_back(init);
+          inits.operands().at(i) = init;
+        }
+
+        // If this expression is initializing an union, we should
+        // set which field is being initialized
+        if(t.is_union())
+        {
+          to_union_expr(inits).set_component_name(
+            init_stmt.getInitializedFieldInUnion()->getName().str());
         }
       }
       else
