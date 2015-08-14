@@ -1311,19 +1311,43 @@ void llvm_convertert::get_expr(
       get_type(init_stmt.getType(), t);
 
       exprt inits;
-      if(t.is_array())
-        inits = constant_exprt(t);
-      else if(t.is_struct())
-        inits = exprt("struct", t);
-      else if(t.is_union())
-        inits = exprt("union", t);
 
-      unsigned int num = init_stmt.getNumInits();
-      for (unsigned int i = 0; i < num; i++)
+      // Structs/unions/arrays put the initializer on operands
+      if(t.is_struct() || t.is_union() || t.is_array())
       {
-        exprt init;
-        get_expr(*init_stmt.getInit(i), init);
-        inits.operands().push_back(init);
+        if(t.is_struct())
+          inits = struct_exprt(t);
+        else if(t.is_union())
+          inits = union_exprt(
+            init_stmt.getInitializedFieldInUnion()->getName().str(), t);
+        else
+          inits = constant_exprt(t);
+
+        unsigned int num = init_stmt.getNumInits();
+        for (unsigned int i = 0; i < num; i++)
+        {
+          exprt init;
+          get_expr(*init_stmt.getInit(i), init);
+          inits.operands().push_back(init);
+        }
+      }
+      else
+      {
+        // Builtin types put the initializer directly on the assigned irep
+        if(init_stmt.getType().getTypePtrOrNull() &&
+          (init_stmt.getType().getTypePtrOrNull()->getTypeClass() ==
+            clang::Type::Builtin))
+        {
+          assert(init_stmt.getNumInits() == 1);
+          get_expr(*init_stmt.getInit(0), inits);
+        }
+        else
+        {
+          std::cerr << "Unsupported initializer expression "
+                    << init_stmt.getType().getTypePtrOrNull()->getTypeClassName()
+                    << " at " << current_location << std::endl;
+          abort();
+        }
       }
 
       new_expr = inits;
