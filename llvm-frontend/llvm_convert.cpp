@@ -14,6 +14,7 @@
 #include <expr_util.h>
 #include <mp_arith.h>
 #include <arith_tools.h>
+#include <i2string.h>
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/convert_integer_literal.h>
@@ -30,6 +31,7 @@ llvm_convertert::llvm_convertert(contextt &_context)
     current_path(""),
     current_function_name(""),
     current_scope_var_num(1),
+    anon_counter(0),
     sm(nullptr)
 {
 }
@@ -230,7 +232,7 @@ void llvm_convertert::get_enum(
 
   typet t = enum_type();
   t.id("c_enum");
-  t.tag(enumd.getName().str());
+  t.tag(identifier);
 
   symbolt symbol;
   get_default_symbol(
@@ -269,7 +271,7 @@ void llvm_convertert::get_struct(
     get_tag_name(structd.getName().str(), !current_function_name.empty());
 
   struct_typet t;
-  t.tag(structd.getName().str());
+  t.tag(identifier);
 
   for(const auto &field : structd.fields())
   {
@@ -307,7 +309,7 @@ void llvm_convertert::get_union(
     get_tag_name(uniond.getName().str(), !current_function_name.empty());
 
   union_typet t;
-  t.tag(uniond.getName().str());
+  t.tag(identifier);
 
   for(const auto &field : uniond.fields())
   {
@@ -2196,9 +2198,14 @@ std::string llvm_convertert::get_param_name(std::string name)
 }
 
 std::string llvm_convertert::get_tag_name(
-  std::string name,
+  std::string _name,
   bool is_local)
 {
+  std::string name = _name;
+
+  if(name.empty())
+    name = "#anon"+i2string(anon_counter++);
+
   if(!is_local)
     return "tag-" + name;
 

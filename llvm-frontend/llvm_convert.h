@@ -41,6 +41,8 @@ private:
   std::string current_function_name;
   unsigned int current_scope_var_num;
 
+  unsigned int anon_counter;
+
   clang::SourceManager *sm;
 
   typedef std::map<std::size_t, std::string> object_mapt;
@@ -141,7 +143,7 @@ private:
     std::string name);
 
   std::string get_tag_name(
-    std::string name,
+    std::string _name,
     bool is_local);
 
   void get_size_exprt(
