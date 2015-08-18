@@ -255,8 +255,7 @@ void llvm_convertert::get_enum(
     get_decl(*enumerator, dummy_enumerator);
   }
 
-  if(current_function_name!= "")
-    new_expr = code_skipt();
+  new_expr = code_skipt();
 
   // Save the enum type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&enumd);
@@ -293,8 +292,7 @@ void llvm_convertert::get_struct(
 
   move_symbol_to_context(symbol);
 
-  if(current_function_name!= "")
-    new_expr = code_skipt();
+  new_expr = code_skipt();
 
   // Save the struct type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&structd);
@@ -331,8 +329,7 @@ void llvm_convertert::get_union(
 
   move_symbol_to_context(symbol);
 
-  if(current_function_name!= "")
-    new_expr = code_skipt();
+  new_expr = code_skipt();
 
   // Save the union type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&uniond);
@@ -408,8 +405,7 @@ void llvm_convertert::get_typedef(
 
   move_symbol_to_context(symbol);
 
-  if(current_function_name!= "")
-    new_expr = code_skipt();
+  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_var(
@@ -587,8 +583,7 @@ void llvm_convertert::get_function(
 
   // If that was an declaration of a function, inside a function
   // Add a skip
-  if(current_function_name!= "")
-    new_expr = code_skipt();
+  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_function_params(
