@@ -1967,8 +1967,9 @@ std::string expr2ct::convert_code_switch(
     }
   }
 
+  dest+="\n";
   dest+=indent_str(indent);
-  dest+="}\n";
+  dest+='}';
 
   return dest;
 }
@@ -2101,7 +2102,7 @@ std::string expr2ct::convert_code_block(
   const codet &src,
   unsigned indent)
 {
-  std::string dest=indent_str(indent-2);
+  std::string dest=indent_str(indent);
   dest+="{\n";
 
   forall_operands(it, src)
@@ -2110,10 +2111,11 @@ std::string expr2ct::convert_code_block(
       dest+=convert_code_block(to_code(*it), indent+2);
     else
       dest+=convert_code(to_code(*it), indent);
+    dest+="\n";
   }
 
-  dest+=indent_str(indent-2);
-  dest+="}\n";
+  dest+=indent_str(indent);
+  dest+="}";
 
   return dest;
 }
