@@ -286,10 +286,16 @@ void llvm_convertert::get_struct(
   struct_typet t;
   t.tag(identifier);
 
-  for(const auto &field : structd.fields())
+  for(const auto &decl : structd.decls())
   {
     struct_typet::componentt comp;
-    get_decl(*field, comp);
+    get_decl(*decl, comp);
+
+    if(comp.type().is_union()
+      || comp.type().is_struct()
+      || comp.statement() == "skip")
+      continue;
+
     t.components().push_back(comp);
   }
 
