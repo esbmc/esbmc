@@ -1376,6 +1376,7 @@ void llvm_convertert::get_expr(
           std::cerr << "Unsupported initializer expression "
                     << init_stmt.getType().getTypePtrOrNull()->getTypeClassName()
                     << " at " << current_location << std::endl;
+          init_stmt.dump();
           abort();
         }
       }
@@ -2312,6 +2313,7 @@ void llvm_convertert::move_symbol_to_context(
   if (context.move(symbol)) {
     std::cerr << "Couldn't add symbol " << symbol.name
         << " to symbol table" << std::endl;
+    symbol.dump();
     abort();
   }
 }
