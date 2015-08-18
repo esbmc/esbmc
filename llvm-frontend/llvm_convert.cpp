@@ -167,6 +167,21 @@ void llvm_convertert::get_decl(
       break;
     }
 
+    case clang::Decl::IndirectField:
+    {
+      const clang::IndirectFieldDecl &fd =
+        static_cast<const clang::IndirectFieldDecl &>(decl);
+
+      typet t;
+      get_type(fd.getType(), t);
+
+      struct_union_typet::componentt comp(fd.getName().str(), t);
+      comp.set_pretty_name(fd.getName().str());
+
+      new_expr = comp;
+      break;
+    }
+
     // A record is a struct/union/class/enum
     case clang::Decl::Record:
     {
@@ -207,7 +222,6 @@ void llvm_convertert::get_decl(
       break;
 
     case clang::Decl::Namespace:
-    case clang::Decl::IndirectField:
     case clang::Decl::TypeAlias:
     case clang::Decl::FileScopeAsm:
     case clang::Decl::Block:
