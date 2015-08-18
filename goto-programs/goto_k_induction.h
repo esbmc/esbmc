@@ -74,6 +74,9 @@ protected:
     exprt &expr,
     bool is_if_cond = false);
 
+  void convert_finite_loop(loopst &loop);
+  void make_nondet_assign(goto_programt::targett &loop_head);
+
   void copy(const codet &code,
     goto_program_instruction_typet type,
     goto_programt &dest);

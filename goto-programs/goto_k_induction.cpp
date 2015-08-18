@@ -103,7 +103,51 @@ void goto_k_inductiont::goto_k_induction()
       // Start the loop conversion
       convert_infinity_loop(it->second);
     }
+    else
+    {
+      // We're going to change the code, so enable inductive step
+      options.set_option("disable-inductive-step", false);
+
+      // Start the loop conversion
+      convert_finite_loop(it->second);
+    }
   }
+}
+
+void goto_k_inductiont::convert_finite_loop(loopst& loop)
+{
+  assert(!loop.get_goto_program().instructions.empty());
+
+  // Add global vars to loop map
+  loop.add_var_to_loop(global_vars);
+
+  // Get current loop head and loop exit
+  goto_programt::targett loop_head = loop.get_original_loop_head();
+  goto_programt::targett loop_exit = loop.get_original_loop_exit();
+
+  // First, we need to fill the state member with the variables
+  fill_state(loop);
+
+  // Create the nondet assignments on the beginning of the loop
+  make_nondet_assign(loop_head);
+}
+
+void goto_k_inductiont::make_nondet_assign(goto_programt::targett& loop_head)
+{
+  goto_programt dest;
+
+  unsigned int component_size = state.components().size();
+  for (unsigned int j = 0; j < component_size; j++)
+  {
+    exprt rhs_expr = side_effect_expr_nondett(
+      state.components()[j].type());
+    exprt lhs_expr = state.components().at(j);
+
+    code_assignt new_assign(lhs_expr, rhs_expr);
+    copy(new_assign, ASSIGN, dest);
+  }
+
+  goto_function.body.destructive_insert(loop_head, dest);
 }
 
 void goto_k_inductiont::convert_infinity_loop(loopst &loop)
