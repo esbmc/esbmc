@@ -492,7 +492,7 @@ void goto_k_inductiont::assume_all_state_vector(goto_programt::targett& loop_exi
 
   //assume(s[k]!=cs)
   exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
-  assume_cond(result_expr, false, tmp_w);
+  assume_cond(result_expr, tmp_w);
 
   // y: goto u;
   goto_programt tmp_y;
@@ -546,7 +546,7 @@ void goto_k_inductiont::assume_state_vector(
 
   // assume(s[k]!=cs)
   exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
-  assume_cond(result_expr, false, dest);
+  assume_cond(result_expr, dest);
 
   // TODO: This should be in a separate method
   // kindice=kindice+1
@@ -682,14 +682,11 @@ void goto_k_inductiont::copy(const codet& code,
 
 void goto_k_inductiont::assume_cond(
   const exprt& cond,
-  const bool& neg,
   goto_programt& dest)
 {
   goto_programt tmp_e;
   goto_programt::targett e=tmp_e.add_instruction(ASSUME);
   exprt result_expr = cond;
-  if (neg)
-    result_expr.make_not();
 
   migrate_expr(result_expr, e->guard);
   dest.destructive_append(tmp_e);

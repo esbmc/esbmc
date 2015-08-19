@@ -83,7 +83,6 @@ protected:
 
   void assume_cond(
     const exprt &cond,
-    const bool &neg,
     goto_programt &dest);
 };
 
