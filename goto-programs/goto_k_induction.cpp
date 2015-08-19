@@ -701,6 +701,8 @@ void goto_k_inductiont::copy(const codet& code,
   goto_programt& dest)
 {
   goto_programt::targett t=dest.add_instruction(type);
+  t->inductive_step_instruction = true;
+
   migrate_expr(code, t->code);
   t->location=code.location();
 }
@@ -711,8 +713,8 @@ void goto_k_inductiont::assume_cond(
 {
   goto_programt tmp_e;
   goto_programt::targett e=tmp_e.add_instruction(ASSUME);
-  exprt result_expr = cond;
+  e->inductive_step_instruction = true;
 
-  migrate_expr(result_expr, e->guard);
+  migrate_expr(cond, e->guard);
   dest.destructive_append(tmp_e);
 }
