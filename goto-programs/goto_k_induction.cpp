@@ -289,6 +289,21 @@ void goto_k_inductiont::duplicate_loop_body(
 
   assert(copies.instructions.size()==target_map.size());
 
+  // Assume the loop termination condition after the copy's exit
+  goto_programt::targett tmp = loop_head;
+
+  // First, check if the loop condition is a function
+  // If it is a function, get the guard from the next instruction
+  if(tmp->is_assign())
+    ++tmp;
+
+  assert(tmp->is_goto());
+  exprt guard = migrate_expr_back(tmp->guard);
+  if(guard.is_not())
+    assume_cond(guard, copies);
+  else
+    assume_cond(gen_not(guard), copies);
+
   // now insert copies before loop_exit
   goto_function.body.destructive_insert(loop_exit, copies);
 
