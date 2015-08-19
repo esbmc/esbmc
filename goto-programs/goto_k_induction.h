@@ -76,6 +76,7 @@ protected:
 
   void convert_finite_loop(loopst &loop);
   void make_nondet_assign(goto_programt::targett &loop_head);
+  void assume_loop_cond(goto_programt::targett &loop_head);
 
   void copy(const codet &code,
     goto_program_instruction_typet type,
