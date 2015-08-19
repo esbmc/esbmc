@@ -136,6 +136,10 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
 
   // Duplicate the loop after loop_exit, but without the backward goto
   duplicate_loop_body(loop_head, loop_exit);
+
+  // Convert assert into assumes on the original loop (don't touch the
+  // copy made on the last step)
+  convert_assert_to_assume(loop_head, loop_exit);
 }
 
 void goto_k_inductiont::make_nondet_assign(goto_programt::targett& loop_head)
@@ -290,6 +294,14 @@ void goto_k_inductiont::duplicate_loop_body(
 
   // remove skips
   remove_skip(goto_function.body);
+}
+
+void goto_k_inductiont::convert_assert_to_assume(
+  goto_programt::targett& loop_head,
+  goto_programt::targett& _loop_exit)
+{
+  for(goto_programt::targett t=loop_head; t!=_loop_exit; t++)
+    if(t->is_assert()) t->type=ASSUME;
 }
 
 void goto_k_inductiont::convert_infinity_loop(loopst &loop)

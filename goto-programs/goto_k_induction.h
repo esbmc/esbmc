@@ -80,6 +80,9 @@ protected:
   void duplicate_loop_body(
     goto_programt::targett &loop_head,
     goto_programt::targett &_loop_exit);
+  void convert_assert_to_assume(
+    goto_programt::targett &loop_head,
+    goto_programt::targett &_loop_exit);
 
   void copy(const codet &code,
     goto_program_instruction_typet type,
