@@ -36,6 +36,7 @@ extern "C" {
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/goto_inline.h>
+#include <goto-programs/goto_unwind.h>
 #include <goto-programs/show_claims.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/read_goto_binary.h>
@@ -1414,7 +1415,12 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
-      goto_partial_inline(goto_functions, ns, ui_message_handler);
+    {
+      if(cmdline.isset("full-inlining"))
+        goto_inline(goto_functions, ns, ui_message_handler);
+      else
+        goto_partial_inline(goto_functions, ns, ui_message_handler);
+    }
 
     goto_check(ns, options, goto_functions);
 
@@ -1470,6 +1476,18 @@ bool cbmc_parseoptionst::process_goto_program(
 
       value_set_analysis.
         update(goto_functions);
+    }
+
+    if(cmdline.isset("unroll-loops"))
+    {
+      assert(atol(options.get_option("unwind").c_str()) != 0
+        && "Max unwind must be set to unroll loops");
+
+      goto_unwind(
+        goto_functions,
+        atol(options.get_option("unwind").c_str()),
+        ns,
+        ui_message_handler);
     }
 
     // show it?
@@ -1551,6 +1569,7 @@ void cbmc_parseoptionst::help()
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
     " --no-inlining                disable inlining function calls\n"
+    " --full-inlining              perform full inlining of function calls\n"
     " --program-only               only show program expression\n"
     " --all-claims                 keep all claims\n"
     " --show-loops                 show the loops in the program\n"
@@ -1569,7 +1588,6 @@ void cbmc_parseoptionst::help()
     " --witnesspath filename       output counterexample in graphML format\n"
     " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
     "                              program for graphML generation\n\n"
-
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"

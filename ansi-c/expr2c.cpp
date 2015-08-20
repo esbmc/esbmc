@@ -172,12 +172,10 @@ std::string expr2ct::convert_rec(
 
     if(width==config.ansi_c.int_width)
     {
-      if(is_signed) sign_str="";
       return q+sign_str+"int";
     }
     else if(width==config.ansi_c.long_int_width)
     {
-      if(is_signed) sign_str="";
       return q+sign_str+"long int";
     }
     else if(width==config.ansi_c.char_width)
@@ -186,12 +184,10 @@ std::string expr2ct::convert_rec(
     }
     else if(width==config.ansi_c.short_int_width)
     {
-      if(is_signed) sign_str="";
       return q+sign_str+"short int";
     }
     else if(width==config.ansi_c.long_long_int_width)
     {
-      if(is_signed) sign_str="";
       return q+sign_str+"long long int";
     }
   }
@@ -2035,7 +2031,7 @@ std::string expr2ct::convert_code_decl(
   if(src.operands().size()==2)
     dest+=" = "+convert(src.op1());
 
-  dest+=";\n";
+  dest+=";";
 
   return dest;
 }
@@ -2605,7 +2601,7 @@ Function: expr2ct::convert_code
 
 std::string expr2ct::convert_code(const codet &src)
 {
-  return convert_code(src, 2);
+  return convert_code(src, 0);
 }
 
 /*******************************************************************\

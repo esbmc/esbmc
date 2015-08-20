@@ -211,6 +211,7 @@ public:
       location(static_cast<const locationt &>(get_nil_irep())),
       type(NO_INSTRUCTION_TYPE),
       location_number(0),
+      loop_number(unsigned(0)),
       target_number(unsigned(-1))
     {
       guard = true_expr;
@@ -220,6 +221,7 @@ public:
       location(static_cast<const locationt &>(get_nil_irep())),
       type(_type),
       location_number(0),
+      loop_number(unsigned(0)),
       target_number(unsigned(-1))
     {
       guard = true_expr;
