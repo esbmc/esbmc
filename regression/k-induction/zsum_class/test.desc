@@ -1,0 +1,3 @@
+main.cpp
+--k-induction --memlimit 12000000 --timeout 15m -I ~/libraries
+^VERIFICATION SUCCESSFUL$

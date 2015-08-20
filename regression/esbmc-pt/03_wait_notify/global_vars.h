@@ -1,0 +1,21 @@
+
+
+/* structs used as input/output to threads */
+struct inputs_wait_example__ZN12wait_example8do_test2Ev_pid0_ZN12wait_example8do_test2Ev{
+};
+struct inputs_wait_example__ZN12wait_example8do_test2Ev_pid0_ZN12wait_example8do_test2Ev my_inputs_wait_example__ZN12wait_example8do_test2Ev_pid0_ZN12wait_example8do_test2Ev;
+
+
+
+struct inputs_wait_example__ZN12wait_example8do_test1Ev_pid1_ZN12wait_example8do_test1Ev{
+};
+struct inputs_wait_example__ZN12wait_example8do_test1Ev_pid1_ZN12wait_example8do_test1Ev my_inputs_wait_example__ZN12wait_example8do_test1Ev_pid1_ZN12wait_example8do_test1Ev;
+
+
+
+
+/* global join variables used to signal thread completion instead of pthread_join */
+_Bool wait_example__ZN12wait_example8do_test2Ev_pid0_ZN12wait_example8do_test2Ev_join = 0;
+_Bool wait_example__ZN12wait_example8do_test1Ev_pid1_ZN12wait_example8do_test1Ev_join = 0;
+
+/* global declaration of threads */

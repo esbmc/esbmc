@@ -1,0 +1,3 @@
+main.c
+--partial-loops --unwind 1 --claim 11
+^VERIFICATION SUCCESSFUL$

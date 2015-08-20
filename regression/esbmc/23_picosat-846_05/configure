@@ -1,0 +1,125 @@
+#!/bin/sh
+
+satcompetition=undefined
+
+log=no
+debug=no
+optimize=no
+stats=undefined
+trace=undefined
+static=yes
+thirtytwobit=no
+static=no
+assumptions=yes
+
+while [ $# -gt 0 ]
+do
+  case $1 in
+    --log) debug=yes; log=yes;;
+    -g) debug=yes; optimize=no;;
+    --stats) stats=yes;;
+    --no-stats) stats=no;;
+    --trace) trace=yes;;
+    --no-trace) trace=no;;
+    --ass*) assumptions=yes;;
+    --no-ass*|--nass*|-DNASS) assumptions=no;;
+    -32|--32|-m32) thirtytwobit=yes;;
+    -static|--static) static=yes;;
+    -O) debug=no; optimize=yes;;
+    *) cat <<EOF
+usage: ./configure [-g][-O][--log][--[no-]stats][--[no-]trace][-32][--static]
+EOF
+exit 1
+;;
+  esac
+shift
+done
+
+echo "version ... `cat VERSION`"
+
+if [ $satcompetition = yes ]
+then
+  debug=no
+  optimize=yes
+  stats=no
+  trace=no
+fi
+
+echo "debug ... $debug"
+echo "optimize ... $optimize"
+echo "log ... $log"
+
+if [ $stats = undefined ]
+then
+  if [ $optimize = yes ]
+  then
+    stats=no
+  else
+    stats=yes
+  fi
+fi
+echo "stats ... $stats"
+
+if [ $trace = undefined ]
+then
+  if [ $optimize = yes ]
+  then
+    trace=no
+  else
+    trace=yes
+  fi
+fi
+echo "trace ... $trace"
+
+echo -n "cc ..."
+[ "X$CC" = X ] && CC=gcc
+echo " $CC"
+
+echo -n "cflags ..."
+if [ X"$CFLAGS" = X ]
+then
+  case X"$CC" in
+    *wine*|*mingw*) CFLAGS="-DNGETRUSAGE -DNALLSIGNALS";;
+    *);;
+  esac
+  [ $log = yes ] && CFLAGS="$CFLAGS -DLOGGING"
+  [ $stats = yes ] && CFLAGS="$CFLAGS -DSTATS"
+  [ $trace = yes ] && CFLAGS="$CFLAGS -DTRACE"
+  [ $assumptions = no ] && CFLAGS="$CFLAGS -DNASS"
+  [ $static = yes ] && CFLAGS="$CFLAGS -static"
+  case X"$CC" in
+    X*gcc*)
+      CFLAGS="$CFLAGS -Wall"
+      [ $thirtytwobit = yes ] && CFLAGS="$CFLAGS -m32"
+      if [ $satcompetition = yes ]
+      then
+        CFLAGS="$CFLAGS -static"
+      fi
+      if [ $debug = yes ]
+      then
+        CFLAGS="$CFLAGS -g3 -ggdb"
+      else
+	CFLAGS="$CFLAGS -DNDEBUG"
+	if [ $optimize = yes ]
+	then
+	  CFLAGS="$CFLAGS -O3 -fomit-frame-pointer -finline-limit=10000"
+	else
+	  CFLAGS="$CFLAGS -O2"
+	fi
+      fi
+      ;;
+    *)
+      if [ $debug = yes ]
+      then
+        CFLAGS="$CFLAGS -g"
+      else
+        CFLAGS="$CFLAGS -O"
+      fi
+      ;;
+  esac
+fi
+echo " $CFLAGS"
+echo -n "makefile ..."
+rm -f makefile
+sed -e "s,@CC@,$CC," -e "s,@CFLAGS@,$CFLAGS," makefile.in > makefile
+echo " done"

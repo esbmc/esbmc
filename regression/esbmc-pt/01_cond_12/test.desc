@@ -1,0 +1,3 @@
+main.c
+--unwind 3 --no-unwinding-assertions --context-switch 4
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,3 @@
+main.c
+--claim 1 --overflow-check
+^VERIFICATION SUCCESSFUL$

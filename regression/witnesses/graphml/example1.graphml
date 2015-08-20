@@ -1,0 +1,387 @@
+<?xml version="1.0" encoding="utf-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
+	<key id="sourcecodelang" attr.name="sourcecodeLanguage" attr.type="string" for="graph"/>
+	<key id="nodetype" attr.name="nodeType" attr.type="string" for="node"/>
+	<key id="thread" attr.name="threadNumber" attr.type="int" for="node"/>
+	<key id="entry" attr.name="isEntryNode" attr.type="boolean" for="node"/>
+	<key id="frontier" attr.name="isFrontierNode" attr.type="boolean" for="node"/>
+	<key id="sink" attr.name="isSinkNode" attr.type="boolean" for="node"/>
+	<key id="violation" attr.name="isViolationNode" attr.type="boolean" for="node"/>
+	<key id="assumption" attr.name="assumption" attr.type="string" for="edge"/>
+	<key id="originline" attr.name="lineNumberInOrigin" attr.type="int" for="edge"/>
+	<key id="negation" attr.name="negativeCase" attr.type="string" for="edge"/>
+	<key id="originfile" attr.name="originFileName" attr.type="string" for="edge"/>
+	<key id="origintokens" attr.name="originTokenSet" attr.type="string" for="edge"/>
+	<key id="returnFunction" attr.name="returnFromFunction" attr.type="string" for="edge"/>
+	<key id="sourcecode" attr.name="sourcecode" attr.type="string" for="edge"/>
+	<key id="d0" attr.name="tokenSet" attr.type="string" for="edge"/>
+	<graph id="G" edgedefault="directed">
+		<data key="sourcecodelang">C</data>
+		<node id="n0">
+			<data key="entry">true</data>
+		</node>
+		<node id="n1">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e0" source="n0" target="n1">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">9</data>
+			<data key="assumption">global&amp;0#1 = 5;</data>
+			<data key="origintokens">34,38</data>
+			<data key="d0">34,38</data>
+			<data key="enterFunction">main</data>
+			<data key="sourcecode">int
+global
+=
+5
+;
+</data>
+		</edge>
+		<node id="n2">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e1" source="n1" target="n2">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">11</data>
+			<data key="assumption">return_value_foo$1 = 1;</data>
+			<data key="origintokens">39,48</data>
+			<data key="d0">39,48</data>
+			<data key="enterFunction">foo</data>
+			<data key="sourcecode">int
+foo
+(
+)
+{
+return
+1
+;
+}
+;
+</data>
+		</edge>
+		<node id="n3">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e2" source="n2" target="n3">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">16</data>
+			<data key="assumption">a = 1;</data>
+			<data key="origintokens">81,93</data>
+			<data key="d0">81,93</data>
+			<data key="enterFunction">main</data>
+			<data key="sourcecode">int
+a
+=
+foo
+(
+)
+,
+b
+=
+bar
+(
+)
+;
+</data>
+		</edge>
+		<node id="n4">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e3" source="n3" target="n4">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">12</data>
+			<data key="assumption">return_value_bar$2 = 5;</data>
+			<data key="origintokens">49,58</data>
+			<data key="d0">49,58</data>
+			<data key="enterFunction">bar</data>
+			<data key="sourcecode">int
+bar
+(
+)
+{
+return
+5
+;
+}
+;
+</data>
+		</edge>
+		<node id="n5">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e4" source="n4" target="n5">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">16</data>
+			<data key="assumption">b = 5;</data>
+			<data key="origintokens">81,93</data>
+			<data key="d0">81,93</data>
+			<data key="enterFunction">main</data>
+			<data key="sourcecode">int
+a
+=
+foo
+(
+)
+,
+b
+=
+bar
+(
+)
+;
+</data>
+		</edge>
+		<node id="n6">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e5" source="n5" target="n6">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">17</data>
+			<data key="assumption">global&amp;0#2 = 10;</data>
+			<data key="origintokens">94,99</data>
+			<data key="d0">94,99</data>
+			<data key="sourcecode">global
+=
+global
++
+b
+;
+</data>
+		</edge>
+		<node id="n7">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e6" source="n6" target="n7">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">12</data>
+			<data key="assumption">return_value_bar$3 = 5;</data>
+			<data key="origintokens">49,58</data>
+			<data key="d0">49,58</data>
+			<data key="enterFunction">bar</data>
+			<data key="sourcecode">int
+bar
+(
+)
+{
+return
+5
+;
+}
+;
+</data>
+		</edge>
+		<node id="n8">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e7" source="n7" target="n8">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">20</data>
+			<data key="assumption">p1 = 10;</data>
+			<data key="origintokens">107,119</data>
+			<data key="d0">107,119</data>
+			<data key="enterFunction">main</data>
+			<data key="sourcecode">global
+=
+pred
+(
+global
+,
+bar
+(
+)
++
+a
+)
+;
+</data>
+		</edge>
+		<node id="n9">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e8" source="n8" target="n9">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">20</data>
+			<data key="assumption">by = 6;</data>
+			<data key="origintokens">107,119</data>
+			<data key="d0">107,119</data>
+			<data key="sourcecode">global
+=
+pred
+(
+global
+,
+bar
+(
+)
++
+a
+)
+;
+</data>
+		</edge>
+		<node id="n10">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e9" source="n9" target="n10">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">13</data>
+			<data key="assumption">global&amp;0#3 = 4;</data>
+			<data key="origintokens">59,75</data>
+			<data key="d0">59,75</data>
+			<data key="enterFunction">pred</data>
+			<data key="sourcecode">int
+pred
+(
+int
+p1
+,
+int
+by
+)
+{
+return
+p1
+-
+by
+;
+}
+;
+</data>
+		</edge>
+		<node id="n11">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e10" source="n10" target="n11">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">12</data>
+			<data key="assumption">return_value_bar$3 = 5;</data>
+			<data key="origintokens">49,58</data>
+			<data key="d0">49,58</data>
+			<data key="enterFunction">bar</data>
+			<data key="sourcecode">int
+bar
+(
+)
+{
+return
+5
+;
+}
+;
+</data>
+		</edge>
+		<node id="n12">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e11" source="n11" target="n12">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">20</data>
+			<data key="assumption">p1 = 4;</data>
+			<data key="origintokens">107,119</data>
+			<data key="d0">107,119</data>
+			<data key="enterFunction">main</data>
+			<data key="sourcecode">global
+=
+pred
+(
+global
+,
+bar
+(
+)
++
+a
+)
+;
+</data>
+		</edge>
+		<node id="n13">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e12" source="n12" target="n13">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">20</data>
+			<data key="assumption">by = 6;</data>
+			<data key="origintokens">107,119</data>
+			<data key="d0">107,119</data>
+			<data key="sourcecode">global
+=
+pred
+(
+global
+,
+bar
+(
+)
++
+a
+)
+;
+</data>
+		</edge>
+		<node id="n14">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e13" source="n13" target="n14">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">13</data>
+			<data key="assumption">global&amp;0#4 = -2;</data>
+			<data key="origintokens">59,75</data>
+			<data key="d0">59,75</data>
+			<data key="enterFunction">pred</data>
+			<data key="sourcecode">int
+pred
+(
+int
+p1
+,
+int
+by
+)
+{
+return
+p1
+-
+by
+;
+}
+;
+</data>
+		</edge>
+		<node id="n15">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e14" source="n14" target="n15">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">23</data>
+			<data key="assumption">a = 0;</data>
+			<data key="origintokens">121,124</data>
+			<data key="d0">121,124</data>
+			<data key="enterFunction">main</data>
+			<data key="sourcecode">a
+=
+0
+;
+</data>
+		</edge>
+		<node id="n16">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e15" source="n15" target="n16">
+			<data key="originfile">../regression/witnesses/examples/example1.c</data>
+			<data key="originline">26</data>
+			<data key="assumption">a = 1;</data>
+			<data key="origintokens">132,135</data>
+			<data key="d0">132,135</data>
+			<data key="sourcecode">a
+=
+1
+;
+</data>
+		</edge>
+		<node id="n17">
+			<data key="violation">true</data>
+		</node>
+		<edge id="e16" source="n16" target="n17"/>
+	</graph>
+</graphml>
