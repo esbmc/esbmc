@@ -1,0 +1,3 @@
+main.c
+--unwind 1 --context-switch 1 --no-bounds-check --ir
+^VERIFICATION FAILED$

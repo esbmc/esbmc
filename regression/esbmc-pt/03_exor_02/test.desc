@@ -1,0 +1,5 @@
+main.c
+-I . --context-switch 6
+^VERIFICATION SUCCESSFUL$
+--
+^VERIFICATION FAILURE$

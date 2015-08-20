@@ -1,0 +1,3 @@
+main.c
+--bv --no-slice
+^VERIFICATION SUCCESSFUL$

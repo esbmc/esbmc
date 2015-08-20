@@ -1,0 +1,5 @@
+main.c
+--data-races-check --context-switch 5
+^VERIFICATION SUCCESSFUL$
+--
+^VERIFICATION FAILURE$

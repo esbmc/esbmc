@@ -1,0 +1,3 @@
+main.c
+--lock-order-check
+^VERIFICATION FAILED$

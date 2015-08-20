@@ -1,0 +1,3 @@
+main.c
+-I . --context-switch 10
+^VERIFICATION FAILED$

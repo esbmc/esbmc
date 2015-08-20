@@ -1,0 +1,3 @@
+main.c
+--data-races-check --context-switch 3
+^VERIFICATION FAILED$

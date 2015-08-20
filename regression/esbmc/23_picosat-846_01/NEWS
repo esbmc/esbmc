@@ -1,0 +1,26 @@
+news for release 846 since 632
+------------------------------
+
+* cleaned up assumption handling (actually removed buggy optimization)
+
+* incremental core generation 
+
+* experimental 'all different constraint' handling as in our FMCAD'08 paper
+
+* new API calls: 
+
+  - picosat_add_ado_lit       (add all different object literal)
+  - picosat_deref_top_level   (deref top level assighment)
+  - picosat_changed           (check whether extension was possible)
+  - picosat_measure_all_calls (per default do not measure adding time)
+  - picosat_set_prefix        (set prefix for messages)
+
+* 64 bit port (and compilation options)
+
+* optional NVSIDS visualization code
+
+* resource controlled failed literal implementation
+
+* disconnect long clauses satisfied at lower decision level
+
+* controlling restarts

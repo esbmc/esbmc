@@ -1,0 +1,3 @@
+main.c
+--no-slice --control-flow-test --context-switch 4
+^VERIFICATION FAILED$

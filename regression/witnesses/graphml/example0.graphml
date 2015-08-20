@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
+	<key id="sourcecodelang" attr.name="sourcecodeLanguage" attr.type="string" for="graph"/>
+	<key id="nodetype" attr.name="nodeType" attr.type="string" for="node"/>
+	<key id="entry" attr.name="isEntryNode" attr.type="boolean" for="node"/>
+	<key id="frontier" attr.name="isFrontierNode" attr.type="boolean" for="node"/>
+	<key id="sink" attr.name="isSinkNode" attr.type="boolean" for="node"/>
+	<key id="violation" attr.name="isViolationNode" attr.type="boolean" for="node"/>
+	<key id="assumption" attr.name="assumption" attr.type="string" for="edge"/>
+	<key id="originline" attr.name="lineNumberInOrigin" attr.type="int" for="edge"/>
+	<key id="negation" attr.name="negativeCase" attr.type="string" for="edge"/>
+	<key id="originfile" attr.name="originFileName" attr.type="string" for="edge"/>
+	<key id="origintokens" attr.name="originTokenSet" attr.type="string" for="edge"/>
+	<key id="returnFunction" attr.name="returnFromFunction" attr.type="string" for="edge"/>
+	<key id="sourcecode" attr.name="sourcecode" attr.type="string" for="edge"/>
+	<key id="tokens" attr.name="tokenSet" attr.type="string" for="edge"/>
+	<graph id="G" edgedefault="directed">
+		<data key="sourcecodelang">C</data>
+		<node id="n0">
+			<data key="entry">true</data>
+		</node>
+		<node id="n1"/>
+		<edge id="e0" source="n0" target="n1">
+			<data key="originfile">../regression/witnesses/examples/example0.c</data>
+			<data key="originline">9</data>
+			<data key="assumption">a = 1;</data>
+			<data key="origintokens">32,36</data>
+			<data key="tokens">32,36</data>
+			<data key="sourcecode">int
+a
+=
+1
+;
+</data>
+		</edge>
+		<node id="n2"/>
+		<edge id="e1" source="n1" target="n2">
+			<data key="originfile">../regression/witnesses/examples/example0.c</data>
+			<data key="originline">10</data>
+			<data key="assumption">c = 1;</data>
+			<data key="origintokens">37,47</data>
+			<data key="tokens">37,47</data>
+			<data key="sourcecode">int
+c
+=
+55
+||
+(
+a
+=
+0
+)
+;
+</data>
+		</edge>
+		<node id="n3">
+			<data key="violation">true</data>
+		</node>
+		<edge id="e2" source="n2" target="n3"/>
+	</graph>
+</graphml>

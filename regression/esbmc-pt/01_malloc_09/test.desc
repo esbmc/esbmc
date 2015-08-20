@@ -1,0 +1,3 @@
+main.c
+--unwind 3 --deadlock-check --context-switch 3
+^VERIFICATION FAILED$

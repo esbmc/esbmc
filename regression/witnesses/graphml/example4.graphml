@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://graphml.graphdrawing.org/xmlns/1.0/graphml.xsd">
+	<key id="sourcecodelang" attr.name="sourcecodeLanguage" attr.type="string" for="graph"/>
+	<key id="nodetype" attr.name="nodeType" attr.type="string" for="node"/>
+	<key id="thread" attr.name="threadNumber" attr.type="int" for="node"/>
+	<key id="entry" attr.name="isEntryNode" attr.type="boolean" for="node"/>
+	<key id="frontier" attr.name="isFrontierNode" attr.type="boolean" for="node"/>
+	<key id="sink" attr.name="isSinkNode" attr.type="boolean" for="node"/>
+	<key id="violation" attr.name="isViolationNode" attr.type="boolean" for="node"/>
+	<key id="assumption" attr.name="assumption" attr.type="string" for="edge"/>
+	<key id="originline" attr.name="lineNumberInOrigin" attr.type="int" for="edge"/>
+	<key id="negation" attr.name="negativeCase" attr.type="string" for="edge"/>
+	<key id="originfile" attr.name="originFileName" attr.type="string" for="edge"/>
+	<key id="origintokens" attr.name="originTokenSet" attr.type="string" for="edge"/>
+	<key id="returnFunction" attr.name="returnFromFunction" attr.type="string" for="edge"/>
+	<key id="sourcecode" attr.name="sourcecode" attr.type="string" for="edge"/>
+	<key id="tokens" attr.name="tokenSet" attr.type="string" for="edge"/>
+	<graph id="G" edgedefault="directed">
+		<data key="sourcecodelang">C</data>
+		<node id="n0">
+			<data key="entry">true</data>
+		</node>
+		<node id="n1">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e0" source="n0" target="n1">
+			<data key="originfile">../regression/witnesses/examples/example4.c</data>
+			<data key="originline">14</data>
+			<data key="assumption">return_value_nondet_int$1 = nondet_symbol(symex::nondet0);</data>
+			<data key="origintokens">54,60</data>
+			<data key="tokens">54,60</data>
+			<data key="enterFunction">main</data>
+			<data key="sourcecode">int
+r
+=
+nondet_int
+(
+)
+;
+</data>
+		</edge>
+		<node id="n2">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e1" source="n1" target="n2">
+			<data key="originfile">../regression/witnesses/examples/example4.c</data>
+			<data key="originline">14</data>
+			<data key="assumption">r = return_value_nondet_int$1@1!0&amp;0#1;</data>
+			<data key="origintokens">54,60</data>
+			<data key="tokens">54,60</data>
+			<data key="sourcecode">int
+r
+=
+nondet_int
+(
+)
+;
+</data>
+		</edge>
+		<node id="n3">
+			<data key="thread">0</data>
+		</node>
+		<edge id="e2" source="n2" target="n3">
+			<data key="originfile">../regression/witnesses/examples/example4.c</data>
+			<data key="originline">24</data>
+			<data key="assumption">a = 2;</data>
+			<data key="origintokens">96,99</data>
+			<data key="tokens">96,99</data>
+			<data key="sourcecode">a
+=
+2
+;
+</data>
+		</edge>
+		<node id="n4">
+			<data key="violation">true</data>
+		</node>
+		<edge id="e3" source="n3" target="n4"/>
+	</graph>
+</graphml>
