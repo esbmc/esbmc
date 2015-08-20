@@ -72,6 +72,12 @@ goto_symext::symex_malloc(
 
   if (is_nil_type(type))
     type = char_type2();
+  else if (is_union_type(type)) {
+    // Filter out creation of instantiated unions. They're now all byte arrays.
+    size_is_one = false;
+    type = char_type2();
+  }
+
 
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
@@ -1285,7 +1291,7 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
   solver.compute(coefficients);
 
   RootsType solver_roots = solver.roots();
-  for(unsigned int i=0; i<solver_roots.rows(); ++i)
+  for (int i=0; i<solver_roots.rows(); ++i)
     roots.push_back(solver_roots[i]);
 
   return 0;

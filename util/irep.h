@@ -120,7 +120,7 @@ public:
   // These methods should be protected; however to make things play nice with
   // the C++ frontend right now, they're made public.
 //protected:
-  // This class has to be able to fiddle with ireps directly. Ewww.
+  // This class has to be able to fiddle with ireps directly.
   friend class irep_serializationt;
 
   const irept &find(const irep_namet &name) const;

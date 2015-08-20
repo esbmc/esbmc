@@ -12,11 +12,12 @@
 
 // File for old irep -> new irep conversions.
 
-// Why do we need a namespace you say? Because there are now @ symbols embedded
-// in variable names, so we can't detect the renaming level of a variable
-// effectively. So, perform some hacks, by getting the top level parseoptions
-// code to give us the global namespace, and use that to detect whether the
-// symbol is renamed at all.
+// Due to the sins of the fathers, we need to have a namespace available during
+// migration. There are now @ symbols embedded in variable names, so we can't
+// detect the renaming level of a variable effectively. So, perform some hacks,
+// by getting the top level parseoptions code to give us the global namespace,
+// and use that to detect whether the symbol is renamed at all.
+//
 // Why is this a global? Because there are over three hundred call sites to
 // migrate_expr, and it's a huge task to fix them all up to pass a namespace
 // down.
@@ -318,7 +319,6 @@ migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns,
     new_type_ref = type_pool.get_empty();
   } else if (type.id() == "cpp-name") {
     real_migrate_type(type, new_type_ref, ns, cache);
-    // No caching; no reason, just not doing it right now.
   } else if (type.id() == "ellipsis") {
     real_migrate_type(type, new_type_ref, ns, cache);
   } else if (type.id() == "incomplete_array") {
@@ -385,6 +385,9 @@ decide_on_expr_type(const exprt &side1, const exprt &side2)
     return side2.type();
 }
 
+// Called when we have an expression (such as 'add') with more than two
+// operands. irep2 only allows for binary expressions, so these have to be
+// decomposed into a chain of add expressions, or similar.
 static exprt
 splice_expr(const exprt &expr)
 {
@@ -531,6 +534,99 @@ sym_name_to_symbol(irep_idt init, type2tc type)
                               level2_num, thread_num, node_num));
 }
 
+// Functions to flatten union literals to not contain anything of union type.
+// Everything should become a byte array, as we slowly purge concrete unions
+static expr2tc flatten_union(const exprt &expr);
+
+static void
+flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
+{
+  // Migrate to irep2 for sanity. We can't have recursive unions.
+  expr2tc new_expr;
+  migrate_expr(expr, new_expr);
+
+  // Awkwardly, this array literal might not be completely fixed-value, if
+  // encoded in the middle of a function body or something that refers to other
+  // variables.
+  if (is_array_type(new_expr)) {
+    // Assume only fixed-size arrays (because you can't have variable size
+    // members of unions).
+    const array_type2t &arraytype = to_array_type(new_expr->type);
+    assert(!arraytype.size_is_infinite && !is_nil_expr(arraytype.array_size) &&
+           is_constant_int2t(arraytype.array_size) &&
+           "Can't flatten array in union literal with unbounded size");
+
+    // Iterate over each field and flatten to bytes
+    const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
+    for (unsigned long i = 0; i < intref.constant_value.to_uint64(); i++) {
+      index2tc idx(arraytype.subtype, new_expr, gen_ulong(i));
+      flatten_to_bytes(migrate_expr_back(idx), bytes);
+    }
+  } else if (is_struct_type(new_expr)) {
+    // Iterate over each field.
+    const struct_type2t &structtype = to_struct_type(new_expr->type);
+    for (unsigned long i = 0; i < structtype.members.size(); i++) {
+      member2tc memb(structtype.members[i], new_expr,
+                     structtype.member_names[i]);
+      flatten_to_bytes(migrate_expr_back(memb), bytes);
+    }
+  } else if (is_union_type(new_expr)) {
+    // This is an expression that evaluates to a union -- probably a symbol
+    // name. It can't be a union literal, because that would have been
+    // recursively flattened. In this circumstance we are *not* required to
+    // actually perform any flattening, because something else in the union
+    // transformation should have transformed it to a byte array. Simply take
+    // the address (it has to have storage), cast to byte array, and index.
+    BigInt size = type_byte_size(*new_expr->type);
+    address_of2tc addrof(new_expr->type, new_expr);
+    type2tc byteptr(new pointer_type2t(get_uint8_type()));
+    typecast2tc cast(byteptr, addrof);
+
+    // Produce N bytes
+    for (unsigned long i = 0; i < size.to_uint64(); i++) {
+      index2tc idx(get_uint8_type(), cast, gen_ulong(i));
+      flatten_to_bytes(migrate_expr_back(idx), bytes);
+    }
+  } else if (is_number_type(new_expr) || is_bool_type(new_expr) ||
+             is_pointer_type(new_expr)) {
+    BigInt size = type_byte_size(*new_expr->type);
+
+    bool is_big_endian =
+      config.ansi_c.endianess ==configt::ansi_ct::IS_BIG_ENDIAN;
+    for (unsigned long i = 0; i < size.to_uint64(); i++) {
+      byte_extract2tc ext(get_uint8_type(), new_expr, gen_ulong(i),
+          is_big_endian);
+      bytes.push_back(ext);
+    }
+  } else {
+    std::cerr << "Unrecognized type " << get_type_id(*new_expr->type);
+    std::cerr << " when flattening union literal" << std::endl;
+    abort();
+  }
+
+  return;
+}
+
+static expr2tc
+flatten_union(const exprt &expr)
+{
+  type2tc type;
+  migrate_type(expr.type(), type);
+
+  // Union literals should have one field.
+  assert(expr.operands().size() == 1 &&
+      "Union literal with more than one field");
+
+  // Cannot have unbounded size; flatten to an array of bytes.
+  std::vector<expr2tc> byte_array;
+  flatten_to_bytes(expr.op0(), byte_array);
+
+  expr2tc size = gen_ulong(byte_array.size());
+  type2tc arraytype(new array_type2t(get_uint8_type(), size, false));
+  constant_array2tc arr(arraytype, byte_array);
+  return arr;
+}
+
 void
 migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
@@ -608,18 +704,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     constant_struct2t *s = new constant_struct2t(type, members);
     new_expr_ref = expr2tc(s);
   } else if (expr.id() == typet::t_union) {
-    migrate_type(expr.type(), type);
-
-    std::vector<expr2tc> members;
-    forall_operands(it, expr) {
-      expr2tc new_ref;
-      migrate_expr(*it, new_ref);
-
-      members.push_back(new_ref);
-    }
-
-    constant_union2t *u = new constant_union2t(type, members);
-    new_expr_ref = expr2tc(u);
+    // Unions are now being transformed into byte arrays at all stages past
+    // parsing.
+    new_expr_ref = flatten_union(expr);
   } else if (expr.id() == "string-constant") {
     std::string thestring = expr.value().as_string();
     typet thetype = expr.type();
@@ -1502,7 +1589,8 @@ migrate_type_back(const type2tc &ref)
     return ret;
   }
   default:
-    assert(0 && "Unrecognized type in migrate_type_back");
+  std::cerr << "Unrecognized type in migrate_type_back" << std::endl;
+  abort();
   }
 }
 
@@ -2342,6 +2430,7 @@ migrate_expr_back(const expr2tc &ref)
     return back;
   }
   default:
-    assert(0 && "Unrecognized expr in migrate_expr_back");
+    std::cerr <<  "Unrecognized expr in migrate_expr_back" << std::endl;
+    abort();
   }
 }

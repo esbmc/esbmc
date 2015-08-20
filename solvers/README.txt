@@ -1,3 +1,8 @@
+This directory contains the ESBMC SMT reduction code. The primary purpose is
+to reduce SSA programs that contain expressions over integers, arrays,
+pointers, structures, complex byte operations and much more, down to an SMT
+formula.
+
 The best reference is probably the boolector backend, see
 solvers/boolector. There's also some documentation on how the new solver
 backends are arranged in solvers/smt/smt_conv.h in a file comment. There
@@ -37,17 +42,12 @@ by abstracting arrays. There are two "interfaces" in
 solvers/smt/smt_array.h and solvers/smt/smt_tuple.h, which solvers have
 to implement if they support arrays or tuples; plus some virtual methods
 in smt_ast. It's worth reading up on C++ virtual interface classes
-before dealing with this (tl;dr, like java interfaces, but worse).
+before dealing with this (tl;dr, like java interfaces, but worse. It's
+essentially passing a vtable around).
 
 Finally, there's some boilerplate in solvers/solve.cpp for creating
 solvers. The idea there is to implement the factory pattern for solver
 creation, avoiding general-esbmc code having to touch solver specific stuff.
-
-~
-
-Also note that there are already implementations for cvc, yices, and
-mathsat. They all work, but require various levels of juggling to
-compile. (See: my comment about getting autoconf working).
 
 [0] It's variardic; I thought that'd be useful at the time, see
 boolector_convt::mk_sort for an implementation. In reality, it hasn't

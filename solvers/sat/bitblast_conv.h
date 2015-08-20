@@ -60,6 +60,9 @@ public:
   // in the domain of logical operations on literals, although all kinds of
   // other API things can be fudged, such as tuples and arrays.
 
+  // Update: SAT solver no longer subclasses this class, it instead provides a
+  // SAT api pointer. Documentation not yet updated, sorry.
+
   // smt_convt apis we fufil
 
   virtual smt_astt mk_func_app(const smt_sort *ressort, smt_func_kind f,
@@ -72,7 +75,6 @@ public:
   virtual smt_ast* mk_smt_bool(bool boolval);
   virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *sort);
   virtual smt_sort* mk_struct_sort(const type2tc &t);
-  virtual smt_sort* mk_union_sort(const type2tc&t);
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
                               unsigned int low, const smt_sort *s);
   virtual const smt_ast *make_disjunct(const smt_convt::ast_vec &v);

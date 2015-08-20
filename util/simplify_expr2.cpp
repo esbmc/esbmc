@@ -149,7 +149,8 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
   case type2t::fixedbv_id:
     return expr2tc(new constant_fixedbv2t(type, bv));
   default:
-    assert(0 && "Unexpected typed argument to from_fixedbv");
+    std::cerr << "Unexpected typed argument to from_fixedbv" << std::endl;
+    abort();
   }
 }
 
@@ -624,10 +625,9 @@ member2t::do_simplify(bool second __attribute__((unused))) const
       assert(is_pointer_type(type) ||
              base_type_eq(type, s->type, namespacet(contextt())));
     } else {
-      // XXX jmorse HHHNNGGGGGG, it would appear that the constant arrays spat
-      // out by the parser are somewhat undefined; to the extent that there are
-      // an undefined number of operands in the datatype_members vector. So
-      // bounds check first that we can actually perform this member operation.
+      // The constant array has some number of elements, up to the size of the
+      // array, but possibly fewer. This is legal C. So bounds check first that
+      // we can actually perform this member operation.
       const constant_union2t &uni = to_constant_union2t(source_value);
       if (uni.datatype_members.size() <= no)
         return expr2tc();
@@ -736,22 +736,12 @@ pointer_offset2t::do_simplify(bool second) const
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
     mp_integer thesize = (is_empty_type(ptr_subtype)) ? 1
                           : type_byte_size(*ptr_subtype.get());
-#if 0
-    constant_int2tc type_size(ptr_int_type, thesize);
-#endif
     constant_int2tc type_size(type, thesize);
 
-#if 0
-    if (non_ptr_op->type->get_width() != config.ansi_c.pointer_width)
-      non_ptr_op = typecast2tc(ptr_int_type, non_ptr_op);
-#endif
-    // Herp derp tacas
+    // SV-Comp workaround
     if (non_ptr_op->type->get_width() != type->get_width())
       non_ptr_op = typecast2tc(type, non_ptr_op);
 
-#if 0
-    mul2tc new_non_ptr_op(ptr_int_type, non_ptr_op, type_size);
-#endif
     mul2tc new_non_ptr_op(type, non_ptr_op, type_size);
 
     expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, new_non_ptr_op));
@@ -779,10 +769,6 @@ index2t::do_simplify(bool second __attribute__((unused))) const
       return to_with2t(source_value).update_value;
     }
 
-    // XXX jmorse old irep has an additional simplification of indexes with
-    // a with below it; I haven't implemented it here out of partial lazyness,
-    // but so that it can be studied in the future to see if it makes a
-    // difference.
     return expr2tc();
   } else if (is_constant_array2t(source_value) && is_constant_int2t(index)) {
     const constant_array2t &arr = to_constant_array2t(source_value);
@@ -813,8 +799,7 @@ index2t::do_simplify(bool second __attribute__((unused))) const
     unsigned long val = str.value.as_string().c_str()[the_idx];
     return expr2tc(new constant_int2t(type, BigInt(val)));
   } else if (is_constant_array_of2t(source_value)) {
-    // XXX jmorse - here's hoping that something else is doing the bounds
-    // checking on arrays here.
+    // Only thing this index can evaluate to is the default value of this array
     return to_constant_array_of2t(source_value).initializer;
   } else {
     return expr2tc();
@@ -826,7 +811,7 @@ not2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (is_not2t(value))
-    // Bam. These negate.
+    // These negate.
     return to_not2t(value).value;
 
   if (!is_constant_bool2t(value))
@@ -1129,12 +1114,11 @@ typecast2t::do_simplify(bool second) const
              && is_pointer_type(type)){
     // Casts of null can operate on null directly. So long as we're casting it
     // to a pointer. Code like 32_floppy casts it to an int though; were we to
-    // simplify that away, we end up with Z3 type errors.
-    // Use of strings here is inefficient XXX jmorse
+    // simplify that away, we end up with type errors.
     return from;
   } else if (is_pointer_type(type) && is_pointer_type(from)) {
     // Casting from one pointer to another is meaningless... except when there's
-    // pointer arithmetic about to be applied to it. So, only nurk typecasts
+    // pointer arithmetic about to be applied to it. So, only remove typecasts
     // that don't change the subtype width.
     const pointer_type2t &ptr_to = to_pointer_type(type);
     const pointer_type2t &ptr_from = to_pointer_type(from->type);
@@ -1216,9 +1200,6 @@ typecast2t::do_simplify(bool second) const
     // So, if this is an integer type, performing an integer arith operation,
     // and the type we're casting to isn't _supposed_ to result in a loss of
     // information, push the cast downwards.
-    // XXXjmorse - I'm not convinced that potentially increasing int width is
-    // a good plan, but this is what CBMC was doing, so don't change
-    // behaviour.
     std::list<expr2tc> set2;
     forall_operands2(it, idx, from) {
       expr2tc cast = expr2tc(new typecast2t(type, *it));

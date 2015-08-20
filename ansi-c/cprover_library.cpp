@@ -16,7 +16,7 @@ extern "C" {
 #ifdef _WIN32
 #include <windows.h>
 #include <io.h>
-#undef small // MinGW headers are terrible (alternately; windows).
+#undef small // MinGW header workaround
 #endif
 }
 

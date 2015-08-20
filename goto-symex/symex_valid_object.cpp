@@ -101,6 +101,8 @@ goto_symext::is_valid_object(const symbolt &symbol)
   // XXX jmorse - disabled on moving local_variables to name records. It only
   // ever contains l1 names; any lookup of symbol.name isn't going to work
   // because that's a global name.
+  //
+  // XXX re-enable to be able to check for stack-var-out-of-scope problems
   if(cur_state->source.is_set &&
      cur_state->source.pc->local_variables.find(symbol.name)!=
      cur_state->source.pc->local_variables.end())

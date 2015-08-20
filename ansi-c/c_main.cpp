@@ -30,32 +30,35 @@ Function: static_lifetime_init
 
 \*******************************************************************/
 
+static void
+init_variable(codet &dest, const symbolt &sym)
+{
+  const exprt &value = sym.value;
+
+  if(value.is_nil())
+    return;
+
+  assert(!value.type().is_code());
+
+  exprt symbol("symbol", sym.type);
+  symbol.identifier(sym.name);
+
+  code_assignt code(symbol, sym.value);
+  code.location() = sym.location;
+
+  dest.move_to_operands(code);
+}
+
 void static_lifetime_init(
   const contextt &context,
   codet &dest)
 {
   dest=code_blockt();
 
-  // do assignments based on "value"
-
+  // Do assignments based on "value".
   forall_symbols(it, context.symbols)
     if(it->second.static_lifetime)
-    {
-      const exprt &value=it->second.value;
-
-      if(value.is_not_nil())
-      {
-        assert(!value.type().is_code());
-
-        exprt symbol("symbol", it->second.type);
-        symbol.identifier(it->second.name);
-
-        code_assignt code(symbol, it->second.value);
-        code.location()=it->second.location;
-
-        dest.move_to_operands(code);
-      }
-    }
+      init_variable(dest, it->second);
 
   // call designated "initialization" functions
 

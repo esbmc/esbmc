@@ -64,7 +64,7 @@ class execution_statet : public goto_symext
    *  Takes the environment we'll be working with, and sets up a single thread
    *  with a function call to the "main" function just encoded. Two of these
    *  arguments can have unknown subclasses: _target and l2init get clone'd
-   *  each time we need a new one (think the blasted factory pattern).
+   *  each time we need a new one (think the factory pattern).
    *  @param goto_functions GOTO functions we'll operate over.
    *  @param ns Namespace we're working with.
    *  @param _target Symex target to receive assigns/asserts/etc in trace.
@@ -410,7 +410,6 @@ class execution_statet : public goto_symext
 
   /**
    *  Get list of globals accessed by expr.
-   *  Exactly how this works, I do not know.
    *  @param ns Namespace to work under.
    *  @expr Expression to count global writes in.
    *  @return Number of global refs in this expression.

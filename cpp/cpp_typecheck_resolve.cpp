@@ -2362,7 +2362,7 @@ bool cpp_typecheck_resolvet::guess_template_args(
               // XXX: various implicit conversions are defined by section 14.1
               // of the spec, most notably that array types become element
               // pointers. This should be refactored into a separate method
-              // and fully explored, rather than monkey-patched.
+              // and fully explored, rather than randomly patched here.
               if (t.id() == "array") {
                 // Morph irep.
                 t.id("pointer");
@@ -2683,10 +2683,11 @@ void cpp_typecheck_resolvet::apply_template_args(
 
       assert(type_symb.type.id()=="struct");
 
+#ifndef NDEBUG
       const struct_typet &struct_type=
           to_struct_type(type_symb.type);
-
       assert(struct_type.has_component(new_symbol.name));
+#endif
       member_exprt member(code_type);
       member.set_component_name(new_symbol.name);
       if(fargs.has_object)

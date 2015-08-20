@@ -8,8 +8,8 @@
 class array_iface
 {
 public:
-  // This constructor makes this not qualify as an abstract interface, but
-  // meh.
+  // This constructor makes this not qualify as an abstract interface according
+  // to strict definitions.
   array_iface(bool _b, bool inf) : supports_bools_in_arrays(_b),
                                    can_init_infinite_arrays(inf) { }
 

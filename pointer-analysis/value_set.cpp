@@ -6,10 +6,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-// XXXjmorse - consider whether or not many more of the type assertions below
-// need to take consideration of the data they're working on being an dynamic
-// object type, which should match all types.
-
 #include <irep2.h>
 #include <migrate.h>
 
@@ -285,9 +281,6 @@ void value_sett::get_value_set_rec(
     // If it's null however, create a null_object2t with the appropriate type.
     if (sym.thename == "NULL" && is_pointer_type(expr))
     {
-      // XXXjmorse - looks like there's no easy way to avoid this ns.follow
-      // for getting the null objects type, without an internal pointer
-      // repr reshuffle.
       const pointer_type2t &ptr_ref = to_pointer_type(expr->type);
       typet subtype = migrate_type_back(ptr_ref.subtype);
       if (subtype.id() == "symbol")
@@ -540,8 +533,7 @@ void value_sett::get_value_set_rec(
       }
       return;
     case sideeffect2t::nondet:
-      // XXXjmorse - don't know what to do here, previously wasn't handled,
-      // so I won't try to handle it now.
+      // Introduction of nondeterminism does not introduce new pointer vars
       return;
     default:
       std::cerr << "Unexpected side-effect: " << expr->pretty(0) << std::endl;
@@ -582,10 +574,8 @@ void value_sett::get_value_set_rec(
   }
   else if (is_dynamic_object2t(expr))
   {
-    // No idea what this does. Black magic.
     const dynamic_object2t &dyn = to_dynamic_object2t(expr);
   
-    // XXXjmorse, could become a uint.
     assert(is_constant_int2t(dyn.instance));
     const constant_int2t &intref = to_constant_int2t(dyn.instance);
     std::string idnum = integer2string(intref.constant_value);
@@ -787,7 +777,7 @@ void value_sett::get_reference_set_rec(
     // This may or may not have a constant offset
     objectt o = (is_constant_int2t(extract.source_offset))
       ? objectt(true, to_constant_int2t(extract.source_offset).constant_value)
-      // Don't know what to do about alignments right now; default to nothing.
+      // Unclear what to do about alignments; default to nothing.
       : objectt(false, 1);
 
     insert(dest, extract.source_value, o);
@@ -1028,8 +1018,7 @@ void value_sett::assign_rec(
     const dynamic_object2t &dynamic_object = to_dynamic_object2t(lhs);
   
     if (is_unknown2t(dynamic_object.instance))
-      return; // XXXjmorse - we're assigning to something unknown.
-              // Not much we can do about it.
+      return; // We're assigning to something unknown. Not much we can do.
     assert(is_constant_int2t(dynamic_object.instance));
     unsigned int idnum =
       to_constant_int2t(dynamic_object.instance).constant_value.to_long();
@@ -1050,7 +1039,6 @@ void value_sett::assign_rec(
         it!=reference_set.read().end();
         it++)
     {
-      // XXXjmorse - some horrible type safety is about to fail
       const expr2tc obj = object_numbering[it->first];
 
       if (!is_unknown2t(obj))
@@ -1166,7 +1154,7 @@ void value_sett::do_function_call(
 
   // And now delete the value set dummy args. They're going to end up
   // accumulating values from each function call that is made, which is a
-  // bad plan. (This as a result of commit f91e3d83, didn't used to do this).
+  // bad plan.
   for(unsigned i=0; i<arguments.size(); i++) {
     del_var("value_set::dummy_arg_"+i2string(i), "");
   }

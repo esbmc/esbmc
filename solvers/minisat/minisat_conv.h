@@ -18,7 +18,7 @@
 
 typedef Minisat::Lit Lit;
 typedef Minisat::lbool lbool;
-typedef std::vector<literalt> bvt; // sadface.jpg
+typedef std::vector<literalt> bvt;
 
 class minisat_convt : public cnf_iface, public cnf_convt, public bitblast_convt{
 public:

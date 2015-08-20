@@ -1414,15 +1414,7 @@ void string_abstractiont::abstract_function_call(
     const expr2tc actual(*it1);
 
     new_args.push_back(actual);
-
-    // XXX jmorse migration; see here in the past, arg was being implicity
-    // casted from type to expr. Hacking around this could have led to a change
-    // in behaviour.
     type2tc tcfree = *arg;
-#if 0
-    while (is_typecast2t(tcfree))
-      tcfree = to_typecast2t(tcfree).from;
-#endif
     
     if (is_pointer_type(tcfree) &&
         is_char_type(to_pointer_type(tcfree).subtype))
@@ -1439,8 +1431,8 @@ void string_abstractiont::abstract_function_call(
     if (arg == argument_types.end())
       break;
 
-    // Uuugh. Arg we're pointing at may (or may not) now be a string struct ptr.
-    // Ultimately the fix to this horror is not rewriting program code and
+    // Arg we're pointing at may (or may not) now be a string struct ptr.
+    // Ultimately the fix to this is not rewriting program code and
     // signature in the same pass.
     if (is_pointer_type(*arg) && to_pointer_type(*arg).subtype == string_struct)
       arg++;
@@ -1459,16 +1451,10 @@ void string_abstractiont::abstract_function_call(
       symbol2tc null(null_type, "NULL");
       new_args.push_back(null);
     } else {
-      //XXX jmorse migration guessing; void ptr?
       type2tc ret_type = type2tc(new pointer_type2t(get_empty_type()));
       new_args.push_back(address_of2tc(ret_type, build(call.ret, false)));
     }
   }
-
-  // XXX - previously had a test to ensure that we have the same number of
-  // arguments as the function being called. However as we're now changing
-  // that number, and we can't guarentee the order these functions are processed
-  // in, it's not inpractical.
 
   call.operands = new_args;
 }

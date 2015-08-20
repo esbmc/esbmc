@@ -105,9 +105,7 @@ public:
     : tuple_iface(), ctx(_ctx), ns(_ns), array_conv(_ctx) { }
 
   virtual smt_sortt mk_struct_sort(const type2tc &type);
-  virtual smt_sortt mk_union_sort(const type2tc &type);
   virtual smt_astt tuple_create(const expr2tc &structdef);
-  virtual smt_astt union_create(const expr2tc &unidef);
   virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "");
   virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s);
   virtual expr2tc tuple_get(const expr2tc &expr);
@@ -197,9 +195,7 @@ public:
     : tuple_iface(), ctx(_ctx), ns(_ns) { }
 
   virtual smt_sortt mk_struct_sort(const type2tc &type);
-  virtual smt_sortt mk_union_sort(const type2tc &type);
   virtual smt_astt tuple_create(const expr2tc &structdef);
-  virtual smt_astt union_create(const expr2tc &unidef);
   virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "");
   virtual smt_astt tuple_array_of(const expr2tc &init_value,
                                             unsigned long domain_width);

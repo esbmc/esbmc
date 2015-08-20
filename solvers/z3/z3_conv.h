@@ -59,13 +59,13 @@ private:
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 
-  void convert_struct_union(const std::vector<expr2tc> &members,
-                            const std::vector<type2tc> &member_types,
-                            const type2tc &type, z3::expr &bv);
+  void convert_struct(const std::vector<expr2tc> &members,
+                      const std::vector<type2tc> &member_types,
+                      const type2tc &type, z3::expr &bv);
 
-  void convert_struct_union_type(const std::vector<type2tc> &members,
-                                 const std::vector<irep_idt> &member_names,
-                                 const irep_idt &name, bool uni, z3::sort &s);
+  void convert_struct_type(const std::vector<type2tc> &members,
+                           const std::vector<irep_idt> &member_names,
+                           const irep_idt &name, z3::sort &s);
 
   z3::expr mk_tuple_update(const z3::expr &t, unsigned i,
                            const z3::expr &new_val);
@@ -86,14 +86,12 @@ private:
                                    smt_sortt array_subtype);
   virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_sort *mk_struct_sort(const type2tc &type);
-  virtual smt_sort *mk_union_sort(const type2tc &type);
   virtual smt_astt mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
   virtual const smt_ast *make_disjunct(const ast_vec &v);
   virtual const smt_ast *make_conjunct(const ast_vec &v);
 
   virtual smt_astt tuple_create(const expr2tc &structdef);
-  virtual smt_astt union_create(const expr2tc &unidef);
   virtual smt_astt tuple_fresh(const smt_sort *s, std::string name = "");
   virtual expr2tc tuple_get(const expr2tc &expr);
 
