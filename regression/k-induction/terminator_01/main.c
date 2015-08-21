@@ -1,8 +1,4 @@
-int nondet_int()
-{
-  int i;
-  return i;
-}
+int nondet_int();
 
 int main()
 {
