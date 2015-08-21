@@ -29,19 +29,19 @@ void q1(int argc, char* argv[])
       break;
 
     case 1: // decrescente
-      for (int i = (N - 1); i >= 0; --i)
-        a[i] = N - 1 - i;
+      for (int j = (N - 1); j >= 0; --j)
+        a[j] = N - 1 - j;
       break;
 
     case 2: // aleatorio
-      for (int i = 0; i < N; ++i)
-        a[i] = i;
+      for (int k = 0; k < N; ++k)
+        a[k] = k;
 
-      for (int i = 0; i < N; i++)
+      for (int l = 0; l < N; l++)
       {
-        int r = i + (nondet_uint() % (N - i));
-        int temp = a[i];
-        a[i] = a[r];
+        int r = l + (nondet_uint() % (N - l));
+        int temp = a[l];
+        a[l] = a[r];
         a[r] = temp;
       }
       break;
