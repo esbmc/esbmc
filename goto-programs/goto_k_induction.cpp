@@ -93,6 +93,12 @@ void goto_k_inductiont::goto_k_induction()
     ++it)
   {
     assert(!it->second.get_goto_program().empty());
+
+    // If the loop has no variables, than there is no need to make
+    // any transformation on them
+    if(!it->second.get_loop_vars().size())
+      continue;
+
     if(it->second.is_infinite_loop()
        || (options.get_bool_option("k-induction-nondet-loops")
            && it->second.is_nondet_loop()))
