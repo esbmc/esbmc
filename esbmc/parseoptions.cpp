@@ -828,6 +828,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
       // Set that we are running inductive step
       opts.set_option("inductive-step", true);
+      opts.set_option("no-bounds-check", true);
+      opts.set_option("no-div-by-zero-check", true);
+      opts.set_option("no-pointer-check", true);
 
       if(get_goto_program(opts, goto_functions))
         return 6;
@@ -953,6 +956,9 @@ int cbmc_parseoptionst::doit_k_induction()
     status("\n*** Generating Inductive Step ***");
     inductive_goto_functions = new goto_functionst;
     opts.set_option("inductive-step", true);
+    opts.set_option("no-bounds-check", true);
+    opts.set_option("no-div-by-zero-check", true);
+    opts.set_option("no-pointer-check", true);
 
     if(get_goto_program(opts, *inductive_goto_functions))
       return 6;
