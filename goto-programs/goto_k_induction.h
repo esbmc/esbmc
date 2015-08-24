@@ -53,7 +53,7 @@ protected:
   optionst &options;
 
   void goto_k_induction();
-  void convert_infinity_loop(loopst &loop);
+  void convert_infinite_loop(loopst &loop);
   void fill_state(loopst &loop);
   void create_symbols();
   void make_nondet_state_assign(goto_programt::targett &loop_head);

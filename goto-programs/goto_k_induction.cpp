@@ -102,7 +102,7 @@ void goto_k_inductiont::goto_k_induction()
       options.set_option("disable-inductive-step", false);
 
       // Start the loop conversion
-      convert_infinity_loop(it->second);
+      convert_infinite_loop(it->second);
     }
     else
     {
@@ -341,7 +341,7 @@ void goto_k_inductiont::convert_assert_to_assume(
     if(t->is_assert()) t->type=ASSUME;
 }
 
-void goto_k_inductiont::convert_infinity_loop(loopst &loop)
+void goto_k_inductiont::convert_infinite_loop(loopst &loop)
 {
   assert(!loop.get_goto_program().instructions.empty());
 
