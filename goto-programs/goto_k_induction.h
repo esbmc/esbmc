@@ -75,6 +75,10 @@ protected:
     bool is_if_cond = false);
 
   void convert_finite_loop(loopst &loop);
+  void get_loop_cond(
+    goto_programt::targett &loop_head,
+    goto_programt::targett &_loop_exit,
+    exprt &loop_cond);
   void make_nondet_assign(goto_programt::targett &loop_head);
   void assume_loop_cond(goto_programt::targett &loop_head);
   void duplicate_loop_body(

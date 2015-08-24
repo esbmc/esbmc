@@ -143,6 +143,29 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   convert_assert_to_assume(loop_head, loop_exit);
 }
 
+void goto_k_inductiont::get_loop_cond(
+  goto_programt::targett& loop_head,
+  goto_programt::targett& loop_exit,
+  exprt& loop_cond)
+{
+  loop_cond = nil_exprt();
+
+  // Let's not change the loop head
+  goto_programt::targett tmp = loop_head;
+
+  // Look for an loop condition
+  while(!tmp->is_goto())
+    ++tmp;
+
+  // If we hit the loop's end and didn't find any loop condition
+  // return a nil exprt
+  if(tmp == loop_exit)
+    return;
+
+  // Otherwise, fill the loop condition
+  loop_cond = migrate_expr_back(tmp->guard);
+}
+
 void goto_k_inductiont::make_nondet_assign(goto_programt::targett& loop_head)
 {
   goto_programt dest;
