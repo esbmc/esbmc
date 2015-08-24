@@ -146,10 +146,10 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   make_nondet_assign(loop_head);
 
   // Assume the loop condition before go into the loop
-  assume_loop_cond(loop_head);
+  assume_loop_cond(loop_head, loop_cond);
 
   // Duplicate the loop after loop_exit, but without the backward goto
-  duplicate_loop_body(loop_head, loop_exit);
+  duplicate_loop_body(loop_head, loop_exit, loop_cond);
 
   // Convert assert into assumes on the original loop (don't touch the
   // copy made on the last step)
@@ -197,30 +197,24 @@ void goto_k_inductiont::make_nondet_assign(goto_programt::targett& loop_head)
   goto_function.body.destructive_insert(loop_head, dest);
 }
 
-void goto_k_inductiont::assume_loop_cond(goto_programt::targett& loop_head)
+void goto_k_inductiont::assume_loop_cond(
+  goto_programt::targett& loop_head,
+  exprt &loop_cond)
 {
-  goto_programt::targett tmp = loop_head;
-
-  // First, check if the loop condition is a function
-  // If it is a function, get the guard from the next instruction
-  if(tmp->is_assign())
-    ++tmp;
-
-  assert(tmp->is_goto());
-  exprt guard = migrate_expr_back(tmp->guard);
-
   goto_programt dest;
-  if(guard.is_not())
-    assume_cond(guard.op0(), dest);
+
+  if(loop_cond.is_not())
+    assume_cond(loop_cond.op0(), dest);
   else
-    assume_cond(guard, dest);
+    assume_cond(loop_cond, dest);
 
   goto_function.body.destructive_insert(loop_head, dest);
 }
 
 void goto_k_inductiont::duplicate_loop_body(
   goto_programt::targett& loop_head,
-  goto_programt::targett& _loop_exit)
+  goto_programt::targett& _loop_exit,
+  exprt& loop_cond)
 {
   goto_programt::targett loop_exit = _loop_exit;
   ++loop_exit;
@@ -327,19 +321,10 @@ void goto_k_inductiont::duplicate_loop_body(
   assert(copies.instructions.size()==target_map.size());
 
   // Assume the loop termination condition after the copy's exit
-  goto_programt::targett tmp = loop_head;
-
-  // First, check if the loop condition is a function
-  // If it is a function, get the guard from the next instruction
-  if(tmp->is_assign())
-    ++tmp;
-
-  assert(tmp->is_goto());
-  exprt guard = migrate_expr_back(tmp->guard);
-  if(guard.is_not())
-    assume_cond(guard, copies);
+  if(loop_cond.is_not())
+    assume_cond(loop_cond, copies);
   else
-    assume_cond(gen_not(guard), copies);
+    assume_cond(gen_not(loop_cond), copies);
 
   // now insert copies before loop_exit
   goto_function.body.destructive_insert(loop_exit, copies);
