@@ -119,12 +119,25 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
 {
   assert(!loop.get_goto_program().instructions.empty());
 
-  // Add global vars to loop map
-  loop.add_var_to_loop(global_vars);
-
   // Get current loop head and loop exit
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
+
+  exprt loop_cond;
+  get_loop_cond(loop_head, loop_exit, loop_cond);
+
+  // If we didn't find a loop condition, don't change anything
+  if(loop_cond.is_nil())
+  {
+    std::cout << "**** WARNING: we couldn't find a loop condition for the "
+              << " following loop, so we're not converting it."
+              << std::endl << "Loop: ";
+    loop.output();
+    return;
+  }
+
+  // Add global vars to loop map
+  loop.add_var_to_loop(global_vars);
 
   // First, we need to fill the state member with the variables
   fill_state(loop);
