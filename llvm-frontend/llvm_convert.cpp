@@ -291,9 +291,13 @@ void llvm_convertert::get_struct(
     struct_typet::componentt comp;
     get_decl(*decl, comp);
 
-    if(comp.type().is_union()
-      || comp.type().is_struct()
-      || comp.statement() == "skip")
+    // Don't add if it's an anonymous declaration
+    if(comp.name().as_string().empty())
+      continue;
+
+    // Don't add if it's an skip, this happens
+    // when there is a declaration on a struct or union
+    if(comp.statement() == "skip")
       continue;
 
     t.components().push_back(comp);
