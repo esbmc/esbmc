@@ -772,30 +772,33 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Set that we are running forward condition
       opts.set_option("forward-condition", true);
 
-      // Run bmc and only send results in two occasions:
-      // 1. A proof was found, we send the step where it was found
-      // 2. It couldn't find a proof
-      for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
+      if(!opts.get_bool_option("disable-forward-condition"))
       {
-        bmct bmc(goto_functions, opts, context, ui_message_handler);
-        set_verbosity_msg(bmc);
-
-        bmc.options.set_option("unwind", i2string(k_step));
-        bool res = do_bmc(bmc);
-
-        // Send information to parent if no bug was found
-        if(!res)
+        // Run bmc and only send results in two occasions:
+        // 1. A proof was found, we send the step where it was found
+        // 2. It couldn't find a proof
+        for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
         {
-          r.k = k_step;
+          bmct bmc(goto_functions, opts, context, ui_message_handler);
+          set_verbosity_msg(bmc);
 
-          // Write result
-          u_int len = write(commPipe[1], &r, sizeof(r));
-          assert(len == sizeof(r) && "short write");
-          (void)len; //ndebug
+          bmc.options.set_option("unwind", i2string(k_step));
+          bool res = do_bmc(bmc);
 
-          std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+          // Send information to parent if no bug was found
+          if(!res)
+          {
+            r.k = k_step;
 
-          return res;
+            // Write result
+            u_int len = write(commPipe[1], &r, sizeof(r));
+            assert(len == sizeof(r) && "short write");
+            (void)len; //ndebug
+
+            std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+
+            return res;
+          }
         }
       }
 
@@ -1017,6 +1020,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
     ++k_step;
 
+    if(!opts.get_bool_option("disable-forward-condition"))
     {
       opts.set_option("base-case", false);
       opts.set_option("forward-condition", true);
