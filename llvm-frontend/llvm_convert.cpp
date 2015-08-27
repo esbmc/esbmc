@@ -1171,6 +1171,15 @@ void llvm_convertert::get_expr(
       typet t;
       get_type(member.getType(), t);
 
+      // Let's look for anonymous access, so it can be ignored
+      // TODO: Do this at later stage
+      if(!t.tag().as_string().empty() &&
+         t.tag().as_string().find("#anon") != std::string::npos)
+      {
+        get_expr(*member.getBase(), new_expr);
+        return;
+      }
+
       exprt base;
       get_expr(*member.getBase(), base);
 
