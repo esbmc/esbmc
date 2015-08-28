@@ -777,12 +777,17 @@ void llvm_convertert::get_type(
       const clang::TagDecl &tag =
         *static_cast<const clang::TagType &>(the_type).getDecl();
 
+      bool is_anon = false;
+
       std::size_t address;
       if(tag.isStruct() || tag.isUnion())
       {
         const clang::RecordType &et =
           static_cast<const clang::RecordType &>(the_type);
         address = reinterpret_cast<std::size_t>(et.getDecl());
+
+        if (!et.getDecl()->getIdentifier() && !et.getDecl()->getTypedefNameForAnonDecl())
+          is_anon = true;
       }
       else if(tag.isClass())
       {
@@ -805,6 +810,10 @@ void llvm_convertert::get_type(
           get_tag_name(tag.getName().str(), !current_function_name.empty()));
         new_type = s;
       }
+
+      if(is_anon)
+        new_type.set("anonymous", true);
+
       break;
     }
 
