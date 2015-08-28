@@ -288,17 +288,20 @@ void llvm_convertert::get_struct(
 
   for(const auto &decl : structd.decls())
   {
+    exprt dummy;
+    get_decl(*decl, dummy);
+  }
+
+  for(const auto &field : structd.fields())
+  {
     struct_typet::componentt comp;
-    get_decl(*decl, comp);
+    get_decl(*field, comp);
 
-    // Don't add if it's an anonymous declaration
-    if(comp.name().as_string().empty())
-      continue;
-
-    // Don't add if it's an skip, this happens
-    // when there is a declaration on a struct or union
-    if(comp.statement() == "skip")
-      continue;
+    if(comp.type().get_bool("anonymous"))
+    {
+      comp.name(comp.type().tag());
+      comp.pretty_name(comp.type().tag());
+    }
 
     t.components().push_back(comp);
   }
@@ -333,10 +336,23 @@ void llvm_convertert::get_union(
   union_typet t;
   t.tag(identifier);
 
+  for(const auto &decl : uniond.decls())
+  {
+    exprt dummy;
+    get_decl(*decl, dummy);
+  }
+
   for(const auto &field : uniond.fields())
   {
     struct_typet::componentt comp;
     get_decl(*field, comp);
+
+    if(comp.type().get_bool("anonymous"))
+    {
+      comp.name(comp.type().tag());
+      comp.pretty_name(comp.type().tag());
+    }
+
     t.components().push_back(comp);
   }
 
@@ -1180,16 +1196,12 @@ void llvm_convertert::get_expr(
       typet t;
       get_type(member.getType(), t);
 
-      // Let's look for anonymous access, so it can be ignored
-      // TODO: Do this at later stage
-      if(t.get_bool("anonymous"))
-      {
-        get_expr(*member.getBase(), new_expr);
-        return;
-      }
-
       exprt base;
       get_expr(*member.getBase(), base);
+
+      // If this is anonymous, than get the name from the tag
+      if(base.type().get_bool("anonymous"))
+        base.component_name(base.type().tag());
 
       // TODO: Do this at later stage
       if(base.type().is_pointer())
