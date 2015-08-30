@@ -1,0 +1,3 @@
+main.c
+--string-abstraction --unwind 1 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

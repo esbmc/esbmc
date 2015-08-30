@@ -1,0 +1,3 @@
+main.c
+--k-induction --memlimit 12000000 --timeout 15m --z3
+^VERIFICATION FAILED$

@@ -1,0 +1,264 @@
+file main.c: Parsing
+Converting
+Type-checking main
+Generating GOTO Program
+Pointer Analysis
+Adding Pointer Checks
+Adding Data Race Checks
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_init::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_init::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_init::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_lock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_lock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_lock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_unlock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_rwlock_init::lock
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_rwlock_wrlock::lock
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_rwlock_trywrlock::lock
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_rwlock_unlock::lock
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_cond_init::__cond
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_cond_init::__cond
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_cond_destroy::__cond
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_cond_signal::__cond
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_cond_wait::cond
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_cond_wait::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_cond_wait::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_lock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_lock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_lock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_unlock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_init::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_init::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_init::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_lock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_lock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_lock::mutex
+member expr.op0(): 
+member expr.op0(): 
+dereference expr.op0(): c::<built-in-library>::pthread_mutex_unlock::mutex
+Claim 1:
+  file /usr/include/time.h line 275
+  W/W data race on __tzname
+  !__tzname_write_flag
+
+Claim 2:
+  file /usr/include/time.h line 276
+  W/W data race on __daylight
+  !__daylight_write_flag
+
+Claim 3:
+  file /usr/include/time.h line 277
+  W/W data race on __timezone
+  !__timezone_write_flag
+
+Claim 4:
+  file /usr/include/time.h line 282
+  W/W data race on tzname
+  !tzname_write_flag
+
+Claim 5:
+  file <builtin-library> line 276 function pthread_cond_signal
+  W/W data race on count_cond_wait
+  !count_cond_wait_write_flag
+
+Claim 6:
+  file <builtin-library> line 39 function pthread_mutex_lock
+  W/W data race on <built-in-library>::pthread_mutex_lock::1::unlocked
+  !<built-in-library>::pthread_mutex_lock::1::unlocked_write_flag
+
+Claim 7:
+  file <builtin-library> line 40 function pthread_mutex_lock
+  W/W data race on <built-in-library>::pthread_mutex_lock::1::deadlock
+  !<built-in-library>::pthread_mutex_lock::1::deadlock_write_flag
+
+Claim 8:
+  file <builtin-library> line 41 function pthread_mutex_lock
+  W/W data race on trds_in_run
+  !trds_in_run_write_flag
+
+Claim 9:
+  file <builtin-library> line 41 function pthread_mutex_lock
+  W/W data race on count_lock
+  !count_lock_write_flag
+
+Claim 10:
+  file main.c line 4
+  W/W data race on esbmc
+  !esbmc_write_flag
+
+Claim 11:
+  file main.c line 5
+  W/W data race on mutex
+  !mutex_write_flag
+
+Claim 12:
+  file <builtin-library> line 221 function pthread_join
+  W/W data race on trds_in_join
+  !trds_in_join_write_flag
+
+Claim 13:
+  file <builtin-library> line 298 function pthread_cond_wait
+  W/W data race on count_wait
+  !count_wait_write_flag
+
+Claim 14:
+  file <built-in> line 19
+  W/W data race on __ESBMC_rounding_mode
+  !__ESBMC_rounding_mode_write_flag
+
+Claim 15:
+  file main.c line 9 function thread1
+  W/W data race on <built-in-library>::pthread_mutex_lock::1::unlocked
+  !<built-in-library>::pthread_mutex_lock::1::unlocked_write_flag
+
+Claim 16:
+  file main.c line 9 function thread1
+  W/W data race on count_lock
+  !count_lock_write_flag
+
+Claim 17:
+  file main.c line 9 function thread1
+  W/W data race on count_lock
+  !count_lock_write_flag
+
+Claim 18:
+  file main.c line 9 function thread1
+  W/W data race on <built-in-library>::pthread_mutex_lock::1::deadlock
+  !<built-in-library>::pthread_mutex_lock::1::deadlock_write_flag
+
+Claim 19:
+  file main.c line 9 function thread1
+  R/W data race on trds_in_run
+  !trds_in_run_write_flag
+
+Claim 20:
+  file main.c line 9 function thread1
+  R/W data race on count_lock
+  !count_lock_write_flag
+
+Claim 21:
+  file main.c line 9 function thread1
+  Deadlock detected with mutex lock
+  count_lock < trds_in_run
+
+Claim 22:
+  file main.c line 10 function thread1
+  W/W data race on esbmc
+  !esbmc_write_flag
+
+Claim 23:
+  file main.c line 11 function thread1
+  must hold lock upon unlock
+  (_Bool)mutex->__data.__lock
+
+Claim 24:
+  file main.c line 21 function main
+  W/W data race on <built-in-library>::pthread_mutex_lock::1::unlocked
+  !<built-in-library>::pthread_mutex_lock::1::unlocked_write_flag
+
+Claim 25:
+  file main.c line 21 function main
+  W/W data race on count_lock
+  !count_lock_write_flag
+
+Claim 26:
+  file main.c line 21 function main
+  W/W data race on count_lock
+  !count_lock_write_flag
+
+Claim 27:
+  file main.c line 21 function main
+  W/W data race on <built-in-library>::pthread_mutex_lock::1::deadlock
+  !<built-in-library>::pthread_mutex_lock::1::deadlock_write_flag
+
+Claim 28:
+  file main.c line 21 function main
+  R/W data race on trds_in_run
+  !trds_in_run_write_flag
+
+Claim 29:
+  file main.c line 21 function main
+  R/W data race on count_lock
+  !count_lock_write_flag
+
+Claim 30:
+  file main.c line 21 function main
+  Deadlock detected with mutex lock
+  count_lock < trds_in_run
+
+Claim 31:
+  file main.c line 22 function main
+  W/W data race on esbmc
+  !esbmc_write_flag
+
+Claim 32:
+  file main.c line 23 function main
+  R/W data race on esbmc
+  !esbmc_write_flag
+
+Claim 33:
+  file main.c line 23 function main
+  assertion esbmc==2
+  FALSE
+
+Claim 34:
+  file main.c line 24 function main
+  must hold lock upon unlock
+  (_Bool)mutex->__data.__lock
+

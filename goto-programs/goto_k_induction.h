@@ -53,7 +53,7 @@ protected:
   optionst &options;
 
   void goto_k_induction();
-  void convert_infinity_loop(loopst &loop);
+  void convert_infinite_loop(loopst &loop);
   void fill_state(loopst &loop);
   void create_symbols();
   void make_nondet_state_assign(goto_programt::targett &loop_head);
@@ -74,13 +74,29 @@ protected:
     exprt &expr,
     bool is_if_cond = false);
 
+  void convert_finite_loop(loopst &loop);
+  void get_loop_cond(
+    goto_programt::targett &loop_head,
+    goto_programt::targett &_loop_exit,
+    exprt &loop_cond);
+  void make_nondet_assign(goto_programt::targett &loop_head);
+  void assume_loop_cond(
+    goto_programt::targett &loop_head,
+    exprt &loop_cond);
+  void duplicate_loop_body(
+    goto_programt::targett &loop_head,
+    goto_programt::targett &_loop_exit,
+    exprt& loop_cond);
+  void convert_assert_to_assume(
+    goto_programt::targett &loop_head,
+    goto_programt::targett &_loop_exit);
+
   void copy(const codet &code,
     goto_program_instruction_typet type,
     goto_programt &dest);
 
   void assume_cond(
     const exprt &cond,
-    const bool &neg,
     goto_programt &dest);
 };
 

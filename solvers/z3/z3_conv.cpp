@@ -774,7 +774,8 @@ z3_convt::z3_smt_ast::update(smt_convt *ctx, const smt_ast *value,
 
   if (sort->id == SMT_SORT_ARRAY) {
     if (is_nil_expr(idx_expr)) {
-      index = constant_int2tc(type2tc(new unsignedbv_type2t(sort->domain_width)),
+      unsigned int dom_width = (ctx->int_encoding) ? 32 : sort->domain_width;
+      index = constant_int2tc(type2tc(new unsignedbv_type2t(dom_width)),
             BigInt(idx));
     } else {
       index = idx_expr;

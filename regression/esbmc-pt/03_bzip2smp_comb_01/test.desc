@@ -1,0 +1,5 @@
+main.c
+--no-pointer-check --no-bounds-check --no-div-by-zero-check --unwind 1 --claim 1 --context-switch 1 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$
+--
+^VERIFICATION FAILURE$

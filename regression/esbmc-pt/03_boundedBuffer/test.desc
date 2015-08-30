@@ -1,0 +1,3 @@
+main.c
+--unwind 1 --no-slice --context-switch 2
+^VERIFICATION FAILED$

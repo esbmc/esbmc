@@ -26,6 +26,10 @@ void goto_loopst::find_function_loops()
     if (it->is_backwards_goto())
     {
       assert(it->targets.size() == 1);
+
+      if((*it->targets.begin())->location_number == it->location_number)
+        continue;
+
       create_function_loop(
         targets[(*it->targets.begin())->location_number], it);
     }

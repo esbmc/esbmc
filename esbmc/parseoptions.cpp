@@ -654,8 +654,18 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // If the inductive step finds a solution, first check if base case
         // couldn't find a bug in that code, if there is no bug, inductive
         // step can present the result
-        if((is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
-          && (!bc_finished && (bc_solution == 0)))
+
+        // TODO: This needs improvement as it can lead to unsound verification.
+        // The inductive step show only prove a program when the base case did
+        // not find a bug for the same k step inductive proved. Since there is
+        // no communication about the verification process of each step, there
+        // is no guarantee that base case didn't find a bug for that step. It
+        // may yet to run bmc that deep! But since usually the base is faster
+        // than inductive step, this might not be a problem. A solution for
+        // this situation is sound kind of message from the parent process to
+        // the base case, asking about it's current k step, if bigger than
+        // is_solution, we can say for sure that the program is correct
+        if(is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
           break;
       }
 
@@ -682,8 +692,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
       // Check if a solution was found by the inductive step and
       // the base case didn't find a bug
-      if((is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
-          && (!bc_finished && (bc_solution == 0)))
+      if(is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
       {
         std::cout << std::endl << "Solution found by the inductive step "
             << "(k = " << is_solution << ")" << std::endl;
@@ -729,6 +738,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           assert(len == sizeof(r) && "short write");
           (void)len; //ndebug
 
+          std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
+
           return res;
         }
       }
@@ -763,32 +774,37 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Set that we are running forward condition
       opts.set_option("forward-condition", true);
 
-      // Run bmc and only send results in two occasions:
-      // 1. A proof was found, we send the step where it was found
-      // 2. It couldn't find a proof
-      for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
+      if(!opts.get_bool_option("disable-forward-condition"))
       {
-        bmct bmc(goto_functions, opts, context, ui_message_handler);
-        set_verbosity_msg(bmc);
-
-        bmc.options.set_option("unwind", i2string(k_step));
-        bool res = do_bmc(bmc);
-
-        // Send information to parent if a bug was found
-        if(!res)
+        // Run bmc and only send results in two occasions:
+        // 1. A proof was found, we send the step where it was found
+        // 2. It couldn't find a proof
+        for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
         {
-          r.k = k_step;
+          bmct bmc(goto_functions, opts, context, ui_message_handler);
+          set_verbosity_msg(bmc);
 
-          // Write result
-          u_int len = write(commPipe[1], &r, sizeof(r));
-          assert(len == sizeof(r) && "short write");
-          (void)len; //ndebug
+          bmc.options.set_option("unwind", i2string(k_step));
+          bool res = do_bmc(bmc);
 
-          return res;
+          // Send information to parent if no bug was found
+          if(!res)
+          {
+            r.k = k_step;
+
+            // Write result
+            u_int len = write(commPipe[1], &r, sizeof(r));
+            assert(len == sizeof(r) && "short write");
+            (void)len; //ndebug
+
+            std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+
+            return res;
+          }
         }
       }
 
-      // Send information to parent that a bug was not found
+      // Send information to parent that it couldn't prove the code
       r.k = 0;
 
       u_int len = write(commPipe[1], &r, sizeof(r));
@@ -855,7 +871,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
             break;
           }
 
-          // Send information to parent if a bug was found
+          // Send information to parent if no bug was found
           if(!res)
           {
             r.k = k_step;
@@ -865,12 +881,14 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
             assert(len == sizeof(r) && "short write");
             (void)len; //ndebug
 
+            std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
+
             return res;
           }
         }
       }
 
-      // Send information to parent that a bug was not found
+      // Send information to parent that it couldn't prove the code
       r.k = 0;
 
       u_int len = write(commPipe[1], &r, sizeof(r));
@@ -1004,6 +1022,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
     ++k_step;
 
+    if(!opts.get_bool_option("disable-forward-condition"))
     {
       opts.set_option("base-case", false);
       opts.set_option("forward-condition", true);

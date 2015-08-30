@@ -1,0 +1,3 @@
+main.c
+--data-races-check --atomicity-check
+^VERIFICATION FAILED$
