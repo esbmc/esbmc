@@ -1282,19 +1282,7 @@ void llvm_convertert::get_expr(
         static_cast<const clang::ConditionalOperator &>(stmt);
 
       exprt cond;
-
-      // TODO: Move to a step after conversion?
-      // For some strange reason, the cond is wrapped around an integer
-      // typecast, don't really know why, so ignore it
-      if(ternary_if.getCond()->getStmtClass() == clang::Stmt::CStyleCastExprClass
-         || ternary_if.getCond()->getStmtClass() == clang::Stmt::ImplicitCastExprClass)
-      {
-        const clang::CastExpr &cast =
-          static_cast<const clang::CastExpr &>(*ternary_if.getCond());
-        get_expr(*cast.getSubExpr(), cond);
-      }
-      else
-        get_expr(*ternary_if.getCond(), cond);
+      get_expr(*ternary_if.getCond(), cond);
 
       // If the condition is not of boolean type, it must be casted
       gen_typecast(cond, bool_type());
@@ -1320,18 +1308,7 @@ void llvm_convertert::get_expr(
         static_cast<const clang::BinaryConditionalOperator &>(stmt);
 
       exprt cond;
-      // TODO: Move to a step after conversion?
-      // For some strange reason, the cond is wrapped around an integer
-      // typecast, don't really know why, so ignore it
-      if(ternary_if.getCond()->getStmtClass() == clang::Stmt::CStyleCastExprClass
-          || ternary_if.getCond()->getStmtClass() == clang::Stmt::ImplicitCastExprClass)
-      {
-        const clang::CastExpr &cast =
-            static_cast<const clang::CastExpr &>(*ternary_if.getCond());
-        get_expr(*cast.getSubExpr(), cond);
-      }
-      else
-        get_expr(*ternary_if.getCond(), cond);
+      get_expr(*ternary_if.getCond(), cond);
 
       // If the condition is not of boolean type, it must be casted
       gen_typecast(cond, bool_type());
