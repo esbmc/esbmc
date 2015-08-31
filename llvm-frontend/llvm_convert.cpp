@@ -15,6 +15,7 @@
 #include <mp_arith.h>
 #include <arith_tools.h>
 #include <i2string.h>
+#include <simplify_expr_class.h>
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/convert_integer_literal.h>
@@ -1867,6 +1868,9 @@ void llvm_convertert::get_cast_expr(
     case clang::CK_ToVoid:
     case clang::CK_BitCast:
     case clang::CK_LValueToRValue:
+
+    case clang::CK_PointerToBoolean:
+    case clang::CK_PointerToIntegral:
       gen_typecast(expr, type);
       break;
 
@@ -2152,22 +2156,10 @@ void llvm_convertert::gen_typecast(
 {
   if(expr.type() != type)
   {
-    exprt new_expr;
+    exprt new_expr = typecast_exprt(expr, type);
 
-    // I don't think that this code is really needed,
-    // but it removes typecasts, which is good
-    // It should simplify constants to either true or
-    // false when casting them to bool
-    if(type.is_bool() and expr.is_constant())
-    {
-      mp_integer value=string2integer(expr.cformat().as_string());
-      if(value != 0)
-        new_expr = true_exprt();
-      else
-       new_expr = false_exprt();
-    }
-    else
-      new_expr = typecast_exprt(expr, type);
+    simplify_exprt simplify;
+    simplify.simplify(new_expr);
 
     new_expr.location() = expr.location();
     expr.swap(new_expr);
