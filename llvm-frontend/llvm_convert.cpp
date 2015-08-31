@@ -1074,7 +1074,12 @@ void llvm_convertert::get_expr(
       string_constantt string;
       string.set_value(string_literal.getString().str());
 
-      new_expr = string;
+      index_exprt index;
+      index.array() = string;
+      index.index() = gen_zero(index_type());
+      index.type() = string.type().subtype();
+
+      new_expr = gen_address_of(index);
       break;
     }
 
