@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <llvm_language.h>
 #include <llvm_convert.h>
+#include <llvm_adjust.h>
 #include <llvm_main.h>
 
 #include <ansi-c/cprover_library.h>
@@ -114,6 +115,10 @@ bool llvm_languaget::convert(
 
   llvm_convertert converter(new_context, ASTs);
   if(converter.convert())
+    return true;
+
+  llvm_adjust adjuster(new_context);
+  if(adjuster.adjust())
     return true;
 
   return c_link(context, new_context, message_handler, module);
