@@ -30,10 +30,9 @@ public:
   bool convert();
 
 private:
-  std::vector<std::unique_ptr<clang::ASTUnit> > &ASTs;
-
   contextt &context;
   namespacet ns;
+  std::vector<std::unique_ptr<clang::ASTUnit> > &ASTs;
 
   locationt current_location;
   std::string current_path;

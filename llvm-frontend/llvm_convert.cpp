@@ -28,8 +28,8 @@ llvm_convertert::llvm_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit> > &_ASTs)
   : context(_context),
-    ASTs(_ASTs),
     ns(context),
+    ASTs(_ASTs),
     current_location(locationt()),
     current_path(""),
     current_function_name(""),
