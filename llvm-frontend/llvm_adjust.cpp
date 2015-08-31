@@ -34,11 +34,11 @@ void llvm_adjust::adjust_function(symbolt& symbol)
   {
     // All statements inside a function body must be an code
     // so convert any expression to a code_expressiont
-    convert_exprt_inside_block(*it);
+    convert_expr_to_codet(*it);
   }
 }
 
-void llvm_adjust::convert_exprt_inside_block(exprt& expr)
+void llvm_adjust::convert_expr_to_codet(exprt& expr)
 {
   if(expr.is_code())
     return;

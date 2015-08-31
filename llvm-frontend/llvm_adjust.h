@@ -22,7 +22,7 @@ class llvm_adjust
     contextt &context;
 
     void adjust_function(symbolt &symbol);
-    void convert_exprt_inside_block(exprt &expr);
+    void convert_expr_to_codet(exprt &expr);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_ADJUST_H_ */
