@@ -22,13 +22,16 @@
 class llvm_convertert
 {
 public:
-  llvm_convertert(contextt &_context);
+  llvm_convertert(
+    contextt &_context,
+    std::vector<std::unique_ptr<clang::ASTUnit> > &_ASTs);
   virtual ~llvm_convertert();
 
   bool convert();
-  std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 
 private:
+  std::vector<std::unique_ptr<clang::ASTUnit> > &ASTs;
+
   contextt &context;
   namespacet ns;
 

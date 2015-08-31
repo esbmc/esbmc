@@ -111,9 +111,8 @@ bool llvm_languaget::convert(
   message_handlert &message_handler)
 {
   contextt new_context;
-  llvm_convertert converter(new_context);
-  converter.ASTs.swap(ASTs);
 
+  llvm_convertert converter(new_context, ASTs);
   if(converter.convert())
     return true;
 
