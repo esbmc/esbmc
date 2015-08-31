@@ -9,6 +9,7 @@
 #define LLVM_FRONTEND_LLVM_ADJUST_H_
 
 #include <context.h>
+#include <std_expr.h>
 
 class llvm_adjust
 {
@@ -22,6 +23,9 @@ class llvm_adjust
     contextt &context;
 
     void adjust_function(symbolt &symbol);
+
+    void convert_exprt(exprt &expr);
+    void convert_member(member_exprt &expr);
     void convert_expr_to_codet(exprt &expr);
 };
 

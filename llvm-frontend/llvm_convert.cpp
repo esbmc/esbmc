@@ -1202,15 +1202,6 @@ void llvm_convertert::get_expr(
       if(base.type().get_bool("anonymous"))
         base.component_name(base.type().tag());
 
-      // TODO: Do this at later stage
-      if(base.type().is_pointer())
-      {
-        exprt deref("dereference");
-        deref.type() = base.type().subtype();
-        deref.move_to_operands(base);
-        base.swap(deref);
-      }
-
       exprt comp_name;
       get_decl(*member.getMemberDecl(), comp_name);
 
