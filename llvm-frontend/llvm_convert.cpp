@@ -491,7 +491,6 @@ void llvm_convertert::get_var(
   if (vd.hasExternalStorage())
     symbol.is_extern = true;
 
-
   if (!vd.hasLocalStorage())
   {
     // Initialize with zero value, if the symbol has initial value,
@@ -524,7 +523,6 @@ void llvm_convertert::get_var(
 
     // If the symbol is an array, we must initialize all
     // uninitialized positions to zero
-    // TODO: Move to a step after conversion
     if(t.is_array())
     {
       BigInt size;
