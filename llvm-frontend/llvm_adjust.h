@@ -20,6 +20,9 @@ class llvm_adjust
 
   private:
     contextt &context;
+
+    void adjust_function(symbolt &symbol);
+    void convert_exprt_inside_block(exprt &expr);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_ADJUST_H_ */

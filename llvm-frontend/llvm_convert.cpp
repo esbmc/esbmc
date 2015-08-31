@@ -595,14 +595,6 @@ void llvm_convertert::get_function(
   {
     exprt body_exprt;
     get_expr(*body, body_exprt);
-
-    // TODO: Move to a step after conversion
-    // Before push the body to the symbol, we must check if
-    // every statement is an codet, e.g., sideeffects are exprts
-    // and must be converted
-    for(auto &statement : body_exprt.operands())
-      convert_exprt_inside_block(statement);
-
     symbol.value = body_exprt;
   }
 
@@ -1477,9 +1469,6 @@ void llvm_convertert::get_expr(
       for (const auto &stmt : compound_stmt.body()) {
         exprt statement;
         get_expr(*stmt, statement);
-
-        // TODO: Move to later stage?
-        convert_exprt_inside_block(statement);
         block.operands().push_back(statement);
       }
 
@@ -1550,13 +1539,6 @@ void llvm_convertert::get_expr(
       codet label("label");
       label.add("label") = irept(label_stmt.getName());
       label.copy_to_operands(sub_stmt);
-
-      // TODO: Move to a step after conversion
-      // Before push the body to the symbol, we must check if
-      // every statement is an codet, e.g., sideeffects are exprts
-      // and must be converted
-      for(auto &statement : label.operands())
-        convert_exprt_inside_block(statement);
 
       new_expr = label;
       break;
@@ -2381,17 +2363,4 @@ void llvm_convertert::check_symbol_redefinition(
       }
     }
   }
-}
-
-// TODO: Move to a step after conversion
-void llvm_convertert::convert_exprt_inside_block(
-  exprt& expr)
-{
-  if(expr.is_code())
-    return;
-
-  codet code("expression");
-  code.copy_to_operands(expr);
-
-  expr.swap(code);
 }

@@ -169,9 +169,6 @@ private:
   void check_symbol_redefinition(
     symbolt &old_symbol,
     symbolt &new_symbol);
-
-  void convert_exprt_inside_block(
-    exprt &expr);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */
