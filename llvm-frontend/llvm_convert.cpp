@@ -488,15 +488,19 @@ void llvm_convertert::get_var(
     abort();
   }
 
-  // Initialize with zero value, if the symbol has initial value,
-  // it will be add later on this method
-  symbol.value = gen_zero(t);
-
-  // Add location to value since it is only added on get_expr
-  symbol.value.location() = current_location;
-
   if (vd.hasExternalStorage())
     symbol.is_extern = true;
+
+
+  if (!vd.hasLocalStorage())
+  {
+    // Initialize with zero value, if the symbol has initial value,
+    // it will be add later on this method
+    symbol.value = gen_zero(t);
+
+    // Add location to value since it is only added on get_expr
+    symbol.value.location() = current_location;
+  }
 
   symbol.lvalue = true;
   symbol.static_lifetime = !vd.hasLocalStorage();
