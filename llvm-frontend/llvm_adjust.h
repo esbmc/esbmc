@@ -29,7 +29,12 @@ class llvm_adjust
     void convert_exprt(exprt &expr);
     void convert_member(member_exprt &expr);
     void convert_pointer_arithmetic(exprt &expr);
+    void convert_index(index_exprt &index);
+    void convert_dereference(exprt &deref);
     void convert_expr_to_codet(exprt &expr);
+    void convert_expr_function_identifier(exprt &expr);
+
+    void make_index_type(exprt &expr);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_ADJUST_H_ */
