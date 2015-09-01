@@ -263,7 +263,17 @@ void llvm_convertert::get_enum(
   symbol.pretty_name = "enum " + enumd.getName().str();
   symbol.is_type = true;
 
-  move_symbol_to_context(symbol);
+  // see if we have it already
+  symbolst::iterator old_it=context.symbols.find(symbol.name);
+  if(old_it==context.symbols.end())
+  {
+    move_symbol_to_context(symbol);
+  }
+  else
+  {
+    symbolt &old_symbol = old_it->second;
+    check_symbol_redefinition(old_symbol, symbol);
+  }
 
   for(const auto &enumerator : enumd.enumerators())
   {
@@ -321,7 +331,17 @@ void llvm_convertert::get_struct(
   symbol.pretty_name = "struct " + structd.getName().str();
   symbol.is_type = true;
 
-  move_symbol_to_context(symbol);
+  // see if we have it already
+  symbolst::iterator old_it=context.symbols.find(symbol.name);
+  if(old_it==context.symbols.end())
+  {
+    move_symbol_to_context(symbol);
+  }
+  else
+  {
+    symbolt &old_symbol = old_it->second;
+    check_symbol_redefinition(old_symbol, symbol);
+  }
 
   new_expr = code_skipt();
 
@@ -371,7 +391,17 @@ void llvm_convertert::get_union(
   symbol.pretty_name = "union " + uniond.getName().str();
   symbol.is_type = true;
 
-  move_symbol_to_context(symbol);
+  // see if we have it already
+  symbolst::iterator old_it=context.symbols.find(symbol.name);
+  if(old_it==context.symbols.end())
+  {
+    move_symbol_to_context(symbol);
+  }
+  else
+  {
+    symbolt &old_symbol = old_it->second;
+    check_symbol_redefinition(old_symbol, symbol);
+  }
 
   new_expr = code_skipt();
 
@@ -422,7 +452,17 @@ void llvm_convertert::get_enum_constants(
   get_size_exprt(enumcd.getInitVal(), signedbv_typet(), bval);
   symbol.value.swap(bval);
 
-  move_symbol_to_context(symbol);
+  // see if we have it already
+  symbolst::iterator old_it=context.symbols.find(symbol.name);
+  if(old_it==context.symbols.end())
+  {
+    move_symbol_to_context(symbol);
+  }
+  else
+  {
+    symbolt &old_symbol = old_it->second;
+    check_symbol_redefinition(old_symbol, symbol);
+  }
 
   // Save the enum constant address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
@@ -2329,5 +2369,13 @@ void llvm_convertert::check_symbol_redefinition(
         old_symbol.value.swap(new_symbol.value);
       }
     }
+  }
+  else if(old_symbol.is_type)
+  {
+    // overwrite location
+    old_symbol.location=new_symbol.location;
+
+    // move body
+    old_symbol.type.swap(new_symbol.type);
   }
 }
