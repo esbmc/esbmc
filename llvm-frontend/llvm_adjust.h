@@ -28,6 +28,7 @@ class llvm_adjust
 
     void convert_exprt(exprt &expr);
     void convert_member(member_exprt &expr);
+    void convert_pointer_arithmetic(exprt &expr);
     void convert_expr_to_codet(exprt &expr);
 };
 
