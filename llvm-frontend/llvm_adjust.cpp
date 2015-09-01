@@ -10,7 +10,8 @@
 #include <std_code.h>
 
 llvm_adjust::llvm_adjust(contextt &_context)
-  : context(_context)
+  : context(_context),
+    ns(namespacet(context))
 {
 }
 

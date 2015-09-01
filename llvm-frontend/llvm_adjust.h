@@ -9,6 +9,7 @@
 #define LLVM_FRONTEND_LLVM_ADJUST_H_
 
 #include <context.h>
+#include <namespace.h>
 #include <std_expr.h>
 
 class llvm_adjust
@@ -21,6 +22,7 @@ class llvm_adjust
 
   private:
     contextt &context;
+    namespacet ns;
 
     void adjust_function(symbolt &symbol);
 
