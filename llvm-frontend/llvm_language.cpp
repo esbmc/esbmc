@@ -111,6 +111,23 @@ bool llvm_languaget::convert(
   const std::string &module,
   message_handlert &message_handler)
 {
+  char tmp_file[32];
+
+  sprintf(tmp_file, "/tmp/ESBMC_XXXXXX.c");
+  int fd = mkstemps(tmp_file, 2);
+  if (fd < 0) {
+    std::cout << "Couldn't open preprocessing output file" << std::endl;
+    return true;
+  }
+  close(fd);
+
+  std::string in;
+  internal_additions(in);
+
+  std::fstream fs (tmp_file, std::fstream::out);
+  fs << in;
+  parse(std::string(tmp_file));
+
   contextt new_context;
 
   llvm_convertert converter(new_context, ASTs);
