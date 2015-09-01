@@ -44,14 +44,14 @@ bool llvm_languaget::parse(
   // preprocessing
 
   std::ostringstream o_preprocessed;
-
-  internal_additions(o_preprocessed);
-
   if(preprocess(path, o_preprocessed, message_handler))
     return true;
 
-  std::istringstream i_preprocessed(o_preprocessed.str());
+  return parse(path);
+}
 
+bool llvm_languaget::parse(const std::string& path)
+{
   // From the clang tool example,
   int num_args = 3;
   const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
@@ -157,47 +157,91 @@ bool llvm_languaget::final(contextt& context, message_handlert& message_handler)
   return false;
 }
 
-void llvm_languaget::internal_additions(std::ostream &out)
+void llvm_languaget::internal_additions(std::string &str)
 {
-  out << "# 1 \"<built-in>\"" << std::endl;
+  str+=
+    "void __ESBMC_assume(_Bool assumption);\n"
+    "void assert(_Bool assertion);\n"
+    "void __ESBMC_assert(_Bool assertion, const char *description);\n"
+    "_Bool __ESBMC_same_object(const void *, const void *);\n"
+    "_Bool __ESBMC_is_zero_string(const void *);\n"
+    "unsigned __ESBMC_zero_string_length(const void *);\n"
+    "unsigned __ESBMC_buffer_size(const void *);\n"
 
-  out << "void *operator new(unsigned int size);" << std::endl;
+    // traces
+    "void CBMC_trace(int lvl, const char* event, ...);\n"
 
-  // assume/assert
-  out << "extern \"C\" void assert(bool assertion);" << std::endl;
-  out << "extern \"C\" void __ESBMC_assume(bool assumption);" << std::endl;
-  out << "extern \"C\" void __ESBMC_assert("
-         "bool assertion, const char *description);" << std::endl;
+    // pointers
+    "unsigned __ESBMC_POINTER_OBJECT(const void *p);\n"
+    "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
 
-  // __ESBMC_atomic_{begin,end}
-  out << "extern \"C\" void __ESBMC_atomic_begin();" << std::endl;
-  out << "extern \"C\" void __ESBMC_atomic_end();" << std::endl;
+    // malloc
+    "unsigned __ESBMC_constant_infinity_uint;\n"
+    //"_Bool __ESBMC_alloc[__ESBMC_constant_infinity_uint];\n"
+    //"_Bool __ESBMC_deallocated[__ESBMC_constant_infinity_uint];\n"
+    //"_Bool __ESBMC_is_dynamic[__ESBMC_constant_infinity_uint];\n"
+    //"unsigned long __ESBMC_alloc_size[__ESBMC_constant_infinity_uint];\n"
 
-  // __CPROVER namespace
-  out << "namespace __CPROVER { }" << std::endl;
+    "void *__ESBMC_realloc(void *ptr, long unsigned int size);\n"
 
-  // for dynamic objects
-  out << "unsigned __CPROVER::constant_infinity_uint;" << std::endl;
-  out << "bool __ESBMC_alloc[__CPROVER::constant_infinity_uint];" << std::endl;
-  out << "unsigned __ESBMC_alloc_size[__CPROVER::constant_infinity_uint];" << std::endl;
-  out << " bool __ESBMC_deallocated[__CPROVER::constant_infinity_uint];" << std::endl;
-  out << "bool __ESBMC_is_dynamic[__CPROVER::constant_infinity_uint];" << std::endl;
+    // float stuff
+    "_Bool __ESBMC_isnan(double f);\n"
+    "_Bool __ESBMC_isfinite(double f);\n"
+    "_Bool __ESBMC_isinf(double f);\n"
+    "_Bool __ESBMC_isnormal(double f);\n"
+    "extern int __ESBMC_rounding_mode;\n"
 
-  // GCC stuff
-  out << "extern \"C\" {" << std::endl;
-  out << GCC_BUILTIN_HEADERS;
+    // absolute value
+    "int __ESBMC_abs(int x);\n"
+    "long int __ESBMC_labs(long int x);\n"
+    "double __ESBMC_fabs(double x);\n"
+    "long double __ESBMC_fabsl(long double x);\n"
+    "float __ESBMC_fabsf(float x);\n"
 
-  // Forward decs for pthread main thread begin/end hooks. Because they're
-  // pulled in from the C library, they need to be declared prior to pulling
-  // them in, for type checking.
-  out << "void pthread_start_main_hook(void);" << std::endl;
-  out << "void pthread_end_main_hook(void);" << std::endl;
+    // Forward decs for pthread main thread begin/end hooks. Because they're
+    // pulled in from the C library, they need to be declared prior to pulling
+    // them in, for type checking.
+    "void pthread_start_main_hook(void);\n"
+    "void pthread_end_main_hook(void);\n"
 
-  //  Empty __FILE__ and __LINE__ definitions.
-  out << "const char *__FILE__ = \"\";" << std::endl;
-  out << "unsigned int __LINE__ = 0;" << std::endl;
+    // Forward declarations for nondeterministic types.
+    "int nondet_int();\n"
+    "unsigned int nondet_uint();\n"
+    "long nondet_long();\n"
+    "unsigned long nondet_ulong();\n"
+    "short nondet_short();\n"
+    "unsigned short nondet_ushort();\n"
+    "short nondet_short();\n"
+    "unsigned short nondet_ushort();\n"
+    "char nondet_char();\n"
+    "unsigned char nondet_uchar();\n"
+    "signed char nondet_schar();\n"
 
-  out << "}" << std::endl;
+    // Digital filters code
+    "_Bool __ESBMC_check_stability(float den[], float num[]);\n"
+
+    // Digital controllers code
+    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
+    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"
+    "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);\n"
+
+    // And again, for TACAS VERIFIER versions,
+    "int __VERIFIER_nondet_int();\n"
+    "unsigned int __VERIFIER_nondet_uint();\n"
+    "long __VERIFIER_nondet_long();\n"
+    "unsigned long __VERIFIER_nondet_ulong();\n"
+    "short __VERIFIER_nondet_short();\n"
+    "unsigned short __VERIFIER_nondet_ushort();\n"
+    "short __VERIFIER_nondet_short();\n"
+    "unsigned short __VERIFIER_nondet_ushort();\n"
+    "char __VERIFIER_nondet_char();\n"
+    "unsigned char __VERIFIER_nondet_uchar();\n"
+    "signed char __VERIFIER_nondet_schar();\n"
+
+    // GCC junk stuff
+//    GCC_BUILTIN_HEADERS
+
+    "\n";
 }
 
 bool llvm_languaget::from_expr(

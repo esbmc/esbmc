@@ -75,7 +75,9 @@ public:
   llvm_languaget();
 
 protected:
-  void internal_additions(std::ostream &outstream);
+  void internal_additions(std::string &str);
+
+  bool parse(const std::string &path);
 
   virtual std::string main_symbol()
   {
