@@ -668,10 +668,21 @@ void llvm_convertert::get_function_params(
   const clang::ParmVarDecl &pdecl,
   exprt &param)
 {
+  std::string name = pdecl.getName().str();
+
   typet param_type;
   get_type(pdecl.getOriginalType(), param_type);
 
-  std::string name = pdecl.getName().str();
+  param = code_typet::argumentt();
+  param.type() = param_type;
+  param.cmt_base_name(name);
+
+  // If the name is empty, this is an function definition that we don't
+  // need to worry about as the function params name's will be defined
+  // when the function is defined, the exprt is filled for the sake of
+  // beautfication
+  if(name.empty())
+    return;
 
   symbolt param_symbol;
   get_default_symbol(
@@ -684,9 +695,6 @@ void llvm_convertert::get_function_params(
   param_symbol.file_local = true;
   param_symbol.is_actual = true;
 
-  param = code_typet::argumentt();
-  param.type() = param_type;
-  param.cmt_base_name(name);
   param.cmt_identifier(param_symbol.name.as_string());
   param.location() = param_symbol.location;
 
@@ -759,7 +767,6 @@ void llvm_convertert::get_type(
                       "than 64 bits" << std::endl;
         abort();
       }
-
 
       typet the_type;
       get_type(arr.getElementType(), the_type);
