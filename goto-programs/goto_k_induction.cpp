@@ -356,7 +356,7 @@ void goto_k_inductiont::convert_infinite_loop(loopst &loop)
   // Create the kindice variable and initialize it
   init_k_indice(loop_head);
 
-  // Update the state vector, this will be inserted one instruction
+  // Update the state vector, this will insert one instruction
   // after the loop head
   update_state_vector(loop_head);
 
