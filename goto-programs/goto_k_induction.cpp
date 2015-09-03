@@ -885,3 +885,8 @@ void goto_k_inductiont::kindice_incr(goto_programt& dest)
   z->code = kindice_plus2;
   dest.destructive_append(tmp_z);
 }
+
+symbol_exprt goto_k_inductiont::gen_kindice()
+{
+  return symbol_exprt("kindice$"+i2string(state_counter), int_type());;
+}

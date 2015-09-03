@@ -100,6 +100,7 @@ protected:
     goto_programt &dest);
 
   void kindice_incr(goto_programt &dest);
+  symbol_exprt gen_kindice();
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */
