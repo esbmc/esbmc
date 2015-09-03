@@ -732,12 +732,7 @@ void goto_k_inductiont::assume_state_vector(
   exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
   assume_cond(result_expr, dest);
 
-  // TODO: This should be in a separate method
-  // kindice=kindice+1
-  exprt one_expr = gen_one(int_type());
-  exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
-  code_assignt new_assign_plus(lhs_index, rhs_expr);
-  copy(new_assign_plus, ASSIGN, dest);
+  kindice_incr(dest);
 
   goto_function.body.destructive_insert(loop_exit, dest);
 }
