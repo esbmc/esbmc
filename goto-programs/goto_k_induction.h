@@ -103,6 +103,7 @@ protected:
 
   symbol_exprt gen_kindice();
   symbol_exprt gen_state_vector();
+  symbol_exprt gen_current_state();
 
   exprt gen_state_vector_indexed(exprt index);
 };

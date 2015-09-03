@@ -868,6 +868,11 @@ symbol_exprt goto_k_inductiont::gen_state_vector()
   return symbol_exprt("s$"+i2string(state_counter), array_typet(state));
 }
 
+symbol_exprt goto_k_inductiont::gen_current_state()
+{
+  return symbol_exprt("cs$"+i2string(state_counter), state);
+}
+
 exprt goto_k_inductiont::gen_state_vector_indexed(exprt index)
 {
   exprt state_vector_indexed(exprt::index, state);
