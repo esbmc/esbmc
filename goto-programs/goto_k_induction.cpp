@@ -533,23 +533,17 @@ void goto_k_inductiont::update_state_vector(goto_programt::targett& loop_head)
   state_vector.subtype() = state;
 
   exprt new_expr(exprt::with, state_vector);
-  exprt lhs_array("symbol", state);
+
   exprt rhs("symbol", state);
-
-  std::string identifier_lhs, identifier_rhs;
-  identifier_lhs = "s$"+i2string(state_counter);
-  identifier_rhs = "cs$"+i2string(state_counter);
-
-  lhs_array.identifier(identifier_lhs);
-  rhs.identifier(identifier_rhs);
+  rhs.identifier("cs$"+i2string(state_counter));
 
   //s[k] = cs
   new_expr.reserve_operands(3);
-  new_expr.copy_to_operands(lhs_array);
+  new_expr.copy_to_operands(gen_state_vector());
   new_expr.copy_to_operands(gen_kindice());
   new_expr.move_to_operands(rhs);
 
-  code_assignt new_assign(lhs_array,new_expr);
+  code_assignt new_assign(gen_state_vector(), new_expr);
   copy(new_assign, ASSIGN, dest);
 
   // The update vector should be added one instruction after the loop head
@@ -568,13 +562,9 @@ void goto_k_inductiont::assign_current_state(goto_programt::targett& loop_exit)
   {
     exprt rhs_expr(state.components()[j]);
     exprt new_expr(exprt::with, state);
+
     exprt lhs_expr("symbol", state);
-
-    std::string identifier;
-
-    identifier = "cs$" + i2string(state_counter);
-
-    lhs_expr.identifier(identifier);
+    lhs_expr.identifier("cs$" + i2string(state_counter));
 
     new_expr.reserve_operands(3);
     new_expr.copy_to_operands(lhs_expr);
@@ -698,24 +688,16 @@ void goto_k_inductiont::assume_state_vector(
     return;
   }
 
-  exprt new_expr(exprt::index, state);
-
-  array_typet state_vector;
-  state_vector.subtype() = state;
-
-  exprt lhs_array("symbol", state_vector);
-  lhs_array.identifier("s$"+i2string(state_counter));
-
   exprt rhs("symbol", state);
   rhs.identifier("cs$"+i2string(state_counter));
 
-  // s[k]
-  new_expr.reserve_operands(2);
-  new_expr.copy_to_operands(lhs_array);
-  new_expr.copy_to_operands(gen_kindice());
-
   // assume(s[k]!=cs)
-  exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
+  exprt result_expr =
+    gen_binary(
+      exprt::notequal,
+      bool_typet(),
+      gen_state_vector_indexed(gen_kindice()),
+      rhs);
   assume_cond(result_expr, dest);
 
   kindice_incr(dest);
@@ -881,6 +863,11 @@ symbol_exprt goto_k_inductiont::gen_kindice()
   return symbol_exprt("kindice$"+i2string(state_counter), int_type());
 }
 
+symbol_exprt goto_k_inductiont::gen_state_vector()
+{
+  return symbol_exprt("s$"+i2string(state_counter), array_typet(state));
+}
+
 exprt goto_k_inductiont::gen_state_vector_indexed(exprt index)
 {
   exprt state_vector_indexed(exprt::index, state);
@@ -890,9 +877,4 @@ exprt goto_k_inductiont::gen_state_vector_indexed(exprt index)
   state_vector_indexed.copy_to_operands(index);
 
   return state_vector_indexed;
-}
-
-symbol_exprt goto_k_inductiont::gen_state_vector()
-{
-  return symbol_exprt("s$"+i2string(state_counter), int_type());
 }
