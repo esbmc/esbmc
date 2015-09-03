@@ -878,5 +878,21 @@ void goto_k_inductiont::kindice_incr(goto_programt& dest)
 
 symbol_exprt goto_k_inductiont::gen_kindice()
 {
-  return symbol_exprt("kindice$"+i2string(state_counter), int_type());;
+  return symbol_exprt("kindice$"+i2string(state_counter), int_type());
+}
+
+exprt goto_k_inductiont::gen_state_vector_indexed(exprt index)
+{
+  exprt state_vector_indexed(exprt::index, state);
+
+  state_vector_indexed.reserve_operands(2);
+  state_vector_indexed.copy_to_operands(gen_state_vector());
+  state_vector_indexed.copy_to_operands(index);
+
+  return state_vector_indexed;
+}
+
+symbol_exprt goto_k_inductiont::gen_state_vector()
+{
+  return symbol_exprt("s$"+i2string(state_counter), int_type());
 }
