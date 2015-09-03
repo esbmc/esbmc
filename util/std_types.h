@@ -38,7 +38,7 @@ public:
   symbol_typet():typet(t_symbol)
   {
   }
-  
+
   explicit symbol_typet(const irep_idt &identifier):typet(t_symbol)
   {
     set_identifier(identifier);
@@ -52,7 +52,7 @@ public:
   const irep_idt &get_identifier() const
   {
     return get(a_identifier);
-  }  
+  }
 };
 
 
@@ -149,22 +149,22 @@ public:
   };
 
   typedef std::vector<componentt> componentst;
-  
+
   const componentst &components() const
   {
     return (const componentst &)(find(a_components).get_sub());
   }
-  
+
   componentst &components()
   {
     return (componentst &)(add(a_components).get_sub());
   }
-  
+
   bool has_component(const irep_idt &component_name) const
   {
     return get_component(component_name).is_not_nil();
   }
-  
+
   const componentt &get_component(
     const irep_idt &component_name) const;
 
@@ -195,14 +195,14 @@ public:
   {
     id(t_struct);
   }
-    
+
   bool is_prefix_of(const struct_typet &other) const;
 
   const componentst &methods() const
   {
     return (const componentst &)(find(a_methods).get_sub());
   }
-     
+
   componentst &methods()
   {
     return (componentst &)(add(a_methods).get_sub());
@@ -255,18 +255,18 @@ public:
   {
     id(t_code);
   }
-  
+
   class argumentt:public exprt
   {
   public:
     argumentt():exprt(argument)
     {
     }
-    
+
     argumentt(const typet &type):exprt(argument, type)
     {
     }
-    
+
     const exprt &default_value() const
     {
       return find_expr("#default_value");
@@ -281,7 +281,7 @@ public:
     {
       return add_expr("#default_value");
     }
-    
+
     void set_identifier(const irep_idt &identifier)
     {
       cmt_identifier(identifier);
@@ -302,7 +302,7 @@ public:
       return cmt_base_name();
     }
   };
-  
+
   bool has_ellipsis() const
   {
     return find(a_arguments).ellipsis();
@@ -374,7 +374,7 @@ public:
   {
     return (const exprt &)find(a_size);
   }
-  
+
   exprt &size()
   {
     return (exprt &)add(a_size);
