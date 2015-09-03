@@ -877,3 +877,23 @@ void goto_k_inductiont::assume_cond(
   migrate_expr(cond, e->guard);
   dest.destructive_append(tmp_e);
 }
+
+void goto_k_inductiont::kindice_incr(goto_programt& dest)
+{
+  goto_programt tmp_z;
+  goto_programt::targett z=tmp_z.add_instruction(ASSIGN);
+
+  exprt lhs_index =
+    symbol_exprt("kindice$"+i2string(state_counter), int_type());
+
+  // kindice=kindice+1
+  exprt one_expr = gen_one(int_type());
+  exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
+  code_assignt kindice_plus(lhs_index, rhs_expr);
+
+  expr2tc kindice_plus2;
+  migrate_expr(kindice_plus, kindice_plus2);
+
+  z->code = kindice_plus2;
+  dest.destructive_append(tmp_z);
+}

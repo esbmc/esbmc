@@ -98,6 +98,8 @@ protected:
   void assume_cond(
     const exprt &cond,
     goto_programt &dest);
+
+  void kindice_incr(goto_programt &dest);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */
