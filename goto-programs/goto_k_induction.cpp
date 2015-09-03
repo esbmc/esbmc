@@ -477,19 +477,14 @@ void goto_k_inductiont::make_nondet_state_assign(
   {
     exprt rhs_expr = side_effect_expr_nondett(
       state.components()[j].type());
-    exprt new_expr(exprt::with, state);
-    exprt lhs_expr("symbol", state);
 
     if (state.components()[j].type().is_array())
       rhs_expr = side_effect_expr_nondett(
         state.components()[j].type());
 
-    std::string identifier;
-    identifier = "cs$" + i2string(state_counter);
-    lhs_expr.identifier(identifier);
-
+    exprt new_expr(exprt::with, state);
     new_expr.reserve_operands(3);
-    new_expr.copy_to_operands(lhs_expr);
+    new_expr.copy_to_operands(gen_current_state());
     new_expr.copy_to_operands(exprt("member_name"));
     new_expr.move_to_operands(rhs_expr);
 
@@ -507,7 +502,7 @@ void goto_k_inductiont::make_nondet_state_assign(
       }
     }
 
-    code_assignt new_assign(lhs_expr, new_expr);
+    code_assignt new_assign(gen_current_state(), new_expr);
     copy(new_assign, ASSIGN, dest);
   }
 
@@ -534,14 +529,11 @@ void goto_k_inductiont::update_state_vector(goto_programt::targett& loop_head)
 
   exprt new_expr(exprt::with, state_vector);
 
-  exprt rhs("symbol", state);
-  rhs.identifier("cs$"+i2string(state_counter));
-
   //s[k] = cs
   new_expr.reserve_operands(3);
   new_expr.copy_to_operands(gen_state_vector());
   new_expr.copy_to_operands(gen_kindice());
-  new_expr.move_to_operands(rhs);
+  new_expr.copy_to_operands(gen_current_state());
 
   code_assignt new_assign(gen_state_vector(), new_expr);
   copy(new_assign, ASSIGN, dest);
@@ -560,16 +552,12 @@ void goto_k_inductiont::assign_current_state(goto_programt::targett& loop_exit)
   unsigned int component_size = state.components().size();
   for (unsigned int j = 0; j < component_size; j++)
   {
-    exprt rhs_expr(state.components()[j]);
     exprt new_expr(exprt::with, state);
 
-    exprt lhs_expr("symbol", state);
-    lhs_expr.identifier("cs$" + i2string(state_counter));
-
     new_expr.reserve_operands(3);
-    new_expr.copy_to_operands(lhs_expr);
+    new_expr.copy_to_operands(gen_current_state());
     new_expr.copy_to_operands(exprt("member_name"));
-    new_expr.move_to_operands(rhs_expr);
+    new_expr.copy_to_operands(state.components()[j]);
 
     if (!state.components()[j].has_operands())
     {
@@ -585,7 +573,7 @@ void goto_k_inductiont::assign_current_state(goto_programt::targett& loop_exit)
       }
     }
 
-    code_assignt new_assign(lhs_expr, new_expr);
+    code_assignt new_assign(gen_current_state(), new_expr);
     copy(new_assign, ASSIGN, dest);
   }
 
@@ -688,16 +676,13 @@ void goto_k_inductiont::assume_state_vector(
     return;
   }
 
-  exprt rhs("symbol", state);
-  rhs.identifier("cs$"+i2string(state_counter));
-
   // assume(s[k]!=cs)
   exprt result_expr =
     gen_binary(
       exprt::notequal,
       bool_typet(),
       gen_state_vector_indexed(gen_kindice()),
-      rhs);
+      gen_current_state());
   assume_cond(result_expr, dest);
 
   kindice_incr(dest);
@@ -789,12 +774,9 @@ void goto_k_inductiont::replace_guard(loopst &loop, exprt& expr)
 
 void goto_k_inductiont::replace_by_cs_member(exprt& expr)
 {
-  exprt lhs_struct("symbol", state);
-  lhs_struct.identifier("cs$" + i2string(state_counter));
-
   exprt new_expr(exprt::member, expr.type());
   new_expr.reserve_operands(1);
-  new_expr.copy_to_operands(lhs_struct);
+  new_expr.copy_to_operands(gen_current_state());
   new_expr.identifier(expr.identifier());
   new_expr.component_name(expr.identifier());
 
