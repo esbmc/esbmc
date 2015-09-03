@@ -518,11 +518,8 @@ void goto_k_inductiont::init_k_indice(goto_programt::targett& loop_head)
 {
   goto_programt dest;
 
-  std::string identifier;
-  identifier = "kindice$"+i2string(state_counter);
-  exprt lhs_index = symbol_exprt(identifier, int_type());
   exprt zero_expr = gen_zero(int_type());
-  code_assignt new_assign(lhs_index,zero_expr);
+  code_assignt new_assign(gen_kindice(), zero_expr);
   copy(new_assign, ASSIGN, dest);
 
   goto_function.body.destructive_insert(loop_head, dest);
@@ -532,13 +529,9 @@ void goto_k_inductiont::update_state_vector(goto_programt::targett& loop_head)
 {
   goto_programt dest;
 
-  std::string identifier;
-  identifier = "kindice$"+i2string(state_counter);
-
   array_typet state_vector;
   state_vector.subtype() = state;
 
-  exprt lhs_index = symbol_exprt(identifier, int_type());
   exprt new_expr(exprt::with, state_vector);
   exprt lhs_array("symbol", state);
   exprt rhs("symbol", state);
@@ -550,11 +543,12 @@ void goto_k_inductiont::update_state_vector(goto_programt::targett& loop_head)
   lhs_array.identifier(identifier_lhs);
   rhs.identifier(identifier_rhs);
 
-  //s[k]=cs
+  //s[k] = cs
   new_expr.reserve_operands(3);
   new_expr.copy_to_operands(lhs_array);
-  new_expr.copy_to_operands(lhs_index);
+  new_expr.copy_to_operands(gen_kindice());
   new_expr.move_to_operands(rhs);
+
   code_assignt new_assign(lhs_array,new_expr);
   copy(new_assign, ASSIGN, dest);
 
@@ -704,12 +698,11 @@ void goto_k_inductiont::assume_state_vector(
     return;
   }
 
-  exprt lhs_index =
-    symbol_exprt("kindice$"+i2string(state_counter), int_type());
   exprt new_expr(exprt::index, state);
 
   array_typet state_vector;
   state_vector.subtype() = state;
+
   exprt lhs_array("symbol", state_vector);
   lhs_array.identifier("s$"+i2string(state_counter));
 
@@ -719,7 +712,7 @@ void goto_k_inductiont::assume_state_vector(
   // s[k]
   new_expr.reserve_operands(2);
   new_expr.copy_to_operands(lhs_array);
-  new_expr.copy_to_operands(lhs_index);
+  new_expr.copy_to_operands(gen_kindice());
 
   // assume(s[k]!=cs)
   exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
@@ -871,13 +864,10 @@ void goto_k_inductiont::kindice_incr(goto_programt& dest)
   goto_programt tmp_z;
   goto_programt::targett z=tmp_z.add_instruction(ASSIGN);
 
-  exprt lhs_index =
-    symbol_exprt("kindice$"+i2string(state_counter), int_type());
-
-  // kindice=kindice+1
+  // kindice = kindice + 1
   exprt one_expr = gen_one(int_type());
-  exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
-  code_assignt kindice_plus(lhs_index, rhs_expr);
+  exprt rhs_expr = gen_binary(exprt::plus, int_type(), gen_kindice(), one_expr);
+  code_assignt kindice_plus(gen_kindice(), rhs_expr);
 
   expr2tc kindice_plus2;
   migrate_expr(kindice_plus, kindice_plus2);
