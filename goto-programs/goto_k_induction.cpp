@@ -650,13 +650,13 @@ void goto_k_inductiont::assume_all_state_vector(goto_programt::targett& loop_exi
 void goto_k_inductiont::assume_state_vector(
   goto_programt::targett& loop_exit)
 {
-  goto_programt dest;
-
   if(constrain_all_states)
   {
     assume_all_state_vector(loop_exit);
     return;
   }
+
+  goto_programt dest;
 
   // assume(s[k]!=cs)
   exprt result_expr =
@@ -811,8 +811,8 @@ void goto_k_inductiont::kindice_incr(goto_programt& dest)
   goto_programt::targett z=tmp_z.add_instruction(ASSIGN);
 
   // kindice = kindice + 1
-  exprt one_expr = gen_one(int_type());
-  exprt rhs_expr = gen_binary(exprt::plus, int_type(), gen_kindice(), one_expr);
+  exprt rhs_expr =
+    gen_binary(exprt::plus, int_type(), gen_kindice(), gen_one(int_type()));
   code_assignt kindice_plus(gen_kindice(), rhs_expr);
 
   expr2tc kindice_plus2;
