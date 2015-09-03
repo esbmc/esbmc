@@ -704,24 +704,17 @@ void goto_k_inductiont::assume_state_vector(
     return;
   }
 
-  std::string identifier;
-  identifier = "kindice$"+i2string(state_counter);
+  exprt lhs_index =
+    symbol_exprt("kindice$"+i2string(state_counter), int_type());
+  exprt new_expr(exprt::index, state);
 
   array_typet state_vector;
   state_vector.subtype() = state;
-
-  exprt lhs_index = symbol_exprt(identifier, int_type());
-  exprt new_expr(exprt::index, state);
   exprt lhs_array("symbol", state_vector);
+  lhs_array.identifier("s$"+i2string(state_counter));
+
   exprt rhs("symbol", state);
-
-  std::string identifier_lhs, identifier_rhs;
-
-  identifier_lhs = "s$"+i2string(state_counter);
-  identifier_rhs = "cs$"+i2string(state_counter);
-
-  lhs_array.identifier(identifier_lhs);
-  rhs.identifier(identifier_rhs);
+  rhs.identifier("cs$"+i2string(state_counter));
 
   // s[k]
   new_expr.reserve_operands(2);
