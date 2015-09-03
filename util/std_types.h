@@ -361,11 +361,15 @@ extern inline code_typet &to_code_type(typet &type)
 class array_typet:public typet
 {
 public:
-  array_typet()
+  array_typet() : typet(t_array)
   {
-    id(t_array);
   }
-  
+
+  array_typet(const typet &_subtype) : typet(t_array)
+  {
+    subtype()=_subtype;
+  }
+
   const exprt &size() const
   {
     return (const exprt &)find(a_size);
