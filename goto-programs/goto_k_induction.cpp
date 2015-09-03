@@ -482,11 +482,7 @@ void goto_k_inductiont::make_nondet_state_assign(
       rhs_expr = side_effect_expr_nondett(
         state.components()[j].type());
 
-    exprt new_expr(exprt::with, state);
-    new_expr.reserve_operands(3);
-    new_expr.copy_to_operands(gen_current_state());
-    new_expr.copy_to_operands(exprt("member_name"));
-    new_expr.move_to_operands(rhs_expr);
+    with_exprt new_expr(gen_current_state(), exprt("member_name"), rhs_expr);
 
     if (!state.components()[j].has_operands())
     {
@@ -513,8 +509,7 @@ void goto_k_inductiont::init_k_indice(goto_programt::targett& loop_head)
 {
   goto_programt dest;
 
-  exprt zero_expr = gen_zero(int_type());
-  code_assignt new_assign(gen_kindice(), zero_expr);
+  code_assignt new_assign(gen_kindice(), gen_zero(int_type()));
   copy(new_assign, ASSIGN, dest);
 
   goto_function.body.destructive_insert(loop_head, dest);
@@ -524,17 +519,7 @@ void goto_k_inductiont::update_state_vector(goto_programt::targett& loop_head)
 {
   goto_programt dest;
 
-  array_typet state_vector;
-  state_vector.subtype() = state;
-
-  exprt new_expr(exprt::with, state_vector);
-
-  //s[k] = cs
-  new_expr.reserve_operands(3);
-  new_expr.copy_to_operands(gen_state_vector());
-  new_expr.copy_to_operands(gen_kindice());
-  new_expr.copy_to_operands(gen_current_state());
-
+  with_exprt new_expr(gen_state_vector(), gen_kindice(), gen_current_state());
   code_assignt new_assign(gen_state_vector(), new_expr);
   copy(new_assign, ASSIGN, dest);
 
@@ -552,12 +537,9 @@ void goto_k_inductiont::assign_current_state(goto_programt::targett& loop_exit)
   unsigned int component_size = state.components().size();
   for (unsigned int j = 0; j < component_size; j++)
   {
-    exprt new_expr(exprt::with, state);
 
-    new_expr.reserve_operands(3);
-    new_expr.copy_to_operands(gen_current_state());
-    new_expr.copy_to_operands(exprt("member_name"));
-    new_expr.copy_to_operands(state.components()[j]);
+    with_exprt new_expr(
+      gen_current_state(), exprt("member_name"), state.components()[j]);
 
     if (!state.components()[j].has_operands())
     {
