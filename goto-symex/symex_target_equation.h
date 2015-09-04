@@ -104,6 +104,7 @@ public:
     bool is_assignment() const { return type==goto_trace_stept::ASSIGNMENT; }
     bool is_output() const     { return type==goto_trace_stept::OUTPUT; }
     bool is_renumber() const   { return type==goto_trace_stept::RENUMBER; }
+    bool is_skip() const   { return type==goto_trace_stept::SKIP; }
     
     expr2tc guard;
 
