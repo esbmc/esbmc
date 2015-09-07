@@ -487,7 +487,17 @@ void llvm_convertert::get_typedef(
   symbol.is_type = true;
   symbol.is_macro = true;
 
-  move_symbol_to_context(symbol);
+  // see if we have it already
+  symbolst::iterator old_it=context.symbols.find(symbol.name);
+  if(old_it==context.symbols.end())
+  {
+    move_symbol_to_context(symbol);
+  }
+  else
+  {
+    symbolt &old_symbol = old_it->second;
+    check_symbol_redefinition(old_symbol, symbol);
+  }
 
   new_expr = code_skipt();
 }
