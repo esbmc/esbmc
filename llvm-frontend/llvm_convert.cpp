@@ -708,7 +708,17 @@ void llvm_convertert::get_function_params(
   param.cmt_identifier(param_symbol.name.as_string());
   param.location() = param_symbol.location;
 
-  move_symbol_to_context(param_symbol);
+  // see if we have it already
+  symbolst::iterator old_it=context.symbols.find(param_symbol.name);
+  if(old_it==context.symbols.end())
+  {
+    move_symbol_to_context(param_symbol);
+  }
+  else
+  {
+    symbolt &old_symbol = old_it->second;
+    check_symbol_redefinition(old_symbol, param_symbol);
+  }
 
   // Save the function's param address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&pdecl);
