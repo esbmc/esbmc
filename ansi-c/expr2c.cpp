@@ -2750,6 +2750,30 @@ std::string expr2ct::convert_extractbit(
 
 /*******************************************************************\
 
+Function: expr2ct::convert_sizeof
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+
+std::string expr2ct::convert_sizeof(
+  const exprt &src,
+  unsigned precedence)
+{
+  std::string dest="sizeof(";
+  dest+=convert(static_cast<const typet&>(src.find("sizeof-type")));
+  dest+=')';
+
+  return dest;
+}
+
+/*******************************************************************\
+
 Function: expr2ct::convert
 
   Inputs:
@@ -3166,6 +3190,9 @@ std::string expr2ct::convert(
 
   else if(src.id()=="extractbit")
     return convert_extractbit(src, precedence);
+
+  else if(src.id()=="sizeof")
+    return convert_sizeof(src, precedence);
 
   else if(src.id()=="concat")
     return convert_function(src, "CONCAT", precedence=15);
