@@ -37,6 +37,8 @@ private:
   locationt current_location;
   std::string current_path;
 
+  clang::ASTUnit::top_level_iterator current_translation_unit;
+
   // TODO: We don't need the current_function_name attribute!!!!!
   // We can get it from the declcontext. Refactor the
   // rest of the code to use it

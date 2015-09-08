@@ -65,6 +65,7 @@ bool llvm_convertert::convert_top_level_decl()
     {
       set_source_manager((*it)->getASTContext().getSourceManager());
       update_current_location((*it)->getLocation());
+      current_translation_unit = it;
 
       exprt dummy_decl;
       get_decl(**it, dummy_decl);
@@ -2179,28 +2180,16 @@ void llvm_convertert::get_predefined_expr(
   typet t;
   get_type(pred_expr.getType(), t);
 
-  std::string the_name;
+
   switch (pred_expr.getIdentType())
   {
     case clang::PredefinedExpr::Func:
     case clang::PredefinedExpr::Function:
-      the_name = current_function_name;
-      break;
     case clang::PredefinedExpr::LFunction:
-      the_name = "__LFUNCTION__";
-      break;
     case clang::PredefinedExpr::FuncDName:
-      the_name = "__FUNCDNAME__";
-      break;
     case clang::PredefinedExpr::FuncSig:
-      the_name = "__FUNCSIG__";
-      break;
-    // TODO: Construct correct prettyfunction name
     case clang::PredefinedExpr::PrettyFunction:
-      the_name = "__PRETTYFUNCTION__";
-      break;
     case clang::PredefinedExpr::PrettyFunctionNoVirtual:
-      the_name = "__PRETTYFUNCTIONNOVIRTUAL__";
       break;
     default:
       std::cerr << "Conversion of unsupported clang predefined expr: \""
@@ -2209,11 +2198,15 @@ void llvm_convertert::get_predefined_expr(
       abort();
   }
 
+  std::string the_name =
+    clang::PredefinedExpr::ComputeName(
+      pred_expr.getIdentType(),
+      *current_translation_unit);
+
   string_constantt string;
   string.set_value(the_name);
 
   index_exprt zero_index(string, gen_zero(int_type()), t);
-
   new_expr = address_of_exprt(zero_index);
 }
 
