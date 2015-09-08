@@ -276,6 +276,10 @@ void llvm_convertert::get_enum(
     check_symbol_redefinition(old_symbol, symbol);
   }
 
+  // Save the enum type address and name to the object map
+  std::size_t address = reinterpret_cast<std::size_t>(&enumd);
+  type_map[address] = identifier;
+
   for(const auto &enumerator : enumd.enumerators())
   {
     // Each enumerator will become a type, so we can
@@ -285,10 +289,6 @@ void llvm_convertert::get_enum(
   }
 
   new_expr = code_skipt();
-
-  // Save the enum type address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(&enumd);
-  type_map[address] = identifier;
 }
 
 void llvm_convertert::get_struct(
