@@ -714,7 +714,7 @@ void llvm_convertert::get_function_params(
   // If the name is empty, this is an function definition that we don't
   // need to worry about as the function params name's will be defined
   // when the function is defined, the exprt is filled for the sake of
-  // beautfication
+  // beautification
   if(name.empty())
     return;
 
@@ -2354,7 +2354,7 @@ void llvm_convertert::set_source_manager(
 void llvm_convertert::update_current_location(
   clang::SourceLocation source_location)
 {
-  current_path =sm->getFilename(source_location).str();
+  current_path = sm->getFilename(source_location).str();
 
   current_location.set_file(get_filename_from_path());
   current_location.set_line(sm->getSpellingLineNumber(source_location));
