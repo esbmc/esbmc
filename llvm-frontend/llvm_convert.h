@@ -147,8 +147,7 @@ private:
     std::string name);
 
   std::string get_tag_name(
-    std::string _name,
-    bool is_local);
+    std::string _name);
 
   void get_size_exprt(
     llvm::APInt val,

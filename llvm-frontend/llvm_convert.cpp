@@ -246,8 +246,7 @@ void llvm_convertert::get_enum(
   const clang::EnumDecl& enumd,
   exprt& new_expr)
 {
-  std::string identifier =
-    get_tag_name(enumd.getName().str(), !current_function_name.empty());
+  std::string identifier = get_tag_name(enumd.getName().str());
 
   typet t = enum_type();
   t.id("c_enum");
@@ -295,8 +294,7 @@ void llvm_convertert::get_struct(
   const clang::RecordDecl& structd,
   exprt& new_expr)
 {
-  std::string identifier =
-    get_tag_name(structd.getName().str(), !current_function_name.empty());
+  std::string identifier = get_tag_name(structd.getName().str());
 
   struct_typet t;
   t.tag(identifier);
@@ -355,8 +353,7 @@ void llvm_convertert::get_union(
   const clang::RecordDecl& uniond,
   exprt& new_expr)
 {
-  std::string identifier =
-    get_tag_name(uniond.getName().str(), !current_function_name.empty());
+  std::string identifier = get_tag_name(uniond.getName().str());
 
   union_typet t;
   t.tag(identifier);
@@ -887,8 +884,7 @@ void llvm_convertert::get_type(
       {
         // This probably means a recursive struct, so create a symbol
         // for it
-        symbol_typet s("c::" +
-          get_tag_name(tag.getName().str(), !current_function_name.empty()));
+        symbol_typet s("c::" + get_tag_name(tag.getName().str()));
         new_type = s;
       }
 
@@ -2274,24 +2270,14 @@ std::string llvm_convertert::get_param_name(std::string name)
 }
 
 std::string llvm_convertert::get_tag_name(
-  std::string _name,
-  bool is_local)
+  std::string _name)
 {
   std::string name = _name;
 
   if(name.empty())
     name = "#anon"+i2string(anon_counter++);
 
-  if(!is_local)
-    return "tag-" + name;
-
-  std::string pretty_name = get_modulename_from_path() + "::";
-  if(current_function_name!= "")
-    pretty_name += current_function_name + "::";
-  pretty_name += integer2string(current_scope_var_num) + "::";
-  pretty_name += "tag-" + name;
-
-  return pretty_name;
+  return "tag-" + name;
 }
 
 void llvm_convertert::get_size_exprt(
