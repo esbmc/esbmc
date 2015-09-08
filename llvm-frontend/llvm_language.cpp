@@ -193,11 +193,12 @@ void llvm_languaget::internal_additions(std::string &str)
     "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
 
     // malloc
+    // TODO: the following arrays should be infinity in size
     "unsigned __ESBMC_constant_infinity_uint;\n"
-    //"_Bool __ESBMC_alloc[__ESBMC_constant_infinity_uint];\n"
-    //"_Bool __ESBMC_deallocated[__ESBMC_constant_infinity_uint];\n"
-    //"_Bool __ESBMC_is_dynamic[__ESBMC_constant_infinity_uint];\n"
-    //"unsigned long __ESBMC_alloc_size[__ESBMC_constant_infinity_uint];\n"
+    "_Bool __ESBMC_alloc[100];\n"
+    "_Bool __ESBMC_deallocated[100];\n"
+    "_Bool __ESBMC_is_dynamic[100];\n"
+    "unsigned long __ESBMC_alloc_size[100];\n"
 
     "void *__ESBMC_realloc(void *ptr, long unsigned int size);\n"
 
@@ -254,9 +255,6 @@ void llvm_languaget::internal_additions(std::string &str)
     "char __VERIFIER_nondet_char();\n"
     "unsigned char __VERIFIER_nondet_uchar();\n"
     "signed char __VERIFIER_nondet_schar();\n"
-
-    // GCC junk stuff
-//    GCC_BUILTIN_HEADERS
 
     "\n";
 }
