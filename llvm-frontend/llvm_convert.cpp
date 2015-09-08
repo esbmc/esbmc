@@ -52,6 +52,31 @@ bool llvm_convertert::convert()
   return false;
 }
 
+bool llvm_convertert::convert_builtin_types()
+{
+  clang::ASTUnit::top_level_iterator it = (*ASTs.begin())->top_level_begin();
+
+  set_source_manager((*it)->getASTContext().getSourceManager());
+  update_current_location((*it)->getLocation());
+
+  // Convert va_list_tag
+  // TODO: from clang 3.8 we'll have a member VaListTagDecl and a method
+  // getVaListTagDecl() that might make the following code redundant
+  clang::QualType q_va_list_type = (*it)->getASTContext().getVaListTagType();
+  const clang::TypedefType &t =
+    static_cast<const clang::TypedefType &>(*q_va_list_type.getTypePtr());
+
+  exprt dummy;
+  get_decl(*t.getDecl(), dummy);
+
+  // TODO: clang offers several informations from the target architecture,
+  // such as primitive type's size, much like our configt class. We could
+  // offer an option in the future to query them from the target system.
+  // See clang/Basic/TargetInfo.h for what clang has to offer
+
+  return false;
+}
+
 bool llvm_convertert::convert_top_level_decl()
 {
   // Iterate through each translation unit and their global symbols, creating

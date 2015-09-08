@@ -55,6 +55,7 @@ private:
   typedef std::map<std::size_t, std::string> type_mapt;
   type_mapt type_map;
 
+  bool convert_builtin_types();
   bool convert_top_level_decl();
 
   void get_decl(
