@@ -46,6 +46,9 @@ llvm_convertert::~llvm_convertert()
 
 bool llvm_convertert::convert()
 {
+  if(convert_builtin_types())
+    return true;
+
   if(convert_top_level_decl())
     return true;
 
@@ -88,7 +91,6 @@ bool llvm_convertert::convert_top_level_decl()
       it != translation_unit->top_level_end();
       it++)
     {
-      set_source_manager((*it)->getASTContext().getSourceManager());
       update_current_location((*it)->getLocation());
       current_translation_unit = it;
 
