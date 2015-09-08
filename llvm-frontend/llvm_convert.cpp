@@ -432,20 +432,19 @@ void llvm_convertert::get_enum_constants(
     get_var_name(enumcd.getName().str(), !current_function_name.empty());
 
   // The parent enum to construct the enum constant's type
-  std::string parent_enum_identifier;
-  if(enumcd.getDeclContext())
-  {
-    const clang::EnumDecl &enumd =
-      static_cast<const clang::EnumDecl &>(*enumcd.getDeclContext());
+  const clang::EnumDecl &enumd =
+    static_cast<const clang::EnumDecl &>(*enumcd.getDeclContext());
 
-    parent_enum_identifier =
-      get_tag_name(enumd.getName().str(), !current_function_name.empty());
-  }
+  std::size_t enum_address = reinterpret_cast<std::size_t>(&enumd);
+  std::string identifier = type_map.find(enum_address)->second;
+
+  symbolt &s = context.symbols.find("c::" + identifier)->second;
+  typet t = s.type;
 
   symbolt symbol;
   get_default_symbol(
     symbol,
-    symbol_typet("c::" + parent_enum_identifier),
+    t,
     enumcd.getName().str(),
     enum_value_identifier);
 
