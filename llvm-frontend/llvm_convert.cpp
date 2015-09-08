@@ -1469,6 +1469,14 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::GenericSelectionExprClass:
+    {
+      const clang::GenericSelectionExpr &gen =
+        static_cast<const clang::GenericSelectionExpr&>(stmt);
+      get_expr(*gen.getResultExpr(), new_expr);
+      break;
+    }
+
     /*
        The following enum values are the basic elements of a program,
        defined on the Stmt class
@@ -1814,7 +1822,6 @@ void llvm_convertert::get_expr(
     case clang::Stmt::VAArgExprClass:
     case clang::Stmt::DesignatedInitExprClass:
     case clang::Stmt::ParenListExprClass:
-    case clang::Stmt::GenericSelectionExprClass:
     case clang::Stmt::ExtVectorElementExprClass:
     case clang::Stmt::BlockExprClass:
     case clang::Stmt::AsTypeExprClass:
