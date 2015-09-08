@@ -290,17 +290,7 @@ void llvm_convertert::get_enum(
   symbol.pretty_name = "enum " + enumd.getName().str();
   symbol.is_type = true;
 
-  // see if we have it already
-  symbolst::iterator old_it=context.symbols.find(symbol.name);
-  if(old_it==context.symbols.end())
-  {
-    move_symbol_to_context(symbol);
-  }
-  else
-  {
-    symbolt &old_symbol = old_it->second;
-    check_symbol_redefinition(old_symbol, symbol);
-  }
+  move_symbol_to_context(symbol);
 
   // Save the enum type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&enumd);
@@ -357,17 +347,7 @@ void llvm_convertert::get_struct(
   symbol.pretty_name = "struct " + structd.getName().str();
   symbol.is_type = true;
 
-  // see if we have it already
-  symbolst::iterator old_it=context.symbols.find(symbol.name);
-  if(old_it==context.symbols.end())
-  {
-    move_symbol_to_context(symbol);
-  }
-  else
-  {
-    symbolt &old_symbol = old_it->second;
-    check_symbol_redefinition(old_symbol, symbol);
-  }
+  move_symbol_to_context(symbol);
 
   new_expr = code_skipt();
 
@@ -416,17 +396,7 @@ void llvm_convertert::get_union(
   symbol.pretty_name = "union " + uniond.getName().str();
   symbol.is_type = true;
 
-  // see if we have it already
-  symbolst::iterator old_it=context.symbols.find(symbol.name);
-  if(old_it==context.symbols.end())
-  {
-    move_symbol_to_context(symbol);
-  }
-  else
-  {
-    symbolt &old_symbol = old_it->second;
-    check_symbol_redefinition(old_symbol, symbol);
-  }
+  move_symbol_to_context(symbol);
 
   new_expr = code_skipt();
 
@@ -476,17 +446,7 @@ void llvm_convertert::get_enum_constants(
   get_size_exprt(enumcd.getInitVal(), signedbv_typet(), bval);
   symbol.value.swap(bval);
 
-  // see if we have it already
-  symbolst::iterator old_it=context.symbols.find(symbol.name);
-  if(old_it==context.symbols.end())
-  {
-    move_symbol_to_context(symbol);
-  }
-  else
-  {
-    symbolt &old_symbol = old_it->second;
-    check_symbol_redefinition(old_symbol, symbol);
-  }
+  move_symbol_to_context(symbol);
 
   // Save the enum constant address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
@@ -511,17 +471,7 @@ void llvm_convertert::get_typedef(
   symbol.is_type = true;
   symbol.is_macro = true;
 
-  // see if we have it already
-  symbolst::iterator old_it=context.symbols.find(symbol.name);
-  if(old_it==context.symbols.end())
-  {
-    move_symbol_to_context(symbol);
-  }
-  else
-  {
-    symbolt &old_symbol = old_it->second;
-    check_symbol_redefinition(old_symbol, symbol);
-  }
+  move_symbol_to_context(symbol);
 
   new_expr = code_skipt();
 }
@@ -675,17 +625,7 @@ void llvm_convertert::get_function(
     symbol.value = body_exprt;
   }
 
-  // see if we have it already
-  symbolst::iterator old_it=context.symbols.find(symbol.name);
-  if(old_it==context.symbols.end())
-  {
-    move_symbol_to_context(symbol);
-  }
-  else
-  {
-    symbolt &old_symbol = old_it->second;
-    check_symbol_redefinition(old_symbol, symbol);
-  }
+  move_symbol_to_context(symbol);
 
   // Save the function address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&fd);
@@ -732,17 +672,7 @@ void llvm_convertert::get_function_params(
   param.cmt_identifier(param_symbol.name.as_string());
   param.location() = param_symbol.location;
 
-  // see if we have it already
-  symbolst::iterator old_it=context.symbols.find(param_symbol.name);
-  if(old_it==context.symbols.end())
-  {
-    move_symbol_to_context(param_symbol);
-  }
-  else
-  {
-    symbolt &old_symbol = old_it->second;
-    check_symbol_redefinition(old_symbol, param_symbol);
-  }
+  move_symbol_to_context(param_symbol);
 
   // Save the function's param address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&pdecl);
@@ -2374,11 +2304,21 @@ std::string llvm_convertert::get_filename_from_path()
 void llvm_convertert::move_symbol_to_context(
   symbolt& symbol)
 {
-  if (context.move(symbol)) {
-    std::cerr << "Couldn't add symbol " << symbol.name
-        << " to symbol table" << std::endl;
-    symbol.dump();
-    abort();
+  symbolst::iterator old_it=context.symbols.find(symbol.name);
+  if(old_it==context.symbols.end())
+  {
+    if (context.move(symbol))
+    {
+      std::cerr << "Couldn't add symbol " << symbol.name
+          << " to symbol table" << std::endl;
+      symbol.dump();
+      abort();
+    }
+  }
+  else
+  {
+    symbolt &old_symbol = old_it->second;
+    check_symbol_redefinition(old_symbol, symbol);
   }
 }
 
