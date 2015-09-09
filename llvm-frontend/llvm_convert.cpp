@@ -1886,6 +1886,7 @@ void llvm_convertert::get_cast_expr(
       break;
 
     case clang::CK_BuiltinFnToFnPtr:
+    case clang::CK_NoOp:
 
     case clang::CK_IntegralCast:
     case clang::CK_IntegralToBoolean:
