@@ -1885,6 +1885,8 @@ void llvm_convertert::get_cast_expr(
     case clang::CK_FunctionToPointerDecay:
       break;
 
+    case clang::CK_BuiltinFnToFnPtr:
+
     case clang::CK_IntegralCast:
     case clang::CK_IntegralToBoolean:
     case clang::CK_IntegralToFloating:
