@@ -217,6 +217,7 @@ void llvm_adjust::convert_sizeof(exprt& expr)
   if(expr.operands().size()==0)
   {
     type = ((typet &)expr.sizeof_type());
+    adjust_type(type);
   }
   else if(expr.operands().size()==1)
   {
