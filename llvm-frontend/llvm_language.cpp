@@ -185,20 +185,16 @@ void llvm_languaget::internal_additions(std::string &str)
     "unsigned __ESBMC_zero_string_length(const void *);\n"
     "unsigned __ESBMC_buffer_size(const void *);\n"
 
-    // traces
-    "void CBMC_trace(int lvl, const char* event, ...);\n"
-
     // pointers
     "unsigned __ESBMC_POINTER_OBJECT(const void *p);\n"
     "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
 
     // malloc
-    // TODO: the following arrays should be infinity in size
-    "unsigned __ESBMC_constant_infinity_uint;\n"
-    "_Bool __ESBMC_alloc[100];\n"
-    "_Bool __ESBMC_deallocated[100];\n"
-    "_Bool __ESBMC_is_dynamic[100];\n"
-    "unsigned long __ESBMC_alloc_size[100];\n"
+    "const unsigned __ESBMC_constant_infinity_uint = 1;\n"
+    "_Bool __ESBMC_alloc[__ESBMC_constant_infinity_uint];\n"
+    "_Bool __ESBMC_deallocated[__ESBMC_constant_infinity_uint];\n"
+    "_Bool __ESBMC_is_dynamic[__ESBMC_constant_infinity_uint];\n"
+    "unsigned long __ESBMC_alloc_size[__ESBMC_constant_infinity_uint];\n"
 
     "void *__ESBMC_realloc(void *ptr, long unsigned int size);\n"
 
