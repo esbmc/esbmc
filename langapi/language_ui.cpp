@@ -276,6 +276,10 @@ void language_uit::show_symbol_table_plain(std::ostream &out)
   {
     const symbolt &symbol=it->second;
 
+    if(language_files.filemap.end() ==
+       language_files.filemap.find(symbol.location.file().as_string()))
+      continue;
+
     int mode;
 
     if(symbol.mode=="")
