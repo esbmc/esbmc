@@ -793,9 +793,46 @@ void llvm_convertert::get_type(
     // Those two here appears when we make a function call, e.g:
     // FunctionNoProto: int x = fun()
     // FunctionProto: int x = fun(a, b)
-    case clang::Type::FunctionNoProto:
     case clang::Type::FunctionProto:
+    {
+      const clang::FunctionProtoType &func =
+        static_cast<const clang::FunctionProtoType &>(the_type);
+
+      code_typet type;
+
+      // Return type
+      const clang::QualType ret_type = func.getReturnType();
+      typet return_type;
+      get_type(ret_type, return_type);
+      type.return_type() = return_type;
+
+      for (const auto &ptype : func.getParamTypes())
+      {
+        typet param_type;
+        get_type(ptype, param_type);
+        type.arguments().push_back(param_type);
+      }
+
+      new_type = type;
       break;
+    }
+
+    case clang::Type::FunctionNoProto:
+    {
+      const clang::FunctionNoProtoType &func =
+        static_cast<const clang::FunctionNoProtoType &>(the_type);
+
+      code_typet type;
+
+      // Return type
+      const clang::QualType ret_type = func.getReturnType();
+      typet return_type;
+      get_type(ret_type, return_type);
+      type.return_type() = return_type;
+
+      new_type = type;
+      break;
+    }
 
     // Typedef type definition
     case clang::Type::Typedef:
