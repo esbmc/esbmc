@@ -91,6 +91,7 @@ bool llvm_convertert::convert_top_level_decl()
       it != translation_unit->top_level_end();
       it++)
     {
+      set_source_manager((*it)->getASTContext().getSourceManager());
       update_current_location((*it)->getLocation());
       current_translation_unit = it;
 
