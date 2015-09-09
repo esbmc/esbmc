@@ -12,6 +12,7 @@
 #include <bitvector.h>
 
 #include <ansi-c/c_types.h>
+#include <ansi-c/c_sizeof.h>
 
 llvm_adjust::llvm_adjust(contextt &_context)
   : context(_context),
@@ -66,6 +67,10 @@ void llvm_adjust::convert_exprt(exprt& expr)
   else if(expr.is_dereference())
   {
     convert_dereference(expr);
+  }
+  else if(expr.id() == "sizeof")
+  {
+    convert_sizeof(expr);
   }
 }
 
@@ -203,6 +208,37 @@ void llvm_adjust::convert_expr_to_codet(exprt& expr)
   code.copy_to_operands(expr);
 
   expr.swap(code);
+}
+
+void llvm_adjust::convert_sizeof(exprt& expr)
+{
+  typet type;
+
+  if(expr.operands().size()==0)
+  {
+    type = ((typet &)expr.sizeof_type());
+  }
+  else if(expr.operands().size()==1)
+  {
+    type.swap(expr.op0().type());
+  }
+  else
+  {
+    std::cout << "sizeof operator expects zero or one operand, "
+              << "but got" << expr.operands().size() << std::endl;
+    abort();
+  }
+
+  exprt new_expr=c_sizeof(type, ns);
+
+  if(new_expr.is_nil())
+  {
+    std::cout << "type has no size, " << type.name() << std::endl;
+    abort();
+  }
+
+  new_expr.swap(expr);
+  expr.cmt_c_sizeof_type(type);
 }
 
 void llvm_adjust::make_index_type(exprt& expr)
