@@ -33,7 +33,6 @@ class llvm_adjust
     void convert_index(index_exprt &index);
     void convert_dereference(exprt &deref);
     void convert_expr_to_codet(exprt &expr);
-    void convert_expr_function_identifier(exprt &expr);
     void convert_sizeof(exprt& expr);
 
     void make_index_type(exprt &expr);

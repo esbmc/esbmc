@@ -191,12 +191,6 @@ void llvm_adjust::convert_dereference(exprt& deref)
   }
 
   deref.cmt_lvalue(true);
-
-  // if you dereference a pointer pointing to
-  // a function, you get a pointer again
-  // allowing ******...*p
-
-  convert_expr_function_identifier(deref);
 }
 
 void llvm_adjust::convert_expr_to_codet(exprt& expr)
@@ -297,18 +291,5 @@ void llvm_adjust::make_index_type(exprt& expr)
     std::cout << "expected integer type, but got `"
         << full_type.name().as_string() << "'";
     throw 0;
-  }
-}
-
-void llvm_adjust::convert_expr_function_identifier(exprt& expr)
-{
-  if(expr.type().is_code())
-  {
-    exprt tmp("address_of", pointer_typet());
-    tmp.implicit(true);
-    tmp.type().subtype()=expr.type();
-    tmp.location()=expr.location();
-    tmp.move_to_operands(expr);
-    expr.swap(tmp);
   }
 }
