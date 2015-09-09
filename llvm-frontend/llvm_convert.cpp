@@ -1165,6 +1165,38 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::UnaryExprOrTypeTraitExprClass:
+    {
+      const clang::UnaryExprOrTypeTraitExpr &unary =
+        static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
+
+      typet t;
+      get_type(unary.getType(), t);
+
+      switch(unary.getKind())
+      {
+        case clang::UETT_SizeOf:
+          new_expr = exprt("sizeof", t);
+          break;
+
+        default:
+          std::cerr << "Conversion of unsupported clang expr: \"";
+          std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
+          stmt.dumpColor();
+          abort();
+      }
+
+      // TODO: Try to evaluate the expression as an integer first
+      // NOTFIX: This works marvelously! Unfortunately, this is machine dependent
+      // and esbmc should rely on --32 or --64 flags to do the correct calculation
+      // instead of querying the system.
+
+      typet size_t;
+      get_type(unary.getTypeOfArgument(), size_t);
+      new_expr.set("sizeof-type", size_t);
+      break;
+    }
+
     // A function call expr. The symbol may be undefined so we create it here
     // This should be moved to a step after the conversion. The conversion
     // step should only convert the code
@@ -1769,7 +1801,6 @@ void llvm_convertert::get_expr(
 
     // No idea when these AST is created
     case clang::Stmt::ImaginaryLiteralClass:
-    case clang::Stmt::UnaryExprOrTypeTraitExprClass:
     case clang::Stmt::ShuffleVectorExprClass:
     case clang::Stmt::ConvertVectorExprClass:
     case clang::Stmt::ChooseExprClass:
