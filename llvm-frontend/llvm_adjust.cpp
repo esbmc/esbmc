@@ -241,6 +241,34 @@ void llvm_adjust::convert_sizeof(exprt& expr)
   expr.cmt_c_sizeof_type(type);
 }
 
+void llvm_adjust::adjust_type(typet &type)
+{
+  if(type.id()=="symbol")
+  {
+    const irep_idt &identifier=type.identifier();
+
+    symbolst::const_iterator s_it=context.symbols.find(identifier);
+
+    if(s_it==context.symbols.end())
+    {
+      std::cout << "type symbol `" << identifier << "' not found" << std::endl;
+      abort();
+    }
+
+    const symbolt &symbol=s_it->second;
+
+    if(!symbol.is_type)
+    {
+      std::cout << "expected type symbol, but got " << std::endl;
+      symbol.dump();
+      abort();
+    }
+
+    if(symbol.is_macro)
+      type=symbol.type; // overwrite
+  }
+}
+
 void llvm_adjust::make_index_type(exprt& expr)
 {
   const typet &full_type=ns.follow(expr.type());

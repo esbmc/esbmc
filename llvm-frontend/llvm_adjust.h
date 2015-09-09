@@ -25,6 +25,7 @@ class llvm_adjust
     namespacet ns;
 
     void adjust_function(symbolt &symbol);
+    void adjust_type(typet &type);
 
     void convert_exprt(exprt &expr);
     void convert_member(member_exprt &expr);
