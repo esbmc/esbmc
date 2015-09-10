@@ -31,41 +31,6 @@ languaget *new_llvm_language()
 
 llvm_languaget::llvm_languaget()
 {
-  std::string intrinsics;
-  internal_additions(intrinsics);
-
-  // From the clang tool example,
-  int num_args = 3;
-  const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
-
-  unsigned int i=0;
-  the_args[i++] = "clang";
-  the_args[i++] = "/esbmc_intrinsics.h";
-  the_args[i] = "--";
-
-  clang::tooling::CommonOptionsParser OptionsParser(
-      num_args,
-      the_args,
-      esbmc_llvm);
-  free(the_args);
-
-  clang::tooling::ClangTool Tool(
-      OptionsParser.getCompilations(),
-      OptionsParser.getSourcePathList());
-
-  Tool.mapVirtualFile(
-    llvm::StringRef("/esbmc_intrinsics.h"),
-    llvm::StringRef(intrinsics));
-
-  Tool.buildASTs(ASTs);
-
-  // Use diagnostics to find errors, rather than the return code.
-  for (const auto &astunit : ASTs) {
-    if (astunit->getDiagnostics().hasErrorOccurred()) {
-      std::cout << std::endl;
-      abort();
-    }
-  }
 }
 
 llvm_languaget::~llvm_languaget()
@@ -87,14 +52,19 @@ bool llvm_languaget::parse(
 
 bool llvm_languaget::parse(const std::string& path)
 {
+  std::string intrinsics;
+  internal_additions(intrinsics);
+
   // From the clang tool example,
-  int num_args = 3;
+  int num_args = 5;
   const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
 
   unsigned int i=0;
   the_args[i++] = "clang";
   the_args[i++] = path.c_str();
-  the_args[i] = "--";
+  the_args[i++] = "--";
+  the_args[i++] = "-include";
+  the_args[i++] = "/esbmc_intrinsics.h";
 
   clang::tooling::CommonOptionsParser OptionsParser(
     num_args,
@@ -107,7 +77,7 @@ bool llvm_languaget::parse(const std::string& path)
     OptionsParser.getSourcePathList());
   Tool.mapVirtualFile(
     llvm::StringRef("/esbmc_intrinsics.h"),
-    llvm::StringRef(""));
+    llvm::StringRef(intrinsics));
 
   Tool.buildASTs(ASTs);
 
