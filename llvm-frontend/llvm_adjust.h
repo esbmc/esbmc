@@ -11,6 +11,7 @@
 #include <context.h>
 #include <namespace.h>
 #include <std_expr.h>
+#include <std_code.h>
 
 class llvm_adjust
 {
@@ -32,9 +33,11 @@ class llvm_adjust
     void convert_pointer_arithmetic(exprt &expr);
     void convert_index(index_exprt &index);
     void convert_dereference(exprt &deref);
-    void convert_expr_to_codet(exprt &expr);
     void convert_sizeof(exprt& expr);
 
+    void convert_code(codet &code);
+
+    void convert_expr_to_codet(exprt &expr);
     void make_index_type(exprt &expr);
 };
 

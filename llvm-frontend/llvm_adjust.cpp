@@ -51,26 +51,49 @@ void llvm_adjust::convert_exprt(exprt& expr)
   Forall_operands(it, expr)
     convert_exprt(*it);
 
-  if(expr.is_member())
+  if(expr.id()=="sideeffect")
   {
-    convert_member(to_member_expr(expr));
   }
-  else if(expr.id() == "+" || expr.id() == "-")
+  else if(expr.id()=="symbol")
   {
-    convert_pointer_arithmetic(expr.op0());
-    convert_pointer_arithmetic(expr.op1());
   }
-  else if(expr.is_index())
+  else if(expr.is_and() || expr.is_or())
   {
-    convert_index(to_index_expr(expr));
+  }
+  else if(expr.is_address_of())
+  {
   }
   else if(expr.is_dereference())
   {
     convert_dereference(expr);
   }
+  else if(expr.is_member())
+  {
+    convert_member(to_member_expr(expr));
+  }
+  else if(expr.is_index())
+  {
+    convert_index(to_index_expr(expr));
+  }
   else if(expr.id() == "sizeof")
   {
     convert_sizeof(expr);
+  }
+  else if(expr.id()=="+" || expr.id()=="-" ||
+            expr.id()=="*" || expr.id()=="/" ||
+            expr.id()=="mod" ||
+            expr.id()=="shl" || expr.id()=="shr" ||
+            expr.id()=="bitand" || expr.id()=="bitxor" || expr.id()=="bitor")
+  {
+    convert_pointer_arithmetic(expr.op0());
+    convert_pointer_arithmetic(expr.op1());
+  }
+  else if(expr.id()=="if")
+  {
+  }
+  else if(expr.is_code())
+  {
+    convert_code(to_code(expr));
   }
 }
 
@@ -234,6 +257,52 @@ void llvm_adjust::convert_sizeof(exprt& expr)
 
   new_expr.swap(expr);
   expr.cmt_c_sizeof_type(type);
+}
+
+void llvm_adjust::convert_code(codet& code)
+{
+  const irep_idt &statement=code.statement();
+
+  if(statement=="expression")
+  {
+  }
+  else if(statement=="label")
+  {
+  }
+  else if(statement=="block")
+  {
+  }
+  else if(statement=="ifthenelse")
+  {
+  }
+  else if(statement=="while" ||
+          statement=="dowhile")
+  {
+  }
+  else if(statement=="for")
+  {
+  }
+  else if(statement=="switch")
+  {
+  }
+  else if(statement=="decl-block")
+  {
+  }
+  else if(statement=="assign")
+  {
+  }
+  else if(statement=="skip")
+  {
+  }
+  else if(statement=="msc_try_finally")
+  {
+  }
+  else if(statement=="msc_try_except")
+  {
+  }
+  else if(statement=="msc_leave")
+  {
+  }
 }
 
 void llvm_adjust::adjust_type(typet &type)
