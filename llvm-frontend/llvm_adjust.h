@@ -28,6 +28,8 @@ class llvm_adjust
     void adjust_function(symbolt &symbol);
     void adjust_type(typet &type);
 
+    void convert_builtin(symbolt& symbol);
+
     void convert_exprt(exprt &expr);
     void convert_member(member_exprt &expr);
     void convert_pointer_arithmetic(exprt &expr);

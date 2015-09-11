@@ -10,6 +10,8 @@
 #include <std_code.h>
 #include <expr_util.h>
 #include <bitvector.h>
+#include <prefix.h>
+#include <cprover_prefix.h>
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/c_sizeof.h>
@@ -31,9 +33,33 @@ bool llvm_adjust::adjust()
   Forall_symbols(it, context.symbols)
   {
     if(!it->second.is_type && it->second.type.is_code())
+    {
       adjust_function(it->second);
+    }
+    else if(has_prefix(it->second.name.as_string(), CPROVER_PREFIX))
+    {
+      convert_builtin(it->second);
+    }
   }
   return false;
+}
+
+
+void llvm_adjust::convert_builtin(symbolt& symbol)
+{
+  const irep_idt &identifier = symbol.name;
+
+  // TODO: find a better solution for this
+  if(has_prefix(id2string(identifier), CPROVER_PREFIX "alloc")
+     || has_prefix(id2string(identifier), CPROVER_PREFIX "deallocated")
+     || has_prefix(id2string(identifier), CPROVER_PREFIX "is_dynamic")
+     || has_prefix(id2string(identifier), CPROVER_PREFIX "alloc_size"))
+  {
+    exprt expr=exprt("infinity", symbol.type.subtype());
+
+    symbol.type.size(expr);
+    symbol.value.type().size(expr);
+  }
 }
 
 void llvm_adjust::adjust_function(symbolt& symbol)
