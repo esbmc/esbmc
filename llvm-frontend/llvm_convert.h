@@ -130,10 +130,6 @@ private:
     const clang::PredefinedExpr &pred_expr,
     exprt &new_expr);
 
-  void gen_typecast(
-    exprt &expr,
-    typet type);
-
   void get_default_symbol(
     symbolt &symbol,
     typet type,

@@ -15,7 +15,6 @@
 #include <mp_arith.h>
 #include <arith_tools.h>
 #include <i2string.h>
-#include <simplify_expr_class.h>
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/convert_integer_literal.h>
@@ -24,6 +23,8 @@
 #include <ansi-c/ansi_c_expr.h>
 
 #include <boost/filesystem.hpp>
+
+#include "typecast.h"
 
 llvm_convertert::llvm_convertert(
   contextt &_context,
@@ -2241,21 +2242,6 @@ void llvm_convertert::get_predefined_expr(
   new_expr = address_of_exprt(zero_index);
 }
 
-void llvm_convertert::gen_typecast(
-  exprt &expr,
-  typet type)
-{
-  if(expr.type() != type)
-  {
-    exprt new_expr = typecast_exprt(expr, type);
-
-    simplify_exprt simplify;
-    simplify.simplify(new_expr);
-
-    new_expr.location() = expr.location();
-    expr.swap(new_expr);
-  }
-}
 
 void llvm_convertert::get_default_symbol(
   symbolt& symbol,
