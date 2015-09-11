@@ -1191,7 +1191,7 @@ void llvm_convertert::get_expr(
 
       // TODO: This will evaluate the offset as the target machine that
       // ESBMC is running, which may lead to wrong results. The calculation
-      // shourd rely on the flags --32 or --64 instead
+      // should rely on the flags --32 or --64 instead
       llvm::APSInt val;
       assert(offset.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()));
 
@@ -1609,7 +1609,7 @@ void llvm_convertert::get_expr(
       get_expr(*label_stmt.getSubStmt(), sub_stmt);
 
       codet label("label");
-      label.add("label") = irept(label_stmt.getName());
+      label.set("label", label_stmt.getName());
       label.copy_to_operands(sub_stmt);
 
       new_expr = label;
