@@ -2054,7 +2054,11 @@ void llvm_convertert::get_binary_operator_expr(
   switch(binop.getOpcode())
   {
     case clang::BO_Assign:
-      new_expr = code_assignt();
+      //If we use code_assignt, it will reserve two operands,
+      // and the copy_to_operands method call at the end of
+      // this method will put lhs and rhs in positions 2 and 3,
+      // instead of 0 and 1 :/
+      new_expr = codet("assign");
       new_expr.type() = binop_type;
       break;
 
