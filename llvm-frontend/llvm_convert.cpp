@@ -1721,21 +1721,11 @@ void llvm_convertert::get_expr(
 
       exprt cond = true_exprt();
       if(for_stmt.getCond())
-      {
         get_expr(*for_stmt.getCond(), cond);
-        gen_typecast(cond, bool_type());
-      }
 
-      exprt inc = nil_exprt();
+      codet inc = code_skipt();
       if(for_stmt.getInc())
-      {
-        exprt iter;
-        get_expr(*for_stmt.getInc(), iter);
-
-        // The increment should be a code_expressiont
-        inc = codet("expression");
-        inc.copy_to_operands(iter);
-      }
+        get_expr(*for_stmt.getInc(), inc);
 
       codet body;
       get_expr(*for_stmt.getBody(), body);

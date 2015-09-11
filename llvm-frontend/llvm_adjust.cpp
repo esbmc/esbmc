@@ -113,7 +113,6 @@ void llvm_adjust::convert_side_effect(side_effect_exprt& expr)
      statement=="postincrement" ||
      statement=="postdecrement")
   {
-    convert_expr_to_codet(expr);
   }
 }
 
@@ -300,6 +299,14 @@ void llvm_adjust::convert_code(codet& code)
   }
   else if(statement=="for")
   {
+    // If the condition is not of boolean type, it must be casted
+    gen_typecast(code.op1(), bool_type());
+
+    // Convert exprt when there is no block defined
+    convert_expr_to_codet(code.op0());
+    convert_expr_to_codet(code.op1());
+    convert_expr_to_codet(code.op2());
+    convert_expr_to_codet(code.op3());
   }
   else if(statement=="switch")
   {
