@@ -37,7 +37,7 @@ class llvm_adjust
     void convert_dereference(exprt &deref);
     void convert_sizeof(exprt &expr);
     void convert_side_effect(side_effect_exprt &expr);
-
+    void convert_symbol(exprt &expr);
     void convert_code(codet &code);
 
     void convert_expr_to_codet(exprt &expr);

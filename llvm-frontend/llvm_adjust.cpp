@@ -85,6 +85,7 @@ void llvm_adjust::convert_exprt(exprt& expr)
   }
   else if(expr.id()=="symbol")
   {
+    convert_symbol(expr);
   }
   else if(expr.is_and() || expr.is_or())
   {
@@ -127,6 +128,34 @@ void llvm_adjust::convert_exprt(exprt& expr)
   else if(expr.is_code())
   {
     convert_code(to_code(expr));
+  }
+}
+
+void llvm_adjust::convert_symbol(exprt& expr)
+{
+  const irep_idt &identifier=expr.identifier();
+
+  // look it up
+  symbolst::const_iterator s_it=context.symbols.find(identifier);
+
+  if(s_it==context.symbols.end())
+  {
+    std::cout << "failed to find symbol `" << identifier << "'" << std::endl;
+    abort();
+  }
+
+  // found it
+  const symbolt &symbol=s_it->second;
+
+  // save location
+  locationt location=expr.location();
+
+  if(symbol.is_macro)
+  {
+    expr=symbol.value;
+
+    // put it back
+    expr.location()=location;
   }
 }
 
