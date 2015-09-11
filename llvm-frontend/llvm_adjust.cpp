@@ -276,6 +276,10 @@ void llvm_adjust::convert_code(codet& code)
   }
   else if(statement=="label")
   {
+    // We just need to convert the first statement inside the label
+    // since any other statement will be converted by the
+    // if(statement=="block")
+    convert_expr_to_codet(code.op0());
   }
   else if(statement=="block")
   {
