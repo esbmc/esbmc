@@ -280,6 +280,8 @@ void llvm_adjust::convert_code(codet& code)
   }
   else if(statement=="block")
   {
+    Forall_operands(it, code)
+      convert_expr_to_codet(*it);
   }
   else if(statement=="ifthenelse")
   {
