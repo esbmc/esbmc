@@ -236,17 +236,6 @@ void llvm_adjust::convert_dereference(exprt& deref)
   deref.cmt_lvalue(true);
 }
 
-void llvm_adjust::convert_expr_to_codet(exprt& expr)
-{
-  if(expr.is_code())
-    return;
-
-  codet code("expression");
-  code.copy_to_operands(expr);
-
-  expr.swap(code);
-}
-
 void llvm_adjust::convert_sizeof(exprt& expr)
 {
   typet type;
@@ -355,6 +344,17 @@ void llvm_adjust::adjust_type(typet &type)
     if(symbol.is_macro)
       type=symbol.type; // overwrite
   }
+}
+
+void llvm_adjust::convert_expr_to_codet(exprt& expr)
+{
+  if(expr.is_code())
+    return;
+
+  codet code("expression");
+  code.copy_to_operands(expr);
+
+  expr.swap(code);
 }
 
 void llvm_adjust::make_index_type(exprt& expr)
