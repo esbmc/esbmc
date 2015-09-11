@@ -212,25 +212,9 @@ bool llvm_languaget::preprocess(
   std::ostream &outstream,
   message_handlert &message_handler)
 {
-  if(path=="")
-    return c_preprocess("", outstream, true, message_handler);
-
-  // check extension
-
-  const char *ext=strrchr(path.c_str(), '.');
-  if(ext!=NULL && std::string(ext)==".ipp")
-  {
-    std::ifstream infile(path.c_str());
-
-    char ch;
-
-    while(infile.read(&ch, 1))
-      outstream << ch;
-
-    return false;
-  }
-
-  return c_preprocess(path, outstream, true, message_handler);
+  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
+  abort();
+  return true;
 }
 
 bool llvm_languaget::final(contextt& context, message_handlert& message_handler)
