@@ -1189,6 +1189,9 @@ void llvm_convertert::get_expr(
       const clang::OffsetOfExpr &offset =
         static_cast<const clang::OffsetOfExpr &>(stmt);
 
+      // TODO: This will evaluate the offset as the target machine that
+      // ESBMC is running, which may lead to wrong results. The calculation
+      // shourd rely on the flags --32 or --64 instead
       llvm::APSInt val;
       assert(offset.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()));
 
