@@ -2063,9 +2063,8 @@ void llvm_convertert::get_binary_operator_expr(
   switch(binop.getOpcode())
   {
     case clang::BO_Assign:
-      new_expr = codet("assign");
+      new_expr = code_assignt();
       new_expr.type() = binop_type;
-      gen_typecast(rhs, lhs.type());
       break;
 
     case clang::BO_Add:

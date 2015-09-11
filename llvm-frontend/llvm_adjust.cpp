@@ -298,6 +298,8 @@ void llvm_adjust::convert_code(codet& code)
   }
   else if(statement=="assign")
   {
+    // Creat typecast on assingments, if needed
+    gen_typecast(code.op1(), code.op0().type());
   }
   else if(statement=="skip")
   {
