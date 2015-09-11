@@ -492,29 +492,6 @@ void llvm_convertert::get_var(
   symbolt symbol;
   get_default_symbol(symbol, t, vd.getName().str(), identifier);
 
-  // insert a new type symbol for the array
-  if(symbol.type.is_array())
-  {
-    symbolt new_symbol;
-    new_symbol.name=id2string(symbol.name)+"$type";
-    new_symbol.base_name=id2string(symbol.base_name)+"$type";
-    new_symbol.location=symbol.location;
-    new_symbol.mode=symbol.mode;
-    new_symbol.module=symbol.module;
-    new_symbol.type=symbol.type;
-    new_symbol.is_type=true;
-    new_symbol.is_macro=true;
-
-    symbol.type=symbol_typet(new_symbol.name);
-
-    move_symbol_to_context(new_symbol);
-  }
-  else if(symbol.type.id()=="incomplete_array")
-  {
-    // Not really sure when a incomplete type is created
-    abort();
-  }
-
   if (vd.hasExternalStorage())
     symbol.is_extern = true;
 
