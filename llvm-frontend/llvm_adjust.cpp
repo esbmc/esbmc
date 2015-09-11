@@ -55,6 +55,7 @@ void llvm_adjust::convert_exprt(exprt& expr)
 
   if(expr.id()=="sideeffect")
   {
+    convert_side_effect(to_side_effect_expr(expr));
   }
   else if(expr.id()=="symbol")
   {
@@ -100,6 +101,19 @@ void llvm_adjust::convert_exprt(exprt& expr)
   else if(expr.is_code())
   {
     convert_code(to_code(expr));
+  }
+}
+
+void llvm_adjust::convert_side_effect(side_effect_exprt& expr)
+{
+  const irep_idt &statement=expr.get_statement();
+
+  if(statement=="preincrement" ||
+     statement=="predecrement" ||
+     statement=="postincrement" ||
+     statement=="postdecrement")
+  {
+    convert_expr_to_codet(expr);
   }
 }
 

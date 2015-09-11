@@ -33,7 +33,8 @@ class llvm_adjust
     void convert_pointer_arithmetic(exprt &expr);
     void convert_index(index_exprt &index);
     void convert_dereference(exprt &deref);
-    void convert_sizeof(exprt& expr);
+    void convert_sizeof(exprt &expr);
+    void convert_side_effect(side_effect_exprt &expr);
 
     void convert_code(codet &code);
 
