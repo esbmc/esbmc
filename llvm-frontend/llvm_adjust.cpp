@@ -280,6 +280,8 @@ void llvm_adjust::convert_code(codet& code)
   }
   else if(statement=="ifthenelse")
   {
+    // If the condition is not of boolean type, it must be casted
+    gen_typecast(code.op0(), bool_type());
   }
   else if(statement=="while" ||
           statement=="dowhile")

@@ -1623,7 +1623,6 @@ void llvm_convertert::get_expr(
 
       exprt cond;
       get_expr(*ifstmt.getCond(), cond);
-      gen_typecast(cond, bool_type());
 
       exprt then;
       get_expr(*ifstmt.getThen(), then);
