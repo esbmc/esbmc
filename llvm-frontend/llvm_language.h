@@ -84,6 +84,9 @@ protected:
     return "c::main";
   }
 
+  void search_clang_headers();
+
+  std::string headers_path;
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 };
 
