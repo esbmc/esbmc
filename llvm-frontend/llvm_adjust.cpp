@@ -288,7 +288,6 @@ void llvm_adjust::convert_code(codet& code)
     gen_typecast(code.op0(), bool_type());
 
     // Convert exprt when there is no block defined for ifthenelse
-    convert_expr_to_codet(code.op0());
     convert_expr_to_codet(code.op1());
     if(code.operands().size() == 3)
       convert_expr_to_codet(code.op2());
