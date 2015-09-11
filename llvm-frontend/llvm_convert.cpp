@@ -1671,7 +1671,6 @@ void llvm_convertert::get_expr(
 
       exprt cond;
       get_expr(*while_stmt.getCond(), cond);
-      gen_typecast(cond, bool_type());
 
       codet body;
       get_expr(*while_stmt.getBody(), body);
@@ -1693,7 +1692,6 @@ void llvm_convertert::get_expr(
 
       exprt cond;
       get_expr(*do_stmt.getCond(), cond);
-      gen_typecast(cond, bool_type());
 
       codet body;
       get_expr(*do_stmt.getBody(), body);

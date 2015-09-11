@@ -295,6 +295,11 @@ void llvm_adjust::convert_code(codet& code)
   else if(statement=="while" ||
           statement=="dowhile")
   {
+    // If the condition is not of boolean type, it must be casted
+    gen_typecast(code.op0(), bool_type());
+
+    // Convert exprt when there is no block defined
+    convert_expr_to_codet(code.op1());
   }
   else if(statement=="for")
   {
