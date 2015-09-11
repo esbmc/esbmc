@@ -2141,14 +2141,10 @@ void llvm_convertert::get_binary_operator_expr(
 
     case clang::BO_LAnd:
       new_expr = exprt("and", bool_type());
-      gen_typecast(lhs, bool_type());
-      gen_typecast(rhs, bool_type());
       break;
 
     case clang::BO_LOr:
       new_expr = exprt("or", bool_type());
-      gen_typecast(lhs, bool_type());
-      gen_typecast(rhs, bool_type());
       break;
 
     case clang::BO_AddAssign:

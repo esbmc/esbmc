@@ -14,6 +14,8 @@
 #include <ansi-c/c_types.h>
 #include <ansi-c/c_sizeof.h>
 
+#include "typecast.h"
+
 llvm_adjust::llvm_adjust(contextt &_context)
   : context(_context),
     ns(namespacet(context))
@@ -59,6 +61,8 @@ void llvm_adjust::convert_exprt(exprt& expr)
   }
   else if(expr.is_and() || expr.is_or())
   {
+    gen_typecast(expr.op0(), bool_type());
+    gen_typecast(expr.op1(), bool_type());
   }
   else if(expr.is_address_of())
   {
