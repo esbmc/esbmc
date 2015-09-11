@@ -308,7 +308,6 @@ void llvm_adjust::convert_code(codet& code)
 
     // Convert exprt when there is no block defined
     convert_expr_to_codet(code.op0());
-    convert_expr_to_codet(code.op1());
     convert_expr_to_codet(code.op2());
     convert_expr_to_codet(code.op3());
   }
