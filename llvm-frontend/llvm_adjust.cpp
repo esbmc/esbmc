@@ -94,6 +94,8 @@ void llvm_adjust::convert_exprt(exprt& expr)
   }
   else if(expr.id()=="if")
   {
+    // If the condition is not of boolean type, it must be casted
+    gen_typecast(expr.op0(), bool_type());
   }
   else if(expr.is_code())
   {

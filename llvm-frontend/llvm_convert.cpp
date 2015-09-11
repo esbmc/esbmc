@@ -1383,9 +1383,6 @@ void llvm_convertert::get_expr(
       exprt cond;
       get_expr(*ternary_if.getCond(), cond);
 
-      // If the condition is not of boolean type, it must be casted
-      gen_typecast(cond, bool_type());
-
       exprt then;
       get_expr(*ternary_if.getTrueExpr(), then);
 
@@ -1407,9 +1404,6 @@ void llvm_convertert::get_expr(
 
       exprt cond;
       get_expr(*ternary_if.getCond(), cond);
-
-      // If the condition is not of boolean type, it must be casted
-      gen_typecast(cond, bool_type());
 
       exprt then;
       get_expr(*ternary_if.getTrueExpr(), then);
