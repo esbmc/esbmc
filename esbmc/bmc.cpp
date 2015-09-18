@@ -596,10 +596,6 @@ bool bmct::run_thread()
 int
 bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 {
-#ifndef Z3
-  std::cerr << "Can't run LTL checking without Z3 compiled in" << std::endl;
-  exit(1);
-#else
   smt_convt *solver;
   bool ret;
   unsigned int num_asserts = 0;
@@ -725,7 +721,6 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
   }
 
   return ltl_res_good;
-#endif
 }
 
 bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
