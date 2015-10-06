@@ -1652,7 +1652,7 @@ void llvm_convertert::get_expr(
       exprt cond;
       get_expr(*while_stmt.getCond(), cond);
 
-      codet body;
+      codet body = code_skipt();
       get_expr(*while_stmt.getBody(), body);
 
       code_whilet code_while;
@@ -1673,7 +1673,7 @@ void llvm_convertert::get_expr(
       exprt cond;
       get_expr(*do_stmt.getCond(), cond);
 
-      codet body;
+      codet body = code_skipt();
       get_expr(*do_stmt.getBody(), body);
 
       code_dowhilet code_while;
@@ -1705,7 +1705,7 @@ void llvm_convertert::get_expr(
       if(for_stmt.getInc())
         get_expr(*for_stmt.getInc(), inc);
 
-      codet body;
+      codet body = code_skipt();
       get_expr(*for_stmt.getBody(), body);
 
       code_fort code_for;
