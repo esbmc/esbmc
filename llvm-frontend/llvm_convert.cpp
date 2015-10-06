@@ -2150,6 +2150,10 @@ void llvm_convertert::get_binary_operator_expr(
       new_expr = side_effect_exprt("assign_bitxor", binop_type);
       break;
 
+    case clang::BO_Comma:
+      new_expr = exprt("comma", binop_type);
+      break;
+
     default:
       std::cerr << "Conversion of unsupported clang binary operator: \"";
       std::cerr << binop.getOpcodeStr().str() << "\" to expression" << std::endl;
