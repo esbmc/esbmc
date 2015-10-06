@@ -2030,15 +2030,6 @@ void llvm_convertert::get_binary_operator_expr(
 
   switch(binop.getOpcode())
   {
-    case clang::BO_Assign:
-      //If we use code_assignt, it will reserve two operands,
-      // and the copy_to_operands method call at the end of
-      // this method will put lhs and rhs in positions 2 and 3,
-      // instead of 0 and 1 :/
-      new_expr = codet("assign");
-      new_expr.type() = binop_type;
-      break;
-
     case clang::BO_Add:
       new_expr = exprt("+", binop_type);
       break;
@@ -2111,44 +2102,52 @@ void llvm_convertert::get_binary_operator_expr(
       new_expr = exprt("or", bool_type());
       break;
 
+    case clang::BO_Assign:
+      //If we use code_assignt, it will reserve two operands,
+      // and the copy_to_operands method call at the end of
+      // this method will put lhs and rhs in positions 2 and 3,
+      // instead of 0 and 1 :/
+      new_expr = side_effect_exprt("assign", binop_type);
+      break;
+
     case clang::BO_AddAssign:
-      new_expr = exprt("assign+", binop_type);
-      break;
-
-    case clang::BO_DivAssign:
-      new_expr = exprt("assign_div", binop_type);
-      break;
-
-    case clang::BO_RemAssign:
-      new_expr = exprt("assign_mod", binop_type);
+      new_expr = side_effect_exprt("assign+", binop_type);
       break;
 
     case clang::BO_SubAssign:
-      new_expr = exprt("assign-", binop_type);
-      break;
-
-    case clang::BO_ShlAssign:
-      new_expr = exprt("assign_shl", binop_type);
-      break;
-
-    case clang::BO_ShrAssign:
-      new_expr = exprt("assign_ashr", binop_type);
-      break;
-
-    case clang::BO_AndAssign:
-      new_expr = exprt("assign_bitand", binop_type);
-      break;
-
-    case clang::BO_XorAssign:
-      new_expr = exprt("assign_bitor", binop_type);
-      break;
-
-    case clang::BO_OrAssign:
-      new_expr = exprt("assign_bitxor", binop_type);
+      new_expr = side_effect_exprt("assign-", binop_type);
       break;
 
     case clang::BO_MulAssign:
-      new_expr = exprt("assign*", binop_type);
+      new_expr = side_effect_exprt("assign*", binop_type);
+      break;
+
+    case clang::BO_DivAssign:
+      new_expr = side_effect_exprt("assign_div", binop_type);
+      break;
+
+    case clang::BO_RemAssign:
+      new_expr = side_effect_exprt("assign_mod", binop_type);
+      break;
+
+    case clang::BO_ShlAssign:
+      new_expr = side_effect_exprt("assign_shl", binop_type);
+      break;
+
+    case clang::BO_ShrAssign:
+      new_expr = side_effect_exprt("assign_shr", binop_type);
+      break;
+
+    case clang::BO_AndAssign:
+      new_expr = side_effect_exprt("assign_bitand", binop_type);
+      break;
+
+    case clang::BO_XorAssign:
+      new_expr = side_effect_exprt("assign_bitor", binop_type);
+      break;
+
+    case clang::BO_OrAssign:
+      new_expr = side_effect_exprt("assign_bitxor", binop_type);
       break;
 
     default:
@@ -2159,14 +2158,6 @@ void llvm_convertert::get_binary_operator_expr(
   }
 
   new_expr.copy_to_operands(lhs, rhs);
-
-  // If this is a compound assignment, we should wrap around a sideeffect
-  // TODO: This should be done after conversion
-  if(binop.getStmtClass() == clang::Stmt::CompoundAssignOperatorClass)
-  {
-    new_expr.statement(new_expr.id());
-    new_expr.id("sideeffect");
-  }
 }
 
 void llvm_convertert::get_predefined_expr(
