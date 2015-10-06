@@ -143,6 +143,8 @@ static void internal_additions(std::string &code)
     "const char *__FILE__ = \"\";\n"
     "unsigned int __LINE__ = 0;\n"
 
+    "void* alloca(int alloca_size);\n"
+
     // GCC junk stuff
     GCC_BUILTIN_HEADERS
 

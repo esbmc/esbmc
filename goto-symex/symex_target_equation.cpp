@@ -182,7 +182,7 @@ void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
     }
   } else if (step.is_renumber()) {
     smt_conv.renumber_symbol_address(step.guard, step.lhs, step.rhs);
-  } else {
+  } else if (!step.is_skip()) {
     assert(0 && "Unexpected SSA step type in conversion");
   }
 
