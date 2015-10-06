@@ -2147,6 +2147,10 @@ void llvm_convertert::get_binary_operator_expr(
       new_expr = exprt("assign_bitxor", binop_type);
       break;
 
+    case clang::BO_MulAssign:
+      new_expr = exprt("assign*", binop_type);
+      break;
+
     default:
       std::cerr << "Conversion of unsupported clang binary operator: \"";
       std::cerr << binop.getOpcodeStr().str() << "\" to expression" << std::endl;
