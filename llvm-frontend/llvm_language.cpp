@@ -208,13 +208,12 @@ bool llvm_languaget::convert(
 }
 
 bool llvm_languaget::preprocess(
-  const std::string &path,
-  std::ostream &outstream,
-  message_handlert &message_handler)
+  const std::string &path __attribute__((unused)),
+  std::ostream &outstream __attribute__((unused)),
+  message_handlert &message_handler __attribute__((unused)))
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  return false;
 }
 
 bool llvm_languaget::final(contextt& context, message_handlert& message_handler)
