@@ -780,6 +780,29 @@ std::string expr2ct::convert_nondet(
 
 /*******************************************************************\
 
+Function: expr2ct::convert_statement_expression
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string expr2ct::convert_statement_expression(
+  const exprt &src,
+  unsigned &precedence)
+{
+  if(src.operands().size()!=1 ||
+     to_code(src.op0()).get_statement()!="block")
+    return convert_norep(src, precedence);
+
+  return "("+convert_code(to_code_block(to_code(src.op0())), 0)+")";
+}
+
+/*******************************************************************\
+
 Function: expr2ct::convert_function
 
   Inputs:
@@ -3033,6 +3056,8 @@ std::string expr2ct::convert(
       return convert_function(src, "PRINTF", precedence=15);
     else if(statement=="nondet")
       return convert_nondet(src, precedence=15);
+    else if(statement=="statement_expression")
+      return convert_statement_expression(src, precedence=15);
     else
       return convert_norep(src, precedence);
   }
