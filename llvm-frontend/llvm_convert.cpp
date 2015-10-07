@@ -1518,6 +1518,8 @@ void llvm_convertert::get_expr(
       for (const auto &stmt : compound_stmt.body()) {
         exprt statement;
         get_expr(*stmt, statement);
+        convert_expression_to_code(statement);
+
         block.operands().push_back(statement);
       }
 
@@ -1546,9 +1548,9 @@ void llvm_convertert::get_expr(
 
       exprt sub_stmt;
       get_expr(*case_stmt.getSubStmt(), sub_stmt);
+      convert_expression_to_code(sub_stmt);
 
       codet label("label");
-
       exprt &case_ops=label.add_expr("case");
       case_ops.copy_to_operands(value);
 
@@ -1584,6 +1586,7 @@ void llvm_convertert::get_expr(
 
       exprt sub_stmt;
       get_expr(*label_stmt.getSubStmt(), sub_stmt);
+      convert_expression_to_code(sub_stmt);
 
       codet label("label");
       label.set("label", label_stmt.getName());
@@ -1606,6 +1609,7 @@ void llvm_convertert::get_expr(
 
       exprt then;
       get_expr(*ifstmt.getThen(), then);
+      convert_expression_to_code(then);
 
       codet if_expr("ifthenelse");
       if_expr.copy_to_operands(cond, then);
@@ -1614,6 +1618,8 @@ void llvm_convertert::get_expr(
       {
         exprt else_expr;
         get_expr(*ifstmt.getElse(), else_expr);
+        convert_expression_to_code(else_expr);
+
         if_expr.copy_to_operands(else_expr);
       }
 
@@ -1654,6 +1660,7 @@ void llvm_convertert::get_expr(
 
       codet body = code_skipt();
       get_expr(*while_stmt.getBody(), body);
+      convert_expression_to_code(body);
 
       code_whilet code_while;
       code_while.cond() = cond;
@@ -1675,6 +1682,7 @@ void llvm_convertert::get_expr(
 
       codet body = code_skipt();
       get_expr(*do_stmt.getBody(), body);
+      convert_expression_to_code(body);
 
       code_dowhilet code_while;
       code_while.cond() = cond;
@@ -1696,6 +1704,7 @@ void llvm_convertert::get_expr(
       codet init = code_skipt();
       if(for_stmt.getInit())
         get_expr(*for_stmt.getInit(), init);
+      convert_expression_to_code(init);
 
       exprt cond = true_exprt();
       if(for_stmt.getCond())
@@ -1704,9 +1713,11 @@ void llvm_convertert::get_expr(
       codet inc = code_skipt();
       if(for_stmt.getInc())
         get_expr(*for_stmt.getInc(), inc);
+      convert_expression_to_code(inc);
 
       codet body = code_skipt();
       get_expr(*for_stmt.getBody(), body);
+      convert_expression_to_code(body);
 
       code_fort code_for;
       code_for.init() = init;
@@ -2374,4 +2385,16 @@ void llvm_convertert::check_symbol_redefinition(
     // move body
     old_symbol.type.swap(new_symbol.type);
   }
+}
+
+void llvm_convertert::convert_expression_to_code(exprt& expr)
+{
+  if(expr.is_code())
+    return;
+
+  codet code("expression");
+  code.location() = expr.location();
+  code.move_to_operands(expr);
+
+  expr.swap(code);
 }

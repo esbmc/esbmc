@@ -28,42 +28,27 @@ void llvm_adjust::convert_code(codet& code)
   }
   else if(statement=="label")
   {
-    // We just need to convert the first statement inside the label
-    // since any other statement will be converted by the
-    // if(statement=="block")
-    convert_expr_to_codet(code.op0());
   }
   else if(statement=="ifthenelse")
   {
     // If the condition is not of boolean type, it must be casted
     gen_typecast(code.op0(), bool_type());
-
-    // Convert exprt when there is no block defined for ifthenelse
-    convert_expr_to_codet(code.op1());
-    if(code.operands().size() == 3)
-      convert_expr_to_codet(code.op2());
   }
   else if(statement=="while" ||
           statement=="dowhile")
   {
     // If the condition is not of boolean type, it must be casted
     gen_typecast(code.op0(), bool_type());
-
-    // Convert exprt when there is no block defined
-    convert_expr_to_codet(code.op1());
   }
   else if(statement=="for")
   {
     // If the condition is not of boolean type, it must be casted
     gen_typecast(code.op1(), bool_type());
-
-    // Convert exprt when there is no block defined
-    convert_expr_to_codet(code.op0());
-    convert_expr_to_codet(code.op2());
-    convert_expr_to_codet(code.op3());
   }
   else if(statement=="switch")
   {
+    // If the condition is not of boolean type, it must be casted
+    gen_typecast(code.op0(), int_type());
   }
   else if(statement=="assign")
   {
