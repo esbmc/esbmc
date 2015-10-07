@@ -47,13 +47,21 @@ class llvm_adjust
     void convert_side_effect_statement_expression(side_effect_exprt &expr);
     void convert_member(member_exprt &expr);
     void convert_pointer_arithmetic(exprt &expr);
-    void convert_expression(codet &code);
     void convert_index(index_exprt &index);
     void convert_dereference(exprt &deref);
     void convert_sizeof(exprt &expr);
     void convert_side_effect(side_effect_exprt &expr);
     void convert_symbol(exprt &expr);
+
     void convert_code(codet &code);
+    void convert_expression(codet &code);
+    void convert_label(code_labelt &code);
+    void convert_block(codet &code);
+    void convert_ifthenelse(codet &code);
+    void convert_while(codet &code);
+    void convert_for(codet &code);
+    void convert_switch(codet &code);
+    void convert_assign(codet &code);
 
     void make_index_type(exprt &expr);
 };

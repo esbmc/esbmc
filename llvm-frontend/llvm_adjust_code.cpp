@@ -23,57 +23,57 @@ void llvm_adjust::convert_code(codet& code)
   const irep_idt &statement=code.statement();
 
   if(statement=="expression")
-  {
     convert_expression(code);
-  }
   else if(statement=="label")
-  {
-  }
+    convert_label(to_code_label(code));
+  else if(statement=="block" ||
+          statement=="decl-block")
+    convert_block(code);
   else if(statement=="ifthenelse")
-  {
-    // If the condition is not of boolean type, it must be casted
-    gen_typecast(code.op0(), bool_type());
-  }
+    convert_ifthenelse(code);
   else if(statement=="while" ||
           statement=="dowhile")
-  {
-    // If the condition is not of boolean type, it must be casted
-    gen_typecast(code.op0(), bool_type());
-  }
+    convert_while(code);
   else if(statement=="for")
-  {
-    // If the condition is not of boolean type, it must be casted
-    gen_typecast(code.op1(), bool_type());
-  }
+    convert_for(code);
   else if(statement=="switch")
-  {
-    // If the condition is not of boolean type, it must be casted
-    gen_typecast(code.op0(), int_type());
-  }
+    convert_switch(code);
   else if(statement=="assign")
+    convert_assign(code);
+  else if(statement=="return")
   {
-    // Creat typecast on assingments, if needed
-    gen_typecast(code.op1(), code.op0().type());
+  }
+  else if(statement=="break")
+  {
+  }
+  else if(statement=="goto")
+  {
+  }
+  else if(statement=="continue")
+  {
+  }
+  else if(statement=="decl")
+  {
   }
   else if(statement=="skip")
   {
   }
-  else if(statement=="msc_try_finally")
+  else if(statement=="asm")
   {
   }
-  else if(statement=="msc_try_except")
+  else if(statement=="function_call")
   {
   }
-  else if(statement=="msc_leave")
+  else
   {
+    std::cout << "Unexpected statement: " << statement << std::endl;
+    code.dump();
+    abort();
   }
 }
 
 void llvm_adjust::convert_expression(codet& code)
 {
-  if(code.operands().size()!=1)
-    throw "expression statement expected to have one operand";
-
   exprt &op=code.op0();
   convert_expr(op);
 
@@ -116,4 +116,77 @@ void llvm_adjust::convert_expression(codet& code)
       code.swap(function_call);
     }
   }
+}
+
+void llvm_adjust::convert_label(code_labelt& code)
+{
+  convert_code(to_code(code.op0()));
+
+  if(code.case_irep().is_not_nil())
+  {
+    exprt case_expr=static_cast<const exprt &>(code.case_irep());
+
+    Forall_operands(it, case_expr)
+      convert_expr(*it);
+
+    code.case_irep(case_expr);
+  }
+}
+
+void llvm_adjust::convert_block(codet& code)
+{
+  Forall_operands(it, code)
+    convert_code(to_code(*it));
+}
+
+void llvm_adjust::convert_ifthenelse(codet& code)
+{
+  exprt &cond=code.op0();
+  convert_expr(cond);
+
+  // If the condition is not of boolean type, it must be casted
+  gen_typecast(code.op0(), bool_type());
+
+  convert_code(to_code(code.op1()));
+
+  if(code.operands().size()==3 && !code.op2().is_nil())
+    convert_code(to_code(code.op2()));
+}
+
+void llvm_adjust::convert_while(codet& code)
+{
+  // If the condition is not of boolean type, it must be casted
+  gen_typecast(code.op0(), bool_type());
+
+  convert_expr(code.op0());
+  convert_code(to_code(code.op1()));
+}
+
+void llvm_adjust::convert_for(codet& code)
+{
+  convert_code(to_code(code.op0()));
+  convert_expr(code.op1());
+  convert_code(to_code(code.op2()));
+  convert_code(to_code(code.op3()));
+
+  // If the condition is not of boolean type, it must be casted
+  gen_typecast(code.op1(), bool_type());
+}
+
+void llvm_adjust::convert_switch(codet& code)
+{
+  // If the condition is not of boolean type, it must be casted
+  gen_typecast(code.op0(), int_type());
+
+  convert_expr(code.op0());
+  convert_code(to_code(code.op1()));
+}
+
+void llvm_adjust::convert_assign(codet& code)
+{
+  convert_expr(code.op0());
+  convert_expr(code.op1());
+
+  // Create typecast on assingments, if needed
+  gen_typecast(code.op1(), code.op0().type());
 }
