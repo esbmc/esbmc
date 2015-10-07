@@ -309,6 +309,46 @@ void llvm_convertert::get_enum(
   new_expr = code_skipt();
 }
 
+void llvm_convertert::get_enum_constants(
+  const clang::EnumConstantDecl& enumcd,
+  exprt& new_expr __attribute__((unused)))
+{
+  // The enum name is different on the old frontend
+  // Global variables have the form <language>::<variable_name>
+  // But for some reason, global enums have the form
+  // <language>::<module>::<variable_name>, on the new frontend
+  // follow the standard for global variables
+  std::string enum_value_identifier =
+    get_var_name(enumcd.getName().str(), !current_function_name.empty());
+
+  // The parent enum to construct the enum constant's type
+  const clang::EnumDecl &enumd =
+    static_cast<const clang::EnumDecl &>(*enumcd.getDeclContext());
+
+  std::string identifier = get_tag_name(enumd.getName().str());
+
+  typet t = enum_type();
+  t.id("c_enum");
+  t.tag(identifier);
+
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    t,
+    enumcd.getName().str(),
+    enum_value_identifier);
+
+  exprt bval;
+  get_size_exprt(enumcd.getInitVal(), signedbv_typet(), bval);
+  symbol.value.swap(bval);
+
+  move_symbol_to_context(symbol);
+
+  // Save the enum constant address and name to the object map
+  std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
+  object_map[address] = enum_value_identifier;
+}
+
 void llvm_convertert::get_struct(
   const clang::RecordDecl& structd,
   exprt& new_expr)
@@ -413,46 +453,6 @@ void llvm_convertert::get_class(
 {
   std::cerr << "Class is not supported yet" << std::endl;
   abort();
-}
-
-void llvm_convertert::get_enum_constants(
-  const clang::EnumConstantDecl& enumcd,
-  exprt& new_expr __attribute__((unused)))
-{
-  // The enum name is different on the old frontend
-  // Global variables have the form <language>::<variable_name>
-  // But for some reason, global enums have the form
-  // <language>::<module>::<variable_name>, on the new frontend
-  // follow the standard for global variables
-  std::string enum_value_identifier =
-    get_var_name(enumcd.getName().str(), !current_function_name.empty());
-
-  // The parent enum to construct the enum constant's type
-  const clang::EnumDecl &enumd =
-    static_cast<const clang::EnumDecl &>(*enumcd.getDeclContext());
-
-  std::size_t enum_address = reinterpret_cast<std::size_t>(&enumd);
-  std::string identifier = type_map.find(enum_address)->second;
-
-  symbolt &s = context.symbols.find("c::" + identifier)->second;
-  typet t = s.type;
-
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    t,
-    enumcd.getName().str(),
-    enum_value_identifier);
-
-  exprt bval;
-  get_size_exprt(enumcd.getInitVal(), signedbv_typet(), bval);
-  symbol.value.swap(bval);
-
-  move_symbol_to_context(symbol);
-
-  // Save the enum constant address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
-  object_map[address] = enum_value_identifier;
 }
 
 void llvm_convertert::get_typedef(
