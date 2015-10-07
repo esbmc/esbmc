@@ -16,8 +16,15 @@
 class llvm_adjust
 {
   public:
-    llvm_adjust(contextt &_context);
-    virtual ~llvm_adjust();
+    llvm_adjust(contextt &_context)
+      : context(_context),
+        ns(namespacet(context))
+    {
+    }
+
+    ~llvm_adjust()
+    {
+    }
 
     bool adjust();
 
@@ -30,9 +37,17 @@ class llvm_adjust
 
     void convert_builtin(symbolt& symbol);
 
-    void convert_exprt(exprt &expr);
+    void convert_expr(exprt &expr);
+    void convert_expr_operands(exprt &expr);
+    void convert_expr_main(exprt &expr);
+
+    void convert_side_effect_assignment(exprt &expr);
+    void convert_side_effect_function_call(
+      side_effect_expr_function_callt &expr);
+    void convert_side_effect_statement_expression(side_effect_exprt &expr);
     void convert_member(member_exprt &expr);
     void convert_pointer_arithmetic(exprt &expr);
+    void convert_expression(codet &code);
     void convert_index(index_exprt &index);
     void convert_dereference(exprt &deref);
     void convert_sizeof(exprt &expr);
@@ -40,7 +55,6 @@ class llvm_adjust
     void convert_symbol(exprt &expr);
     void convert_code(codet &code);
 
-    void convert_expr_to_codet(exprt &expr);
     void make_index_type(exprt &expr);
 };
 

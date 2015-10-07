@@ -18,16 +18,6 @@
 
 #include "typecast.h"
 
-llvm_adjust::llvm_adjust(contextt &_context)
-  : context(_context),
-    ns(namespacet(context))
-{
-}
-
-llvm_adjust::~llvm_adjust()
-{
-}
-
 bool llvm_adjust::adjust()
 {
   Forall_symbols(it, context.symbols)
@@ -66,19 +56,52 @@ void llvm_adjust::adjust_function(symbolt& symbol)
 {
   Forall_operands(it, symbol.value)
   {
-    convert_exprt(*it);
-
-    // All statements inside a function body must be an code
-    // so convert any expression to a code_expressiont
-    convert_expr_to_codet(*it);
+    convert_expr(*it);
   }
 }
 
-void llvm_adjust::convert_exprt(exprt& expr)
+void llvm_adjust::convert_expr(exprt& expr)
 {
-  Forall_operands(it, expr)
-    convert_exprt(*it);
+  if(expr.id()=="already_typechecked")
+  {
+    assert(expr.operands().size()==1);
+    exprt tmp;
+    tmp.swap(expr.op0());
+    expr.swap(tmp);
+    return;
+  }
 
+  // fist do sub-nodes
+  convert_expr_operands(expr);
+
+  // now do case-split
+  convert_expr_main(expr);
+}
+
+void llvm_adjust::convert_expr_operands(exprt& expr)
+{
+  if(expr.id()=="sideeffect" &&
+     expr.statement()=="function_call")
+  {
+    // don't do function operand
+    assert(expr.operands().size()==2);
+
+    convert_expr(expr.op1()); // arguments
+  }
+  else if(expr.id()=="sideeffect" &&
+          expr.statement()=="statement_expression")
+  {
+    convert_code(to_code(expr.op0()));
+  }
+  else
+  {
+    Forall_operands(it, expr)
+      convert_expr(*it);
+  }
+}
+
+void llvm_adjust::convert_expr_main(exprt& expr)
+{
   if(expr.id()=="sideeffect")
   {
     convert_side_effect(to_side_effect_expr(expr));
@@ -168,6 +191,18 @@ void llvm_adjust::convert_side_effect(side_effect_exprt& expr)
      statement=="postincrement" ||
      statement=="postdecrement")
   {
+  }
+  else if(has_prefix(id2string(statement), "assign"))
+    convert_side_effect_assignment(expr);
+  else if(statement=="function_call")
+    convert_side_effect_function_call(to_side_effect_expr_function_call(expr));
+  else if(statement=="statement_expression")
+    convert_side_effect_statement_expression(expr);
+  else
+  {
+    std::cout << "unknown side effect: " << statement;
+    std::cout << "at " << expr.location() << std::endl;
+    abort();
   }
 }
 
@@ -322,79 +357,6 @@ void llvm_adjust::convert_sizeof(exprt& expr)
   expr.cmt_c_sizeof_type(type);
 }
 
-void llvm_adjust::convert_code(codet& code)
-{
-  const irep_idt &statement=code.statement();
-
-  if(statement=="expression")
-  {
-  }
-  else if(statement=="label")
-  {
-    // We just need to convert the first statement inside the label
-    // since any other statement will be converted by the
-    // if(statement=="block")
-    convert_expr_to_codet(code.op0());
-  }
-  else if(statement=="block")
-  {
-    Forall_operands(it, code)
-      convert_expr_to_codet(*it);
-  }
-  else if(statement=="ifthenelse")
-  {
-    // If the condition is not of boolean type, it must be casted
-    gen_typecast(code.op0(), bool_type());
-
-    // Convert exprt when there is no block defined for ifthenelse
-    convert_expr_to_codet(code.op1());
-    if(code.operands().size() == 3)
-      convert_expr_to_codet(code.op2());
-  }
-  else if(statement=="while" ||
-          statement=="dowhile")
-  {
-    // If the condition is not of boolean type, it must be casted
-    gen_typecast(code.op0(), bool_type());
-
-    // Convert exprt when there is no block defined
-    convert_expr_to_codet(code.op1());
-  }
-  else if(statement=="for")
-  {
-    // If the condition is not of boolean type, it must be casted
-    gen_typecast(code.op1(), bool_type());
-
-    // Convert exprt when there is no block defined
-    convert_expr_to_codet(code.op0());
-    convert_expr_to_codet(code.op2());
-    convert_expr_to_codet(code.op3());
-  }
-  else if(statement=="switch")
-  {
-  }
-  else if(statement=="decl-block")
-  {
-  }
-  else if(statement=="assign")
-  {
-    // Creat typecast on assingments, if needed
-    gen_typecast(code.op1(), code.op0().type());
-  }
-  else if(statement=="skip")
-  {
-  }
-  else if(statement=="msc_try_finally")
-  {
-  }
-  else if(statement=="msc_try_except")
-  {
-  }
-  else if(statement=="msc_leave")
-  {
-  }
-}
-
 void llvm_adjust::adjust_type(typet &type)
 {
   if(type.id()=="symbol")
@@ -423,15 +385,80 @@ void llvm_adjust::adjust_type(typet &type)
   }
 }
 
-void llvm_adjust::convert_expr_to_codet(exprt& expr)
+void llvm_adjust::convert_side_effect_assignment(exprt& expr)
 {
-  if(expr.is_code())
-    return;
+}
 
-  codet code("expression");
-  code.copy_to_operands(expr);
+void llvm_adjust::convert_side_effect_function_call(
+  side_effect_expr_function_callt& expr)
+{
+}
 
-  expr.swap(code);
+void llvm_adjust::convert_side_effect_statement_expression(
+  side_effect_exprt& expr)
+{
+  if(expr.operands().size()!=1)
+  {
+    std::cout << "statement expression expects one operand" << std::endl;
+    abort();
+  }
+
+  codet &code=to_code(expr.op0());
+
+  assert(code.statement()=="block");
+
+  // the type is the type of the last statement in the
+  // block
+  codet &last=to_code(code.operands().back());
+
+  irep_idt last_statement=last.get_statement();
+
+  if(last_statement=="expression")
+  {
+    assert(last.operands().size()==1);
+    expr.type()=last.op0().type();
+  }
+  else if(last_statement=="function_call")
+  {
+    // make the last statement an expression
+
+    code_function_callt &fc=to_code_function_call(last);
+
+    side_effect_expr_function_callt sideeffect;
+
+    sideeffect.function()=fc.function();
+    sideeffect.arguments()=fc.arguments();
+    sideeffect.location()=fc.location();
+
+    sideeffect.type()=
+      static_cast<const typet &>(fc.function().type().return_type());
+
+    expr.type()=sideeffect.type();
+
+    if(fc.lhs().is_nil())
+    {
+      codet code_expr("expression");
+      code_expr.location() = fc.location();
+      code_expr.move_to_operands(sideeffect);
+      last.swap(code_expr);
+    }
+    else
+    {
+      codet code_expr("expression");
+      code_expr.location() = fc.location();
+
+      exprt assign("sideeffect");
+      assign.statement("assign");
+      assign.location()=fc.location();
+      assign.move_to_operands(fc.lhs(), sideeffect);
+      assign.type()=assign.op1().type();
+
+      code_expr.move_to_operands(assign);
+      last.swap(code_expr);
+    }
+  }
+  else
+    expr.type()=typet("empty");
 }
 
 void llvm_adjust::make_index_type(exprt& expr)
