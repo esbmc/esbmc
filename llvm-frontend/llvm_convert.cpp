@@ -1079,7 +1079,7 @@ void llvm_convertert::get_expr(
         static_cast<const clang::CharacterLiteral&>(stmt);
 
       char c[1];
-      sprintf(c,"%d",char_literal.getValue());
+      sprintf(c,"%c",char_literal.getValue());
 
       exprt char_expr;
       convert_character_literal("'" + std::string(c) + "'", char_expr);
