@@ -360,21 +360,7 @@ void c_typecastt::implicit_typecast_arithmetic(
   }
 
   if(new_type!=expr_type)
-  {
-    if(new_type.id()=="pointer" &&
-       (expr_type.is_array() ||
-        expr_type.id()=="incomplete_array"))
-    {
-      exprt index_expr("index", expr_type.subtype());
-      index_expr.reserve_operands(2);
-      index_expr.move_to_operands(expr);
-      index_expr.copy_to_operands(gen_zero(index_type()));
-      expr=exprt("address_of", new_type);
-      expr.move_to_operands(index_expr);
-    }
-    else
-      do_typecast(expr, new_type);
-  }
+    do_typecast(expr, new_type);
 }
 
 /*******************************************************************\
@@ -562,11 +548,10 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
 {
   // special case: array -> pointer is actually
   // something like address_of
-  
+
   const typet &dest_type=ns.follow(dest.type());
 
-  if(dest_type.is_array() || 
-     dest_type.id()=="incomplete_array")
+  if(dest_type.is_array())
   {
     index_exprt index;
     index.array()=dest;
