@@ -4,7 +4,7 @@ int (x);
 
 void func(enum AB foo)
 {
-  assert(foo == A);
+  assert(foo == 0);
 }
 
 int main()

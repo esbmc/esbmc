@@ -4,16 +4,12 @@ struct X { int a; };
 
 typedef const _Bool inteiro;
 
-const unsigned int d = 10;
-const unsigned int c = d;
-
 int y;
 
 int fun();
 void fun1(int a, int b){ int j, y; }
 int fun2() { return 2; }
 int fun3(int x) { return x; }
-int fun4(int x, int y) { return x/c; }
 int fun5();
 int fun6(int a, float b);
 
@@ -74,7 +70,6 @@ int main()
   float a =3;
   int x,k;
   x = x1;
-  x = fun4(k,0);
   y = x;
   x = fun5();
   x = fun8(x,-4);

@@ -43,6 +43,9 @@ int main()
   union AB foo1;
   union AB foo2 = {1};
   func(foo2);
-  func(ab);
+
+  assert(ab.a == 0);
+  assert(ab.a == 0);
+
   return 0;
 }

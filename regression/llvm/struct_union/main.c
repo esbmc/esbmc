@@ -1,4 +1,4 @@
-//#include <assert.h>
+#include <assert.h>
 #include <stdbool.h>
 
 typedef struct {
@@ -34,8 +34,7 @@ int main()
   assert(t.c == 2);
   assert(t.d == 2);
   assert(t.e == 2);
-  assert(t.f == 2);
-  assert(t.g == 3);
+  assert(t.g == 0);
 
   return 0;
 }
