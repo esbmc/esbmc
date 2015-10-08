@@ -62,42 +62,12 @@ void llvm_adjust::adjust_function(symbolt& symbol)
 
 void llvm_adjust::convert_expr(exprt& expr)
 {
-  if(expr.id()=="already_typechecked")
-  {
-    assert(expr.operands().size()==1);
-    exprt tmp;
-    tmp.swap(expr.op0());
-    expr.swap(tmp);
-    return;
-  }
-
   // fist do sub-nodes
-  convert_expr_operands(expr);
+  Forall_operands(it, expr)
+    convert_expr(*it);
 
   // now do case-split
   convert_expr_main(expr);
-}
-
-void llvm_adjust::convert_expr_operands(exprt& expr)
-{
-  if(expr.id()=="sideeffect" &&
-     expr.statement()=="function_call")
-  {
-    // don't do function operand
-    assert(expr.operands().size()==2);
-
-    convert_expr(expr.op1()); // arguments
-  }
-  else if(expr.id()=="sideeffect" &&
-          expr.statement()=="statement_expression")
-  {
-    convert_code(to_code(expr.op0()));
-  }
-  else
-  {
-    Forall_operands(it, expr)
-      convert_expr(*it);
-  }
 }
 
 void llvm_adjust::convert_expr_main(exprt& expr)
@@ -462,7 +432,6 @@ void llvm_adjust::convert_side_effect_statement_expression(
   }
 
   codet &code=to_code(expr.op0());
-
   assert(code.statement()=="block");
 
   // the type is the type of the last statement in the

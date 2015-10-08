@@ -38,7 +38,6 @@ class llvm_adjust
     void convert_builtin(symbolt& symbol);
 
     void convert_expr(exprt &expr);
-    void convert_expr_operands(exprt &expr);
     void convert_expr_main(exprt &expr);
 
     void convert_side_effect_assignment(exprt &expr);
