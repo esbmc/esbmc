@@ -75,7 +75,6 @@ void llvm_adjust::convert_code(codet& code)
 void llvm_adjust::convert_expression(codet& code)
 {
   exprt &op=code.op0();
-  convert_expr(op);
 
   if(op.id()=="sideeffect")
   {
