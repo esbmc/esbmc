@@ -258,10 +258,8 @@ void llvm_adjust::convert_index(index_exprt& index)
     const typet &index_full_type=ns.follow(index_expr.type());
 
     if(!array_full_type.is_array() &&
-        array_full_type.id()!="incomplete_array" &&
         array_full_type.id()!="pointer" &&
         (index_full_type.is_array() ||
-            index_full_type.id()=="incomplete_array" ||
             index_full_type.id()=="pointer"))
       std::swap(array_expr, index_expr);
   }
