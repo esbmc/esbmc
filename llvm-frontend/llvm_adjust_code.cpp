@@ -145,7 +145,7 @@ void llvm_adjust::convert_ifthenelse(codet& code)
   convert_expr(cond);
 
   // If the condition is not of boolean type, it must be casted
-  gen_typecast(code.op0(), bool_type());
+  gen_typecast(ns, code.op0(), bool_type());
 
   convert_code(to_code(code.op1()));
 
@@ -156,7 +156,7 @@ void llvm_adjust::convert_ifthenelse(codet& code)
 void llvm_adjust::convert_while(codet& code)
 {
   // If the condition is not of boolean type, it must be casted
-  gen_typecast(code.op0(), bool_type());
+  gen_typecast(ns, code.op0(), bool_type());
 
   convert_expr(code.op0());
   convert_code(to_code(code.op1()));
@@ -170,13 +170,13 @@ void llvm_adjust::convert_for(codet& code)
   convert_code(to_code(code.op3()));
 
   // If the condition is not of boolean type, it must be casted
-  gen_typecast(code.op1(), bool_type());
+  gen_typecast(ns, code.op1(), bool_type());
 }
 
 void llvm_adjust::convert_switch(codet& code)
 {
   // If the condition is not of boolean type, it must be casted
-  gen_typecast(code.op0(), int_type());
+  gen_typecast(ns, code.op0(), int_type());
 
   convert_expr(code.op0());
   convert_code(to_code(code.op1()));
@@ -188,5 +188,5 @@ void llvm_adjust::convert_assign(codet& code)
   convert_expr(code.op1());
 
   // Create typecast on assingments, if needed
-  gen_typecast(code.op1(), code.op0().type());
+  gen_typecast(ns, code.op1(), code.op0().type());
 }

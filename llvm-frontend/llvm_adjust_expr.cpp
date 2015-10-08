@@ -112,8 +112,8 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   }
   else if(expr.is_and() || expr.is_or())
   {
-    gen_typecast(expr.op0(), bool_type());
-    gen_typecast(expr.op1(), bool_type());
+    gen_typecast(ns, expr.op0(), bool_type());
+    gen_typecast(ns, expr.op1(), bool_type());
   }
   else if(expr.is_address_of())
   {
@@ -146,7 +146,7 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   else if(expr.id()=="if")
   {
     // If the condition is not of boolean type, it must be casted
-    gen_typecast(expr.op0(), bool_type());
+    gen_typecast(ns, expr.op0(), bool_type());
   }
   else if(expr.is_code())
   {

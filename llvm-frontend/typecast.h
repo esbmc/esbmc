@@ -9,9 +9,11 @@
 #define LLVM_FRONTEND_TYPECAST_H_
 
 #include <std_expr.h>
+#include <namespace.h>
 
 extern void gen_typecast(
-  exprt &expr,
+  namespacet ns,
+  exprt &dest,
   typet type);
 
 #endif /* LLVM_FRONTEND_TYPECAST_H_ */

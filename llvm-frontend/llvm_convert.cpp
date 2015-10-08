@@ -1177,7 +1177,7 @@ void llvm_convertert::get_expr(
 
       exprt offset_value;
       convert_integer_literal(integer2string(val.getSExtValue()), offset_value, 10);
-      gen_typecast(offset_value, t);
+      gen_typecast(ns, offset_value, t);
 
       new_expr = offset_value;
       break;
@@ -1943,7 +1943,7 @@ void llvm_convertert::get_cast_expr(
 
     case clang::CK_PointerToBoolean:
     case clang::CK_PointerToIntegral:
-      gen_typecast(expr, type);
+      gen_typecast(ns, expr, type);
       break;
 
     case clang::CK_NullToPointer:

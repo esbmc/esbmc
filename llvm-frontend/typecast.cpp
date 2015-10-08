@@ -8,19 +8,16 @@
 #include "typecast.h"
 
 #include <simplify_expr_class.h>
+#include <ansi-c/c_typecast.h>
 
 void gen_typecast(
-  exprt &expr,
+  namespacet ns,
+  exprt &dest,
   typet type)
 {
-  if(expr.type() != type)
+  if(dest.type() != type)
   {
-    exprt new_expr = typecast_exprt(expr, type);
-
-    simplify_exprt simplify;
-    simplify.simplify(new_expr);
-
-    new_expr.location() = expr.location();
-    expr.swap(new_expr);
+    c_typecastt c_typecast(ns);
+    c_typecast.implicit_typecast(dest, type);
   }
 }
