@@ -1893,6 +1893,15 @@ void llvm_convertert::get_decl_ref(
       identifier = object_map.find(address)->second;
 
       get_type(enumcd.getType(), type);
+
+      // TODO: This shouldn't be done here, the issue is that the enum tag
+      // and enum constants have the same id (c_enum), which is stupid and
+      // breaks esbmc when we try to replace all c_enum on the next step
+      // We should replace the id, add it to migrate and replace only the
+      // constants
+      get_size_exprt(enumcd.getInitVal(), signedbv_typet(), new_expr);
+      return;
+
       break;
     }
 
