@@ -385,11 +385,71 @@ void llvm_adjust::adjust_type(typet &type)
 
 void llvm_adjust::convert_side_effect_assignment(exprt& expr)
 {
+  const irep_idt &statement=expr.statement();
+
+  exprt &op0=expr.op0();
+  exprt &op1=expr.op1();
+
+  const typet type0=op0.type();
+
+  if(statement=="assign")
+  {
+    gen_typecast(ns, op1, type0);
+    return;
+  }
+  else if(statement=="assign_shl" ||
+          statement=="assign_shr")
+  {
+
+    if(is_number(op1.type()))
+    {
+      if(statement=="assign_shl")
+      {
+        return;
+      }
+      else
+      {
+        if(type0.id()=="unsignedbv")
+        {
+          expr.statement("assign_lshr");
+          return;
+        }
+        else if(type0.id()=="signedbv")
+        {
+          expr.statement("assign_ashr");
+          return;
+        }
+      }
+    }
+  }
 }
 
 void llvm_adjust::convert_side_effect_function_call(
   side_effect_expr_function_callt& expr)
 {
+  // TODO: move creation of undefined function to this point from llvm_convert
+  // llvm_convert should only convert
+  convert_expr(expr.function());
+
+  exprt &f_op=expr.function();
+  const code_typet &code_type = to_code_type(f_op.type());
+  exprt::operandst &arguments = expr.arguments();
+  const code_typet::argumentst &argument_types = code_type.arguments();
+
+  for(unsigned i=0; i<arguments.size(); i++)
+  {
+    exprt &op=arguments[i];
+
+    if(i<argument_types.size())
+    {
+      const code_typet::argumentt &argument_type=
+        argument_types[i];
+
+      const typet &op_type=argument_type.type();
+
+      gen_typecast(ns, op, op_type);
+    }
+  }
 }
 
 void llvm_adjust::convert_side_effect_statement_expression(
