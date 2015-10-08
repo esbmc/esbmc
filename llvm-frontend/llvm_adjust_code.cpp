@@ -66,7 +66,7 @@ void llvm_adjust::convert_code(codet& code)
   }
   else
   {
-    std::cout << "Unexpected statement: " << statement << std::endl;
+    std::cout << "Unexpected codet: " << statement << std::endl;
     code.dump();
     abort();
   }
