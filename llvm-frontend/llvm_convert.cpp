@@ -1569,6 +1569,7 @@ void llvm_convertert::get_expr(
 
       exprt sub_stmt;
       get_expr(*default_stmt.getSubStmt(), sub_stmt);
+      convert_expression_to_code(sub_stmt);
 
       codet label("label");
       label.set("default", true);
