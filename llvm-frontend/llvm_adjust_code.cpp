@@ -119,73 +119,38 @@ void llvm_adjust::convert_expression(codet& code)
 
 void llvm_adjust::convert_label(code_labelt& code)
 {
-  convert_code(to_code(code.op0()));
-
-  if(code.case_irep().is_not_nil())
-  {
-    exprt case_expr=static_cast<const exprt &>(code.case_irep());
-
-    Forall_operands(it, case_expr)
-      convert_expr(*it);
-
-    code.case_irep(case_expr);
-  }
 }
 
 void llvm_adjust::convert_block(codet& code)
 {
-  Forall_operands(it, code)
-    convert_code(to_code(*it));
 }
 
 void llvm_adjust::convert_ifthenelse(codet& code)
 {
-  exprt &cond=code.op0();
-  convert_expr(cond);
-
   // If the condition is not of boolean type, it must be casted
-  gen_typecast(ns, code.op0(), bool_type());
-
-  convert_code(to_code(code.op1()));
-
-  if(code.operands().size()==3 && !code.op2().is_nil())
-    convert_code(to_code(code.op2()));
+  gen_typecast_bool(ns, code.op0());
 }
 
 void llvm_adjust::convert_while(codet& code)
 {
   // If the condition is not of boolean type, it must be casted
-  gen_typecast(ns, code.op0(), bool_type());
-
-  convert_expr(code.op0());
-  convert_code(to_code(code.op1()));
+  gen_typecast_bool(ns, code.op0());
 }
 
 void llvm_adjust::convert_for(codet& code)
 {
-  convert_code(to_code(code.op0()));
-  convert_expr(code.op1());
-  convert_code(to_code(code.op2()));
-  convert_code(to_code(code.op3()));
-
   // If the condition is not of boolean type, it must be casted
-  gen_typecast(ns, code.op1(), bool_type());
+  gen_typecast_bool(ns, code.op1());
 }
 
 void llvm_adjust::convert_switch(codet& code)
 {
   // If the condition is not of boolean type, it must be casted
   gen_typecast(ns, code.op0(), int_type());
-
-  convert_expr(code.op0());
-  convert_code(to_code(code.op1()));
 }
 
 void llvm_adjust::convert_assign(codet& code)
 {
-  convert_expr(code.op0());
-  convert_expr(code.op1());
-
   // Create typecast on assingments, if needed
   gen_typecast(ns, code.op1(), code.op0().type());
 }
