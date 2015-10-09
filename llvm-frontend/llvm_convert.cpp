@@ -2043,9 +2043,6 @@ void llvm_convertert::get_binary_operator_expr(
   exprt rhs;
   get_expr(*binop.getRHS(), rhs);
 
-  // The resultant type from the binary operation
-  // For boolean operation, we always assign bool type regardless
-  // of what llvm says
   typet binop_type;
   get_type(binop.getType(), binop_type);
 
@@ -2072,7 +2069,7 @@ void llvm_convertert::get_binary_operator_expr(
       break;
 
     case clang::BO_Shr:
-      new_expr = exprt("ashr", binop_type);
+      new_expr = exprt("shr", binop_type);
       break;
 
     case clang::BO_Rem:
@@ -2092,39 +2089,39 @@ void llvm_convertert::get_binary_operator_expr(
       break;
 
     case clang::BO_LT:
-      new_expr = exprt("<", bool_type());
+      new_expr = exprt("<", binop_type);
       break;
 
     case clang::BO_GT:
-      new_expr = exprt(">", bool_type());
+      new_expr = exprt(">", binop_type);
       break;
 
     case clang::BO_LE:
-      new_expr = exprt("<=", bool_type());
+      new_expr = exprt("<=", binop_type);
       break;
 
     case clang::BO_GE:
-      new_expr = exprt(">=", bool_type());
+      new_expr = exprt(">=", binop_type);
       break;
 
     case clang::BO_EQ:
-      new_expr = exprt("=", bool_type());
+      new_expr = exprt("=", binop_type);
       break;
 
     case clang::BO_NE:
-      new_expr = exprt("notequal", bool_type());
+      new_expr = exprt("notequal", binop_type);
       break;
 
     case clang::BO_LAnd:
-      new_expr = exprt("and", bool_type());
+      new_expr = exprt("and", binop_type);
       break;
 
     case clang::BO_LOr:
-      new_expr = exprt("or", bool_type());
+      new_expr = exprt("or", binop_type);
       break;
 
     case clang::BO_Assign:
-      //If we use code_assignt, it will reserve two operands,
+      // If we use code_assignt, it will reserve two operands,
       // and the copy_to_operands method call at the end of
       // this method will put lhs and rhs in positions 2 and 3,
       // instead of 0 and 1 :/
