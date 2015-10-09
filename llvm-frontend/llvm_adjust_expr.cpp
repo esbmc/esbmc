@@ -76,9 +76,19 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   {
     convert_side_effect(to_side_effect_expr(expr));
   }
+  else if(expr.id()=="constant")
+  {
+  }
   else if(expr.id()=="symbol")
   {
     convert_symbol(expr);
+  }
+  else if(expr.id()=="unary+" || expr.id()=="unary-" ||
+          expr.id()=="bitnot")
+  {
+  }
+  else if(expr.id()=="not")
+  {
   }
   else if(expr.is_and() || expr.is_or())
   {
@@ -96,22 +106,34 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   {
     convert_member(to_member_expr(expr));
   }
+  else if(expr.id()=="="  ||
+          expr.id()=="notequal" ||
+          expr.id()=="<"  ||
+          expr.id()=="<=" ||
+          expr.id()==">"  ||
+          expr.id()==">=")
+  {
+  }
   else if(expr.is_index())
   {
     convert_index(to_index_expr(expr));
+  }
+  else if(expr.id()=="typecast")
+  {
   }
   else if(expr.id() == "sizeof")
   {
     convert_sizeof(expr);
   }
   else if(expr.id()=="+" || expr.id()=="-" ||
-            expr.id()=="*" || expr.id()=="/" ||
-            expr.id()=="mod" ||
-            expr.id()=="shl" || expr.id()=="shr" ||
-            expr.id()=="bitand" || expr.id()=="bitxor" || expr.id()=="bitor")
+          expr.id()=="*" || expr.id()=="/" ||
+          expr.id()=="mod" ||
+          expr.id()=="shl" || expr.id()=="shr" ||
+          expr.id()=="bitand" || expr.id()=="bitxor" || expr.id()=="bitor")
   {
-    convert_pointer_arithmetic(expr.op0());
-    convert_pointer_arithmetic(expr.op1());
+  }
+  else if(expr.id()=="comma")
+  {
   }
   else if(expr.id()=="if")
   {
@@ -121,6 +143,27 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   else if(expr.is_code())
   {
     convert_code(to_code(expr));
+  }
+  else if(expr.id()=="builtin_offsetof")
+  {
+  }
+  else if(expr.id()=="string-constant")
+  {
+  }
+  else if(expr.id()=="arguments")
+  {
+  }
+  else if(expr.id()=="union")
+  {
+  }
+  else if(expr.id()=="struct")
+  {
+  }
+  else
+  {
+    std::cout << "Unexpected expression: " << expr.id().as_string() << std::endl;
+    expr.dump();
+    abort();
   }
 }
 
@@ -370,7 +413,6 @@ void llvm_adjust::convert_side_effect_assignment(exprt& expr)
   else if(statement=="assign_shl" ||
           statement=="assign_shr")
   {
-
     if(is_number(op1.type()))
     {
       if(statement=="assign_shl")
