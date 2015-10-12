@@ -7,6 +7,43 @@
 
 #include "loopst.h"
 
+bool check_var_name(const exprt &expr)
+{
+  std::size_t found = expr.identifier().as_string().find("__ESBMC_");
+  if(found != std::string::npos)
+    return false;
+
+  found = expr.identifier().as_string().find("__CPROVER");
+  if(found != std::string::npos)
+    return false;
+
+  found = expr.identifier().as_string().find("return_value___");
+  if(found != std::string::npos)
+    return false;
+
+  found = expr.identifier().as_string().find("c::pthread_lib");
+  if(found != std::string::npos)
+    return false;
+
+  // Don't add variables that we created for k-induction
+  found = expr.identifier().as_string().find("$");
+  if(found != std::string::npos)
+    return false;
+
+  if(expr.identifier().as_string() == "c::__func__"
+     || expr.identifier().as_string() == "c::__PRETTY_FUNCTION__"
+     || expr.identifier().as_string() == "c::__LINE__")
+    return false;
+
+  if(expr.location().file().as_string() == "<built-in>"
+     || expr.cmt_location().file().as_string() == "<built-in>"
+     || expr.type().location().file().as_string() == "<built-in>"
+     || expr.type().cmt_location().file().as_string() == "<built-in>")
+    return false;
+
+  return true;
+}
+
 goto_programt& loopst::get_goto_program()
 {
   return goto_program;

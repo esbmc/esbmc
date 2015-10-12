@@ -52,5 +52,6 @@ private:
   bool is_expr_a_constant(exprt &expr);
 };
 
+bool check_var_name(const exprt &expr);
 
 #endif /* GOTO_PROGRAMS_LOOPST_H_ */
