@@ -1,4 +1,4 @@
-int main()
+float main()
 {
   int b=0;
 
@@ -34,9 +34,9 @@ int main()
     if(!b)
       goto LABEL;
 
-  switch(b)
+  switch(b=3)
   {
-    case 1:
+    case 'c':
       ++b;
       break;
 
@@ -45,8 +45,8 @@ int main()
       break;
 
     default:
-      break;
+      assert(1);
   }
 
-  return 0;
+  return 2;
 }
