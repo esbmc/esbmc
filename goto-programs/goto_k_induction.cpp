@@ -64,9 +64,6 @@ void goto_k_induction(
 {
   get_global_vars(context);
 
-  // Disable forward condition, if there is a finite loop, it will be enabled
-  options.set_option("disable-forward-condition", true);
-
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
       goto_k_inductiont(
@@ -99,9 +96,6 @@ void goto_k_inductiont::goto_k_induction()
     }
     else
     {
-      // We're going to change the code, so enable forward condition
-      options.set_option("disable-forward-condition", false);
-
       // Start the loop conversion
       convert_finite_loop(it->second);
     }

@@ -772,33 +772,30 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Set that we are running forward condition
       opts.set_option("forward-condition", true);
 
-      if(!opts.get_bool_option("disable-forward-condition"))
+      // Run bmc and only send results in two occasions:
+      // 1. A proof was found, we send the step where it was found
+      // 2. It couldn't find a proof
+      for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
       {
-        // Run bmc and only send results in two occasions:
-        // 1. A proof was found, we send the step where it was found
-        // 2. It couldn't find a proof
-        for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
+        bmct bmc(goto_functions, opts, context, ui_message_handler);
+        set_verbosity_msg(bmc);
+
+        bmc.options.set_option("unwind", i2string(k_step));
+        bool res = do_bmc(bmc);
+
+        // Send information to parent if no bug was found
+        if(!res)
         {
-          bmct bmc(goto_functions, opts, context, ui_message_handler);
-          set_verbosity_msg(bmc);
+          r.k = k_step;
 
-          bmc.options.set_option("unwind", i2string(k_step));
-          bool res = do_bmc(bmc);
+          // Write result
+          u_int len = write(commPipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
+          (void)len; //ndebug
 
-          // Send information to parent if no bug was found
-          if(!res)
-          {
-            r.k = k_step;
+          std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
 
-            // Write result
-            u_int len = write(commPipe[1], &r, sizeof(r));
-            assert(len == sizeof(r) && "short write");
-            (void)len; //ndebug
-
-            std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
-
-            return res;
-          }
+          return res;
         }
       }
 
