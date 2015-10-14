@@ -1020,7 +1020,6 @@ int cbmc_parseoptionst::doit_k_induction()
 
     ++k_step;
 
-    if(!opts.get_bool_option("disable-forward-condition"))
     {
       opts.set_option("base-case", false);
       opts.set_option("forward-condition", true);
