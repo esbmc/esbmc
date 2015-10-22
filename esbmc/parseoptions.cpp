@@ -80,17 +80,6 @@ struct resultt
 void
 timeout_handler(int dummy __attribute__((unused)))
 {
-  if(process_type != PARENT)
-  {
-    struct resultt r;
-    r.type = process_type;
-    r.k = -1;
-
-    unsigned int len = write(commPipe[1], &r, sizeof(r));
-    assert(len == sizeof(r) && "short write");
-    (void)len; // ndebug
-  }
-
   std::cout << "Timed out" << std::endl;
 
   // Unfortunately some highly useful pieces of code hook themselves into
