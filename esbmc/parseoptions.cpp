@@ -426,7 +426,7 @@ int cbmc_parseoptionst::doit()
   }
   catch(int)
   {
-    status("Unable to prove or falsify the property, giving up.");
+    status("Unable to prove or falsify the program, giving up.");
     status("VERIFICATION UNKNOWN");
     return 0;
   }
@@ -1061,7 +1061,7 @@ int cbmc_parseoptionst::doit_k_induction()
     }
   } while(k_step <= max_k_step);
 
-  status("Unable to prove or falsify the property, giving up.");
+  status("Unable to prove or falsify the program, giving up.");
   status("VERIFICATION UNKNOWN");
 
   return 0;
