@@ -51,6 +51,15 @@ goto_symext::symex_malloc(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
+  if(options.get_bool_option("inductive-step")
+     && !options.get_bool_option("disable-inductive-step"))
+  {
+    std::cout << "**** WARNING: this program contains dynamic memory allocation,"
+        << " so we are not applying the inductive step to this program!"
+        << std::endl;
+    options.set_option("disable-inductive-step", true);
+    throw 0;
+  }
 
   if (is_nil_expr(lhs))
     return expr2tc(); // ignore
@@ -545,23 +554,14 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
-  if((options.get_bool_option("k-induction")
-    || (options.get_bool_option("k-induction-parallel")
-        && options.get_bool_option("inductive-step")))
-    && !options.get_bool_option("disable-inductive-step"))
+  if(options.get_bool_option("inductive-step")
+     && !options.get_bool_option("disable-inductive-step"))
   {
     std::cout << "**** WARNING: this program is multithreaded,"
         << " so we are not applying the inductive step to this program!"
         << std::endl;
     options.set_option("disable-inductive-step", true);
-
-    // Hack to stop inductive step verification if a multithreaded code is
-    // found. It will only throw if we are running parallel k-induction
-    // and the current process is the inductive step one. It will be caught
-    // by the try catch on parseoptions.cpp
-    if(options.get_bool_option("k-induction-parallel")
-       && options.get_bool_option("inductive-step"))
-      throw 0;
+    throw 0;
   }
 
   // As an argument, we expect the address of a symbol.

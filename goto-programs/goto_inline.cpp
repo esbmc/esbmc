@@ -271,17 +271,6 @@ void goto_inlinet::expand_function_call(
     warning("Recursion is ignored when inlining");
     target->make_skip();
 
-    if((options.get_bool_option("k-induction")
-        || options.get_bool_option("k-induction-parallel"))
-        && !options.get_bool_option("disable-inductive-step"))
-    {
-      std::cout << "**** WARNING: this program contains recursive function calls,"
-                << " so we are not applying the inductive step to this program!"
-                << std::endl;
-      options.set_option("disable-inductive-step", true);
-      throw 0;
-    }
-
     target++;
     return;
   }

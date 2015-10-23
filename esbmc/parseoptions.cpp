@@ -407,15 +407,6 @@ int cbmc_parseoptionst::doit()
   if(get_goto_program(opts, goto_functions))
     return 6;
 
-  if((cmdline.isset("inductive-step") ||
-    opts.get_bool_option("inductive-step")) &&
-    opts.get_bool_option("disable-inductive-step"))
-  {
-    status("Unable to prove or falsify the property, giving up.");
-    status("VERIFICATION UNKNOWN");
-    return 0;
-  }
-
   if(cmdline.isset("show-claims"))
   {
     const namespacet ns(context);
@@ -426,12 +417,20 @@ int cbmc_parseoptionst::doit()
   if(set_claims(goto_functions))
     return 7;
 
-  // slice according to property
-
-  // do actual BMC
-  bmct bmc(goto_functions, opts, context, ui_message_handler);
-  set_verbosity_msg(bmc);
-  return do_bmc(bmc);
+  bool res = false;
+  try {
+    // do actual BMC
+    bmct bmc(goto_functions, opts, context, ui_message_handler);
+    set_verbosity_msg(bmc);
+    res = do_bmc(bmc);
+  }
+  catch(int)
+  {
+    status("Unable to prove or falsify the property, giving up.");
+    status("VERIFICATION UNKNOWN");
+    return 0;
+  }
+  return res;
 }
 
 int cbmc_parseoptionst::doit_k_induction_parallel()
@@ -837,44 +836,41 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       if(set_claims(goto_functions))
         return 7;
 
-      if(!opts.get_bool_option("disable-inductive-step"))
+      // Run bmc and only send results in two occasions:
+      // 1. A proof was found, we send the step where it was found
+      // 2. It couldn't find a proof
+      for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
       {
-        // Run bmc and only send results in two occasions:
-        // 1. A proof was found, we send the step where it was found
-        // 2. It couldn't find a proof
-        for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
+        bmct bmc(goto_functions, opts, context, ui_message_handler);
+        set_verbosity_msg(bmc);
+
+        bmc.options.set_option("unwind", i2string(k_step));
+        bool res = true;
+
+        // if there is multithreaded code, an exception will be thrown
+        // this will catch it and send the message to the parent process
+        // to stop verification
+        try {
+          res = do_bmc(bmc);
+        }
+        catch(int)
         {
-          bmct bmc(goto_functions, opts, context, ui_message_handler);
-          set_verbosity_msg(bmc);
+          break;
+        }
 
-          bmc.options.set_option("unwind", i2string(k_step));
-          bool res = true;
+        // Send information to parent if no bug was found
+        if(!res)
+        {
+          r.k = k_step;
 
-          // if there is multithreaded code, an exception will be thrown
-          // this will catch it and send the message to the parent process
-          // to stop verification
-          try {
-            res = do_bmc(bmc);
-          }
-          catch(int)
-          {
-            break;
-          }
+          // Write result
+          u_int len = write(commPipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
+          (void)len; //ndebug
 
-          // Send information to parent if no bug was found
-          if(!res)
-          {
-            r.k = k_step;
+          std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
 
-            // Write result
-            u_int len = write(commPipe[1], &r, sizeof(r));
-            assert(len == sizeof(r) && "short write");
-            (void)len; //ndebug
-
-            std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
-
-            return res;
-          }
+          return res;
         }
       }
 
@@ -916,12 +912,6 @@ int cbmc_parseoptionst::doit_k_induction()
   optionst opts;
   get_command_line_options(opts);
 
-  // This will be changed to true if the code contains:
-  // 1. Dynamic allocated memory (during goto convert)
-  // 2. Multithreaded code (during symbolic execution)
-  // 3. Recursion (during inlining)
-  opts.set_option("disable-inductive-step", false);
-
   if(get_goto_program(opts, goto_functions))
     return 6;
 
@@ -935,42 +925,34 @@ int cbmc_parseoptionst::doit_k_induction()
   if(set_claims(goto_functions))
     return 7;
 
-  goto_functionst *inductive_goto_functions = NULL;
+  status("\n*** Generating Inductive Step ***");
 
-  // Check if the inductive step was disabled
-  if(!opts.get_bool_option("disable-inductive-step"))
+  // This will be changed to true if the code contains:
+  // 1. Dynamic allocated memory
+  // 2. Multithreaded code (during symbolic execution)
+  // 3. Recursion (during inlining)
+  opts.set_option("disable-inductive-step", false);
+
+  // Generate goto functions for inductive step
+  // We'll clean the context so there is no function name clash
+  // It will generate the same context + inductive step's variables
+  context.clear();
+
+  goto_functionst *inductive_goto_functions = new goto_functionst;
+  opts.set_option("inductive-step", true);
+
+  if(get_goto_program(opts, *inductive_goto_functions))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
   {
-    // Generate goto functions for inductive step
-    // We'll clean the context so there is no function name clash
-    // It will generate the same context + inductive step's variables
-    context.clear();
-
-    status("\n*** Generating Inductive Step ***");
-    inductive_goto_functions = new goto_functionst;
-    opts.set_option("inductive-step", true);
-
-    if(get_goto_program(opts, *inductive_goto_functions))
-      return 6;
-
-    // If the inductive step was disabled during inlining,
-    // remember to free the inductive goto instructions
-    if(opts.get_bool_option("disable-inductive-step"))
-    {
-      delete inductive_goto_functions;
-      inductive_goto_functions = NULL;
-    }
-    else {
-      if(cmdline.isset("show-claims"))
-      {
-        const namespacet ns(context);
-        show_claims(ns, get_ui(), *inductive_goto_functions);
-        return 0;
-      }
-
-      if(set_claims(*inductive_goto_functions))
-        return 7;
-    }
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), *inductive_goto_functions);
+    return 0;
   }
+
+  if(set_claims(*inductive_goto_functions))
+    return 7;
 
   bool res = 0;
   u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
@@ -1058,7 +1040,12 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking inductive step" << std::endl;
 
-      res = do_bmc(bmc);
+      try {
+        res = do_bmc(bmc);
+      }
+      catch(int)
+      {
+      }
 
       // If the inductive step was disabled during symex,
       // remember to free the inductive goto instructions
