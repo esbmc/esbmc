@@ -815,6 +815,12 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Struct to keep the result
       struct resultt r = { process_type, 0 };
 
+      // This will be changed to true if the code contains:
+      // 1. Dynamic allocated memory
+      // 2. Multithreaded code (during symbolic execution)
+      // 3. Recursion (during inlining)
+      opts.set_option("disable-inductive-step", false);
+
       // Set that we are running inductive step
       opts.set_option("inductive-step", true);
 
