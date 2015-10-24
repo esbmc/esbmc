@@ -709,6 +709,10 @@ void goto_k_inductiont::convert_instruction(
     code_function_call2t &function_call =
       to_code_function_call2t(instruction->code);
 
+    // Don't do function pointers
+    if(is_dereference2t(function_call.function))
+      return;
+
     irep_idt &identifier = to_symbol2t(function_call.function).thename;
 
     // This means recursion, do nothing

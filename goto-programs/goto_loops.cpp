@@ -88,6 +88,10 @@ void goto_loopst::get_modified_variables(
     code_function_call2t &function_call =
       to_code_function_call2t(instruction->code);
 
+    // Don't do function pointers
+    if(is_dereference2t(function_call.function))
+      return;
+
     // First, add its return
     add_loop_var(loop->second, migrate_expr_back(function_call.ret));
 
