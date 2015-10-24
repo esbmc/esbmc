@@ -14,7 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void convert_integer_literal(
   const std::string &src,
-  exprt &dest,
-  unsigned base);
+  exprt &dest);
 
 #endif

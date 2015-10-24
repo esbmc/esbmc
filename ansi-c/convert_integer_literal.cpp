@@ -27,11 +27,11 @@ Function: convert_integer_literal
 
 void convert_integer_literal(
   const std::string &src,
-  exprt &dest,
-  unsigned base)
+  exprt &dest)
 {
   bool is_unsigned=false;
   unsigned long_cnt=0;
+  unsigned base=10;
 
   for(unsigned i=src.size(); i!=0; i--)
   {
@@ -46,21 +46,26 @@ void convert_integer_literal(
 
   mp_integer value;
 
-  if(base==10)
+  if(src.size()>=2 && src[0]=='0' && tolower(src[1])=='x')
   {
-    dest.value(src);
-    value=string2integer(src, 10);
+    // hex; strip "0x"
+    base=16;
+    dest.hex_or_oct(true);
+    std::string without_prefix(src, 2, std::string::npos);
+    value=string2integer(without_prefix, 16);
   }
-  else if(base==8)
+  else if(src.size()>=2 && src[0]=='0')
   {
+    // octal
+    base=8;
     dest.hex_or_oct(true);
     value=string2integer(src, 8);
   }
   else
   {
-    dest.hex_or_oct(true);
-    std::string without_prefix(src, 2, std::string::npos);
-    value=string2integer(without_prefix, 16);
+    // The default is base 10.
+    dest.value(src);
+    value=string2integer(src, 10);
   }
 
   typet type;
