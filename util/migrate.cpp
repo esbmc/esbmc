@@ -1209,6 +1209,12 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     convert_operand_pair(expr, op0, op1);
     expr2tc div = expr2tc(new div2t(op0->type, op0, op1)); // XXX type?
     new_expr_ref = expr2tc(new overflow2t(div));
+  } else if (expr.id() == "overflow-mod") {
+    assert(expr.type().id() == typet::t_bool);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc mod = expr2tc(new modulus2t(op0->type, op0, op1)); // XXX type?
+    new_expr_ref = expr2tc(new overflow2t(mod));
   } else if (has_prefix(expr.id_string(), "overflow-typecast-")) {
     unsigned bits = atoi(expr.id_string().c_str() + 18);
     expr2tc operand;
@@ -2109,6 +2115,11 @@ migrate_expr_back(const expr2tc &ref)
     } else if (is_div2t(ref2.operand)) {
       theexpr.id("overflow-/");
       const div2t &divref = to_div2t(ref2.operand);
+      theexpr.copy_to_operands(migrate_expr_back(divref.side_1),
+                               migrate_expr_back(divref.side_2));
+    } else if (is_modulus2t(ref2.operand)) {
+      theexpr.id("overflow-mod");
+      const modulus2t &divref = to_modulus2t(ref2.operand);
       theexpr.copy_to_operands(migrate_expr_back(divref.side_1),
                                migrate_expr_back(divref.side_2));
     } else {
