@@ -438,7 +438,11 @@ goto_checkt::check_rec(
     bounds_check(expr, guard);
   } else if (expr.id() == "/")      {
     div_by_zero_check(expr, guard);
-    nan_check(expr, guard);
+    if (expr.type().id() == "signedbv") {
+      overflow_check(expr, guard);
+    } else if (expr.type().id() == "floatbv") {
+      nan_check(expr, guard);
+    }
   } else if (expr.id() == "+" || expr.id() == "-" ||
              expr.id() == "*" ||
              expr.id() == "unary-" ||
@@ -454,7 +458,11 @@ goto_checkt::check_rec(
     pointer_rel_check(expr, guard);
   } else if (expr.id() == "mod")   {
     div_by_zero_check(expr, guard);
-    nan_check(expr, guard);
+    if (expr.type().id() == "signedbv") {
+      overflow_check(expr, guard);
+    } else if (expr.type().id() == "floatbv") {
+      nan_check(expr, guard);
+    }
   }
 }
 

@@ -475,6 +475,8 @@ boolector_convt::overflow_arith(const expr2tc &expr)
     } else {
       res = boolector_umulo(btor, side1->e, side2->e);
     }
+  } else if (is_div2t(overflow.operand)) {
+    res = boolector_sdivo(btor, side1->e, side2->e);
   } else {
     std::cerr << "Unexpected operand to overflow_arith2t irep" << std::endl;
     abort();
