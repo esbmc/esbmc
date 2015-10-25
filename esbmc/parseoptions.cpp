@@ -925,34 +925,39 @@ int cbmc_parseoptionst::doit_k_induction()
   if(set_claims(goto_functions))
     return 7;
 
-  status("\n*** Generating Inductive Step ***");
+  goto_functionst *inductive_goto_functions = nullptr;
 
-  // This will be changed to true if the code contains:
-  // 1. Dynamic allocated memory
-  // 2. Multithreaded code (during symbolic execution)
-  // 3. Recursion (during inlining)
-  opts.set_option("disable-inductive-step", false);
-
-  // Generate goto functions for inductive step
-  // We'll clean the context so there is no function name clash
-  // It will generate the same context + inductive step's variables
-  context.clear();
-
-  goto_functionst *inductive_goto_functions = new goto_functionst;
-  opts.set_option("inductive-step", true);
-
-  if(get_goto_program(opts, *inductive_goto_functions))
-    return 6;
-
-  if(cmdline.isset("show-claims"))
+  // Check if the inductive step was disabled
+  if(!opts.get_bool_option("disable-inductive-step"))
   {
-    const namespacet ns(context);
-    show_claims(ns, get_ui(), *inductive_goto_functions);
-    return 0;
-  }
+    status("\n*** Generating Inductive Step ***");
 
-  if(set_claims(*inductive_goto_functions))
-    return 7;
+    // This will be changed to true if the code contains:
+    // 1. Dynamic allocated memory (during goto conversion)
+    // 2. Multithreaded code (during symbolic execution)
+    opts.set_option("disable-inductive-step", false);
+
+    // Generate goto functions for inductive step
+    // We'll clean the context so there is no function name clash
+    // It will generate the same context + inductive step's variables
+    context.clear();
+
+    inductive_goto_functions = new goto_functionst;
+    opts.set_option("inductive-step", true);
+
+    if(get_goto_program(opts, *inductive_goto_functions))
+      return 6;
+
+    if(cmdline.isset("show-claims"))
+    {
+      const namespacet ns(context);
+      show_claims(ns, get_ui(), *inductive_goto_functions);
+      return 0;
+    }
+
+    if(set_claims(*inductive_goto_functions))
+      return 7;
+  }
 
   bool res = 0;
   u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
@@ -982,10 +987,10 @@ int cbmc_parseoptionst::doit_k_induction()
       // If it was disabled during symbolic execution,
       // remember to clean the inductive goto instructions
       if(opts.get_bool_option("disable-inductive-step")
-         && inductive_goto_functions != NULL)
+         && inductive_goto_functions != nullptr)
       {
         delete inductive_goto_functions;
-        inductive_goto_functions = NULL;
+        inductive_goto_functions = nullptr;
       }
 
       if(res)
@@ -1012,10 +1017,10 @@ int cbmc_parseoptionst::doit_k_induction()
       // If it was disabled during symbolic execution,
       // remember to clean the inductive goto instructions
       if(opts.get_bool_option("disable-inductive-step")
-         && inductive_goto_functions != NULL)
+         && inductive_goto_functions != nullptr)
       {
         delete inductive_goto_functions;
-        inductive_goto_functions = NULL;
+        inductive_goto_functions = nullptr;
       }
 
       res = do_bmc(bmc);
@@ -1052,7 +1057,7 @@ int cbmc_parseoptionst::doit_k_induction()
       if(bmc.options.get_bool_option("disable-inductive-step"))
       {
         delete inductive_goto_functions;
-        inductive_goto_functions = NULL;
+        inductive_goto_functions = nullptr;
         continue;
       }
 
