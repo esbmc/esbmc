@@ -780,12 +780,13 @@ void c_typecheck_baset::adjust_float_rel(exprt &expr)
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
 
-  if(follow(expr.op0().type()).id()=="floatbv")
+  if(follow(expr.op0().type()).id()=="fixedbv")
   {
-    if(expr.id()=="=")
-      expr.id("ieee_float_equal");
-    else if(expr.id()=="notequal")
-      expr.id("ieee_float_notequal");
+    if(expr.id()=="=" and (expr.op0() == expr.op1()))
+    {
+      expr.id("notequal");
+      expr.op1() = side_effect_expr_nondett(follow(expr.op0().type()));
+    }
   }
 }
 
