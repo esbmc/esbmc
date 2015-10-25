@@ -45,19 +45,6 @@ void *calloc_strabs(size_t nmemb, size_t size)
   return res;
 }
 
-void *alloca(size_t alloca_size)
-{
-  __ESBMC_HIDE:;
-  return __builtin_alloca(alloca_size);
-}
-
-void *__builtin_alloca(size_t alloca_size)
-{
-  __ESBMC_HIDE:;
-  void *res = malloc(alloca_size);
-  return res;
-}
-
 int atoi(const char *nptr)
 {
   __ESBMC_HIDE:;
