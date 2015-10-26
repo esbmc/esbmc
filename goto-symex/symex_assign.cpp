@@ -24,7 +24,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
                          const goto_functionst &_goto_functions,
-                         symex_targett *_target, const optionst &opts) :
+                         symex_targett *_target, optionst &opts) :
   guard_identifier_s("goto_symex::guard"),
   total_claims(0),
   remaining_claims(0),
@@ -49,7 +49,8 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   k_induction(options.get_bool_option("k-induction")
     || options.get_bool_option("k-induction-parallel")),
   base_case(options.get_bool_option("base-case")),
-  forward_condition(options.get_bool_option("forward-condition"))
+  forward_condition(options.get_bool_option("forward-condition")),
+  inductive_step(options.get_bool_option("inductive-step"))
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -122,6 +123,7 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   k_induction = sym.k_induction;
   base_case = sym.base_case;
   forward_condition = sym.forward_condition;
+  inductive_step = sym.inductive_step;
 
   valid_ptr_arr_name = sym.valid_ptr_arr_name;
   alloc_size_arr_name = sym.alloc_size_arr_name;

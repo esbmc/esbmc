@@ -33,7 +33,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    symex_targett *_target,
                                    contextt &context,
                                    ex_state_level2t *l2init,
-                                   const optionst &options,
+                                   optionst &options,
                                    message_handlert &_message_handler) :
   goto_symext(ns, context, goto_functions, _target, options),
   owning_rt(art),

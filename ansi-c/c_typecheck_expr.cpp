@@ -780,12 +780,13 @@ void c_typecheck_baset::adjust_float_rel(exprt &expr)
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
 
-  if(follow(expr.op0().type()).id()=="floatbv")
+  if(follow(expr.op0().type()).id()=="fixedbv")
   {
-    if(expr.id()=="=")
-      expr.id("ieee_float_equal");
-    else if(expr.id()=="notequal")
-      expr.id("ieee_float_notequal");
+    if(expr.id()=="=" and (expr.op0() == expr.op1()))
+    {
+      expr.id("notequal");
+      expr.op1() = side_effect_expr_nondett(follow(expr.op0().type()));
+    }
   }
 }
 
@@ -1767,95 +1768,7 @@ Function: c_typecheck_baset::typecheck_expr_constant
 
 void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
 {
-  const typet &type=expr.type();
-
-  if(type.id()=="integer")
-  {
-    // save location
-    locationt location=expr.location();
-
-    mp_integer value=string2integer(expr.value().as_string());
-    const std::string &given_width=expr.type().cmt_width().as_string();
-    bool is_unsigned=expr.type().cmt_unsigned();
-    bool is_hex_or_oct=expr.hex_or_oct();
-    const std::string cformat=expr.cformat().as_string();
-
-    if(value<0)
-      throw "unexpected value";
-
-    unsigned min_width=config.ansi_c.int_width;
-
-    if(given_width=="long")
-      min_width=config.ansi_c.long_int_width;
-    else if(given_width=="longlong")
-      min_width=config.ansi_c.long_long_int_width;
-    else if(given_width=="8" || given_width=="16" ||
-            given_width=="32" || given_width=="64" ||
-            given_width=="128")
-      min_width=atoi(given_width.c_str());
-    else if(given_width!="")
-    {
-      err_location(expr);
-      str << "unknown width: " << given_width;
-      throw 0;
-    }
-
-    #define FITS(width, signed) \
-      ((signed?!is_unsigned:(is_unsigned || is_hex_or_oct)) && \
-      (width>=min_width) && \
-      (power(2, signed?width-1:width)>value))
-
-    unsigned width;
-    bool is_signed=false;
-
-    if(FITS(config.ansi_c.int_width, true)) // int
-    {
-      width=config.ansi_c.int_width;
-      is_signed=true;
-    }
-    else if(FITS(config.ansi_c.int_width, false)) // unsigned int
-    {
-      width=config.ansi_c.int_width;
-    }
-    else if(FITS(config.ansi_c.long_int_width, true)) // long int
-    {
-      width=config.ansi_c.long_int_width;
-      is_signed=true;
-    }
-    else if(FITS(config.ansi_c.long_int_width, false)) // unsigned long int
-    {
-      width=config.ansi_c.long_int_width;
-    }
-    else if(FITS(config.ansi_c.long_long_int_width, true)) // long long int
-    {
-      width=config.ansi_c.long_long_int_width;
-      is_signed=true;
-    }
-    else if(FITS(config.ansi_c.long_long_int_width, false)) // unsigned long long int
-    {
-      width=config.ansi_c.long_long_int_width;
-    }
-    else
-    {
-      err_location(expr);
-      str << "constant " << value << " does not fit any scalar type";
-      throw 0;
-    }
-
-    typet value_type(is_signed?"signedbv":"unsignedbv");
-    value_type.width(width);
-
-    expr=from_integer(value, value_type);
-    expr.location()=location;
-
-    if(!cformat.empty())
-      expr.cformat(cformat);
-  }
-  else if(type.is_array() ||
-          type.id()=="incomplete_array")
-  {
-    // nothing to do
-  }
+  // Do nothing
 }
 
 /*******************************************************************\

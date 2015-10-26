@@ -740,8 +740,6 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
     		  options.get_bool_option("show-counter-example"))
       {
         error_trace(*solver, equation);
-   	    report_failure();
-   	    return false;
       }
       else if(!options.get_bool_option("inductive-step")
     		  && !options.get_bool_option("forward-condition"))

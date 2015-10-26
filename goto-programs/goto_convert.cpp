@@ -881,7 +881,6 @@ void goto_convertt::convert_decl(
           else
           {
             remove_sideeffects(initializer, dest);
-            dest.output(std::cout);
           }
 
           // break up into decl and assignment
@@ -1525,7 +1524,7 @@ void goto_convertt::convert_for(
   // w: P;
   // x: B;               <-- continue target
   // y: goto u;
-  // g: assume(!c)
+  // z: ;                <-- break target
 
   // A;
   code_blockt block;
@@ -1555,11 +1554,15 @@ void goto_convertt::convert_for(
   // do the z label
   goto_programt tmp_z;
   goto_programt::targett z=tmp_z.add_instruction(SKIP);
+  z->location=code.location();
 
   // do the x label
   goto_programt tmp_x;
   if(code.op2().is_nil())
+  {
     tmp_x.add_instruction(SKIP);
+    tmp_x.instructions.back().location=code.location();
+  }
   else
   {
     exprt tmp_B=code.op2();
@@ -1628,7 +1631,6 @@ void goto_convertt::convert_while(
 
   exprt tmp=code.op0();
 
-  array_typet state_vector;
   const exprt *cond=&tmp;
   const locationt &location=code.location();
 
@@ -1646,6 +1648,7 @@ void goto_convertt::convert_while(
   goto_programt tmp_z;
   goto_programt::targett z=tmp_z.add_instruction();
   z->make_skip();
+  z->location=location;
 
   goto_programt tmp_branch;
   generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
@@ -1708,8 +1711,6 @@ void goto_convertt::convert_dowhile(
 
   goto_programt sideeffects;
   remove_sideeffects(tmp, sideeffects);
-
-  array_typet state_vector;
   const exprt &cond=tmp;
 
   //    do P while(c);
@@ -1730,6 +1731,7 @@ void goto_convertt::convert_dowhile(
   goto_programt tmp_z;
   goto_programt::targett z=tmp_z.add_instruction();
   z->make_skip();
+  z->location=code.location();
 
   // do the x label
   goto_programt::targett x;
@@ -1848,6 +1850,7 @@ void goto_convertt::convert_switch(
   goto_programt tmp_z;
   goto_programt::targett z=tmp_z.add_instruction();
   z->make_skip();
+  z->location=code.location();
 
   // set the new targets -- continue stays as is
   targets.set_break(z);

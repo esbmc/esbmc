@@ -93,7 +93,7 @@ std::ostream& goto_programt::output_instruction(
     break;
 
   case FUNCTION_CALL:
-    out << "FUNCTION_CALL:  " << from_expr(ns, "", to_code_function_call2t(it->code).function) << std::endl;
+    out << "FUNCTION_CALL:  " << from_expr(ns, "", migrate_expr_back(it->code)) << std::endl;
     break;
 
   case RETURN:
@@ -116,9 +116,9 @@ std::ostream& goto_programt::output_instruction(
   case ASSUME:
   case ASSERT:
     if(it->is_assume())
-      out << "  ASSUME ";
+      out << "ASSUME ";
     else
-      out << "  ASSERT ";
+      out << "ASSERT ";
 
     {
       out << from_expr(ns, identifier, it->guard);

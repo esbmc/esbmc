@@ -378,7 +378,7 @@ __CPROVER_thread_local { loc(); return TOK_THREAD_LOCAL; }
 {identifier}        { return make_identifier(); }
 
 {integer_s}  { loc();
-                      convert_integer_literal(yytext, PARSER.current_token().data, 10);
+                      convert_integer_literal(yytext, PARSER.current_token().data);
                       return TOK_INTEGER;
                     }
 
