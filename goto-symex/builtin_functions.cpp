@@ -59,15 +59,6 @@ goto_symext::symex_alloca(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
-  return symex_mem(false, lhs, code);
-}
-
-expr2tc
-goto_symext::symex_mem(
-  const bool is_malloc,
-  const expr2tc &lhs,
-  const sideeffect2t &code)
-{
   if(options.get_bool_option("inductive-step")
      && !options.get_bool_option("disable-inductive-step"))
   {
@@ -78,6 +69,15 @@ goto_symext::symex_mem(
     throw 0;
   }
 
+  return symex_mem(false, lhs, code);
+}
+
+expr2tc
+goto_symext::symex_mem(
+  const bool is_malloc,
+  const expr2tc &lhs,
+  const sideeffect2t &code)
+{
   if (is_nil_expr(lhs))
     return expr2tc(); // ignore
 
