@@ -726,6 +726,39 @@ std::string expr2ct::convert_pointer_object_has_type(
 
 /*******************************************************************\
 
+Function: expr2ct::convert_alloca
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string expr2ct::convert_alloca(
+  const exprt &src,
+  unsigned &precedence)
+{
+  if(src.operands().size()!=1)
+    return convert_norep(src, precedence);
+
+  unsigned p0;
+  std::string op0=convert(src.op0(), p0);
+
+  std::string dest="ALLOCA";
+  dest+='(';
+  dest+=convert((const typet &)src.cmt_type());
+  dest+=", ";
+  dest+=op0;
+  dest+=')';
+
+  return dest;
+}
+
+
+/*******************************************************************\
+
 Function: expr2ct::convert_malloc
 
   Inputs:
@@ -2940,6 +2973,8 @@ std::string expr2ct::convert(
       return convert_function_call(src, precedence);
     else if(statement=="malloc")
       return convert_malloc(src, precedence=15);
+    else if(statement=="alloca")
+      return convert_alloca(src, precedence=15);
     else if(statement=="printf")
       return convert_function(src, "PRINTF", precedence=15);
     else if(statement=="nondet")
