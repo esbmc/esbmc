@@ -51,6 +51,23 @@ goto_symext::symex_malloc(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
+  return symex_mem(true, lhs, code);
+}
+
+expr2tc
+goto_symext::symex_alloca(
+  const expr2tc &lhs,
+  const sideeffect2t &code)
+{
+  return symex_mem(false, lhs, code);
+}
+
+expr2tc
+goto_symext::symex_mem(
+  const bool is_malloc,
+  const expr2tc &lhs,
+  const sideeffect2t &code)
+{
   if(options.get_bool_option("inductive-step")
      && !options.get_bool_option("disable-inductive-step"))
   {
@@ -164,7 +181,7 @@ goto_symext::symex_malloc(
   pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard, false));
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard, !is_malloc));
 
   return rhs_addrof->ptr_obj;
 }
