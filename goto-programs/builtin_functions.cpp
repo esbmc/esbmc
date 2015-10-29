@@ -805,7 +805,7 @@ void goto_convertt::do_function_call_symbol(
   {
     do_malloc(lhs, function, arguments, dest);
   }
-  else if(identifier=="c::alloca")
+  else if(identifier=="c::alloca" || identifier=="c::__builtin_alloca")
   {
     do_alloca(lhs, function, arguments, dest);
   }
