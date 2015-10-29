@@ -901,6 +901,7 @@ type_to_string(const sideeffect_data::allockind &data,
                int indent __attribute__((unused)))
 {
   return (data == sideeffect_data::allockind::malloc) ? "malloc" :
+         (data == sideeffect_data::allockind::alloca) ? "alloca" :
          (data == sideeffect_data::allockind::cpp_new) ? "cpp_new" :
          (data == sideeffect_data::allockind::cpp_new_arr) ? "cpp_new_arr" :
          (data == sideeffect_data::allockind::nondet) ? "nondet" :
