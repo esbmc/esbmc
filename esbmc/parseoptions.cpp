@@ -399,6 +399,9 @@ int cbmc_parseoptionst::doit()
     || cmdline.isset("k-induction-parallel"))
     return doit_k_induction();
 
+  if(cmdline.isset("falsification"))
+    return doit_falsification();
+
   goto_functionst goto_functions;
 
   optionst opts;
@@ -1072,6 +1075,62 @@ int cbmc_parseoptionst::doit_k_induction()
   return 0;
 }
 
+int cbmc_parseoptionst::doit_falsification()
+{
+  // Generate goto functions for base case and forward condition
+  status("\n*** Generating GOTO functions ***");
+  goto_functionst goto_functions;
+
+  optionst opts;
+  get_command_line_options(opts);
+
+  if(get_goto_program(opts, goto_functions))
+    return 6;
+
+  opts.set_option("base-case", true);
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions);
+    return 0;
+  }
+
+  if(set_claims(goto_functions))
+    return 7;
+
+  bool res = 0;
+  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+  if(cmdline.isset("unlimited-k-steps"))
+    max_k_step = -1;
+
+  u_int k_step = 1;
+  do
+  {
+    bmct bmc(goto_functions, opts, context, ui_message_handler);
+    set_verbosity_msg(bmc);
+
+    bmc.options.set_option("unwind", i2string(k_step));
+
+    std::cout << std::endl << "*** Iteration number ";
+    std::cout << i2string((unsigned long) k_step);
+    std::cout << " ***" << std::endl;
+
+    res = do_bmc(bmc);
+
+    ++k_step;
+
+    if(res)
+      return res;
+
+  } while(k_step <= max_k_step);
+
+  status("Unable to prove or falsify the program, giving up.");
+  status("VERIFICATION UNKNOWN");
+
+  return 0;
+}
+
 bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
 {
   try
@@ -1723,11 +1782,13 @@ void cbmc_parseoptionst::help()
     " --unwind nr                  unwind nr times\n"
     " --unwindset nr               unwind given loop nr times\n"
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
-    " --no-slice                   do not remove unused equations\n\n"
+    " --no-slice                   do not remove unused equations\n"
+    " --falsification              incremental loop unwinding for bug searching\n\n"
     " --- solver configuration ------------------------------------------------------\n\n"
-    " --boolector				   use Boolector (default)\n"
-    " --bv                         use Z3 with bit-vector arithmetic\n"
-    " --ir                         use Z3 with integer/real arithmetic\n"
+    " --boolector                  use Boolector (default)\n"
+    " --z3                         use Z3\n"
+    " --bv                         use solver with bit-vector arithmetic\n"
+    " --ir                         use solver with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"
     " --lazy                       use lazy instantiation with Z3 (default)\n"
     " --outfile Filename           output VCCs in SMT lib format to given file\n\n"
