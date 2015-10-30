@@ -91,6 +91,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"print-stack-traces",	switc,		""	},
 { 0,	"interactive-ileaves",	switc,		""	},
 { 0,	"round-robin",	switc,		""	},
+{ 0,  "falsification", switc, "" },
 { 0,	"base-case",	switc,		""	},
 { 0,	"forward-condition",	switc,		""	},
 { 0,	"inductive-step",	switc,		""	},

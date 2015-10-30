@@ -50,6 +50,8 @@ protected:
   int doit_k_induction();
   int doit_k_induction_parallel();
 
+  int doit_falsification();
+
   bool read_goto_binary(goto_functionst &goto_functions);
 
   bool set_claims(goto_functionst &goto_functions);
