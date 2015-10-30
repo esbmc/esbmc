@@ -211,7 +211,7 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
   if (has_dereference(expr.op0()))
     return;
 
-  std::string name = array_name(expr.op0());
+  std::string name = "array bounds violated: " + array_name(expr.op0());
   const exprt &index = expr.op1();
 
   if (index.type().id() != "unsignedbv")
