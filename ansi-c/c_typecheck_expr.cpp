@@ -1766,7 +1766,7 @@ Function: c_typecheck_baset::typecheck_expr_constant
 
 \*******************************************************************/
 
-void c_typecheck_baset::typecheck_expr_constant(exprt &expr)
+void c_typecheck_baset::typecheck_expr_constant(exprt &expr __attribute__((unused)))
 {
   // Do nothing
 }
