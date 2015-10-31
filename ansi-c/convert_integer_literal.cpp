@@ -31,7 +31,6 @@ void convert_integer_literal(
 {
   bool is_unsigned=false;
   unsigned long_cnt=0;
-  unsigned base=10;
 
   for(unsigned i=src.size(); i!=0; i--)
   {
@@ -49,7 +48,6 @@ void convert_integer_literal(
   if(src.size()>=2 && src[0]=='0' && tolower(src[1])=='x')
   {
     // hex; strip "0x"
-    base=16;
     dest.hex_or_oct(true);
     std::string without_prefix(src, 2, std::string::npos);
     value=string2integer(without_prefix, 16);
@@ -57,7 +55,6 @@ void convert_integer_literal(
   else if(src.size()>=2 && src[0]=='0')
   {
     // octal
-    base=8;
     dest.hex_or_oct(true);
     value=string2integer(src, 8);
   }

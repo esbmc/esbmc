@@ -245,10 +245,22 @@ void goto_symext::symex_free(const expr2tc &expr)
   expr2tc tmp = code.operand;
   dereference(tmp, false, true);
 
-  address_of2tc addrof(code.operand->type, tmp);
-  pointer_offset2tc ptr_offs(pointer_type2(), addrof);
-  equality2tc eq(ptr_offs, zero_ulong);
-  claim(eq, "Operand of free must have zero pointer offset");
+  // Don't rely on the output of dereference in free mode; instead fetch all
+  // the internal dereference state for pointed at objects, and creates claims
+  // that if pointed at, their offset is zero.
+  internal_deref_items.clear();
+  tmp = code.operand;
+  // Create temporary, dummy, dereference
+  tmp = dereference2tc(get_uint8_type(), tmp);
+  dereference(tmp, false, false, true); // 'internal' dereference
+  for (const auto &item : internal_deref_items) {
+    guardt g = cur_state->guard;
+    g.add(item.guard);
+    expr2tc offset = item.offset;
+    expr2tc eq = equality2tc(offset, zero_ulong);
+    g.guard_expr(eq);
+    claim(eq, "Operand of free must have zero pointer offset");
+  }
 
   // Clear the alloc bit, and set the deallocated bit.
   guardt guard;
