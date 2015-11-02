@@ -66,12 +66,14 @@ public:
   /** Records for dynamically allocated blobs of memory. */
   class allocated_obj {
   public:
-    allocated_obj(const expr2tc &s, const guardt &g)
-      : obj(s), alloc_guard(g) { }
+    allocated_obj(const expr2tc &s, const guardt &g, const bool a)
+      : obj(s), alloc_guard(g), auto_deallocd(a) { }
     /** Symbol identifying the pointer that was allocated. Must have ptr type */
     expr2tc obj;
     /** Guard when allocation occured. */
     guardt alloc_guard;
+    /** Record if the object is automatically desallocated (allocated with alloca). */
+    bool auto_deallocd;
   };
 
   friend class symex_dereference_statet;
@@ -595,7 +597,11 @@ protected:
 
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
-  /** Pointer modelling update function */
+  /** Symbolic implementation of alloca. */
+  expr2tc symex_alloca(const expr2tc &lhs, const sideeffect2t &code);
+  /** Wrapper around for alloca and malloc. */
+  expr2tc symex_mem(const bool is_malloc, const expr2tc &lhs, const sideeffect2t &code);
+    /** Pointer modelling update function */
   void track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
                          expr2tc size = expr2tc());
   /** Symbolic implementation of free */

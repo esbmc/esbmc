@@ -371,6 +371,11 @@ goto_symext::finish_formula(void)
 
   std::list<allocated_obj>::const_iterator it;
   for (it = dynamic_memory.begin(); it != dynamic_memory.end(); it++) {
+
+    // Don't check memory leak if the object is automatically deallocated
+    if(it->auto_deallocd)
+      continue;
+
     // Assert that the allocated object was freed.
     deallocated_obj2tc deallocd(it->obj);
     equality2tc eq(deallocd, true_expr);

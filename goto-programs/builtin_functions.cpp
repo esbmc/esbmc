@@ -217,7 +217,7 @@ void goto_convertt::do_atomic_end(
 
 /*******************************************************************\
 
-Function: goto_convertt::do_malloc
+Function: goto_convertt::do_mem
 
   Inputs:
 
@@ -227,16 +227,19 @@ Function: goto_convertt::do_malloc
 
 \*******************************************************************/
 
-void goto_convertt::do_malloc(
+void goto_convertt::do_mem(
+  bool is_malloc,
   const exprt &lhs,
   const exprt &function,
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
+  std::string func = is_malloc? "malloc" : "alloca";
+
   if(arguments.size()!=1)
   {
     err_location(function);
-    throw "malloc expected to have one argument";
+    throw func + "expected to have one argument";
   }
 
   if(lhs.is_nil())
@@ -268,7 +271,7 @@ void goto_convertt::do_malloc(
   // produce new object
 
   exprt new_expr("sideeffect", lhs.type());
-  new_expr.statement("malloc");
+  new_expr.statement(func);
   new_expr.copy_to_operands(arguments[0]);
   new_expr.cmt_size(alloc_size);
   new_expr.cmt_type(alloc_type);
@@ -281,6 +284,48 @@ void goto_convertt::do_malloc(
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;
   t_n->location=location;
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::do_alloca
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::do_alloca(
+  const exprt &lhs,
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  do_mem(false, lhs, function, arguments, dest);
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::do_malloc
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::do_malloc(
+  const exprt &lhs,
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  do_mem(true, lhs, function, arguments, dest);
 
   if((options.get_bool_option("k-induction")
       || (options.get_bool_option("k-induction-parallel")
@@ -759,6 +804,10 @@ void goto_convertt::do_function_call_symbol(
   else if(identifier=="c::malloc")
   {
     do_malloc(lhs, function, arguments, dest);
+  }
+  else if(identifier=="c::alloca" || identifier=="c::__builtin_alloca")
+  {
+    do_alloca(lhs, function, arguments, dest);
   }
   else if(identifier=="c::free")
   {

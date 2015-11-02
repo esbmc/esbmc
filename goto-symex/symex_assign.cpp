@@ -192,6 +192,9 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
     case sideeffect2t::malloc:
       symex_malloc(lhs, effect);
       break;
+    case sideeffect2t::alloca:
+      symex_alloca(lhs, effect);
+      break;
     // No nondet side effect?
     default:
       assert(0 && "unexpected side effect");
