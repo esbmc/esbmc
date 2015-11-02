@@ -196,7 +196,7 @@ extern char *yyansi_ctext;
 %type <type> basic_declaration_specifier basic_type_specifier
 %type <type> sue_declaration_specifier sue_type_specifier
 %type <type> typedef_declaration_specifier typedef_type_specifier
-%type <type> typeof_type_specifier ptr_type_specifier storage_class
+%type <type> typeof_declaration_specifier typeof_type_specifier typeof_specifier storage_class
 %type <type> basic_type_name elaborated_type_name type_name
 %type <type> typedef_declarator parameter_typedef_declarator
 %type <type> clean_typedef_declarator clean_postfix_typedef_declarator
@@ -233,7 +233,6 @@ grammar: TOK_PARSE_LANGUAGE translation_unit {}
 	;
 
 /*** Token with values **************************************************/
-
 
 identifier:
 	TOK_IDENTIFIER
@@ -608,7 +607,6 @@ comma_expression_opt:
 
 /*** Declarations *******************************************************/
 
-
 declaration:
 	declaration_specifier ';'
 	{
@@ -706,6 +704,7 @@ declaration_specifier:
 	basic_declaration_specifier
 	| sue_declaration_specifier
 	| typedef_declaration_specifier
+	| typeof_declaration_specifier
 	;
 
 type_specifier:
@@ -838,6 +837,24 @@ typedef_declaration_specifier:	/* DeclarationSpec */
 	}
 	;
 
+typeof_declaration_specifier:
+    typeof_type_specifier storage_class
+    {
+	  $$=$1;
+	  merge_types($$, $2);
+    }
+    | declaration_qualifier_list typeof_specifier
+    {
+	  $$=$1;
+	  merge_types($$, $2);
+    }
+    | typeof_declaration_specifier declaration_qualifier
+    {
+	  $$=$1;
+	  merge_types($$, $2);
+    }
+    ;
+
 typedef_type_specifier:		/* Type */
 	typedef_name
 	| type_qualifier_list typedef_name
@@ -852,7 +869,7 @@ typedef_type_specifier:		/* Type */
 	}
 	;
 
-typeof_type_specifier:
+typeof_specifier:
 	TOK_TYPEOF '(' comma_expression ')'
 	{ $$ = (typet*)$3;
 	  locationt location=$$->location();
@@ -862,7 +879,7 @@ typeof_type_specifier:
 	  $$->location()=location;
 	  $$->is_expression(true);
 	}
-	| TOK_TYPEOF '(' ptr_type_specifier  ')'
+	| TOK_TYPEOF '(' type_name  ')'
 	{ $$ = $3;
 	  locationt location=$$->location();
 	  typet new_type("type_of");
@@ -873,17 +890,14 @@ typeof_type_specifier:
 	}
 	;
 
-ptr_type_specifier:
-	type_specifier
-	| ptr_type_specifier '*'
-	{ $$ = $1;
-	  locationt location=$$->location();
-	  typet new_type("pointer");
-	  new_type.subtype() = *$$;
-	  $$->swap(new_type);
-	  $$->location()=location;
-	}
-	;
+typeof_type_specifier:
+    typeof_specifier
+    | type_qualifier_list typeof_specifier
+    {
+	  $$=$1;
+	  merge_types($$, $2);
+    }
+    ;
 
 storage_class:
 	TOK_TYPEDEF    { $$=(typet*)$1; set(*$$, "typedef"); }
