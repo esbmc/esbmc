@@ -294,7 +294,7 @@ Function: c_typecheck_baset::typecheck_compound_type
 
 \*******************************************************************/
 
-void c_typecheck_baset::typecheck_compound_type(struct_typet &type)
+void c_typecheck_baset::typecheck_compound_type(typet &type)
 {
   struct_typet &struct_type=to_struct_type(type);
   struct_typet::componentst &components=struct_type.components();
