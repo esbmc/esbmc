@@ -33,51 +33,11 @@ void c_typecheck_baset::typecheck_type(typet &type)
   if(type.is_code())
     typecheck_code_type(to_code_type(type));
   else if(type.is_array())
-  {
-    array_typet &array_type=to_array_type(type);
-    exprt &size=array_type.size();
-
-    typecheck_expr(size);
-    typecheck_type(array_type.subtype());
-
-    bool size_is_unsigned=(size.type().id()=="unsignedbv");
-
-    typet integer_type(size_is_unsigned?"unsignedbv":"signedbv");
-    integer_type.width(config.ansi_c.int_width);
-
-    implicit_typecast(size, integer_type);
-
-    // simplify it
-    simplify(size);
-
-    if(size.is_constant())
-    {
-      mp_integer s;
-      if(to_integer(size, s))
-      {
-        err_location(size);
-        str << "failed to convert constant: "
-            << size.pretty();
-        throw 0;
-      }
-
-      if(s<0)
-      {
-        err_location(size);
-        str << "array size must not be negative, "
-               "but got " << s;
-        throw 0;
-      }
-    }
-  }
+    typecheck_array_type(to_array_type(type));
   else if(type.id()=="incomplete_array")
-  {
     typecheck_type(type.subtype());
-  }
   else if(type.id()=="pointer")
-  {
     typecheck_type(type.subtype());
-  }
   else if(type.id()=="struct" ||
           type.id()=="union")
   {
@@ -341,6 +301,57 @@ void c_typecheck_baset::typecheck_code_type(code_typet &type)
   }
 
   typecheck_type(code_type.return_type());
+}
+
+/*******************************************************************\
+
+Function: c_typecheck_baset::typecheck_array_type
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void c_typecheck_baset::typecheck_array_type(array_typet &type)
+{
+  array_typet &array_type=to_array_type(type);
+  exprt &size=array_type.size();
+
+  typecheck_expr(size);
+  typecheck_type(array_type.subtype());
+
+  bool size_is_unsigned=(size.type().id()=="unsignedbv");
+
+  typet integer_type(size_is_unsigned?"unsignedbv":"signedbv");
+  integer_type.width(config.ansi_c.int_width);
+
+  implicit_typecast(size, integer_type);
+
+  // simplify it
+  simplify(size);
+
+  if(size.is_constant())
+  {
+    mp_integer s;
+    if(to_integer(size, s))
+    {
+      err_location(size);
+      str << "failed to convert constant: "
+          << size.pretty();
+      throw 0;
+    }
+
+    if(s<0)
+    {
+      err_location(size);
+      str << "array size must not be negative, "
+             "but got " << s;
+      throw 0;
+    }
+  }
 }
 
 /*******************************************************************\
