@@ -45,65 +45,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
   {
   }
   else if(type.id()=="c_bitfield")
-  {
-    typecheck_type(type.subtype());
-
-    // we turn this into unsigedbv/signedbv
-    exprt size = static_cast<const exprt &>(type.size_irep());
-
-    typecheck_expr(size);
-    make_constant_index(size);
-
-    mp_integer i;
-    if(to_integer(size, i))
-    {
-      err_location(size);
-      throw "failed to convert bit field width";
-    }
-
-    // Now converted, set size field.
-    type.size(size);
-
-    const typet &base_type=follow(type.subtype());
-
-    if (base_type.id() == "bool") {
-      // TACAS benchmarks all insist on putting these in bitfields. Rewrite
-      // to be an unsigned integer.
-      type.subtype() = unsignedbv_typet(32);
-    }
-
-    if(base_type.id()!="signedbv" &&
-       base_type.id()!="unsignedbv" &&
-       base_type.id()!="c_enum")
-    {
-      err_location(type);
-      str << "Bit-field with non-integer type: "
-          << to_string(base_type);
-      throw 0;
-    }
-
-    unsigned width=atoi(base_type.width().c_str());
-
-    if(i>width)
-    {
-      err_location(size);
-      throw "bit field size too large";
-    }
-#if 0
-    /* 6.7.2.1 of C89 permits zero sized bit fields */
-    else if(i<1)
-    {
-      err_location(size);
-      throw "bit field size too small";
-    }
-#endif
-
-    width=integer2long(i);
-
-    typet tmp(base_type);
-    type.swap(tmp);
-    type.width(width);
-  }
+    typecheck_c_bit_field_type(type);
   else if(type.id()=="type_of")
   {
     if(type.is_expression())
@@ -367,6 +309,71 @@ void c_typecheck_baset::typecheck_compound_type(typet &type)
     else
       it++;
   }
+}
+
+/*******************************************************************\
+
+Function: c_typecheck_baset::typecheck_c_bit_field_type
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void c_typecheck_baset::typecheck_c_bit_field_type(typet &type)
+{
+  typecheck_type(type.subtype());
+
+  // we turn this into unsigedbv/signedbv
+  exprt size = static_cast<const exprt &>(type.size_irep());
+
+  typecheck_expr(size);
+  make_constant_index(size);
+
+  mp_integer i;
+  if(to_integer(size, i))
+  {
+    err_location(size);
+    throw "failed to convert bit field width";
+  }
+
+  // Now converted, set size field.
+  type.size(size);
+
+  const typet &base_type=follow(type.subtype());
+
+  if (base_type.id() == "bool") {
+    // TACAS benchmarks all insist on putting these in bitfields. Rewrite
+    // to be an unsigned integer.
+    type.subtype() = unsignedbv_typet(32);
+  }
+
+  if(base_type.id()!="signedbv" &&
+      base_type.id()!="unsignedbv" &&
+      base_type.id()!="c_enum")
+  {
+    err_location(type);
+    str << "Bit-field with non-integer type: "
+        << to_string(base_type);
+    throw 0;
+  }
+
+  unsigned width=atoi(base_type.width().c_str());
+
+  if(i>width)
+  {
+    err_location(size);
+    throw "bit field size too large";
+  }
+
+  width=integer2long(i);
+
+  typet tmp(base_type);
+  type.swap(tmp);
+  type.width(width);
 }
 
 /*******************************************************************\
