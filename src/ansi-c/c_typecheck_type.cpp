@@ -40,79 +40,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
     typecheck_type(type.subtype());
   else if(type.id()=="struct" ||
           type.id()=="union")
-  {
-    struct_typet &struct_type=to_struct_type(type);
-    struct_typet::componentst &components=struct_type.components();
-
-    for(struct_typet::componentst::iterator
-        it=components.begin();
-        it!=components.end();
-        it++)
-    {
-      typet &type=it->type();
-
-      typecheck_type(type);
-
-      // incomplete arrays become arrays of size 0
-      if(type.id()=="incomplete_array")
-      {
-        type.id("array");
-        type.size(gen_zero(int_type()));
-      }
-    }
-
-    unsigned anon_member_counter=0;
-
-    // scan for anonymous members
-    for(struct_typet::componentst::iterator
-        it=components.begin();
-        it!=components.end();
-        ) // no it++
-    {
-      if(it->name()=="")
-      {
-        const typet &final_type=follow(it->type());
-
-        if(final_type.id()=="struct" ||
-           final_type.id()=="union")
-        {
-          struct_typet::componentt c;
-          c.swap(*it);
-          it=components.erase(it);
-
-          // copy child's records
-          const typet &final_type=follow(c.type());
-          if(final_type.id()!="struct" &&
-             final_type.id()!="union")
-          {
-            err_location(type);
-            str << "expected struct or union as anonymous member, but got `"
-                << to_string(final_type) << "'";
-            throw 0;
-          }
-
-          const struct_typet &c_struct_type=to_struct_type(final_type);
-          const struct_typet::componentst &c_components=
-            c_struct_type.components();
-
-          for(struct_typet::componentst::const_iterator
-              c_it=c_components.begin();
-              c_it!=c_components.end();
-              c_it++)
-            it=components.insert(it, *c_it);
-        }
-        else
-        {
-          // some other anonymous member
-          it->name("$anon_member"+i2string(anon_member_counter++));
-          it->set_anonymous(true);
-          it++;
-        }
-      }
-      else
-        it++;
-    }
-  }
+    typecheck_compound_type(to_struct_type(type));
   else if(type.id()=="c_enum")
   {
   }
@@ -351,6 +279,93 @@ void c_typecheck_baset::typecheck_array_type(array_typet &type)
              "but got " << s;
       throw 0;
     }
+  }
+}
+
+/*******************************************************************\
+
+Function: c_typecheck_baset::typecheck_compound_type
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void c_typecheck_baset::typecheck_compound_type(struct_typet &type)
+{
+  struct_typet &struct_type=to_struct_type(type);
+  struct_typet::componentst &components=struct_type.components();
+
+  for(struct_typet::componentst::iterator
+      it=components.begin();
+      it!=components.end();
+      it++)
+  {
+    typet &type=it->type();
+
+    typecheck_type(type);
+
+    // incomplete arrays become arrays of size 0
+    if(type.id()=="incomplete_array")
+    {
+      type.id("array");
+      type.size(gen_zero(int_type()));
+    }
+  }
+
+  unsigned anon_member_counter=0;
+
+  // scan for anonymous members
+  for(struct_typet::componentst::iterator
+      it=components.begin();
+      it!=components.end();
+      ) // no it++
+  {
+    if(it->name()=="")
+    {
+      const typet &final_type=follow(it->type());
+
+      if(final_type.id()=="struct" ||
+         final_type.id()=="union")
+      {
+        struct_typet::componentt c;
+        c.swap(*it);
+        it=components.erase(it);
+
+        // copy child's records
+        const typet &final_type=follow(c.type());
+        if(final_type.id()!="struct" &&
+           final_type.id()!="union")
+        {
+          err_location(type);
+          str << "expected struct or union as anonymous member, but got `"
+              << to_string(final_type) << "'";
+          throw 0;
+        }
+
+        const struct_typet &c_struct_type=to_struct_type(final_type);
+        const struct_typet::componentst &c_components=
+          c_struct_type.components();
+
+        for(struct_typet::componentst::const_iterator
+            c_it=c_components.begin();
+            c_it!=c_components.end();
+            c_it++)
+          it=components.insert(it, *c_it);
+      }
+      else
+      {
+        // some other anonymous member
+        it->name("$anon_member"+i2string(anon_member_counter++));
+        it->set_anonymous(true);
+        it++;
+      }
+    }
+    else
+      it++;
   }
 }
 
