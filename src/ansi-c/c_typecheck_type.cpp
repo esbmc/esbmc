@@ -31,75 +31,7 @@ Function: c_typecheck_baset::typecheck_type
 void c_typecheck_baset::typecheck_type(typet &type)
 {
   if(type.is_code())
-  {
-    code_typet &code_type=to_code_type(type);
-
-    code_typet::argumentst &arguments=code_type.arguments();
-
-    // if we don't have any arguments, we assume it's (...)
-    if(arguments.empty())
-    {
-      code_type.make_ellipsis();
-    }
-    else if(arguments.size()==1 &&
-            arguments[0].type().id()=="empty")
-    {
-      // if we just have one argument of type void, remove it
-      arguments.clear();
-    }
-    else
-    {
-      for(unsigned i=0; i<code_type.arguments().size(); i++)
-      {
-        code_typet::argumentt &argument=code_type.arguments()[i];
-        typet &type=argument.type();
-
-        if(type.id()=="KnR")
-        {
-          // need to look it up
-          irep_idt identifier=argument.get_identifier();
-
-          if(identifier=="")
-          {
-            err_location(argument);
-            throw "failed to find identifier for K&R function argument";
-          }
-
-          // may be renamed
-          {
-            id_replace_mapt::const_iterator m_it=id_replace_map.find(identifier);
-            if(m_it!=id_replace_map.end())
-              identifier=m_it->second;
-          }
-
-          symbolst::iterator s_it=context.symbols.find(identifier);
-          if(s_it==context.symbols.end())
-          {
-            err_location(argument);
-            throw "failed to find K&R function argument symbol";
-          }
-          
-          symbolt &symbol=s_it->second;
-          
-          if(symbol.type.id()=="KnR")
-          {
-            err_location(argument);
-            throw "failed to get a type for K&R function argument";
-          }
-
-          adjust_function_argument(symbol.type);
-          type=symbol.type;
-        }
-        else
-        {
-          typecheck_type(type);
-          adjust_function_argument(type);
-        }
-      }
-    }
-
-    typecheck_type(code_type.return_type());
-  }
+    typecheck_code_type(to_code_type(type));
   else if(type.is_array())
   {
     array_typet &array_type=to_array_type(type);
@@ -158,9 +90,9 @@ void c_typecheck_baset::typecheck_type(typet &type)
         it++)
     {
       typet &type=it->type();
-    
+
       typecheck_type(type);
-      
+
       // incomplete arrays become arrays of size 0
       if(type.id()=="incomplete_array")
       {
@@ -326,6 +258,89 @@ void c_typecheck_baset::typecheck_type(typet &type)
     if(symbol.is_macro)
       type=symbol.type; // overwrite
   }
+}
+
+/*******************************************************************\
+
+Function: c_typecheck_baset::typecheck_code_type
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void c_typecheck_baset::typecheck_code_type(code_typet &type)
+{
+  code_typet &code_type=to_code_type(type);
+
+  code_typet::argumentst &arguments=code_type.arguments();
+
+  // if we don't have any arguments, we assume it's (...)
+  if(arguments.empty())
+  {
+    code_type.make_ellipsis();
+  }
+  else if(arguments.size()==1 &&
+          arguments[0].type().id()=="empty")
+  {
+    // if we just have one argument of type void, remove it
+    arguments.clear();
+  }
+  else
+  {
+    for(unsigned i=0; i<code_type.arguments().size(); i++)
+    {
+      code_typet::argumentt &argument=code_type.arguments()[i];
+      typet &type=argument.type();
+
+      if(type.id()=="KnR")
+      {
+        // need to look it up
+        irep_idt identifier=argument.get_identifier();
+
+        if(identifier=="")
+        {
+          err_location(argument);
+          throw "failed to find identifier for K&R function argument";
+        }
+
+        // may be renamed
+        {
+          id_replace_mapt::const_iterator m_it=id_replace_map.find(identifier);
+          if(m_it!=id_replace_map.end())
+            identifier=m_it->second;
+        }
+
+        symbolst::iterator s_it=context.symbols.find(identifier);
+        if(s_it==context.symbols.end())
+        {
+          err_location(argument);
+          throw "failed to find K&R function argument symbol";
+        }
+
+        symbolt &symbol=s_it->second;
+
+        if(symbol.type.id()=="KnR")
+        {
+          err_location(argument);
+          throw "failed to get a type for K&R function argument";
+        }
+
+        adjust_function_argument(symbol.type);
+        type=symbol.type;
+      }
+      else
+      {
+        typecheck_type(type);
+        adjust_function_argument(type);
+      }
+    }
+  }
+
+  typecheck_type(code_type.return_type());
 }
 
 /*******************************************************************\
