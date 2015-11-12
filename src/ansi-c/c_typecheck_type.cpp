@@ -47,20 +47,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
   else if(type.id()=="c_bitfield")
     typecheck_c_bit_field_type(type);
   else if(type.id()=="type_of")
-  {
-    if(type.is_expression())
-    {
-      exprt expr = (exprt&) type.subtype();
-      typecheck_expr(expr);
-      type.swap(expr.type());
-    }
-    else
-    {
-      typet t = type.subtype();
-      typecheck_type(t);
-      type.swap(t);
-    }
-  }
+    typecheck_typeof_type(type);
   else if(type.id()=="symbol")
   {
     // adjust identifier, if needed
@@ -374,6 +361,34 @@ void c_typecheck_baset::typecheck_c_bit_field_type(typet &type)
   typet tmp(base_type);
   type.swap(tmp);
   type.width(width);
+}
+
+/*******************************************************************\
+
+Function: c_typecheck_baset::typecheck_typeof_type
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void c_typecheck_baset::typecheck_typeof_type(typet &type)
+{
+  if(type.is_expression())
+  {
+    exprt expr = (exprt&) type.subtype();
+    typecheck_expr(expr);
+    type.swap(expr.type());
+  }
+  else
+  {
+    typet t = type.subtype();
+    typecheck_type(t);
+    type.swap(t);
+  }
 }
 
 /*******************************************************************\

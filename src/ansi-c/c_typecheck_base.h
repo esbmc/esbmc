@@ -234,6 +234,7 @@ protected:
   virtual void typecheck_compound_type(typet &type);
   virtual void typecheck_code_type(code_typet &type);
   virtual void typecheck_c_bit_field_type(typet &type);
+  virtual void typecheck_typeof_type(typet &type);
   virtual void typecheck_array_type(array_typet &type);
   virtual void adjust_function_argument(typet &type) const;
 
