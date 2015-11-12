@@ -49,32 +49,7 @@ void c_typecheck_baset::typecheck_type(typet &type)
   else if(type.id()=="type_of")
     typecheck_typeof_type(type);
   else if(type.id()=="symbol")
-  {
-    // adjust identifier, if needed
-    replace_symbol(type);
-
-    const irep_idt &identifier=type.identifier();
-
-    symbolst::const_iterator s_it=context.symbols.find(identifier);
-
-    if(s_it==context.symbols.end())
-    {
-      err_location(type);
-      str << "type symbol `" << identifier << "' not found";
-      throw 0;
-    }
-
-    const symbolt &symbol=s_it->second;
-
-    if(!symbol.is_type)
-    {
-      err_location(type);
-      throw "expected type symbol";
-    }
-
-    if(symbol.is_macro)
-      type=symbol.type; // overwrite
-  }
+    typecheck_symbol_type(type);
 }
 
 /*******************************************************************\
@@ -389,6 +364,46 @@ void c_typecheck_baset::typecheck_typeof_type(typet &type)
     typecheck_type(t);
     type.swap(t);
   }
+}
+
+/*******************************************************************\
+
+Function: c_typecheck_baset::typecheck_symbol_type
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void c_typecheck_baset::typecheck_symbol_type(typet &type)
+{
+  // adjust identifier, if needed
+  replace_symbol(type);
+
+  const irep_idt &identifier=type.identifier();
+
+  symbolst::const_iterator s_it=context.symbols.find(identifier);
+
+  if(s_it==context.symbols.end())
+  {
+    err_location(type);
+    str << "type symbol `" << identifier << "' not found";
+    throw 0;
+  }
+
+  const symbolt &symbol=s_it->second;
+
+  if(!symbol.is_type)
+  {
+    err_location(type);
+    throw "expected type symbol";
+  }
+
+  if(symbol.is_macro)
+    type=symbol.type; // overwrite
 }
 
 /*******************************************************************\
