@@ -46,6 +46,7 @@ private:
   unsigned int current_scope_var_num;
 
   unsigned int anon_counter;
+  unsigned int global_counter;
 
   clang::SourceManager *sm;
 
