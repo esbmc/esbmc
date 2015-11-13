@@ -515,6 +515,10 @@ void llvm_convertert::get_var(
   // completely wrong but allowed by the language
   move_symbol_to_context(symbol);
 
+  // Save the variable address and name to the object map
+  std::size_t address = reinterpret_cast<std::size_t>(&vd);
+  object_map[address] = identifier;
+
   // Now get the symbol back to continue the conversion
   symbolt &added_symbol = context.symbols.find("c::" + identifier)->second;
 
@@ -545,10 +549,6 @@ void llvm_convertert::get_var(
   }
 
   new_expr = decl;
-
-  // Save the variable address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(&vd);
-  object_map[address] = identifier;
 
   // Increment current scope variable number. If the variable
   // is global/static, it has no impact. If the variable is
