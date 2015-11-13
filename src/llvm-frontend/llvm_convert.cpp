@@ -1791,12 +1791,17 @@ void llvm_convertert::get_expr(
       const clang::ReturnStmt &ret =
         static_cast<const clang::ReturnStmt&>(stmt);
 
-      const clang::Expr &retval = *ret.getRetValue();
-      exprt val;
-      get_expr(retval, val);
-
       code_returnt ret_expr;
-      ret_expr.return_value() = val;
+
+      if(ret.getRetValue())
+      {
+        const clang::Expr &retval = *ret.getRetValue();
+
+        exprt val;
+        get_expr(retval, val);
+
+        ret_expr.return_value() = val;
+      }
 
       new_expr = ret_expr;
       break;
