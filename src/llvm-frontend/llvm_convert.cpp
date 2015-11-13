@@ -311,7 +311,7 @@ void llvm_convertert::get_enum(
 
 void llvm_convertert::get_enum_constants(
   const clang::EnumConstantDecl& enumcd,
-  exprt& new_expr __attribute__((unused)))
+  exprt& new_expr)
 {
   // The enum name is different on the old frontend
   // Global variables have the form <language>::<variable_name>
@@ -347,6 +347,8 @@ void llvm_convertert::get_enum_constants(
   // Save the enum constant address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
   object_map[address] = enum_value_identifier;
+
+  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_struct(
@@ -391,11 +393,11 @@ void llvm_convertert::get_struct(
 
   move_symbol_to_context(symbol);
 
-  new_expr = code_skipt();
-
   // Save the struct type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&structd);
   type_map[address] = identifier;
+
+  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_union(
@@ -440,11 +442,11 @@ void llvm_convertert::get_union(
 
   move_symbol_to_context(symbol);
 
-  new_expr = code_skipt();
-
   // Save the union type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&uniond);
   type_map[address] = identifier;
+
+  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_class(
