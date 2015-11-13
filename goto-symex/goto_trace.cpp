@@ -498,7 +498,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
   /* write graphml */
 
   graphml.add_child("graphml.graph", graph);
-#if (BOOST_VERSION == 105700)
+#if (BOOST_VERSION >= 105700)
   boost::property_tree::xml_writer_settings<std::string> settings('\t', 1);
 #else
   boost::property_tree::xml_writer_settings<char> settings('\t', 1);;
