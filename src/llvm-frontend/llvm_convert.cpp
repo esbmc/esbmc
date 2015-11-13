@@ -286,7 +286,8 @@ void llvm_convertert::get_enum(
     symbol,
     t,
     enumd.getName().str(),
-    identifier);
+    identifier,
+    false); // There is no such thing as static enum on ANSI-C
 
   // This change on the pretty_name is just to beautify the output
   symbol.pretty_name = "enum " + enumd.getName().str();
@@ -336,7 +337,8 @@ void llvm_convertert::get_enum_constants(
     symbol,
     t,
     enumcd.getName().str(),
-    enum_value_identifier);
+    enum_value_identifier,
+    false); // There is no such thing as static enum constants on ANSI-C
 
   exprt bval;
   get_size_exprt(enumcd.getInitVal(), signedbv_typet(), bval);
@@ -385,7 +387,8 @@ void llvm_convertert::get_struct(
     symbol,
     t,
     structd.getName().str(),
-    identifier);
+    identifier,
+    false); // There is no such thing as static struct on ANSI-C
 
   // This change on the pretty_name is just to beautify the output
   symbol.pretty_name = "struct " + structd.getName().str();
@@ -434,7 +437,8 @@ void llvm_convertert::get_union(
     symbol,
     t,
     uniond.getName().str(),
-    identifier);
+    identifier,
+    false); // There is no such thing as static union on ANSI-C
 
   // This change on the pretty_name is just to beautify the output
   symbol.pretty_name = "union " + uniond.getName().str();
@@ -470,7 +474,8 @@ void llvm_convertert::get_typedef(
     symbol,
     t,
     tdd.getName().str(),
-    get_modulename_from_path() + "::" + tdd.getName().str());
+    get_modulename_from_path() + "::" + tdd.getName().str(),
+    false); // There is no such thing as static typedef on ANSI-C
 
   symbol.is_type = true;
   symbol.is_macro = true;
@@ -492,7 +497,12 @@ void llvm_convertert::get_var(
     get_var_name(vd.getName().str(), vd.hasLocalStorage());
 
   symbolt symbol;
-  get_default_symbol(symbol, t, vd.getName().str(), identifier);
+  get_default_symbol(
+    symbol,
+    t,
+    vd.getName().str(),
+    identifier,
+    false); // Naming convention was already applied by get_var_name
 
   if (vd.hasExternalStorage())
     symbol.is_extern = true;
@@ -590,7 +600,8 @@ void llvm_convertert::get_function(
     symbol,
     type,
     fd.getName().str(),
-    fd.getName().str());
+    fd.getName().str(),
+    (fd.getStorageClass() != clang::SC_Static));
 
   symbol.lvalue = true;
 
@@ -644,7 +655,8 @@ void llvm_convertert::get_function_params(
     param_symbol,
     param_type,
     name,
-    get_param_name(name));
+    get_param_name(name),
+    false); // function parameter cannot be static
 
   param_symbol.lvalue = true;
   param_symbol.file_local = true;
@@ -1247,6 +1259,7 @@ void llvm_convertert::get_expr(
       // on the context, if it isn't, we should create and add a symbol
       // without value, so esbmc will replace the function call by
       // a non deterministic call later on
+      // I'm not sure if the symbol should be created as static or not
       symbolst::iterator old_it=context.symbols.find(callee_expr.identifier());
       if(old_it==context.symbols.end())
       {
@@ -1258,7 +1271,8 @@ void llvm_convertert::get_expr(
           symbol,
           func_type,
           callee_expr.name().as_string(),
-          callee_expr.name().as_string());
+          callee_expr.name().as_string(),
+          false);
         move_symbol_to_context(symbol);
       }
 
@@ -2232,7 +2246,8 @@ void llvm_convertert::get_default_symbol(
   symbolt& symbol,
   typet type,
   std::string base_name,
-  std::string pretty_name)
+  std::string pretty_name,
+  bool is_local)
 {
   symbol.mode = "C";
   symbol.module = get_modulename_from_path();
@@ -2240,7 +2255,13 @@ void llvm_convertert::get_default_symbol(
   symbol.type = type;
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
-  symbol.name = "c::" + pretty_name;
+
+  std::string symbol_name = "c::";
+  if(is_local)
+    symbol_name += get_modulename_from_path() + "::";
+  symbol_name += pretty_name;
+
+  symbol.name = symbol_name;
 }
 
 std::string llvm_convertert::get_var_name(

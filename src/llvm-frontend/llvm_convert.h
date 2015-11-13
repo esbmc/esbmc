@@ -134,7 +134,8 @@ private:
     symbolt &symbol,
     typet type,
     std::string base_name,
-    std::string pretty_name);
+    std::string pretty_name,
+    bool is_local);
 
   std::string get_var_name(
     std::string name,
