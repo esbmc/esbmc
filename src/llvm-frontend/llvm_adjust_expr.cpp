@@ -209,6 +209,25 @@ void llvm_adjust::convert_symbol(exprt& expr)
     // put it back
     expr.location()=location;
   }
+  else
+  {
+    expr=symbol_expr(symbol);
+
+    // put it back
+    expr.location()=location;
+
+    if(symbol.lvalue)
+      expr.cmt_lvalue(true);
+
+    if(expr.type().is_code()) // function designator
+    {
+      // special case: this is sugar for &f
+      address_of_exprt tmp(expr);
+      tmp.implicit(true);
+      tmp.location()=expr.location();
+      expr.swap(tmp);
+    }
+  }
 }
 
 void llvm_adjust::convert_side_effect(side_effect_exprt& expr)
@@ -334,22 +353,23 @@ void llvm_adjust::convert_dereference(exprt& deref)
   }
   else if(op_type.id()=="pointer")
   {
-    if(op_type.subtype().id()=="empty")
-    {
-      std::cout << "operand of unary * is a void * pointer" << std::endl;
-      abort();
-    }
-
     deref.type()=op_type.subtype();
-  }
-  else
-  {
-    std::cout  << "operand of unary * `" << op.name().as_string()
-        << "' is not a pointer";
-    throw 0;
   }
 
   deref.cmt_lvalue(true);
+
+  // if you dereference a pointer pointing to
+  // a function, you get a pointer again
+  // allowing ******...*p
+  if(deref.type().is_code())
+  {
+    exprt tmp("address_of", pointer_typet());
+    tmp.implicit(true);
+    tmp.type().subtype()=deref.type();
+    tmp.location()=deref.location();
+    tmp.move_to_operands(deref);
+    deref.swap(tmp);
+  }
 }
 
 void llvm_adjust::convert_sizeof(exprt& expr)
@@ -483,6 +503,24 @@ void llvm_adjust::convert_side_effect_function_call(
   }
 
   convert_expr(f_op);
+
+  // do implicit dereference
+  if(f_op.is_address_of() &&
+     f_op.implicit() &&
+     f_op.operands().size()==1)
+  {
+    exprt tmp;
+    tmp.swap(f_op.op0());
+    f_op.swap(tmp);
+  }
+  else
+  {
+    exprt tmp("dereference", f_op.type().subtype());
+    tmp.implicit(true);
+    tmp.location()=f_op.location();
+    tmp.move_to_operands(f_op);
+    f_op.swap(tmp);
+  }
 
   const code_typet &code_type = to_code_type(f_op.type());
   exprt::operandst &arguments = expr.arguments();
