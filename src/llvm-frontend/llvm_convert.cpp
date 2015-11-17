@@ -503,7 +503,7 @@ void llvm_convertert::get_var(
     t,
     vd.getName().str(),
     identifier,
-    false); // Naming convention was already applied by get_var_name
+    vd.hasLocalStorage());
 
   if (vd.hasExternalStorage())
     symbol.is_extern = true;
@@ -1275,7 +1275,7 @@ void llvm_convertert::get_expr(
           func_type,
           callee_expr.name().as_string(),
           callee_expr.name().as_string(),
-          false);
+          true);
         move_symbol_to_context(symbol);
       }
 
@@ -1902,7 +1902,7 @@ void llvm_convertert::get_decl_ref(
       // not defined or is undefined at all
       object_mapt::iterator it = object_map.find(address);
       if(it == object_map.end())
-        identifier = fd.getName().str();
+        identifier = "c::" + fd.getName().str();
       else
         identifier = it->second;
 
