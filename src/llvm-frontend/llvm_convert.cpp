@@ -1258,28 +1258,6 @@ void llvm_convertert::get_expr(
         call.arguments().push_back(single_arg);
       }
 
-      // TODO: Move to a step after conversion
-      // Let's check if the symbol for this function call is defined
-      // on the context, if it isn't, we should create and add a symbol
-      // without value, so esbmc will replace the function call by
-      // a non deterministic call later on
-      // I'm not sure if the symbol should be created as static or not
-      symbolst::iterator old_it=context.symbols.find(callee_expr.identifier());
-      if(old_it==context.symbols.end())
-      {
-        code_typet func_type;
-        func_type.return_type() = type;
-
-        symbolt symbol;
-        get_default_symbol(
-          symbol,
-          func_type,
-          callee_expr.name().as_string(),
-          callee_expr.name().as_string(),
-          true);
-        move_symbol_to_context(symbol);
-      }
-
       new_expr = call;
       break;
     }

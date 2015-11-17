@@ -62,9 +62,25 @@ void llvm_adjust::adjust_function(symbolt& symbol)
 
 void llvm_adjust::convert_expr(exprt& expr)
 {
-  // fist do sub-nodes
-  Forall_operands(it, expr)
-    convert_expr(*it);
+  if(expr.id()=="sideeffect" &&
+     expr.statement()=="function_call")
+  {
+    // don't do function operand
+    assert(expr.operands().size()==2);
+
+    convert_expr(expr.op1()); // arguments
+  }
+  else if(expr.id()=="sideeffect" &&
+          expr.statement()=="statement_expression")
+  {
+    convert_code(to_code(expr.op0()));
+  }
+  else
+  {
+    // fist do sub-nodes
+    Forall_operands(it, expr)
+      convert_expr(*it);
+  }
 
   // now do case-split
   convert_expr_main(expr);
@@ -439,11 +455,35 @@ void llvm_adjust::convert_side_effect_assignment(exprt& expr)
 void llvm_adjust::convert_side_effect_function_call(
   side_effect_expr_function_callt& expr)
 {
-  // TODO: move creation of undefined function to this point from llvm_convert
-  // llvm_convert should only convert
-  convert_expr(expr.function());
-
   exprt &f_op=expr.function();
+
+  if(f_op.id()=="symbol")
+  {
+    if(context.symbols.find(f_op.identifier())==context.symbols.end())
+    {
+      // maybe this is an undeclared function
+      // let's just add it
+      const irep_idt &identifier=f_op.identifier();
+
+      symbolt new_symbol;
+
+      new_symbol.name=identifier;
+      new_symbol.base_name=f_op.name();
+      new_symbol.location=expr.location();
+      new_symbol.type=f_op.type();
+      new_symbol.type.incomplete(true);
+
+      symbolt *symbol_ptr;
+      bool res = context.move(new_symbol, symbol_ptr);
+      assert(!res);
+      (void)res; // ndebug
+
+      // LLVM will complain about this already, no need for us to do the same!
+    }
+  }
+
+  convert_expr(f_op);
+
   const code_typet &code_type = to_code_type(f_op.type());
   exprt::operandst &arguments = expr.arguments();
   const code_typet::argumentst &argument_types = code_type.arguments();
