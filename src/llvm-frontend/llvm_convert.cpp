@@ -363,6 +363,30 @@ void llvm_convertert::get_struct(
   struct_typet t;
   t.tag(identifier);
 
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    t,
+    structd.getName().str(),
+    identifier,
+    false); // There is no such thing as static struct on ANSI-C
+
+  // Save the struct type address and name to the object map
+  std::string symbol_name = symbol.name.as_string();
+
+  std::size_t address = reinterpret_cast<std::size_t>(&structd);
+  type_map[address] = symbol_name;
+
+  // We have to add the struct to the context before converting its fields
+  // because there might be recursive structs (pointers) and the code at
+  // get_type, case clang::Type::Record, needs to find the correct type
+  // (itself). Note that the type is incomplete at this stage, it doesn't
+  // contain the fields, which are added to the symbol later on this method.
+  move_symbol_to_context(symbol);
+
+  // Now get the symbol back to continue the conversion
+  symbolt &added_symbol = context.symbols.find(symbol_name)->second;
+
   for(const auto &decl : structd.decls())
   {
     exprt dummy;
@@ -383,23 +407,11 @@ void llvm_convertert::get_struct(
     t.components().push_back(comp);
   }
 
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    t,
-    structd.getName().str(),
-    identifier,
-    false); // There is no such thing as static struct on ANSI-C
+  added_symbol.type = t;
 
   // This change on the pretty_name is just to beautify the output
-  symbol.pretty_name = "struct " + structd.getName().str();
-  symbol.is_type = true;
-
-  // Save the struct type address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(&structd);
-  type_map[address] = symbol.name.as_string();
-
-  move_symbol_to_context(symbol);
+  added_symbol.pretty_name = "struct " + structd.getName().str();
+  added_symbol.is_type = true;
 
   new_expr = code_skipt();
 }
@@ -850,12 +862,9 @@ void llvm_convertert::get_type(
       std::size_t address;
       if(tag.isStruct() || tag.isUnion())
       {
-        const clang::RecordType &et =
-          static_cast<const clang::RecordType &>(the_type);
-        address = reinterpret_cast<std::size_t>(et.getDecl());
+        address = reinterpret_cast<std::size_t>(&tag);
 
-        if (!et.getDecl()->getIdentifier()
-            && !et.getDecl()->getTypedefNameForAnonDecl())
+        if (!tag.getIdentifier() && !tag.getTypedefNameForAnonDecl())
           is_anon = true;
       }
       else if(tag.isClass())
