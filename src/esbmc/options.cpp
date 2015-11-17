@@ -106,7 +106,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,  "unroll-loops", switc, "" },
 { 0,  "llvm-frontend", switc, "" },
 { 0,	"break-at",		string,		""	},
-{ 0,	"decide",		switc,		""	},
 { 0,	"enable-core-dump",     switc,		""	},
 { 0,	"memstats",		switc,		""	},
 { 0,	"dump-z3-assigns",	switc,		""	},
