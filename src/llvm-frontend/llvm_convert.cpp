@@ -854,7 +854,8 @@ void llvm_convertert::get_type(
           static_cast<const clang::RecordType &>(the_type);
         address = reinterpret_cast<std::size_t>(et.getDecl());
 
-        if (!et.getDecl()->getIdentifier() && !et.getDecl()->getTypedefNameForAnonDecl())
+        if (!et.getDecl()->getIdentifier()
+            && !et.getDecl()->getTypedefNameForAnonDecl())
           is_anon = true;
       }
       else if(tag.isClass())
@@ -1649,7 +1650,6 @@ void llvm_convertert::get_expr(
     }
 
     // A switch statement.
-    // TODO: Should its condition be casted to integer?
     case clang::Stmt::SwitchStmtClass:
     {
       const clang::SwitchStmt &switch_stmt =
