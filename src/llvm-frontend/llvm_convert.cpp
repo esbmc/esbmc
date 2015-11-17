@@ -2230,10 +2230,7 @@ void llvm_convertert::get_predefined_expr(
       abort();
   }
 
-  std::string the_name =
-    clang::PredefinedExpr::ComputeName(
-      pred_expr.getIdentType(),
-      *current_translation_unit);
+  std::string the_name = pred_expr.getFunctionName()->getString().str();
 
   string_constantt string;
   string.set_value(the_name);
