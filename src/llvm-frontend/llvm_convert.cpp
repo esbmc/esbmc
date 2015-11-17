@@ -294,11 +294,11 @@ void llvm_convertert::get_enum(
   symbol.pretty_name = "enum " + enumd.getName().str();
   symbol.is_type = true;
 
-  move_symbol_to_context(symbol);
-
   // Save the enum type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&enumd);
-  type_map[address] = identifier;
+  type_map[address] = symbol.name.as_string();
+
+  move_symbol_to_context(symbol);
 
   for(const auto &enumerator : enumd.enumerators())
   {
@@ -345,11 +345,11 @@ void llvm_convertert::get_enum_constants(
   get_size_exprt(enumcd.getInitVal(), signedbv_typet(), bval);
   symbol.value.swap(bval);
 
-  move_symbol_to_context(symbol);
-
   // Save the enum constant address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
-  object_map[address] = enum_value_identifier;
+  object_map[address] = symbol.name.as_string();
+
+  move_symbol_to_context(symbol);
 
   new_expr = code_skipt();
 }
@@ -395,11 +395,11 @@ void llvm_convertert::get_struct(
   symbol.pretty_name = "struct " + structd.getName().str();
   symbol.is_type = true;
 
-  move_symbol_to_context(symbol);
-
   // Save the struct type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&structd);
-  type_map[address] = identifier;
+  type_map[address] = symbol.name.as_string();
+
+  move_symbol_to_context(symbol);
 
   new_expr = code_skipt();
 }
@@ -445,11 +445,11 @@ void llvm_convertert::get_union(
   symbol.pretty_name = "union " + uniond.getName().str();
   symbol.is_type = true;
 
-  move_symbol_to_context(symbol);
-
   // Save the union type address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&uniond);
-  type_map[address] = identifier;
+  type_map[address] = symbol.name.as_string();
+
+  move_symbol_to_context(symbol);
 
   new_expr = code_skipt();
 }
@@ -521,17 +521,19 @@ void llvm_convertert::get_var(
   symbol.lvalue = true;
   symbol.static_lifetime = !vd.hasLocalStorage();
 
+  // Save the variable address and name to the object map
+  std::string symbol_name = symbol.name.as_string();
+
+  std::size_t address = reinterpret_cast<std::size_t>(&vd);
+  object_map[address] = symbol_name;
+
   // We have to add the symbol before converting the initial assignment
   // because we might have something like 'int x = x + 1;' which is
   // completely wrong but allowed by the language
   move_symbol_to_context(symbol);
 
-  // Save the variable address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(&vd);
-  object_map[address] = identifier;
-
   // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = context.symbols.find("c::" + identifier)->second;
+  symbolt &added_symbol = context.symbols.find(symbol_name)->second;
 
   code_declt decl;
   decl.operands().push_back(symbol_expr(added_symbol));
@@ -618,11 +620,11 @@ void llvm_convertert::get_function(
     symbol.value = body_exprt;
   }
 
-  move_symbol_to_context(symbol);
-
   // Save the function address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&fd);
-  object_map[address] = fd.getName().str();
+  object_map[address] = symbol.name.as_string();
+
+  move_symbol_to_context(symbol);
 
   current_function_name = old_function_name;
 
@@ -666,11 +668,11 @@ void llvm_convertert::get_function_params(
   param.cmt_identifier(param_symbol.name.as_string());
   param.location() = param_symbol.location;
 
-  move_symbol_to_context(param_symbol);
-
   // Save the function's param address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&pdecl);
-  object_map[address] = get_param_name(name);
+  object_map[address] = param_symbol.name.as_string();
+
+  move_symbol_to_context(param_symbol);
 }
 
 void llvm_convertert::get_type(
@@ -865,7 +867,7 @@ void llvm_convertert::get_type(
       type_mapt::iterator it = type_map.find(address);
       if(it != type_map.end())
       {
-        symbolt &s = context.symbols.find("c::" + it->second)->second;
+        symbolt &s = context.symbols.find(it->second)->second;
         new_type = s.type;
       }
       else
@@ -890,7 +892,7 @@ void llvm_convertert::get_type(
       std::size_t address = reinterpret_cast<std::size_t>(et.getDecl());
       std::string identifier = type_map.find(address)->second;
 
-      symbolt &s = context.symbols.find("c::" + identifier)->second;
+      symbolt &s = context.symbols.find(identifier)->second;
       new_type = s.type;
       break;
     }
@@ -1937,9 +1939,13 @@ void llvm_convertert::get_decl_ref(
   }
 
   new_expr = exprt("symbol", type);
-  new_expr.identifier("c::" + identifier);
-  new_expr.name(identifier);
+  new_expr.identifier(identifier);
   new_expr.cmt_lvalue(true);
+
+  if(identifier.find_last_of("::") != std::string::npos)
+    new_expr.name(identifier.substr(identifier.find_last_of("::")+1));
+  else
+    new_expr.name(identifier);
 }
 
 void llvm_convertert::get_cast_expr(
