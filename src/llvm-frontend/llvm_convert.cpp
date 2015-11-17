@@ -2378,12 +2378,8 @@ void llvm_convertert::check_symbol_redefinition(
     {
       if(old_symbol.value.is_not_nil())
       {
-        std::cerr << "multiple definition of `" << new_symbol.display_name()
-                  << "':" << std::endl << "first defined: "
-                  << old_symbol.location.as_string() << std::endl
-                  << "redefinition: " << new_symbol.location.as_string()
-                  << std::endl;
-        abort();
+        // If this is a invalid redefinition, LLVM will complain and
+        // won't convert the program. We should safely to ignore this.
       }
       else
       {
