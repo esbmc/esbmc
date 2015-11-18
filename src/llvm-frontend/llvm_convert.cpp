@@ -899,10 +899,21 @@ void llvm_convertert::get_type(
         static_cast<const clang::EnumType &>(the_type);
 
       std::size_t address = reinterpret_cast<std::size_t>(et.getDecl());
-      std::string identifier = type_map.find(address)->second;
 
-      symbolt &s = context.symbols.find(identifier)->second;
-      new_type = s.type;
+      // Search for the type on the type map
+      type_mapt::iterator it = type_map.find(address);
+      if(it != type_map.end())
+      {
+        symbolt &s = context.symbols.find(it->second)->second;
+        new_type = s.type;
+      }
+      else
+      {
+        exprt decl;
+        get_decl(*et.getDecl(), decl);
+        new_type = decl.type();
+      }
+
       break;
     }
 
