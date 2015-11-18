@@ -915,6 +915,48 @@ void llvm_convertert::get_type(
       break;
     }
 
+    case clang::Type::TypeOfExpr:
+    {
+      const clang::TypeOfExprType &tofe =
+        static_cast<const clang::TypeOfExprType &>(the_type);
+
+      if(tofe.isSugared())
+      {
+        get_type(tofe.desugar(), new_type);
+      }
+      else
+      {
+        std::cerr << "ESBMC cannot handle desugared TypeOfExpr, "
+                  << "please report this benchmark to the developers"
+                  << std::endl;
+        tofe.dump();
+        abort();
+      }
+
+      break;
+    }
+
+    case clang::Type::TypeOf:
+    {
+      const clang::TypeOfType &toft =
+        static_cast<const clang::TypeOfType &>(the_type);
+
+      if(toft.isSugared())
+      {
+        get_type(toft.desugar(), new_type);
+      }
+      else
+      {
+        std::cerr << "ESBMC cannot handle desugared TypeOf, "
+                  << "please report this benchmark to the developers"
+                  << std::endl;
+        toft.dump();
+        abort();
+      }
+
+      break;
+    }
+
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
