@@ -86,10 +86,6 @@ extern inline symbol_typet &to_symbol_type(typet &type)
 class struct_union_typet:public typet
 {
 public:
-  struct_union_typet()
-  {
-  }
-
   inline explicit struct_union_typet(const irep_idt &_id):typet(_id)
   {
   }
@@ -201,9 +197,8 @@ extern inline struct_union_typet &to_struct_union_type(typet &type)
 class struct_typet:public struct_union_typet
 {
 public:
-  struct_typet()
+  struct_typet():struct_union_typet(t_struct)
   {
-    id(t_struct);
   }
 
   bool is_prefix_of(const struct_typet &other) const;
@@ -238,9 +233,8 @@ extern inline struct_typet &to_struct_type(typet &type)
 class union_typet:public struct_union_typet
 {
 public:
-  union_typet()
+  union_typet():struct_union_typet(t_union)
   {
-    id(t_union);
   }
 };
 
