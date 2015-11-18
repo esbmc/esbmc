@@ -68,11 +68,14 @@ bool llvm_convertert::convert_builtin_types()
   // TODO: from clang 3.8 we'll have a member VaListTagDecl and a method
   // getVaListTagDecl() that might make the following code redundant
   clang::QualType q_va_list_type = (*it)->getASTContext().getVaListTagType();
-  const clang::TypedefType &t =
-    static_cast<const clang::TypedefType &>(*q_va_list_type.getTypePtr());
+  if(!q_va_list_type.isNull())
+  {
+    const clang::TypedefType &t =
+      static_cast<const clang::TypedefType &>(*q_va_list_type.getTypePtr());
 
-  exprt dummy;
-  get_decl(*t.getDecl(), dummy);
+    exprt dummy;
+    get_decl(*t.getDecl(), dummy);
+  }
 
   // TODO: clang offers several informations from the target architecture,
   // such as primitive type's size, much like our configt class. We could
