@@ -413,7 +413,7 @@ void llvm_convertert::get_struct(
   added_symbol.pretty_name = "struct " + structd.getName().str();
   added_symbol.is_type = true;
 
-  new_expr = struct_exprt(t);
+  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_union(
@@ -463,7 +463,7 @@ void llvm_convertert::get_union(
 
   move_symbol_to_context(symbol);
 
-  new_expr = union_exprt(t);
+  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_class(
@@ -882,9 +882,22 @@ void llvm_convertert::get_type(
       }
       else
       {
+        // Force the declaration to be added to the type_map
         exprt decl;
         get_decl(tag, decl);
-        new_type = decl.type();
+
+        // and search again
+        type_mapt::iterator it = type_map.find(address);
+        if(it != type_map.end())
+        {
+          symbolt &s = context.symbols.find(it->second)->second;
+          new_type = s.type;
+        }
+        else
+        {
+          // BUG! This should be added already
+          abort();
+        }
       }
 
       if(is_anon)
@@ -909,9 +922,22 @@ void llvm_convertert::get_type(
       }
       else
       {
+        // Force the declaration to be added to the type_map
         exprt decl;
         get_decl(*et.getDecl(), decl);
-        new_type = decl.type();
+
+        // and search again
+        type_mapt::iterator it = type_map.find(address);
+        if(it != type_map.end())
+        {
+          symbolt &s = context.symbols.find(it->second)->second;
+          new_type = s.type;
+        }
+        else
+        {
+          // BUG! This should be added already
+          abort();
+        }
       }
 
       break;
