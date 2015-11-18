@@ -343,7 +343,7 @@ void llvm_convertert::get_enum_constants(
 
   exprt bval;
   get_size_exprt(enumcd.getInitVal(), signedbv_typet(), bval);
-  symbol.value.swap(bval);
+  symbol.value = bval;
 
   // Save the enum constant address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
@@ -351,7 +351,7 @@ void llvm_convertert::get_enum_constants(
 
   move_symbol_to_context(symbol);
 
-  new_expr = code_skipt();
+  new_expr = bval;
 }
 
 void llvm_convertert::get_struct(
