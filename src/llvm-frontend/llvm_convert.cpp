@@ -413,7 +413,7 @@ void llvm_convertert::get_struct(
   added_symbol.pretty_name = "struct " + structd.getName().str();
   added_symbol.is_type = true;
 
-  new_expr = code_skipt();
+  new_expr = struct_exprt(t);
 }
 
 void llvm_convertert::get_union(
@@ -463,7 +463,7 @@ void llvm_convertert::get_union(
 
   move_symbol_to_context(symbol);
 
-  new_expr = code_skipt();
+  new_expr = union_exprt(t);
 }
 
 void llvm_convertert::get_class(
@@ -882,10 +882,9 @@ void llvm_convertert::get_type(
       }
       else
       {
-        // This probably means a recursive struct, so create a symbol
-        // for it
-        symbol_typet s("c::" + get_tag_name(tag.getName().str()));
-        new_type = s;
+        exprt decl;
+        get_decl(tag, decl);
+        new_type = decl.type();
       }
 
       if(is_anon)
