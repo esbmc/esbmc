@@ -130,6 +130,11 @@ bool llvm_languaget::parse(const std::string& path)
 
   // From the clang tool example,
   int num_args = 7;
+
+  // If we are running in 32 bit mode, we'll have to append a new arg
+  if(config.ansi_c.pointer_width == 32)
+    num_args++;
+
   const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
 
   unsigned int i=0;
@@ -140,6 +145,10 @@ bool llvm_languaget::parse(const std::string& path)
   the_args[i++] = "/esbmc_intrinsics.h";
   the_args[i++] = "-I";
   the_args[i++] = headers_path.c_str();
+
+  // Append 32 bit mode arg
+  if(config.ansi_c.pointer_width == 32)
+    the_args[i++] = "-m32";
 
   clang::tooling::CommonOptionsParser OptionsParser(
     num_args,
