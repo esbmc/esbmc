@@ -2392,11 +2392,8 @@ void llvm_convertert::check_symbol_redefinition(
       }
       else
       {
-        // overwrite location
-        old_symbol.location=new_symbol.location;
-
-        // move body
-        old_symbol.value.swap(new_symbol.value);
+        // overwrite
+        old_symbol.swap(new_symbol);
       }
     }
   }
