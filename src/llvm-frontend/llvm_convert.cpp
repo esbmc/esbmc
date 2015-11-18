@@ -1274,9 +1274,7 @@ void llvm_convertert::get_expr(
       const clang::OffsetOfExpr &offset =
         static_cast<const clang::OffsetOfExpr &>(stmt);
 
-      // TODO: This will evaluate the offset as the target machine that
-      // ESBMC is running, which may lead to wrong results. The calculation
-      // should rely on the flags --32 or --64 instead
+      // Use LLVM to calculate offsetof
       llvm::APSInt val;
       assert(offset.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()));
 
@@ -1299,27 +1297,15 @@ void llvm_convertert::get_expr(
       typet t;
       get_type(unary.getType(), t);
 
-      switch(unary.getKind())
-      {
-        case clang::UETT_SizeOf:
-          new_expr = exprt("sizeof", t);
-          break;
+      // Use LLVM to calculate sizeof/alignof
+      llvm::APSInt val;
+      assert(unary.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()));
 
-        default:
-          std::cerr << "Conversion of unsupported clang expr: \"";
-          std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
-          stmt.dumpColor();
-          abort();
-      }
+      exprt value;
+      convert_integer_literal(integer2string(val.getSExtValue()), value);
+      gen_typecast(ns, value, t);
 
-      // TODO: Try to evaluate the expression as an integer first
-      // NOTFIX: This works marvelously! Unfortunately, this is machine dependent
-      // and esbmc should rely on --32 or --64 flags to do the correct calculation
-      // instead of querying the system.
-
-      typet size_t;
-      get_type(unary.getTypeOfArgument(), size_t);
-      new_expr.set("sizeof-type", size_t);
+      new_expr = value;
       break;
     }
 
