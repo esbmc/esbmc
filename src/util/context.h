@@ -64,6 +64,7 @@ public:
   }
 
   void show(std::ostream &out = std::cout) const;
+  void dump() const;
 
   const irept &value(const irep_idt &name) const;
 
