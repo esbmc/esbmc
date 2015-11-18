@@ -2429,6 +2429,20 @@ void llvm_convertert::move_symbol_to_context(
   }
 }
 
+void llvm_convertert::dump_type_map()
+{
+  std::cout << "Type_map:" << std::endl;
+  for (auto it : type_map)
+    std::cout << it.first << ": " << it.second << std::endl;
+}
+
+void llvm_convertert::dump_object_map()
+{
+  std::cout << "Object_map:" << std::endl;
+  for (auto it : object_map)
+    std::cout << it.first << ": " << it.second << std::endl;
+}
+
 void llvm_convertert::check_symbol_redefinition(
   symbolt& old_symbol,
   symbolt& new_symbol)
