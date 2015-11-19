@@ -541,12 +541,6 @@ void llvm_adjust::convert_side_effect_function_call(
 void llvm_adjust::convert_side_effect_statement_expression(
   side_effect_exprt& expr)
 {
-  if(expr.operands().size()!=1)
-  {
-    std::cout << "statement expression expects one operand" << std::endl;
-    abort();
-  }
-
   codet &code=to_code(expr.op0());
   assert(code.statement()=="block");
 
