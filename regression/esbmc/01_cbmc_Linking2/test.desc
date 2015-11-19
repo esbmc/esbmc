@@ -1,5 +1,5 @@
 main.c
-module.c --decide
+module.c 
 ^EXIT=0$
 ^SIGNAL=0$
 ^VERIFICATION SUCCESSFUL$
