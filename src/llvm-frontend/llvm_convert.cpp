@@ -97,7 +97,6 @@ bool llvm_convertert::convert_top_level_decl()
     {
       set_source_manager((*it)->getASTContext().getSourceManager());
       update_current_location((*it)->getLocation());
-      current_translation_unit = it;
 
       exprt dummy_decl;
       get_decl(**it, dummy_decl);
@@ -2417,12 +2416,12 @@ void llvm_convertert::update_current_location(
 
 std::string llvm_convertert::get_modulename_from_path()
 {
-  return  boost::filesystem::path(current_path).stem().string();
+  return boost::filesystem::path(current_path).stem().string();
 }
 
 std::string llvm_convertert::get_filename_from_path()
 {
-  return  boost::filesystem::path(current_path).filename().string();
+  return boost::filesystem::path(current_path).filename().string();
 }
 
 void llvm_convertert::move_symbol_to_context(
