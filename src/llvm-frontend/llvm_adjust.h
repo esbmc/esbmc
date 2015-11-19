@@ -45,7 +45,9 @@ class llvm_adjust
       side_effect_expr_function_callt &expr);
     void convert_side_effect_statement_expression(side_effect_exprt &expr);
     void convert_member(member_exprt &expr);
-    void convert_pointer_arithmetic(exprt &expr);
+    void convert_expr_binary_arithmetic(exprt &expr);
+    void convert_expr_unary_boolean(exprt &expr);
+    void convert_expr_binary_boolean(exprt &expr);
     void convert_index(index_exprt &index);
     void convert_dereference(exprt &deref);
     void convert_sizeof(exprt &expr);

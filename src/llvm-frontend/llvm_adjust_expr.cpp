@@ -100,11 +100,11 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   }
   else if(expr.id()=="not")
   {
+    convert_expr_unary_boolean(expr);
   }
   else if(expr.is_and() || expr.is_or())
   {
-    gen_typecast(ns, expr.op0(), bool_type());
-    gen_typecast(ns, expr.op1(), bool_type());
+    convert_expr_binary_boolean(expr);
   }
   else if(expr.is_address_of())
   {
@@ -142,6 +142,7 @@ void llvm_adjust::convert_expr_main(exprt& expr)
           expr.id()=="shl" || expr.id()=="shr" ||
           expr.id()=="bitand" || expr.id()=="bitxor" || expr.id()=="bitor")
   {
+    convert_expr_binary_arithmetic(expr);
   }
   else if(expr.id()=="comma")
   {
@@ -261,29 +262,53 @@ void llvm_adjust::convert_member(member_exprt& expr)
   }
 }
 
-void llvm_adjust::convert_pointer_arithmetic(exprt& expr)
+void llvm_adjust::convert_expr_binary_arithmetic(exprt& expr)
 {
-  if(expr.type().is_array())
+  exprt &op0=expr.op0();
+  exprt &op1=expr.op1();
+
+  const typet type0=ns.follow(op0.type());
+  const typet type1=ns.follow(op1.type());
+
+  if(expr.id()=="shl" || expr.id()=="shr")
   {
-    typet new_type;
-    const typet &expr_type=ns.follow(expr.type());
+    gen_typecast_arithmetic(ns, op0);
+    gen_typecast_arithmetic(ns, op1);
 
-    if(expr_type.is_array())
+    if(is_number(op0.type()) &&
+       is_number(op1.type()))
     {
-      new_type.id("pointer");
-      new_type.subtype()=expr_type.subtype();
-    }
-
-    if(new_type != expr_type)
-    {
-      if(new_type.is_pointer() && expr_type.is_array())
+      if(expr.id()=="shr") // shifting operation depends on types
       {
-        exprt index_expr("index", expr_type.subtype());
-        index_expr.reserve_operands(2);
-        index_expr.move_to_operands(expr);
-        index_expr.copy_to_operands(gen_zero(index_type()));
-        expr=exprt("address_of", new_type);
-        expr.move_to_operands(index_expr);
+        if(type0.id()=="unsignedbv")
+        {
+          expr.id("lshr");
+          return;
+        }
+        else if(type0.id()=="signedbv")
+        {
+          expr.id("ashr");
+          return;
+        }
+      }
+
+      return;
+    }
+  }
+  else
+  {
+    gen_typecast_arithmetic(ns, op0, op1);
+
+    const typet &type0=ns.follow(op0.type());
+    const typet &type1=ns.follow(op1.type());
+
+    if(expr.id()=="+" || expr.id()=="-" ||
+       expr.id()=="*" || expr.id()=="/")
+    {
+      if(type0.id()=="pointer" || type1.id()=="pointer")
+      {
+//        typecheck_expr_pointer_arithmetic(expr);
+        return;
       }
     }
   }
@@ -444,6 +469,8 @@ void llvm_adjust::convert_side_effect_assignment(exprt& expr)
   else if(statement=="assign_shl" ||
           statement=="assign_shr")
   {
+    gen_typecast_arithmetic(ns, op1);
+
     if(is_number(op1.type()))
     {
       if(statement=="assign_shl")
@@ -596,6 +623,22 @@ void llvm_adjust::convert_side_effect_statement_expression(
   }
   else
     expr.type()=typet("empty");
+}
+
+void llvm_adjust::convert_expr_unary_boolean(exprt& expr)
+{
+  expr.type() = bool_type();
+
+  exprt &operand=expr.op0();
+  gen_typecast_bool(ns, operand);
+}
+
+void llvm_adjust::convert_expr_binary_boolean(exprt& expr)
+{
+  expr.type() = bool_type();
+
+  gen_typecast_bool(ns, expr.op0());
+  gen_typecast_bool(ns, expr.op1());
 }
 
 void llvm_adjust::make_index_type(exprt& expr)
