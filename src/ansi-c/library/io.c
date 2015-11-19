@@ -34,17 +34,17 @@ int puts(const char *s)
   return ret;
 }
 
-FILE *fopen(const char *filename, const char *m)
+struct _IO_FILE *fopen(const char *filename, const char *m)
 {
   __ESBMC_HIDE:;
-  FILE *f=malloc(sizeof(FILE));
+  struct _IO_FILE *f=malloc(sizeof(struct _IO_FILE));
   return f;
 }
 
-FILE *fopen_strabs(const char *filename, const char *m)
+struct _IO_FILE *fopen_strabs(const char *filename, const char *m)
 {
   __ESBMC_HIDE:;
-  FILE *f=malloc(sizeof(FILE));
+  struct _IO_FILE *f=malloc(sizeof(struct _IO_FILE));
 
   __ESBMC_assert(__ESBMC_is_zero_string(f), "fopen zero-termination of 1st argument");
   __ESBMC_assert(__ESBMC_is_zero_string(m), "fopen zero-termination of 2nd argument");
@@ -52,7 +52,7 @@ FILE *fopen_strabs(const char *filename, const char *m)
   return f;
 }
 
-int fclose(FILE *stream)
+int fclose(struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
@@ -60,18 +60,18 @@ int fclose(FILE *stream)
   return return_value;
 }
 
-FILE *fdopen(int handle, const char *m)
+struct _IO_FILE *fdopen(int handle, const char *m)
 {
   __ESBMC_HIDE:;
-  FILE *f=malloc(sizeof(FILE));
+  struct _IO_FILE *f=malloc(sizeof(struct _IO_FILE));
 
   return f;
 }
 
-FILE *fdopen_abs(int handle, const char *m)
+struct _IO_FILE *fdopen_abs(int handle, const char *m)
 {
   __ESBMC_HIDE:;
-  FILE *f=malloc(sizeof(FILE));
+  struct _IO_FILE *f=malloc(sizeof(struct _IO_FILE));
 
   __ESBMC_assert(__ESBMC_is_zero_string(m),
     "fdopen zero-termination of 2nd argument");
@@ -79,7 +79,7 @@ FILE *fdopen_abs(int handle, const char *m)
   return f;
 }
 
-char *fgets(char *str, int size, FILE *stream)
+char *fgets(char *str, int size, struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   _Bool error;
@@ -87,7 +87,7 @@ char *fgets(char *str, int size, FILE *stream)
   return error?0:str;
 }
 
-char *fgets_strabs(char *str, int size, FILE *stream)
+char *fgets_strabs(char *str, int size, struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   _Bool error;
@@ -108,7 +108,7 @@ size_t fread(
   void *ptr,
   size_t size,
   size_t nitems,
-  FILE *stream)
+  struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   size_t nread;
@@ -125,7 +125,7 @@ size_t fread(
   return nread;
 }
 
-int feof(FILE *stream)
+int feof(struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
@@ -133,7 +133,7 @@ int feof(FILE *stream)
   return return_value;
 }
 
-int ferror(FILE *stream)
+int ferror(struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
@@ -141,7 +141,7 @@ int ferror(FILE *stream)
   return return_value;
 }
 
-int fileno(FILE *stream)
+int fileno(struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
@@ -149,7 +149,7 @@ int fileno(FILE *stream)
   return return_value;
 }
 
-int fputs(const char *s, FILE *stream)
+int fputs(const char *s, struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
@@ -158,7 +158,7 @@ int fputs(const char *s, FILE *stream)
   return return_value;
 }
 
-int fputs_strabs(const char *s, FILE *stream)
+int fputs_strabs(const char *s, struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
@@ -167,7 +167,7 @@ int fputs_strabs(const char *s, FILE *stream)
   return return_value;
 }
 
-int fflush(FILE *stream)
+int fflush(struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
@@ -175,7 +175,7 @@ int fflush(FILE *stream)
   return return_value;
 }
 
-int fpurge(FILE *stream)
+int fpurge(struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
@@ -199,7 +199,7 @@ ssize_t read(int fildes, void *buf, size_t nbyte)
   return nread;
 }
 
-int fgetc(FILE *stream)
+int fgetc(struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
@@ -207,7 +207,7 @@ int fgetc(FILE *stream)
   return return_value;
 }
 
-int getc(FILE *stream)
+int getc(struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
@@ -222,7 +222,7 @@ int getchar()
   return return_value;
 }
 
-int getw(FILE *stream)
+int getw(struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
@@ -230,7 +230,7 @@ int getw(FILE *stream)
   return return_value;
 }
 
-int fseek(FILE *stream, long offset, int whence)
+int fseek(struct _IO_FILE *stream, long offset, int whence)
 {
   __ESBMC_HIDE:;
   int return_value;
@@ -238,7 +238,7 @@ int fseek(FILE *stream, long offset, int whence)
   return return_value;
 }
 
-long ftell(FILE *stream)
+long ftell(struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
@@ -246,7 +246,7 @@ long ftell(FILE *stream)
   return return_value;
 }
 
-void rewind(FILE *stream)
+void rewind(struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:
   *stream;
@@ -256,7 +256,7 @@ size_t fwrite(
   const void *ptr,
   size_t size,
   size_t nitems,
-  FILE *stream)
+  struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   size_t nwrite;
