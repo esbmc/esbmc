@@ -618,7 +618,7 @@ void llvm_convertert::get_function(
     type,
     fd.getName().str(),
     fd.getName().str(),
-    (fd.getStorageClass() != clang::SC_Static));
+    (fd.getStorageClass() == clang::SC_Static));
 
   symbol.lvalue = true;
 
@@ -2339,7 +2339,7 @@ std::string llvm_convertert::get_var_name(
   if(!is_local)
     return name;
 
-  std::string pretty_name = get_modulename_from_path() + "::";
+  std::string pretty_name = "";
   if(current_function_name!= "")
     pretty_name += current_function_name + "::";
   pretty_name += integer2string(current_scope_var_num) + "::";
