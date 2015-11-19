@@ -37,7 +37,6 @@ llvm_convertert::llvm_convertert(
     current_function_name(""),
     current_scope_var_num(1),
     anon_counter(0),
-    global_counter(0),
     sm(nullptr)
 {
 }
@@ -2326,8 +2325,8 @@ void llvm_convertert::get_default_symbol(
   symbol.pretty_name = pretty_name;
 
   std::string symbol_name = "c::";
-  if(!is_local)
-    symbol_name += integer2string(++global_counter) + "::";
+  if(is_local)
+    symbol_name += get_modulename_from_path() + "::";
   symbol_name += pretty_name;
 
   symbol.name = symbol_name;
