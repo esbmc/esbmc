@@ -257,6 +257,12 @@ void llvm_convertert::get_decl(
     case clang::Decl::Empty:
       break;
 
+    // If this fails, llvm will not generate the ASTs, we can
+    // safely skip it
+    case clang::Decl::StaticAssert:
+      new_expr = code_skipt();
+      break;
+
     case clang::Decl::Namespace:
     case clang::Decl::TypeAlias:
     case clang::Decl::FileScopeAsm:
