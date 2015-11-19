@@ -859,21 +859,13 @@ void llvm_convertert::get_type(
       const clang::TagDecl &tag =
         *static_cast<const clang::TagType &>(the_type).getDecl();
 
-      bool is_anon = false;
-
-      std::size_t address;
-      if(tag.isStruct() || tag.isUnion())
-      {
-        address = reinterpret_cast<std::size_t>(&tag);
-
-        if (!tag.getIdentifier() && !tag.getTypedefNameForAnonDecl())
-          is_anon = true;
-      }
-      else if(tag.isClass())
+      if(tag.isClass())
       {
         std::cerr << "Class Type is not supported yet" << std::endl;
         abort();
       }
+
+      std::size_t address = reinterpret_cast<std::size_t>(&tag);
 
       // Search for the type on the type map
       type_mapt::iterator it = type_map.find(address);
@@ -902,7 +894,7 @@ void llvm_convertert::get_type(
         }
       }
 
-      if(is_anon)
+      if (!tag.getIdentifier() && !tag.getTypedefNameForAnonDecl())
         new_type.set("anonymous", true);
 
       break;
