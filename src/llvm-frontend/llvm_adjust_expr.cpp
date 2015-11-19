@@ -487,6 +487,7 @@ void llvm_adjust::convert_side_effect_function_call(
       new_symbol.location=expr.location();
       new_symbol.type=f_op.type();
       new_symbol.type.incomplete(true);
+      new_symbol.mode="C";
 
       symbolt *symbol_ptr;
       bool res = context.move(new_symbol, symbol_ptr);
