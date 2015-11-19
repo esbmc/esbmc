@@ -4,5 +4,7 @@ static_assert(sizeof(long) == 4, "Code relies on int being exactly 4 bytes");
  
 int main(void)
 {
-    return 0;
+  static_assert(sizeof(long) == 4, "Code relies on int being exactly 4 bytes");
+
+  return 0;
 }
