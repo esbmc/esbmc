@@ -1299,13 +1299,24 @@ void llvm_convertert::get_expr(
 
       // Use LLVM to calculate sizeof/alignof
       llvm::APSInt val;
-      assert(unary.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()));
+      if(unary.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()))
+      {
+        exprt value;
+        convert_integer_literal(integer2string(val.getSExtValue()), value);
+        gen_typecast(ns, value, t);
 
-      exprt value;
-      convert_integer_literal(integer2string(val.getSExtValue()), value);
-      gen_typecast(ns, value, t);
+        new_expr = value;
+      }
+      else
+      {
+        assert(unary.getKind() == clang::UETT_SizeOf);
 
-      new_expr = value;
+        typet size_t;
+        get_type(unary.getTypeOfArgument(), size_t);
+
+        new_expr = exprt("sizeof", t);
+        new_expr.set("sizeof-type", size_t);
+      }
       break;
     }
 
