@@ -70,11 +70,6 @@ void llvm_adjust::convert_expr(exprt& expr)
 
     convert_expr(expr.op1()); // arguments
   }
-  else if(expr.id()=="sideeffect" &&
-          expr.statement()=="statement_expression")
-  {
-    convert_code(to_code(expr.op0()));
-  }
   else
   {
     // fist do sub-nodes
