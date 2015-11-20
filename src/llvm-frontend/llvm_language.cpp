@@ -288,6 +288,9 @@ void llvm_languaget::internal_additions(std::string &str)
     "char nondet_char();\n"
     "unsigned char nondet_uchar();\n"
     "signed char nondet_schar();\n"
+    "_Bool nondet_bool();\n"
+    "float nondet_float();\n"
+    "double nondet_double();"
 
     // Digital filters code
     "_Bool __ESBMC_check_stability(float den[], float num[]);\n"
@@ -307,6 +310,9 @@ void llvm_languaget::internal_additions(std::string &str)
     "char __VERIFIER_nondet_char();\n"
     "unsigned char __VERIFIER_nondet_uchar();\n"
     "signed char __VERIFIER_nondet_schar();\n"
+    "_Bool __VERIFIER_nondet_bool();\n"
+    "float __VERIFIER_nondet_float();\n"
+    "double __VERIFIER_nondet_double();"
 
     "\n";
 }
