@@ -108,6 +108,7 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   }
   else if(expr.is_address_of())
   {
+    convert_address_of(expr);
   }
   else if(expr.is_dereference())
   {
@@ -354,6 +355,43 @@ void llvm_adjust::convert_index(index_exprt& index)
   }
 
   index.type()=final_array_type.subtype();
+}
+
+void llvm_adjust::convert_address_of(exprt &expr)
+{
+  exprt &op=expr.op0();
+
+  // special case: address of function designator
+  // ANSI-C 99 section 6.3.2.1 paragraph 4
+
+  if(op.is_address_of() &&
+     op.implicit() &&
+     op.operands().size()==1 &&
+     op.op0().id()=="symbol" &&
+     op.op0().type().is_code())
+  {
+    // make the implicit address_of an explicit address_of
+    exprt tmp;
+    tmp.swap(op);
+    tmp.implicit(false);
+    expr.swap(tmp);
+    return;
+  }
+
+  expr.type()=typet("pointer");
+
+  // turn &array into &(array[0])
+  if(op.type().is_array())
+  {
+    index_exprt index;
+    index.array()=op;
+    index.index()=gen_zero(index_type());
+    index.type()=op.type().subtype();
+    index.location()=expr.location();
+    op.swap(index);
+  }
+
+  expr.type().subtype()=op.type();
 }
 
 void llvm_adjust::convert_dereference(exprt& deref)

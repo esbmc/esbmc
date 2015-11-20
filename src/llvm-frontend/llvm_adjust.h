@@ -50,6 +50,7 @@ class llvm_adjust
     void convert_expr_binary_boolean(exprt &expr);
     void convert_index(index_exprt &index);
     void convert_dereference(exprt &deref);
+    void convert_address_of(exprt &expr);
     void convert_sizeof(exprt &expr);
     void convert_side_effect(side_effect_exprt &expr);
     void convert_symbol(exprt &expr);
