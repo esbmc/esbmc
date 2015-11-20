@@ -1,7 +1,3 @@
-void *malloc(unsigned size);
-void free(void *p);
-unsigned int nondet_uint();
-
 int main() {
   int *p;
   unsigned o;

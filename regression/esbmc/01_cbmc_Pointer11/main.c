@@ -1,5 +1,3 @@
-int nondet_int();
-
 struct S
 {
   int a, b;

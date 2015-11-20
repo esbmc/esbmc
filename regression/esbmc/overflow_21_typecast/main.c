@@ -1,5 +1,3 @@
-int nondet_double();
-
 int main()
 {
   int a;

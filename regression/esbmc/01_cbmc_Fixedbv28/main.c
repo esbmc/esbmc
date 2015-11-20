@@ -113,10 +113,6 @@ float iirOutFixed(float y[], float x[], float a[], float b[], int Na, int Nb, in
 	return sum;																// timer1 += 4;
 }																			// timer1 += 3;
 
-
-int nondet_int();
-float nondet_float();
-
 int main(void)
 {
 	int i;

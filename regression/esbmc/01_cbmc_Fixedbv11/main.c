@@ -130,9 +130,6 @@ float iirOutTimer(float y[], float x[], float a[], float b[], int Na, int Nb)
 	return ret;																// timer1 += 4;
 }																			// timer1 += 3;
 
-
-float nondet_float();
-
 int checkOverflow(void)
 {
 	int i;

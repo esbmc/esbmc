@@ -1,4 +1,3 @@
-_Bool nondet_bool();
 
 int main()
 {

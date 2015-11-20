@@ -1,7 +1,5 @@
 #include "common.h"
 
-#define NULL 0
-
 char UnComp[800 + 40];
 char CompBuf[800];
 static char Buf[] = "/* Replacement routines for standard C routines. */\0#define CONSOLE 0\0#ifndef SUN\0#define stderr CONSOLE\0#define EOF (-1)\0#endif /* SUN */\0\0#include \"buf.c\"\0\0char* outbuf = 0;\0\0int getchar()\0{ static char *bufp = Buf;\0  static int n = Buflen;\0#ifdef TEST\0  if ( n == 0 ) {   /* buffer is empty */\0    n = strtol ( bufp, &bufp, 10 ); /* read char size from 1st string. */\0    }\0#endif TEST\0  return ( --n >= 0 ) ? (unsigned char) *bufp++ : EOF;\0}  \0\0/*void putchar ( c)\0  char c;\0{ \0  fprintf(stderr,\"putchar: c = %x \\n\", c);\0  *outbuf++ = c;\0}\0 */\0#ifndef SUN\0void exit( x )\0  int x;\0{\0  fprintf (stderr, \"exit(0x%x)\\n\", x);\0#ifdef XINU\0  userret();               /* Must link with XINU? */\0#endif /* XINU */\0}\0 \0int putc( dev,  c)   /* putc defined bu XINU. */\0  int dev;\0  char c;\0{\0/* if (dev == CONSOLE)  */\0}\0#endif /* SUN */\0xff\0xff\0xff\0xff\0xff\0xff\0xff\0xff\0";

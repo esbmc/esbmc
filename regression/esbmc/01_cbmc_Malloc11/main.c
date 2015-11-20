@@ -1,4 +1,3 @@
-void *malloc(unsigned s);
 
 int main()
 {

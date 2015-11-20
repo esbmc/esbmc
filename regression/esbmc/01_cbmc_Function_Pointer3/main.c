@@ -1,8 +1,4 @@
 
-int nondet_int();
-void assert(_Bool b);
-
-
 typedef int (*FuncType)(int, int);
 
 int f1(int a, int b)

@@ -1,7 +1,5 @@
 #include <stdlib.h>
 
-int nondet_int();
-
 struct S {
   int x;
   struct S *n;

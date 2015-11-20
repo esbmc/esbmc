@@ -1,9 +1,7 @@
 int i;
 int a[20];
 
-int nondet_int(void);
-
-main(){
+int main(){
   i=0;
   i=nondet_int();
   if(i>0){

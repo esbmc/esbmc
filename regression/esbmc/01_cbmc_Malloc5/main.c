@@ -1,5 +1,3 @@
-_Bool nondet_bool();
-void *malloc(unsigned s);
 
 int analyze_this()
 {

@@ -1,7 +1,5 @@
 #include <stdlib.h>
 
-void *malloc(unsigned int s);
-
 struct nodet {
   struct nodet *n;
   int payload;

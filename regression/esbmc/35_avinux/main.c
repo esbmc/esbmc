@@ -4884,8 +4884,6 @@ void ata_exec_command(struct ata_port *ap , struct ata_taskfile *tf )
   return;
 }
 }
-//#line 7 "/home/matze/workspace_TestPlugins/Linux2.6.14.1/linux-2.6.14.1/drivers/scsi/slicheader.h"
-extern _Bool nondet_bool();
 //#line 9 "/home/matze/workspace_TestPlugins/Linux2.6.14.1/linux-2.6.14.1/drivers/scsi/slicheader.h"
 int __SLIC_state_handler_installed  =    0;
 //#line 10 "/home/matze/workspace_TestPlugins/Linux2.6.14.1/linux-2.6.14.1/drivers/scsi/slicheader.h"

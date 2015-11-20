@@ -1,7 +1,5 @@
 #include <stdlib.h>
 
-void free(void *p);
-
 void my_free(int *q)
 {
   free(q);

@@ -9,8 +9,6 @@ struct pp_struct {
   atomic_t irqc;
 };
 
-void *malloc(size_t size);
-
 void * kmalloc(size_t size, gfp_t flags)
 {
   return malloc(size);

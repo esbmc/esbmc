@@ -7204,12 +7204,7 @@ int main(void)
 }
 }
 char _SLAM_alloc_dummy  ;
-char *malloc(int i ) 
-{ 
 
-  {
-  return (& _SLAM_alloc_dummy);
-}
 }
   void ExAcquireFastMutex(PFAST_MUTEX FastMutex ) ;
 void ExAcquireFastMutex(PFAST_MUTEX FastMutex ) 

@@ -1,6 +1,5 @@
-int nondet_int(void);
 
-main(){
+int main(){
   int x,i;
   x=5;
   x=nondet_int();
