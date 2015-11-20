@@ -5,7 +5,7 @@ struct S
   int z;
 };
 
-main()
+int main()
 {
   struct S s;
   int *p;

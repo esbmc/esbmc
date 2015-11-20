@@ -11,7 +11,7 @@ void adpcm_coder(struct adpcm_state *state)
 
 struct adpcm_state state;
 
-main() {
+int main() {
     while(1) {
 	adpcm_coder(&state);
     }

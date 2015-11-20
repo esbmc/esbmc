@@ -12,7 +12,7 @@ void f1(int *px)
   *px = 1234;
 }
 
-main()
+int main()
 {
   int flag;
   int *ref = NULL;

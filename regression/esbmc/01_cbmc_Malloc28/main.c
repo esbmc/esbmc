@@ -19,6 +19,6 @@ void test() {
   }
 }
 
-main(){
+int main(){
 	test();	
 }

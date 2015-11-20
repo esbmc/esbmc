@@ -1,6 +1,6 @@
 int i,j;
 int a[4];
-main(){
+int main(){
   a[0]=0;
   a[3]=3;
   j=0;

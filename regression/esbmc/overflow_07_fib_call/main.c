@@ -71,7 +71,7 @@ fib(int n)
   return ans;
 }
     
-main()
+int main()
 {
   int a;
 

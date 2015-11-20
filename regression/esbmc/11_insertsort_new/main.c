@@ -47,7 +47,7 @@
 int cnt1, cnt2;
 #endif
 
-main()
+int main()
 {
   int  i,j, temp, a[11];
 

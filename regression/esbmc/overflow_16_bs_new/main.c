@@ -107,7 +107,7 @@ binary_search(int x)
   return fvalue;
 }
 
-main()
+int main()
 {
 	binary_search(8);
 }

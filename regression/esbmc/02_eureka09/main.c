@@ -12,7 +12,7 @@ findmax(int dim){
   }
 }
 
-main(){
+int main(){
   max=0;
   a[0]=1;
   a[1]=2;

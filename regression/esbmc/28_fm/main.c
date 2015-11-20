@@ -116,7 +116,7 @@ _Bool rtb_Logical_Operator1;
 
 int f1();
 
-main(){
+int main(){
   // initializations
 	Unit_Delay_g = FALSE;
 	Unit_Delay_a_DSTATE = FALSE;

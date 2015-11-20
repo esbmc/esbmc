@@ -1,4 +1,4 @@
-main() {
+int main() {
         float a;
         double b;
 
