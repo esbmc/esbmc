@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/loaders/load_add_on.c
+/usr/share/libtool/loaders/load_add_on.c

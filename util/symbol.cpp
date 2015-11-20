@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "symbol.h"
 #include "location.h"
 
-void symbolt::dump()
+void symbolt::dump() const
 {
   show(std::cout);
 }

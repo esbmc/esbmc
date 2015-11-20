@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/libltdl/lt__dirent.h
+/usr/share/libtool/libltdl/lt__dirent.h

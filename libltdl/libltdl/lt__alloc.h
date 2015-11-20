@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/libltdl/lt__alloc.h
+/usr/share/libtool/libltdl/lt__alloc.h

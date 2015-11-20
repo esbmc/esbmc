@@ -78,7 +78,7 @@ class execution_statet : public goto_symext
                    symex_targett *_target,
                    contextt &context,
                    ex_state_level2t *l2init,
-                   const optionst &options,
+                   optionst &options,
                    message_handlert &message_handler);
 
   /**
@@ -638,7 +638,7 @@ class dfs_execution_statet : public execution_statet
                    reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
-                   const optionst &options,
+                   optionst &options,
                    message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
                          options.get_bool_option("state-hashing")
@@ -668,7 +668,7 @@ class schedule_execution_statet : public execution_statet
                    reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
-                   const optionst &options,
+                   optionst &options,
                    unsigned int *ptotal_claims,
                    unsigned int *premaining_claims,
                    message_handlert &_message_handler)

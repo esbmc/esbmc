@@ -51,7 +51,33 @@ goto_symext::symex_malloc(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
+  return symex_mem(true, lhs, code);
+}
 
+expr2tc
+goto_symext::symex_alloca(
+  const expr2tc &lhs,
+  const sideeffect2t &code)
+{
+  if(options.get_bool_option("inductive-step")
+     && !options.get_bool_option("disable-inductive-step"))
+  {
+    std::cout << "**** WARNING: this program contains dynamic memory allocation,"
+        << " so we are not applying the inductive step to this program!"
+        << std::endl;
+    options.set_option("disable-inductive-step", true);
+    throw 0;
+  }
+
+  return symex_mem(false, lhs, code);
+}
+
+expr2tc
+goto_symext::symex_mem(
+  const bool is_malloc,
+  const expr2tc &lhs,
+  const sideeffect2t &code)
+{
   if (is_nil_expr(lhs))
     return expr2tc(); // ignore
 
@@ -155,7 +181,7 @@ goto_symext::symex_malloc(
   pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard, !is_malloc));
 
   return rhs_addrof->ptr_obj;
 }
@@ -219,10 +245,22 @@ void goto_symext::symex_free(const expr2tc &expr)
   expr2tc tmp = code.operand;
   dereference(tmp, false, true);
 
-  address_of2tc addrof(code.operand->type, tmp);
-  pointer_offset2tc ptr_offs(pointer_type2(), addrof);
-  equality2tc eq(ptr_offs, zero_ulong);
-  claim(eq, "Operand of free must have zero pointer offset");
+  // Don't rely on the output of dereference in free mode; instead fetch all
+  // the internal dereference state for pointed at objects, and creates claims
+  // that if pointed at, their offset is zero.
+  internal_deref_items.clear();
+  tmp = code.operand;
+  // Create temporary, dummy, dereference
+  tmp = dereference2tc(get_uint8_type(), tmp);
+  dereference(tmp, false, false, true); // 'internal' dereference
+  for (const auto &item : internal_deref_items) {
+    guardt g = cur_state->guard;
+    g.add(item.guard);
+    expr2tc offset = item.offset;
+    expr2tc eq = equality2tc(offset, zero_ulong);
+    g.guard_expr(eq);
+    claim(eq, "Operand of free must have zero pointer offset");
+  }
 
   // Clear the alloc bit, and set the deallocated bit.
   guardt guard;
@@ -345,7 +383,7 @@ void goto_symext::symex_cpp_new(
 
   symex_assign_rec(idx, truth, guard);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard, false));
 }
 
 // XXX - implement as a call to free?
@@ -545,6 +583,16 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
+  if(options.get_bool_option("inductive-step")
+     && !options.get_bool_option("disable-inductive-step"))
+  {
+    std::cout << "**** WARNING: this program is multithreaded,"
+        << " so we are not applying the inductive step to this program!"
+        << std::endl;
+    options.set_option("disable-inductive-step", true);
+    throw 0;
+  }
+
   // As an argument, we expect the address of a symbol.
   const expr2tc &addr = call.operands[0];
   assert(is_address_of2t(addr));

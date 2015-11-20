@@ -172,12 +172,10 @@ std::string expr2ct::convert_rec(
 
     if(width==config.ansi_c.int_width)
     {
-      if(is_signed) sign_str="";
       return q+sign_str+"int";
     }
     else if(width==config.ansi_c.long_int_width)
     {
-      if(is_signed) sign_str="";
       return q+sign_str+"long int";
     }
     else if(width==config.ansi_c.char_width)
@@ -186,12 +184,10 @@ std::string expr2ct::convert_rec(
     }
     else if(width==config.ansi_c.short_int_width)
     {
-      if(is_signed) sign_str="";
       return q+sign_str+"short int";
     }
     else if(width==config.ansi_c.long_long_int_width)
     {
-      if(is_signed) sign_str="";
       return q+sign_str+"long long int";
     }
   }
@@ -727,6 +723,39 @@ std::string expr2ct::convert_pointer_object_has_type(
 
   return dest;
 }
+
+/*******************************************************************\
+
+Function: expr2ct::convert_alloca
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string expr2ct::convert_alloca(
+  const exprt &src,
+  unsigned &precedence)
+{
+  if(src.operands().size()!=1)
+    return convert_norep(src, precedence);
+
+  unsigned p0;
+  std::string op0=convert(src.op0(), p0);
+
+  std::string dest="ALLOCA";
+  dest+='(';
+  dest+=convert((const typet &)src.cmt_type());
+  dest+=", ";
+  dest+=op0;
+  dest+=')';
+
+  return dest;
+}
+
 
 /*******************************************************************\
 
@@ -1971,8 +2000,9 @@ std::string expr2ct::convert_code_switch(
     }
   }
 
+  dest+="\n";
   dest+=indent_str(indent);
-  dest+="}\n";
+  dest+='}';
 
   return dest;
 }
@@ -2034,7 +2064,7 @@ std::string expr2ct::convert_code_decl(
   if(src.operands().size()==2)
     dest+=" = "+convert(src.op1());
 
-  dest+=";\n";
+  dest+=";";
 
   return dest;
 }
@@ -2105,7 +2135,7 @@ std::string expr2ct::convert_code_block(
   const codet &src,
   unsigned indent)
 {
-  std::string dest=indent_str(indent-2);
+  std::string dest=indent_str(indent);
   dest+="{\n";
 
   forall_operands(it, src)
@@ -2114,10 +2144,11 @@ std::string expr2ct::convert_code_block(
       dest+=convert_code_block(to_code(*it), indent+2);
     else
       dest+=convert_code(to_code(*it), indent);
+    dest+="\n";
   }
 
-  dest+=indent_str(indent-2);
-  dest+="}\n";
+  dest+=indent_str(indent);
+  dest+="}";
 
   return dest;
 }
@@ -2603,7 +2634,7 @@ Function: expr2ct::convert_code
 
 std::string expr2ct::convert_code(const codet &src)
 {
-  return convert_code(src, 2);
+  return convert_code(src, 0);
 }
 
 /*******************************************************************\
@@ -2942,6 +2973,8 @@ std::string expr2ct::convert(
       return convert_function_call(src, precedence);
     else if(statement=="malloc")
       return convert_malloc(src, precedence=15);
+    else if(statement=="alloca")
+      return convert_alloca(src, precedence=15);
     else if(statement=="printf")
       return convert_function(src, "PRINTF", precedence=15);
     else if(statement=="nondet")

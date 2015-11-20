@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/loaders/dlopen.c
+/usr/share/libtool/loaders/dlopen.c

@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/ltdl.h
+/usr/share/libtool/ltdl.h

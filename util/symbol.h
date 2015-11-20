@@ -93,7 +93,7 @@ public:
   }
 
   void show(std::ostream &out = std::cout) const;
-  void dump();
+  void dump() const;
 
   void to_irep(irept &dest) const;
   void from_irep(const irept &src);

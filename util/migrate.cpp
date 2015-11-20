@@ -1203,6 +1203,18 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     convert_operand_pair(expr, op0, op1);
     expr2tc mul = expr2tc(new mul2t(op0->type, op0, op1)); // XXX type?
     new_expr_ref = expr2tc(new overflow2t(mul));
+  } else if (expr.id() == "overflow-/") {
+    assert(expr.type().id() == typet::t_bool);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc div = expr2tc(new div2t(op0->type, op0, op1)); // XXX type?
+    new_expr_ref = expr2tc(new overflow2t(div));
+  } else if (expr.id() == "overflow-mod") {
+    assert(expr.type().id() == typet::t_bool);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc mod = expr2tc(new modulus2t(op0->type, op0, op1)); // XXX type?
+    new_expr_ref = expr2tc(new overflow2t(mod));
   } else if (has_prefix(expr.id_string(), "overflow-typecast-")) {
     unsigned bits = atoi(expr.id_string().c_str() + 18);
     expr2tc operand;
@@ -1275,6 +1287,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_type(expr.type(), plaintype);
     if (expr.statement() == "malloc")
       t = sideeffect2t::malloc;
+    else if (expr.statement() == "alloca")
+      t = sideeffect2t::alloca;
     else if (expr.statement() == "cpp_new")
       t = sideeffect2t::cpp_new;
     else if (expr.statement() == "cpp_new[]")
@@ -1745,7 +1759,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const lessthan2t &ref2 = to_lessthan2t(ref);
     exprt lessthan("<", bool_typet());
-    lessthan.copy_to_operands(migrate_expr_back(ref2.side_1), 
+    lessthan.copy_to_operands(migrate_expr_back(ref2.side_1),
                               migrate_expr_back(ref2.side_2));
     return lessthan;
   }
@@ -2100,6 +2114,16 @@ migrate_expr_back(const expr2tc &ref)
       const mul2t &mulref = to_mul2t(ref2.operand);
       theexpr.copy_to_operands(migrate_expr_back(mulref.side_1),
                                migrate_expr_back(mulref.side_2));
+    } else if (is_div2t(ref2.operand)) {
+      theexpr.id("overflow-/");
+      const div2t &divref = to_div2t(ref2.operand);
+      theexpr.copy_to_operands(migrate_expr_back(divref.side_1),
+                               migrate_expr_back(divref.side_2));
+    } else if (is_modulus2t(ref2.operand)) {
+      theexpr.id("overflow-mod");
+      const modulus2t &divref = to_modulus2t(ref2.operand);
+      theexpr.copy_to_operands(migrate_expr_back(divref.side_1),
+                               migrate_expr_back(divref.side_2));
     } else {
       assert(0 && "Invalid operand to overflow2t when backmigrating");
     }
@@ -2232,6 +2256,9 @@ migrate_expr_back(const expr2tc &ref)
     switch (ref2.kind) {
     case sideeffect2t::malloc:
       theexpr.statement("malloc");
+      break;
+    case sideeffect2t::alloca:
+      theexpr.statement("alloca");
       break;
     case sideeffect2t::cpp_new:
       theexpr.statement("cpp_new");

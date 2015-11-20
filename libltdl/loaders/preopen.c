@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/loaders/preopen.c
+/usr/share/libtool/loaders/preopen.c

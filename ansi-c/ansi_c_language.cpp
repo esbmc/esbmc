@@ -73,7 +73,7 @@ static void internal_additions(std::string &code)
     "unsigned __ESBMC_POINTER_OBJECT(const void *p);\n"
     "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
 
-    // malloc
+    // malloc / alloca
     "unsigned __ESBMC_constant_infinity_uint;\n"
     "_Bool __ESBMC_alloc[__ESBMC_constant_infinity_uint];\n"
     "_Bool __ESBMC_deallocated[__ESBMC_constant_infinity_uint];\n"

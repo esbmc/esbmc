@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/libltdl/lt__glibc.h
+/usr/share/libtool/libltdl/lt__glibc.h

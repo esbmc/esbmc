@@ -6,6 +6,7 @@
 
 const struct opt_templ esbmc_options[] = {
 { 0,	"no-inlining",		switc,		""	},
+{ 0,  "full-inlining",    switc,    ""  },
 { 0,	"program-only",		switc,		""	},
 { 0,	"program-too",		switc,		""	},
 { 0,	"function",		string,		""	},
@@ -90,6 +91,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"print-stack-traces",	switc,		""	},
 { 0,	"interactive-ileaves",	switc,		""	},
 { 0,	"round-robin",	switc,		""	},
+{ 0,  "falsification", switc, "" },
 { 0,	"base-case",	switc,		""	},
 { 0,	"forward-condition",	switc,		""	},
 { 0,	"inductive-step",	switc,		""	},
@@ -97,8 +99,10 @@ const struct opt_templ esbmc_options[] = {
 { 0,  "k-induction-parallel", switc, "" },
 { 0,  "k-induction-busy-wait", switc, "" },
 { 0,  "constrain-all-states", switc, ""},
+{ 0,  "k-induction-nondet-loops", switc, "" },
 { 0,  "dont-ignore-dead-child-process", switc, "" },
 { 0,  "unlimited-k-steps", switc, "" },
+{ 0,  "unroll-loops", switc, "" },
 { 0,	"break-at",		string,		""	},
 { 0,	"decide",		switc,		""	},
 { 0,	"enable-core-dump",     switc,		""	},

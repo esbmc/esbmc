@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/loaders/loadlibrary.c
+/usr/share/libtool/loaders/loadlibrary.c

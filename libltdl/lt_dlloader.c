@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/lt_dlloader.c
+/usr/share/libtool/lt_dlloader.c

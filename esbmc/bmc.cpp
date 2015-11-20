@@ -94,39 +94,45 @@ void bmct::error_trace(smt_convt &smt_conv,
 
   goto_trace.metadata_filename = options.get_option("llvm-metadata");
 
-  std::string graphml_output_filename;
+  std::string graphml_output_filename = options.get_option("witnesspath");
   std::string tokenizer_path;
-  if (!(graphml_output_filename = options.get_option("witnesspath")).empty()){
-	set_ui(ui_message_handlert::GRAPHML);
-	tokenizer_path = options.get_option("tokenizer");
+  if(!graphml_output_filename.empty())
+  {
+    set_ui(ui_message_handlert::GRAPHML);
+    tokenizer_path = options.get_option("tokenizer");
   }
 
-  switch(ui)
+  switch (ui)
   {
-  case ui_message_handlert::PLAIN:
-    std::cout << std::endl << "Counterexample:" << std::endl;
-    show_goto_trace(std::cout, ns, goto_trace);
-  break;
+    case ui_message_handlert::GRAPHML:
+      std::cout << "The counterexample in GraphML format is available in: "
+               << options.get_option("witnesspath") << std::endl;
 
-  case ui_message_handlert::OLD_GUI:
-    show_goto_trace_gui(std::cout, ns, goto_trace);
-  break;
+      generate_goto_trace_in_graphml_format(
+        tokenizer_path,
+        graphml_output_filename,
+        ns,
+        goto_trace);
 
-  case ui_message_handlert::XML_UI:
-  {
-    xmlt xml;
-    convert(ns, goto_trace, xml);
-    std::cout << xml << std::endl;
-  }
-  break;
+    case ui_message_handlert::PLAIN:
+      std::cout << std::endl << "Counterexample:" << std::endl;
+      show_goto_trace(std::cout, ns, goto_trace);
+      break;
 
-  case ui_message_handlert::GRAPHML:
-	 generate_goto_trace_in_graphml_format(tokenizer_path, graphml_output_filename, ns, goto_trace);
-	 std::cout << "The counterexample in GraphML format is available in: " << options.get_option("witnesspath") << std::endl;
-  break;
+    case ui_message_handlert::OLD_GUI:
+      show_goto_trace_gui(std::cout, ns, goto_trace);
+      break;
 
-  default:
-    assert(false);
+    case ui_message_handlert::XML_UI:
+    {
+      xmlt xml;
+      convert(ns, goto_trace, xml);
+      std::cout << xml << std::endl;
+      break;
+    }
+
+    default:
+      assert(false);
   }
 }
 
@@ -596,10 +602,6 @@ bool bmct::run_thread()
 int
 bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 {
-#ifndef Z3
-  std::cerr << "Can't run LTL checking without Z3 compiled in" << std::endl;
-  exit(1);
-#else
   smt_convt *solver;
   bool ret;
   unsigned int num_asserts = 0;
@@ -725,7 +727,6 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
   }
 
   return ltl_res_good;
-#endif
 }
 
 bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
@@ -745,8 +746,6 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
     		  options.get_bool_option("show-counter-example"))
       {
         error_trace(*solver, equation);
-   	    report_failure();
-   	    return false;
       }
       else if(!options.get_bool_option("inductive-step")
     		  && !options.get_bool_option("forward-condition"))

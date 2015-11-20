@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/lt__dirent.c
+/usr/share/libtool/lt__dirent.c

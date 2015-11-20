@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/loaders/shl_load.c
+/usr/share/libtool/loaders/shl_load.c

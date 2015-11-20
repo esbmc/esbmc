@@ -8,6 +8,7 @@ libgotoprograms_a_SOURCES = \
       static_analysis.cpp string_abstraction.cpp \
       goto_program_serialization.cpp goto_function_serialization.cpp \
       read_bin_goto_object.cpp goto_program_irep.cpp \
-      format_strings.cpp loop_numbers.cpp \
-      write_goto_binary.cpp
+      format_strings.cpp loop_numbers.cpp goto_loops.cpp \
+      write_goto_binary.cpp goto_unwind.cpp goto_k_induction.cpp \
+      loopst.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util -Wno-unused-private-field

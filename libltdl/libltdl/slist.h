@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/libltdl/slist.h
+/usr/share/libtool/libltdl/slist.h

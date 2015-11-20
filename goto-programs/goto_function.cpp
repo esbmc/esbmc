@@ -17,6 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_types.h>
 
 #include "goto_convert_class.h"
+#include "goto_functions.h"
 
 /*******************************************************************\
 
@@ -256,8 +257,6 @@ void goto_convertt::do_function_call_dereference(
   t->location=function.location();
   migrate_expr(function_call, t->code);
 }
-
-#include "goto_functions.h"
 
 void goto_functionst::output(
   const namespacet &ns,

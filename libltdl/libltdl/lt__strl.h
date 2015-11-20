@@ -1,1 +1,1 @@
-/usr/share/libtool/libltdl/libltdl/lt__strl.h
+/usr/share/libtool/libltdl/lt__strl.h

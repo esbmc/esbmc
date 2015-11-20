@@ -93,7 +93,7 @@ std::ostream& goto_programt::output_instruction(
     break;
 
   case FUNCTION_CALL:
-    out << "FUNCTION_CALL:  " << from_expr(ns, "", to_code_function_call2t(it->code).function) << std::endl;
+    out << "FUNCTION_CALL:  " << from_expr(ns, "", migrate_expr_back(it->code)) << std::endl;
     break;
 
   case RETURN:
@@ -106,32 +106,19 @@ std::ostream& goto_programt::output_instruction(
     }
     break;
 
+  case DECL:
+  case DEAD:
   case OTHER:
   case ASSIGN:
-
-#if 0
-    if(it->code.statement()!="typeid")
-    {
-#endif
       out << from_expr(ns, identifier, it->code) << std::endl;
-#if 0
-    }
-    else
-    {
-      // Get the identifier
-      out << "  return_value = ";
-      out << "typeid(" << it->code.op0().identifier() << ").name() ";
-      out << std::endl << std::endl;
-    }
-#endif
     break;
 
   case ASSUME:
   case ASSERT:
     if(it->is_assume())
-      out << "  ASSUME ";
+      out << "ASSUME ";
     else
-      out << "  ASSERT ";
+      out << "ASSERT ";
 
     {
       out << from_expr(ns, identifier, it->guard);

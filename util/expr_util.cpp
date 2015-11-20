@@ -207,7 +207,7 @@ void make_next_state(exprt &expr)
 {
   Forall_operands(it, expr)
     make_next_state(*it);
-    
+
   if(expr.id()=="symbol")
     expr.id("next_symbol");
 }
@@ -219,7 +219,7 @@ exprt make_binary(const exprt &expr)
   if(operands.size()<=2) return expr;
 
   exprt previous=operands[0];
-  
+
   for(unsigned i=1; i<operands.size(); i++)
   {
     exprt tmp=expr;
@@ -229,7 +229,6 @@ exprt make_binary(const exprt &expr)
     tmp.op1()=operands[i];
     previous.swap(tmp);
   }
-  
+
   return previous;
 }
-
