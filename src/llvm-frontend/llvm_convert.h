@@ -170,6 +170,10 @@ private:
   void check_symbol_redefinition(
     symbolt &old_symbol,
     symbolt &new_symbol);
+
+  void convert_character_literal(
+    const clang::CharacterLiteral char_literal,
+    exprt &dest);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */
