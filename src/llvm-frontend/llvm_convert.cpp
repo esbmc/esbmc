@@ -2417,7 +2417,9 @@ void llvm_convertert::update_current_location(
 
   current_location.set_file(get_filename_from_path());
   current_location.set_line(sm->getSpellingLineNumber(source_location));
-  current_location.set_function(current_function_name);
+
+  if(!current_function_name.empty())
+    current_location.set_function(current_function_name);
 }
 
 std::string llvm_convertert::get_modulename_from_path()
