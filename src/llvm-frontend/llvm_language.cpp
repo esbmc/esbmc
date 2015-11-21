@@ -129,11 +129,7 @@ bool llvm_languaget::parse(const std::string& path)
   internal_additions(intrinsics);
 
   // From the clang tool example,
-  int num_args = 7;
-
-  // If we are running in 32 bit mode, we'll have to append a new arg
-  if(config.ansi_c.pointer_width == 32)
-    num_args++;
+  int num_args = 8;
 
   const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
 
@@ -146,9 +142,26 @@ bool llvm_languaget::parse(const std::string& path)
   the_args[i++] = "-I";
   the_args[i++] = headers_path.c_str();
 
-  // Append 32 bit mode arg
-  if(config.ansi_c.pointer_width == 32)
-    the_args[i++] = "-m32";
+  // Append mode arg
+  switch(config.ansi_c.word_size)
+  {
+    case 16:
+      the_args[i++] = "-m16";
+      break;
+
+    case 32:
+      the_args[i++] = "-m32";
+      break;
+
+    case 64:
+      the_args[i++] = "-m64";
+      break;
+
+    default:
+      std::cerr << "Unknown word size: " << config.ansi_c.word_size
+                << std::endl;
+      abort();
+  }
 
   clang::tooling::CommonOptionsParser OptionsParser(
     num_args,
