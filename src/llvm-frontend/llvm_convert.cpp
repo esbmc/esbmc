@@ -19,7 +19,6 @@
 #include <ansi-c/c_types.h>
 #include <ansi-c/convert_integer_literal.h>
 #include <ansi-c/convert_float_literal.h>
-#include <ansi-c/convert_character_literal.h>
 #include <ansi-c/ansi_c_expr.h>
 
 #include <boost/filesystem.hpp>
@@ -1182,11 +1181,10 @@ void llvm_convertert::get_expr(
       const clang::CharacterLiteral &char_literal =
         static_cast<const clang::CharacterLiteral&>(stmt);
 
-      char c[1];
-      sprintf(c,"%c",char_literal.getValue());
-
       exprt char_expr;
-      convert_character_literal("'" + std::string(c) + "'", char_expr);
+      convert_character_literal(
+        char_literal,
+        char_expr);
 
       new_expr.swap(char_expr);
       break;
