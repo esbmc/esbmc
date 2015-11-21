@@ -1,6 +1,6 @@
 struct foo1
 {
-  struct bar1
+  struct
   {
     int x;
   };
@@ -10,7 +10,7 @@ struct foo1
 
 union foo2
 {
-  struct bar2
+  struct
   {
     int x;
   };

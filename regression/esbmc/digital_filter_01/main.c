@@ -1,5 +1,4 @@
 ////Coefficients of a filter with limit cycle, |H|=2.0
-#include <digitalfilter.h>
 
 float a[] = { 1.0000f, -0.5f };
 float b[] = { 1.0000f };

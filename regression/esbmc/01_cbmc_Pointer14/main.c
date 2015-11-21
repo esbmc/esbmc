@@ -1,7 +1,6 @@
-typedef unsigned int size_t;
+#include <stdio.h>
 
 typedef struct {
-  enum blockstate bs;
   int id;
   int version;
 } block;

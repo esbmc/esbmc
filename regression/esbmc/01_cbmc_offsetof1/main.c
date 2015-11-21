@@ -1,3 +1,5 @@
+#include <assert.h>
+
 struct S
 {
   int i;
@@ -9,5 +11,5 @@ int main(void)
 {
   assert(__builtin_offsetof(struct S, i)==0);
   assert(__builtin_offsetof(struct S, ch)==4);
-  assert(__builtin_offsetof(struct S, j)==5);
+  assert(__builtin_offsetof(struct S, j)==8);
 }

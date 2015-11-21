@@ -188,7 +188,7 @@ int Compress(argc, argv)
 }
 void cl_hash(register count_int hsize);
 void output(register code_int code);
-compress()
+void compress()
 {
   register long fcode;
   register code_int i = 0;
@@ -272,7 +272,7 @@ compress()
     }
   if (bytes_out > in_count)
     exit_stat = 2;
-  return 0;
+  return;
 }
 static char buf[12];
 char_type lmask[9] = {0xff, 0xfe, 0xfc, 0xf8, 0xf0, 0xe0, 0xc0, 0x80, 0x00};
@@ -346,7 +346,7 @@ void output(code)
       offset = 0;
     }
 }
-decompress()
+void decompress()
 {
   register char_type *stackp;
   register int finchar;
@@ -361,7 +361,7 @@ decompress()
   finchar = oldcode = getcode();
   if (oldcode == -1)
     {
-      return 0;
+      return;
     }
   *outbuf++ = (char) finchar;
   stackp = ((char_type *) & ((char_type *) (htab))[1 << 12]);
@@ -402,7 +402,7 @@ decompress()
 	}
       oldcode = incode;
     }
-  return 0;
+  return;
 }
 code_int
 getcode()
@@ -479,7 +479,7 @@ oops()
     ("uncompress: corrupt input\n");
   return (1);
 }
-cl_block()
+void cl_block()
 {
   register long int rat;
   checkpoint = in_count + 10000;
@@ -511,7 +511,7 @@ cl_block()
       clear_flg = 1;
       output((code_int) 256);
     }
-  return 0;
+  return;
 }
 void cl_hash(hsize)
      register count_int hsize;
@@ -564,10 +564,10 @@ prratio(num, den)
   ("%d.%02d%%", q / 100, q % 100);
   return 0;
 }
-version()
+void version()
 {
   ("%s\n", rcs_ident);
   ("Options: ");
   ("BITS = %d\n", 12);
-  return 0;
+  return;
 }
