@@ -2251,11 +2251,11 @@ void llvm_convertert::get_binary_operator_expr(
       break;
 
     case clang::BO_XorAssign:
-      new_expr = side_effect_exprt("assign_bitor", binop_type);
+      new_expr = side_effect_exprt("assign_bitxor", binop_type);
       break;
 
     case clang::BO_OrAssign:
-      new_expr = side_effect_exprt("assign_bitxor", binop_type);
+      new_expr = side_effect_exprt("assign_bitor", binop_type);
       break;
 
     case clang::BO_Comma:
