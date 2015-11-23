@@ -1105,7 +1105,7 @@ void llvm_convertert::get_expr(
   const clang::Stmt& stmt,
   exprt& new_expr)
 {
-  update_current_location(stmt.getLocStart());
+  update_current_location(stmt.getSourceRange().getBegin());
 
   switch(stmt.getStmtClass())
   {
@@ -2411,10 +2411,13 @@ void llvm_convertert::set_source_manager(
 void llvm_convertert::update_current_location(
   clang::SourceLocation source_location)
 {
-  current_path = sm->getFilename(source_location).str();
+  clang::SourceLocation SpellingLoc = sm->getSpellingLoc(source_location);
+  clang::PresumedLoc PLoc = sm->getPresumedLoc(SpellingLoc);
 
+  current_path = PLoc.getFilename();
+
+  current_location.set_line(PLoc.getLine());
   current_location.set_file(get_filename_from_path());
-  current_location.set_line(sm->getSpellingLineNumber(source_location));
 
   if(!current_function_name.empty())
     current_location.set_function(current_function_name);
