@@ -555,7 +555,9 @@ void goto_convertt::do_function_call_symbol(
     throw "error: function `"+id2string(identifier)+"' type mismatch: expected code";
   }
 
-  bool is_assume=identifier==CPROVER_PREFIX "assume";
+  bool is_assume = ((identifier == CPROVER_PREFIX "assume")
+                    || (identifier == "c::__VERIFIER_assume"));
+
   bool is_assert=identifier=="c::assert";
 
   if(is_assume || is_assert)
@@ -570,7 +572,7 @@ void goto_convertt::do_function_call_symbol(
       return;
 
     goto_programt::targett t=dest.add_instruction(
-      is_assume?ASSUME:ASSERT);
+      is_assume ? ASSUME : ASSERT);
     migrate_expr(arguments.front(), t->guard);
 
     // The user may have re-declared the assert or assume functions to take an
