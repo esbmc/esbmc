@@ -600,6 +600,14 @@ void llvm_adjust::convert_side_effect_function_call(
 
       gen_typecast(ns, op, op_type);
     }
+    else
+    {
+      // don't know type, just do standard conversion
+
+      const typet &type = ns.follow(op.type());
+      if(type.is_array() || type.id()=="incomplete_array")
+        gen_typecast(ns, op, pointer_typet(empty_typet()));
+    }
   }
 }
 
