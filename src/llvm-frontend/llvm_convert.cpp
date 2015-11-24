@@ -1181,12 +1181,7 @@ void llvm_convertert::get_expr(
       const clang::CharacterLiteral &char_literal =
         static_cast<const clang::CharacterLiteral&>(stmt);
 
-      exprt char_expr;
-      convert_character_literal(
-        char_literal,
-        char_expr);
-
-      new_expr.swap(char_expr);
+      convert_character_literal(char_literal, new_expr);
       break;
     }
 
@@ -1212,15 +1207,7 @@ void llvm_convertert::get_expr(
       const clang::StringLiteral &string_literal =
         static_cast<const clang::StringLiteral&>(stmt);
 
-      string_constantt string;
-      string.set_value(string_literal.getString().str());
-
-      index_exprt index;
-      index.array() = string;
-      index.index() = gen_zero(index_type());
-      index.type() = string.type().subtype();
-
-      new_expr = gen_address_of(index);
+      convert_string_literal(string_literal, new_expr);
       break;
     }
 
