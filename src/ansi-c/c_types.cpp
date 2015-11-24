@@ -339,3 +339,18 @@ type2tc pointer_type2()
 {
   return type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
 }
+
+typet char16_type()
+{
+  return unsignedbv_typet(config.ansi_c.short_int_width);
+}
+
+typet char32_type()
+{
+  return unsignedbv_typet(config.ansi_c.single_width);
+}
+
+typet wchar_type()
+{
+  return signedbv_typet(config.ansi_c.int_width);
+}
