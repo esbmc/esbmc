@@ -1008,47 +1008,59 @@ void llvm_convertert::get_builtin_type(
   const clang::BuiltinType& bt,
   typet& new_type)
 {
+  std::string c_type;
+
   switch (bt.getKind()) {
     case clang::BuiltinType::Void:
       new_type = empty_typet();
+      c_type = "void";
       break;
 
     case clang::BuiltinType::Bool:
       new_type = bool_type();
+      c_type = "bool";
       break;
 
     case clang::BuiltinType::Char_U:
     case clang::BuiltinType::UChar:
-      new_type = unsignedbv_typet(config.ansi_c.char_width);
+      new_type = unsigned_char_type();
+      c_type = "unsigned char";
       break;
 
     case clang::BuiltinType::Char16:
-      new_type = unsignedbv_typet(16);
+      new_type = char16_type();
+      c_type = "char16_t";
       break;
 
     case clang::BuiltinType::Char32:
-      new_type = unsignedbv_typet(32);
+      new_type = char32_type();
+      c_type = "char32_t";
       break;
 
     case clang::BuiltinType::Char_S:
     case clang::BuiltinType::SChar:
-      new_type = signedbv_typet(config.ansi_c.char_width);
+      new_type = signed_char_type();
+      c_type = "signed char";
       break;
 
     case clang::BuiltinType::UShort:
-      new_type = unsignedbv_typet(config.ansi_c.short_int_width);
+      new_type = unsigned_short_int_type();
+      c_type = "unsigned short";
       break;
 
     case clang::BuiltinType::UInt:
       new_type = uint_type();
+      c_type = "unsigned int";
       break;
 
     case clang::BuiltinType::ULong:
       new_type = long_uint_type();
+      c_type = "unsigned long";
       break;
 
     case clang::BuiltinType::ULongLong:
       new_type = long_long_uint_type();
+      c_type = "unsigned long long";
       break;
 
     case clang::BuiltinType::UInt128:
@@ -1059,19 +1071,23 @@ void llvm_convertert::get_builtin_type(
       break;
 
     case clang::BuiltinType::Short:
-      new_type = signedbv_typet(config.ansi_c.short_int_width);
+      new_type = signed_short_int_type();
+      c_type = "signed short";
       break;
 
     case clang::BuiltinType::Int:
       new_type = int_type();
+      c_type = "unsigned int";
       break;
 
     case clang::BuiltinType::Long:
       new_type = long_int_type();
+      c_type = "unsigned long";
       break;
 
     case clang::BuiltinType::LongLong:
       new_type = long_long_int_type();
+      c_type = "unsigned long long";
       break;
 
     case clang::BuiltinType::Int128:
@@ -1083,14 +1099,17 @@ void llvm_convertert::get_builtin_type(
 
     case clang::BuiltinType::Float:
       new_type = float_type();
+      c_type = "float";
       break;
 
     case clang::BuiltinType::Double:
       new_type = double_type();
+      c_type = "double";
       break;
 
     case clang::BuiltinType::LongDouble:
       new_type = long_double_type();
+      c_type = "lond double";
       break;
 
     default:
@@ -1099,6 +1118,8 @@ void llvm_convertert::get_builtin_type(
       << std::endl;
       abort();
   }
+
+  new_type.set("#c_type", c_type);
 }
 
 void llvm_convertert::get_expr(
