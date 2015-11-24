@@ -20,18 +20,18 @@ void llvm_convertert::convert_character_literal(
   switch(char_literal.getKind())
   {
     case clang::CharacterLiteral::Ascii:
-      type.set("#cpp_type", "char");
+      type.set("#c_type", "char");
       break;
 
     case clang::CharacterLiteral::UTF16:
       type.width(16);
-      type.set("#cpp_type", "char16_t");
+      type.set("#c_type", "char16_t");
       break;
 
     case clang::CharacterLiteral::UTF32:
     case clang::CharacterLiteral::Wide:
       type.width(32);
-      type.set("#cpp_type", "char32_t");
+      type.set("#c_type", "char32_t");
       break;
 
     default:
