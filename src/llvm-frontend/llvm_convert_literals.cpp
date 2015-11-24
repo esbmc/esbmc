@@ -11,6 +11,7 @@
 #include <bitvector.h>
 
 #include <ansi-c/c_types.h>
+#include <ansi-c/convert_integer_literal.h>
 
 void llvm_convertert::convert_character_literal(
   const clang::CharacterLiteral char_literal,
@@ -42,4 +43,60 @@ void llvm_convertert::convert_character_literal(
 
   dest =
     constant_exprt(integer2binary(char_literal.getValue(), bv_width(type)), type);
+}
+
+void llvm_convertert::convert_string_literal(
+  const clang::StringLiteral string_literal,
+  exprt &dest)
+{
+  constant_exprt string(string_literal.getBytes().str(), array_typet());
+
+  array_typet &type = to_array_type(string.type());
+  typet &elem_type = type.subtype();
+
+  switch(string_literal.getKind())
+  {
+    case clang::StringLiteral::Ascii:
+    case clang::StringLiteral::UTF8:
+      elem_type = char_type();
+      elem_type.set("#c_type", "char");
+      break;
+
+    case clang::StringLiteral::UTF16:
+      elem_type = char16_type();
+      elem_type.set("#c_type", "char16_t");
+      break;
+
+    case clang::StringLiteral::UTF32:
+      elem_type = char32_type();
+      elem_type.set("#c_type", "char32_t");
+      break;
+
+    case clang::StringLiteral::Wide:
+      elem_type = wchar_type();
+      elem_type.set("#c_type", "wchar_t");
+      break;
+
+    default:
+      std::cerr << "Conversion of unsupported char literal: \"";
+      string_literal.dump();
+      abort();
+  }
+
+  exprt& size = to_array_type(type).size();
+  convert_integer_literal(integer2string(string_literal.getLength()+1), size);
+
+  for(u_int byte = 0; byte < string_literal.getLength(); ++byte)
+  {
+    exprt elem =
+      constant_exprt(
+        integer2binary(string_literal.getCodeUnit(byte),
+        bv_width(elem_type)),
+        elem_type);
+    elem.set("#cformat", string_literal.getCodeUnit(byte));
+
+    string.operands().push_back(elem);
+  }
+
+  dest.swap(string);
 }

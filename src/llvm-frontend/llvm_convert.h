@@ -174,6 +174,11 @@ private:
   void convert_character_literal(
     const clang::CharacterLiteral char_literal,
     exprt &dest);
+
+  void convert_string_literal(
+    const clang::StringLiteral string_literal,
+    exprt &dest);
+
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */
