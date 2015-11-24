@@ -2022,16 +2022,17 @@ const std::string &goto_convertt::get_string_constant(
      expr.operands().size()==1)
     return get_string_constant(expr.op0());
 
-  if(!expr.is_address_of() ||
-     expr.operands().size()!=1 ||
-     expr.op0().id()!="index" ||
-     expr.op0().operands().size()!=2 ||
-     expr.op0().op0().id()!="string-constant")
+  if(!expr.is_address_of()
+     || expr.operands().size()!=1
+     || !expr.op0().is_index()
+     || expr.op0().operands().size()!=2
+     || !expr.op0().op0().is_constant()
+     || !expr.op0().op0().type().is_array())
   {
     err_location(expr);
     str << "expected string constant, but got: "
           << expr.pretty() << std::endl;
-    throw 0;
+    abort();
   }
 
   return expr.op0().op0().value().as_string();
