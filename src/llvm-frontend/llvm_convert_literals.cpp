@@ -9,6 +9,7 @@
 
 #include <arith_tools.h>
 #include <bitvector.h>
+#include <expr_util.h>
 
 #include <ansi-c/c_types.h>
 
@@ -51,6 +52,14 @@ void llvm_convertert::convert_string_literal(
 
     string.operands().push_back(elem);
   }
+
+  BigInt size;
+  to_integer(to_array_type(type).size(), size);
+
+  for(BigInt curr_size = string.operands().size() - 1;
+      curr_size < (size - 1);
+      ++curr_size)
+    string.operands().push_back(gen_zero(type.subtype()));
 
   dest.swap(string);
 }
