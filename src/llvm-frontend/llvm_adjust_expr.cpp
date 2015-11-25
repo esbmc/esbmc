@@ -20,17 +20,29 @@
 
 bool llvm_adjust::adjust()
 {
+  // warning! hash-table iterators are not stable
+
+  symbol_listt symbol_list;
+
   Forall_symbols(it, context.symbols)
   {
     if(!it->second.is_type && it->second.type.is_code())
+      symbol_list.push_back(&it->second);
+  }
+
+  Forall_symbol_list(it, symbol_list)
+  {
+    symbolt &symbol = **it;
+    if(!symbol.is_type && symbol.type.is_code())
     {
-      adjust_function(it->second);
+      adjust_function(symbol);
     }
-    else if(has_prefix(it->second.name.as_string(), CPROVER_PREFIX))
+    else if(has_prefix(symbol.name.as_string(), CPROVER_PREFIX))
     {
-      convert_builtin(it->second);
+      convert_builtin(symbol);
     }
   }
+
   return false;
 }
 
