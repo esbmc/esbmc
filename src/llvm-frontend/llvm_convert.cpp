@@ -1215,7 +1215,7 @@ void llvm_convertert::get_expr(
       get_type(float_literal.getType(), t);
 
       exprt bval;
-      get_size_exprt(float_literal.getValueAsApproximateDouble(), t, bval );
+      get_size_exprt(float_literal.getValueAsApproximateDouble(), t, bval);
 
       new_expr.swap(bval);
       break;

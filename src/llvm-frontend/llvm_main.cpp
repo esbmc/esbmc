@@ -168,31 +168,6 @@ bool llvm_main(
       }
 
       {
-        /* zero_string doesn't work yet */
-
-        /*
-        exprt zero_string("zero_string", array_typet());
-        zero_string.type().subtype()=char_type();
-        zero_string.type().size("infinity");
-        exprt index("index", char_type());
-        index.copy_to_operands(zero_string, gen_zero(uint_type()));
-        exprt address_of("address_of", pointer_typet());
-        address_of.type().subtype()=char_type();
-        address_of.copy_to_operands(index);
-
-        if(argv_symbol.type.subtype()!=address_of.type())
-          address_of.make_typecast(argv_symbol.type.subtype());
-
-        // assign argv[*] to the address of a string-object
-        exprt array_of("array_of", argv_symbol.type);
-        array_of.copy_to_operands(address_of);
-
-        init_code.copy_to_operands(
-          code_assignt(symbol_expr(argv_symbol), array_of));
-        */
-      }
-
-      {
         // assign argv[argc] to NULL
         exprt null("constant", argv_symbol.type.subtype());
         null.value("NULL");
