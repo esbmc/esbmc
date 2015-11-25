@@ -175,9 +175,21 @@ private:
     exprt &dest);
 
   void convert_integer_literal(
-    const llvm::APInt val,
+    llvm::APInt val,
     typet type,
     exprt &dest);
+
+  void convert_float_literal(
+    llvm::APFloat val,
+    typet type,
+    exprt &dest);
+
+  void parse_float(
+    const std::string &src,
+    mp_integer &significand,
+    mp_integer &exponent, // base 10
+    bool &is_float,
+    bool &is_long);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */
