@@ -1112,7 +1112,7 @@ void llvm_convertert::get_builtin_type(
 
     case clang::BuiltinType::LongDouble:
       new_type = long_double_type();
-      c_type = "lond double";
+      c_type = "long double";
       break;
 
     default:
