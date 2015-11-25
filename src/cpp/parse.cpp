@@ -5153,7 +5153,7 @@ bool Parser::rPrimaryExpr(exprt &exp)
 
   case TOK_NULLPTR:
     lex->GetToken(tk);
-    exp=constant_exprt("nullptr", typet("nullptr"));
+    exp=constant_exprt("nullptr", "nullptr", typet("nullptr"));
     set_location(exp, tk);
     return true;
 

@@ -1001,9 +1001,13 @@ public:
   {
   }
 
-  inline constant_exprt(const irep_idt &_value, const typet &_type):
-    exprt(exprt::constant, _type)
+  inline constant_exprt(
+    const irep_idt &_value,
+    const irep_idt &_cformat,
+    const typet &_type)
+    : exprt(exprt::constant, _type)
   {
+    set("#cformat", _cformat);
     set_value(_value);
   }
 

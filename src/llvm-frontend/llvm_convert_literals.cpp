@@ -43,7 +43,10 @@ void llvm_convertert::convert_character_literal(
   }
 
   dest =
-    constant_exprt(integer2binary(char_literal.getValue(), bv_width(type)), type);
+    constant_exprt(
+      integer2binary(char_literal.getValue(), bv_width(type)),
+      integer2string(char_literal.getValue()),
+      type);
 }
 
 void llvm_convertert::convert_string_literal(
@@ -84,21 +87,18 @@ void llvm_convertert::convert_string_literal(
       abort();
   }
 
-  exprt& size = to_array_type(type).size();
-  size =
-    constant_exprt(
-      integer2binary((string_literal.getLength()+1),
-      bv_width(uint_type())),
-      uint_type());
+  constant_exprt string(
+    string_literal.getBytes().str(),
+    string_literal.getBytes().str(),
+    type);
 
   for(u_int byte = 0; byte < string_literal.getLength(); ++byte)
   {
     exprt elem =
       constant_exprt(
-        integer2binary(string_literal.getCodeUnit(byte),
-        bv_width(elem_type)),
+        integer2binary(string_literal.getCodeUnit(byte), bv_width(elem_type)),
+        integer2string(string_literal.getCodeUnit(byte)),
         elem_type);
-    elem.set("#cformat", string_literal.getCodeUnit(byte));
 
     string.operands().push_back(elem);
   }
@@ -118,19 +118,17 @@ void llvm_convertert::convert_integer_literal(
   {
     the_val =
       constant_exprt(
-        integer2binary(val.getZExtValue(),
-        bv_width(type)),
+        integer2binary(val.getZExtValue(), bv_width(type)),
+        integer2string(val.getZExtValue()),
         type);
-    the_val.set("#cformat", val.getZExtValue());
   }
   else
   {
     the_val =
       constant_exprt(
-        integer2binary(val.getSExtValue(),
-        bv_width(type)),
+        integer2binary(val.getSExtValue(), bv_width(type)),
+        integer2string(val.getSExtValue()),
         type);
-    the_val.set("#cformat", val.getSExtValue());
   }
 
   dest.swap(the_val);
