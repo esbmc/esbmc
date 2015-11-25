@@ -1187,12 +1187,8 @@ void llvm_convertert::get_expr(
 
       typet the_type;
       get_type(integer_literal.getType(), the_type);
-      assert(the_type.is_unsignedbv() || the_type.is_signedbv());
 
-      exprt bval;
-      get_size_exprt(val, the_type, bval);
-
-      new_expr.swap(bval);
+      convert_integer_literal(val, the_type, new_expr);
       break;
     }
 
