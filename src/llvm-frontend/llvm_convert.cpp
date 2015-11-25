@@ -2371,6 +2371,9 @@ void llvm_convertert::update_current_location(
   clang::SourceLocation SpellingLoc = sm->getSpellingLoc(source_location);
   clang::PresumedLoc PLoc = sm->getPresumedLoc(SpellingLoc);
 
+  if (PLoc.isInvalid())
+    return;
+
   current_path = PLoc.getFilename();
 
   current_location.set_line(PLoc.getLine());
