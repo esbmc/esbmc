@@ -18,29 +18,8 @@ void llvm_convertert::convert_character_literal(
   const clang::CharacterLiteral char_literal,
   exprt &dest)
 {
-  typet type = char_type();
-  switch(char_literal.getKind())
-  {
-    case clang::CharacterLiteral::Ascii:
-      type.set("#c_type", "char");
-      break;
-
-    case clang::CharacterLiteral::UTF16:
-      type.width(16);
-      type.set("#c_type", "char16_t");
-      break;
-
-    case clang::CharacterLiteral::UTF32:
-    case clang::CharacterLiteral::Wide:
-      type.width(32);
-      type.set("#c_type", "char32_t");
-      break;
-
-    default:
-      std::cerr << "Conversion of unsupported char literal: \"";
-      char_literal.dump();
-      abort();
-  }
+  typet type;
+  get_type(char_literal.getType(), type);
 
   dest =
     constant_exprt(
@@ -53,45 +32,15 @@ void llvm_convertert::convert_string_literal(
   const clang::StringLiteral string_literal,
   exprt &dest)
 {
-  constant_exprt string(string_literal.getBytes().str(), array_typet());
-
-  array_typet &type = to_array_type(string.type());
-  typet &elem_type = type.subtype();
-
-  switch(string_literal.getKind())
-  {
-    case clang::StringLiteral::Ascii:
-    case clang::StringLiteral::UTF8:
-      elem_type = char_type();
-      elem_type.set("#c_type", "char");
-      break;
-
-    case clang::StringLiteral::UTF16:
-      elem_type = char16_type();
-      elem_type.set("#c_type", "char16_t");
-      break;
-
-    case clang::StringLiteral::UTF32:
-      elem_type = char32_type();
-      elem_type.set("#c_type", "char32_t");
-      break;
-
-    case clang::StringLiteral::Wide:
-      elem_type = wchar_type();
-      elem_type.set("#c_type", "wchar_t");
-      break;
-
-    default:
-      std::cerr << "Conversion of unsupported char literal: \"";
-      string_literal.dump();
-      abort();
-  }
+  typet type;
+  get_type(string_literal.getType(), type);
 
   constant_exprt string(
     string_literal.getBytes().str(),
     string_literal.getBytes().str(),
     type);
 
+  typet &elem_type = type.subtype();
   for(u_int byte = 0; byte < string_literal.getLength(); ++byte)
   {
     exprt elem =
