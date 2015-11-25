@@ -580,11 +580,6 @@ void llvm_convertert::get_var(
   }
 
   new_expr = decl;
-
-  // Increment current scope variable number. If the variable
-  // is global/static, it has no impact. If the variable is
-  // scoped, than it will force a unique name on it
-  ++current_scope_var_num;
 }
 
 void llvm_convertert::get_function(
@@ -2330,9 +2325,9 @@ std::string llvm_convertert::get_var_name(
     return name;
 
   std::string pretty_name = "";
-  if(current_function_name!= "")
+  if(!current_function_name.empty())
     pretty_name += current_function_name + "::";
-  pretty_name += integer2string(current_scope_var_num) + "::";
+  pretty_name += integer2string(current_scope_var_num++) + "::";
   pretty_name += name;
 
   return pretty_name;
