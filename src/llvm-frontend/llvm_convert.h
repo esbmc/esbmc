@@ -148,11 +148,6 @@ private:
   std::string get_tag_name(
     std::string _name);
 
-  void get_size_exprt(
-    double val,
-    typet type,
-    exprt &expr);
-
   void set_source_manager(clang::SourceManager &source_manager);
   void update_current_location(clang::SourceLocation source_location);
   std::string get_filename_from_path();

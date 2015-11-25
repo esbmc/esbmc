@@ -2359,22 +2359,6 @@ std::string llvm_convertert::get_tag_name(
   return "tag-" + name;
 }
 
-void llvm_convertert::get_size_exprt(
-  double val,
-  typet type,
-  exprt& expr)
-{
-  std::ostringstream strs;
-  strs << val;
-
-  if(type == float_type())
-    convert_float_literal(strs.str() + "f", expr);
-  else if(type == double_type())
-    convert_float_literal(strs.str(), expr);
-  else
-    abort();
-}
-
 void llvm_convertert::set_source_manager(
   clang::SourceManager& source_manager)
 {
