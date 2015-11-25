@@ -7,8 +7,6 @@
 
 #include "llvm_convert.h"
 
-#include <sstream>
-
 #include <std_code.h>
 #include <std_expr.h>
 #include <expr_util.h>
@@ -18,7 +16,6 @@
 #include <bitvector.h>
 
 #include <ansi-c/c_types.h>
-#include <ansi-c/convert_float_literal.h>
 #include <ansi-c/ansi_c_expr.h>
 
 #include <boost/filesystem.hpp>
@@ -1214,10 +1211,7 @@ void llvm_convertert::get_expr(
       typet t;
       get_type(float_literal.getType(), t);
 
-      exprt bval;
-      get_size_exprt(float_literal.getValueAsApproximateDouble(), t, bval);
-
-      new_expr.swap(bval);
+      convert_float_literal(float_literal.getValue(), t, new_expr);
       break;
     }
 
