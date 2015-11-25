@@ -2025,9 +2025,7 @@ const std::string &goto_convertt::get_string_constant(
   if(!expr.is_address_of()
      || expr.operands().size()!=1
      || !expr.op0().is_index()
-     || expr.op0().operands().size()!=2
-     || !expr.op0().op0().is_constant()
-     || !expr.op0().op0().type().is_array())
+     || expr.op0().operands().size()!=2)
   {
     err_location(expr);
     str << "expected string constant, but got: "
