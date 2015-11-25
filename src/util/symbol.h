@@ -104,10 +104,14 @@ std::ostream &operator<<(std::ostream &out,
 
 #include <list>
 
-typedef std::list<symbolt> symbol_listt;
+typedef std::list<symbolt*> symbol_listt;
 
 #define forall_symbol_list(it, expr) \
   for(symbol_listt::const_iterator it=(expr).begin(); \
+      it!=(expr).end(); it++)
+
+#define Forall_symbol_list(it, expr) \
+  for(symbol_listt::iterator it=(expr).begin(); \
       it!=(expr).end(); it++)
 
 typedef std::list<const symbolt *> symbolptr_listt;
