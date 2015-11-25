@@ -350,8 +350,8 @@ void llvm_convertert::get_enum_constants(
   symbol.value =
     constant_exprt(
       integer2binary(enumcd.getInitVal().getSExtValue(),
-      bv_width(uint_type())),
-      uint_type());
+      bv_width(int_type())),
+      int_type());
 
   new_expr = symbol.value;
 
@@ -766,8 +766,8 @@ void llvm_convertert::get_type(
       type.size() =
         constant_exprt(
           integer2binary(val.getSExtValue(),
-          bv_width(uint_type())),
-          uint_type());
+          bv_width(int_type())),
+          int_type());
 
       new_type = type;
       break;
@@ -1282,8 +1282,8 @@ void llvm_convertert::get_expr(
       new_expr =
         constant_exprt(
           integer2binary(val.getSExtValue(),
-          bv_width(uint_type())),
-          uint_type());
+          bv_width(int_type())),
+          int_type());
       break;
     }
 
@@ -1302,8 +1302,8 @@ void llvm_convertert::get_expr(
         new_expr =
           constant_exprt(
             integer2binary(val.getSExtValue(),
-            bv_width(uint_type())),
-            uint_type());
+            bv_width(int_type())),
+            int_type());
       }
       else
       {
