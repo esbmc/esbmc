@@ -179,6 +179,10 @@ private:
     const clang::StringLiteral string_literal,
     exprt &dest);
 
+  void convert_integer_literal(
+    const llvm::APInt val,
+    typet type,
+    exprt &dest);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */

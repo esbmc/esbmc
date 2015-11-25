@@ -100,3 +100,33 @@ void llvm_convertert::convert_string_literal(
 
   dest.swap(string);
 }
+
+void llvm_convertert::convert_integer_literal(
+  const llvm::APInt val,
+  typet type,
+  exprt &dest)
+{
+  assert(type.is_unsignedbv() || type.is_signedbv());
+
+  exprt the_val;
+  if (type.is_unsignedbv())
+  {
+    the_val =
+      constant_exprt(
+        integer2binary(val.getZExtValue(),
+        bv_width(type)),
+        type);
+    the_val.set("#cformat", val.getZExtValue());
+  }
+  else
+  {
+    the_val =
+      constant_exprt(
+        integer2binary(val.getSExtValue(),
+        bv_width(type)),
+        type);
+    the_val.set("#cformat", val.getSExtValue());
+  }
+
+  dest.swap(the_val);
+}
