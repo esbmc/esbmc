@@ -15,9 +15,9 @@
 #include <mp_arith.h>
 #include <arith_tools.h>
 #include <i2string.h>
+#include <bitvector.h>
 
 #include <ansi-c/c_types.h>
-#include <ansi-c/convert_integer_literal.h>
 #include <ansi-c/convert_float_literal.h>
 #include <ansi-c/ansi_c_expr.h>
 
@@ -347,9 +347,13 @@ void llvm_convertert::get_enum_constants(
     enum_value_identifier,
     false); // There is no such thing as static enum constants on ANSI-C
 
-  exprt bval;
-  get_size_exprt(enumcd.getInitVal(), signedbv_typet(), bval);
-  symbol.value = bval;
+  symbol.value =
+    constant_exprt(
+      integer2binary(enumcd.getInitVal().getSExtValue(),
+      bv_width(uint_type())),
+      uint_type());
+
+  new_expr = symbol.value;
 
   // Save the enum constant address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
@@ -357,7 +361,6 @@ void llvm_convertert::get_enum_constants(
 
   move_symbol_to_context(symbol);
 
-  new_expr = bval;
 }
 
 void llvm_convertert::get_struct(
@@ -759,12 +762,12 @@ void llvm_convertert::get_type(
       typet the_type;
       get_type(arr.getElementType(), the_type);
 
-      exprt bval;
-      get_size_exprt(val, signedbv_typet(), bval);
-
-      array_typet type;
-      type.size() = bval;
-      type.subtype() = the_type;
+      array_typet type(the_type);
+      type.size() =
+        constant_exprt(
+          integer2binary(val.getSExtValue(),
+          bv_width(uint_type())),
+          uint_type());
 
       new_type = type;
       break;
@@ -1276,14 +1279,11 @@ void llvm_convertert::get_expr(
       llvm::APSInt val;
       assert(offset.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()));
 
-      typet t;
-      get_type(offset.getType(), t);
-
-      exprt offset_value;
-      convert_integer_literal(integer2string(val.getSExtValue()), offset_value);
-      gen_typecast(ns, offset_value, t);
-
-      new_expr = offset_value;
+      new_expr =
+        constant_exprt(
+          integer2binary(val.getSExtValue(),
+          bv_width(uint_type())),
+          uint_type());
       break;
     }
 
@@ -1299,11 +1299,11 @@ void llvm_convertert::get_expr(
       llvm::APSInt val;
       if(unary.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()))
       {
-        exprt value;
-        convert_integer_literal(integer2string(val.getSExtValue()), value);
-        gen_typecast(ns, value, t);
-
-        new_expr = value;
+        new_expr =
+          constant_exprt(
+            integer2binary(val.getSExtValue(),
+            bv_width(uint_type())),
+            uint_type());
       }
       else
       {
@@ -1978,17 +1978,14 @@ void llvm_convertert::get_decl_ref(
       const clang::EnumConstantDecl &enumcd =
         static_cast<const clang::EnumConstantDecl &>(decl);
 
-      std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
-      identifier = object_map.find(address)->second;
-
       get_type(enumcd.getType(), type);
 
-      // TODO: This shouldn't be done here, the issue is that the enum tag
-      // and enum constants have the same id (c_enum), which is stupid and
-      // breaks esbmc when we try to replace all c_enum on the next step
-      // We should replace the id, add it to migrate and replace only the
-      // constants
-      get_size_exprt(enumcd.getInitVal(), signedbv_typet(), new_expr);
+      // For enum constants, we get their value directly
+      new_expr =
+        constant_exprt(
+          integer2binary(enumcd.getInitVal().getSExtValue(),
+          bv_width(int_type())),
+          int_type());
       return;
 
       break;
@@ -2366,28 +2363,6 @@ std::string llvm_convertert::get_tag_name(
     name = "#anon"+i2string(anon_counter++);
 
   return "tag-" + name;
-}
-
-void llvm_convertert::get_size_exprt(
-  llvm::APInt val,
-  typet type,
-  exprt &expr)
-{
-  if (type.is_unsignedbv())
-  {
-    uint64_t the_val = val.getZExtValue();
-    convert_integer_literal(integer2string(the_val) + "u", expr);
-  }
-  else if(type.is_signedbv())
-  {
-    int64_t the_val = val.getSExtValue();
-    convert_integer_literal(integer2string(the_val), expr);
-  }
-  else
-  {
-    // This method should only be used to convert integer values
-    abort();
-  }
 }
 
 void llvm_convertert::get_size_exprt(

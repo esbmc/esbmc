@@ -149,11 +149,6 @@ private:
     std::string _name);
 
   void get_size_exprt(
-    llvm::APInt val,
-    typet type,
-    exprt &expr);
-
-  void get_size_exprt(
     double val,
     typet type,
     exprt &expr);

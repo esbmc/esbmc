@@ -11,7 +11,6 @@
 #include <bitvector.h>
 
 #include <ansi-c/c_types.h>
-#include <ansi-c/convert_integer_literal.h>
 
 void llvm_convertert::convert_character_literal(
   const clang::CharacterLiteral char_literal,
@@ -84,7 +83,11 @@ void llvm_convertert::convert_string_literal(
   }
 
   exprt& size = to_array_type(type).size();
-  convert_integer_literal(integer2string(string_literal.getLength()+1), size);
+  size =
+    constant_exprt(
+      integer2binary((string_literal.getLength()+1),
+      bv_width(uint_type())),
+      uint_type());
 
   for(u_int byte = 0; byte < string_literal.getLength(); ++byte)
   {
