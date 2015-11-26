@@ -14,6 +14,7 @@
 #include <std_code.h>
 #include <config.h>
 #include <message.h>
+#include <bitvector.h>
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/c_main.h>
@@ -105,8 +106,8 @@ bool llvm_main(
     {
       namespacet ns(context);
 
-      const symbolt &argc_symbol=ns.lookup("c::argc'");
-      const symbolt &argv_symbol=ns.lookup("c::argv'");
+      const symbolt &argc_symbol=ns.lookup(arguments[0].cmt_identifier());
+      const symbolt &argv_symbol=ns.lookup(arguments[1].cmt_identifier());
 
       {
         // assume argc is at least one
@@ -141,11 +142,31 @@ bool llvm_main(
         assumption.set_statement("assume");
         assumption.move_to_operands(ge);
         init_code.move_to_operands(assumption);
+
+        // assign argv[argc] to NULL
+        constant_exprt null(
+          integer2binary(0, bv_width(argc_symbol.type)),
+          integer2string(0),
+          argc_symbol.type);
+
+        exprt index_expr("index", argv_symbol.type.subtype());
+        index_expr.copy_to_operands(
+          symbol_expr(argv_symbol),
+          symbol_expr(argc_symbol));
+
+        // disable bounds check on that one
+        // Logic to perform this ^ moved into goto_check, rather than load
+        // irep2 with additional baggage.
+
+        init_code.copy_to_operands(code_assignt(index_expr, null));
       }
 
       if(arguments.size()==3)
       {
-        const symbolt &envp_size_symbol=ns.lookup("c::envp_size'");
+        const symbolt &envp_symbol = ns.lookup(arguments[2].cmt_identifier());
+        const symbolt &envp_size_symbol =
+          ns.lookup(envp_symbol.name.as_string() + "_size");
+
         // assume envp_size is at most MAX-1
         mp_integer max;
 
@@ -165,29 +186,6 @@ bool llvm_main(
         assumption.set_statement("assume");
         assumption.move_to_operands(ge);
         init_code.move_to_operands(assumption);
-      }
-
-      {
-        // assign argv[argc] to NULL
-        exprt null("constant", argv_symbol.type.subtype());
-        null.value("NULL");
-
-        exprt index_expr("index", argv_symbol.type.subtype());
-        index_expr.copy_to_operands(
-          symbol_expr(argv_symbol),
-          symbol_expr(argc_symbol));
-
-        // disable bounds check on that one
-        // Logic to perform this ^ moved into goto_check, rather than load
-        // irep2 with additional baggage.
-
-        init_code.copy_to_operands(code_assignt(index_expr, null));
-      }
-
-      if(arguments.size()==3)
-      {
-        const symbolt &envp_symbol=ns.lookup("c::envp'");
-        const symbolt &envp_size_symbol=ns.lookup("c::envp_size'");
 
         // assume envp[envp_size] is NULL
         exprt null("constant", envp_symbol.type.subtype());
@@ -209,9 +207,7 @@ bool llvm_main(
         assumption2.set_statement("assume");
         assumption2.move_to_operands(is_null);
         init_code.move_to_operands(assumption2);
-      }
 
-      {
         exprt::operandst &operands=call.arguments();
 
         if(arguments.size()==3)
@@ -241,7 +237,6 @@ bool llvm_main(
         // do we need envp?
         if(arguments.size()==3)
         {
-          const symbolt &envp_symbol=ns.lookup("c::envp'");
           exprt &op2=operands[2];
 
           const exprt &arg2=arguments[2];

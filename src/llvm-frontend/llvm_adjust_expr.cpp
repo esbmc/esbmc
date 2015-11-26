@@ -7,6 +7,7 @@
 
 #include "llvm_adjust.h"
 
+#include <arith_tools.h>
 #include <std_code.h>
 #include <expr_util.h>
 #include <bitvector.h>
@@ -70,6 +71,9 @@ void llvm_adjust::adjust_function(symbolt& symbol)
   {
     convert_expr(*it);
   }
+
+  if(symbol.name=="c::main")
+    add_argc_argv(symbol);
 }
 
 void llvm_adjust::convert_expr(exprt& expr)
@@ -697,6 +701,67 @@ void llvm_adjust::convert_expr_binary_boolean(exprt& expr)
 
   gen_typecast_bool(ns, expr.op0());
   gen_typecast_bool(ns, expr.op1());
+}
+
+void llvm_adjust::add_argc_argv(const symbolt& main_symbol)
+{
+  const code_typet::argumentst &arguments=
+    to_code_type(main_symbol.type).arguments();
+
+  if(arguments.size()==0)
+    return;
+
+  if(arguments.size() != 2 && arguments.size() != 3)
+  {
+    std::cerr << "main expected to have no or two or three arguments"
+              << std::endl;
+    abort();
+  }
+
+  // main args should already be added on the last step
+  symbolt &argc_symbol =
+    context.symbols.find(arguments[0].cmt_identifier())->second;
+
+  argc_symbol.static_lifetime = true;
+  argc_symbol.lvalue = true;
+  argc_symbol.file_local = false;
+  argc_symbol.is_actual = false;
+
+  symbolt &argv_symbol =
+    context.symbols.find(arguments[1].cmt_identifier())->second;
+
+  // need to add one to the size -- the array is terminated
+  // with NULL
+  exprt one_expr=from_integer(1, argc_symbol.type);
+
+  exprt size_expr("+", argc_symbol.type);
+  size_expr.copy_to_operands(symbol_expr(argc_symbol), one_expr);
+
+  argv_symbol.type.size(size_expr);
+
+  argv_symbol.lvalue=true;
+
+  if (arguments.size() == 3)
+  {
+    symbolt &envp_symbol =
+      context.symbols.find(arguments[2].cmt_identifier())->second;
+    envp_symbol.static_lifetime=true;
+
+    symbolt envp_size_symbol, *envp_new_size_symbol;
+    envp_size_symbol.base_name = envp_symbol.base_name.as_string() + "_size";
+    envp_size_symbol.name = envp_symbol.name.as_string() + "_size";
+    envp_size_symbol.type = arguments[0].type(); // same type as argc!
+    envp_size_symbol.static_lifetime = true;
+    envp_size_symbol.mode = envp_symbol.mode;
+    envp_size_symbol.module = envp_symbol.module;
+
+    exprt size_expr = symbol_expr(envp_size_symbol);
+
+    envp_symbol.type.id("array");
+    envp_symbol.type.size(size_expr);
+
+    context.move(envp_size_symbol, envp_new_size_symbol);
+  }
 }
 
 void llvm_adjust::make_index_type(exprt& expr)
