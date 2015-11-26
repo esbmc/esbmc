@@ -23,7 +23,10 @@ public:
   {
     const symbolt *symbol;
     if(lookup(name, symbol))
-      throw "identifier "+id2string(name)+" not found";
+    {
+      std::cerr <<  "identifier "+id2string(name)+" not found";
+      abort();
+    }
     return *symbol;
   }
 
