@@ -1072,17 +1072,17 @@ void llvm_convertert::get_builtin_type(
 
     case clang::BuiltinType::Int:
       new_type = int_type();
-      c_type = "unsigned int";
+      c_type = "signed int";
       break;
 
     case clang::BuiltinType::Long:
       new_type = long_int_type();
-      c_type = "unsigned long";
+      c_type = "signed long";
       break;
 
     case clang::BuiltinType::LongLong:
       new_type = long_long_int_type();
-      c_type = "unsigned long long";
+      c_type = "signed long long";
       break;
 
     case clang::BuiltinType::Int128:
