@@ -318,23 +318,23 @@ void llvm_convertert::get_enum_constants(
   const clang::EnumConstantDecl& enumcd,
   exprt& new_expr)
 {
-  // The enum name is different on the old frontend
-  // Global variables have the form <language>::<variable_name>
-  // But for some reason, global enums have the form
-  // <language>::<module>::<variable_name>, on the new frontend
-  // follow the standard for global variables
-  std::string enum_value_identifier =
-    get_var_name(enumcd.getName().str(), !current_function_name.empty());
-
-  // The parent enum to construct the enum constant's type
+  // The parent enum to construct the enum constant's name
   const clang::EnumDecl &enumd =
     static_cast<const clang::EnumDecl &>(*enumcd.getDeclContext());
 
-  std::string identifier = get_tag_name(enumd.getName().str());
+  std::size_t parent_address = reinterpret_cast<std::size_t>(&enumd);
+  std::string parent_identifier = type_map[parent_address];
 
-  typet t = enum_type();
-  t.id("c_enum");
-  t.tag(identifier);
+  // remove c::
+  parent_identifier = parent_identifier.substr(3);
+
+  std::string identifier = parent_identifier + "::" + enumcd.getName().str();
+
+  std::string enum_value_identifier =
+    get_var_name(identifier, !current_function_name.empty());
+
+  typet t;
+  get_type(enumcd.getType(), t);
 
   symbolt symbol;
   get_default_symbol(
@@ -357,7 +357,6 @@ void llvm_convertert::get_enum_constants(
   object_map[address] = symbol.name.as_string();
 
   move_symbol_to_context(symbol);
-
 }
 
 void llvm_convertert::get_struct(
