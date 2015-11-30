@@ -265,12 +265,9 @@ void goto_k_inductiont::duplicate_loop_body(
   // build a map for branch targets inside the loop
   std::map<goto_programt::targett, unsigned> target_map;
 
-  goto_programt::targett _loop_head = loop_head;
-  ++_loop_head;
-
   {
     unsigned count = 0;
-    for(goto_programt::targett t = _loop_head; t != loop_exit; t++)
+    for(goto_programt::targett t = loop_head; t != loop_exit; t++)
     {
       assert(t != goto_function.body.instructions.end());
 
@@ -290,7 +287,7 @@ void goto_k_inductiont::duplicate_loop_body(
   std::vector<goto_programt::targett> target_vector;
   target_vector.reserve(target_map.size());
 
-  for(goto_programt::targett t = _loop_head; t != loop_exit; t++)
+  for(goto_programt::targett t = loop_head; t != loop_exit; t++)
   {
     assert(t != goto_function.body.instructions.end());
 
@@ -329,7 +326,7 @@ void goto_k_inductiont::duplicate_loop_body(
   }
 
   // now insert copies before _loop_exit
-  goto_function.body.insert_swap(_loop_exit, copies);
+  goto_function.body.insert_swap(loop_exit, copies);
 
   // remove skips
   remove_skip(goto_function.body);
