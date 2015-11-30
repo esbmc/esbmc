@@ -181,6 +181,7 @@ void goto_k_inductiont::make_nondet_assign(goto_programt::targett& loop_head)
     exprt lhs_expr = state.components().at(j);
 
     code_assignt new_assign(lhs_expr, rhs_expr);
+    new_assign.location() = loop_head->location;
     copy(new_assign, ASSIGN, dest);
   }
 
