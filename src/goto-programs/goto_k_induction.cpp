@@ -322,9 +322,9 @@ void goto_k_inductiont::duplicate_loop_body(
 
 void goto_k_inductiont::convert_assert_to_assume(
   goto_programt::targett& loop_head,
-  goto_programt::targett& _loop_exit)
+  goto_programt::targett& loop_exit)
 {
-  for(goto_programt::targett t=loop_head; t!=_loop_exit; t++)
+  for(goto_programt::targett t=loop_head; t!=loop_exit; t++)
     if(t->is_assert()) t->type=ASSUME;
 }
 
