@@ -133,7 +133,7 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   make_nondet_assign(loop_head);
 
   // Assume the loop condition before go into the loop
-  assume_loop_cond(loop_head, loop_cond);
+  assume_loop_cond_before_loop(loop_head, loop_cond);
 
   // Duplicate the loop after loop_exit, but without the backward goto
   duplicate_loop_body(loop_head, loop_exit, loop_cond);
@@ -184,7 +184,7 @@ void goto_k_inductiont::make_nondet_assign(goto_programt::targett& loop_head)
   goto_function.body.destructive_insert(loop_head, dest);
 }
 
-void goto_k_inductiont::assume_loop_cond(
+void goto_k_inductiont::assume_loop_cond_before_loop(
   goto_programt::targett& loop_head,
   exprt &loop_cond)
 {
@@ -196,6 +196,23 @@ void goto_k_inductiont::assume_loop_cond(
     assume_cond(loop_cond, dest);
 
   goto_function.body.destructive_insert(loop_head, dest);
+}
+
+void goto_k_inductiont::assume_neg_loop_cond_after_loop(
+  goto_programt::targett& loop_exit,
+  exprt& loop_cond)
+{
+  goto_programt dest;
+
+  if(loop_cond.is_not())
+    assume_cond(gen_not(loop_cond.op0()), dest);
+  else
+    assume_cond(gen_not(loop_cond), dest);
+
+  goto_programt::targett _loop_exit = loop_exit;
+  ++_loop_exit;
+
+  goto_function.body.insert_swap(_loop_exit, dest);
 }
 
 void goto_k_inductiont::duplicate_loop_body(

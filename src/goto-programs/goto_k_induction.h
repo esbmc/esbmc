@@ -80,8 +80,11 @@ protected:
     goto_programt::targett &loop_exit,
     exprt &loop_cond);
   void make_nondet_assign(goto_programt::targett &loop_head);
-  void assume_loop_cond(
+  void assume_loop_cond_before_loop(
     goto_programt::targett &loop_head,
+    exprt &loop_cond);
+  void assume_neg_loop_cond_after_loop(
+    goto_programt::targett &loop_exit,
     exprt &loop_cond);
   void duplicate_loop_body(
     goto_programt::targett &loop_head,
