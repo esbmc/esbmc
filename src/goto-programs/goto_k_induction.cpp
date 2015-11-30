@@ -138,6 +138,9 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   // Duplicate the loop after loop_exit, but without the backward goto
   duplicate_loop_body(loop_head, loop_exit, loop_cond);
 
+  // Assume the loop termination condition after the copy's exit
+  assume_neg_loop_cond_after_loop(loop_exit, loop_cond);
+
   // Convert assert into assumes on the original loop (don't touch the
   // copy made on the last step)
   convert_assert_to_assume(loop_head, loop_exit);
