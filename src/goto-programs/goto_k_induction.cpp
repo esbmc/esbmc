@@ -200,19 +200,19 @@ void goto_k_inductiont::assume_loop_cond(
 
 void goto_k_inductiont::duplicate_loop_body(
   goto_programt::targett& loop_head,
-  goto_programt::targett& _loop_exit,
+  goto_programt::targett& loop_exit,
   exprt& loop_cond)
 {
-  goto_programt::targett loop_exit = _loop_exit;
-  ++loop_exit;
+  goto_programt::targett _loop_exit = loop_exit;
+  ++_loop_exit;
 
   // Iteration points will only be duplicated
   std::vector<goto_programt::targett> iteration_points;
   iteration_points.resize(2);
 
-  if(loop_exit != loop_head)
+  if(_loop_exit != loop_head)
   {
-    goto_programt::targett t_before=loop_exit;
+    goto_programt::targett t_before = _loop_exit;
     t_before--;
 
     if(t_before->is_goto() && is_true(t_before->guard))
@@ -222,33 +222,36 @@ void goto_k_inductiont::duplicate_loop_body(
     else
     {
       // guard against 'fall-out'
-      goto_programt::targett t_goto=goto_function.body.insert(loop_exit);
+      goto_programt::targett t_goto = goto_function.body.insert(_loop_exit);
 
-      t_goto->make_goto(loop_exit);
-      t_goto->location=loop_exit->location;
-      t_goto->function=loop_exit->function;
-      t_goto->guard=true_expr;
+      t_goto->make_goto(_loop_exit);
+      t_goto->location = _loop_exit->location;
+      t_goto->function = _loop_exit->function;
+      t_goto->guard = true_expr;
     }
   }
 
-  goto_programt::targett t_skip=goto_function.body.insert(loop_exit);
-  goto_programt::targett loop_iter=t_skip;
+  goto_programt::targett t_skip = goto_function.body.insert(_loop_exit);
+  goto_programt::targett loop_iter = t_skip;
 
   t_skip->make_skip();
-  t_skip->location=loop_head->location;
-  t_skip->function=loop_head->function;
+  t_skip->location = loop_head->location;
+  t_skip->function = loop_head->function;
 
   // record the exit point of first iteration
-  iteration_points[0]=loop_iter;
+  iteration_points[0] = loop_iter;
 
   // build a map for branch targets inside the loop
   std::map<goto_programt::targett, unsigned> target_map;
 
+  goto_programt::targett _loop_head = loop_head;
+  ++_loop_head;
+
   {
-    unsigned count=0;
-    for(goto_programt::targett t=loop_head; t!=_loop_exit; t++)
+    unsigned count = 0;
+    for(goto_programt::targett t = _loop_head; t != loop_exit; t++)
     {
-      assert(t!=goto_function.body.instructions.end());
+      assert(t != goto_function.body.instructions.end());
 
       // Don't copy instructions inserted by the inductive-step
       // transformations
@@ -259,62 +262,53 @@ void goto_k_inductiont::duplicate_loop_body(
     }
   }
 
-  // we make k-1 copies, to be inserted before loop_exit
+  // we make k-1 copies, to be inserted before _loop_exit
   goto_programt copies;
 
   // make a copy
   std::vector<goto_programt::targett> target_vector;
   target_vector.reserve(target_map.size());
 
-  for(goto_programt::targett t=loop_head;
-      t!=_loop_exit; t++)
+  for(goto_programt::targett t = _loop_head; t != loop_exit; t++)
   {
-    assert(t!=goto_function.body.instructions.end());
+    assert(t != goto_function.body.instructions.end());
 
     // Don't copy instructions inserted by the inductive-step
     // transformations
     if(t->inductive_step_instruction)
       continue;
 
-    goto_programt::targett copied_t=copies.add_instruction();
-    *copied_t=*t;
+    goto_programt::targett copied_t = copies.add_instruction();
+    *copied_t = *t;
     target_vector.push_back(copied_t);
   }
 
   // record exit point of this copy
-  iteration_points[1]=target_vector.back();
+  iteration_points[1] = target_vector.back();
 
   // adjust the intra-loop branches
-  for(unsigned i=0; i<target_vector.size(); i++)
+  for(unsigned i=0; i < target_vector.size(); i++)
   {
-    goto_programt::targett t=target_vector[i];
+    goto_programt::targett t = target_vector[i];
 
     for(goto_programt::instructiont::targetst::iterator
-        t_it=t->targets.begin();
-        t_it!=t->targets.end();
+        t_it = t->targets.begin();
+        t_it != t->targets.end();
         t_it++)
     {
-      std::map<goto_programt::targett, unsigned>::const_iterator
-      m_it=target_map.find(*t_it);
+      std::map<goto_programt::targett, unsigned>::const_iterator m_it =
+        target_map.find(*t_it);
 
-      if(m_it!=target_map.end()) // intra-loop?
+      if(m_it != target_map.end()) // intra-loop?
       {
         assert(m_it->second < target_vector.size());
-        *t_it=target_vector[m_it->second];
+        *t_it = target_vector[m_it->second];
       }
     }
   }
 
-  assert(copies.instructions.size()==target_map.size());
-
-  // Assume the loop termination condition after the copy's exit
-  if(loop_cond.is_not())
-    assume_cond(loop_cond, copies);
-  else
-    assume_cond(gen_not(loop_cond), copies);
-
-  // now insert copies before loop_exit
-  goto_function.body.destructive_insert(loop_exit, copies);
+  // now insert copies before _loop_exit
+  goto_function.body.insert_swap(_loop_exit, copies);
 
   // remove skips
   remove_skip(goto_function.body);
