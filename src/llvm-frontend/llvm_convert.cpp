@@ -165,10 +165,32 @@ void llvm_convertert::get_decl(
       typet t;
       get_type(fd.getType(), t);
 
-      struct_union_typet::componentt comp(fd.getName().str(), t);
-      comp.set_pretty_name(fd.getName().str());
+      // The parent RecordDecl to construct the field's name
+      const clang::RecordDecl &rd =
+        static_cast<const clang::RecordDecl &>(*fd.getDeclContext());
 
-      new_expr = comp;
+      std::size_t parent_address = reinterpret_cast<std::size_t>(&rd);
+      std::string parent_identifier = type_map[parent_address];
+
+      // remove c::
+      parent_identifier = parent_identifier.substr(3);
+
+      std::string field_identifier =
+        get_var_name(fd.getName().str(), false);
+
+      std::string identifier = parent_identifier + "::" + field_identifier;
+
+      struct_union_typet::componentt comp(identifier, t);
+      comp.set_pretty_name(field_identifier);
+
+      if(fd.isBitField())
+      {
+        exprt width;
+        get_expr(*fd.getBitWidth(), width);
+        comp.type().width(width.cformat());
+      }
+
+      new_expr.swap(comp);
       break;
     }
 
@@ -1340,9 +1362,6 @@ void llvm_convertert::get_expr(
       const clang::MemberExpr &member =
         static_cast<const clang::MemberExpr &>(stmt);
 
-      typet t;
-      get_type(member.getType(), t);
-
       exprt base;
       get_expr(*member.getBase(), base);
 
@@ -1350,10 +1369,10 @@ void llvm_convertert::get_expr(
       if(base.type().get_bool("anonymous"))
         base.component_name(base.type().tag());
 
-      exprt comp_name;
-      get_decl(*member.getMemberDecl(), comp_name);
+      exprt comp;
+      get_decl(*member.getMemberDecl(), comp);
 
-      new_expr = member_exprt(base, comp_name.name(), t);
+      new_expr = member_exprt(base, comp.name(), comp.type());
       break;
     }
 
