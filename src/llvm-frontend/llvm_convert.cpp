@@ -2329,8 +2329,10 @@ void llvm_convertert::get_default_symbol(
   symbol.pretty_name = pretty_name;
 
   std::string symbol_name = "c::";
+
   if(is_local)
     symbol_name += get_modulename_from_path() + "::";
+
   symbol_name += pretty_name;
 
   symbol.name = symbol_name;
@@ -2340,6 +2342,9 @@ std::string llvm_convertert::get_var_name(
   std::string name,
   bool is_local)
 {
+  if(name.empty())
+    name = "#anon"+i2string(anon_counter++);
+
   if(!is_local)
     return name;
 
