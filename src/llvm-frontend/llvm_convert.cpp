@@ -252,19 +252,7 @@ void llvm_convertert::get_decl(
       {
         const clang::RecordDecl &record =
           static_cast<const clang::RecordDecl &>(tag);
-
-        if(tag.isStruct())
-          get_struct(record, new_expr);
-        else if(tag.isUnion())
-          get_union(record, new_expr);
-        else if(tag.isClass())
-          get_class(record, new_expr);
-        else
-        {
-          std::cerr << "Error: unknown record type at "
-                    << current_function_name << std::endl;
-          abort();
-        }
+        get_struct_union_class(record, new_expr);
       }
 
       break;
@@ -381,31 +369,49 @@ void llvm_convertert::get_enum_constants(
   move_symbol_to_context(symbol);
 }
 
-void llvm_convertert::get_struct(
-  const clang::RecordDecl& structd,
+void llvm_convertert::get_struct_union_class(
+  const clang::RecordDecl& recordd,
   exprt& new_expr)
 {
-  std::string identifier = get_tag_name(structd.getName().str());
+  if(recordd.isClass())
+  {
+    std::cerr << "Class is not supported yet" << std::endl;
+    abort();
+  }
+  else if(recordd.isInterface())
+  {
+    std::cerr << "Interface is not supported yet" << std::endl;
+    abort();
+  }
 
-  struct_typet t;
+  std::string identifier = get_tag_name(recordd.getName().str());
+
+  struct_union_typet t;
+  if(recordd.isStruct())
+    t = struct_typet();
+  else if(recordd.isUnion())
+    t = union_typet();
+  else
+    // This should never be reached
+    abort();
   t.tag(identifier);
 
   symbolt symbol;
   get_default_symbol(
     symbol,
     t,
-    structd.getName().str(),
+    recordd.getName().str(),
     identifier,
-    false); // There is no such thing as static struct on ANSI-C
+    false); // There is no such thing as static struct/union/class on ANSI-C
 
-  // Save the struct type address and name to the object map
+  // Save the struct/union/class type address and name to the object map
   std::string symbol_name = symbol.name.as_string();
 
-  std::size_t address = reinterpret_cast<std::size_t>(&structd);
+  std::size_t address = reinterpret_cast<std::size_t>(&recordd);
   type_map[address] = symbol_name;
 
-  // We have to add the struct to the context before converting its fields
-  // because there might be recursive structs (pointers) and the code at
+  // We have to add the struct/union/class to the context before converting its fields
+  // because there might be recursive struct/union/class (pointers) and the code at
   // get_type, case clang::Type::Record, needs to find the correct type
   // (itself). Note that the type is incomplete at this stage, it doesn't
   // contain the fields, which are added to the symbol later on this method.
@@ -414,15 +420,15 @@ void llvm_convertert::get_struct(
   // Now get the symbol back to continue the conversion
   symbolt &added_symbol = context.symbols.find(symbol_name)->second;
 
-  for(const auto &decl : structd.decls())
+  for(const auto &decl : recordd.decls())
   {
     exprt dummy;
     get_decl(*decl, dummy);
   }
 
-  for(const auto &field : structd.fields())
+  for(const auto &field : recordd.fields())
   {
-    struct_typet::componentt comp;
+    struct_union_typet::componentt comp;
     get_decl(*field, comp);
 
     if(comp.type().get_bool("anonymous"))
@@ -437,68 +443,14 @@ void llvm_convertert::get_struct(
   added_symbol.type = t;
 
   // This change on the pretty_name is just to beautify the output
-  added_symbol.pretty_name = "struct " + structd.getName().str();
+  if(recordd.isStruct())
+    added_symbol.pretty_name = "struct " + recordd.getName().str();
+  else if(recordd.isUnion())
+    added_symbol.pretty_name = "union " + recordd.getName().str();
+
   added_symbol.is_type = true;
 
   new_expr = code_skipt();
-}
-
-void llvm_convertert::get_union(
-  const clang::RecordDecl& uniond,
-  exprt& new_expr)
-{
-  std::string identifier = get_tag_name(uniond.getName().str());
-
-  union_typet t;
-  t.tag(identifier);
-
-  for(const auto &decl : uniond.decls())
-  {
-    exprt dummy;
-    get_decl(*decl, dummy);
-  }
-
-  for(const auto &field : uniond.fields())
-  {
-    struct_typet::componentt comp;
-    get_decl(*field, comp);
-
-    if(comp.type().get_bool("anonymous"))
-    {
-      comp.name(comp.type().tag());
-      comp.pretty_name(comp.type().tag());
-    }
-
-    t.components().push_back(comp);
-  }
-
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    t,
-    uniond.getName().str(),
-    identifier,
-    false); // There is no such thing as static union on ANSI-C
-
-  // This change on the pretty_name is just to beautify the output
-  symbol.pretty_name = "union " + uniond.getName().str();
-  symbol.is_type = true;
-
-  // Save the union type address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(&uniond);
-  type_map[address] = symbol.name.as_string();
-
-  move_symbol_to_context(symbol);
-
-  new_expr = code_skipt();
-}
-
-void llvm_convertert::get_class(
-  const clang::RecordDecl& classd __attribute__((unused)),
-  exprt& new_expr __attribute__((unused)))
-{
-  std::cerr << "Class is not supported yet" << std::endl;
-  abort();
 }
 
 void llvm_convertert::get_typedef(

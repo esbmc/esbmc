@@ -83,16 +83,8 @@ private:
     const clang::EnumDecl &enumd,
     exprt &new_expr);
 
-  void get_struct(
-    const clang::RecordDecl &structd,
-    exprt &new_expr);
-
-  void get_union(
-    const clang::RecordDecl &uniond,
-    exprt &new_expr);
-
-  void get_class(
-    const clang::RecordDecl &classd,
+  void get_struct_union_class(
+    const clang::RecordDecl &recordd,
     exprt &new_expr);
 
   void get_enum_constants(
