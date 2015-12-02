@@ -220,7 +220,14 @@ void llvm_convertert::get_decl(
       struct_union_typet::componentt comp(fd.getName().str(), t);
       comp.set_pretty_name(fd.getName().str());
 
-      new_expr = comp;
+      if(fd.getAnonField()->isBitField())
+      {
+        exprt width;
+        get_expr(*fd.getAnonField()->getBitWidth(), width);
+        comp.type().width(width.cformat());
+      }
+
+      new_expr.swap(comp);
       break;
     }
 
