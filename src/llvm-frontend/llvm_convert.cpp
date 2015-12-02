@@ -253,7 +253,7 @@ void llvm_convertert::get_decl(
       break;
     }
 
-    // This is an empty declaration. An lose semicolon on the
+    // This is an empty declaration. An lost semicolon on the
     // code is an empty declaration
     case clang::Decl::Empty:
       break;
