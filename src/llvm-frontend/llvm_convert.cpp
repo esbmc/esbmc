@@ -1397,6 +1397,7 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    // TODO: This code is terrible, improve it sometime in the future
     // An initialize statement, such as int a[3] = {1, 2, 3}
     case clang::Stmt::InitListExprClass:
     {
