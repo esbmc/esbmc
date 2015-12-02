@@ -1460,6 +1460,13 @@ void llvm_convertert::get_expr(
         {
           exprt init;
           get_expr(*init_stmt.getInit(i), init);
+
+          // The backend requires that each element of the init lit
+          // to have the same type of the element. This is ok most of
+          // times but it's a problem when we're handling bitfields
+          if(t.is_struct() || t.is_union())
+            init.type() = to_struct_union_type(t).components()[i].type();
+
           inits.operands().at(i) = init;
         }
 
