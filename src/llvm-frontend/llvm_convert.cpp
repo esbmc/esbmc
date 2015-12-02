@@ -2446,3 +2446,26 @@ void llvm_convertert::convert_expression_to_code(exprt& expr)
 
   expr.swap(code);
 }
+
+void llvm_convertert::search_add_type_map(
+  const clang::TagDecl &tag,
+  type_mapt::iterator &type_it)
+{
+  std::size_t address = reinterpret_cast<std::size_t>(&tag);
+
+  // Search for the type on the type map
+  type_it = type_map.find(address);
+  if(type_it == type_map.end())
+  {
+    // Force the declaration to be added to the type_map
+    exprt decl;
+    get_decl(tag, decl);
+  }
+
+  type_it = type_map.find(address);
+  if(type_it == type_map.end())
+  {
+    // BUG! This should be added already
+    abort();
+  }
+}

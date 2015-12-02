@@ -177,6 +177,10 @@ private:
     mp_integer &exponent, // base 10
     bool &is_float,
     bool &is_long);
+
+  void search_add_type_map(
+    const clang::TagDecl &tag,
+    type_mapt::iterator &type_it);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */
