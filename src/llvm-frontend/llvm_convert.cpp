@@ -418,21 +418,25 @@ void llvm_convertert::get_struct_union_class(
   for(const auto &decl : recordd.decls())
   {
     exprt dummy;
-    get_decl(*decl, dummy);
-  }
+    struct_typet::componentt comp;
 
-  for(const auto &field : recordd.fields())
-  {
-    struct_union_typet::componentt comp;
-    get_decl(*field, comp);
-
-    if(comp.type().get_bool("anonymous"))
+    // If we are parsing a field declaration, add it to the components
+    if(decl->getKind() == clang::Decl::Field)
     {
-      comp.name(comp.type().tag());
-      comp.pretty_name(comp.type().tag());
-    }
+      get_decl(*decl, comp);
 
-    t.components().push_back(comp);
+      if(comp.type().get_bool("anonymous"))
+      {
+        comp.name(comp.type().tag());
+        comp.pretty_name(comp.type().tag());
+      }
+
+      t.components().push_back(comp);
+    }
+    else
+    {
+      get_decl(*decl, dummy);
+    }
   }
 
   added_symbol.type = t;
