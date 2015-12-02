@@ -327,8 +327,10 @@ void llvm_convertert::get_enum_constants(
   const clang::EnumDecl &enumd =
     static_cast<const clang::EnumDecl &>(*enumcd.getDeclContext());
 
-  std::size_t parent_address = reinterpret_cast<std::size_t>(&enumd);
-  std::string parent_identifier = type_map[parent_address];
+  type_mapt::iterator it;
+  search_add_type_map(enumd, it);
+
+  std::string parent_identifier = it->second;
 
   // remove c::
   parent_identifier = parent_identifier.substr(3);
@@ -827,8 +829,8 @@ void llvm_convertert::get_type(
 
     case clang::Type::Record:
     {
-      const clang::TagDecl &tag =
-        *static_cast<const clang::TagType &>(the_type).getDecl();
+      const clang::RecordDecl &tag =
+        *(static_cast<const clang::RecordType &>(the_type)).getDecl();
 
       if(tag.isClass())
       {
@@ -836,34 +838,12 @@ void llvm_convertert::get_type(
         abort();
       }
 
-      std::size_t address = reinterpret_cast<std::size_t>(&tag);
-
       // Search for the type on the type map
-      type_mapt::iterator it = type_map.find(address);
-      if(it != type_map.end())
-      {
-        symbolt &s = context.symbols.find(it->second)->second;
-        new_type = s.type;
-      }
-      else
-      {
-        // Force the declaration to be added to the type_map
-        exprt decl;
-        get_decl(tag, decl);
+      type_mapt::iterator it;
+      search_add_type_map(tag, it);
 
-        // and search again
-        type_mapt::iterator it = type_map.find(address);
-        if(it != type_map.end())
-        {
-          symbolt &s = context.symbols.find(it->second)->second;
-          new_type = s.type;
-        }
-        else
-        {
-          // BUG! This should be added already
-          abort();
-        }
-      }
+      symbolt &s = context.symbols.find(it->second)->second;
+      new_type = s.type;
 
       if (!tag.getIdentifier() && !tag.getTypedefNameForAnonDecl())
         new_type.set("anonymous", true);
@@ -873,37 +853,15 @@ void llvm_convertert::get_type(
 
     case clang::Type::Enum:
     {
-      const clang::EnumType &et =
-        static_cast<const clang::EnumType &>(the_type);
-
-      std::size_t address = reinterpret_cast<std::size_t>(et.getDecl());
+      const clang::EnumDecl &et =
+        *(static_cast<const clang::EnumType &>(the_type)).getDecl();
 
       // Search for the type on the type map
-      type_mapt::iterator it = type_map.find(address);
-      if(it != type_map.end())
-      {
-        symbolt &s = context.symbols.find(it->second)->second;
-        new_type = s.type;
-      }
-      else
-      {
-        // Force the declaration to be added to the type_map
-        exprt decl;
-        get_decl(*et.getDecl(), decl);
+      type_mapt::iterator it;
+      search_add_type_map(et, it);
 
-        // and search again
-        type_mapt::iterator it = type_map.find(address);
-        if(it != type_map.end())
-        {
-          symbolt &s = context.symbols.find(it->second)->second;
-          new_type = s.type;
-        }
-        else
-        {
-          // BUG! This should be added already
-          abort();
-        }
-      }
+      symbolt &s = context.symbols.find(it->second)->second;
+      new_type = s.type;
 
       break;
     }
