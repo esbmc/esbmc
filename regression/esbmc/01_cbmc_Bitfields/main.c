@@ -23,7 +23,7 @@ struct bft {
 };
  
 
-int main() {
+int main(){
   struct bft bf;
    
   assert(bf.a<=7);
