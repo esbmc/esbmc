@@ -1,7 +1,3 @@
 main.c
 
-^EXIT=0$
-^SIGNAL=0$
 ^PARSING ERROR$
---
-^warning: ignoring
