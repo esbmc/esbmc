@@ -26,19 +26,20 @@ bool llvm_adjust::adjust()
   symbol_listt symbol_list;
 
   Forall_symbols(it, context.symbols)
-  {
-    if(!it->second.is_type && it->second.type.is_code())
-      symbol_list.push_back(&it->second);
-  }
+    symbol_list.push_back(&it->second);
 
   Forall_symbol_list(it, symbol_list)
   {
     symbolt &symbol = **it;
-    if(!symbol.is_type && symbol.type.is_code())
+
+    if(symbol.is_type)
+      continue;
+
+    if(symbol.type.is_code())
     {
       adjust_function(symbol);
     }
-    else if(has_prefix(symbol.name.as_string(), CPROVER_PREFIX))
+    else if(has_prefix(symbol.name.as_string(), std::string(CPROVER_PREFIX)))
     {
       convert_builtin(symbol);
     }
@@ -50,17 +51,19 @@ bool llvm_adjust::adjust()
 
 void llvm_adjust::convert_builtin(symbolt& symbol)
 {
-  const irep_idt &identifier = symbol.name;
+  const std::string &identifier = symbol.name.as_string();
 
   // TODO: find a better solution for this
-  if(has_prefix(id2string(identifier), CPROVER_PREFIX "alloc")
-     || has_prefix(id2string(identifier), CPROVER_PREFIX "deallocated")
-     || has_prefix(id2string(identifier), CPROVER_PREFIX "is_dynamic")
-     || has_prefix(id2string(identifier), CPROVER_PREFIX "alloc_size"))
+  if(has_prefix(identifier, std::string(CPROVER_PREFIX "alloc"))
+     || has_prefix(identifier, std::string(CPROVER_PREFIX "deallocated"))
+     || has_prefix(identifier, std::string(CPROVER_PREFIX "is_dynamic"))
+     || has_prefix(identifier, std::string(CPROVER_PREFIX "alloc_size")))
   {
     exprt expr=exprt("infinity", symbol.type.subtype());
 
     symbol.type.size(expr);
+
+    symbol.value.id("array_of");
     symbol.value.type().size(expr);
   }
 }
