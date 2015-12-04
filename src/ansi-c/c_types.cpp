@@ -117,7 +117,7 @@ typet char_type()
 
 typet unsigned_char_type()
 {
-  return signedbv_typet(config.ansi_c.char_width);
+  return unsignedbv_typet(config.ansi_c.char_width);
 }
 
 typet signed_char_type()
