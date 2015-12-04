@@ -2222,7 +2222,8 @@ void llvm_convertert::get_compound_assign_expr(
 
   get_type(compop.getType(), new_expr.type());
 
-  gen_typecast(ns, rhs, lhs.type());
+  if(!lhs.type().is_pointer())
+    gen_typecast(ns, rhs, lhs.type());
 
   new_expr.copy_to_operands(lhs, rhs);
 }
