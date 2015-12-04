@@ -41,7 +41,7 @@ bool llvm_adjust::adjust()
     }
     else if(has_prefix(symbol.name.as_string(), std::string(CPROVER_PREFIX)))
     {
-      convert_builtin(symbol);
+      adjust_builtin(symbol);
     }
   }
 
@@ -49,7 +49,7 @@ bool llvm_adjust::adjust()
 }
 
 
-void llvm_adjust::convert_builtin(symbolt& symbol)
+void llvm_adjust::adjust_builtin(symbolt& symbol)
 {
   const std::string &identifier = symbol.name.as_string();
 
@@ -72,14 +72,14 @@ void llvm_adjust::adjust_function(symbolt& symbol)
 {
   Forall_operands(it, symbol.value)
   {
-    convert_expr(*it);
+    adjust_expr(*it);
   }
 
   if(symbol.name=="c::main")
     add_argc_argv(symbol);
 }
 
-void llvm_adjust::convert_expr(exprt& expr)
+void llvm_adjust::adjust_expr(exprt& expr)
 {
   if(expr.id()=="sideeffect" &&
      expr.statement()=="function_call")
@@ -87,31 +87,31 @@ void llvm_adjust::convert_expr(exprt& expr)
     // don't do function operand
     assert(expr.operands().size()==2);
 
-    convert_expr(expr.op1()); // arguments
+    adjust_expr(expr.op1()); // arguments
   }
   else
   {
     // fist do sub-nodes
     Forall_operands(it, expr)
-      convert_expr(*it);
+      adjust_expr(*it);
   }
 
   // now do case-split
-  convert_expr_main(expr);
+  adjust_expr_main(expr);
 }
 
-void llvm_adjust::convert_expr_main(exprt& expr)
+void llvm_adjust::adjust_expr_main(exprt& expr)
 {
   if(expr.id()=="sideeffect")
   {
-    convert_side_effect(to_side_effect_expr(expr));
+    adjust_side_effect(to_side_effect_expr(expr));
   }
   else if(expr.id()=="constant")
   {
   }
   else if(expr.id()=="symbol")
   {
-    convert_symbol(expr);
+    adjust_symbol(expr);
   }
   else if(expr.id()=="unary+" || expr.id()=="unary-" ||
           expr.id()=="bitnot")
@@ -119,23 +119,23 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   }
   else if(expr.id()=="not")
   {
-    convert_expr_unary_boolean(expr);
+    adjust_expr_unary_boolean(expr);
   }
   else if(expr.is_and() || expr.is_or())
   {
-    convert_expr_binary_boolean(expr);
+    adjust_expr_binary_boolean(expr);
   }
   else if(expr.is_address_of())
   {
-    convert_address_of(expr);
+    adjust_address_of(expr);
   }
   else if(expr.is_dereference())
   {
-    convert_dereference(expr);
+    adjust_dereference(expr);
   }
   else if(expr.is_member())
   {
-    convert_member(to_member_expr(expr));
+    adjust_member(to_member_expr(expr));
   }
   else if(expr.id()=="="  ||
           expr.id()=="notequal" ||
@@ -147,14 +147,14 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   }
   else if(expr.is_index())
   {
-    convert_index(to_index_expr(expr));
+    adjust_index(to_index_expr(expr));
   }
   else if(expr.id()=="typecast")
   {
   }
   else if(expr.id() == "sizeof")
   {
-    convert_sizeof(expr);
+    adjust_sizeof(expr);
   }
   else if(expr.id()=="+" || expr.id()=="-" ||
           expr.id()=="*" || expr.id()=="/" ||
@@ -162,7 +162,7 @@ void llvm_adjust::convert_expr_main(exprt& expr)
           expr.id()=="shl" || expr.id()=="shr" ||
           expr.id()=="bitand" || expr.id()=="bitxor" || expr.id()=="bitor")
   {
-    convert_expr_binary_arithmetic(expr);
+    adjust_expr_binary_arithmetic(expr);
   }
   else if(expr.id()=="comma")
   {
@@ -174,7 +174,7 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   }
   else if(expr.is_code())
   {
-    convert_code(to_code(expr));
+    adjust_code(to_code(expr));
   }
   else if(expr.id()=="builtin_offsetof")
   {
@@ -199,7 +199,7 @@ void llvm_adjust::convert_expr_main(exprt& expr)
   }
 }
 
-void llvm_adjust::convert_symbol(exprt& expr)
+void llvm_adjust::adjust_symbol(exprt& expr)
 {
   const irep_idt &identifier=expr.identifier();
 
@@ -246,7 +246,7 @@ void llvm_adjust::convert_symbol(exprt& expr)
   }
 }
 
-void llvm_adjust::convert_side_effect(side_effect_exprt& expr)
+void llvm_adjust::adjust_side_effect(side_effect_exprt& expr)
 {
   const irep_idt &statement=expr.get_statement();
 
@@ -257,11 +257,11 @@ void llvm_adjust::convert_side_effect(side_effect_exprt& expr)
   {
   }
   else if(has_prefix(id2string(statement), "assign"))
-    convert_side_effect_assignment(expr);
+    adjust_side_effect_assignment(expr);
   else if(statement=="function_call")
-    convert_side_effect_function_call(to_side_effect_expr_function_call(expr));
+    adjust_side_effect_function_call(to_side_effect_expr_function_call(expr));
   else if(statement=="statement_expression")
-    convert_side_effect_statement_expression(expr);
+    adjust_side_effect_statement_expression(expr);
   else
   {
     std::cout << "unknown side effect: " << statement;
@@ -270,7 +270,7 @@ void llvm_adjust::convert_side_effect(side_effect_exprt& expr)
   }
 }
 
-void llvm_adjust::convert_member(member_exprt& expr)
+void llvm_adjust::adjust_member(member_exprt& expr)
 {
   exprt& base = expr.struct_op();
   if(base.type().is_pointer())
@@ -282,7 +282,7 @@ void llvm_adjust::convert_member(member_exprt& expr)
   }
 }
 
-void llvm_adjust::convert_expr_binary_arithmetic(exprt& expr)
+void llvm_adjust::adjust_expr_binary_arithmetic(exprt& expr)
 {
   exprt &op0=expr.op0();
   exprt &op1=expr.op1();
@@ -334,7 +334,7 @@ void llvm_adjust::convert_expr_binary_arithmetic(exprt& expr)
   }
 }
 
-void llvm_adjust::convert_index(index_exprt& index)
+void llvm_adjust::adjust_index(index_exprt& index)
 {
   exprt &array_expr=index.op0();
   exprt &index_expr=index.op1();
@@ -376,7 +376,7 @@ void llvm_adjust::convert_index(index_exprt& index)
   index.type()=final_array_type.subtype();
 }
 
-void llvm_adjust::convert_address_of(exprt &expr)
+void llvm_adjust::adjust_address_of(exprt &expr)
 {
   exprt &op=expr.op0();
 
@@ -413,7 +413,7 @@ void llvm_adjust::convert_address_of(exprt &expr)
   expr.type().subtype()=op.type();
 }
 
-void llvm_adjust::convert_dereference(exprt& deref)
+void llvm_adjust::adjust_dereference(exprt& deref)
 {
   exprt &op=deref.op0();
 
@@ -449,7 +449,7 @@ void llvm_adjust::convert_dereference(exprt& deref)
   }
 }
 
-void llvm_adjust::convert_sizeof(exprt& expr)
+void llvm_adjust::adjust_sizeof(exprt& expr)
 {
   typet type;
 
@@ -509,7 +509,7 @@ void llvm_adjust::adjust_type(typet &type)
   }
 }
 
-void llvm_adjust::convert_side_effect_assignment(exprt& expr)
+void llvm_adjust::adjust_side_effect_assignment(exprt& expr)
 {
   const irep_idt &statement=expr.statement();
 
@@ -551,7 +551,7 @@ void llvm_adjust::convert_side_effect_assignment(exprt& expr)
   }
 }
 
-void llvm_adjust::convert_side_effect_function_call(
+void llvm_adjust::adjust_side_effect_function_call(
   side_effect_expr_function_callt& expr)
 {
   exprt &f_op=expr.function();
@@ -582,7 +582,7 @@ void llvm_adjust::convert_side_effect_function_call(
     }
   }
 
-  convert_expr(f_op);
+  adjust_expr(f_op);
 
   // do implicit dereference
   if(f_op.is_address_of() &&
@@ -630,7 +630,7 @@ void llvm_adjust::convert_side_effect_function_call(
   }
 }
 
-void llvm_adjust::convert_side_effect_statement_expression(
+void llvm_adjust::adjust_side_effect_statement_expression(
   side_effect_exprt& expr)
 {
   codet &code=to_code(expr.op0());
@@ -690,7 +690,7 @@ void llvm_adjust::convert_side_effect_statement_expression(
     expr.type()=typet("empty");
 }
 
-void llvm_adjust::convert_expr_unary_boolean(exprt& expr)
+void llvm_adjust::adjust_expr_unary_boolean(exprt& expr)
 {
   expr.type() = bool_type();
 
@@ -698,7 +698,7 @@ void llvm_adjust::convert_expr_unary_boolean(exprt& expr)
   gen_typecast_bool(ns, operand);
 }
 
-void llvm_adjust::convert_expr_binary_boolean(exprt& expr)
+void llvm_adjust::adjust_expr_binary_boolean(exprt& expr)
 {
   expr.type() = bool_type();
 

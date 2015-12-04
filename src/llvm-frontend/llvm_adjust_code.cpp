@@ -18,28 +18,28 @@
 
 #include "typecast.h"
 
-void llvm_adjust::convert_code(codet& code)
+void llvm_adjust::adjust_code(codet& code)
 {
   const irep_idt &statement=code.statement();
 
   if(statement=="expression")
-    convert_expression(code);
+    adjust_expression(code);
   else if(statement=="label")
-    convert_label(to_code_label(code));
+    adjust_label(to_code_label(code));
   else if(statement=="block" ||
           statement=="decl-block")
-    convert_block(code);
+    adjust_block(code);
   else if(statement=="ifthenelse")
-    convert_ifthenelse(code);
+    adjust_ifthenelse(code);
   else if(statement=="while" ||
           statement=="dowhile")
-    convert_while(code);
+    adjust_while(code);
   else if(statement=="for")
-    convert_for(code);
+    adjust_for(code);
   else if(statement=="switch")
-    convert_switch(code);
+    adjust_switch(code);
   else if(statement=="assign")
-    convert_assign(code);
+    adjust_assign(code);
   else if(statement=="return")
   {
   }
@@ -72,7 +72,7 @@ void llvm_adjust::convert_code(codet& code)
   }
 }
 
-void llvm_adjust::convert_expression(codet& code)
+void llvm_adjust::adjust_expression(codet& code)
 {
   exprt &op=code.op0();
 
@@ -117,39 +117,39 @@ void llvm_adjust::convert_expression(codet& code)
   }
 }
 
-void llvm_adjust::convert_label(code_labelt& code)
+void llvm_adjust::adjust_label(code_labelt& code)
 {
 }
 
-void llvm_adjust::convert_block(codet& code)
+void llvm_adjust::adjust_block(codet& code)
 {
 }
 
-void llvm_adjust::convert_ifthenelse(codet& code)
-{
-  // If the condition is not of boolean type, it must be casted
-  gen_typecast_bool(ns, code.op0());
-}
-
-void llvm_adjust::convert_while(codet& code)
+void llvm_adjust::adjust_ifthenelse(codet& code)
 {
   // If the condition is not of boolean type, it must be casted
   gen_typecast_bool(ns, code.op0());
 }
 
-void llvm_adjust::convert_for(codet& code)
+void llvm_adjust::adjust_while(codet& code)
+{
+  // If the condition is not of boolean type, it must be casted
+  gen_typecast_bool(ns, code.op0());
+}
+
+void llvm_adjust::adjust_for(codet& code)
 {
   // If the condition is not of boolean type, it must be casted
   gen_typecast_bool(ns, code.op1());
 }
 
-void llvm_adjust::convert_switch(codet& code)
+void llvm_adjust::adjust_switch(codet& code)
 {
   // If the condition is not of boolean type, it must be casted
   gen_typecast(ns, code.op0(), int_type());
 }
 
-void llvm_adjust::convert_assign(codet& code)
+void llvm_adjust::adjust_assign(codet& code)
 {
   // Create typecast on assingments, if needed
   gen_typecast(ns, code.op1(), code.op0().type());
