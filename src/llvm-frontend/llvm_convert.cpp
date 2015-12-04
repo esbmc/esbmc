@@ -925,8 +925,6 @@ void llvm_convertert::get_type(
 
   if(q_type.isConstQualified())
     new_type.cmt_constant(true);
-
-  new_type.location() = current_location;
 }
 
 void llvm_convertert::get_builtin_type(
