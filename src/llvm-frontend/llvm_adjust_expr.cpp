@@ -144,6 +144,7 @@ void llvm_adjust::adjust_expr_main(exprt& expr)
           expr.id()==">"  ||
           expr.id()==">=")
   {
+    adjust_expr_rel(expr);
   }
   else if(expr.is_index())
   {
@@ -374,6 +375,46 @@ void llvm_adjust::adjust_index(index_exprt& index)
   }
 
   index.type()=final_array_type.subtype();
+}
+
+void llvm_adjust::adjust_expr_rel(exprt& expr)
+{
+  expr.type() = bool_type();
+
+  exprt &op0=expr.op0();
+  exprt &op1=expr.op1();
+
+  const typet o_type0=op0.type();
+  const typet o_type1=op1.type();
+
+  if(expr.id()=="=" || expr.id()=="notequal")
+  {
+    if(o_type0==o_type1)
+    {
+      if(!o_type0.is_array())
+      {
+        adjust_float_rel(expr);
+        return; // no promotion necessary
+      }
+    }
+  }
+
+  gen_typecast_arithmetic(ns, op0, op1);
+}
+
+void llvm_adjust::adjust_float_rel(exprt& expr)
+{
+  // equality and disequality on float is not mathematical equality!
+  assert(expr.operands().size()==2);
+
+  if(expr.op0().type().is_fixedbv())
+  {
+    if(expr.id()=="=" and (expr.op0() == expr.op1()))
+    {
+      expr.id("notequal");
+      expr.op1() = side_effect_expr_nondett(expr.op0().type());
+    }
+  }
 }
 
 void llvm_adjust::adjust_address_of(exprt &expr)

@@ -48,6 +48,8 @@ class llvm_adjust
     void adjust_expr_binary_arithmetic(exprt &expr);
     void adjust_expr_unary_boolean(exprt &expr);
     void adjust_expr_binary_boolean(exprt &expr);
+    void adjust_expr_rel(exprt &expr);
+    void adjust_float_rel(exprt &expr);
     void adjust_index(index_exprt &index);
     void adjust_dereference(exprt &deref);
     void adjust_address_of(exprt &expr);
