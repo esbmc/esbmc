@@ -1368,7 +1368,10 @@ void llvm_convertert::get_expr(
       exprt else_expr;
       get_expr(*ternary_if.getFalseExpr(), else_expr);
 
-      exprt if_expr("if", bool_type());
+      typet t;
+      get_type(ternary_if.getType(), t);
+
+      exprt if_expr("if", t);
       if_expr.copy_to_operands(cond, then, else_expr);
 
       new_expr = if_expr;
@@ -1390,7 +1393,10 @@ void llvm_convertert::get_expr(
       exprt else_expr;
       get_expr(*ternary_if.getFalseExpr(), else_expr);
 
-      exprt if_expr("if", bool_type());
+      typet t;
+      get_type(ternary_if.getType(), t);
+
+      exprt if_expr("if", t);
       if_expr.copy_to_operands(cond, then, else_expr);
 
       new_expr = if_expr;
