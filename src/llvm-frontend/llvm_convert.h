@@ -111,6 +111,10 @@ private:
     const clang::BinaryOperator &binop,
     exprt &new_expr);
 
+  void get_compound_assign_expr(
+    const clang::CompoundAssignOperator& compop,
+    exprt& new_expr);
+
   void get_unary_operator_expr(
     const clang::UnaryOperator &uniop,
     exprt &new_expr);

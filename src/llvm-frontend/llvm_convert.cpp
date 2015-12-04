@@ -2057,87 +2057,78 @@ void llvm_convertert::get_binary_operator_expr(
   const clang::BinaryOperator& binop,
   exprt& new_expr)
 {
-  exprt lhs;
-  get_expr(*binop.getLHS(), lhs);
-
-  exprt rhs;
-  get_expr(*binop.getRHS(), rhs);
-
-  typet binop_type;
-  get_type(binop.getType(), binop_type);
-
   switch(binop.getOpcode())
   {
     case clang::BO_Add:
-      new_expr = exprt("+", binop_type);
+      new_expr = exprt("+");
       break;
 
     case clang::BO_Sub:
-      new_expr = exprt("-", binop_type);
+      new_expr = exprt("-");
       break;
 
     case clang::BO_Mul:
-      new_expr = exprt("*", binop_type);
+      new_expr = exprt("*");
       break;
 
     case clang::BO_Div:
-      new_expr = exprt("/", binop_type);
+      new_expr = exprt("/");
       break;
 
     case clang::BO_Shl:
-      new_expr = exprt("shl", binop_type);
+      new_expr = exprt("shl");
       break;
 
     case clang::BO_Shr:
-      new_expr = exprt("shr", binop_type);
+      new_expr = exprt("shr");
       break;
 
     case clang::BO_Rem:
-      new_expr = exprt("mod", binop_type);
+      new_expr = exprt("mod");
       break;
 
     case clang::BO_And:
-      new_expr = exprt("bitand", binop_type);
+      new_expr = exprt("bitand");
       break;
 
     case clang::BO_Xor:
-      new_expr = exprt("bitxor", binop_type);
+      new_expr = exprt("bitxor");
       break;
 
     case clang::BO_Or:
-      new_expr = exprt("bitor", binop_type);
+      new_expr = exprt("bitor");
       break;
 
     case clang::BO_LT:
-      new_expr = exprt("<", binop_type);
+      new_expr = exprt("<");
       break;
 
     case clang::BO_GT:
-      new_expr = exprt(">", binop_type);
+      new_expr = exprt(">");
       break;
 
     case clang::BO_LE:
-      new_expr = exprt("<=", binop_type);
+      new_expr = exprt("<=");
       break;
 
     case clang::BO_GE:
-      new_expr = exprt(">=", binop_type);
+      new_expr = exprt(">=");
       break;
 
     case clang::BO_EQ:
-      new_expr = exprt("=", binop_type);
+      new_expr = exprt("=");
       break;
 
     case clang::BO_NE:
-      new_expr = exprt("notequal", binop_type);
+      new_expr = exprt("notequal");
       break;
 
     case clang::BO_LAnd:
-      new_expr = exprt("and", binop_type);
+      new_expr = exprt("and");
       break;
 
     case clang::BO_LOr:
-      new_expr = exprt("or", binop_type);
+      new_expr = exprt("or");
       break;
 
     case clang::BO_Assign:
@@ -2145,59 +2136,95 @@ void llvm_convertert::get_binary_operator_expr(
       // and the copy_to_operands method call at the end of
       // this method will put lhs and rhs in positions 2 and 3,
       // instead of 0 and 1 :/
-      new_expr = side_effect_exprt("assign", binop_type);
-      break;
-
-    case clang::BO_AddAssign:
-      new_expr = side_effect_exprt("assign+", binop_type);
-      break;
-
-    case clang::BO_SubAssign:
-      new_expr = side_effect_exprt("assign-", binop_type);
-      break;
-
-    case clang::BO_MulAssign:
-      new_expr = side_effect_exprt("assign*", binop_type);
-      break;
-
-    case clang::BO_DivAssign:
-      new_expr = side_effect_exprt("assign_div", binop_type);
-      break;
-
-    case clang::BO_RemAssign:
-      new_expr = side_effect_exprt("assign_mod", binop_type);
-      break;
-
-    case clang::BO_ShlAssign:
-      new_expr = side_effect_exprt("assign_shl", binop_type);
-      break;
-
-    case clang::BO_ShrAssign:
-      new_expr = side_effect_exprt("assign_shr", binop_type);
-      break;
-
-    case clang::BO_AndAssign:
-      new_expr = side_effect_exprt("assign_bitand", binop_type);
-      break;
-
-    case clang::BO_XorAssign:
-      new_expr = side_effect_exprt("assign_bitxor", binop_type);
-      break;
-
-    case clang::BO_OrAssign:
-      new_expr = side_effect_exprt("assign_bitor", binop_type);
+      new_expr = side_effect_exprt("assign");
       break;
 
     case clang::BO_Comma:
-      new_expr = exprt("comma", binop_type);
+      new_expr = exprt("comma");
+      break;
+
+    default:
+    {
+      const clang::CompoundAssignOperator &compop =
+        static_cast<const clang::CompoundAssignOperator &>(binop);
+      get_compound_assign_expr(compop, new_expr);
+      return;
+    }
+  }
+
+  exprt lhs;
+  get_expr(*binop.getLHS(), lhs);
+
+  exprt rhs;
+  get_expr(*binop.getRHS(), rhs);
+
+  get_type(binop.getType(), new_expr.type());
+
+  new_expr.copy_to_operands(lhs, rhs);
+}
+
+void llvm_convertert::get_compound_assign_expr(
+  const clang::CompoundAssignOperator& compop,
+  exprt& new_expr)
+{
+  switch(compop.getOpcode())
+  {
+    case clang::BO_AddAssign:
+      new_expr = side_effect_exprt("assign+");
+      break;
+
+    case clang::BO_SubAssign:
+      new_expr = side_effect_exprt("assign-");
+      break;
+
+    case clang::BO_MulAssign:
+      new_expr = side_effect_exprt("assign*");
+      break;
+
+    case clang::BO_DivAssign:
+      new_expr = side_effect_exprt("assign_div");
+      break;
+
+    case clang::BO_RemAssign:
+      new_expr = side_effect_exprt("assign_mod");
+      break;
+
+    case clang::BO_ShlAssign:
+      new_expr = side_effect_exprt("assign_shl");
+      break;
+
+    case clang::BO_ShrAssign:
+      new_expr = side_effect_exprt("assign_shr");
+      break;
+
+    case clang::BO_AndAssign:
+      new_expr = side_effect_exprt("assign_bitand");
+      break;
+
+    case clang::BO_XorAssign:
+      new_expr = side_effect_exprt("assign_bitxor");
+      break;
+
+    case clang::BO_OrAssign:
+      new_expr = side_effect_exprt("assign_bitor");
       break;
 
     default:
       std::cerr << "Conversion of unsupported clang binary operator: \"";
-      std::cerr << binop.getOpcodeStr().str() << "\" to expression" << std::endl;
-      binop.dumpColor();
+      std::cerr << compop.getOpcodeStr().str() << "\" to expression" << std::endl;
+      compop.dumpColor();
       abort();
   }
+
+  exprt lhs;
+  get_expr(*compop.getLHS(), lhs);
+
+  exprt rhs;
+  get_expr(*compop.getRHS(), rhs);
+
+  get_type(compop.getType(), new_expr.type());
+
+  gen_typecast(ns, rhs, lhs.type());
 
   new_expr.copy_to_operands(lhs, rhs);
 }
