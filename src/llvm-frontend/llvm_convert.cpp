@@ -28,7 +28,6 @@ llvm_convertert::llvm_convertert(
   : context(_context),
     ns(context),
     ASTs(_ASTs),
-    current_location(locationt()),
     current_path(""),
     current_function_name(""),
     current_scope_var_num(1),
@@ -55,9 +54,6 @@ bool llvm_convertert::convert()
 bool llvm_convertert::convert_builtin_types()
 {
   clang::ASTUnit::top_level_iterator it = (*ASTs.begin())->top_level_begin();
-
-  set_source_manager((*it)->getASTContext().getSourceManager());
-  update_current_location((*it)->getLocation());
 
   // Convert va_list_tag
   // TODO: from clang 3.8 we'll have a member VaListTagDecl and a method
@@ -91,9 +87,6 @@ bool llvm_convertert::convert_top_level_decl()
       it != translation_unit->top_level_end();
       it++)
     {
-      set_source_manager((*it)->getASTContext().getSourceManager());
-      update_current_location((*it)->getLocation());
-
       exprt dummy_decl;
       get_decl(**it, dummy_decl);
     }
@@ -276,9 +269,7 @@ void llvm_convertert::get_decl(
       decl.dumpColor();
       abort();
   }
-
-  new_expr.location() = current_location;
-}
+  }
 
 void llvm_convertert::get_enum(
   const clang::EnumDecl& enumd,
@@ -290,12 +281,16 @@ void llvm_convertert::get_enum(
   t.id("c_enum");
   t.tag(identifier);
 
+  locationt location_begin, location_end;
+  get_location_from_decl(enumd, location_begin, location_end);
+
   symbolt symbol;
   get_default_symbol(
     symbol,
     t,
     enumd.getName().str(),
     identifier,
+    location_begin,
     false); // There is no such thing as static enum on ANSI-C
 
   // This change on the pretty_name is just to beautify the output
@@ -343,12 +338,16 @@ void llvm_convertert::get_enum_constants(
   typet t;
   get_type(enumcd.getType(), t);
 
+  locationt location_begin, location_end;
+  get_location_from_decl(enumd, location_begin, location_end);
+
   symbolt symbol;
   get_default_symbol(
     symbol,
     t,
     enumcd.getName().str(),
     enum_value_identifier,
+    location_begin,
     false); // There is no such thing as static enum constants on ANSI-C
 
   symbol.value =
@@ -391,7 +390,11 @@ void llvm_convertert::get_struct_union_class(
   else
     // This should never be reached
     abort();
+
   t.tag(identifier);
+
+  locationt location_begin, location_end;
+  get_location_from_decl(recordd, location_begin, location_end);
 
   symbolt symbol;
   get_default_symbol(
@@ -399,6 +402,7 @@ void llvm_convertert::get_struct_union_class(
     t,
     recordd.getName().str(),
     identifier,
+    location_begin,
     false); // There is no such thing as static struct/union/class on ANSI-C
 
   // Save the struct/union/class type address and name to the object map
@@ -462,12 +466,16 @@ void llvm_convertert::get_typedef(
   typet t;
   get_type(tdd.getUnderlyingType().getCanonicalType(), t);
 
+  locationt location_begin, location_end;
+  get_location_from_decl(tdd, location_begin, location_end);
+
   symbolt symbol;
   get_default_symbol(
     symbol,
     t,
     tdd.getName().str(),
     get_modulename_from_path() + "::" + tdd.getName().str(),
+    location_begin,
     false); // There is no such thing as static typedef on ANSI-C
 
   symbol.is_type = true;
@@ -489,12 +497,16 @@ void llvm_convertert::get_var(
   std::string identifier =
     get_var_name(vd.getName().str(), vd.hasLocalStorage());
 
+  locationt location_begin, location_end;
+  get_location_from_decl(vd, location_begin, location_end);
+
   symbolt symbol;
   get_default_symbol(
     symbol,
     t,
     vd.getName().str(),
     identifier,
+    location_begin,
     vd.hasLocalStorage());
 
   if (vd.hasExternalStorage())
@@ -507,7 +519,7 @@ void llvm_convertert::get_var(
     symbol.value = gen_zero(t);
 
     // Add location to value since it is only added on get_expr
-    symbol.value.location() = current_location;
+    symbol.value.location() = location_begin;
   }
 
   symbol.lvalue = true;
@@ -585,12 +597,16 @@ void llvm_convertert::get_function(
     type.arguments().push_back(param);
   }
 
+  locationt location_begin, location_end;
+  get_location_from_decl(fd, location_begin, location_end);
+
   symbolt symbol;
   get_default_symbol(
     symbol,
     type,
     fd.getName().str(),
     fd.getName().str(),
+    location_begin,
     (fd.getStorageClass() == clang::SC_Static));
 
   symbol.lvalue = true;
@@ -640,12 +656,16 @@ void llvm_convertert::get_function_params(
   if(name.empty())
     return;
 
+  locationt location_begin, location_end;
+  get_location_from_decl(pdecl, location_begin, location_end);
+
   symbolt param_symbol;
   get_default_symbol(
     param_symbol,
     param_type,
     name,
     get_param_name(name),
+    location_begin,
     false); // function parameter cannot be static
 
   param_symbol.lvalue = true;
@@ -1049,7 +1069,8 @@ void llvm_convertert::get_expr(
   const clang::Stmt& stmt,
   exprt& new_expr)
 {
-  update_current_location(stmt.getSourceRange().getBegin());
+  locationt location_begin, location_end;
+  get_location_from_stmt(stmt, location_begin, location_end);
 
   switch(stmt.getStmtClass())
   {
@@ -1455,7 +1476,7 @@ void llvm_convertert::get_expr(
         {
           std::cerr << "Unsupported initializer expression "
                     << init_stmt.getType().getTypePtrOrNull()->getTypeClassName()
-                    << " at " << current_location << std::endl;
+                    << " at " << location_begin << std::endl;
           init_stmt.dump();
           abort();
         }
@@ -1535,14 +1556,8 @@ void llvm_convertert::get_expr(
         block.operands().push_back(statement);
       }
 
-      // Set the end location for blocks, we get all the information
-      // from the current location (file, line and function name) then
-      // we change the line number
-      locationt end_location;
-      end_location = current_location;
-      end_location.set_line(
-        sm->getSpellingLineNumber(compound_stmt.getLocEnd()));
-      block.end_location(end_location);
+      // Set the end location for blocks
+      block.end_location(location_end);
 
       new_expr = block;
       break;
@@ -1846,7 +1861,7 @@ void llvm_convertert::get_expr(
       abort();
   }
 
-  new_expr.location() = current_location;
+  new_expr.location() = location_begin;
 }
 
 void llvm_convertert::get_decl_ref(
@@ -2268,11 +2283,12 @@ void llvm_convertert::get_default_symbol(
   typet type,
   std::string base_name,
   std::string pretty_name,
+  locationt location,
   bool is_local)
 {
   symbol.mode = "C";
   symbol.module = get_modulename_from_path();
-  symbol.location = current_location;
+  symbol.location = location;
   symbol.type = type;
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
@@ -2327,28 +2343,48 @@ std::string llvm_convertert::get_tag_name(
   return "tag-" + name;
 }
 
-void llvm_convertert::set_source_manager(
-  clang::SourceManager& source_manager)
+void llvm_convertert::get_location_from_stmt(
+  const clang::Stmt &stmt,
+  locationt &location_begin,
+  locationt &location_end)
 {
-  sm = &source_manager;
+  get_location(stmt.getSourceRange().getBegin(), location_begin);
+  get_location(stmt.getSourceRange().getEnd(), location_end);
 }
 
-void llvm_convertert::update_current_location(
-  clang::SourceLocation source_location)
+void llvm_convertert::get_location_from_decl(
+  const clang::Decl& decl,
+  locationt &location_begin,
+  locationt &location_end)
 {
-  clang::SourceLocation SpellingLoc = sm->getSpellingLoc(source_location);
+  sm = &decl.getASTContext().getSourceManager();
+
+  get_location(decl.getSourceRange().getBegin(), location_begin);
+  get_location(decl.getSourceRange().getEnd(), location_end);
+}
+
+void llvm_convertert::get_location(
+  clang::SourceLocation loc,
+  locationt &location)
+{
+  if(!sm)
+    return;
+
+  clang::SourceLocation SpellingLoc = sm->getSpellingLoc(loc);
   clang::PresumedLoc PLoc = sm->getPresumedLoc(SpellingLoc);
 
-  if (PLoc.isInvalid())
+  if (PLoc.isInvalid()) {
+    location.set_file("<invalid sloc>");
     return;
+  }
 
   current_path = PLoc.getFilename();
 
-  current_location.set_line(PLoc.getLine());
-  current_location.set_file(get_filename_from_path());
+  location.set_line(PLoc.getLine());
+  location.set_file(get_filename_from_path());
 
   if(!current_function_name.empty())
-    current_location.set_function(current_function_name);
+    location.set_function(current_function_name);
 }
 
 std::string llvm_convertert::get_modulename_from_path()

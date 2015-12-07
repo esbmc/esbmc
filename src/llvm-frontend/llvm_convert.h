@@ -34,7 +34,6 @@ private:
   namespacet ns;
   std::vector<std::unique_ptr<clang::ASTUnit> > &ASTs;
 
-  locationt current_location;
   std::string current_path;
 
   // TODO: We don't need the current_function_name attribute!!!!!
@@ -45,7 +44,7 @@ private:
 
   unsigned int anon_counter;
 
-  clang::SourceManager *sm;
+  const clang::SourceManager *sm;
 
   typedef std::map<std::size_t, std::string> object_mapt;
   object_mapt object_map;
@@ -132,6 +131,7 @@ private:
     typet type,
     std::string base_name,
     std::string pretty_name,
+    locationt location,
     bool is_local);
 
   std::string get_var_name(
@@ -144,8 +144,20 @@ private:
   std::string get_tag_name(
     std::string _name);
 
-  void set_source_manager(clang::SourceManager &source_manager);
-  void update_current_location(clang::SourceLocation source_location);
+  void get_location_from_decl(
+    const clang::Decl& decl,
+    locationt &location_begin,
+    locationt &location_end);
+
+  void get_location_from_stmt(
+    const clang::Stmt &stmt,
+    locationt &location_begin,
+    locationt &location_end);
+
+  void get_location(
+    clang::SourceLocation loc,
+    locationt &location);
+
   std::string get_filename_from_path();
   std::string get_modulename_from_path();
 
