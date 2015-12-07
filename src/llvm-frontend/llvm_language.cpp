@@ -25,7 +25,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 
-static llvm::cl::OptionCategory esbmc_llvm("esmc_llvm");
+static llvm_languaget *lang = new llvm_languaget;
 
 std::string get_output_from_cmd(std::string cmd)
 {
@@ -46,7 +46,7 @@ std::string get_output_from_cmd(std::string cmd)
 
 languaget *new_llvm_language()
 {
-  return new llvm_languaget;
+  return lang;
 }
 
 llvm_languaget::llvm_languaget()
@@ -110,6 +110,34 @@ void llvm_languaget::search_clang_headers()
   abort();
 }
 
+void llvm_languaget::build_compiler_string(
+  std::vector<std::string> &compiler_string)
+{
+  compiler_string.push_back("-I");
+  compiler_string.push_back(headers_path.c_str());
+
+  // Append mode arg
+  switch(config.ansi_c.word_size)
+  {
+    case 16:
+      compiler_string.push_back("-m16");
+      break;
+
+    case 32:
+      compiler_string.push_back("-m32");
+      break;
+
+    case 64:
+      compiler_string.push_back("-m64");
+      break;
+
+    default:
+      std::cerr << "Unknown word size: " << config.ansi_c.word_size
+                << std::endl;
+      abort();
+  }
+}
+
 bool llvm_languaget::parse(
   const std::string &path,
   message_handlert &message_handler)
@@ -125,56 +153,16 @@ bool llvm_languaget::parse(
 
 bool llvm_languaget::parse(const std::string& path)
 {
-  std::string intrinsics;
-  internal_additions(intrinsics);
+  // Finish the compiler string
+  std::vector<std::string> compiler_string;
+  build_compiler_string(compiler_string);
 
-  // From the clang tool example,
-  int num_args = 8;
+  clang::tooling::FixedCompilationDatabase Compilations("./", compiler_string);
 
-  const char **the_args = (const char**) malloc(sizeof(const char*) * num_args);
+  std::vector<std::string> sources;
+  sources.push_back(path);
 
-  unsigned int i=0;
-  the_args[i++] = "clang";
-  the_args[i++] = path.c_str();
-  the_args[i++] = "--";
-  the_args[i++] = "-include";
-  the_args[i++] = "/esbmc_intrinsics.h";
-  the_args[i++] = "-I";
-  the_args[i++] = headers_path.c_str();
-
-  // Append mode arg
-  switch(config.ansi_c.word_size)
-  {
-    case 16:
-      the_args[i++] = "-m16";
-      break;
-
-    case 32:
-      the_args[i++] = "-m32";
-      break;
-
-    case 64:
-      the_args[i++] = "-m64";
-      break;
-
-    default:
-      std::cerr << "Unknown word size: " << config.ansi_c.word_size
-                << std::endl;
-      abort();
-  }
-
-  clang::tooling::CommonOptionsParser OptionsParser(
-    num_args,
-    the_args,
-    esbmc_llvm);
-  free(the_args);
-
-  clang::tooling::ClangTool Tool(
-    OptionsParser.getCompilations(),
-    OptionsParser.getSourcePathList());
-  Tool.mapVirtualFile(
-    llvm::StringRef("/esbmc_intrinsics.h"),
-    llvm::StringRef(intrinsics));
+  clang::tooling::ClangTool Tool(Compilations, sources);
 
   Tool.buildASTs(ASTs);
 
@@ -194,6 +182,23 @@ bool llvm_languaget::typecheck(
   const std::string& module,
   message_handlert& message_handler)
 {
+  std::string intrinsics;
+  internal_additions(intrinsics);
+
+  // Finish the compiler string
+  std::vector<std::string> compiler_string;
+  build_compiler_string(compiler_string);
+
+  clang::tooling::FixedCompilationDatabase Compilations("./", compiler_string);
+
+  std::vector<std::string> sources;
+  sources.push_back("/esbmc_intrinsics.c");
+
+  clang::tooling::ClangTool Tool(Compilations, sources);
+  Tool.mapVirtualFile("/esbmc_intrinsics.c", intrinsics);
+
+  Tool.buildASTs(ASTs);
+
   return convert(context, module, message_handler);
 }
 

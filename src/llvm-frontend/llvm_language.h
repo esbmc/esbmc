@@ -85,6 +85,7 @@ protected:
   }
 
   void search_clang_headers();
+  void build_compiler_string(std::vector<std::string> &compiler_string);
 
   std::string headers_path;
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
