@@ -193,6 +193,12 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
       && expr.op1().identifier() == "c::argc'")
     return;
 
+  if (expr.op0().id_string() == "symbol"
+      && expr.op0().identifier() == "c::envp'"
+      && expr.op1().id_string() == "symbol"
+      && expr.op1().identifier() == "c::envp_size'")
+    return;
+
   typet array_type = ns.follow(expr.op0().type());
 
   if (array_type.id() == "pointer")
