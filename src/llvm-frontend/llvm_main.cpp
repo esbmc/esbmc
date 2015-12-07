@@ -106,148 +106,120 @@ bool llvm_main(
     {
       namespacet ns(context);
 
-      const symbolt &argc_symbol=ns.lookup(arguments[0].cmt_identifier());
-      const symbolt &argv_symbol=ns.lookup(arguments[1].cmt_identifier());
+      const symbolt &argc_symbol = ns.lookup("c::argc'");
+      const symbolt &argv_symbol = ns.lookup("c::argv'");
 
+      // assume argc is at least one
+      exprt one = from_integer(1, argc_symbol.type);
+
+      exprt ge(">=", bool_type());
+      ge.copy_to_operands(symbol_expr(argc_symbol), one);
+
+      init_code.copy_to_operands(code_assumet(ge));
+
+      // assume argc is at most MAX-1
+      mp_integer max;
+
+      if(argc_symbol.type.id() == "signedbv")
+        max = power(2, atoi(argc_symbol.type.width().c_str()) - 1) - 1;
+      else if(argc_symbol.type.id() == "unsignedbv")
+        max = power(2, atoi(argc_symbol.type.width().c_str())) - 1;
+      else
+        assert(false);
+
+      exprt max_minus_one = from_integer(max - 1, argc_symbol.type);
+
+      exprt le("<=", bool_type());
+      le.copy_to_operands(symbol_expr(argc_symbol), max_minus_one);
+
+      init_code.copy_to_operands(code_assumet(le));
+
+      // assign argv[argc] to NULL
+      constant_exprt null(
+        irep_idt("NULL"),
+        integer2string(0),
+        argv_symbol.type.subtype());
+
+      exprt index_expr("index", argv_symbol.type.subtype());
+
+      index_exprt argv_index(
+        symbol_expr(argv_symbol),
+        symbol_expr(argc_symbol),
+        argv_symbol.type.subtype());
+
+      // disable bounds check on that one
+      // Logic to perform this ^ moved into goto_check, rather than load
+      // irep2 with additional baggage.
+
+      init_code.copy_to_operands(code_assignt(argv_index, null));
+
+      exprt::operandst &operands = call.arguments();
+
+      if(arguments.size() == 3)
+        operands.resize(3);
+      else
+        operands.resize(2);
+
+      exprt &op0 = operands[0];
+      exprt &op1 = operands[1];
+
+      op0 = symbol_expr(argc_symbol);
+
+      const exprt &arg1 = arguments[1];
+
+      index_exprt arg1_index(
+        symbol_expr(argv_symbol),
+        gen_zero(index_type()),
+        arg1.type().subtype());
+
+      // disable bounds check on that one
+      // Logic to perform this ^ moved into goto_check, rather than load
+      // irep2 with additional baggage.
+
+      op1 = exprt("address_of", arg1.type());
+      op1.move_to_operands(arg1_index);
+
+      if(arguments.size() == 3)
       {
-        // assume argc is at least one
-        exprt one=from_integer(1, argc_symbol.type);
+        const symbolt &envp_symbol = ns.lookup("c::envp'");
+        const symbolt &envp_size_symbol = ns.lookup("c::envp_size'");
 
-        exprt ge(">=", typet("bool"));
-        ge.copy_to_operands(symbol_expr(argc_symbol), one);
+        exprt envp_ge(">=", bool_type());
+        envp_ge.copy_to_operands(symbol_expr(envp_size_symbol), one);
 
-        codet assumption;
-        assumption.set_statement("assume");
-        assumption.move_to_operands(ge);
-        init_code.move_to_operands(assumption);
-      }
-
-      {
-        // assume argc is at most MAX-1
-        mp_integer max;
-
-        if(argc_symbol.type.id()=="signedbv")
-          max=power(2, atoi(argc_symbol.type.width().c_str())-1)-1;
-        else if(argc_symbol.type.id()=="unsignedbv")
-          max=power(2, atoi(argc_symbol.type.width().c_str()))-1;
-        else
-          assert(false);
-
-        exprt max_minus_one=from_integer(max-1, argc_symbol.type);
-
-        exprt ge("<=", typet("bool"));
-        ge.copy_to_operands(symbol_expr(argc_symbol), max_minus_one);
-
-        codet assumption;
-        assumption.set_statement("assume");
-        assumption.move_to_operands(ge);
-        init_code.move_to_operands(assumption);
-
-        // assign argv[argc] to NULL
-        constant_exprt null(
-          integer2binary(0, bv_width(argc_symbol.type)),
-          integer2string(0),
-          argc_symbol.type);
-
-        exprt index_expr("index", argv_symbol.type.subtype());
-        index_expr.copy_to_operands(
-          symbol_expr(argv_symbol),
-          symbol_expr(argc_symbol));
-
-        // disable bounds check on that one
-        // Logic to perform this ^ moved into goto_check, rather than load
-        // irep2 with additional baggage.
-
-        init_code.copy_to_operands(code_assignt(index_expr, null));
-      }
-
-      if(arguments.size()==3)
-      {
-        const symbolt &envp_symbol = ns.lookup(arguments[2].cmt_identifier());
-        const symbolt &envp_size_symbol =
-          ns.lookup(envp_symbol.name.as_string() + "_size");
+        init_code.copy_to_operands(code_assumet(envp_ge));
 
         // assume envp_size is at most MAX-1
-        mp_integer max;
 
-        if(envp_size_symbol.type.id()=="signedbv")
-          max=power(2, atoi(envp_size_symbol.type.width().c_str())-1)-1;
-        else if(envp_size_symbol.type.id()=="unsignedbv")
-          max=power(2, atoi(envp_size_symbol.type.width().c_str()))-1;
-        else
-          assert(false);
+        exprt envp_le("<=", bool_type());
+        envp_le.copy_to_operands(symbol_expr(envp_size_symbol), max_minus_one);
 
-        exprt max_minus_one=from_integer(max-1, envp_size_symbol.type);
+        init_code.copy_to_operands(code_assumet(envp_le));
 
-        exprt ge("<=", typet("bool"));
-        ge.copy_to_operands(symbol_expr(envp_size_symbol), max_minus_one);
-
-        codet assumption;
-        assumption.set_statement("assume");
-        assumption.move_to_operands(ge);
-        init_code.move_to_operands(assumption);
-
-        // assume envp[envp_size] is NULL
-        exprt null("constant", envp_symbol.type.subtype());
-        null.value("NULL");
-
-        exprt index_expr("index", envp_symbol.type.subtype());
-        index_expr.copy_to_operands(
+        index_exprt envp_index(
           symbol_expr(envp_symbol),
-          symbol_expr(envp_size_symbol));
+          symbol_expr(envp_size_symbol),
+          envp_symbol.type.subtype());
 
         // disable bounds check on that one
         // Logic to perform this ^ moved into goto_check, rather than load
         // irep2 with additional baggage.
 
-        exprt is_null("=", typet("bool"));
-        is_null.copy_to_operands(index_expr, null);
+        exprt is_null("=", bool_type());
+        is_null.copy_to_operands(envp_index, null);
 
-        codet assumption2;
-        assumption2.set_statement("assume");
-        assumption2.move_to_operands(is_null);
-        init_code.move_to_operands(assumption2);
+        init_code.copy_to_operands(code_assumet(is_null));
 
-        exprt::operandst &operands=call.arguments();
+        exprt &op2 = operands[2];
+        const exprt &arg2 = arguments[2];
 
-        if(arguments.size()==3)
-          operands.resize(3);
-        else
-          operands.resize(2);
+        index_exprt arg2_index(
+          symbol_expr(envp_symbol),
+          gen_zero(index_type()),
+          arg2.type().subtype());
 
-        exprt &op0=operands[0];
-        exprt &op1=operands[1];
-
-        op0=symbol_expr(argc_symbol);
-
-        {
-          const exprt &arg1=arguments[1];
-
-          exprt index_expr("index", arg1.type().subtype());
-          index_expr.copy_to_operands(symbol_expr(argv_symbol), gen_zero(index_type()));
-
-          // disable bounds check on that one
-          // Logic to perform this ^ moved into goto_check, rather than load
-          // irep2 with additional baggage.
-
-          op1=exprt("address_of", arg1.type());
-          op1.move_to_operands(index_expr);
-        }
-
-        // do we need envp?
-        if(arguments.size()==3)
-        {
-          exprt &op2=operands[2];
-
-          const exprt &arg2=arguments[2];
-
-          exprt index_expr("index", arg2.type().subtype());
-          index_expr.copy_to_operands(
-            symbol_expr(envp_symbol), gen_zero(index_type()));
-
-          op2=exprt("address_of", arg2.type());
-          op2.move_to_operands(index_expr);
-        }
+        op2 = exprt("address_of", arg2.type());
+        op2.move_to_operands(arg2_index);
       }
     }
     else

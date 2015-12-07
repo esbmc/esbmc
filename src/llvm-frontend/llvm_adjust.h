@@ -67,7 +67,7 @@ class llvm_adjust
     void adjust_switch(codet &code);
     void adjust_assign(codet &code);
 
-    void add_argc_argv(const symbolt &main_symbol);
+    void adjust_argc_argv(const symbolt &main_symbol);
 
     void make_index_type(exprt &expr);
 };

@@ -190,6 +190,21 @@ public:
   {
     operands().reserve(1);
   }
+
+  inline explicit code_assumet(const exprt &expr):codet("assume")
+  {
+    copy_to_operands(expr);
+  }
+
+  inline const exprt &assumption() const
+  {
+    return op0();
+  }
+
+  inline exprt &assumption()
+  {
+    return op0();
+  }
 };
 
 extern inline const code_assumet &to_code_assume(const codet &code)
@@ -210,6 +225,21 @@ public:
   code_assertt():codet("assert")
   {
     operands().reserve(1);
+  }
+
+  inline explicit code_assertt(const exprt &expr):codet("assert")
+  {
+    copy_to_operands(expr);
+  }
+
+  inline const exprt &assertion() const
+  {
+    return op0();
+  }
+
+  inline exprt &assertion()
+  {
+    return op0();
   }
 };
 

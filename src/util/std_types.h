@@ -378,6 +378,12 @@ public:
     subtype()=_subtype;
   }
 
+  array_typet(const typet &_subtype, const exprt &_size) : typet(t_array)
+  {
+    subtype()=_subtype;
+    size()=_size;
+  }
+
   const exprt &size() const
   {
     return (const exprt &)find(a_size);

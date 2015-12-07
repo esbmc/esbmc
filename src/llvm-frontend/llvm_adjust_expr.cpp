@@ -76,7 +76,7 @@ void llvm_adjust::adjust_function(symbolt& symbol)
   }
 
   if(symbol.name=="c::main")
-    add_argc_argv(symbol);
+    adjust_argc_argv(symbol);
 }
 
 void llvm_adjust::adjust_expr(exprt& expr)
@@ -747,64 +747,74 @@ void llvm_adjust::adjust_expr_binary_boolean(exprt& expr)
   gen_typecast_bool(ns, expr.op1());
 }
 
-void llvm_adjust::add_argc_argv(const symbolt& main_symbol)
+void llvm_adjust::adjust_argc_argv(const symbolt& main_symbol)
 {
-  const code_typet::argumentst &arguments=
+  const code_typet::argumentst &arguments =
     to_code_type(main_symbol.type).arguments();
 
-  if(arguments.size()==0)
+  if(arguments.size() == 0)
     return;
 
   if(arguments.size() != 2 && arguments.size() != 3)
   {
     std::cerr << "main expected to have no or two or three arguments"
-              << std::endl;
+        << std::endl;
     abort();
   }
 
-  // main args should already be added on the last step
-  symbolt &argc_symbol =
-    context.symbols.find(arguments[0].cmt_identifier())->second;
+  const exprt &op0 = arguments[0];
+  const exprt &op1 = arguments[1];
 
+  symbolt *argc_new_symbol;
+
+  symbolt argc_symbol;
+  argc_symbol.base_name = "argc";
+  argc_symbol.name = "c::argc'";
+  argc_symbol.type = op0.type();
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
-  argc_symbol.file_local = false;
-  argc_symbol.is_actual = false;
 
-  symbolt &argv_symbol =
-    context.symbols.find(arguments[1].cmt_identifier())->second;
+  context.move(argc_symbol, argc_new_symbol);
 
   // need to add one to the size -- the array is terminated
   // with NULL
-  exprt one_expr=from_integer(1, argc_symbol.type);
+  exprt one_expr = from_integer(1, argc_new_symbol->type);
 
-  exprt size_expr("+", argc_symbol.type);
-  size_expr.copy_to_operands(symbol_expr(argc_symbol), one_expr);
+  exprt size_expr("+", argc_new_symbol->type);
+  size_expr.copy_to_operands(symbol_expr(*argc_new_symbol), one_expr);
 
-  argv_symbol.type.size(size_expr);
+  symbolt argv_symbol;
+  argv_symbol.base_name = "argv";
+  argv_symbol.name = "c::argv'";
+  argv_symbol.type = array_typet(op1.type().subtype(), size_expr);
+  argv_symbol.static_lifetime = true;
+  argv_symbol.lvalue = true;
 
-  argv_symbol.lvalue=true;
+  symbolt *argv_new_symbol;
+  context.move(argv_symbol, argv_new_symbol);
 
-  if (arguments.size() == 3)
+  if(arguments.size() == 3)
   {
-    symbolt &envp_symbol =
-      context.symbols.find(arguments[2].cmt_identifier())->second;
-    envp_symbol.static_lifetime=true;
+    const exprt &op2 = arguments[2];
+
+    symbolt envp_symbol;
+    envp_symbol.base_name = "envp";
+    envp_symbol.name = "c::envp'";
+    envp_symbol.type = op2.type();
+    envp_symbol.static_lifetime = true;
 
     symbolt envp_size_symbol, *envp_new_size_symbol;
-    envp_size_symbol.base_name = envp_symbol.base_name.as_string() + "_size";
-    envp_size_symbol.name = envp_symbol.name.as_string() + "_size";
-    envp_size_symbol.type = arguments[0].type(); // same type as argc!
+    envp_size_symbol.base_name = "envp_size";
+    envp_size_symbol.name = "c::envp_size'";
+    envp_size_symbol.type = op0.type(); // same type as argc!
     envp_size_symbol.static_lifetime = true;
-    envp_size_symbol.mode = envp_symbol.mode;
-    envp_size_symbol.module = envp_symbol.module;
-
-    exprt size_expr = symbol_expr(envp_size_symbol);
-
-    envp_symbol.type.id("array");
-    envp_symbol.type.size(size_expr);
-
     context.move(envp_size_symbol, envp_new_size_symbol);
+
+    exprt size_expr = symbol_expr(*envp_new_size_symbol);
+    envp_symbol.type = array_typet(envp_symbol.type.subtype(), size_expr);
+
+    symbolt *envp_new_symbol;
+    context.move(envp_symbol, envp_new_symbol);
   }
 }
 
