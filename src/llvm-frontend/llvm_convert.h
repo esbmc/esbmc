@@ -146,13 +146,7 @@ private:
 
   void get_location_from_decl(
     const clang::Decl& decl,
-    locationt &location_begin,
-    locationt &location_end);
-
-  void get_location_from_stmt(
-    const clang::Stmt &stmt,
-    locationt &location_begin,
-    locationt &location_end);
+    locationt &location_begin);
 
   void get_location(
     clang::SourceLocation loc,

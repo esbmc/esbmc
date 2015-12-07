@@ -281,8 +281,8 @@ void llvm_convertert::get_enum(
   t.id("c_enum");
   t.tag(identifier);
 
-  locationt location_begin, location_end;
-  get_location_from_decl(enumd, location_begin, location_end);
+  locationt location_begin;
+  get_location_from_decl(enumd, location_begin);
 
   symbolt symbol;
   get_default_symbol(
@@ -338,8 +338,8 @@ void llvm_convertert::get_enum_constants(
   typet t;
   get_type(enumcd.getType(), t);
 
-  locationt location_begin, location_end;
-  get_location_from_decl(enumd, location_begin, location_end);
+  locationt location_begin;
+  get_location_from_decl(enumd, location_begin);
 
   symbolt symbol;
   get_default_symbol(
@@ -393,8 +393,8 @@ void llvm_convertert::get_struct_union_class(
 
   t.tag(identifier);
 
-  locationt location_begin, location_end;
-  get_location_from_decl(recordd, location_begin, location_end);
+  locationt location_begin;
+  get_location_from_decl(recordd, location_begin);
 
   symbolt symbol;
   get_default_symbol(
@@ -466,8 +466,8 @@ void llvm_convertert::get_typedef(
   typet t;
   get_type(tdd.getUnderlyingType().getCanonicalType(), t);
 
-  locationt location_begin, location_end;
-  get_location_from_decl(tdd, location_begin, location_end);
+  locationt location_begin;
+  get_location_from_decl(tdd, location_begin);
 
   symbolt symbol;
   get_default_symbol(
@@ -597,8 +597,8 @@ void llvm_convertert::get_function(
     type.arguments().push_back(param);
   }
 
-  locationt location_begin, location_end;
-  get_location_from_decl(fd, location_begin, location_end);
+  locationt location_begin;
+  get_location_from_decl(fd, location_begin);
 
   symbolt symbol;
   get_default_symbol(
@@ -1069,8 +1069,8 @@ void llvm_convertert::get_expr(
   const clang::Stmt& stmt,
   exprt& new_expr)
 {
-  locationt location_begin, location_end;
-  get_location_from_stmt(stmt, location_begin, location_end);
+  locationt location_begin;
+  get_location(stmt.getSourceRange().getBegin(), location_begin);
 
   switch(stmt.getStmtClass())
   {
@@ -1557,6 +1557,8 @@ void llvm_convertert::get_expr(
       }
 
       // Set the end location for blocks
+      locationt location_end;
+      get_location(stmt.getSourceRange().getEnd(), location_end);
       block.end_location(location_end);
 
       new_expr = block;
@@ -2354,13 +2356,10 @@ void llvm_convertert::get_location_from_stmt(
 
 void llvm_convertert::get_location_from_decl(
   const clang::Decl& decl,
-  locationt &location_begin,
-  locationt &location_end)
+  locationt &location_begin)
 {
   sm = &decl.getASTContext().getSourceManager();
-
   get_location(decl.getSourceRange().getBegin(), location_begin);
-  get_location(decl.getSourceRange().getEnd(), location_end);
 }
 
 void llvm_convertert::get_location(
