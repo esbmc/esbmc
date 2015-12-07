@@ -146,7 +146,8 @@ private:
     locationt &location_begin);
 
   void get_location(
-    clang::SourceLocation loc,
+    const clang::SourceLocation loc,
+    std::string function_name,
     locationt &location);
 
   std::string get_filename_from_path();

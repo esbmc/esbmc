@@ -1089,8 +1089,14 @@ void llvm_convertert::get_expr(
   const clang::Stmt& stmt,
   exprt& new_expr)
 {
+  std::string function_name = "";
+
+  // TODO: find a way to get the function_name from the parent node
   locationt location_begin;
-  get_location(stmt.getSourceRange().getBegin(), location_begin);
+  get_location(
+    stmt.getSourceRange().getBegin(),
+    function_name,
+    location_begin);
 
   switch(stmt.getStmtClass())
   {
@@ -1578,7 +1584,10 @@ void llvm_convertert::get_expr(
 
       // Set the end location for blocks
       locationt location_end;
-      get_location(stmt.getSourceRange().getEnd(), location_end);
+      get_location(
+        stmt.getSourceRange().getEnd(),
+        function_name,
+        location_end);
       block.end_location(location_end);
 
       new_expr = block;
@@ -2374,11 +2383,26 @@ void llvm_convertert::get_location_from_decl(
   locationt &location_begin)
 {
   sm = &decl.getASTContext().getSourceManager();
-  get_location(decl.getSourceRange().getBegin(), location_begin);
+
+  std::string function_name = "";
+
+  if(decl.getDeclContext()->isFunctionOrMethod())
+  {
+    const clang::FunctionDecl &funcd =
+      static_cast<const clang::FunctionDecl &>(*decl.getDeclContext());
+
+    function_name = funcd.getName().str();
+  }
+
+  get_location(
+    decl.getSourceRange().getBegin(),
+    function_name,
+    location_begin);
 }
 
 void llvm_convertert::get_location(
   clang::SourceLocation loc,
+  std::string function_name,
   locationt &location)
 {
   if(!sm)
@@ -2397,8 +2421,8 @@ void llvm_convertert::get_location(
   location.set_line(PLoc.getLine());
   location.set_file(get_filename_from_path());
 
-//  if(!current_function_name.empty())
-//    location.set_function(current_function_name);
+  if(!function_name.empty())
+    location.set_function(function_name);
 }
 
 std::string llvm_convertert::get_modulename_from_path()
