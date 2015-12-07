@@ -281,7 +281,6 @@ void llvm_languaget::internal_additions(std::string &str)
     "_Bool __ESBMC_isfinite(double f);\n"
     "_Bool __ESBMC_isinf(double f);\n"
     "_Bool __ESBMC_isnormal(double f);\n"
-    "extern int __ESBMC_rounding_mode;\n"
 
     // absolute value
     "int __ESBMC_abs(int x);\n"
