@@ -277,7 +277,6 @@ void llvm_convertert::get_enum(
   std::string identifier = get_tag_name(enumd.getName().str());
 
   typet t = enum_type();
-  t.id("c_enum");
   t.tag(identifier);
 
   locationt location_begin;
