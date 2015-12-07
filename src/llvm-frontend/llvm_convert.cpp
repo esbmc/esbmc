@@ -29,7 +29,6 @@ llvm_convertert::llvm_convertert(
     ns(context),
     ASTs(_ASTs),
     current_path(""),
-    current_function_name(""),
     current_scope_var_num(1),
     anon_counter(0),
     sm(nullptr)
@@ -159,7 +158,7 @@ void llvm_convertert::get_decl(
       get_type(fd.getType(), t);
 
       std::string field_identifier =
-        get_var_name(fd.getName().str(), false);
+        get_var_name(fd.getName().str(), "");
 
       struct_union_typet::componentt comp(field_identifier, t);
       comp.set_pretty_name(fd.getName().str());
@@ -332,8 +331,21 @@ void llvm_convertert::get_enum_constants(
 
   std::string identifier = parent_identifier + "::" + enumcd.getName().str();
 
-  std::string enum_value_identifier =
-    get_var_name(identifier, !current_function_name.empty());
+  std::string function_name = "";
+
+  // If the enum was defined inside a function or method, get its name to
+  // compose the enum_constant's name. We must get the context in which
+  // the enum was defined, because the context of the enum constant is
+  // the enum context.
+  if(enumd.getDeclContext()->isFunctionOrMethod())
+  {
+    const clang::FunctionDecl &funcd =
+      static_cast<const clang::FunctionDecl &>(*enumd.getDeclContext());
+
+    function_name = funcd.getName().str();
+  }
+
+  std::string enum_value_identifier = get_var_name(identifier, function_name);
 
   typet t;
   get_type(enumcd.getType(), t);
@@ -494,11 +506,19 @@ void llvm_convertert::get_var(
   typet t;
   get_type(vd.getType(), t);
 
-  std::string identifier =
-    get_var_name(vd.getName().str(), vd.hasLocalStorage());
+  std::string function_name = "";
+  if(vd.getDeclContext()->isFunctionOrMethod())
+  {
+    const clang::FunctionDecl &funcd =
+      static_cast<const clang::FunctionDecl &>(*vd.getDeclContext());
 
-  locationt location_begin, location_end;
-  get_location_from_decl(vd, location_begin, location_end);
+    function_name = funcd.getName().str();
+  }
+
+  std::string identifier = get_var_name(vd.getName().str(), function_name);
+
+  locationt location_begin;
+  get_location_from_decl(vd, location_begin);
 
   symbolt symbol;
   get_default_symbol(
@@ -572,9 +592,6 @@ void llvm_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
-  std::string old_function_name = current_function_name;
-  current_function_name = fd.getName().str();
-
   // Set initial variable name, it will be used for variables' name
   // This will be reset every time a function is parsed
   current_scope_var_num = 1;
@@ -629,8 +646,6 @@ void llvm_convertert::get_function(
 
   move_symbol_to_context(symbol);
 
-  current_function_name = old_function_name;
-
   // If that was an declaration of a function, inside a function
   // Add a skip
   new_expr = code_skipt();
@@ -656,15 +671,20 @@ void llvm_convertert::get_function_params(
   if(name.empty())
     return;
 
-  locationt location_begin, location_end;
-  get_location_from_decl(pdecl, location_begin, location_end);
+  locationt location_begin;
+  get_location_from_decl(pdecl, location_begin);
+
+  const clang::FunctionDecl &funcd =
+    static_cast<const clang::FunctionDecl &>(*pdecl.getParentFunctionOrMethod());
+
+  std::string function_name = funcd.getName().str();
 
   symbolt param_symbol;
   get_default_symbol(
     param_symbol,
     param_type,
     name,
-    get_param_name(name),
+    get_param_name(name, function_name),
     location_begin,
     false); // function parameter cannot be static
 
@@ -2307,51 +2327,46 @@ void llvm_convertert::get_default_symbol(
 
 std::string llvm_convertert::get_var_name(
   std::string name,
-  bool is_local)
+  std::string function_name)
 {
-  if(name.empty())
-    name = "#anon"+i2string(anon_counter++);
-
-  if(!is_local)
-    return name;
-
   std::string pretty_name = "";
-  if(!current_function_name.empty())
-    pretty_name += current_function_name + "::";
-  pretty_name += integer2string(current_scope_var_num++) + "::";
-  pretty_name += name;
 
+  if(name.empty())
+    pretty_name = "#anon"+i2string(anon_counter++);
+
+  // This means a global/static variable
+  if(!function_name.empty())
+  {
+    pretty_name += function_name + "::";
+    pretty_name += integer2string(current_scope_var_num++) + "::";
+  }
+
+  pretty_name += name;
   return pretty_name;
 }
 
-std::string llvm_convertert::get_param_name(std::string name)
+std::string llvm_convertert::get_param_name(
+  std::string name,
+  std::string function_name)
 {
   std::string pretty_name = get_modulename_from_path() + "::";
-  if(current_function_name!= "")
-    pretty_name += current_function_name + "::";
+  pretty_name += function_name + "::";
   pretty_name += name;
 
   return pretty_name;
 }
 
 std::string llvm_convertert::get_tag_name(
-  std::string _name)
+  std::string name)
 {
-  std::string name = _name;
+  std::string pretty_name = "";
 
   if(name.empty())
-    name = "#anon"+i2string(anon_counter++);
+    pretty_name = "#anon"+i2string(anon_counter++);
 
-  return "tag-" + name;
-}
+  pretty_name += name;
 
-void llvm_convertert::get_location_from_stmt(
-  const clang::Stmt &stmt,
-  locationt &location_begin,
-  locationt &location_end)
-{
-  get_location(stmt.getSourceRange().getBegin(), location_begin);
-  get_location(stmt.getSourceRange().getEnd(), location_end);
+  return pretty_name;
 }
 
 void llvm_convertert::get_location_from_decl(
@@ -2382,8 +2397,8 @@ void llvm_convertert::get_location(
   location.set_line(PLoc.getLine());
   location.set_file(get_filename_from_path());
 
-  if(!current_function_name.empty())
-    location.set_function(current_function_name);
+//  if(!current_function_name.empty())
+//    location.set_function(current_function_name);
 }
 
 std::string llvm_convertert::get_modulename_from_path()

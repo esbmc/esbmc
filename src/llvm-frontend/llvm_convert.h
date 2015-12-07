@@ -36,10 +36,6 @@ private:
 
   std::string current_path;
 
-  // TODO: We don't need the current_function_name attribute!!!!!
-  // We can get it from the declcontext. Refactor the
-  // rest of the code to use it
-  std::string current_function_name;
   unsigned int current_scope_var_num;
 
   unsigned int anon_counter;
@@ -136,13 +132,14 @@ private:
 
   std::string get_var_name(
     std::string name,
-    bool is_local);
+    std::string function_name);
 
   std::string get_param_name(
-    std::string name);
+    std::string name,
+    std::string function_name);
 
   std::string get_tag_name(
-    std::string _name);
+    std::string name);
 
   void get_location_from_decl(
     const clang::Decl& decl,
