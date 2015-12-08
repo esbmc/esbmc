@@ -62,8 +62,6 @@ void llvm_adjust::adjust_builtin(symbolt& symbol)
     exprt expr=exprt("infinity", symbol.type.subtype());
 
     symbol.type.size(expr);
-
-    symbol.value.id("array_of");
     symbol.value.type().size(expr);
   }
 }

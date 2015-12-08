@@ -535,10 +535,11 @@ void llvm_convertert::get_var(
   {
     // Initialize with zero value, if the symbol has initial value,
     // it will be add later on this method
-    symbol.value = gen_zero(t);
-
-    // Add location to value since it is only added on get_expr
-    symbol.value.location() = location_begin;
+    // Array are specials, we create an array_of exprt
+    if(t.is_array())
+      symbol.value = array_of_exprt(gen_zero(t.subtype()), t);
+    else
+      symbol.value = gen_zero(t);
   }
 
   symbol.lvalue = true;
