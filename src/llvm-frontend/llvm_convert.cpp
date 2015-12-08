@@ -564,22 +564,9 @@ void llvm_convertert::get_var(
 
   if(vd.hasInit())
   {
-    const clang::Expr *value = vd.getInit();
     exprt val;
-    get_expr(*value, val);
-
-    // If the symbol is an array, we must initialize all
-    // uninitialized positions to zero
-    if(t.is_array())
-    {
-      BigInt size;
-      to_integer(to_array_type(t).size(), size);
-
-      for(BigInt curr_size = val.operands().size() - 1;
-          curr_size < (size - 1);
-          ++curr_size)
-        val.operands().push_back(gen_zero(t.subtype()));
-    }
+    get_expr(*vd.getInit(), val);
+    gen_typecast(ns, val, t);
 
     added_symbol.value = val;
     decl.operands().push_back(val);
@@ -1448,7 +1435,6 @@ void llvm_convertert::get_expr(
       break;
     }
 
-    // TODO: This code is terrible, improve it sometime in the future
     // An initialize statement, such as int a[3] = {1, 2, 3}
     case clang::Stmt::InitListExprClass:
     {
@@ -1471,11 +1457,14 @@ void llvm_convertert::get_expr(
           exprt init;
           get_expr(*init_stmt.getInit(i), init);
 
-          // The backend requires that each element of the init lit
-          // to have the same type of the element. This is ok most of
-          // times but it's a problem when we're handling bitfields
+          typet elem_type;
+
           if(t.is_struct() || t.is_union())
-            init.type() = to_struct_union_type(t).components()[i].type();
+            elem_type = to_struct_union_type(t).components()[i].type();
+          else
+            elem_type = to_array_type(t).subtype();
+
+          gen_typecast(ns, init, elem_type);
 
           inits.operands().at(i) = init;
         }
@@ -1490,22 +1479,8 @@ void llvm_convertert::get_expr(
       }
       else
       {
-        // Builtin types put the initializer directly on the assigned irep
-        if(init_stmt.getType().getTypePtrOrNull() &&
-          (init_stmt.getType().getTypePtrOrNull()->getTypeClass() ==
-            clang::Type::Builtin))
-        {
-          assert(init_stmt.getNumInits() == 1);
-          get_expr(*init_stmt.getInit(0), inits);
-        }
-        else
-        {
-          std::cerr << "Unsupported initializer expression "
-                    << init_stmt.getType().getTypePtrOrNull()->getTypeClassName()
-                    << " at " << location_begin << std::endl;
-          init_stmt.dump();
-          abort();
-        }
+        assert(init_stmt.getNumInits() == 1);
+        get_expr(*init_stmt.getInit(0), inits);
       }
 
       new_expr = inits;
