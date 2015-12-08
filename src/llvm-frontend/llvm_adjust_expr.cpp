@@ -407,13 +407,19 @@ void llvm_adjust::adjust_float_rel(exprt& expr)
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
 
-  if(expr.op0().type().is_fixedbv())
+  if(!expr.op0().is_symbol())
+    return;
+
+  if(!expr.op1().is_symbol())
+    return;
+
+  if(!expr.op0().type().is_fixedbv())
+    return;
+
+  if(expr.id()=="=" and (expr.op0() == expr.op1()))
   {
-    if(expr.id()=="=" and (expr.op0() == expr.op1()))
-    {
-      expr.id("notequal");
-      expr.op1() = side_effect_expr_nondett(expr.op0().type());
-    }
+    expr.id("notequal");
+    expr.op1() = side_effect_expr_nondett(expr.op0().type());
   }
 }
 
