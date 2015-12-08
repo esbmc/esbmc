@@ -396,9 +396,15 @@ index_exprt &to_index_expr(exprt &expr);
 class array_of_exprt:public exprt
 {
 public:
-  array_of_exprt():exprt(exprt::arrayof)
+  inline array_of_exprt():exprt(exprt::arrayof)
   {
-    operands().resize(1);
+  }
+
+  explicit inline array_of_exprt(
+    const exprt &_what, const typet &_type):
+    exprt(exprt::arrayof, _type)
+  {
+    copy_to_operands(_what);
   }
 
   inline exprt &what()
