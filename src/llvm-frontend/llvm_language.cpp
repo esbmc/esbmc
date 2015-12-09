@@ -239,8 +239,7 @@ bool llvm_languaget::preprocess(
   std::ostream &outstream __attribute__((unused)),
   message_handlert &message_handler __attribute__((unused)))
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  return false;
+  return c_preprocess(path, outstream, false, message_handler);
 }
 
 bool llvm_languaget::final(contextt& context, message_handlert& message_handler)
