@@ -59,7 +59,7 @@ void llvm_adjust::adjust_builtin(symbolt& symbol)
      || has_prefix(identifier, std::string(CPROVER_PREFIX "is_dynamic"))
      || has_prefix(identifier, std::string(CPROVER_PREFIX "alloc_size")))
   {
-    exprt expr=exprt("infinity", symbol.type.subtype());
+    exprt expr=exprt("infinity", uint_type());
 
     symbol.type.size(expr);
     symbol.value.type().size(expr);
