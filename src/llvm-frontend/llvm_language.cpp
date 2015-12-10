@@ -25,8 +25,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 
-static llvm_languaget *lang = new llvm_languaget;
-
 std::string get_output_from_cmd(std::string cmd)
 {
   std::string data;
@@ -46,6 +44,7 @@ std::string get_output_from_cmd(std::string cmd)
 
 languaget *new_llvm_language()
 {
+  static llvm_languaget *lang = new llvm_languaget;
   return lang;
 }
 
