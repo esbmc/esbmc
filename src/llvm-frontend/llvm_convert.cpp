@@ -578,6 +578,9 @@ void llvm_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
+  // TODO: use fd.isMain to flag and check the flag on llvm_adjust_expr
+  // to saner way to add argc/argv/envp
+
   // Set initial variable name, it will be used for variables' name
   // This will be reset every time a function is parsed
   current_scope_var_num = 1;
