@@ -600,6 +600,9 @@ void llvm_convertert::get_function(
     type.arguments().push_back(param);
   }
 
+  if(fd.isVariadic())
+    type.make_ellipsis();
+
   locationt location_begin;
   get_location_from_decl(fd, location_begin);
 
