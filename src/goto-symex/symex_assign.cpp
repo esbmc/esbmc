@@ -168,9 +168,15 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
   // to/from a C++ POD class with no fields. The rest of the model checker isn't
   // rated for dealing with this concept; perform a NOP.
   try {
-    if (is_struct_type(code.target->type) &&
-        type_byte_size(*code.target->type) == 0)
-      return;
+    if (is_struct_type(code.target->type))
+    {
+      const struct_type2t &t2 =
+        static_cast<const struct_type2t&>(*code.target->type);
+
+      if(!t2.members.size())
+        return;
+    }
+
   } catch (array_type2t::dyn_sized_array_excp*foo) {
     delete foo;
   }
