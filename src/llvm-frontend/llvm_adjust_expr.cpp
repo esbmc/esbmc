@@ -35,13 +35,13 @@ bool llvm_adjust::adjust()
     if(symbol.is_type)
       continue;
 
-    if(symbol.type.is_code())
-    {
-      adjust_function(symbol);
-    }
-    else if(has_prefix(symbol.name.as_string(), std::string(CPROVER_PREFIX)))
+    if(has_prefix(symbol.name.as_string(), std::string(CPROVER_PREFIX)))
     {
       adjust_builtin(symbol);
+    }
+    else
+    {
+      adjust_symbol(symbol);
     }
   }
 
@@ -66,7 +66,7 @@ void llvm_adjust::adjust_builtin(symbolt& symbol)
   }
 }
 
-void llvm_adjust::adjust_function(symbolt& symbol)
+void llvm_adjust::adjust_symbol(symbolt& symbol)
 {
   Forall_operands(it, symbol.value)
   {

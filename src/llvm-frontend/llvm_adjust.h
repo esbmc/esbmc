@@ -32,7 +32,7 @@ class llvm_adjust
     contextt &context;
     namespacet ns;
 
-    void adjust_function(symbolt &symbol);
+    void adjust_symbol(symbolt &symbol);
     void adjust_type(typet &type);
 
     void adjust_builtin(symbolt& symbol);
