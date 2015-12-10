@@ -526,12 +526,9 @@ void llvm_convertert::get_var(
     vd.getName().str(),
     identifier,
     location_begin,
-    vd.hasLocalStorage());
+    (!vd.hasGlobalStorage() || !vd.isExternallyVisible()));
 
-  if (vd.hasExternalStorage())
-    symbol.is_extern = true;
-
-  if (!vd.hasLocalStorage())
+  if (vd.hasGlobalStorage())
   {
     // Initialize with zero value, if the symbol has initial value,
     // it will be add later on this method
@@ -543,7 +540,9 @@ void llvm_convertert::get_var(
   }
 
   symbol.lvalue = true;
-  symbol.static_lifetime = !vd.hasLocalStorage();
+  symbol.static_lifetime = vd.hasGlobalStorage();
+  symbol.is_extern = vd.hasExternalStorage();
+  symbol.file_local = vd.isExternallyVisible();
 
   // Save the variable address and name to the object map
   std::string symbol_name = symbol.name.as_string();
