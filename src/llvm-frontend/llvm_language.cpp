@@ -136,6 +136,9 @@ void llvm_languaget::build_compiler_string(
                 << std::endl;
       abort();
   }
+
+  if(config.ansi_c.char_is_unsigned)
+    compiler_string.push_back("-funsigned-char");
 }
 
 bool llvm_languaget::parse(
