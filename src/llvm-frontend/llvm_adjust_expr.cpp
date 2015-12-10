@@ -100,22 +100,23 @@ void llvm_adjust::adjust_expr(exprt& expr)
 
 void llvm_adjust::adjust_expr_main(exprt& expr)
 {
-  if(expr.id()=="sideeffect")
+  if(expr.id() == "sideeffect")
   {
     adjust_side_effect(to_side_effect_expr(expr));
   }
-  else if(expr.id()=="constant")
+  else if(expr.id() == "constant")
   {
   }
-  else if(expr.id()=="symbol")
+  else if(expr.id() == "symbol")
   {
     adjust_symbol(expr);
   }
-  else if(expr.id()=="unary+" || expr.id()=="unary-" ||
-          expr.id()=="bitnot")
+  else if(expr.id() == "unary+"
+          || expr.id() == "unary-"
+          || expr.id() == "bitnot")
   {
   }
-  else if(expr.id()=="not")
+  else if(expr.id() == "not")
   {
     adjust_expr_unary_boolean(expr);
   }
@@ -135,12 +136,12 @@ void llvm_adjust::adjust_expr_main(exprt& expr)
   {
     adjust_member(to_member_expr(expr));
   }
-  else if(expr.id()=="="  ||
-          expr.id()=="notequal" ||
-          expr.id()=="<"  ||
-          expr.id()=="<=" ||
-          expr.id()==">"  ||
-          expr.id()==">=")
+  else if(expr.id() == "="
+          || expr.id() == "notequal"
+          || expr.id() == "<"
+          || expr.id() == "<="
+          || expr.id() == ">"
+          || expr.id() == ">=")
   {
     adjust_expr_rel(expr);
   }
@@ -148,25 +149,30 @@ void llvm_adjust::adjust_expr_main(exprt& expr)
   {
     adjust_index(to_index_expr(expr));
   }
-  else if(expr.id()=="typecast")
+  else if(expr.id() == "typecast")
   {
   }
   else if(expr.id() == "sizeof")
   {
     adjust_sizeof(expr);
   }
-  else if(expr.id()=="+" || expr.id()=="-" ||
-          expr.id()=="*" || expr.id()=="/" ||
-          expr.id()=="mod" ||
-          expr.id()=="shl" || expr.id()=="shr" ||
-          expr.id()=="bitand" || expr.id()=="bitxor" || expr.id()=="bitor")
+  else if(expr.id() == "+"
+          || expr.id() == "-"
+          || expr.id() == "*"
+          || expr.id() == "/"
+          || expr.id() == "mod"
+          || expr.id() == "shl"
+          || expr.id() == "shr"
+          || expr.id() == "bitand"
+          || expr.id() == "bitxor"
+          || expr.id() == "bitor")
   {
     adjust_expr_binary_arithmetic(expr);
   }
-  else if(expr.id()=="comma")
+  else if(expr.id() == "comma")
   {
   }
-  else if(expr.id()=="if")
+  else if(expr.id() == "if")
   {
     // If the condition is not of boolean type, it must be casted
     gen_typecast(ns, expr.op0(), bool_type());
@@ -175,24 +181,25 @@ void llvm_adjust::adjust_expr_main(exprt& expr)
   {
     adjust_code(to_code(expr));
   }
-  else if(expr.id()=="builtin_offsetof")
+  else if(expr.id() == "builtin_offsetof")
   {
   }
-  else if(expr.id()=="string-constant")
+  else if(expr.id() == "string-constant")
   {
   }
-  else if(expr.id()=="arguments")
+  else if(expr.id() == "arguments")
   {
   }
-  else if(expr.id()=="union")
+  else if(expr.id() == "union")
   {
   }
-  else if(expr.id()=="struct")
+  else if(expr.id() == "struct")
   {
   }
   else
   {
-    std::cout << "Unexpected expression: " << expr.id().as_string() << std::endl;
+    std::cout << "Unexpected expression: " << expr.id().as_string()
+              << std::endl;
     expr.dump();
     abort();
   }
