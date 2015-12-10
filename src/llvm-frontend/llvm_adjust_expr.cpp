@@ -68,10 +68,7 @@ void llvm_adjust::adjust_builtin(symbolt& symbol)
 
 void llvm_adjust::adjust_symbol(symbolt& symbol)
 {
-  Forall_operands(it, symbol.value)
-  {
-    adjust_expr(*it);
-  }
+  adjust_expr(symbol.value);
 
   if(symbol.name=="c::main")
     adjust_argc_argv(symbol);
@@ -194,6 +191,12 @@ void llvm_adjust::adjust_expr_main(exprt& expr)
   {
   }
   else if(expr.id() == "struct")
+  {
+  }
+  else if(expr.id() == "nil")
+  {
+  }
+  else if(expr.id() == "array_of")
   {
   }
   else
