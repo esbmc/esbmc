@@ -271,6 +271,9 @@ void llvm_adjust::adjust_side_effect(side_effect_exprt& expr)
     adjust_side_effect_function_call(to_side_effect_expr_function_call(expr));
   else if(statement=="statement_expression")
     adjust_side_effect_statement_expression(expr);
+  else if(statement=="gcc_conditional_expression")
+  {
+  }
   else
   {
     std::cout << "unknown side effect: " << statement;

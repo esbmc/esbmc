@@ -1424,19 +1424,16 @@ void llvm_convertert::get_expr(
       exprt cond;
       get_expr(*ternary_if.getCond(), cond);
 
-      exprt then;
-      get_expr(*ternary_if.getTrueExpr(), then);
-
       exprt else_expr;
       get_expr(*ternary_if.getFalseExpr(), else_expr);
 
       typet t;
       get_type(ternary_if.getType(), t);
 
-      exprt if_expr("if", t);
-      if_expr.copy_to_operands(cond, then, else_expr);
+      side_effect_exprt gcc_ternary("gcc_conditional_expression");
+      gcc_ternary.copy_to_operands(cond, else_expr);
 
-      new_expr = if_expr;
+      new_expr = gcc_ternary;
       break;
     }
 
