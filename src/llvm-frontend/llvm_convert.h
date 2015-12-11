@@ -193,6 +193,9 @@ private:
 
   const clang::Decl* get_DeclContext_from_Stmt(
     const clang::Stmt &stmt);
+
+  const clang::FunctionDecl* get_top_FunctionDecl_from_Stmt(
+    const clang::Stmt &stmt);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */

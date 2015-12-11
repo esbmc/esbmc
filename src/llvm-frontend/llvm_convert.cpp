@@ -2546,3 +2546,10 @@ const clang::Decl* llvm_convertert::get_DeclContext_from_Stmt(
 
   return nullptr;
 }
+
+const clang::FunctionDecl* llvm_convertert::get_top_FunctionDecl_from_Stmt(
+  const clang::Stmt& stmt)
+{
+  const clang::Decl *decl = get_DeclContext_from_Stmt(stmt);
+  return static_cast<const clang::FunctionDecl *>(decl->getNonClosureContext());
+}
