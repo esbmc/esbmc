@@ -1082,7 +1082,10 @@ void llvm_convertert::get_expr(
 {
   std::string function_name = "";
 
-  // TODO: find a way to get the function_name from the parent node
+  const clang::FunctionDecl* fd = get_top_FunctionDecl_from_Stmt(stmt);
+  if(fd)
+    function_name = fd->getName().str();
+
   locationt location_begin;
   get_location(
     stmt.getSourceRange().getBegin(),
