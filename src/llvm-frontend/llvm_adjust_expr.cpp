@@ -70,7 +70,7 @@ void llvm_adjust::adjust_symbol(symbolt& symbol)
 {
   adjust_expr(symbol.value);
 
-  if(symbol.name=="c::main")
+  if(symbol.type.is_code() && symbol.name=="c::main")
     adjust_argc_argv(symbol);
 }
 
