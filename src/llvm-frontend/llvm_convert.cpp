@@ -588,9 +588,8 @@ void llvm_convertert::get_function(
   code_typet type;
 
   // Return type
-  const clang::QualType ret_type = fd.getReturnType();
   typet return_type;
-  get_type(ret_type, return_type);
+  get_type(fd.getReturnType(), return_type);
   type.return_type() = return_type;
 
   // We convert the parameters first so their symbol are added to context
