@@ -1824,14 +1824,29 @@ void llvm_convertert::get_expr(
       const clang::ReturnStmt &ret =
         static_cast<const clang::ReturnStmt&>(stmt);
 
-      code_returnt ret_expr;
+      const clang::Decl *decl = get_DeclContext_from_Stmt(ret);
+      if(!decl)
+      {
+        std::cerr << "ESBMC could not find the parent scope for "
+                  << "the following return statement:" << std::endl;
+        ret.dump();
+        abort();
+      }
 
+      const clang::FunctionDecl &fd =
+        static_cast<const clang::FunctionDecl&>(*decl);
+
+      typet return_type;
+      get_type(fd.getReturnType(), return_type);
+
+      code_returnt ret_expr;
       if(ret.getRetValue())
       {
         const clang::Expr &retval = *ret.getRetValue();
 
         exprt val;
         get_expr(retval, val);
+        gen_typecast(ns, val, return_type);
 
         ret_expr.return_value() = val;
       }
