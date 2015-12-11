@@ -2534,6 +2534,9 @@ const clang::Decl* llvm_convertert::get_DeclContext_from_Stmt(
   llvm::ArrayRef<clang::ast_type_traits::DynTypedNode>::iterator it =
     ASTContext.getParents(stmt).begin();
 
+  if(it == ASTContext.getParents(stmt).end())
+    return nullptr;
+
   const clang::Decl *aDecl = it->get<clang::Decl>();
   if(aDecl)
   {
@@ -2553,5 +2556,8 @@ const clang::FunctionDecl* llvm_convertert::get_top_FunctionDecl_from_Stmt(
   const clang::Stmt& stmt)
 {
   const clang::Decl *decl = get_DeclContext_from_Stmt(stmt);
+  if(!decl)
+    return nullptr;
+
   return static_cast<const clang::FunctionDecl *>(decl->getNonClosureContext());
 }
