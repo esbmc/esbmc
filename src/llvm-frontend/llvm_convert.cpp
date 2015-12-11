@@ -2510,3 +2510,24 @@ void llvm_convertert::search_add_type_map(
     abort();
   }
 }
+
+const clang::Decl* llvm_convertert::get_DeclContext_from_Stmt(
+  const clang::Stmt& stmt)
+{
+  llvm::ArrayRef<clang::ast_type_traits::DynTypedNode>::iterator it =
+    ASTContext.getParents(stmt).begin();
+
+  const clang::Decl *aDecl = it->get<clang::Decl>();
+  if(aDecl)
+  {
+    return aDecl;
+  }
+  else
+  {
+    const clang::Stmt *aStmt = it->get<clang::Stmt>();
+    if(aStmt)
+      return get_DeclContext_from_Stmt(*aStmt);
+  }
+
+  return nullptr;
+}

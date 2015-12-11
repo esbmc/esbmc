@@ -190,6 +190,9 @@ private:
   void search_add_type_map(
     const clang::TagDecl &tag,
     type_mapt::iterator &type_it);
+
+  const clang::Decl* get_DeclContext_from_Stmt(
+    const clang::Stmt &stmt);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */
