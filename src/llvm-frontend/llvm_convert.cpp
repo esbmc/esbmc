@@ -25,7 +25,8 @@
 llvm_convertert::llvm_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit> > &_ASTs)
-  : context(_context),
+  : ASTContext((*(*_ASTs.begin())->top_level_begin())->getASTContext()),
+    context(_context),
     ns(context),
     ASTs(_ASTs),
     current_path(""),
@@ -52,12 +53,10 @@ bool llvm_convertert::convert()
 
 bool llvm_convertert::convert_builtin_types()
 {
-  clang::ASTUnit::top_level_iterator it = (*ASTs.begin())->top_level_begin();
-
   // Convert va_list_tag
   // TODO: from clang 3.8 we'll have a member VaListTagDecl and a method
   // getVaListTagDecl() that might make the following code redundant
-  clang::QualType q_va_list_type = (*it)->getASTContext().getVaListTagType();
+  clang::QualType q_va_list_type = ASTContext.getVaListTagType();
   if(!q_va_list_type.isNull())
   {
     const clang::TypedefType &t =
@@ -1233,7 +1232,7 @@ void llvm_convertert::get_expr(
 
       // Use LLVM to calculate offsetof
       llvm::APSInt val;
-      assert(offset.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()));
+      assert(offset.EvaluateAsInt(val, ASTContext));
 
       new_expr =
         constant_exprt(
@@ -1253,7 +1252,7 @@ void llvm_convertert::get_expr(
 
       // Use LLVM to calculate sizeof/alignof
       llvm::APSInt val;
-      if(unary.EvaluateAsInt(val, (*ASTs.begin())->getASTContext()))
+      if(unary.EvaluateAsInt(val, ASTContext))
       {
         new_expr =
           constant_exprt(
@@ -2359,7 +2358,7 @@ void llvm_convertert::get_location_from_decl(
   const clang::Decl& decl,
   locationt &location_begin)
 {
-  sm = &decl.getASTContext().getSourceManager();
+  sm = &ASTContext.getSourceManager();
 
   std::string function_name = "";
 

@@ -30,6 +30,7 @@ public:
   bool convert();
 
 private:
+  clang::ASTContext &ASTContext;
   contextt &context;
   namespacet ns;
   std::vector<std::unique_ptr<clang::ASTUnit> > &ASTs;
@@ -40,7 +41,7 @@ private:
 
   unsigned int anon_counter;
 
-  const clang::SourceManager *sm;
+  clang::SourceManager *sm;
 
   typedef std::map<std::size_t, std::string> object_mapt;
   object_mapt object_map;
