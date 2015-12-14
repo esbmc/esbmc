@@ -25,7 +25,7 @@
 llvm_convertert::llvm_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit> > &_ASTs)
-  : ASTContext((*(*_ASTs.begin())->top_level_begin())->getASTContext()),
+  : ASTContext(&(*(*_ASTs.begin())->top_level_begin())->getASTContext()),
     context(_context),
     ns(context),
     ASTs(_ASTs),
@@ -56,7 +56,7 @@ bool llvm_convertert::convert_builtin_types()
   // Convert va_list_tag
   // TODO: from clang 3.8 we'll have a member VaListTagDecl and a method
   // getVaListTagDecl() that might make the following code redundant
-  clang::QualType q_va_list_type = ASTContext.getVaListTagType();
+  clang::QualType q_va_list_type = ASTContext->getVaListTagType();
   if(!q_va_list_type.isNull())
   {
     const clang::TypedefType &t =
@@ -85,6 +85,9 @@ bool llvm_convertert::convert_top_level_decl()
       it != translation_unit->top_level_end();
       it++)
     {
+      // Update ASTContext as it changes for each source file
+      ASTContext = &(*it)->getASTContext();
+
       exprt dummy_decl;
       get_decl(**it, dummy_decl);
     }
@@ -1234,7 +1237,7 @@ void llvm_convertert::get_expr(
 
       // Use LLVM to calculate offsetof
       llvm::APSInt val;
-      assert(offset.EvaluateAsInt(val, ASTContext));
+      assert(offset.EvaluateAsInt(val, *ASTContext));
 
       new_expr =
         constant_exprt(
@@ -1254,7 +1257,7 @@ void llvm_convertert::get_expr(
 
       // Use LLVM to calculate sizeof/alignof
       llvm::APSInt val;
-      if(unary.EvaluateAsInt(val, ASTContext))
+      if(unary.EvaluateAsInt(val, *ASTContext))
       {
         new_expr =
           constant_exprt(
@@ -2375,7 +2378,7 @@ void llvm_convertert::get_location_from_decl(
   const clang::Decl& decl,
   locationt &location_begin)
 {
-  sm = &ASTContext.getSourceManager();
+  sm = &ASTContext->getSourceManager();
 
   std::string function_name = "";
 
@@ -2532,22 +2535,18 @@ const clang::Decl* llvm_convertert::get_DeclContext_from_Stmt(
   const clang::Stmt& stmt)
 {
   llvm::ArrayRef<clang::ast_type_traits::DynTypedNode>::iterator it =
-    ASTContext.getParents(stmt).begin();
+    ASTContext->getParents(stmt).begin();
 
-  if(it == ASTContext.getParents(stmt).end())
+  if(it == ASTContext->getParents(stmt).end())
     return nullptr;
 
   const clang::Decl *aDecl = it->get<clang::Decl>();
   if(aDecl)
-  {
     return aDecl;
-  }
-  else
-  {
-    const clang::Stmt *aStmt = it->get<clang::Stmt>();
-    if(aStmt)
-      return get_DeclContext_from_Stmt(*aStmt);
-  }
+
+  const clang::Stmt *aStmt = it->get<clang::Stmt>();
+  if(aStmt)
+    return get_DeclContext_from_Stmt(*aStmt);
 
   return nullptr;
 }
@@ -2557,7 +2556,7 @@ const clang::FunctionDecl* llvm_convertert::get_top_FunctionDecl_from_Stmt(
 {
   const clang::Decl *decl = get_DeclContext_from_Stmt(stmt);
   if(!decl)
-    return nullptr;
+    return static_cast<const clang::FunctionDecl*>(decl->getNonClosureContext());
 
-  return static_cast<const clang::FunctionDecl *>(decl->getNonClosureContext());
+  return nullptr;
 }

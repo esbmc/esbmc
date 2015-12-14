@@ -30,7 +30,7 @@ public:
   bool convert();
 
 private:
-  clang::ASTContext &ASTContext;
+  clang::ASTContext *ASTContext;
   contextt &context;
   namespacet ns;
   std::vector<std::unique_ptr<clang::ASTUnit> > &ASTs;
