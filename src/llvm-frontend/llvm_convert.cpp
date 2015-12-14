@@ -1829,7 +1829,7 @@ void llvm_convertert::get_expr(
       const clang::ReturnStmt &ret =
         static_cast<const clang::ReturnStmt&>(stmt);
 
-      const clang::Decl *decl = get_DeclContext_from_Stmt(ret);
+      const clang::Decl *decl = get_top_FunctionDecl_from_Stmt(ret);
       if(!decl)
       {
         std::cerr << "ESBMC could not find the parent scope for "
