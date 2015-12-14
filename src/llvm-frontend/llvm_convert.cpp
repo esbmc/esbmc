@@ -2555,7 +2555,7 @@ const clang::FunctionDecl* llvm_convertert::get_top_FunctionDecl_from_Stmt(
   const clang::Stmt& stmt)
 {
   const clang::Decl *decl = get_DeclContext_from_Stmt(stmt);
-  if(!decl)
+  if(decl)
     return static_cast<const clang::FunctionDecl*>(decl->getNonClosureContext());
 
   return nullptr;
