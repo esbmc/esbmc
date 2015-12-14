@@ -12,6 +12,7 @@
 #include <expr_util.h>
 
 #include <ansi-c/c_types.h>
+#include <ansi-c/ansi_c_expr.h>
 
 #include <sstream>
 
@@ -36,32 +37,11 @@ void llvm_convertert::convert_string_literal(
   typet type;
   get_type(string_literal.getType(), type);
 
-  constant_exprt string(
-    string_literal.getBytes().str(),
-    string_literal.getBytes().str(),
-    type);
+  string_constantt string;
+  string.set_value(string_literal.getString().str());
 
-  typet &elem_type = type.subtype();
-  for(u_int byte = 0; byte < string_literal.getLength(); ++byte)
-  {
-    exprt elem =
-      constant_exprt(
-        integer2binary(string_literal.getCodeUnit(byte), bv_width(elem_type)),
-        integer2string(string_literal.getCodeUnit(byte)),
-        elem_type);
-
-    string.operands().push_back(elem);
-  }
-
-  BigInt size;
-  to_integer(to_array_type(type).size(), size);
-
-  for(BigInt curr_size = string.operands().size() - 1;
-      curr_size < (size - 1);
-      ++curr_size)
-    string.operands().push_back(gen_zero(type.subtype()));
-
-  dest.swap(string);
+  index_exprt zero_index(string, gen_zero(int_type()), type);
+  dest = address_of_exprt(zero_index);
 }
 
 void llvm_convertert::convert_integer_literal(
