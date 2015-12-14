@@ -138,6 +138,12 @@ void llvm_languaget::build_compiler_string(
 
   if(config.ansi_c.char_is_unsigned)
     compiler_string.push_back("-funsigned-char");
+
+  for(auto def : config.ansi_c.defines)
+    compiler_string.push_back("-D" + def);
+
+  for(auto inc : config.ansi_c.include_paths)
+    compiler_string.push_back("-I" + inc);
 }
 
 bool llvm_languaget::parse(
