@@ -13,6 +13,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 exprt gen_zero(const typet &type)
 {
+  return gen_zero(type, false);
+}
+
+exprt gen_zero(const typet &type, bool array_as_array_of)
+{
   exprt result;
 
   const std::string type_id=type.id_string();
@@ -53,15 +58,22 @@ exprt gen_zero(const typet &type)
   {
     result=struct_exprt(type);
     for(auto comp : to_struct_type(type).components())
-      result.copy_to_operands(gen_zero(comp.type()));
+      result.copy_to_operands(gen_zero(comp.type(), array_as_array_of));
   }
   else if(type_id=="array")
   {
-    array_typet arr_type = to_array_type(type);
+    if(array_as_array_of)
+    {
+      result = array_of_exprt(gen_zero(type.subtype(), array_as_array_of), type);
+    }
+    else
+    {
+      array_typet arr_type = to_array_type(type);
 
-    mp_integer size = string2integer(arr_type.size().value().as_string(), 2);
-    for(uint64_t i=0; i < size.to_uint64(); i++)
-      result.copy_to_operands(gen_zero(type.subtype()));
+      mp_integer size = string2integer(arr_type.size().value().as_string(), 2);
+      for(uint64_t i=0; i < size.to_uint64(); i++)
+        result.copy_to_operands(gen_zero(type.subtype(), array_as_array_of));
+    }
   }
   else if(type_id=="union")
   {
@@ -70,7 +82,7 @@ exprt gen_zero(const typet &type)
       to_union_type(type).components().begin()->name());
 
     new_result.copy_to_operands(
-      gen_zero(to_union_type(type).components().begin()->type()));
+      gen_zero(to_union_type(type).components().begin()->type(), array_as_array_of));
 
     result = new_result;
   }

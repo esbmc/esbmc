@@ -534,11 +534,7 @@ void llvm_convertert::get_var(
   {
     // Initialize with zero value, if the symbol has initial value,
     // it will be add later on this method
-    // Array are specials, we create an array_of exprt
-    if(t.is_array())
-      symbol.value = array_of_exprt(gen_zero(t.subtype()), t);
-    else
-      symbol.value = gen_zero(t);
+    symbol.value = gen_zero(t, true);
   }
 
   symbol.lvalue = true;
