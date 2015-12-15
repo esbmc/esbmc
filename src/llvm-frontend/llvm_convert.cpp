@@ -2273,7 +2273,6 @@ void llvm_convertert::get_predefined_expr(
   typet t;
   get_type(pred_expr.getType(), t);
 
-
   switch (pred_expr.getIdentType())
   {
     case clang::PredefinedExpr::Func:
@@ -2298,7 +2297,6 @@ void llvm_convertert::get_predefined_expr(
 
   new_expr.swap(string);
 }
-
 
 void llvm_convertert::get_default_symbol(
   symbolt& symbol,
