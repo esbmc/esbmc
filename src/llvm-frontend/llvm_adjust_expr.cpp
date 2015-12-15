@@ -1012,30 +1012,30 @@ void llvm_adjust::adjust_argc_argv(const symbolt& main_symbol)
 
 void llvm_adjust::make_index_type(exprt& expr)
 {
-  const typet &full_type=ns.follow(expr.type());
+  const typet &full_type = ns.follow(expr.type());
 
   if(full_type.is_bool())
   {
     expr.make_typecast(index_type());
   }
-  else if(full_type.id()=="unsignedbv")
+  else if(full_type.id() == "unsignedbv")
   {
-    unsigned width=bv_width(expr.type());
+    unsigned width = bv_width(expr.type());
 
-    if(width!=config.ansi_c.int_width)
+    if(width != config.ansi_c.int_width)
       expr.make_typecast(uint_type());
   }
-  else if(full_type.id()=="signedbv" ||
-          full_type.id()=="c_enum" ||
-          full_type.id()=="incomplete_c_enum")
+  else if(full_type.id() == "signedbv"
+          || full_type.id() == "c_enum"
+          || full_type.id() == "incomplete_c_enum")
   {
-    if(full_type!=index_type())
+    if(full_type != index_type())
       expr.make_typecast(index_type());
   }
   else
   {
-    std::cout << "expected integer type, but got `"
-        << full_type.name().as_string() << "'";
-    throw 0;
+    std::cerr << "expected integer type, but got `"
+        << full_type.name().as_string() << "'" << std::endl;
+    abort();
   }
 }
