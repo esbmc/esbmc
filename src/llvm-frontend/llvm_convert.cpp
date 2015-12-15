@@ -947,6 +947,15 @@ void llvm_convertert::get_type(
       break;
     }
 
+    case clang::Type::LValueReference:
+    {
+      const clang::LValueReferenceType &lvrt =
+        static_cast<const clang::LValueReferenceType &>(the_type);
+
+      get_type(lvrt.getPointeeTypeAsWritten(), new_type);
+      break;
+    }
+
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
