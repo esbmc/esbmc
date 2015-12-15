@@ -2292,10 +2292,8 @@ void llvm_convertert::get_predefined_expr(
       abort();
   }
 
-  std::string the_name = pred_expr.getFunctionName()->getString().str();
-
   string_constantt string;
-  string.set_value(the_name);
+  string.set_value(pred_expr.getFunctionName()->getString().str());
 
   new_expr.swap(string);
 }
