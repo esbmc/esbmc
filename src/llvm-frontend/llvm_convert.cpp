@@ -569,6 +569,8 @@ void llvm_convertert::get_var(
     decl.operands().push_back(val);
   }
 
+  decl.location() = location_begin;
+
   new_expr = decl;
 }
 
