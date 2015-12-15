@@ -40,8 +40,7 @@ void llvm_convertert::convert_string_literal(
   string_constantt string;
   string.set_value(string_literal.getString().str());
 
-  index_exprt zero_index(string, gen_zero(int_type()), type);
-  dest = address_of_exprt(zero_index);
+  dest.swap(string);
 }
 
 void llvm_convertert::convert_integer_literal(

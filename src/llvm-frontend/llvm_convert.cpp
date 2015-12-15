@@ -2296,8 +2296,7 @@ void llvm_convertert::get_predefined_expr(
   string_constantt string;
   string.set_value(the_name);
 
-  index_exprt zero_index(string, gen_zero(int_type()), t);
-  new_expr = address_of_exprt(zero_index);
+  new_expr.swap(string);
 }
 
 
