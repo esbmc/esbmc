@@ -1520,6 +1520,24 @@ void llvm_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::VAArgExprClass:
+    {
+      const clang::VAArgExpr &vaa =
+        static_cast<const clang::VAArgExpr&>(stmt);
+
+      exprt expr;
+      get_expr(*vaa.getSubExpr(), expr);
+
+      typet t;
+      get_type(vaa.getType(), t);
+
+      exprt vaa_expr("builtin_va_arg", t);
+      vaa_expr.copy_to_operands(expr);
+
+      new_expr = vaa_expr;
+      break;
+    }
+
     /*
        The following enum values are the basic elements of a program,
        defined on the Stmt class
@@ -1879,7 +1897,6 @@ void llvm_convertert::get_expr(
     case clang::Stmt::ConvertVectorExprClass:
     case clang::Stmt::ChooseExprClass:
     case clang::Stmt::GNUNullExprClass:
-    case clang::Stmt::VAArgExprClass:
     case clang::Stmt::DesignatedInitExprClass:
     case clang::Stmt::ParenListExprClass:
     case clang::Stmt::ExtVectorElementExprClass:
