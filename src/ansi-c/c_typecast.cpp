@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 
+#include <string2array.h>
 #include <config.h>
 #include <simplify_expr_class.h>
 #include <expr_util.h>
@@ -484,6 +485,15 @@ void c_typecastt::implicit_typecast_followed(
         do_typecast(expr, dest_type);
 
       return; // ok
+    }
+  }
+  else if(dest_type.id()=="array")
+  {
+    if(expr.id() == "string-constant")
+    {
+      exprt dest;
+      string2array(expr, dest);
+      expr.swap(dest);
     }
   }
 
