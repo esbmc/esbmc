@@ -173,6 +173,7 @@ void llvm_adjust::adjust_expr_main(exprt& expr)
   {
     // If the condition is not of boolean type, it must be casted
     gen_typecast(ns, expr.op0(), bool_type());
+    gen_typecast_arithmetic(ns, expr.op1(), expr.op2());
   }
   else if(expr.is_code())
   {
