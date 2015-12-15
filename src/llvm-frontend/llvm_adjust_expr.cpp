@@ -686,6 +686,181 @@ void llvm_adjust::adjust_side_effect_function_call(
         gen_typecast(ns, op, pointer_typet(empty_typet()));
     }
   }
+
+  do_special_functions(expr);
+}
+
+void llvm_adjust::do_special_functions(side_effect_expr_function_callt& expr)
+{
+  const exprt &f_op = expr.function();
+
+  // some built-in functions
+  if(f_op.id() == "symbol")
+  {
+    const irep_idt &identifier = to_symbol_expr(f_op).get_identifier();
+
+    if(identifier == CPROVER_PREFIX "same_object")
+    {
+      if(expr.arguments().size() != 2)
+      {
+        std::cout << "same_object expects two operands" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt same_object_expr("same-object", bool_typet());
+      same_object_expr.operands() = expr.arguments();
+      expr.swap(same_object_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "buffer_size")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "buffer_size expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt buffer_size_expr("buffer_size", uint_type());
+      buffer_size_expr.operands() = expr.arguments();
+      expr.swap(buffer_size_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "is_zero_string")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "is_zero_string expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt is_zero_string_expr("is_zero_string", bool_typet());
+      is_zero_string_expr.operands() = expr.arguments();
+      is_zero_string_expr.cmt_lvalue(true); // make it an lvalue
+      expr.swap(is_zero_string_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "zero_string_length")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "zero_string_length expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt zero_string_length_expr("zero_string_length", uint_type());
+      zero_string_length_expr.operands() = expr.arguments();
+      zero_string_length_expr.cmt_lvalue(true); // make it an lvalue
+      expr.swap(zero_string_length_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "POINTER_OFFSET")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "pointer_offset expects one argument" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt pointer_offset_expr = exprt("pointer_offset", expr.type());
+      pointer_offset_expr.operands() = expr.arguments();
+      expr.swap(pointer_offset_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "POINTER_OBJECT")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "pointer_object expects one argument" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt pointer_object_expr = exprt("pointer_object", expr.type());
+      pointer_object_expr.operands() = expr.arguments();
+      expr.swap(pointer_object_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "isnan")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "isnan expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt isnan_expr("isnan", bool_typet());
+      isnan_expr.operands() = expr.arguments();
+      expr.swap(isnan_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "isfinite")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "isfinite expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt isfinite_expr("isfinite", bool_typet());
+      isfinite_expr.operands() = expr.arguments();
+      expr.swap(isfinite_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "abs"
+        || identifier == CPROVER_PREFIX "fabs"
+        || identifier == CPROVER_PREFIX "fabsf"
+        || identifier == CPROVER_PREFIX "fabsl")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "abs expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt abs_expr("abs", expr.type());
+      abs_expr.operands() = expr.arguments();
+      expr.swap(abs_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "isinf")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "isinf expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt isinf_expr("isinf", bool_typet());
+      isinf_expr.operands() = expr.arguments();
+      expr.swap(isinf_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "isnormal")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "finite expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt isnormal_expr("isnormal", bool_typet());
+      isnormal_expr.operands() = expr.arguments();
+      expr.swap(isnormal_expr);
+    }
+    else if(identifier == CPROVER_PREFIX "sign")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "sign expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt sign_expr("sign", bool_typet());
+      sign_expr.operands() = expr.arguments();
+      expr.swap(sign_expr);
+    }
+  }
 }
 
 void llvm_adjust::adjust_side_effect_statement_expression(
