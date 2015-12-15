@@ -13,11 +13,8 @@
 
 void gen_typecast(namespacet ns, exprt &dest, typet type)
 {
-  if(dest.type() != type)
-  {
-    c_typecastt c_typecast(ns);
-    c_typecast.implicit_typecast(dest, type);
-  }
+  c_typecastt c_typecast(ns);
+  c_typecast.implicit_typecast(dest, type);
 }
 
 void gen_typecast_bool(namespacet ns, exprt& dest)
