@@ -491,9 +491,13 @@ void c_typecastt::implicit_typecast_followed(
   {
     if(expr.id() == "string-constant")
     {
+      expr.type() = dest_type;
+
       exprt dest;
       string2array(expr, dest);
       expr.swap(dest);
+
+      return;
     }
   }
 
