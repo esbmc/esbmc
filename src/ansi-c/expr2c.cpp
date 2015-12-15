@@ -3008,6 +3008,11 @@ std::string expr2ct::convert(
     return convert_function(src, "isnormal", precedence=15);
   }
 
+  else if(src.id()=="builtin_va_arg")
+  {
+    return convert_function(src, "builtin_va_arg", precedence=15);
+  }
+
   else if(has_prefix(src.id_string(), "byte_extract"))
   {
     return convert_byte_extract(src, precedence=15);
