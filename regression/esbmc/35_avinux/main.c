@@ -14038,8 +14038,8 @@ void ata_scsi_simulate(u16 *id , struct scsi_cmnd *cmd , void (*done)(struct scs
 }
 //#line 59 "include/linux/slab.h"
 extern kmem_cache_t *kmem_cache_create(char const   * , size_t  , size_t  , unsigned long  ,
-                                       void /*(*)*/(*__perl_script_tmp)(void * , kmem_cache_t * , unsigned long  ) ,
-                                       void /*(*)*/(*__perl_script_tmp)(void * , kmem_cache_t * , unsigned long  ) ) ;
+                                       void (*ctor)(void * , kmem_cache_t * , unsigned long  ) ,
+                                       void (*dtor)(void * , kmem_cache_t * , unsigned long  ) ) ;
 //#line 62
 extern int kmem_cache_destroy(kmem_cache_t * ) ;
 //#line 24 "include/linux/mempool.h"
