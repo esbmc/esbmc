@@ -1259,29 +1259,30 @@ void llvm_convertert::get_expr(
       const clang::UnaryExprOrTypeTraitExpr &unary =
         static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
 
-      typet t;
-      get_type(unary.getType(), t);
-
       // Use LLVM to calculate sizeof/alignof
       llvm::APSInt val;
       if(unary.EvaluateAsInt(val, *ASTContext))
       {
         new_expr =
           constant_exprt(
-            integer2binary(val.getSExtValue(), bv_width(int_type())),
-            integer2string(val.getSExtValue()),
-            int_type());
+            integer2binary(val.getZExtValue(), bv_width(uint_type())),
+            integer2string(val.getZExtValue()),
+            uint_type());
       }
       else
       {
         assert(unary.getKind() == clang::UETT_SizeOf);
 
-        typet size_t;
-        get_type(unary.getTypeOfArgument(), size_t);
+        typet t;
+        get_type(unary.getType(), t);
 
         new_expr = exprt("sizeof", t);
-        new_expr.set("sizeof-type", size_t);
       }
+
+      typet size_t;
+      get_type(unary.getTypeOfArgument(), size_t);
+
+      new_expr.set("#c_sizeof_type", size_t);
       break;
     }
 
