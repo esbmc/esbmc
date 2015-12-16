@@ -76,38 +76,34 @@ void llvm_convertert::convert_float_literal(
   typet type,
   exprt &dest)
 {
-  bool ignored;
-  val.convert(llvm::APFloat::IEEEdouble, llvm::APFloat::rmTowardZero, &ignored);
-
-  std::ostringstream strs;
-  strs << val.convertToDouble();
+  llvm::SmallVector<char, 16> string;
+  val.toString(string, 32, 0);
 
   mp_integer significand;
   mp_integer exponent;
-  bool is_float, is_long;
 
-  parse_float(strs.str(), significand, exponent, is_float, is_long);
+  parse_float(string, significand, exponent);
 
   dest = constant_exprt(type);
 
   if(config.ansi_c.use_fixed_for_float)
   {
-    unsigned width=atoi(dest.type().width().c_str());
+    unsigned width = atoi(dest.type().width().c_str());
     unsigned fraction_bits;
-    const std::string &integer_bits=dest.type().integer_bits().as_string();
+    const std::string &integer_bits = dest.type().integer_bits().as_string();
 
-    if(integer_bits=="")
-      fraction_bits=width/2;
+    if (integer_bits == "")
+      fraction_bits = width / 2;
     else
-      fraction_bits=width-atoi(integer_bits.c_str());
+      fraction_bits = width - atoi(integer_bits.c_str());
 
-    mp_integer factor=mp_integer(1)<<fraction_bits;
-    mp_integer value=significand*factor;
+    mp_integer factor = mp_integer(1) << fraction_bits;
+    mp_integer value = significand * factor;
 
-    if(exponent<0)
-      value/=power(10, -exponent);
+    if (exponent < 0)
+      value /= power(10, -exponent);
     else
-      value*=power(10, exponent);
+      value *= power(10, exponent);
 
     dest.value(integer2binary(value, width));
   }
@@ -116,87 +112,56 @@ void llvm_convertert::convert_float_literal(
     std::cerr << "floatbv unsupported, sorry" << std::endl;
     abort();
   }
-
 }
 
 void llvm_convertert::parse_float(
-  const std::string &src,
+  llvm::SmallVector<char, 16> &src,
   mp_integer &significand,
-  mp_integer &exponent,
-  bool &is_float, bool &is_long)
+  mp_integer &exponent)
 {
-  // <INITIAL>{digits}{dot}{digits}{exponent}?{floatsuffix}?
-  // <INITIAL>{digits}{dot}{exponent}?{floatsuffix}?
-  // <INITIAL>{dot}{digits}{exponent}?{floatsuffix}?
-  // <INITIAL>{digits}{exponent}{floatsuffix}?
+  // {digit}{dot}{31 digits}[+-]{exponent}
 
-  const char *p=src.c_str();
+  unsigned p = 0;
 
-  std::string str_whole_number,
-              str_fraction_part,
-              str_exponent;
-
-  // get whole number part
-  while(*p!='.' && *p!=0 && *p!='e' && *p!='E' &&
-        *p!='f' && *p!='F' && *p!='l' && *p!='L')
-  {
-    str_whole_number+=*p;
-    p++;
-  }
+  // get whole number
+  std::string str_whole_number = "";
+  str_whole_number += src[p++];
 
   // skip dot
-  if(*p=='.')
-    p++;
+  assert(src[p++] == '.');
 
   // get fraction part
-  while(*p!=0 && *p!='e' && *p!='E' &&
-         *p!='f' && *p!='F' && *p!='l' && *p!='L')
-  {
-    str_fraction_part+=*p;
-    p++;
-  }
+  std::string str_fraction_part = "";
+  while (src[p] != 'E')
+    str_fraction_part += src[p++];
 
   // skip E
-  if(*p=='e' || *p=='E')
-    p++;
-
-  // skip +
-  if(*p=='+')
-    p++;
+  assert(src[p++] == 'E');
 
   // get exponent
-  while(*p!=0 && *p!='f' && *p!='F' && *p!='l' && *p!='L')
-  {
-    str_exponent+=*p;
+  assert(src[p] == '+' || src[p] == '-');
+
+  // skip +
+  if(src[p] == '+')
     p++;
-  }
 
-  // get flags
-  is_float=is_long=false;
+  std::string str_exponent = "";
+  str_exponent += src[p++];
 
-  while(*p!=0)
-  {
-    if(*p=='f' || *p=='F')
-      is_float=true;
-    else if(*p=='l' || *p=='L')
-      is_long=true;
+  while (p < src.size())
+    str_exponent += src[p++];
 
-    p++;
-  }
+  std::string str_number = str_whole_number + str_fraction_part;
 
-  std::string str_number=str_whole_number+
-                         str_fraction_part;
-
-  if(str_number.empty())
-    significand=0;
+  if (str_number.empty())
+    significand = 0;
   else
-    significand=string2integer(str_number);
+    significand = string2integer(str_number);
 
-  if(str_exponent.empty())
-    exponent=0;
+  if (str_exponent.empty())
+    exponent = 0;
   else
-    exponent=string2integer(str_exponent);
+    exponent = string2integer(str_exponent);
 
-  // adjust exponent
-  exponent-=str_fraction_part.size();
+  exponent -= str_fraction_part.size();
 }

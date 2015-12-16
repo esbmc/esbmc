@@ -181,11 +181,9 @@ private:
     exprt &dest);
 
   void parse_float(
-    const std::string &src,
+    llvm::SmallVector<char, 16> &src,
     mp_integer &significand,
-    mp_integer &exponent, // base 10
-    bool &is_float,
-    bool &is_long);
+    mp_integer &exponent);
 
   void search_add_type_map(
     const clang::TagDecl &tag,
