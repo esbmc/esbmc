@@ -2399,7 +2399,7 @@ std::string llvm_convertert::get_param_name(
 std::string llvm_convertert::get_tag_name(
   std::string name)
 {
-  std::string pretty_name = "";
+  std::string pretty_name = "tag-";
 
   if(name.empty())
     pretty_name = "#anon"+i2string(anon_counter++);
