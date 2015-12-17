@@ -1294,10 +1294,16 @@ void llvm_convertert::get_expr(
         new_expr = exprt("sizeof", t);
       }
 
-      typet size_t;
-      get_type(unary.getTypeOfArgument(), size_t);
+      typet size_type;
+      get_type(unary.getTypeOfArgument(), size_type);
 
-      new_expr.set("#c_sizeof_type", size_t);
+      if(size_type.is_struct() || size_type.is_union())
+      {
+        struct_union_typet t = to_struct_union_type(size_type);
+        size_type = symbol_typet("c::" + t.tag().as_string());
+      }
+
+      new_expr.set("#c_sizeof_type", size_type);
       break;
     }
 
