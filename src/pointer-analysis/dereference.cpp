@@ -916,14 +916,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
 
   // No alignment guarantee: assert that it's correct.
   if (!is_correctly_aligned) {
-    expr2tc mask_expr = gen_ulong(deref_size -1);
-    bitand2tc anded(mask_expr->type, mask_expr, mod2);
-    notequal2tc neq(anded, gen_ulong(0));
-
-    guardt tmp_guard = guard;
-    tmp_guard.add(neq);
-    alignment_failure("Incorrect alignment when accessing array element",
-                      tmp_guard);
+    check_alignment(deref_size, mod2, guard);
   }
 
   if (!overflows_boundaries) {
@@ -1774,13 +1767,20 @@ dereferencet::check_data_obj_access(const expr2tc &value,
 
   // Also, if if it's a scalar, check that the access being made is aligned.
   if (is_scalar_type(type)) {
-    expr2tc mask_expr = gen_ulong(access_sz - 1);
-    bitand2tc anded(mask_expr->type, mask_expr, offset);
-    notequal2tc neq(anded, gen_ulong(0));
-
-    guardt tmp_guard2 = guard;
-    tmp_guard2.add(neq);
-    alignment_failure("Incorrect alignment when accessing data object",
-                      tmp_guard2);
+    check_alignment(access_sz, offset, guard);
   }
+}
+
+void
+dereferencet::check_alignment(unsigned long minwidth, const expr2tc offset,
+                              const guardt &guard)
+{
+  expr2tc mask_expr = gen_ulong(minwidth - 1);
+  bitand2tc anded(mask_expr->type, mask_expr, offset);
+  notequal2tc neq(anded, gen_ulong(0));
+
+  guardt tmp_guard2 = guard;
+  tmp_guard2.add(neq);
+  alignment_failure("Incorrect alignment when accessing data object",
+                    tmp_guard2);
 }

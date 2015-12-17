@@ -386,6 +386,8 @@ private:
                          const type2tc &type, const guardt &guard, modet mode);
   void check_data_obj_access(const expr2tc &value, const expr2tc &offset,
                              const type2tc &type, const guardt &guard);
+  void check_alignment(unsigned long minwidth, const expr2tc offset,
+                       const guardt &guard);
 
   void build_reference_rec(expr2tc &value, const expr2tc &offset,
                            const type2tc &type, const guardt &guard, modet mode,
