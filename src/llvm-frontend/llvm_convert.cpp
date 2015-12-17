@@ -424,12 +424,20 @@ void llvm_convertert::get_struct_union_class(
   std::size_t address = reinterpret_cast<std::size_t>(&recordd);
   type_map[address] = symbol_name;
 
+  symbol.is_type = true;
+
   // We have to add the struct/union/class to the context before converting its fields
   // because there might be recursive struct/union/class (pointers) and the code at
   // get_type, case clang::Type::Record, needs to find the correct type
   // (itself). Note that the type is incomplete at this stage, it doesn't
   // contain the fields, which are added to the symbol later on this method.
   move_symbol_to_context(symbol);
+
+  // Don't parse if it's not a complete definition, because we will parse the fields
+  // assign the type to the added symbol. If it's not a complete definition, we may
+  // end up replacing the type of a union/struct/class symbol with an empty type
+  if(!recordd.isCompleteDefinition())
+    return;
 
   // Now get the symbol back to continue the conversion
   symbolt &added_symbol = context.symbols.find(symbol_name)->second;
@@ -465,8 +473,6 @@ void llvm_convertert::get_struct_union_class(
     added_symbol.pretty_name = "struct " + recordd.getName().str();
   else if(recordd.isUnion())
     added_symbol.pretty_name = "union " + recordd.getName().str();
-
-  added_symbol.is_type = true;
 
   new_expr = code_skipt();
 }
