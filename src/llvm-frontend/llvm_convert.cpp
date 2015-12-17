@@ -2505,6 +2505,7 @@ void llvm_convertert::check_symbol_redefinition(
   symbolt& old_symbol,
   symbolt& new_symbol)
 {
+  // types that are code means functions
   if(old_symbol.type.is_code())
   {
     if(new_symbol.value.is_not_nil())
@@ -2523,11 +2524,19 @@ void llvm_convertert::check_symbol_redefinition(
   }
   else if(old_symbol.is_type)
   {
-    // overwrite location
-    old_symbol.location=new_symbol.location;
-
-    // move body
-    old_symbol.type.swap(new_symbol.type);
+    if(new_symbol.type.is_not_nil())
+    {
+      if(old_symbol.type.is_not_nil())
+      {
+        // If this is a invalid redefinition, LLVM will complain and
+        // won't convert the program. We should safely to ignore this.
+      }
+      else
+      {
+        // overwrite
+        old_symbol.swap(new_symbol);
+      }
+    }
   }
 }
 
