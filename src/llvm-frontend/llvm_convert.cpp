@@ -735,6 +735,15 @@ void llvm_convertert::get_type(
       typet sub_type;
       get_type(pointee, sub_type);
 
+      // Special case, pointers to structs/unions/classes must not
+      // have a copy of it, but a reference to the type
+      // TODO: classes
+      if(sub_type.is_struct() || sub_type.is_union())
+      {
+        struct_union_typet t = to_struct_union_type(sub_type);
+        sub_type = symbol_typet("c::" + t.tag().as_string());
+      }
+
       new_type = gen_pointer_type(sub_type);
       break;
     }
