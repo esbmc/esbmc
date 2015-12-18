@@ -263,9 +263,6 @@ void llvm_languaget::internal_additions(std::string &str)
     "void assert(_Bool assertion);\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
     "_Bool __ESBMC_same_object(const void *, const void *);\n"
-    "_Bool __ESBMC_is_zero_string(const void *);\n"
-    "unsigned __ESBMC_zero_string_length(const void *);\n"
-    "unsigned __ESBMC_buffer_size(const void *);\n"
 
     // pointers
     "unsigned __ESBMC_POINTER_OBJECT(const void *p);\n"
