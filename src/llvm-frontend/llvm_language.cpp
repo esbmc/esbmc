@@ -253,8 +253,7 @@ bool llvm_languaget::preprocess(
 bool llvm_languaget::final(contextt& context, message_handlert& message_handler)
 {
   add_cprover_library(context, message_handler);
-  if(llvm_main(context, "c::", "c::main", message_handler)) return true;
-  return false;
+  return llvm_main(context, "c::", "c::main", message_handler);
 }
 
 void llvm_languaget::internal_additions(std::string &str)
