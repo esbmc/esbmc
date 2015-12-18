@@ -1,5 +1,4 @@
-unsigned strlen(const char *);
-char *strcpy(char *dest, const char *src);
+
 const char *strerror(int);
 
 int main()
