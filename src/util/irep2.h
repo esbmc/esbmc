@@ -502,8 +502,6 @@ public:
     with_id,
     member_id,
     index_id,
-    zero_string_id,
-    zero_length_string_id,
     isnan_id,
     overflow_id,
     overflow_cast_id,
@@ -530,7 +528,6 @@ public:
     code_function_call_id,
     code_comma_id,
     invalid_pointer_id,
-    buffer_size_id,
     code_asm_id,
     code_cpp_del_array_id,
     code_cpp_delete_id,
@@ -1959,8 +1956,6 @@ class byte_update2t;
 class with2t;
 class member2t;
 class index2t;
-class zero_string2t;
-class zero_length_string2t;
 class isnan2t;
 class overflow2t;
 class overflow_cast2t;
@@ -1988,7 +1983,6 @@ class object_descriptor2t;
 class code_function_call2t;
 class code_comma2t;
 class invalid_pointer2t;
-class buffer_size2t;
 class code_asm2t;
 class code_cpp_del_array2t;
 class code_cpp_delete2t;
@@ -2601,17 +2595,6 @@ public:
   expr2tc side_2;
 };
 
-class buffer_size_data : public expr2t
-{
-public:
-  buffer_size_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
-    : expr2t(t, id), value(v) { }
-  buffer_size_data(const buffer_size_data &ref)
-    : expr2t(ref), value(ref.value) { }
-
-  expr2tc value;
-};
-
 class code_asm_data : public code_base
 {
 public:
@@ -2837,10 +2820,6 @@ irep_typedefs(member, member_data, esbmct::takestype,
 irep_typedefs(index, index_data, esbmct::takestype,
               expr2tc, index_data, &index_data::source_value,
               expr2tc, index_data, &index_data::index);
-irep_typedefs(zero_string, string_ops, esbmct::notype,
-              expr2tc, string_ops, &string_ops::string);
-irep_typedefs(zero_length_string, string_ops, esbmct::notype,
-              expr2tc, string_ops, &string_ops::string);
 irep_typedefs(isnan, isnan_data, esbmct::takestype,
               expr2tc, isnan_data, &isnan_data::value);
 irep_typedefs(overflow, overflow_ops, esbmct::takestype,
@@ -2910,8 +2889,6 @@ irep_typedefs(code_comma, code_comma_data, esbmct::takestype,
               expr2tc, code_comma_data, &code_comma_data::side_2);
 irep_typedefs(invalid_pointer, pointer_ops, esbmct::notype,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
-irep_typedefs(buffer_size, buffer_size_data, esbmct::takestype,
-              expr2tc, buffer_size_data, &buffer_size_data::value);
 irep_typedefs(code_asm, code_asm_data, esbmct::notype,
               irep_idt, code_asm_data, &code_asm_data::value);
 irep_typedefs(code_cpp_del_array, code_expression_data, esbmct::notype,
@@ -3861,35 +3838,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Is string zero operation. Checks to see whether string operand is zero or
- *  not. This is something string-abstraction related.
- *  Boolean result. @extends string_ops */
-class zero_string2t : public zero_string_expr_methods
-{
-public:
-  /** Primary constructor. @param string String type operand to test. */
-  zero_string2t(const expr2tc &string)
-    : zero_string_expr_methods(type_pool.get_bool(), zero_string_id, string) {}
-  zero_string2t(const zero_string2t &ref)
-    : zero_string_expr_methods(ref) {}
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Check for zero length string. Boolean result. @extends string_ops */
-class zero_length_string2t : public zero_length_string_expr_methods
-{
-public:
-  /** Primary constructor. @param string String type operand to test. */
-  zero_length_string2t(const expr2tc &string)
-    : zero_length_string_expr_methods(type_pool.get_bool(),
-                                      zero_length_string_id, string) {}
-  zero_length_string2t(const zero_length_string2t &ref)
-    : zero_length_string_expr_methods(ref) {}
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
 /** Is operand not-a-number. Used to implement C library isnan function for
  *  float/double values. Boolean result. @extends isnan_data */
 class isnan2t : public isnan_expr_methods
@@ -4281,17 +4229,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class buffer_size2t : public buffer_size_expr_methods
-{
-public:
-  buffer_size2t(const type2tc &t, const expr2tc &obj)
-    : buffer_size_expr_methods(t, buffer_size_id, obj) {}
-  buffer_size2t(const buffer_size2t &ref)
-    : buffer_size_expr_methods(ref) { }
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
 class code_asm2t : public code_asm_expr_methods
 {
 public:
@@ -4528,8 +4465,6 @@ expr_macros(byte_update);
 expr_macros(with);
 expr_macros(member);
 expr_macros(index);
-expr_macros(zero_string);
-expr_macros(zero_length_string);
 expr_macros(isnan);
 expr_macros(overflow);
 expr_macros(overflow_cast);
@@ -4557,7 +4492,6 @@ expr_macros(object_descriptor);
 expr_macros(code_function_call);
 expr_macros(code_comma);
 expr_macros(invalid_pointer);
-expr_macros(buffer_size);
 expr_macros(code_asm);
 expr_macros(code_cpp_del_array);
 expr_macros(code_cpp_delete);

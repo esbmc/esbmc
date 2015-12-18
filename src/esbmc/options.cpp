@@ -64,7 +64,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"unsigned-char",	switc,		""	},
 { 0,	"lock-order-check",	switc,		""	},
 { 0,	"deadlock-check",	switc,		""	},
-{ 0,	"string-abstraction",	switc,		""	},
 { 0,	"no-arch",		switc,		""	},
 { 0,	"no-slice",		switc,		""	},
 { 0,	"control-flow-test",	switc,		""	},

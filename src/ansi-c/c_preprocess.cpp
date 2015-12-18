@@ -108,30 +108,6 @@ static const char *cpp_defines_64[] ={
 NULL
 };
 
-static const char *cpp_defines_strabs[] ={
-"getopt=getopt_strabs",
-"fopen=fopen_strabs",
-"fgets=fgets_strabs",
-"fputs=fputs_strabs",
-"calloc=calloc_strabs",
-"atoi=atoi_strabs",
-"atol=atol_strabs",
-"getenv=getenv_strabs",
-"strcpy=strcpy_strabs",
-"strncpy=strncpy_strabs",
-"strcat=strcat_strabs",
-"strncat=strncat_strnabs",
-"strcmp=strcmp_strabs",
-"strncmp=strncmp_strabs",
-"strlen=strlen_strabs",
-"strdup=strdup_strabs",
-"memcpy=memcpy_strabs",
-"memset=memset_strabs",
-"memmove=memmove_strabs",
-"memcmp=memcmp_strabs",
-NULL
-};
-
 static const char *cpp_normal_defs[] = {
 "__ESBMC__",
 "__STRICT_ANSI__=1",
@@ -347,9 +323,6 @@ configure_and_run_cpp(const char *out_file_buf, std::string path,
     setup_cpp_defs(cpp_defines_64);
   else
     std::cerr << "Bad word size " << config.ansi_c.word_size << std::endl;
-
-  if (config.ansi_c.string_abstraction)
-    setup_cpp_defs(cpp_defines_strabs);
 
   setup_cpp_defs(cpp_normal_defs);
   setup_cpp_defs(platform_defs);

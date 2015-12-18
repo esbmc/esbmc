@@ -555,8 +555,6 @@ static const char *expr_names[] = {
   "with",
   "member",
   "index",
-  "zero_string",
-  "zero_length_string",
   "isnan",
   "overflow",
   "overflow_cast",
@@ -583,7 +581,6 @@ static const char *expr_names[] = {
   "code_function_call",
   "code_comma_id",
   "invalid_pointer",
-  "buffer_size",
   "code_asm",
   "cpp_del_array",
   "cpp_delete",
@@ -2568,10 +2565,6 @@ std::string member2t::field_names [esbmct::num_type_fields]  =
 { "source_value", "member_name", "", "", ""};
 std::string index2t::field_names [esbmct::num_type_fields]  =
 { "source_value", "index", "", "", ""};
-std::string zero_string2t::field_names [esbmct::num_type_fields]  =
-{ "string", "", "", "", ""};
-std::string zero_length_string2t::field_names [esbmct::num_type_fields]  =
-{ "string", "", "", "", ""};
 std::string isnan2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string overflow2t::field_names [esbmct::num_type_fields]  =
@@ -2626,8 +2619,6 @@ std::string code_comma2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names [esbmct::num_type_fields]  =
 { "pointer_obj", "", "", "", ""};
-std::string buffer_size2t::field_names [esbmct::num_type_fields]  =
-{ "value", "", "", "", ""};
 std::string code_asm2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string code_cpp_del_array2t::field_names [esbmct::num_type_fields]  =
@@ -2829,10 +2820,6 @@ template class esbmct::expr_methods<member2t, member_data,
 template class esbmct::expr_methods<index2t, index_data,
     expr2tc, index_data, &index_data::source_value,
     expr2tc, index_data, &index_data::index>;
-template class esbmct::expr_methods<zero_string2t, string_ops,
-    expr2tc, string_ops, &string_ops::string>;
-template class esbmct::expr_methods<zero_length_string2t, string_ops,
-    expr2tc, string_ops, &string_ops::string>;
 template class esbmct::expr_methods<isnan2t, isnan_data,
     expr2tc, isnan_data, &isnan_data::value>;
 template class esbmct::expr_methods<overflow2t, overflow_ops,
@@ -2897,8 +2884,6 @@ template class esbmct::expr_methods<code_comma2t, code_comma_data,
     expr2tc, code_comma_data, &code_comma_data::side_2>;
 template class esbmct::expr_methods<invalid_pointer2t, pointer_ops,
     expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
-template class esbmct::expr_methods<buffer_size2t, buffer_size_data,
-    expr2tc, buffer_size_data, &buffer_size_data::value>;
 template class esbmct::expr_methods<code_asm2t, code_asm_data,
     irep_idt, code_asm_data, &code_asm_data::value>;
 template class esbmct::expr_methods<code_cpp_del_array2t, code_expression_data,
