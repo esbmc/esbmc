@@ -89,7 +89,6 @@ int feof(struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
   return return_value;
 }
 
@@ -97,7 +96,6 @@ int ferror(struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
   return return_value;
 }
 
@@ -105,7 +103,6 @@ int fileno(struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
   return return_value;
 }
 
@@ -113,7 +110,6 @@ int fputs(const char *s, struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
   /* XXX - what? */
   return return_value;
 }
@@ -122,7 +118,6 @@ int fflush(struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
   return return_value;
 }
 
@@ -130,7 +125,6 @@ int fpurge(struct _IO_FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
   return return_value;
 }
 
@@ -154,7 +148,6 @@ int fgetc(struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
-  *stream;
   return return_value;
 }
 
@@ -162,7 +155,6 @@ int getc(struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
-  *stream;
   return return_value;
 }
 
@@ -177,7 +169,6 @@ int getw(struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
-  *stream;
   return return_value;
 }
 
@@ -185,7 +176,6 @@ int fseek(struct _IO_FILE *stream, long offset, int whence)
 {
   __ESBMC_HIDE:;
   int return_value;
-  *stream;
   return return_value;
 }
 
@@ -193,14 +183,12 @@ long ftell(struct _IO_FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
-  *stream;
   return return_value;
 }
 
 void rewind(struct _IO_FILE *stream)
 {
-  __ESBMC_HIDE:
-  *stream;
+  __ESBMC_HIDE:;
 }
 
 size_t fwrite(
