@@ -8,4 +8,5 @@ int getopt(int argc, char * const argv[], const char *optstring)
   unsigned result_index;
   __ESBMC_assume(result_index<argc);
   optarg = argv[result_index];
+  return nondet_int();
 }
