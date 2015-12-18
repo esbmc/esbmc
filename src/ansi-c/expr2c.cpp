@@ -2953,26 +2953,6 @@ std::string expr2ct::convert(
     return convert_function(src, "IS_DYNAMIC_OBJECT", precedence=15);
   }
 
-  else if(src.id()=="is_zero_string")
-  {
-    return convert_function(src, "IS_ZERO_STRING", precedence=15);
-  }
-
-  else if(src.id()=="zero_string")
-  {
-    return convert_function(src, "ZERO_STRING", precedence=15);
-  }
-
-  else if(src.id()=="zero_string_length")
-  {
-    return convert_function(src, "ZERO_STRING_LENGTH", precedence=15);
-  }
-
-  else if(src.id()=="buffer_size")
-  {
-    return convert_function(src, "BUFFER_SIZE", precedence=15);
-  }
-
   else if(src.id()=="dynamic_size")
   {
     return convert_function(src, "DYNAMIC_SIZE", precedence=15);

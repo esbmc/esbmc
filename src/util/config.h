@@ -55,7 +55,6 @@ public:
 
     typedef enum { LIB_NONE, LIB_FULL } libt;
     libt lib;
-    bool string_abstraction;
     bool deadlock_check;
     bool lock_check;
   } ansi_c;

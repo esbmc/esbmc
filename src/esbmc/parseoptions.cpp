@@ -41,7 +41,6 @@ extern "C" {
 #include <goto-programs/show_claims.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/read_goto_binary.h>
-#include <goto-programs/string_abstraction.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_k_induction.h>
 
@@ -1630,13 +1629,6 @@ bool cbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
-
-    if(cmdline.isset("string-abstraction"))
-    {
-      status("String Abstraction");
-      string_abstraction(context,
-        *get_message_handler(), goto_functions);
-    }
 
 #if 0
     // This disabled code used to run the pointer static analysis and produce

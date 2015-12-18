@@ -144,30 +144,6 @@ void llvm_languaget::build_compiler_string(
 
   for(auto inc : config.ansi_c.include_paths)
     compiler_string.push_back("-I" + inc);
-
-  if(config.ansi_c.string_abstraction)
-  {
-    compiler_string.push_back("-Dgetopt=getopt_strabs");
-    compiler_string.push_back("-Dfopen=fopen_strabs");
-    compiler_string.push_back("-Dfgets=fgets_strabs");
-    compiler_string.push_back("-Dfputs=fputs_strabs");
-    compiler_string.push_back("-Dcalloc=calloc_strabs");
-    compiler_string.push_back("-Datoi=atoi_strabs");
-    compiler_string.push_back("-Datol=atol_strabs");
-    compiler_string.push_back("-Dgetenv=getenv_strabs");
-    compiler_string.push_back("-Dstrcpy=strcpy_strabs");
-    compiler_string.push_back("-Dstrncpy=strncpy_strabs");
-    compiler_string.push_back("-Dstrcat=strcat_strabs");
-    compiler_string.push_back("-Dstrncat=strncat_strnabs");
-    compiler_string.push_back("-Dstrcmp=strcmp_strabs");
-    compiler_string.push_back("-Dstrncmp=strncmp_strabs");
-    compiler_string.push_back("-Dstrlen=strlen_strabs");
-    compiler_string.push_back("-Dstrdup=strdup_strabs");
-    compiler_string.push_back("-Dmemcpy=memcpy_strabs");
-    compiler_string.push_back("-Dmemset=memset_strabs");
-    compiler_string.push_back("-Dmemmove=memmove_strabs");
-    compiler_string.push_back("-Dmemcmp=memcmp_strabs");
-  }
 }
 
 bool llvm_languaget::parse(
