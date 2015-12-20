@@ -44,8 +44,7 @@ std::string get_output_from_cmd(std::string cmd)
 
 languaget *new_llvm_language()
 {
-  static llvm_languaget *lang = new llvm_languaget;
-  return lang;
+  return new llvm_languaget;
 }
 
 llvm_languaget::llvm_languaget()
