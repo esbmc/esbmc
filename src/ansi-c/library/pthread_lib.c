@@ -282,11 +282,13 @@ pthread_mutex_trylock(pthread_mutex_t *mutex)
 int
 pthread_mutex_destroy(pthread_mutex_t *mutex)
 {
+  return 0;
 }
 
 int
 pthread_rwlock_destroy(pthread_rwlock_t *lock)
 {
+  return 0;
 }
 
 /************************ rwlock mainpulation routines ************************/
@@ -294,17 +296,21 @@ pthread_rwlock_destroy(pthread_rwlock_t *lock)
 int
 pthread_rwlock_init(pthread_rwlock_t *lock, const pthread_rwlockattr_t *attr)
 {
-  __ESBMC_HIDE : __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_HIDE:;
+  __ESBMC_rwlock_field(*lock) = 0;
+  return 0;
 }
 
 int
 pthread_rwlock_rdlock(pthread_rwlock_t *lock)
-{ /* TODO */
+{
+  return 0;
 }
 
 int
 pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
-{ /* TODO */
+{
+  return 0;
 }
 
 int
@@ -324,7 +330,9 @@ pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 int
 pthread_rwlock_unlock(pthread_rwlock_t *lock)
 {
-  __ESBMC_HIDE : __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_HIDE:;
+  __ESBMC_rwlock_field(*lock) = 0;
+  return 0;
 }
 
 int
