@@ -57,7 +57,10 @@ void llvm_adjust::adjust_builtin(symbolt& symbol)
   if(has_prefix(identifier, std::string(CPROVER_PREFIX "alloc"))
      || has_prefix(identifier, std::string(CPROVER_PREFIX "deallocated"))
      || has_prefix(identifier, std::string(CPROVER_PREFIX "is_dynamic"))
-     || has_prefix(identifier, std::string(CPROVER_PREFIX "alloc_size")))
+     || has_prefix(identifier, std::string(CPROVER_PREFIX "alloc_size"))
+     || has_prefix(identifier, std::string(CPROVER_PREFIX "pthread_thread_running"))
+     || has_prefix(identifier, std::string(CPROVER_PREFIX "pthread_thread_ended"))
+     || has_prefix(identifier, std::string(CPROVER_PREFIX "pthread_end_value")))
   {
     exprt expr=exprt("infinity", uint_type());
 
