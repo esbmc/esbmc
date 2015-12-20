@@ -11,11 +11,11 @@ double __ESBMC_fabs(double x);
 float __ESBMC_fabsf(float x);
 long double __ESBMC_fabsl(long double x);
 
-int __ESBMC_isfinite(double x);
-int __ESBMC_isinf(double x);
-int __ESBMC_isnan(double x);
-int __ESBMC_isnormal(double x);
-int __ESBMC_sign(double x);
+_Bool __ESBMC_isfinite(double x);
+_Bool __ESBMC_isinf(double x);
+_Bool __ESBMC_isnan(double x);
+_Bool __ESBMC_isnormal(double x);
+_Bool __ESBMC_sign(double x);
 extern int __ESBMC_rounding_mode;
 
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
