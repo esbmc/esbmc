@@ -45,13 +45,13 @@ char *strncpy(char *dst, const char *src, size_t n)
 
 char *strcat(char *dst, const char *src)
 {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   return dst;
 }
 
 char *strncat(char *dst, const char *src, size_t n)
 {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   return dst;
 }
 
@@ -61,18 +61,19 @@ int strcmp(const char *s1, const char *s2)
   int retval;
   if(s1!=0 && s1==s2) return 0;
   return retval;
+  return 0;
 }
 
 int strncmp(const char *s1, const char *s2, size_t n)
 {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   if(s1!=0 && s1==s2) return 0;
   return 0;
 }
 
 size_t strlen(const char *s)
 {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   size_t len=0;
   while(s[len]!=0) len++;
   return len;
@@ -91,7 +92,7 @@ char *strdup(const char *str)
 
 void *memcpy(void *dst, const void *src, size_t n)
 {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   char *cdst = dst;
   const char *csrc = src;
   for(size_t i=0; i<n ; i++)
@@ -101,7 +102,7 @@ void *memcpy(void *dst, const void *src, size_t n)
 
 void *memset(void *s, int c, size_t n)
 {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   char *sp=s;
   for(size_t i=0; i<n ; i++) sp[i]=c;
   return s;
@@ -109,7 +110,7 @@ void *memset(void *s, int c, size_t n)
 
 void *memmove(void *dest, const void *src, size_t n)
 {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   char *cdest = dest;
   const char *csrc = src;
   if (dest-src >= n)

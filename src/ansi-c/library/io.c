@@ -20,16 +20,18 @@
 
 int putchar(int c)
 {
+  __ESBMC_HIDE:;
   _Bool error;
-  __ESBMC_HIDE: printf("%c", c);
+  printf("%c", c);
   return (error?-1:c);
 }
 
 int puts(const char *s)
 {
+  __ESBMC_HIDE:;
   _Bool error;
   int ret;
-  __ESBMC_HIDE: printf("%s\n", s);
+  printf("%s\n", s);
   if(error) ret=-1; else __ESBMC_assume(ret>=0);
   return ret;
 }
