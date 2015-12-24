@@ -22,13 +22,13 @@ void __ESBMC_set_thread_internal_data(unsigned int tid,
 #define __ESBMC_rwlock_field(a) ((a).__data.__lock)
 
 /* Global tracking data. Should all initialize to 0 / false */
-static _Bool __ESBMC_pthread_thread_running[1];
-static _Bool __ESBMC_pthread_thread_ended[1];
-static void *__ESBMC_pthread_end_values[1];
+_Bool __ESBMC_pthread_thread_running[1];
+_Bool __ESBMC_pthread_thread_ended[1];
+void *__ESBMC_pthread_end_values[1];
 
-static unsigned int num_total_threads = 0;
-static unsigned int num_threads_running = 0;
-static int blocked_threads_count = 0;
+unsigned int num_total_threads = 0;
+unsigned int num_threads_running = 0;
+int blocked_threads_count = 0;
 
 pthread_t __ESBMC_get_thread_id(void);
 
