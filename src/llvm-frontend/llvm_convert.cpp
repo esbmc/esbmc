@@ -546,7 +546,6 @@ void llvm_convertert::get_var(
   symbol.lvalue = true;
   symbol.static_lifetime = vd.hasGlobalStorage();
   symbol.is_extern = vd.hasExternalStorage();
-  symbol.file_local = vd.isExternallyVisible();
 
   // Save the variable address and name to the object map
   std::string symbol_name = symbol.name.as_string();
@@ -686,7 +685,6 @@ void llvm_convertert::get_function_params(
     false); // function parameter cannot be static
 
   param_symbol.lvalue = true;
-  param_symbol.file_local = true;
   param_symbol.is_actual = true;
 
   param.cmt_identifier(param_symbol.name.as_string());
