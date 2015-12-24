@@ -999,6 +999,26 @@ namespace esbmct {
     virtual expr2t *clone_raw(void) const;
   };
 
+  /** Vardic type2t boilerplate methods. */
+  // Base instance
+  //template <class derived, class subclass, class... Args>
+  template <class... Args>
+    //class type_methods2 : public subclass
+    struct type_methods2
+  {
+      // XXX
+  };
+
+  // Recursive instance
+  //template <class derived, class subclass, typename field_type, typename field_class, field_type field_class::*field_ptr, typename... Args>
+  template <class T, class... Args>
+    //class type_methods2 : public type_methods2<derived, subclass, Args...>
+    struct type_methods2<T, Args...> : type_methods2<Args...>
+  {
+      T fgasdf;
+      // XXX
+  };
+
   /** Template for generating type2t boilerplate methods.
    *  Take a look at expr_methods for how this works, in an identical fashion.
    *  @see expr_methods
