@@ -1787,17 +1787,11 @@ bool cbmc_parseoptionst::parse(const std::string &filename)
   }
 
   language_filet language_file;
-
-  language_filest::filemapt::iterator result;
-  if(!language_files.filemap.size())
-  {
+  std::pair<language_filest::filemapt::iterator, bool>
     result=language_files.filemap.insert(
-      std::pair<std::string, language_filet>(filename, language_file)).first;
-  }
-  else
-    result=language_files.filemap.begin();
+      std::pair<std::string, language_filet>(filename, language_file));
 
-  language_filet &lf=result->second;
+  language_filet &lf=result.first->second;
   lf.filename=filename;
   // 2 is the magic number that represents LLVM
   // In the future, we shall remove this and use only the llvm frontend
