@@ -1000,8 +1000,17 @@ namespace esbmct {
   };
 
   /** Vardic type2t boilerplate methods. */
+
+  template <typename T, T v>
+    class val_wrapper
+  {
+    static const T value = v;
+  };
+
+  typedef val_wrapper<type2t::type_ids type2t::*, &type2t::type_id> type_id_proxy;
+
   // Base instance
-  template <class derived, class subclass, typename field1_type, class field1_class, field1_type field1_class::*field1_ptr, class... Args>
+  template <class derived, class subclass, typename field1_type, class field1_class, typename fieldproxy, class... Args>
     class type_methods2 : public type_methods2<derived, subclass, Args...>
   {
       // XXX
@@ -1009,7 +1018,7 @@ namespace esbmct {
 
   // Recursive instance
   template <class derived, class subclass>
-    class type_methods2<derived, subclass, type2t::type_ids, type2t, &type2t::type_id> : public derived
+    class type_methods2<derived, subclass, type2t::type_ids, type2t, type_id_proxy> : public derived
   {
       int fgasdf;
       // XXX
@@ -1018,13 +1027,7 @@ namespace esbmct {
   template <typename derived, typename subclass, typename... Args>
     class new_type_methods
   {
-    typedef type_methods2<derived, subclass, Args..., type2t::type_ids, type2t, &type2t::type_id> type;
-  };
-
-  template <typename T, T v>
-    class val_wrapper
-  {
-    static const T value = v;
+    typedef type_methods2<derived, subclass, Args..., type2t::type_ids, type2t, type_id_proxy> type;
   };
 
   /** Template for generating type2t boilerplate methods.
