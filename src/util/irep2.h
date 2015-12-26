@@ -1015,6 +1015,12 @@ namespace esbmct {
       // XXX
   };
 
+  template <typename derived, typename subclass, typename... Args>
+    class new_type_methods
+  {
+    typedef type_methods2<derived, subclass, Args..., type2t::type_ids, type2t, &type2t::type_id> type;
+  };
+
   /** Template for generating type2t boilerplate methods.
    *  Take a look at expr_methods for how this works, in an identical fashion.
    *  @see expr_methods
