@@ -1021,6 +1021,12 @@ namespace esbmct {
     typedef type_methods2<derived, subclass, Args..., type2t::type_ids, type2t, &type2t::type_id> type;
   };
 
+  template <typename T, T v>
+    class val_wrapper
+  {
+    static const T value = v;
+  };
+
   /** Template for generating type2t boilerplate methods.
    *  Take a look at expr_methods for how this works, in an identical fashion.
    *  @see expr_methods
