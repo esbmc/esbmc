@@ -18,6 +18,8 @@
 #include <boost/fusion/include/equal_to.hpp>
 #include <boost/functional/hash_fwd.hpp>
 
+#include <boost/mpl/vector.hpp>
+
 #include <config.h>
 #include <irep.h>
 #include <fixedbv.h>
@@ -1009,14 +1011,16 @@ namespace esbmct {
 
   typedef val_wrapper<type2t::type_ids type2t::*, &type2t::type_id> type_id_proxy;
 
-  // Base instance
-  template <class derived, class subclass, typename field1_type, class field1_class, typename fieldproxy, class... Args>
-    class type_methods2 : public type_methods2<derived, subclass, Args...>
+  // Recursive instance
+  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename... Args>
+    class type_methods2 : public type_methods2<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, Args...>
   {
-      // XXX
+    typename boost::mpl::front<type_vec>::type fgasdf;
+    typename boost::mpl::front<class_vec>::type lala;
+    typename boost::mpl::front<ptr_vec>::type po;
   };
 
-  // Recursive instance
+  // Base instance
   template <class derived, class subclass>
     class type_methods2<derived, subclass, type2t::type_ids, type2t, type_id_proxy> : public derived
   {
