@@ -1022,7 +1022,7 @@ namespace esbmct {
 
   // Base instance
   template <class derived, class subclass>
-    class type_methods2<derived, subclass, type2t::type_ids, type2t, type_id_proxy> : public derived
+    class type_methods2<derived, subclass, typename boost::mpl::vector<>::type, typename boost::mpl::vector<>::type, typename boost::mpl::vector<>::type> : public derived
   {
       int fgasdf;
       // XXX
