@@ -1001,15 +1001,15 @@ namespace esbmct {
 
   /** Vardic type2t boilerplate methods. */
   // Base instance
-  template <class derived, class subclass, class... Args>
-    class type_methods2 : public subclass
+  template <class derived, class subclass, typename field1_type, class field1_class, field1_type field1_class::*field1_ptr, class... Args>
+    class type_methods2 : public type_methods2<derived, subclass, Args...>
   {
       // XXX
   };
 
   // Recursive instance
-  template <class derived, class subclass, typename field_type, typename field_class,  typename... Args>
-    class type_methods2<derived, subclass, field_type, field_class, field_type field_class::*, Args...> : public type_methods2<derived, subclass, Args...>
+  template <class derived, class subclass>
+    class type_methods2<derived, subclass, type2t::type_ids, type2t, &type2t::type_id> : public derived
   {
       int fgasdf;
       // XXX
