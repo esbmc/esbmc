@@ -1029,7 +1029,8 @@ namespace esbmct {
   template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
     class type_methods2 : public type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec>
   {
-    template <typename ...Args> type_methods2(Args... args) : type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec>(&args...) { }
+  public:
+    template <typename ...Args> type_methods2(Args... args) : type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec>(args...) { }
 
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
@@ -1043,9 +1044,10 @@ namespace esbmct {
   template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
     class type_methods2_rec : public type_methods2_rec<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable>
   {
+  public:
     typedef type_methods2_rec<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable> superclass;
 
-    template <typename ...Args> type_methods2_rec(Args... args) : superclass(&args...) { }
+    template <typename ...Args> type_methods2_rec(Args... args) : superclass(args...) { }
 
     typedef typename boost::mpl::front<type_vec>::type cur_type;
     typedef typename boost::mpl::front<class_vec>::type base_class;
@@ -1064,7 +1066,8 @@ namespace esbmct {
                         typename boost::enable_if<typename boost::mpl::empty<X>::type>::type>
       : public subclass
   {
-    template <typename ...Args> type_methods2_rec(Args... args) : subclass(&args...) { }
+  public:
+    template <typename ...Args> type_methods2_rec(Args... args) : subclass(args...) { }
 
     // Rather than trying to specialize and implement in the cpp file, terminate
     // here.
