@@ -2541,6 +2541,11 @@ template <class derived, class subclass, typename type_vec, typename class_vec, 
 void
 esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::hash_rec(crypto_hash &hash) const
 {
+  const derived *derived_this = static_cast<const derived*>(this);
+  auto membr_ptr = decltype(this)::membr_ptr::value;
+  do_type_hash(derived_this->*membr_ptr, hash);
+
+  decltype(this)::superclass::hash_rec(hash);
 }
 
 /********************** Constants and explicit instantiations *****************/
