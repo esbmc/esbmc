@@ -2429,28 +2429,54 @@ template <class derived, class subclass, typename type_vec, typename class_vec, 
 bool
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::cmp(const type2t &ref) const
 {
-  abort();
+  return decltype(this)::superclass::cmp_rec(ref);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
 int
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::lt(const type2t &ref) const
 {
-  abort();
+  return decltype(this)::superclass::lt_rec(ref);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
 size_t
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::do_crc(size_t seed) const
 {
-  abort();
+  const derived *derived_this = static_cast<const derived*>(this);
+
+  if (this->crc_val != 0) {
+    boost::hash_combine(seed, (lolnoop)this->crc_val);
+    return seed;
+  }
+
+  // Starting from 0, pass a crc value through all the sub-fields of this
+  // expression. Store it into crc_val. Don't allow the input seed to affect
+  // this calculation, as the crc value needs to uniquely identify _this_
+  // expression.
+  assert(this->crc_val == 0);
+  // Call through to base type2t implementation
+  BOOST_STATIC_ASSERT(&decltype(this)::superclass::do_crc == &type2t::do_crc);
+  size_t tmp = decltype(this)::superclass::do_crc(0);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+
+  decltype(this)::superclass::do_crc_rec();
+
+  // Finally, combine the crc of this expr with the input seed, and return
+  boost::hash_combine(seed, (lolnoop)this->crc_val);
+  return seed;
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
 void
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::hash(crypto_hash &hash) const
 {
-  abort();
+  // Call through to base type2t implementation
+  BOOST_STATIC_ASSERT(&decltype(this)::superclass::hash == &type2t::hash);
+  decltype(this)::type2t::hash(hash);
+
+  decltype(this)::superclass::hash_rec(hash);
+  return;
 }
 
 /********************** Constants and explicit instantiations *****************/
