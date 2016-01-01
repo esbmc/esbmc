@@ -2409,17 +2409,43 @@ template <class derived, class subclass, typename type_vec, typename class_vec, 
 type2tc
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::clone(void) const
 {
+  abort();
 }
 
-#if 0
-    virtual list_of_memberst tostring(unsigned int indent) const;
-    virtual bool cmp(const type2t &ref) const;
-    virtual int lt(const type2t &ref) const;
-    virtual size_t do_crc(size_t seed) const;
-    virtual void hash(crypto_hash &hash) const;
-  };
-#endif
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+list_of_memberst
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::tostring(unsigned int indent) const
+{
+  abort();
+}
 
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+bool
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::cmp(const type2t &ref) const
+{
+  abort();
+}
+
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+int
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::lt(const type2t &ref) const
+{
+  abort();
+}
+
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+size_t
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::do_crc(size_t seed) const
+{
+  abort();
+}
+
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+void
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::hash(crypto_hash &hash) const
+{
+  abort();
+}
 
 /********************** Constants and explicit instantiations *****************/
 
