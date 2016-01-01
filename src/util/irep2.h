@@ -21,6 +21,8 @@
 #include <boost/mpl/vector.hpp>
 #include <boost/mpl/front.hpp>
 #include <boost/mpl/equal.hpp>
+#include <boost/mpl/not.hpp>
+#include <boost/mpl/bool.hpp>
 #include <boost/mpl/pop_front.hpp>
 
 #include <boost/static_assert.hpp>
@@ -1016,9 +1018,13 @@ namespace esbmct {
 
   typedef val_wrapper<type2t::type_ids type2t::*, &type2t::type_id> type_id_proxy;
 
+  // Declaration
+  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable = void>
+    class type_methods2;
+
   // Recursive instance
-  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename... Args>
-    class type_methods2 : public type_methods2<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, Args...>
+  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
+    class type_methods2 : public type_methods2<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable>
   {
     typename boost::mpl::front<type_vec>::type fgasdf;
     typename boost::mpl::front<class_vec>::type lala;
@@ -1027,12 +1033,12 @@ namespace esbmct {
 
   // Base instance
   template <class derived, class subclass, typename X, typename Y, typename Z>
-    class type_methods2<derived, subclass, typename boost::mpl::vector<X>, typename boost::mpl::vector<Y>, typename boost::mpl::vector<Z>>
-//                        typename boost::enable_if<boost::mpl::equal<typename boost::mpl::vector<X>, typename boost::mpl::vector<>::type>>>
+    class type_methods2<derived, subclass, typename boost::mpl::vector<X>, typename boost::mpl::vector<Y>, typename boost::mpl::vector<Z>,
+                        typename boost::enable_if<typename boost::mpl::equal<typename boost::mpl::vector<X>, typename boost::mpl::vector<>>>::type>
       : public subclass
   {
 
-    BOOST_STATIC_ASSERT(boost::mpl::equal<boost::mpl::vector<X>, boost::mpl::vector<Y>>::value);
+    BOOST_STATIC_ASSERT(boost::mpl::equal<boost::mpl::vector<X>, boost::mpl::vector<>>::value);
       int fgasdf;
       // XXX
   };
