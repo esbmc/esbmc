@@ -1066,8 +1066,34 @@ namespace esbmct {
   {
     template <typename ...Args> type_methods2_rec(Args... args) : subclass(&args...) { }
 
-      int fgasdf;
-      // XXX
+    // Rather than trying to specialize and implement in the cpp file, terminate
+    // here.
+    virtual void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
+    {
+      return;
+    }
+
+    virtual bool cmp_rec(const type2t &ref) const
+    {
+      // If it made it this far, we passed
+      return true;
+    }
+
+    virtual int lt_rec(const type2t &ref) const
+    {
+      // If it made it this far, we passed
+      return 0;
+    }
+
+    virtual size_t do_crc_rec() const
+    {
+      return 0; // XXX
+    }
+
+    virtual void hash_rec(crypto_hash &hash) const
+    {
+      return;
+    }
   };
 
   /** Template for generating type2t boilerplate methods.
