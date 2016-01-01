@@ -2526,8 +2526,15 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 size_t
-esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::do_crc_rec(size_t seed) const
+esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::do_crc_rec() const
 {
+  const derived *derived_this = static_cast<const derived*>(this);
+  auto membr_ptr = decltype(this)::membr_ptr::value;
+
+  size_t tmp = do_type_crc(derived_this->*membr_ptr, this->crc_val);
+  boost::hash_combine(this->crc_val, (lolnoop)tmp);
+
+  decltype(this)::superclass::do_crc_rec();
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>

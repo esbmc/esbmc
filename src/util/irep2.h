@@ -1054,7 +1054,7 @@ namespace esbmct {
     virtual void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const;
     virtual bool cmp_rec(const type2t &ref) const;
     virtual int lt_rec(const type2t &ref) const;
-    virtual size_t do_crc_rec(size_t seed) const;
+    virtual size_t do_crc_rec() const;
     virtual void hash_rec(crypto_hash &hash) const;
   };
 
