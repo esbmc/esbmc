@@ -1070,18 +1070,23 @@ namespace esbmct {
     // here.
     virtual void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
     {
+      (void)idx;
+      (void)vec;
+      (void)indent;
       return;
     }
 
     virtual bool cmp_rec(const type2t &ref) const
     {
       // If it made it this far, we passed
+      (void)ref;
       return true;
     }
 
     virtual int lt_rec(const type2t &ref) const
     {
       // If it made it this far, we passed
+      (void)ref;
       return 0;
     }
 
@@ -1092,6 +1097,7 @@ namespace esbmct {
 
     virtual void hash_rec(crypto_hash &hash) const
     {
+      (void)hash;
       return;
     }
   };
