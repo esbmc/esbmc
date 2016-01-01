@@ -1027,9 +1027,16 @@ namespace esbmct {
   template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
     class type_methods2 : public type_methods2<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable>
   {
-    typename boost::mpl::front<type_vec>::type fgasdf;
-    typename boost::mpl::front<class_vec>::type lala;
-    typename boost::mpl::front<ptr_vec>::type po;
+    typedef typename boost::mpl::front<type_vec>::type cur_type;
+    typedef typename boost::mpl::front<class_vec>::type base_class;
+    typedef typename boost::mpl::front<ptr_vec>::type membr_ptr;
+
+    virtual type2tc clone(void) const;
+    virtual list_of_memberst tostring(unsigned int indent) const;
+    virtual bool cmp(const type2t &ref) const;
+    virtual int lt(const type2t &ref) const;
+    virtual size_t do_crc(size_t seed) const;
+    virtual void hash(crypto_hash &hash) const;
   };
 
   // Base instance
@@ -1039,7 +1046,6 @@ namespace esbmct {
       : public subclass
   {
 
-    BOOST_STATIC_ASSERT(boost::mpl::equal<boost::mpl::vector<X>, boost::mpl::vector<>>::value);
       int fgasdf;
       // XXX
   };
@@ -1423,7 +1429,7 @@ public:
 
 class facebees;
 typedef esbmct::val_wrapper<unsigned int bv_data::*, &bv_data::width> bv_data_width_proxy;
-typedef esbmct::type_methods2<facebees, bv_data, boost::mpl::vector<unsigned int>, boost::mpl::vector<bv_data>, boost::mpl::vector<bv_data_width_proxy>> facebee_methods;
+typedef esbmct::type_methods2<facebees, bv_data, boost::mpl::vector<unsigned int>::type, boost::mpl::vector<bv_data>::type, boost::mpl::vector<bv_data_width_proxy>::type> facebee_methods;
 class facebees : facebee_methods
 {
 };
