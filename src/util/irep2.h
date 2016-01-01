@@ -1479,13 +1479,6 @@ public:
   unsigned int width;
 };
 
-class facebees;
-typedef esbmct::val_wrapper<unsigned int bv_data::*, &bv_data::width> bv_data_width_proxy;
-typedef esbmct::type_methods2<facebees, bv_data, boost::mpl::vector<unsigned int>::type, boost::mpl::vector<bv_data>::type, boost::mpl::vector<bv_data_width_proxy>::type> facebee_methods;
-class facebees : facebee_methods
-{
-};
-
 class code_data : public type2t
 {
 public:
