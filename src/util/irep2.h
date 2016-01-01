@@ -1020,17 +1020,15 @@ namespace esbmct {
   typedef val_wrapper<type2t::type_ids type2t::*, &type2t::type_id> type_id_proxy;
 
   // Declaration
-  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable = void>
+  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
     class type_methods2;
+  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable = void>
+    class type_methods2_rec;
 
-  // Recursive instance
-  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
-    class type_methods2 : public type_methods2<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable>
+  // Top level type method definition (above recursive def)
+  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+    class type_methods2 : public type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec>
   {
-    typedef typename boost::mpl::front<type_vec>::type cur_type;
-    typedef typename boost::mpl::front<class_vec>::type base_class;
-    typedef typename boost::mpl::front<ptr_vec>::type membr_ptr;
-
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const type2t &ref) const;
@@ -1039,9 +1037,25 @@ namespace esbmct {
     virtual void hash(crypto_hash &hash) const;
   };
 
+  // Recursive instance
+  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
+    class type_methods2_rec : public type_methods2_rec<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable>
+  {
+    typedef typename boost::mpl::front<type_vec>::type cur_type;
+    typedef typename boost::mpl::front<class_vec>::type base_class;
+    typedef typename boost::mpl::front<ptr_vec>::type membr_ptr;
+
+    virtual type2tc clone_rec(void) const;
+    virtual list_of_memberst tostring_rec(unsigned int indent) const;
+    virtual bool cmp_rec(const type2t &ref) const;
+    virtual int lt_rec(const type2t &ref) const;
+    virtual size_t do_crc_rec(size_t seed) const;
+    virtual void hash_rec(crypto_hash &hash) const;
+  };
+
   // Base instance
   template <class derived, class subclass, typename X, typename Y, typename Z>
-    class type_methods2<derived, subclass, X, Y, Z,
+    class type_methods2_rec<derived, subclass, X, Y, Z,
                         typename boost::enable_if<typename boost::mpl::empty<X>::type>::type>
       : public subclass
   {
