@@ -2512,6 +2512,16 @@ template <class derived, class subclass, typename type_vec, typename class_vec, 
 int
 esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::lt_rec(const type2t &ref) const
 {
+  int tmp;
+  const derived *derived_this = static_cast<const derived*>(this);
+  const derived *ref2 = static_cast<const derived *>(&ref);
+  auto membr_ptr = decltype(this)::membr_ptr::value;
+
+  tmp = do_type_lt(derived_this->*membr_ptr, ref2->*membr_ptr);
+  if (tmp != 0)
+    return tmp;
+
+  return decltype(this)::superclass::lt_rec(ref);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
