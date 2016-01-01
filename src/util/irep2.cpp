@@ -2551,9 +2551,10 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
 class facebees;
 typedef esbmct::val_wrapper<unsigned int bv_data::*, &bv_data::width> bv_data_width_proxy;
 typedef esbmct::type_methods2<facebees, bv_data, boost::mpl::vector<unsigned int>::type, boost::mpl::vector<bv_data>::type, boost::mpl::vector<bv_data_width_proxy>::type> facebee_methods;
-class facebees : facebee_methods
+class facebees : public facebee_methods
 {
-  facebees() : facebee_methods() { }
+public:
+  facebees() : facebee_methods(type2t::unsignedbv_id, 1) { }
 };
 facebees fgasdf;
 
