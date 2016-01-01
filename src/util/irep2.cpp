@@ -2553,7 +2553,9 @@ typedef esbmct::val_wrapper<unsigned int bv_data::*, &bv_data::width> bv_data_wi
 typedef esbmct::type_methods2<facebees, bv_data, boost::mpl::vector<unsigned int>::type, boost::mpl::vector<bv_data>::type, boost::mpl::vector<bv_data_width_proxy>::type> facebee_methods;
 class facebees : facebee_methods
 {
+  facebees() : facebee_methods() { }
 };
+facebees fgasdf;
 
 /********************** Constants and explicit instantiations *****************/
 
