@@ -2482,7 +2482,7 @@ esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::hash(cry
 // The, *actual* recursive defs
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
-list_of_memberst
+void
 esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
 {
   // Insert our particular member to string list.
@@ -2492,7 +2492,6 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
 
   // Recurse
   decltype(this)::superclass::tostring_rec(idx + 1, vec, indent);
-  return vec;
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
