@@ -2409,7 +2409,9 @@ template <class derived, class subclass, typename type_vec, typename class_vec, 
 type2tc
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::clone(void) const
 {
-  abort();
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived *new_obj = new derived(*derived_this);
+  return type2tc(new_obj);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
