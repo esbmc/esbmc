@@ -1029,6 +1029,8 @@ namespace esbmct {
   template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
     class type_methods2 : public type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec>
   {
+    template <typename ...Args> type_methods2(Args... args) : type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec>(&args...) { }
+
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const type2t &ref) const;
