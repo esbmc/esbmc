@@ -2483,8 +2483,16 @@ esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::hash(cry
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 list_of_memberst
-esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::tostring_rec(unsigned int indent) const
+esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
 {
+  // Insert our particular member to string list.
+  const derived *derived_this = static_cast<const derived*>(this);
+  auto membr_ptr = decltype(this)::membr_ptr::value;
+  do_type2string<decltype(this)::cur_type>(this->*membr_ptr, idx, this->field_names, vec, indent);
+
+  // Recurse
+  decltype(this)::superclass::tostring_rec(idx + 1, vec, indent);
+  return vec;
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
