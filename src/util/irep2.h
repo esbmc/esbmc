@@ -19,6 +19,11 @@
 #include <boost/functional/hash_fwd.hpp>
 
 #include <boost/mpl/vector.hpp>
+#include <boost/mpl/front.hpp>
+#include <boost/mpl/equal.hpp>
+#include <boost/mpl/pop_front.hpp>
+
+#include <boost/static_assert.hpp>
 
 #include <config.h>
 #include <irep.h>
@@ -1021,17 +1026,15 @@ namespace esbmct {
   };
 
   // Base instance
-  template <class derived, class subclass>
-    class type_methods2<derived, subclass, typename boost::mpl::vector<>::type, typename boost::mpl::vector<>::type, typename boost::mpl::vector<>::type> : public derived
+  template <class derived, class subclass, typename X, typename Y, typename Z>
+    class type_methods2<derived, subclass, typename boost::mpl::vector<X>, typename boost::mpl::vector<Y>, typename boost::mpl::vector<Z>>
+//                        typename boost::enable_if<boost::mpl::equal<typename boost::mpl::vector<X>, typename boost::mpl::vector<>::type>>>
+      : public subclass
   {
+
+    BOOST_STATIC_ASSERT(boost::mpl::equal<boost::mpl::vector<X>, boost::mpl::vector<Y>>::value);
       int fgasdf;
       // XXX
-  };
-
-  template <typename derived, typename subclass, typename... Args>
-    class new_type_methods
-  {
-    typedef type_methods2<derived, subclass, Args..., type2t::type_ids, type2t, type_id_proxy> type;
   };
 
   /** Template for generating type2t boilerplate methods.
