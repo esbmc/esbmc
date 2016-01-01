@@ -1049,7 +1049,6 @@ namespace esbmct {
     typedef typename boost::mpl::front<class_vec>::type base_class;
     typedef typename boost::mpl::front<ptr_vec>::type membr_ptr;
 
-    virtual type2tc clone_rec(void) const;
     virtual list_of_memberst tostring_rec(unsigned int indent) const;
     virtual bool cmp_rec(const type2t &ref) const;
     virtual int lt_rec(const type2t &ref) const;
