@@ -2525,7 +2525,7 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
-size_t
+void
 esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::do_crc_rec() const
 {
   const derived *derived_this = static_cast<const derived*>(this);
