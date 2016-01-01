@@ -23,6 +23,7 @@
 #include <boost/mpl/equal.hpp>
 #include <boost/mpl/not.hpp>
 #include <boost/mpl/bool.hpp>
+#include <boost/mpl/empty.hpp>
 #include <boost/mpl/pop_front.hpp>
 
 #include <boost/static_assert.hpp>
@@ -1033,8 +1034,8 @@ namespace esbmct {
 
   // Base instance
   template <class derived, class subclass, typename X, typename Y, typename Z>
-    class type_methods2<derived, subclass, typename boost::mpl::vector<X>, typename boost::mpl::vector<Y>, typename boost::mpl::vector<Z>,
-                        typename boost::enable_if<typename boost::mpl::equal<typename boost::mpl::vector<X>, typename boost::mpl::vector<>>>::type>
+    class type_methods2<derived, subclass, X, Y, Z,
+                        typename boost::enable_if<typename boost::mpl::empty<X>::type>::type>
       : public subclass
   {
 
