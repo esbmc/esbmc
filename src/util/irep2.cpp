@@ -2418,7 +2418,11 @@ template <class derived, class subclass, typename type_vec, typename class_vec, 
 list_of_memberst
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::tostring(unsigned int indent) const
 {
-  abort();
+  const derived *derived_this = static_cast<const derived*>(this);
+  list_of_memberst thevector;
+
+  decltype(this)::superclass::tostring_rec(0, thevector, indent);
+  return thevector;
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
