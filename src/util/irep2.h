@@ -1043,7 +1043,9 @@ namespace esbmct {
   template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
     class type_methods2_rec : public type_methods2_rec<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable>
   {
-    template <typename ...Args> type_methods2_rec(Args... args) : type_methods2_rec<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type>(&args...) { }
+    typedef type_methods2_rec<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable> superclass;
+
+    template <typename ...Args> type_methods2_rec(Args... args) : superclass(&args...) { }
 
     typedef typename boost::mpl::front<type_vec>::type cur_type;
     typedef typename boost::mpl::front<class_vec>::type base_class;
