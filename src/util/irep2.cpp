@@ -2479,6 +2479,38 @@ esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::hash(cry
   return;
 }
 
+// The, *actual* recursive defs
+
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
+list_of_memberst
+esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::tostring_rec(unsigned int indent) const
+{
+}
+
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
+bool
+esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::cmp_rec(const type2t &ref) const
+{
+}
+
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
+int
+esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::lt_rec(const type2t &ref) const
+{
+}
+
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
+size_t
+esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::do_crc_rec(size_t seed) const
+{
+}
+
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
+void
+esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::hash_rec(crypto_hash &hash) const
+{
+}
+
 /********************** Constants and explicit instantiations *****************/
 
 const expr2tc true_expr;
