@@ -2400,6 +2400,29 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   return;
 }
 
+/************************ Second attempt at type templates ********************/
+
+// Implementations of type methods, recursively.
+
+  // Top level type method definition (above recursive def)
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+type2tc
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::clone(void) const
+{
+}
+
+#if 0
+    virtual list_of_memberst tostring(unsigned int indent) const;
+    virtual bool cmp(const type2t &ref) const;
+    virtual int lt(const type2t &ref) const;
+    virtual size_t do_crc(size_t seed) const;
+    virtual void hash(crypto_hash &hash) const;
+  };
+#endif
+
+
+/********************** Constants and explicit instantiations *****************/
+
 const expr2tc true_expr;
 const expr2tc false_expr;
 
