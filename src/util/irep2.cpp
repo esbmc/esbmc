@@ -2498,6 +2498,14 @@ template <class derived, class subclass, typename type_vec, typename class_vec, 
 bool
 esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::cmp_rec(const type2t &ref) const
 {
+  const derived *derived_this = static_cast<const derived*>(this);
+  const derived *ref2 = static_cast<const derived *>(&ref);
+  auto membr_ptr = decltype(this)::membr_ptr::value;
+
+  if (!do_type_cmp(derived_this->*membr_ptr, ref2->*membr_ptr))
+    return false;
+
+  return decltype(this)::superclass::cmp_rec(ref);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
