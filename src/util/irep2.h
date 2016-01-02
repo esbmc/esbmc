@@ -1014,7 +1014,8 @@ namespace esbmct {
   template <typename T, T v>
     class val_wrapper
   {
-    static const T value = v;
+  public:
+    static constexpr T value = v;
   };
 
   typedef val_wrapper<type2t::type_ids type2t::*, &type2t::type_id> type_id_proxy;
