@@ -2418,7 +2418,6 @@ template <class derived, class subclass, typename type_vec, typename class_vec, 
 list_of_memberst
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::tostring(unsigned int indent) const
 {
-  const derived *derived_this = static_cast<const derived*>(this);
   list_of_memberst thevector;
 
   superclass::tostring_rec(0, thevector, indent);
@@ -2429,21 +2428,20 @@ template <class derived, class subclass, typename type_vec, typename class_vec, 
 bool
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::cmp(const type2t &ref) const
 {
-  superclass::cmp_rec(ref);
+  return superclass::cmp_rec(ref);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
 int
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::lt(const type2t &ref) const
 {
-  superclass::lt_rec(ref);
+  return superclass::lt_rec(ref);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
 size_t
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::do_crc(size_t seed) const
 {
-  const derived *derived_this = static_cast<const derived*>(this);
 
   if (this->crc_val != 0) {
     boost::hash_combine(seed, (lolnoop)this->crc_val);
