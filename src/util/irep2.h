@@ -1031,6 +1031,8 @@ namespace esbmct {
     class type_methods2 : public type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec>
   {
   public:
+
+    typedef type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec> superclass;
     template <typename ...Args> type_methods2(Args... args) : type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec>(args...) { }
 
     virtual type2tc clone(void) const;

@@ -2421,7 +2421,7 @@ esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::tostring
   const derived *derived_this = static_cast<const derived*>(this);
   list_of_memberst thevector;
 
-  decltype(this)::superclass::tostring_rec(0, thevector, indent);
+  superclass::tostring_rec(0, thevector, indent);
   return thevector;
 }
 
@@ -2429,14 +2429,14 @@ template <class derived, class subclass, typename type_vec, typename class_vec, 
 bool
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::cmp(const type2t &ref) const
 {
-  return decltype(this)::superclass::cmp_rec(ref);
+  superclass::cmp_rec(ref);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
 int
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::lt(const type2t &ref) const
 {
-  return decltype(this)::superclass::lt_rec(ref);
+  superclass::lt_rec(ref);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
@@ -2456,11 +2456,11 @@ esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::do_crc(s
   // expression.
   assert(this->crc_val == 0);
   // Call through to base type2t implementation
-  BOOST_STATIC_ASSERT(&decltype(this)::superclass::do_crc == &type2t::do_crc);
-  size_t tmp = decltype(this)::superclass::do_crc(0);
+  // XXX formulate assertion
+  size_t tmp = superclass::do_crc(0);
   boost::hash_combine(this->crc_val, (lolnoop)tmp);
 
-  decltype(this)::superclass::do_crc_rec();
+  superclass::do_crc_rec();
 
   // Finally, combine the crc of this expr with the input seed, and return
   boost::hash_combine(seed, (lolnoop)this->crc_val);
@@ -2472,10 +2472,10 @@ void
 esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::hash(crypto_hash &hash) const
 {
   // Call through to base type2t implementation
-  BOOST_STATIC_ASSERT(&decltype(this)::superclass::hash == &type2t::hash);
-  decltype(this)::type2t::hash(hash);
+  // XXX formulate assertion
+  type2t::hash(hash);
 
-  decltype(this)::superclass::hash_rec(hash);
+  superclass::hash_rec(hash);
   return;
 }
 
@@ -2500,12 +2500,12 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
 {
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
-  auto membr_ptr = decltype(this)::membr_ptr::value;
+  auto m_ptr = membr_ptr::value;
 
-  if (!do_type_cmp(derived_this->*membr_ptr, ref2->*membr_ptr))
+  if (!do_type_cmp(derived_this->*m_ptr, ref2->*m_ptr))
     return false;
 
-  return decltype(this)::superclass::cmp_rec(ref);
+  return superclass::cmp_rec(ref);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
@@ -2515,13 +2515,13 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
   int tmp;
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
-  auto membr_ptr = decltype(this)::membr_ptr::value;
+  auto m_ptr = membr_ptr::value;
 
-  tmp = do_type_lt(derived_this->*membr_ptr, ref2->*membr_ptr);
+  tmp = do_type_lt(derived_this->*m_ptr, ref2->*m_ptr);
   if (tmp != 0)
     return tmp;
 
-  return decltype(this)::superclass::lt_rec(ref);
+  return superclass::lt_rec(ref);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
@@ -2529,12 +2529,12 @@ void
 esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::do_crc_rec() const
 {
   const derived *derived_this = static_cast<const derived*>(this);
-  auto membr_ptr = decltype(this)::membr_ptr::value;
+  auto m_ptr = membr_ptr::value;
 
-  size_t tmp = do_type_crc(derived_this->*membr_ptr, this->crc_val);
+  size_t tmp = do_type_crc(derived_this->*m_ptr, this->crc_val);
   boost::hash_combine(this->crc_val, (lolnoop)tmp);
 
-  decltype(this)::superclass::do_crc_rec();
+  superclass::do_crc_rec();
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
@@ -2542,10 +2542,10 @@ void
 esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::hash_rec(crypto_hash &hash) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
-  auto membr_ptr = decltype(this)::membr_ptr::value;
-  do_type_hash(derived_this->*membr_ptr, hash);
+  auto m_ptr = membr_ptr::value;
+  do_type_hash(derived_this->*m_ptr, hash);
 
-  decltype(this)::superclass::hash_rec(hash);
+  superclass::hash_rec(hash);
 }
 
 class facebees;
