@@ -2487,11 +2487,11 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
 {
   // Insert our particular member to string list.
   const derived *derived_this = static_cast<const derived*>(this);
-  auto membr_ptr = decltype(this)::membr_ptr::value;
-  do_type2string<decltype(this)::cur_type>(this->*membr_ptr, idx, this->field_names, vec, indent);
+  auto m_ptr = membr_ptr::value;
+  do_type2string<cur_type>(derived_this->*m_ptr, idx, derived_this->field_names, vec, indent);
 
   // Recurse
-  decltype(this)::superclass::tostring_rec(idx + 1, vec, indent);
+  superclass::tostring_rec(idx + 1, vec, indent);
 }
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
@@ -2555,6 +2555,7 @@ class facebees : public facebee_methods
 {
 public:
   facebees() : facebee_methods(type2t::unsignedbv_id, 1) { }
+  static std::string field_names[esbmct::num_type_fields];
 };
 facebees fgasdf;
 
