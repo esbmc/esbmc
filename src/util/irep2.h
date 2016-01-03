@@ -1042,32 +1042,31 @@ namespace esbmct {
     // defining a copy constructor that exactly matches the (only) use case.
     type_methods2(const derived &ref) : superclass(ref) { }
 
-    // XXX XXX XXX these do _not_ need to be virtual.
-    virtual type2tc clone(void) const;
-    virtual list_of_memberst tostring(unsigned int indent) const;
-    virtual bool cmp(const type2t &ref) const;
-    virtual int lt(const type2t &ref) const;
-    virtual size_t do_crc(size_t seed) const;
-    virtual void hash(crypto_hash &hash) const;
+    type2tc clone(void) const;
+    list_of_memberst tostring(unsigned int indent) const;
+    bool cmp(const type2t &ref) const;
+    int lt(const type2t &ref) const;
+    size_t do_crc(size_t seed) const;
+    void hash(crypto_hash &hash) const;
 
   protected:
     typedef typename boost::mpl::front<traits>::type::result_type cur_type;
     typedef typename boost::mpl::front<traits>::type::source_class base_class;
     typedef typename boost::mpl::front<traits>::type membr_ptr;
 
-    virtual void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const;
-    virtual bool cmp_rec(const type2t &ref) const;
-    virtual int lt_rec(const type2t &ref) const;
-    virtual void do_crc_rec() const;
-    virtual void hash_rec(crypto_hash &hash) const;
+    void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const;
+    bool cmp_rec(const type2t &ref) const;
+    int lt_rec(const type2t &ref) const;
+    void do_crc_rec() const;
+    void hash_rec(crypto_hash &hash) const;
 
     // These methods are specific to expressions rather than types, and are
     // placed here to avoid un-necessary recursion in expr_methods2.
-    virtual void list_operands_rec(std::list<const expr2tc*> &inp) const;
-    virtual void list_operands_rec(std::list<expr2tc*> &inp);
-    virtual const expr2tc *get_sub_expr_rec(unsigned int cur_count, unsigned int desired) const;
-    virtual expr2tc *get_sub_expr_nc_rec(unsigned int cur_count, unsigned int desired);
-    virtual unsigned int get_num_sub_exprs_rec(void) const;
+    void list_operands_rec(std::list<const expr2tc*> &inp) const;
+    void list_operands_rec(std::list<expr2tc*> &inp);
+    const expr2tc *get_sub_expr_rec(unsigned int cur_count, unsigned int desired) const;
+    expr2tc *get_sub_expr_nc_rec(unsigned int cur_count, unsigned int desired);
+    unsigned int get_num_sub_exprs_rec(void) const;
   };
 
   // Base instance
@@ -1085,7 +1084,7 @@ namespace esbmct {
   protected:
     // Rather than trying to specialize and implement in the cpp file, terminate
     // here.
-    virtual void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
+    void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
     {
       (void)idx;
       (void)vec;
@@ -1093,59 +1092,59 @@ namespace esbmct {
       return;
     }
 
-    virtual bool cmp_rec(const type2t &ref) const
+    bool cmp_rec(const type2t &ref) const
     {
       // If it made it this far, we passed
       (void)ref;
       return true;
     }
 
-    virtual int lt_rec(const type2t &ref) const
+    int lt_rec(const type2t &ref) const
     {
       // If it made it this far, we passed
       (void)ref;
       return 0;
     }
 
-    virtual void do_crc_rec() const
+    void do_crc_rec() const
     {
       return;
     }
 
-    virtual void hash_rec(crypto_hash &hash) const
+    void hash_rec(crypto_hash &hash) const
     {
       (void)hash;
       return;
     }
 
     // Expr methods
-    virtual void list_operands_rec(std::list<const expr2tc*> &inp) const
+    void list_operands_rec(std::list<const expr2tc*> &inp) const
     {
       (void)inp;
       return;
     }
 
-    virtual void list_operands_rec(std::list<expr2tc*> &inp)
+    void list_operands_rec(std::list<expr2tc*> &inp)
     {
       (void)inp;
       return;
     }
 
-    virtual const expr2tc *get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
+    const expr2tc *get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
     {
       // No result, so desired must exceed the number of idx's
       assert(cur_idx >= desired);
       return NULL;
     }
 
-    virtual expr2tc *get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
+    expr2tc *get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
     {
       // See above
       assert(cur_idx >= desired);
       return NULL;
     }
 
-    virtual unsigned int get_num_sub_exprs_rec(void) const
+    unsigned int get_num_sub_exprs_rec(void) const
     {
       return 0;
     }
@@ -1163,12 +1162,12 @@ namespace esbmct {
     // See notes on type_methods2 copy constructor
     expr_methods2(const derived &ref) : superclass(ref) { }
 
-    virtual void list_operands(std::list<const expr2tc*> &inp) const;
-    virtual const expr2tc *get_sub_expr(unsigned int i) const;
-    virtual expr2tc *get_sub_expr_nc(unsigned int i);
-    virtual unsigned int get_num_sub_exprs(void) const;
+    void list_operands(std::list<const expr2tc*> &inp) const;
+    const expr2tc *get_sub_expr(unsigned int i) const;
+    expr2tc *get_sub_expr_nc(unsigned int i);
+    unsigned int get_num_sub_exprs(void) const;
   protected:
-    virtual void list_operands(std::list<expr2tc*> &inp);
+    void list_operands(std::list<expr2tc*> &inp);
   };
 
   // Meta goo
