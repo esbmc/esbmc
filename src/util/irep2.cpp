@@ -1570,6 +1570,7 @@ do_type_hash(const expr2t::expr_ids &i __attribute__((unused)),
 
 static inline __attribute__((always_inline)) void do_type_list_operands(const symbol_data::renaming_level &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
+static inline __attribute__((always_inline)) void do_type_list_operands(const type2t::type_ids &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const bool &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const sideeffect_data::allockind  &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const unsigned int &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1578,9 +1579,11 @@ static inline __attribute__((always_inline)) void do_type_list_operands(const fi
 static inline __attribute__((always_inline)) void do_type_list_operands(const dstring &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const expr2t::expr_ids &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<irep_idt> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
+static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 
 static inline __attribute__((always_inline)) void do_type_list_operands(symbol_data::renaming_level &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
+static inline __attribute__((always_inline)) void do_type_list_operands(type2t::type_ids &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(bool &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(sideeffect_data::allockind &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(unsigned int &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1589,6 +1592,7 @@ static inline __attribute__((always_inline)) void do_type_list_operands(fixedbvt
 static inline __attribute__((always_inline)) void do_type_list_operands(dstring &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const expr2t::expr_ids &theval __attribute__((unused)), std::list< expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<irep_idt> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
+static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 
 static inline __attribute__((always_inline)) void
 do_type_list_operands(expr2tc &theval, std::list<expr2tc*> &inp)
