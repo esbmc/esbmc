@@ -1023,6 +1023,8 @@ namespace esbmct {
   // Declaration
   template <class derived, class subclass, typename traits, typename enable = void>
     class type_methods2;
+  template <class derived, class subclass, typename traits, typename enable = void>
+    class expr_methods2;
 
   // Recursive instance
   template <class derived, class subclass, typename traits, typename enable>
@@ -1040,6 +1042,7 @@ namespace esbmct {
     // defining a copy constructor that exactly matches the (only) use case.
     type_methods2(const derived &ref) : superclass(ref) { }
 
+    // XXX XXX XXX these do _not_ need to be virtual.
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const type2t &ref) const;
@@ -1105,6 +1108,26 @@ namespace esbmct {
       (void)hash;
       return;
     }
+  };
+
+  // Head definition of expr_methods2 XXX XXX explain
+  template <class derived, class subclass, typename traits, typename enable>
+    class expr_methods2 : public type_methods2<derived, subclass, traits, enable>
+  {
+  public:
+    typedef type_methods2<derived, subclass, traits, enable> superclass;
+
+    template <typename ...Args> expr_methods2(Args... args) : superclass(args...) { }
+
+    // See notes on type_methods2 copy constructor
+    expr_methods2(const derived &ref) : superclass(ref) { }
+
+    virtual void list_operands(std::list<const expr2tc*> &inp) const;
+    virtual const expr2tc *get_sub_expr(unsigned int i) const;
+    virtual expr2tc *get_sub_expr_nc(unsigned int i);
+    virtual unsigned int get_num_sub_exprs(void) const;
+  protected:
+    virtual void list_operands(std::list<expr2tc*> &inp);
   };
 
   // Meta goo
