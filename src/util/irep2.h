@@ -1021,19 +1021,17 @@ namespace esbmct {
   typedef val_wrapper<type2t::type_ids type2t::*, &type2t::type_id> type_id_proxy;
 
   // Declaration
-  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
-    class type_methods2;
   template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable = void>
-    class type_methods2_rec;
+    class type_methods2;
 
-  // Top level type method definition (above recursive def)
-  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
-    class type_methods2 : public type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec>
+  // Recursive instance
+  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
+    class type_methods2 : public type_methods2<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable>
   {
   public:
+    typedef type_methods2<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable> superclass;
 
-    typedef type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec> superclass;
-    template <typename ...Args> type_methods2(Args... args) : type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec>(args...) { }
+    template <typename ...Args> type_methods2(Args... args) : superclass(args...) { }
 
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
@@ -1041,17 +1039,8 @@ namespace esbmct {
     virtual int lt(const type2t &ref) const;
     virtual size_t do_crc(size_t seed) const;
     virtual void hash(crypto_hash &hash) const;
-  };
 
-  // Recursive instance
-  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
-    class type_methods2_rec : public type_methods2_rec<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable>
-  {
-  public:
-    typedef type_methods2_rec<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable> superclass;
-
-    template <typename ...Args> type_methods2_rec(Args... args) : superclass(args...) { }
-
+  protected:
     typedef typename boost::mpl::front<type_vec>::type cur_type;
     typedef typename boost::mpl::front<class_vec>::type base_class;
     typedef typename boost::mpl::front<ptr_vec>::type membr_ptr;
@@ -1065,12 +1054,12 @@ namespace esbmct {
 
   // Base instance
   template <class derived, class subclass, typename X, typename Y, typename Z>
-    class type_methods2_rec<derived, subclass, X, Y, Z,
+    class type_methods2<derived, subclass, X, Y, Z,
                         typename boost::enable_if<typename boost::mpl::empty<X>::type>::type>
       : public subclass
   {
   public:
-    template <typename ...Args> type_methods2_rec(Args... args) : subclass(args...) { }
+    template <typename ...Args> type_methods2(Args... args) : subclass(args...) { }
 
     // Rather than trying to specialize and implement in the cpp file, terminate
     // here.

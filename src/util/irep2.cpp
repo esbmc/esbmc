@@ -2405,18 +2405,18 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
 // Implementations of type methods, recursively.
 
   // Top level type method definition (above recursive def)
-template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 type2tc
-esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::clone(void) const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::clone(void) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
   return type2tc(new_obj);
 }
 
-template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 list_of_memberst
-esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::tostring(unsigned int indent) const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::tostring(unsigned int indent) const
 {
   list_of_memberst thevector;
 
@@ -2424,23 +2424,23 @@ esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::tostring
   return thevector;
 }
 
-template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 bool
-esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::cmp(const type2t &ref) const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::cmp(const type2t &ref) const
 {
   return superclass::cmp_rec(ref);
 }
 
-template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 int
-esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::lt(const type2t &ref) const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::lt(const type2t &ref) const
 {
   return superclass::lt_rec(ref);
 }
 
-template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 size_t
-esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::do_crc(size_t seed) const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::do_crc(size_t seed) const
 {
 
   if (this->crc_val != 0) {
@@ -2465,9 +2465,9 @@ esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::do_crc(s
   return seed;
 }
 
-template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec>
+template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 void
-esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::hash(crypto_hash &hash) const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::hash(crypto_hash &hash) const
 {
   // Call through to base type2t implementation
   // XXX formulate assertion
@@ -2481,7 +2481,7 @@ esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec>::hash(cry
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 void
-esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
 {
   // Insert our particular member to string list.
   const derived *derived_this = static_cast<const derived*>(this);
@@ -2494,7 +2494,7 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 bool
-esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::cmp_rec(const type2t &ref) const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::cmp_rec(const type2t &ref) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
@@ -2508,7 +2508,7 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 int
-esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::lt_rec(const type2t &ref) const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::lt_rec(const type2t &ref) const
 {
   int tmp;
   const derived *derived_this = static_cast<const derived*>(this);
@@ -2524,7 +2524,7 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 void
-esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::do_crc_rec() const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::do_crc_rec() const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
@@ -2537,7 +2537,7 @@ esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enabl
 
 template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
 void
-esbmct::type_methods2_rec<derived, subclass, type_vec, class_vec, ptr_vec, enable>::hash_rec(crypto_hash &hash) const
+esbmct::type_methods2<derived, subclass, type_vec, class_vec, ptr_vec, enable>::hash_rec(crypto_hash &hash) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
