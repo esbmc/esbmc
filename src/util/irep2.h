@@ -2534,6 +2534,12 @@ public:
   expr2tc source_value;
   expr2tc update_field;
   expr2tc update_value;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, with_data, &with_data::source_value> source_value_field;
+  typedef esbmct::field_traits<expr2tc, with_data, &with_data::update_field> update_field_field;
+  typedef esbmct::field_traits<expr2tc, with_data, &with_data::update_value> update_value_field;
+  typedef boost::mpl::vector<source_value_field, update_field_field, update_value_field> traits;
 };
 
 class member_data : public datatype_ops
@@ -2547,6 +2553,11 @@ public:
 
   expr2tc source_value;
   irep_idt member;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, member_data, &member_data::source_value> source_value_field;
+  typedef esbmct::field_traits<irep_idt, member_data, &member_data::member> member_field;
+  typedef boost::mpl::vector<source_value_field, member_field> traits;
 };
 
 class index_data : public datatype_ops
@@ -2560,6 +2571,11 @@ public:
 
   expr2tc source_value;
   expr2tc index;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, index_data, &index_data::source_value> source_value_field;
+  typedef esbmct::field_traits<expr2tc, index_data, &index_data::index> index_field;
+  typedef boost::mpl::vector<source_value_field, index_field> traits;
 };
 
 class string_ops : public expr2t
@@ -2571,6 +2587,10 @@ public:
     : expr2t(ref), string(ref.string) { }
 
   expr2tc string;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, string_ops, &string_ops::string> string_field;
+  typedef boost::mpl::vector<string_field> traits;
 };
 
 class isnan_data : public expr2t
@@ -2582,6 +2602,10 @@ public:
     : expr2t(ref), value(ref.value) { }
 
   expr2tc value;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, isnan_data, &isnan_data::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class overflow_ops : public expr2t
@@ -2593,6 +2617,10 @@ public:
     : expr2t(ref), operand(ref.operand) { }
 
   expr2tc operand;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, overflow_ops, &overflow_ops::operand> operand_field;
+  typedef boost::mpl::vector<operand_field> traits;
 };
 
 class overflow_cast_data : public overflow_ops
@@ -2605,6 +2633,10 @@ public:
     : overflow_ops(ref), bits(ref.bits) { }
 
   unsigned int bits;
+
+// Type mangling:
+  typedef esbmct::field_traits<unsigned int, overflow_cast_data, &overflow_cast_data::bits> bits_field;
+  typedef boost::mpl::vector<bits_field> traits;
 };
 
 class dynamic_object_data : public expr2t
@@ -2620,6 +2652,12 @@ public:
   expr2tc instance;
   bool invalid;
   bool unknown;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, dynamic_object_data, &dynamic_object_data::instance> instance_field;
+  typedef esbmct::field_traits<bool, dynamic_object_data, &dynamic_object_data::invalid> invalid_field;
+  typedef esbmct::field_traits<bool, dynamic_object_data, &dynamic_object_data::unknown> unknown_field;
+  typedef boost::mpl::vector<instance_field, invalid_field, unknown_field> traits;
 };
 
 class dereference_data : public expr2t
@@ -2631,6 +2669,10 @@ public:
     : expr2t(ref), value(ref.value) { }
 
   expr2tc value;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, dereference_data, &dereference_data::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class object_ops : public expr2t
@@ -2642,6 +2684,10 @@ public:
     : expr2t(ref), value(ref.value) { }
 
   expr2tc value;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, object_ops, &object_ops::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class sideeffect_data : public expr2t
@@ -2672,6 +2718,14 @@ public:
   std::vector<expr2tc> arguments;
   type2tc alloctype;
   allockind kind;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, sideeffect_data, &sideeffect_data::operand> operand_field;
+  typedef esbmct::field_traits<expr2tc, sideeffect_data, &sideeffect_data::size> size_field;
+  typedef esbmct::field_traits<std::vector<expr2tc>, sideeffect_data, &sideeffect_data::arguments> arguments_field;
+  typedef esbmct::field_traits<type2tc, sideeffect_data, &sideeffect_data::alloctype> alloctype_field;
+  typedef esbmct::field_traits<allockind, sideeffect_data, &sideeffect_data::kind> kind_field;
+  typedef boost::mpl::vector<operand_field, size_field, arguments_field, alloctype_field, kind_field> traits;
 };
 
 class code_base : public expr2t
@@ -2693,6 +2747,10 @@ public:
     : code_base(ref), operands(ref.operands) { }
 
   std::vector<expr2tc> operands;
+
+// Type mangling:
+  typedef esbmct::field_traits<std::vector<expr2tc>, code_block_data, &code_block_data::operands> operands_field;
+  typedef boost::mpl::vector<operands_field> traits;
 };
 
 class code_assign_data : public code_base
@@ -2706,6 +2764,11 @@ public:
 
   expr2tc target;
   expr2tc source;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, code_assign_data, &code_assign_data::target> target_field;
+  typedef esbmct::field_traits<expr2tc, code_assign_data, &code_assign_data::source> source_field;
+  typedef boost::mpl::vector<target_field, source_field> traits;
 };
 
 class code_decl_data : public code_base
@@ -2717,6 +2780,10 @@ public:
     : code_base(ref), value(ref.value) { }
 
   irep_idt value;
+
+// Type mangling:
+  typedef esbmct::field_traits<irep_idt, code_decl_data, &code_decl_data::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class code_printf_data : public code_base
@@ -2729,6 +2796,10 @@ public:
     : code_base(ref), operands(ref.operands) { }
 
   std::vector<expr2tc> operands;
+
+// Type mangling:
+  typedef esbmct::field_traits<std::vector<expr2tc>, code_printf_data, &code_printf_data::operands> operands_field;
+  typedef boost::mpl::vector<operands_field> traits;
 };
 
 class code_expression_data : public code_base
@@ -2740,6 +2811,10 @@ public:
     : code_base(ref), operand(ref.operand) { }
 
   expr2tc operand;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, code_expression_data, &code_expression_data::operand> operand_field;
+  typedef boost::mpl::vector<operand_field> traits;
 };
 
 class code_goto_data : public code_base
@@ -2751,6 +2826,10 @@ public:
     : code_base(ref), target(ref.target) { }
 
   irep_idt target;
+
+// Type mangling:
+  typedef esbmct::field_traits<irep_idt, code_goto_data, &code_goto_data::target> target_field;
+  typedef boost::mpl::vector<target_field> traits;
 };
 
 class object_desc_data : public expr2t
@@ -2766,6 +2845,12 @@ class object_desc_data : public expr2t
     expr2tc object;
     expr2tc offset;
     unsigned int alignment;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, object_desc_data, &object_desc_data::object> object_field;
+  typedef esbmct::field_traits<expr2tc, object_desc_data, &object_desc_data::offset> offset_field;
+  typedef esbmct::field_traits<unsigned int, object_desc_data, &object_desc_data::alignment> alignment_field;
+  typedef boost::mpl::vector<object_field, offset_field, alignment_field> traits;
 };
 
 class code_funccall_data : public code_base
@@ -2781,6 +2866,12 @@ public:
   expr2tc ret;
   expr2tc function;
   std::vector<expr2tc> operands;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, code_funccall_data, &code_funccall_data::ret> ret_field;
+  typedef esbmct::field_traits<expr2tc, code_funccall_data, &code_funccall_data::function> function_field;
+  typedef esbmct::field_traits<std::vector<expr2tc>, code_funccall_data, &code_funccall_data::operands> operands_field;
+  typedef boost::mpl::vector<ret_field, function_field, operands_field> traits;
 };
 
 class code_comma_data : public code_base
@@ -2794,6 +2885,11 @@ public:
 
   expr2tc side_1;
   expr2tc side_2;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, code_comma_data, &code_comma_data::side_1> side_1_field;
+  typedef esbmct::field_traits<expr2tc, code_comma_data, &code_comma_data::side_2> side_2_field;
+  typedef boost::mpl::vector<side_1_field, side_2_field> traits;
 };
 
 class buffer_size_data : public expr2t
@@ -2805,6 +2901,10 @@ public:
     : expr2t(ref), value(ref.value) { }
 
   expr2tc value;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, buffer_size_data, &buffer_size_data::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class code_asm_data : public code_base
@@ -2816,6 +2916,10 @@ public:
     : code_base(ref), value(ref.value) { }
 
   irep_idt value;
+
+// Type mangling:
+  typedef esbmct::field_traits<irep_idt, code_asm_data, &code_asm_data::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class code_cpp_catch_data : public code_base
@@ -2828,6 +2932,10 @@ public:
     : code_base(ref), exception_list(ref.exception_list) { }
 
   std::vector<irep_idt> exception_list;
+
+// Type mangling:
+  typedef esbmct::field_traits<std::vector<irep_idt>, code_cpp_catch_data, &code_cpp_catch_data::exception_list> exception_list_field;
+  typedef boost::mpl::vector<exception_list_field> traits;
 };
 
 class code_cpp_throw_data : public code_base
@@ -2842,6 +2950,11 @@ public:
 
   expr2tc operand;
   std::vector<irep_idt> exception_list;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand> operand_field;
+  typedef esbmct::field_traits<std::vector<irep_idt>, code_cpp_throw_data, &code_cpp_throw_data::exception_list> exception_list_field;
+  typedef boost::mpl::vector<operand_field, exception_list_field> traits;
 };
 
 class code_cpp_throw_decl_data : public code_base
@@ -2855,6 +2968,10 @@ public:
       { }
 
   std::vector<irep_idt> exception_list;
+
+// Type mangling:
+  typedef esbmct::field_traits<std::vector<irep_idt>, code_cpp_throw_data, &code_cpp_throw_data::exception_list> exception_list_field;
+  typedef boost::mpl::vector<exception_list_field> traits;
 };
 
 class concat_data : public expr2t
@@ -2868,6 +2985,10 @@ public:
       { }
 
   std::vector<expr2tc> data_items;
+
+// Type mangling:
+  typedef esbmct::field_traits<std::vector<expr2tc>, concat_data, &concat_data::data_items> data_items_field;
+  typedef boost::mpl::vector<data_items_field> traits;
 };
 
 // Give everything a typedef name. Use this to construct both the templated
