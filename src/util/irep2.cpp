@@ -2347,35 +2347,66 @@ template <class derived, class subclass, typename traits, typename enable>
 void
 esbmct::type_methods2<derived, subclass, traits, enable>::list_operands_rec(std::list<const expr2tc*> &inp) const
 {
-  abort();
+  const derived *derived_this = static_cast<const derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  do_type_list_operands(derived_this->*m_ptr, inp);
+
+  superclass::list_operands_rec(inp);
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 void
 esbmct::type_methods2<derived, subclass, traits, enable>::list_operands_rec(std::list<expr2tc*> &inp)
 {
-  abort();
+  derived *derived_this = static_cast<derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  do_type_list_operands(derived_this->*m_ptr, inp);
+
+  superclass::list_operands_rec(inp);
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 const expr2tc *
 esbmct::type_methods2<derived, subclass, traits, enable>::get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
 {
-  abort();
+  const expr2tc *ptr;
+  const derived *derived_this = static_cast<const derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  // XXX -- this takes a _reference_ to cur_idx, and maybe modifies.
+  if (do_get_sub_expr(derived_this->*m_ptr, desired, cur_idx, ptr))
+    return ptr;
+
+  return superclass::get_sub_expr_rec(cur_idx, desired);
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 expr2tc *
 esbmct::type_methods2<derived, subclass, traits, enable>::get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
 {
-  abort();
+  expr2tc *ptr;
+  const derived *derived_this = static_cast<const derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  // XXX -- this takes a _reference_ to cur_idx, and maybe modifies.
+  if (do_get_sub_expr(derived_this->*m_ptr, desired, cur_idx, ptr))
+    return ptr;
+
+  return superclass::get_sub_expr_nc_rec(cur_idx, desired);
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 unsigned int
 esbmct::type_methods2<derived, subclass, traits, enable>::get_num_sub_exprs_rec(void) const
 {
-  abort();
+  unsigned int num = 0;
+  const derived *derived_this = static_cast<const derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  num = do_count_sub_exprs(derived_this->*m_ptr);
+  return num + superclass::get_num_sub_exprs_rec();
 }
 
 /********************** Constants and explicit instantiations *****************/
