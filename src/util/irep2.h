@@ -1012,13 +1012,13 @@ namespace esbmct {
   /** Vardic type2t boilerplate methods. */
 
   template <typename T, T v>
-    class val_wrapper
+    class field_data_wrapper
   {
   public:
     static constexpr T value = v;
   };
 
-  typedef val_wrapper<type2t::type_ids type2t::*, &type2t::type_id> type_id_proxy;
+  typedef field_data_wrapper<type2t::type_ids type2t::*, &type2t::type_id> type_id_field;
 
   // Declaration
   template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable = void>
