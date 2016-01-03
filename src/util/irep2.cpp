@@ -2169,35 +2169,35 @@ template <class derived, class subclass, typename traits, typename enable>
 const expr2tc *
 esbmct::expr_methods2<derived, subclass, traits, enable>::get_sub_expr(unsigned int i) const
 {
-  abort();
+  return superclass::get_sub_expr(0, i);
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 expr2tc *
 esbmct::expr_methods2<derived, subclass, traits, enable>::get_sub_expr_nc(unsigned int i)
 {
-  abort();
+  return superclass::get_sub_expr_nc(0, i);
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 unsigned int
 esbmct::expr_methods2<derived, subclass, traits, enable>::get_num_sub_exprs(void) const
 {
-  abort();
+  return superclass::get_num_sub_exprs();
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 void
 esbmct::expr_methods2<derived, subclass, traits, enable>::list_operands(std::list<const expr2tc*> &inp) const
 {
-  abort();
+  superclass::list_operands_rec(inp);
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 void
 esbmct::expr_methods2<derived, subclass, traits, enable>::list_operands(std::list<expr2tc*> &inp)
 {
-  abort();
+  superclass::list_operands_rec(inp);
 }
 
 // Types
