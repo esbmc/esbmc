@@ -2314,6 +2314,10 @@ public:
     : logical_ops(ref), value(ref.value) { }
 
   expr2tc value;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, not_data, &not_data::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class logic_2ops : public logical_ops
@@ -2327,6 +2331,11 @@ public:
 
   expr2tc side_1;
   expr2tc side_2;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, logic_2ops, &logic_2ops::side_1> side_1_field;
+  typedef esbmct::field_traits<expr2tc, logic_2ops, &logic_2ops::side_2> side_2_field;
+  typedef boost::mpl::vector<side_1_field, side_2_field> traits;
 };
 
 class bitops : public expr2t
@@ -2347,6 +2356,10 @@ public:
     : bitops(ref), value(ref.value) { }
 
   expr2tc value;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, bitnot_data, &bitnot_data::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class bit_2ops : public bitops
@@ -2360,6 +2373,11 @@ public:
 
   expr2tc side_1;
   expr2tc side_2;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, bit_2ops, &bit_2ops::side_1> side_1_field;
+  typedef esbmct::field_traits<expr2tc, bit_2ops, &bit_2ops::side_2> side_2_field;
+  typedef boost::mpl::vector<side_1_field, side_2_field> traits;
 };
 
 class arith_ops : public expr2t
@@ -2380,6 +2398,10 @@ public:
     : arith_ops(ref), value(ref.value) { }
 
   expr2tc value;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, arith_1op, &arith_1op::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class arith_2ops : public arith_ops
@@ -2393,6 +2415,11 @@ public:
 
   expr2tc side_1;
   expr2tc side_2;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, arith_2ops, &arith_2ops::side_1> side_1_field;
+  typedef esbmct::field_traits<expr2tc, arith_2ops, &arith_2ops::side_2> side_2_field;
+  typedef boost::mpl::vector<side_1_field, side_2_field> traits;
 };
 
 class same_object_data : public expr2t
@@ -2406,6 +2433,11 @@ public:
 
   expr2tc side_1;
   expr2tc side_2;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, same_object_data, &same_object_data::side_1> side_1_field;
+  typedef esbmct::field_traits<expr2tc, same_object_data, &same_object_data::side_2> side_2_field;
+  typedef boost::mpl::vector<side_1_field, side_2_field> traits;
 };
 
 class pointer_ops : public expr2t
@@ -2417,6 +2449,10 @@ public:
     : expr2t(ref), ptr_obj(ref.ptr_obj) { }
 
   expr2tc ptr_obj;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, pointer_ops, &pointer_ops::ptr_obj> ptr_obj_field;
+  typedef boost::mpl::vector<ptr_obj_field> traits;
 };
 
 class byte_ops : public expr2t
@@ -2441,6 +2477,12 @@ public:
   expr2tc source_value;
   expr2tc source_offset;
   bool big_endian;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, byte_extract_data, &byte_extract_data::source_value> source_value_field;
+  typedef esbmct::field_traits<expr2tc, byte_extract_data, &byte_extract_data::source_offset> source_offset_field;
+  typedef esbmct::field_traits<bool, byte_extract_data, &byte_extract_data::big_endian> big_endian_field;
+  typedef boost::mpl::vector<source_value_field, source_offset_field, big_endian_field> traits;
 };
 
 class byte_update_data : public byte_ops
@@ -2459,6 +2501,13 @@ public:
   expr2tc source_offset;
   expr2tc update_value;
   bool big_endian;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, byte_update_data, &byte_update_data::source_value> source_value_field;
+  typedef esbmct::field_traits<expr2tc, byte_update_data, &byte_update_data::source_offset> source_offset_field;
+  typedef esbmct::field_traits<expr2tc, byte_update_data, &byte_update_data::update_value> update_value_field;
+  typedef esbmct::field_traits<bool, byte_update_data, &byte_update_data::big_endian> big_endian_field;
+  typedef boost::mpl::vector<source_value_field, source_offset_field, update_value_field, big_endian_field> traits;
 };
 
 class datatype_ops : public expr2t
