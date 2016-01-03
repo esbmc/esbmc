@@ -1082,6 +1082,7 @@ namespace esbmct {
     // Copy constructor. See note for non-specialized definition.
     type_methods2(const derived &ref) : subclass(ref) { }
 
+  protected:
     // Rather than trying to specialize and implement in the cpp file, terminate
     // here.
     virtual void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
