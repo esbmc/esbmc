@@ -2359,14 +2359,14 @@ esbmct::type_methods2<derived, subclass, traits, enable>::list_operands_rec(std:
 
 template <class derived, class subclass, typename traits, typename enable>
 const expr2tc *
-esbmct::type_methods2<derived, subclass, traits, enable>::get_sub_expr_rec(unsigned int i) const
+esbmct::type_methods2<derived, subclass, traits, enable>::get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
 {
   abort();
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 expr2tc *
-esbmct::type_methods2<derived, subclass, traits, enable>::get_sub_expr_nc_rec(unsigned int i)
+esbmct::type_methods2<derived, subclass, traits, enable>::get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
 {
   abort();
 }

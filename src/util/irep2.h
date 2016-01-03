@@ -1065,8 +1065,8 @@ namespace esbmct {
     // placed here to avoid un-necessary recursion in expr_methods2.
     virtual void list_operands_rec(std::list<const expr2tc*> &inp) const;
     virtual void list_operands_rec(std::list<expr2tc*> &inp);
-    virtual const expr2tc *get_sub_expr_rec(unsigned int i) const;
-    virtual expr2tc *get_sub_expr_nc_rec(unsigned int i);
+    virtual const expr2tc *get_sub_expr_rec(unsigned int cur_count, unsigned int desired) const;
+    virtual expr2tc *get_sub_expr_nc_rec(unsigned int cur_count, unsigned int desired);
     virtual unsigned int get_num_sub_exprs_rec(void) const;
   };
 
@@ -1129,12 +1129,12 @@ namespace esbmct {
       abort();
     }
 
-    virtual const expr2tc *get_sub_expr_rec(unsigned int i) const
+    virtual const expr2tc *get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
     {
       abort();
     }
 
-    virtual expr2tc *get_sub_expr_nc_rec(unsigned int i)
+    virtual expr2tc *get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
     {
       abort();
     }
