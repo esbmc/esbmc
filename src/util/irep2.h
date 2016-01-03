@@ -1464,6 +1464,12 @@ public:
   std::vector<type2tc> members;
   std::vector<irep_idt> member_names;
   irep_idt name;
+
+// Type mangling:
+  typedef esbmct::field_traits<std::vector<type2tc>, struct_union_data, &struct_union_data::members> members_field;
+  typedef esbmct::field_traits<std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names> member_names_field;
+  typedef esbmct::field_traits<irep_idt, struct_union_data, &struct_union_data::name> name_field;
+  typedef boost::mpl::vector<members_field, member_names_field, name_field> traits;
 };
 
 class bv_data : public type2t
