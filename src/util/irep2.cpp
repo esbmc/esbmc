@@ -2809,6 +2809,7 @@ std::string concat2t::field_names [esbmct::num_type_fields]  =
 
 // Explicit template instanciations
 
+#if 0
 template class esbmct::type_methods<bool_type2t, type2t>;
 template class esbmct::type_methods<empty_type2t, type2t>;
 template class esbmct::type_methods<symbol_type2t, symbol_type_data, irep_idt,
@@ -2844,6 +2845,7 @@ template class esbmct::type_methods<string_type2t, string_data,
 template class esbmct::type_methods<cpp_name_type2t, cpp_name_data,
     irep_idt, cpp_name_data, &cpp_name_data::name,
     std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>;
+#endif
 
 template class esbmct::type_methods2<bool_type2t, type2t, esbmct::type2t_traits>;
 template class esbmct::type_methods2<empty_type2t, type2t, esbmct::type2t_traits>;
