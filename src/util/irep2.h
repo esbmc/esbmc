@@ -1037,6 +1037,13 @@ namespace esbmct {
 
     template <typename ...Args> type_methods2(Args... args) : superclass(args...) { }
 
+    // Copy constructor. Construct from derived ref rather than just
+    // type_methods2, because the template above will be able to directly
+    // match a const derived &, and so the compiler won't cast it up to
+    // const type_methods2 & and call the copy constructor. Fix this by
+    // defining a copy constructor that exactly matches the (only) use case.
+    type_methods2(const derived &ref) : superclass(ref) { }
+
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const type2t &ref) const;
@@ -1064,6 +1071,9 @@ namespace esbmct {
   {
   public:
     template <typename ...Args> type_methods2(Args... args) : subclass(args...) { }
+
+    // Copy constructor. See note for non-specialized definition.
+    type_methods2(const derived &ref) : subclass(ref) { }
 
     // Rather than trying to specialize and implement in the cpp file, terminate
     // here.
