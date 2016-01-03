@@ -1022,6 +1022,7 @@ namespace esbmct {
   };
 
   typedef field_traits<type2t::type_ids, type2t, &type2t::type_id> type_id_field;
+  typedef boost::mpl::vector<type_id_field> type2t_traits;
 
   // Declaration
   template <class derived, class subclass, typename traits, typename enable = void>
@@ -1647,6 +1648,21 @@ typedef esbmct::type_methods<cpp_name_type2t, cpp_name_data,
         irep_idt, cpp_name_data, &cpp_name_data::name,
         std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>
         cpp_name_type_methods;
+
+// 2nd flavour of typedef names:
+typedef esbmct::type_methods2<bool_type2t, type2t, esbmct::type2t_traits> bool_type_methods2;
+typedef esbmct::type_methods2<empty_type2t, type2t, esbmct::type2t_traits> empty_type_methods2;
+typedef esbmct::type_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits> symbol_type_methods2;
+typedef esbmct::type_methods2<struct_type2t, struct_union_data, struct_union_data::traits> struct_type_methods2;
+typedef esbmct::type_methods2<union_type2t, struct_union_data, struct_union_data::traits> union_type_methods2;
+typedef esbmct::type_methods2<unsignedbv_type2t, bv_data, bv_data::traits> unsignedbv_type_methods2;
+typedef esbmct::type_methods2<signedbv_type2t, bv_data, bv_data::traits> signedbv_type_methods2;
+typedef esbmct::type_methods2<code_type2t, code_data, code_data::traits> code_type_methods2;
+typedef esbmct::type_methods2<array_type2t, array_data, array_data::traits> array_type_methods2;
+typedef esbmct::type_methods2<pointer_type2t, pointer_data, pointer_data::traits> pointer_type_methods2;
+typedef esbmct::type_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits> fixedbv_type_methods2;
+typedef esbmct::type_methods2<string_type2t, string_data, string_data::traits> string_type_methods2;
+typedef esbmct::type_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits> cpp_name_type_methods2;
 
 /** Boolean type.
  *  Identifies a boolean type. Contains no additional data.
