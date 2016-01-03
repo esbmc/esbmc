@@ -1017,21 +1017,22 @@ namespace esbmct {
   public:
     typedef R result_type;
     typedef C source_class;
+    typedef T membr_ptr;
     static constexpr T value = v;
   };
 
   typedef field_traits<type2t::type_ids, type2t, type2t::type_ids type2t::*, &type2t::type_id> type_id_field;
 
   // Declaration
-  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable = void>
+  template <class derived, class subclass, typename traits, typename enable = void>
     class type_methods2;
 
   // Recursive instance
-  template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable>
-    class type_methods2 : public type_methods2<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable>
+  template <class derived, class subclass, typename traits, typename enable>
+    class type_methods2 : public type_methods2<derived, subclass, typename boost::mpl::pop_front<traits>::type, enable>
   {
   public:
-    typedef type_methods2<derived, subclass, typename boost::mpl::pop_front<type_vec>::type, typename boost::mpl::pop_front<class_vec>::type, typename boost::mpl::pop_front<ptr_vec>::type, enable> superclass;
+    typedef type_methods2<derived, subclass, typename boost::mpl::pop_front<traits>::type, enable> superclass;
 
     template <typename ...Args> type_methods2(Args... args) : superclass(args...) { }
 
@@ -1043,9 +1044,9 @@ namespace esbmct {
     virtual void hash(crypto_hash &hash) const;
 
   protected:
-    typedef typename boost::mpl::front<type_vec>::type cur_type;
-    typedef typename boost::mpl::front<class_vec>::type base_class;
-    typedef typename boost::mpl::front<ptr_vec>::type membr_ptr;
+    typedef typename boost::mpl::front<traits>::type::result_type cur_type;
+    typedef typename boost::mpl::front<traits>::type::source_class base_class;
+    typedef typename boost::mpl::front<traits>::type membr_ptr;
 
     virtual void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const;
     virtual bool cmp_rec(const type2t &ref) const;
@@ -1055,8 +1056,8 @@ namespace esbmct {
   };
 
   // Base instance
-  template <class derived, class subclass, typename X, typename Y, typename Z>
-    class type_methods2<derived, subclass, X, Y, Z,
+  template <class derived, class subclass, typename X>
+    class type_methods2<derived, subclass, X,
                         typename boost::enable_if<typename boost::mpl::empty<X>::type>::type>
       : public subclass
   {
