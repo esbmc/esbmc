@@ -1012,7 +1012,7 @@ namespace esbmct {
   /** Vardic type2t boilerplate methods. */
 
   template <typename R, typename C, typename T, T v>
-    class field_data_wrapper
+    class field_traits
   {
   public:
     typedef R result_type;
@@ -1020,7 +1020,7 @@ namespace esbmct {
     static constexpr T value = v;
   };
 
-  typedef field_data_wrapper<type2t::type_ids, type2t, type2t::type_ids type2t::*, &type2t::type_id> type_id_field;
+  typedef field_traits<type2t::type_ids, type2t, type2t::type_ids type2t::*, &type2t::type_id> type_id_field;
 
   // Declaration
   template <class derived, class subclass, typename type_vec, typename class_vec, typename ptr_vec, typename enable = void>
