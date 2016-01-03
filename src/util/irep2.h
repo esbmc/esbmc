@@ -1117,6 +1117,32 @@ namespace esbmct {
       (void)hash;
       return;
     }
+
+    // Expr methods
+    virtual void list_operands_rec(std::list<const expr2tc*> &inp) const
+    {
+      abort();
+    }
+
+    virtual void list_operands_rec(std::list<expr2tc*> &inp)
+    {
+      abort();
+    }
+
+    virtual const expr2tc *get_sub_expr_rec(unsigned int i) const
+    {
+      abort();
+    }
+
+    virtual expr2tc *get_sub_expr_nc_rec(unsigned int i)
+    {
+      abort();
+    }
+
+    virtual unsigned int get_num_sub_exprs_rec(void) const
+    {
+      abort();
+    }
   };
 
   // Head definition of expr_methods2 XXX XXX explain
