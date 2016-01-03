@@ -1121,27 +1121,33 @@ namespace esbmct {
     // Expr methods
     virtual void list_operands_rec(std::list<const expr2tc*> &inp) const
     {
-      abort();
+      (void)inp;
+      return;
     }
 
     virtual void list_operands_rec(std::list<expr2tc*> &inp)
     {
-      abort();
+      (void)inp;
+      return;
     }
 
     virtual const expr2tc *get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
     {
-      abort();
+      // No result, so desired must exceed the number of idx's
+      assert(cur_idx >= desired);
+      return NULL;
     }
 
     virtual expr2tc *get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
     {
-      abort();
+      // See above
+      assert(cur_idx >= desired);
+      return NULL;
     }
 
     virtual unsigned int get_num_sub_exprs_rec(void) const
     {
-      abort();
+      return 0;
     }
   };
 
