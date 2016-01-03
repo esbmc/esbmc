@@ -1475,6 +1475,10 @@ public:
   virtual unsigned int get_width(void) const;
 
   unsigned int width;
+
+// Type mangling:
+  typedef esbmct::field_traits<unsigned int, bv_data, unsigned int bv_data::*, &bv_data::width> width_field;
+  typedef boost::mpl::vector<width_field> traits;
 };
 
 class code_data : public type2t

@@ -2548,7 +2548,7 @@ esbmct::type_methods2<derived, subclass, traits, enable>::hash_rec(crypto_hash &
 
 class facebees;
 typedef esbmct::field_traits<unsigned int, bv_data, unsigned int bv_data::*, &bv_data::width> bv_data_width_proxy;
-typedef esbmct::type_methods2<facebees, bv_data, boost::mpl::vector<bv_data_width_proxy>::type> facebee_methods;
+typedef esbmct::type_methods2<facebees, bv_data, bv_data::traits> facebee_methods;
 class facebees : public facebee_methods
 {
 public:
