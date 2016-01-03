@@ -2162,7 +2162,39 @@ esbmct::expr_methods<derived, subclass,
 
 // Implementations of type methods, recursively.
 
-  // Top level type method definition (above recursive def)
+// Top level type method definition (above recursive def)
+// exprs
+
+template <class derived, class subclass, typename traits, typename enable>
+const expr2tc *
+esbmct::expr_methods2<derived, subclass, traits, enable>::get_sub_expr(unsigned int i) const
+{
+  abort();
+}
+
+template <class derived, class subclass, typename traits, typename enable>
+expr2tc *
+esbmct::expr_methods2<derived, subclass, traits, enable>::get_sub_expr_nc(unsigned int i)
+{
+  abort();
+}
+
+template <class derived, class subclass, typename traits, typename enable>
+unsigned int
+esbmct::expr_methods2<derived, subclass, traits, enable>::get_num_sub_exprs(void) const
+{
+  abort();
+}
+
+template <class derived, class subclass, typename traits, typename enable>
+void
+esbmct::expr_methods2<derived, subclass, traits, enable>::list_operands(std::list<expr2tc*> &inp)
+{
+  abort();
+}
+
+// Types
+
 template <class derived, class subclass, typename traits, typename enable>
 type2tc
 esbmct::type_methods2<derived, subclass, traits, enable>::clone(void) const
