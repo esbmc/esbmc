@@ -1432,6 +1432,10 @@ public:
     type2t (ref), symbol_name(ref.symbol_name) { }
 
   irep_idt symbol_name;
+
+// Type mangling:
+  typedef esbmct::field_traits<irep_idt, symbol_type_data, irep_idt symbol_type_data::*, &symbol_type_data::symbol_name> symbol_name_field;
+  typedef boost::mpl::vector<symbol_name_field> traits;
 };
 
 class struct_union_data : public type2t
