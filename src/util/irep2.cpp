@@ -2420,7 +2420,7 @@ esbmct::type_methods2<derived, subclass, traits, enable>::tostring(unsigned int 
 {
   list_of_memberst thevector;
 
-  superclass::tostring_rec(0, thevector, indent);
+  tostring_rec(0, thevector, indent);
   return thevector;
 }
 
@@ -2428,14 +2428,14 @@ template <class derived, class subclass, typename traits, typename enable>
 bool
 esbmct::type_methods2<derived, subclass, traits, enable>::cmp(const type2t &ref) const
 {
-  return superclass::cmp_rec(ref);
+  return cmp_rec(ref);
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 int
 esbmct::type_methods2<derived, subclass, traits, enable>::lt(const type2t &ref) const
 {
-  return superclass::lt_rec(ref);
+  return lt_rec(ref);
 }
 
 template <class derived, class subclass, typename traits,  typename enable>
@@ -2458,7 +2458,7 @@ esbmct::type_methods2<derived, subclass, traits,  enable>::do_crc(size_t seed) c
   size_t tmp = superclass::do_crc(0);
   boost::hash_combine(this->crc_val, (lolnoop)tmp);
 
-  superclass::do_crc_rec();
+  do_crc_rec();
 
   // Finally, combine the crc of this expr with the input seed, and return
   boost::hash_combine(seed, (lolnoop)this->crc_val);
@@ -2473,7 +2473,7 @@ esbmct::type_methods2<derived, subclass, traits, enable>::hash(crypto_hash &hash
   // XXX formulate assertion
   type2t::hash(hash);
 
-  superclass::hash_rec(hash);
+  hash_rec(hash);
   return;
 }
 
