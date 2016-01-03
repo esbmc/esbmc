@@ -2845,6 +2845,20 @@ template class esbmct::type_methods<cpp_name_type2t, cpp_name_data,
     irep_idt, cpp_name_data, &cpp_name_data::name,
     std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>;
 
+template class esbmct::type_methods2<bool_type2t, type2t, esbmct::type2t_traits>;
+template class esbmct::type_methods2<empty_type2t, type2t, esbmct::type2t_traits>;
+template class esbmct::type_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits>;
+template class esbmct::type_methods2<struct_type2t, struct_union_data, struct_union_data::traits>;
+template class esbmct::type_methods2<union_type2t, struct_union_data, struct_union_data::traits>;
+template class esbmct::type_methods2<unsignedbv_type2t, bv_data, bv_data::traits>;
+template class esbmct::type_methods2<signedbv_type2t, bv_data, bv_data::traits>;
+template class esbmct::type_methods2<code_type2t, code_data, code_data::traits>;
+template class esbmct::type_methods2<array_type2t, array_data, array_data::traits>;
+template class esbmct::type_methods2<pointer_type2t, pointer_data, pointer_data::traits>;
+template class esbmct::type_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits>;
+template class esbmct::type_methods2<string_type2t, string_data, string_data::traits>;
+template class esbmct::type_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits>;
+
 // Explicit instanciation for exprs.
 
 template class esbmct::expr_methods<constant_int2t, constant_int_data,
