@@ -2546,16 +2546,6 @@ esbmct::type_methods2<derived, subclass, traits, enable>::hash_rec(crypto_hash &
   superclass::hash_rec(hash);
 }
 
-class facebees;
-typedef esbmct::type_methods2<facebees, bv_data, bv_data::traits> facebee_methods;
-class facebees : public facebee_methods
-{
-public:
-  facebees() : facebee_methods(type2t::unsignedbv_id, 1) { }
-  static std::string field_names[esbmct::num_type_fields];
-};
-facebees fgasdf;
-
 /********************** Constants and explicit instantiations *****************/
 
 const expr2tc true_expr;
