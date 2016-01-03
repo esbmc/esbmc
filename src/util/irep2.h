@@ -1011,17 +1011,17 @@ namespace esbmct {
 
   /** Vardic type2t boilerplate methods. */
 
-  template <typename R, typename C, typename T, T v>
+  template <typename R, typename C, R C::* v>
     class field_traits
   {
   public:
     typedef R result_type;
     typedef C source_class;
-    typedef T membr_ptr;
-    static constexpr T value = v;
+    typedef R C::* membr_ptr;
+    static constexpr membr_ptr value = v;
   };
 
-  typedef field_traits<type2t::type_ids, type2t, type2t::type_ids type2t::*, &type2t::type_id> type_id_field;
+  typedef field_traits<type2t::type_ids, type2t, &type2t::type_id> type_id_field;
 
   // Declaration
   template <class derived, class subclass, typename traits, typename enable = void>
@@ -1434,7 +1434,7 @@ public:
   irep_idt symbol_name;
 
 // Type mangling:
-  typedef esbmct::field_traits<irep_idt, symbol_type_data, irep_idt symbol_type_data::*, &symbol_type_data::symbol_name> symbol_name_field;
+  typedef esbmct::field_traits<irep_idt, symbol_type_data, &symbol_type_data::symbol_name> symbol_name_field;
   typedef boost::mpl::vector<symbol_name_field> traits;
 };
 
@@ -1481,7 +1481,7 @@ public:
   unsigned int width;
 
 // Type mangling:
-  typedef esbmct::field_traits<unsigned int, bv_data, unsigned int bv_data::*, &bv_data::width> width_field;
+  typedef esbmct::field_traits<unsigned int, bv_data, &bv_data::width> width_field;
   typedef boost::mpl::vector<width_field> traits;
 };
 
