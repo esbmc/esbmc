@@ -2188,6 +2188,13 @@ esbmct::expr_methods2<derived, subclass, traits, enable>::get_num_sub_exprs(void
 
 template <class derived, class subclass, typename traits, typename enable>
 void
+esbmct::expr_methods2<derived, subclass, traits, enable>::list_operands(std::list<const expr2tc*> &inp) const
+{
+  abort();
+}
+
+template <class derived, class subclass, typename traits, typename enable>
+void
 esbmct::expr_methods2<derived, subclass, traits, enable>::list_operands(std::list<expr2tc*> &inp)
 {
   abort();
