@@ -2132,6 +2132,10 @@ public:
     : constant2t(ref), value(ref.value) { }
 
   fixedbvt value;
+
+// Type mangling:
+  typedef esbmct::field_traits<fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class constant_datatype_data : public constant2t
@@ -2144,6 +2148,10 @@ public:
     : constant2t(ref), datatype_members(ref.datatype_members) { }
 
   std::vector<expr2tc> datatype_members;
+
+// Type mangling:
+  typedef esbmct::field_traits<std::vector<expr2tc>, constant_datatype_data, &constant_datatype_data::datatype_members> datatype_members_field;
+  typedef boost::mpl::vector<datatype_members_field> traits;
 };
 
 class constant_bool_data : public constant2t
@@ -2155,6 +2163,10 @@ public:
     : constant2t(ref), constant_value(ref.constant_value) { }
 
   bool constant_value;
+
+// Type mangling:
+  typedef esbmct::field_traits<bool, constant_bool_data, &constant_bool_data::constant_value> constant_value_field;
+  typedef boost::mpl::vector<constant_value_field> traits;
 };
 
 class constant_array_of_data : public constant2t
@@ -2166,6 +2178,10 @@ public:
     : constant2t(ref), initializer(ref.initializer) { }
 
   expr2tc initializer;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, constant_array_of_data, &constant_array_of_data::initializer> initializer_field;
+  typedef boost::mpl::vector<initializer_field> traits;
 };
 
 class constant_string_data : public constant2t
@@ -2177,6 +2193,10 @@ public:
     : constant2t(ref), value(ref.value) { }
 
   irep_idt value;
+
+// Type mangling:
+  typedef esbmct::field_traits<irep_idt, constant_string_data, &constant_string_data::value> value_field;
+  typedef boost::mpl::vector<value_field> traits;
 };
 
 class symbol_data : public expr2t
@@ -2211,6 +2231,15 @@ public:
   unsigned int level2_num; // SSA variable number
   unsigned int thread_num;
   unsigned int node_num;
+
+// Type mangling:
+  typedef esbmct::field_traits<irep_idt, symbol_data, &symbol_data::thename> thename_field;
+  typedef esbmct::field_traits<renaming_level, symbol_data, &symbol_data::rlevel> rlevel_field;
+  typedef esbmct::field_traits<unsigned int, symbol_data, &symbol_data::level1_num> level1_num_field;
+  typedef esbmct::field_traits<unsigned int, symbol_data, &symbol_data::level2_num> level2_num_field;
+  typedef esbmct::field_traits<unsigned int, symbol_data, &symbol_data::thread_num> thread_num_field;
+  typedef esbmct::field_traits<unsigned int, symbol_data, &symbol_data::node_num> node_num_field;
+  typedef boost::mpl::vector<thename_field, rlevel_field, level1_num_field, level2_num_field, thread_num_field, node_num_field> traits;
 };
 
 class typecast_data : public expr2t
@@ -2222,6 +2251,10 @@ public:
     : expr2t(ref), from(ref.from) { }
 
   expr2tc from;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, typecast_data, &typecast_data::from> from_field;
+  typedef boost::mpl::vector<from_field> traits;
 };
 
 class if_data : public expr2t
@@ -2237,6 +2270,12 @@ public:
   expr2tc cond;
   expr2tc true_value;
   expr2tc false_value;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, if_data, &if_data::cond> cond_field;
+  typedef esbmct::field_traits<expr2tc, if_data, &if_data::true_value> true_value_field;
+  typedef esbmct::field_traits<expr2tc, if_data, &if_data::false_value> false_value_field;
+  typedef boost::mpl::vector<cond_field, true_value_field, false_value_field> traits;
 };
 
 class relation_data : public expr2t
@@ -2250,6 +2289,11 @@ class relation_data : public expr2t
 
   expr2tc side_1;
   expr2tc side_2;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, relation_data, &relation_data::side_1> side_1_field;
+  typedef esbmct::field_traits<expr2tc, relation_data, &relation_data::side_2> side_2_field;
+  typedef boost::mpl::vector<side_1_field, side_2_field> traits;
 };
 
 class logical_ops : public expr2t
