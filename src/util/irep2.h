@@ -3002,7 +3002,8 @@ public:
                                type, __VA_ARGS__> basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass, \
                                __VA_ARGS__ \
-                               > basename##_expr_methods;
+                               > basename##_expr_methods; \
+  typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits> basename##_expr_methods2;
 
 // Special case for some empty ireps,
 
@@ -3010,7 +3011,8 @@ public:
   typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
                                type> basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass \
-                               > basename##_expr_methods;
+                               > basename##_expr_methods; \
+  typedef esbmct::expr_methods2<basename##2t, superclass, boost::mpl::vector<>> basename##_expr_methods2;
 
 irep_typedefs(constant_int, constant_int_data, esbmct::takestype,
               BigInt, constant_int_data, &constant_int_data::constant_value);
