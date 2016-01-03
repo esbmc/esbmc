@@ -1060,6 +1060,14 @@ namespace esbmct {
     virtual int lt_rec(const type2t &ref) const;
     virtual void do_crc_rec() const;
     virtual void hash_rec(crypto_hash &hash) const;
+
+    // These methods are specific to expressions rather than types, and are
+    // placed here to avoid un-necessary recursion in expr_methods2.
+    virtual void list_operands_rec(std::list<const expr2tc*> &inp) const;
+    virtual void list_operands_rec(std::list<expr2tc*> &inp);
+    virtual const expr2tc *get_sub_expr_rec(unsigned int i) const;
+    virtual expr2tc *get_sub_expr_nc_rec(unsigned int i);
+    virtual unsigned int get_num_sub_exprs_rec(void) const;
   };
 
   // Base instance

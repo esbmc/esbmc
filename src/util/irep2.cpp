@@ -2304,6 +2304,41 @@ esbmct::type_methods2<derived, subclass, traits, enable>::hash_rec(crypto_hash &
   superclass::hash_rec(hash);
 }
 
+template <class derived, class subclass, typename traits, typename enable>
+void
+esbmct::type_methods2<derived, subclass, traits, enable>::list_operands_rec(std::list<const expr2tc*> &inp) const
+{
+  abort();
+}
+
+template <class derived, class subclass, typename traits, typename enable>
+void
+esbmct::type_methods2<derived, subclass, traits, enable>::list_operands_rec(std::list<expr2tc*> &inp)
+{
+  abort();
+}
+
+template <class derived, class subclass, typename traits, typename enable>
+const expr2tc *
+esbmct::type_methods2<derived, subclass, traits, enable>::get_sub_expr_rec(unsigned int i) const
+{
+  abort();
+}
+
+template <class derived, class subclass, typename traits, typename enable>
+expr2tc *
+esbmct::type_methods2<derived, subclass, traits, enable>::get_sub_expr_nc_rec(unsigned int i)
+{
+  abort();
+}
+
+template <class derived, class subclass, typename traits, typename enable>
+unsigned int
+esbmct::type_methods2<derived, subclass, traits, enable>::get_num_sub_exprs_rec(void) const
+{
+  abort();
+}
+
 /********************** Constants and explicit instantiations *****************/
 
 const expr2tc true_expr;
