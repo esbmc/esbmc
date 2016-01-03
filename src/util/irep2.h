@@ -717,9 +717,6 @@ public:
    */
   virtual unsigned int get_num_sub_exprs(void) const = 0 ;
 
-  /** Self explanatory. Like clone, but without being wrapped in an expr2tc */
-  virtual expr2t * clone_raw(void) const = 0;
-
   /** Simplify an expression.
    *  Similar to simplification in the string-based irep, this generates an
    *  expression with any calculations or operations that can be simplified,
@@ -1006,7 +1003,6 @@ namespace esbmct {
     virtual unsigned int get_num_sub_exprs(void) const;
   protected:
     virtual void list_operands(std::list<expr2tc*> &inp);
-    virtual expr2t *clone_raw(void) const;
   };
 
   /** Vardic type2t boilerplate methods. */

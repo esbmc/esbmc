@@ -1792,28 +1792,6 @@ typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
 typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
 typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
 typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
-expr2t *
-esbmct::expr_methods<derived, subclass,
-  field1_type, field1_class, field1_ptr,
-  field2_type, field2_class, field2_ptr,
-  field3_type, field3_class, field3_ptr,
-  field4_type, field4_class, field4_ptr,
-  field5_type, field5_class, field5_ptr,
-  field6_type, field6_class, field6_ptr>
-  ::clone_raw(void) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  derived *new_obj = new derived(*derived_this);
-  return new_obj;
-}
-
-template <class derived, class subclass,
-typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
-typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
-typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
-typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
-typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
-typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 list_of_memberst
 esbmct::expr_methods<derived, subclass,
   field1_type, field1_class, field1_ptr,
