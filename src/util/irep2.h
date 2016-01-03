@@ -2116,6 +2116,10 @@ public:
     : constant2t(ref), constant_value(ref.constant_value) { }
 
   BigInt constant_value;
+
+// Type mangling:
+  typedef esbmct::field_traits<BigInt, constant_int_data, &constant_int_data::constant_value> constant_value_field;
+  typedef boost::mpl::vector<constant_value_field> traits;
 };
 
 class constant_fixedbv_data : public constant2t
