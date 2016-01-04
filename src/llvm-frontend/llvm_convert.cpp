@@ -418,7 +418,7 @@ void llvm_convertert::get_struct_union_class(
     location_begin,
     false); // There is no such thing as static struct/union/class on ANSI-C
 
-  // Save the struct/union/class type address and name to the object map
+  // Save the struct/union/class type address and name to the type map
   std::string symbol_name = symbol.name.as_string();
 
   std::size_t address = reinterpret_cast<std::size_t>(&recordd);
@@ -598,15 +598,6 @@ void llvm_convertert::get_function(
   get_type(fd.getReturnType(), return_type);
   type.return_type() = return_type;
 
-  // We convert the parameters first so their symbol are added to context
-  // before converting the body, as they may appear on the function body
-  for (const auto &pdecl : fd.params())
-  {
-    code_typet::argumentt param;
-    get_function_params(*pdecl, param);
-    type.arguments().push_back(param);
-  }
-
   if(fd.isVariadic())
     type.make_ellipsis();
 
@@ -622,25 +613,42 @@ void llvm_convertert::get_function(
     location_begin,
     (fd.getStorageClass() == clang::SC_Static));
 
-  symbol.lvalue = true;
-
-  // We need: a type, a name, and an optional body
-  clang::Stmt *body = NULL;
-  if (fd.isThisDeclarationADefinition() && fd.hasBody())
-    body = fd.getBody();
-
-  if(body)
-  {
-    exprt body_exprt;
-    get_expr(*body, body_exprt);
-    symbol.value = body_exprt;
-  }
+  std::string symbol_name = symbol.name.as_string();
 
   // Save the function address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&fd);
   object_map[address] = symbol.name.as_string();
 
+  symbol.lvalue = true;
+
   move_symbol_to_context(symbol);
+
+  if(!fd.isThisDeclarationADefinition())
+    return;
+
+  // Now get the symbol back to continue the conversion
+  symbolt &added_symbol = context.symbols.find(symbol_name)->second;
+
+  // We convert the parameters first so their symbol are added to context
+  // before converting the body, as they may appear on the function body
+  for (const auto &pdecl : fd.params())
+  {
+    code_typet::argumentt param;
+    get_function_params(*pdecl, param);
+    type.arguments().push_back(param);
+  }
+
+  added_symbol.type = type;
+
+  // We need: a type, a name, and an optional body
+  clang::Stmt *body = fd.getBody();
+
+  if(body)
+  {
+    exprt body_exprt;
+    get_expr(*body, body_exprt);
+    added_symbol.value = body_exprt;
+  }
 
   // If that was an declaration of a function, inside a function
   // Add a skip
