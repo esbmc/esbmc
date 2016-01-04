@@ -228,22 +228,9 @@ void llvm_convertert::get_decl(
     // A record is a struct/union/class/enum
     case clang::Decl::Record:
     {
-      const clang::TagDecl &tag =
-        static_cast<const clang::TagDecl &>(decl);
-
-      if(tag.isEnum())
-      {
-        const clang::EnumDecl &enumd =
-          static_cast<const clang::EnumDecl &>(decl);
-        get_enum(enumd, new_expr);
-      }
-      else
-      {
-        const clang::RecordDecl &record =
-          static_cast<const clang::RecordDecl &>(tag);
-        get_struct_union_class(record, new_expr);
-      }
-
+      const clang::RecordDecl &record =
+        static_cast<const clang::RecordDecl &>(decl);
+      get_struct_union_class(record, new_expr);
       break;
     }
 
