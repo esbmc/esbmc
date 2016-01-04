@@ -276,6 +276,8 @@ void llvm_convertert::get_enum(
   const clang::EnumDecl& enumd,
   exprt& new_expr)
 {
+  new_expr = code_skipt();
+
   std::string identifier = get_tag_name(enumd.getName().str());
 
   typet t = enum_type();
@@ -310,8 +312,6 @@ void llvm_convertert::get_enum(
     exprt dummy_enumerator;
     get_decl(*enumerator, dummy_enumerator);
   }
-
-  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_enum_constants(
@@ -382,6 +382,8 @@ void llvm_convertert::get_struct_union_class(
   const clang::RecordDecl& recordd,
   exprt& new_expr)
 {
+  new_expr = code_skipt();
+
   if(recordd.isClass())
   {
     std::cerr << "Class is not supported yet" << std::endl;
@@ -473,14 +475,14 @@ void llvm_convertert::get_struct_union_class(
     added_symbol.pretty_name = "struct " + recordd.getName().str();
   else if(recordd.isUnion())
     added_symbol.pretty_name = "union " + recordd.getName().str();
-
-  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_typedef(
   const clang::TypedefDecl &tdd,
   exprt &new_expr)
 {
+  new_expr = code_skipt();
+
   // Get type
   typet t;
   get_type(tdd.getUnderlyingType().getCanonicalType(), t);
@@ -501,8 +503,6 @@ void llvm_convertert::get_typedef(
   symbol.is_macro = true;
 
   move_symbol_to_context(symbol);
-
-  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_var(
@@ -583,6 +583,10 @@ void llvm_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
+  // If that was an declaration of a function, inside a function
+  // Add a skip
+  new_expr = code_skipt();
+
   // TODO: use fd.isMain to flag and check the flag on llvm_adjust_expr
   // to saner way to add argc/argv/envp
 
@@ -649,10 +653,6 @@ void llvm_convertert::get_function(
     get_expr(*body, body_exprt);
     added_symbol.value = body_exprt;
   }
-
-  // If that was an declaration of a function, inside a function
-  // Add a skip
-  new_expr = code_skipt();
 }
 
 void llvm_convertert::get_function_params(
