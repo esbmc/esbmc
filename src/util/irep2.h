@@ -1425,7 +1425,7 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<irep_idt, symbol_type_data, &symbol_type_data::symbol_name> symbol_name_field;
-  typedef boost::mpl::vector<symbol_name_field> traits;
+  typedef esbmct::type2t_traits<symbol_name_field>::type traits;
 };
 
 class struct_union_data : public type2t
@@ -1459,7 +1459,7 @@ public:
   typedef esbmct::field_traits<std::vector<type2tc>, struct_union_data, &struct_union_data::members> members_field;
   typedef esbmct::field_traits<std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names> member_names_field;
   typedef esbmct::field_traits<irep_idt, struct_union_data, &struct_union_data::name> name_field;
-  typedef boost::mpl::vector<members_field, member_names_field, name_field> traits;
+  typedef esbmct::type2t_traits<members_field, member_names_field, name_field>::type traits;
 };
 
 class bv_data : public type2t
@@ -1478,7 +1478,7 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<unsigned int, bv_data, &bv_data::width> width_field;
-  typedef boost::mpl::vector<width_field> traits;
+  typedef esbmct::type2t_traits<width_field>::type traits;
 };
 
 class code_data : public type2t
@@ -1504,7 +1504,7 @@ public:
   typedef esbmct::field_traits<type2tc, code_data, &code_data::ret_type> ret_type_field;
   typedef esbmct::field_traits<std::vector<irep_idt>, code_data, &code_data::argument_names> argument_names_field;
   typedef esbmct::field_traits<bool, code_data, &code_data::ellipsis> ellipsis_field;
-  typedef boost::mpl::vector<arguments_field, ret_type_field, argument_names_field, ellipsis_field> traits;
+  typedef esbmct::type2t_traits<arguments_field, ret_type_field, argument_names_field, ellipsis_field>::type traits;
 };
 
 class array_data : public type2t
@@ -1524,7 +1524,7 @@ public:
   typedef esbmct::field_traits<type2tc, array_data, &array_data::subtype> subtype_field;
   typedef esbmct::field_traits<expr2tc, array_data, &array_data::array_size> array_size_field;
   typedef esbmct::field_traits<bool, array_data, &array_data::size_is_infinite> size_is_infinite_field;
-  typedef boost::mpl::vector<subtype_field, array_size_field, size_is_infinite_field> traits;
+  typedef esbmct::type2t_traits<subtype_field, array_size_field, size_is_infinite_field>::type traits;
 };
 
 class pointer_data : public type2t
@@ -1539,7 +1539,7 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<type2tc, pointer_data, &pointer_data::subtype> subtype_field;
-  typedef boost::mpl::vector<subtype_field> traits;
+  typedef esbmct::type2t_traits<subtype_field>::type traits;
 };
 
 class fixedbv_data : public type2t
@@ -1556,7 +1556,7 @@ public:
 // Type mangling:
   typedef esbmct::field_traits<unsigned int, fixedbv_data, &fixedbv_data::width> width_field;
   typedef esbmct::field_traits<unsigned int, fixedbv_data, &fixedbv_data::integer_bits> integer_bits_field;
-  typedef boost::mpl::vector<width_field, integer_bits_field> traits;
+  typedef esbmct::type2t_traits<width_field, integer_bits_field>::type traits;
 };
 
 class string_data : public type2t
@@ -1571,7 +1571,7 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<unsigned int, string_data, &string_data::width> width_field;
-  typedef boost::mpl::vector<width_field> traits;
+  typedef esbmct::type2t_traits<width_field>::type traits;
 };
 
 class cpp_name_data : public type2t
@@ -1589,7 +1589,7 @@ public:
 // Type mangling:
   typedef esbmct::field_traits<irep_idt, cpp_name_data, &cpp_name_data::name> name_field;
   typedef esbmct::field_traits<std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args> template_args_field;
-  typedef boost::mpl::vector<name_field, template_args_field> traits;
+  typedef esbmct::type2t_traits<name_field, template_args_field>::type traits;
 };
 
 // Then give them a typedef name
