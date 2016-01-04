@@ -164,6 +164,7 @@ bool llvm_languaget::parse(const std::string& path)
   std::vector<std::string> compiler_string;
   build_compiler_string(compiler_string);
 
+  // TODO: Change to JSONCompilationDatabase
   clang::tooling::FixedCompilationDatabase Compilations("./", compiler_string);
 
   std::vector<std::string> sources;
@@ -196,6 +197,7 @@ bool llvm_languaget::typecheck(
   std::vector<std::string> compiler_string;
   build_compiler_string(compiler_string);
 
+  // TODO: Change to JSONCompilationDatabase
   clang::tooling::FixedCompilationDatabase Compilations("./", compiler_string);
 
   std::vector<std::string> sources;
@@ -246,6 +248,7 @@ bool llvm_languaget::preprocess(
   std::ostream &outstream __attribute__((unused)),
   message_handlert &message_handler __attribute__((unused)))
 {
+  // TODO: Check the preprocess situation.
 #if 0
   return c_preprocess(path, outstream, false, message_handler);
 #endif
