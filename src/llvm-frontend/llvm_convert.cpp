@@ -2330,7 +2330,7 @@ void llvm_convertert::get_location(
   current_path = PLoc.getFilename();
 
   location.set_line(PLoc.getLine());
-  location.set_file(current_path);
+  location.set_file(get_filename_from_path());
 
   if(!function_name.empty())
     location.set_function(function_name);
