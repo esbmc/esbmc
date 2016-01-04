@@ -290,7 +290,8 @@ void llvm_convertert::get_struct_union_class(
   // Save the struct/union/class type address and name to the type map
   std::string symbol_name = symbol.name.as_string();
 
-  std::size_t address = reinterpret_cast<std::size_t>(&recordd);
+  std::size_t address =
+    reinterpret_cast<std::size_t>(recordd.getFirstDecl());
   type_map[address] = symbol_name;
 
   symbol.is_type = true;
@@ -2418,7 +2419,7 @@ void llvm_convertert::search_add_type_map(
   const clang::TagDecl &tag,
   type_mapt::iterator &type_it)
 {
-  std::size_t address = reinterpret_cast<std::size_t>(&tag);
+  std::size_t address = reinterpret_cast<std::size_t>(tag.getFirstDecl());
 
   // Search for the type on the type map
   type_it = type_map.find(address);
