@@ -1853,8 +1853,8 @@ void llvm_convertert::get_decl_ref(
 
       std::size_t address = reinterpret_cast<std::size_t>(&fd);
 
-      // We may not find the function's symbol, because it was
-      // not defined or is undefined at all
+      // We may not find the function's symbol, because it is
+      // undefined or not defined at all
       object_mapt::iterator it = object_map.find(address);
       if(it == object_map.end())
         identifier = "c::" + fd.getName().str();
