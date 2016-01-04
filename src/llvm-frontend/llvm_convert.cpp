@@ -17,6 +17,7 @@
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/ansi_c_expr.h>
+#include <ansi-c/type2name.h>
 
 #include <boost/filesystem.hpp>
 
@@ -262,8 +263,6 @@ void llvm_convertert::get_struct_union_class(
     abort();
   }
 
-  std::string identifier = get_tag_name(recordd.getName().str());
-
   struct_union_typet t;
   if(recordd.isStruct())
     t = struct_typet();
@@ -272,6 +271,22 @@ void llvm_convertert::get_struct_union_class(
   else
     // This should never be reached
     abort();
+
+  // Try to get the definition
+  clang::RecordDecl *record_def = recordd.getDefinition();
+
+  std::string identifier;
+
+  // If the struct is anonymous, its name will be a composition of its fields
+  if(recordd.isAnonymousStructOrUnion())
+  {
+    get_struct_union_class_fields(*record_def, t);
+    identifier = type2name(t);
+  }
+  else
+  {
+    identifier = get_tag_name(recordd.getName().str());
+  }
 
   t.tag(identifier);
 
@@ -282,7 +297,7 @@ void llvm_convertert::get_struct_union_class(
   get_default_symbol(
     symbol,
     t,
-    recordd.getName().str(),
+    identifier,
     identifier,
     location_begin,
     false); // There is no such thing as static struct/union/class on ANSI-C
@@ -303,46 +318,48 @@ void llvm_convertert::get_struct_union_class(
   // contain the fields, which are added to the symbol later on this method.
   move_symbol_to_context(symbol);
 
-  // Don't parse if it's not a complete definition, because we will parse the fields
-  // assign the type to the added symbol. If it's not a complete definition, we may
-  // end up replacing the type of a union/struct/class symbol with an empty type
-  if(!recordd.isCompleteDefinition())
+  // Don't continue to parse if it doesn't have a complete definition
+  if(!record_def)
     return;
 
   // Now get the symbol back to continue the conversion
   symbolt &added_symbol = context.symbols.find(symbol_name)->second;
 
+  // If it's anonymous, we already parsed the type
+  if(!recordd.isAnonymousStructOrUnion())
+  {
+    get_struct_union_class_fields(*record_def, t);
+    added_symbol.type = t;
+  }
+
+  // This change on the pretty_name is just to beautify the output
+  if(recordd.isStruct())
+    added_symbol.pretty_name = "struct " + identifier;
+  else if(recordd.isUnion())
+    added_symbol.pretty_name = "union " + identifier;
+}
+
+void llvm_convertert::get_struct_union_class_fields(
+  const clang::RecordDecl &recordd,
+  struct_union_typet &type)
+{
   for(const auto &decl : recordd.decls())
   {
-    exprt dummy;
     struct_typet::componentt comp;
+    get_decl(*decl, comp);
 
     // If we are parsing a field declaration, add it to the components
     if(decl->getKind() == clang::Decl::Field)
     {
-      get_decl(*decl, comp);
-
       if(comp.type().get_bool("anonymous"))
       {
         comp.name(comp.type().tag());
         comp.pretty_name(comp.type().tag());
       }
 
-      t.components().push_back(comp);
-    }
-    else
-    {
-      get_decl(*decl, dummy);
+      type.components().push_back(comp);
     }
   }
-
-  added_symbol.type = t;
-
-  // This change on the pretty_name is just to beautify the output
-  if(recordd.isStruct())
-    added_symbol.pretty_name = "struct " + recordd.getName().str();
-  else if(recordd.isUnion())
-    added_symbol.pretty_name = "union " + recordd.getName().str();
 }
 
 void llvm_convertert::get_typedef(

@@ -83,6 +83,10 @@ private:
     const clang::RecordDecl &recordd,
     exprt &new_expr);
 
+  void get_struct_union_class_fields(
+    const clang::RecordDecl &recordd,
+    struct_union_typet &type);
+
   void get_enum_constants(
     const clang::EnumConstantDecl &enumcd,
     exprt &new_expr);
