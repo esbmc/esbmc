@@ -429,6 +429,7 @@ public:
   virtual type2tc clone(void) const = 0;
 
   /** Instance of type_ids recording this types type. */
+  // XXX XXX XXX this should be const
   type_ids type_id;
 
   mutable size_t crc_val;
