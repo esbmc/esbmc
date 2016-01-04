@@ -2590,8 +2590,7 @@ void llvm_convertert::search_add_type_map(
 const clang::Decl* llvm_convertert::get_DeclContext_from_Stmt(
   const clang::Stmt& stmt)
 {
-  llvm::ArrayRef<clang::ast_type_traits::DynTypedNode>::iterator it =
-    ASTContext->getParents(stmt).begin();
+  auto it = ASTContext->getParents(stmt).begin();
 
   if(it == ASTContext->getParents(stmt).end())
     return nullptr;
