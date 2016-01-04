@@ -24,6 +24,7 @@
 #include <boost/mpl/not.hpp>
 #include <boost/mpl/bool.hpp>
 #include <boost/mpl/empty.hpp>
+#include <boost/mpl/push_front.hpp>
 #include <boost/mpl/pop_front.hpp>
 
 #include <boost/static_assert.hpp>
@@ -1017,8 +1018,15 @@ namespace esbmct {
     static constexpr membr_ptr value = v;
   };
 
-  typedef field_traits<type2t::type_ids, type2t, &type2t::type_id> type_id_field;
-  typedef boost::mpl::vector<type_id_field> type2t_traits;
+  template <typename T>
+    class type2t_traits
+  {
+  public:
+    typedef field_traits<type2t::type_ids, type2t, &type2t::type_id> type_id_field;
+    typedef typename boost::mpl::push_front<T, type_id_field>::type type;
+  };
+
+  typedef type2t_traits<boost::mpl::vector<>>::type type2t_default_traits;
 
   // Declaration
   template <class derived, class subclass, typename traits, typename enable = void>
@@ -1586,8 +1594,8 @@ public:
 
 // Then give them a typedef name
 
-typedef esbmct::type_methods2<bool_type2t, type2t, esbmct::type2t_traits> bool_type_methods;
-typedef esbmct::type_methods2<empty_type2t, type2t, esbmct::type2t_traits> empty_type_methods;
+typedef esbmct::type_methods2<bool_type2t, type2t, typename esbmct::type2t_default_traits> bool_type_methods;
+typedef esbmct::type_methods2<empty_type2t, type2t, typename esbmct::type2t_default_traits> empty_type_methods;
 typedef esbmct::type_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits> symbol_type_methods;
 typedef esbmct::type_methods2<struct_type2t, struct_union_data, struct_union_data::traits> struct_type_methods;
 typedef esbmct::type_methods2<union_type2t, struct_union_data, struct_union_data::traits> union_type_methods;
