@@ -103,6 +103,8 @@ void llvm_convertert::get_decl(
   const clang::Decl& decl,
   exprt &new_expr)
 {
+  new_expr = code_skipt();
+
   switch (decl.getKind())
   {
     // Label declaration
@@ -185,24 +187,6 @@ void llvm_convertert::get_decl(
       break;
     }
 
-    // Enum declaration
-    case clang::Decl::Enum:
-    {
-      const clang::EnumDecl &enumd =
-        static_cast<const clang::EnumDecl &>(decl);
-      get_enum(enumd, new_expr);
-      break;
-    }
-
-    // Enum values
-    case clang::Decl::EnumConstant:
-    {
-      const clang::EnumConstantDecl &enumcd =
-        static_cast<const clang::EnumConstantDecl &>(decl);
-      get_enum_constants(enumcd, new_expr);
-      break;
-    }
-
     case clang::Decl::IndirectField:
     {
       const clang::IndirectFieldDecl &fd =
@@ -237,12 +221,16 @@ void llvm_convertert::get_decl(
     // This is an empty declaration. An lost semicolon on the
     // code is an empty declaration
     case clang::Decl::Empty:
-      break;
 
     // If this fails, llvm will not generate the ASTs, we can
     // safely skip it
     case clang::Decl::StaticAssert:
-      new_expr = code_skipt();
+
+    // Enum declaration and values, we can safely skip them as
+    // any occurrence of those will be converted to int type (enum)
+    // or integer value (enum constant)
+    case clang::Decl::Enum:
+    case clang::Decl::EnumConstant:
       break;
 
     case clang::Decl::Namespace:
@@ -257,112 +245,6 @@ void llvm_convertert::get_decl(
       decl.dumpColor();
       abort();
   }
-  }
-
-void llvm_convertert::get_enum(
-  const clang::EnumDecl& enumd,
-  exprt& new_expr)
-{
-  new_expr = code_skipt();
-
-  std::string identifier = get_tag_name(enumd.getName().str());
-
-  typet t = enum_type();
-  t.tag(identifier);
-
-  locationt location_begin;
-  get_location_from_decl(enumd, location_begin);
-
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    t,
-    enumd.getName().str(),
-    identifier,
-    location_begin,
-    false); // There is no such thing as static enum on ANSI-C
-
-  // This change on the pretty_name is just to beautify the output
-  symbol.pretty_name = "enum " + enumd.getName().str();
-  symbol.is_type = true;
-
-  // Save the enum type address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(&enumd);
-  type_map[address] = symbol.name.as_string();
-
-  move_symbol_to_context(symbol);
-
-  for(const auto &enumerator : enumd.enumerators())
-  {
-    // Each enumerator will become a type, so we can
-    // ignore the generated expr
-    exprt dummy_enumerator;
-    get_decl(*enumerator, dummy_enumerator);
-  }
-}
-
-void llvm_convertert::get_enum_constants(
-  const clang::EnumConstantDecl& enumcd,
-  exprt& new_expr)
-{
-  // The parent enum to construct the enum constant's name
-  const clang::EnumDecl &enumd =
-    static_cast<const clang::EnumDecl &>(*enumcd.getDeclContext());
-
-  type_mapt::iterator it;
-  search_add_type_map(enumd, it);
-
-  std::string parent_identifier = it->second;
-
-  // remove c::
-  parent_identifier = parent_identifier.substr(3);
-
-  std::string identifier = parent_identifier + "::" + enumcd.getName().str();
-
-  std::string function_name = "";
-
-  // If the enum was defined inside a function or method, get its name to
-  // compose the enum_constant's name. We must get the context in which
-  // the enum was defined, because the context of the enum constant is
-  // the enum context.
-  if(enumd.getDeclContext()->isFunctionOrMethod())
-  {
-    const clang::FunctionDecl &funcd =
-      static_cast<const clang::FunctionDecl &>(*enumd.getDeclContext());
-
-    function_name = funcd.getName().str();
-  }
-
-  std::string enum_value_identifier = get_var_name(identifier, function_name);
-
-  typet t;
-  get_type(enumcd.getType(), t);
-
-  locationt location_begin;
-  get_location_from_decl(enumd, location_begin);
-
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    t,
-    enumcd.getName().str(),
-    enum_value_identifier,
-    location_begin,
-    false); // There is no such thing as static enum constants on ANSI-C
-
-  symbol.value =
-    constant_exprt(
-      integer2binary(enumcd.getInitVal().getSExtValue(), bv_width(int_type())),
-      integer2string(enumcd.getInitVal().getSExtValue()),
-      int_type());
-
-  new_expr = symbol.value;
-
-  // Save the enum constant address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(&enumcd);
-  object_map[address] = symbol.name.as_string();
-
-  move_symbol_to_context(symbol);
 }
 
 void llvm_convertert::get_struct_union_class(
@@ -892,16 +774,7 @@ void llvm_convertert::get_type(
 
     case clang::Type::Enum:
     {
-      const clang::EnumDecl &et =
-        *(static_cast<const clang::EnumType &>(the_type)).getDecl();
-
-      // Search for the type on the type map
-      type_mapt::iterator it;
-      search_add_type_map(et, it);
-
-      symbolt &s = context.symbols.find(it->second)->second;
-      new_type = s.type;
-
+      new_type = enum_type();
       break;
     }
 
@@ -1986,8 +1859,6 @@ void llvm_convertert::get_decl_ref(
     {
       const clang::EnumConstantDecl &enumcd =
         static_cast<const clang::EnumConstantDecl &>(decl);
-
-      get_type(enumcd.getType(), type);
 
       // For enum constants, we get their value directly
       new_expr =
