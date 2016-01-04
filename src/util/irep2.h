@@ -1018,15 +1018,15 @@ namespace esbmct {
     static constexpr membr_ptr value = v;
   };
 
-  template <typename T>
+  template <typename ...Args>
     class type2t_traits
   {
   public:
     typedef field_traits<type2t::type_ids, type2t, &type2t::type_id> type_id_field;
-    typedef typename boost::mpl::push_front<T, type_id_field>::type type;
+    typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_id_field>::type type;
   };
 
-  typedef type2t_traits<boost::mpl::vector<>>::type type2t_default_traits;
+  typedef type2t_traits<>::type type2t_default_traits;
 
   // Declaration
   template <class derived, class subclass, typename traits, typename enable = void>
