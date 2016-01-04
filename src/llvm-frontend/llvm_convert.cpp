@@ -776,7 +776,7 @@ void llvm_convertert::get_type(
       symbolt &s = context.symbols.find(it->second)->second;
       new_type = s.type;
 
-      if (!tag.getIdentifier() && !tag.getTypedefNameForAnonDecl())
+      if (tag.isAnonymousStructOrUnion())
         new_type.set("anonymous", true);
 
       break;
