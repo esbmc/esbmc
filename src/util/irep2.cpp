@@ -147,22 +147,6 @@ type2t::crc(void) const
   return seed;
 }
 
-size_t
-type2t::do_crc(size_t seed) const
-{
-  boost::hash_combine(seed, (uint8_t)type_id);
-  return seed;
-}
-
-void
-type2t::hash(crypto_hash &hash) const
-{
-  BOOST_STATIC_ASSERT(type2t::end_type_id < 256);
-  uint8_t tid = type_id;
-  hash.ingest(&tid, sizeof(tid));
-  return;
-}
-
 unsigned int
 bool_type2t::get_width(void) const
 {
@@ -413,23 +397,6 @@ expr2t::crc(void) const
 {
   size_t seed = 0;
   return do_crc(seed);
-}
-
-size_t
-expr2t::do_crc(size_t seed) const
-{
-  boost::hash_combine(seed, (uint8_t)expr_id);
-  return type->do_crc(seed);
-}
-
-void
-expr2t::hash(crypto_hash &hash) const
-{
-  BOOST_STATIC_ASSERT(expr2t::end_expr_id < 256);
-  uint8_t eid = expr_id;
-  hash.ingest(&eid, sizeof(eid));
-  type->hash(hash);
-  return;
 }
 
 expr2tc
@@ -2173,35 +2140,35 @@ template <class derived, class subclass, typename traits, typename enable>
 const expr2tc *
 esbmct::expr_methods2<derived, subclass, traits, enable>::get_sub_expr(unsigned int i) const
 {
-  return superclass::get_sub_expr(0, i);
+  return superclass::get_sub_expr(0, i); // Skips expr_id
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 expr2tc *
 esbmct::expr_methods2<derived, subclass, traits, enable>::get_sub_expr_nc(unsigned int i)
 {
-  return superclass::get_sub_expr_nc(0, i);
+  return superclass::get_sub_expr_nc(0, i); // Skips expr_id
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 unsigned int
 esbmct::expr_methods2<derived, subclass, traits, enable>::get_num_sub_exprs(void) const
 {
-  return superclass::get_num_sub_exprs();
+  return superclass::get_num_sub_exprs(); // Skips expr_id
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 void
 esbmct::expr_methods2<derived, subclass, traits, enable>::list_operands(std::list<const expr2tc*> &inp) const
 {
-  superclass::list_operands_rec(inp);
+  superclass::list_operands_rec(inp); // Skips expr_id
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 void
 esbmct::expr_methods2<derived, subclass, traits, enable>::list_operands(std::list<expr2tc*> &inp)
 {
-  superclass::list_operands_rec(inp);
+  superclass::list_operands_rec(inp); // Skips expr_id
 }
 
 // Types
@@ -2221,7 +2188,7 @@ esbmct::type_methods2<derived, subclass, traits, enable>::tostring(unsigned int 
 {
   list_of_memberst thevector;
 
-  tostring_rec(0, thevector, indent);
+  superclass::tostring_rec(0, thevector, indent); // Skips type_id / expr_id
   return thevector;
 }
 
@@ -2229,14 +2196,14 @@ template <class derived, class subclass, typename traits, typename enable>
 bool
 esbmct::type_methods2<derived, subclass, traits, enable>::cmp(const type2t &ref) const
 {
-  return cmp_rec(ref);
+  return cmp_rec(ref); // _includes_ type_id / expr_id
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 int
 esbmct::type_methods2<derived, subclass, traits, enable>::lt(const type2t &ref) const
 {
-  return lt_rec(ref);
+  return lt_rec(ref); // _includes_ type_id / expr_id
 }
 
 template <class derived, class subclass, typename traits,  typename enable>
@@ -2254,12 +2221,8 @@ esbmct::type_methods2<derived, subclass, traits,  enable>::do_crc(size_t seed) c
   // this calculation, as the crc value needs to uniquely identify _this_
   // expression.
   assert(this->crc_val == 0);
-  // Call through to base type2t implementation
-  // XXX formulate assertion
-  size_t tmp = superclass::do_crc(0);
-  boost::hash_combine(this->crc_val, (lolnoop)tmp);
 
-  do_crc_rec();
+  do_crc_rec(); // _includes_ type_id / expr_id
 
   // Finally, combine the crc of this expr with the input seed, and return
   boost::hash_combine(seed, (lolnoop)this->crc_val);
@@ -2270,11 +2233,8 @@ template <class derived, class subclass, typename traits, typename enable>
 void
 esbmct::type_methods2<derived, subclass, traits, enable>::hash(crypto_hash &hash) const
 {
-  // Call through to base type2t implementation
-  // XXX formulate assertion
-  type2t::hash(hash);
 
-  hash_rec(hash);
+  hash_rec(hash); // _includes_ type_id / expr_id
   return;
 }
 

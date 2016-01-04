@@ -410,7 +410,7 @@ public:
    *  @param seed Hash to accumulate hash data into.
    *  @return Hash value
    */
-  virtual size_t do_crc(size_t seed) const;
+  virtual size_t do_crc(size_t seed) const = 0;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
@@ -421,7 +421,7 @@ public:
    *  @see do_crc
    *  @param hash Object to accumulate hash data into.
    */
-  virtual void hash(crypto_hash &hash) const;
+  virtual void hash(crypto_hash &hash) const = 0;
 
   /** Clone method. Self explanatory.
    *  @return New container, containing a duplicate of this object.
@@ -668,7 +668,7 @@ public:
    *  @param seed Hash to accumulate expression data into.
    *  @return Hash value
    */
-  virtual size_t do_crc(size_t seed) const;
+  virtual size_t do_crc(size_t seed) const = 0;
 
   /** Perform hash operation accumulating into parameter.
    *  Feeds data as appropriate to the type of the expression into the
@@ -679,7 +679,7 @@ public:
    *  @see do_crc
    *  @param hash Object to accumulate hash data into.
    */
-  virtual void hash(crypto_hash &hash) const;
+  virtual void hash(crypto_hash &hash) const = 0;
 
   /** Generate a list of expr operands.
    *  Use forall_operands2 instead; this method is overridden by subclasses and
