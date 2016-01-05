@@ -1856,9 +1856,14 @@ void llvm_convertert::get_decl_ref(
       // undefined or not defined at all
       object_mapt::iterator it = object_map.find(address);
       if(it == object_map.end())
-        identifier = "c::" + fd.getName().str();
+      {
+        identifier =
+          get_default_name(fd.getName().str(), !fd.isExternallyVisible());
+      }
       else
+      {
         identifier = it->second;
+      }
 
       get_type(fd.getType(), type);
       break;
@@ -2233,15 +2238,21 @@ void llvm_convertert::get_default_symbol(
   symbol.type = type;
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
+  symbol.name = get_default_name(pretty_name, is_local);
+}
 
+std::string llvm_convertert::get_default_name(
+  std::string name,
+  bool is_local)
+{
   std::string symbol_name = "c::";
 
   if(is_local)
     symbol_name += get_modulename_from_path() + "::";
 
-  symbol_name += pretty_name;
+  symbol_name += name;
 
-  symbol.name = symbol_name;
+  return symbol_name;
 }
 
 std::string llvm_convertert::get_var_name(

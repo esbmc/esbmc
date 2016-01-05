@@ -135,6 +135,10 @@ private:
     locationt location,
     bool is_local);
 
+  std::string get_default_name(
+    std::string name,
+    bool is_local);
+
   std::string get_var_name(
     std::string name,
     std::string function_name);
