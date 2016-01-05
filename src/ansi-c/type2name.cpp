@@ -39,7 +39,11 @@ std::string type2name(const typet &type)
     result+='v';
 
   if(type.id()=="")
-    throw "Empty type encountered.";
+  {
+    std::cerr <<
+      "Empty type encountered when creating struct irep" << std::endl;
+    abort();
+  }
   else if(type.id()=="empty")
     result+='V';
   else if(type.id()=="signedbv")
