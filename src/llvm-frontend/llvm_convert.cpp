@@ -490,7 +490,8 @@ void llvm_convertert::get_function(
   if(fd.isVariadic())
     type.make_ellipsis();
 
-  type.inlined(fd.isInlined());
+  if(fd.isInlined())
+    type.inlined(true);
 
   locationt location_begin;
   get_location_from_decl(fd, location_begin);
@@ -502,7 +503,7 @@ void llvm_convertert::get_function(
     fd.getName().str(),
     fd.getName().str(),
     location_begin,
-    (fd.getStorageClass() == clang::SC_Static));
+    !fd.isExternallyVisible());
 
   std::string symbol_name = symbol.name.as_string();
 
@@ -511,11 +512,11 @@ void llvm_convertert::get_function(
   object_map[address] = symbol.name.as_string();
 
   symbol.lvalue = true;
+  symbol.is_extern = fd.getStorageClass() == clang::SC_Extern
+                     || fd.getStorageClass() == clang::SC_PrivateExtern;
+  symbol.file_local = !fd.isExternallyVisible();
 
   move_symbol_to_context(symbol);
-
-  if(!fd.isThisDeclarationADefinition())
-    return;
 
   // Now get the symbol back to continue the conversion
   symbolt &added_symbol = context.symbols.find(symbol_name)->second;
@@ -589,6 +590,11 @@ void llvm_convertert::get_function_params(
   // Save the function's param address and name to the object map
   std::size_t address = reinterpret_cast<std::size_t>(&pdecl);
   object_map[address] = param_symbol.name.as_string();
+
+  // If the function is not defined, we don't need to add it's parameter
+  // to the context, they will never be used
+  if(!funcd.isDefined())
+    return;
 
   move_symbol_to_context(param_symbol);
 }
