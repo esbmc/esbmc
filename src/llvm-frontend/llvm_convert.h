@@ -144,7 +144,7 @@ private:
     std::string function_name);
 
   std::string get_tag_name(
-    std::string name);
+    const clang::RecordDecl& recordd);
 
   void get_location_from_decl(
     const clang::Decl& decl,

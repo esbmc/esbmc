@@ -275,19 +275,7 @@ void llvm_convertert::get_struct_union_class(
   // Try to get the definition
   clang::RecordDecl *record_def = recordd.getDefinition();
 
-  std::string identifier;
-
-  // If the struct is anonymous, its name will be a composition of its fields
-  if(recordd.isAnonymousStructOrUnion())
-  {
-    get_struct_union_class_fields(*record_def, t);
-    identifier = type2name(t);
-  }
-  else
-  {
-    identifier = get_tag_name(recordd.getName().str());
-  }
-
+  std::string identifier = get_tag_name(recordd);
   t.tag(identifier);
 
   locationt location_begin;
@@ -325,12 +313,8 @@ void llvm_convertert::get_struct_union_class(
   // Now get the symbol back to continue the conversion
   symbolt &added_symbol = context.symbols.find(symbol_name)->second;
 
-  // If it's anonymous, we already parsed the type
-  if(!recordd.isAnonymousStructOrUnion())
-  {
-    get_struct_union_class_fields(*record_def, t);
-    added_symbol.type = t;
-  }
+  get_struct_union_class_fields(*record_def, t);
+  added_symbol.type = t;
 
   // This change on the pretty_name is just to beautify the output
   if(recordd.isStruct())
@@ -2292,14 +2276,22 @@ std::string llvm_convertert::get_param_name(
 }
 
 std::string llvm_convertert::get_tag_name(
-  std::string name)
+  const clang::RecordDecl& recordd)
 {
   std::string pretty_name = "tag-";
 
-  if(name.empty())
-    pretty_name = "#anon"+i2string(anon_counter++);
+  if(recordd.getName().str().empty())
+  {
+    clang::RecordDecl *record_def = recordd.getDefinition();
+    struct_typet t;
+    get_struct_union_class_fields(*record_def, t);
 
-  pretty_name += name;
+    pretty_name = "anon#" + type2name(t);
+  }
+  else
+  {
+    pretty_name += recordd.getName().str();
+  }
 
   return pretty_name;
 }
