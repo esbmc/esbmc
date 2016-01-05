@@ -34,11 +34,11 @@ c2goto_LDADD = libansic.la libansicscanner.la ../llvm-frontend/libllvmfrontend.a
 libclib_la_SOURCES = cprover_library.cpp clib32.c clib64.c
 
 clib32.c: c2goto
-	./c2goto $(srcdir)/library/*.c --output clib32.goto --no-lock-check
+	./c2goto $(srcdir)/library/*.c --output clib32.goto
 	$(srcdir)/headers/flail.sh clib32 clib32.goto > $@
 
 clib64.c: c2goto
-	./c2goto $(srcdir)/library/*.c --64 --output clib64.goto --no-lock-check
+	./c2goto $(srcdir)/library/*.c --64 --output clib64.goto
 	$(srcdir)/headers/flail.sh clib64 clib64.goto > $@
 
 clean-local:

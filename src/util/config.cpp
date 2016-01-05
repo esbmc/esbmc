@@ -176,11 +176,6 @@ bool configt::set(const cmdlinet &cmdline)
     #endif
   }
 
-  if(cmdline.isset("no-lock-check"))
-    ansi_c.lock_check=false;
-  else
-	ansi_c.lock_check=true;
-
   if(cmdline.isset("deadlock-check"))
     ansi_c.deadlock_check=true;
   else
