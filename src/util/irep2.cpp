@@ -147,6 +147,22 @@ type2t::crc(void) const
   return seed;
 }
 
+size_t
+type2t::do_crc(size_t seed) const
+{
+  boost::hash_combine(seed, (uint8_t)type_id);
+  return seed;
+}
+
+void
+type2t::hash(crypto_hash &hash) const
+{
+  BOOST_STATIC_ASSERT(type2t::end_type_id < 256);
+  uint8_t tid = type_id;
+  hash.ingest(&tid, sizeof(tid));
+  return;
+}
+
 unsigned int
 bool_type2t::get_width(void) const
 {
@@ -397,6 +413,23 @@ expr2t::crc(void) const
 {
   size_t seed = 0;
   return do_crc(seed);
+}
+
+size_t
+expr2t::do_crc(size_t seed) const
+{
+  boost::hash_combine(seed, (uint8_t)expr_id);
+  return type->do_crc(seed);
+}
+
+void
+expr2t::hash(crypto_hash &hash) const
+{
+  BOOST_STATIC_ASSERT(expr2t::end_expr_id < 256);
+  uint8_t eid = expr_id;
+  hash.ingest(&eid, sizeof(eid));
+  type->hash(hash);
+  return;
 }
 
 expr2tc
