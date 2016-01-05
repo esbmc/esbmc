@@ -468,6 +468,10 @@ void llvm_convertert::get_function(
   const clang::FunctionDecl &fd,
   exprt &new_expr)
 {
+  // If the function is not defined but this is not the definition, skip it
+  if(fd.isDefined() && !fd.isThisDeclarationADefinition())
+    return;
+
   // TODO: use fd.isMain to flag and check the flag on llvm_adjust_expr
   // to saner way to add argc/argv/envp
 
