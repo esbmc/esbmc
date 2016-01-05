@@ -75,6 +75,7 @@ int main(int argc, const char **argv)
 
 const mode_table_et mode_table[] =
 {
+  LANGAPI_HAVE_MODE_LLVM,
   LANGAPI_HAVE_MODE_C,
   LANGAPI_HAVE_MODE_END
 };
