@@ -315,13 +315,8 @@ void language_uit::show_symbol_table_plain(std::ostream &out)
     if(symbol.file_local)      out << " file_local";
     if(symbol.is_type)         out << " type";
     if(symbol.is_extern)       out << " extern";
-    if(symbol.is_input)        out << " input";
-    if(symbol.is_output)       out << " output";
     if(symbol.is_macro)        out << " macro";
-    if(symbol.is_actual)       out << " actual";
-    if(symbol.binding)         out << " binding";
-    if(symbol.free_var)        out << " free_var";
-    if(symbol.is_statevar)     out << " statevar";
+    if(symbol.is_parameter)    out << " parameter";
 
     out << std::endl;
     out << "Location....: " << symbol.location << std::endl;

@@ -151,7 +151,7 @@ public:
     symbol.is_type=get_is_type();
     symbol.is_extern=get_is_extern();
     symbol.is_macro=get_is_macro();
-    symbol.is_actual=get_is_argument();
+    symbol.is_parameter=get_is_argument();
 
     bool is_code=symbol.type.is_code();
   

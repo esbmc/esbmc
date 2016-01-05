@@ -572,7 +572,7 @@ void llvm_convertert::get_function_params(
     false); // function parameter cannot be static
 
   param_symbol.lvalue = true;
-  param_symbol.is_actual = true;
+  param_symbol.is_parameter = true;
 
   param.cmt_identifier(param_symbol.name.as_string());
   param.location() = param_symbol.location;

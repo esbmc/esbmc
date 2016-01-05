@@ -220,7 +220,7 @@ Function: c_typecheck_baset::typecheck_new_symbol
 
 void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
 {
-  if(symbol.is_actual)
+  if(symbol.is_parameter)
     adjust_function_argument(symbol.type);
 
   // check initializer, if needed

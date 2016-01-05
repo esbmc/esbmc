@@ -511,7 +511,6 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
     if(!is_code)
     {
       // it is a variable
-      symbol.is_statevar=true;
       symbol.lvalue = !is_reference(symbol.type) &&
                       !(symbol.type.cmt_constant() &&
                       is_number(symbol.type) &&
