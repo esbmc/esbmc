@@ -417,18 +417,20 @@ void llvm_convertert::get_var(
     vd.getName().str(),
     identifier,
     location_begin,
-    (!vd.hasGlobalStorage() || !vd.isExternallyVisible()));
+    !vd.isExternallyVisible());
 
-  if (vd.hasGlobalStorage())
+  if (vd.hasGlobalStorage() && !vd.hasInit())
   {
     // Initialize with zero value, if the symbol has initial value,
     // it will be add later on this method
     symbol.value = gen_zero(t, true);
+    symbol.value.zero_initializer(true);
   }
 
   symbol.lvalue = true;
   symbol.static_lifetime = vd.hasGlobalStorage();
   symbol.is_extern = vd.hasExternalStorage();
+  symbol.file_local = !vd.isExternallyVisible();
 
   // Save the variable address and name to the object map
   std::string symbol_name = symbol.name.as_string();
@@ -483,6 +485,8 @@ void llvm_convertert::get_function(
 
   if(fd.isVariadic())
     type.make_ellipsis();
+
+  type.inlined(fd.isInlined());
 
   locationt location_begin;
   get_location_from_decl(fd, location_begin);
@@ -573,6 +577,7 @@ void llvm_convertert::get_function_params(
 
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
 
   param.cmt_identifier(param_symbol.name.as_string());
   param.location() = param_symbol.location;
