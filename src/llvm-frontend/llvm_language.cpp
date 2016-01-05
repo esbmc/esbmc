@@ -50,6 +50,7 @@ languaget *new_llvm_language()
 llvm_languaget::llvm_languaget()
 {
   search_clang_headers();
+  internal_additions();
 }
 
 llvm_languaget::~llvm_languaget()
@@ -169,8 +170,10 @@ bool llvm_languaget::parse(const std::string& path)
 
   std::vector<std::string> sources;
   sources.push_back(path);
+  sources.push_back("/esbmc_intrinsics.h");
 
   clang::tooling::ClangTool Tool(Compilations, sources);
+  Tool.mapVirtualFile("/esbmc_intrinsics.h", intrinsics);
 
   Tool.buildASTs(ASTs);
 
@@ -190,24 +193,6 @@ bool llvm_languaget::typecheck(
   const std::string& module,
   message_handlert& message_handler)
 {
-  std::string intrinsics;
-  internal_additions(intrinsics);
-
-  // Finish the compiler string
-  std::vector<std::string> compiler_string;
-  build_compiler_string(compiler_string);
-
-  // TODO: Change to JSONCompilationDatabase
-  clang::tooling::FixedCompilationDatabase Compilations("./", compiler_string);
-
-  std::vector<std::string> sources;
-  sources.push_back("/esbmc_intrinsics.c");
-
-  clang::tooling::ClangTool Tool(Compilations, sources);
-  Tool.mapVirtualFile("/esbmc_intrinsics.c", intrinsics);
-
-  Tool.buildASTs(ASTs);
-
   return convert(context, module, message_handler);
 }
 
@@ -261,9 +246,9 @@ bool llvm_languaget::final(contextt& context, message_handlert& message_handler)
   return llvm_main(context, "c::", "c::main", message_handler);
 }
 
-void llvm_languaget::internal_additions(std::string &str)
+void llvm_languaget::internal_additions()
 {
-  str+=
+  intrinsics+=
     "void __ESBMC_assume(_Bool assumption);\n"
     "void assert(_Bool assertion);\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"

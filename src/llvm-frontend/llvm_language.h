@@ -75,7 +75,7 @@ public:
   llvm_languaget();
 
 protected:
-  void internal_additions(std::string &str);
+  void internal_additions();
 
   bool parse(const std::string &path);
 
@@ -88,6 +88,7 @@ protected:
   void build_compiler_string(std::vector<std::string> &compiler_string);
 
   std::string headers_path;
+  std::string intrinsics;
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 };
 
