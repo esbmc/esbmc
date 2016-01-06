@@ -174,6 +174,6 @@ int main() {
 
   pthread_create(&t1, NULL, qrcu_reader1, NULL);
   pthread_create(&t2, NULL, qrcu_reader2, NULL);
-  pthread_create(&t3, NULL, qrcu_writer, NULL);
+  pthread_create(&t3, NULL, qrcu_updater, NULL);
 } 
 
