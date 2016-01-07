@@ -119,7 +119,7 @@ elif grep -q "VERIFICATION FAILED" ${TMPFILE}; then
     fi
   else 
 
-    if test ${IS_OVERFLOW_BENCHMARK} != 1; then    
+    if test ${IS_OVERFLOW_BENCHMARK} != 1; then
       # Do we still have time to check the witness?
       diff_timeout=$((875 - (END-START)))
 
