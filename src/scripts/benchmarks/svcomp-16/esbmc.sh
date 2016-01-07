@@ -49,7 +49,6 @@ Options:
             property_list=$OPTARG
             
             if grep -q -E "LTL[(]G (valid-free|valid-deref|valid-memtrack)" $OPTARG; then
-              echo "Unsupported Property"
               IS_MEMSAFETY_BENCHMARK=1
             elif grep -q -E "LTL[(]F end" $OPTARG; then
               echo "Unsupported Property"
