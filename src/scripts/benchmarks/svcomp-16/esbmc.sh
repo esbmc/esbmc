@@ -106,7 +106,9 @@ timeout=0
 END=$(date +%s);
 
 # Postprocessing: first, collect some facts
-if grep -q "VERIFICATION FAILED" ${TMPFILE}; then
+if grep -i -q "Timed out" ${TMPFILE}; then
+  timeout=1
+elif grep -q "VERIFICATION FAILED" ${TMPFILE}; then
 
   valid_fail=0
 
@@ -165,8 +167,6 @@ if grep -q "VERIFICATION FAILED" ${TMPFILE}; then
   fi
 elif grep -q "VERIFICATION SUCCESSFUL" ${TMPFILE}; then
   success=1
-elif grep -i -q "Timed out" ${TMPFILE}; then
-  timeout=1
 fi
 
 get_memsafety_violated_property() {
@@ -183,7 +183,9 @@ get_memsafety_violated_property() {
 # a counterexample first. The output file may contain both success and failure,
 # if a smaller unwind bound didn't uncover the error. But if there's a
 # counterexample, then there's an error.
-if test $failed = 1; then
+if test $timeout = 1; then
+    echo "Timed Out"
+elif test $failed = 1; then
 
     VPROP=""
     if test ${IS_OVERFLOW_BENCHMARK} = 1; then
@@ -198,8 +200,6 @@ if test $failed = 1; then
 elif test $success = 1; then
     echo "TRUE"
     # Clean up after ourselves
-elif test $timeout = 1; then
-    echo "Timed Out"
 else
     echo "UNKNOWN"
 fi
