@@ -87,19 +87,27 @@ void llvm_convertert::convert_float_literal(
   typet type,
   exprt &dest)
 {
-  llvm::SmallVector<char, 16> string;
+  if(!config.ansi_c.use_fixed_for_float)
+  {
+    std::cerr << "floatbv unsupported, sorry" << std::endl;
+    abort();
+  }
+
+  llvm::SmallVector<char, 32> string;
   val.toString(string, 32, 0);
 
-  mp_integer significand;
-  mp_integer exponent;
-
-  parse_float(string, significand, exponent);
-
   dest = constant_exprt(type);
+  unsigned width = atoi(dest.type().width().c_str());
 
-  if(config.ansi_c.use_fixed_for_float)
+  mp_integer value;
+
+  if(!val.isInfinity())
   {
-    unsigned width = atoi(dest.type().width().c_str());
+    mp_integer significand;
+    mp_integer exponent;
+
+    parse_float(string, significand, exponent);
+
     unsigned fraction_bits;
     const std::string &integer_bits = dest.type().integer_bits().as_string();
 
@@ -109,24 +117,32 @@ void llvm_convertert::convert_float_literal(
       fraction_bits = width - atoi(integer_bits.c_str());
 
     mp_integer factor = mp_integer(1) << fraction_bits;
-    mp_integer value = significand * factor;
+    value = significand * factor;
 
-    if (exponent < 0)
+    if(exponent < 0)
       value /= power(10, -exponent);
     else
+    {
       value *= power(10, exponent);
 
-    dest.value(integer2binary(value, width));
+      if(value <= -power(2, width - 1) - 1)
+      {
+        // saturate: use "smallest value"
+        value = -power(2, width - 1);
+      }
+    }
   }
   else
   {
-    std::cerr << "floatbv unsupported, sorry" << std::endl;
-    abort();
+    // saturate: use "biggest value"
+    value = power(2, width - 1) - 1;
   }
+
+  dest.value(integer2binary(value, width));
 }
 
 void llvm_convertert::parse_float(
-  llvm::SmallVector<char, 16> &src,
+  llvm::SmallVector<char, 32> &src,
   mp_integer &significand,
   mp_integer &exponent)
 {

@@ -189,7 +189,7 @@ private:
     exprt &dest);
 
   void parse_float(
-    llvm::SmallVector<char, 16> &src,
+    llvm::SmallVector<char, 32> &src,
     mp_integer &significand,
     mp_integer &exponent);
 
