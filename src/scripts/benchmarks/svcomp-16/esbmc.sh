@@ -19,7 +19,7 @@ BENCHMARK_FALSE_VALID_DEREF="(${PROPERTY_INVALID_POINTER_TAG}|${PROPERTY_ARRAY_B
 tokenizer_path=./tokenizer
 
 # Path to the ESBMC binary
-path_to_esbmc=esbmc
+path_to_esbmc=./esbmc
 
 # cpachecker command
 cpa_command="scripts/cpa.sh -noout -witness-check "
