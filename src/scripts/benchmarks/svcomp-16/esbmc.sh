@@ -71,12 +71,8 @@ if ! [ -f "${benchmark}" ]; then
     exit 1
 fi
 
-if [ ! -d "witnesses" ]; then
-    mkdir witnesses
-fi
-
 # Add graphml informations
-TMPGRAPHML="witnesses/`basename ${benchmark}`_witness.graphml"
+TMPGRAPHML="error-witness.graphml"
 cmdline="$cmdline --witnesspath $TMPGRAPHML --tokenizer $tokenizer_path"
 
 if test $IS_OVERFLOW_BENCHMARK = 1; then
