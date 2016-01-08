@@ -20,5 +20,5 @@ extern int __ESBMC_rounding_mode;
 
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
 
-unsigned int __ESBMC_spawn_thread(void (*)(void));
+
 void __ESBMC_terminate_thread(void);
