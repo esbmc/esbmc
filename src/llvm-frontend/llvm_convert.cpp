@@ -2293,15 +2293,24 @@ std::string llvm_convertert::get_param_name(
 std::string llvm_convertert::get_tag_name(
   const clang::RecordDecl& recordd)
 {
-  std::string pretty_name = "tag-";
+  std::string pretty_name = "";
 
   if(recordd.getName().str().empty())
   {
     clang::RecordDecl *record_def = recordd.getDefinition();
-    struct_typet t;
+
+    struct_union_typet t;
+    if(recordd.isStruct())
+      t = struct_typet();
+    else if(recordd.isUnion())
+      t = union_typet();
+    else
+      // This should never be reached
+      abort();
+
     get_struct_union_class_fields(*record_def, t);
 
-    pretty_name = "anon#" + type2name(t);
+    pretty_name += "#anon#" + type2name(t);
   }
   else
   {
