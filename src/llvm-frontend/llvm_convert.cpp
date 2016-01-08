@@ -286,7 +286,7 @@ void llvm_convertert::get_struct_union_class(
     symbol,
     t,
     identifier,
-    identifier,
+    "tag-" + identifier,
     location_begin,
     false); // There is no such thing as static struct/union/class on ANSI-C
 
@@ -629,7 +629,7 @@ void llvm_convertert::get_type(
       if(sub_type.is_struct() || sub_type.is_union())
       {
         struct_union_typet t = to_struct_union_type(sub_type);
-        sub_type = symbol_typet("c::" + t.tag().as_string());
+        sub_type = symbol_typet("c::tag-" + t.tag().as_string());
       }
 
       new_type = gen_pointer_type(sub_type);
@@ -1179,7 +1179,7 @@ void llvm_convertert::get_expr(
       if(size_type.is_struct() || size_type.is_union())
       {
         struct_union_typet t = to_struct_union_type(size_type);
-        size_type = symbol_typet("c::" + t.tag().as_string());
+        size_type = symbol_typet("c::tag-" + t.tag().as_string());
       }
 
       new_expr.set("#c_sizeof_type", size_type);
