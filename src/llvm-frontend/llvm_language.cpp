@@ -139,19 +139,26 @@ void llvm_languaget::build_compiler_string(
   if(config.ansi_c.char_is_unsigned)
     compiler_string.push_back("-funsigned-char");
 
-  if(config.ansi_c.deadlock_check)
+  if(config.options.get_bool_option("deadlock-check"))
   {
     compiler_string.push_back("-Dpthread_join=pthread_join_switch");
     compiler_string.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
     compiler_string.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
     compiler_string.push_back("-Dpthread_cond_wait=pthread_cond_wait_check");
   }
+  else if (config.options.get_bool_option("lock-order-check"))
+  {
+    compiler_string.push_back("-Dpthread_join=pthread_join_noswitch");
+    compiler_string.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_nocheck");
+    compiler_string.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_nocheck");
+    compiler_string.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
+  }
   else
   {
     compiler_string.push_back("-Dpthread_join=pthread_join_noswitch");
-    compiler_string.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
-    compiler_string.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
-    compiler_string.push_back("-Dpthread_cond_wait=pthread_cond_wait_check");
+    compiler_string.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_noassert");
+    compiler_string.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_noassert");
+    compiler_string.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
   for(auto def : config.ansi_c.defines)

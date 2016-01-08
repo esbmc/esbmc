@@ -176,11 +176,6 @@ bool configt::set(const cmdlinet &cmdline)
     #endif
   }
 
-  if(cmdline.isset("deadlock-check"))
-    ansi_c.deadlock_check=true;
-  else
-    ansi_c.deadlock_check=false;
-
   if(cmdline.isset("no-library"))
     ansi_c.lib=configt::ansi_ct::LIB_NONE;
 
