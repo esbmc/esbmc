@@ -15,30 +15,29 @@
 char *strcpy(char *dst, const char *src)
 {
   __ESBMC_HIDE:;
-  size_t i;
+  size_t i = 0;
   char ch;
   do
   {
-    ch=src[i];
-    dst[i]=ch;
+    ch = src[i];
+    dst[i] = ch;
     i++;
-  } while(ch!=(char)0);
-
+  } while (ch != (char) 0);
   return dst;
 }
 
 char *strncpy(char *dst, const char *src, size_t n)
 {
   __ESBMC_HIDE:;
-  size_t i=0;
+  size_t i = 0;
   char ch;
   _Bool end;
 
-  for(end=0; i<n; i++)
+  for (end = 0; i < n; i++)
   {
-    ch=end?0:src[i];
-    dst[i]=ch;
-    end=end || ch==(char)0;
+    ch = end ? 0 : src[i];
+    dst[i] = ch;
+    end = end || ch == (char) 0;
   }
   return dst;
 }
@@ -46,6 +45,19 @@ char *strncpy(char *dst, const char *src, size_t n)
 char *strcat(char *dst, const char *src)
 {
   __ESBMC_HIDE:;
+  size_t i = 0;
+  while (dst[i] != 0)
+    i++;
+
+  size_t j = 0;
+  char ch;
+  do
+  {
+    char ch = src[j];
+    dst[i] = ch;
+    i++;
+    j++;
+  } while (ch != (char) 0);
   return dst;
 }
 
@@ -58,24 +70,55 @@ char *strncat(char *dst, const char *src, size_t n)
 int strcmp(const char *s1, const char *s2)
 {
   __ESBMC_HIDE:;
-  int retval;
-  if(s1!=0 && s1==s2) return 0;
-  return retval;
+  size_t i = 0;
+  unsigned char ch1, ch2;
+  do
+  {
+    ch1 = s1[i];
+    ch2 = s2[i];
+
+    if (ch1 == ch2)
+    {
+    }
+    else if (ch1 < ch2)
+      return -1;
+    else
+      return 1;
+
+    i++;
+  } while (ch1 != 0 && ch2 != 0);
   return 0;
 }
 
 int strncmp(const char *s1, const char *s2, size_t n)
 {
   __ESBMC_HIDE:;
-  if(s1!=0 && s1==s2) return 0;
+  size_t i = 0;
+  unsigned char ch1, ch2;
+  do
+  {
+    ch1 = s1[i];
+    ch2 = s2[i];
+
+    if (ch1 == ch2)
+    {
+    }
+    else if (ch1 < ch2)
+      return -1;
+    else
+      return 1;
+
+    i++;
+  } while (ch1 != 0 && ch2 != 0 && i < n);
   return 0;
 }
 
 size_t strlen(const char *s)
 {
   __ESBMC_HIDE:;
-  size_t len=0;
-  while(s[len]!=0) len++;
+  size_t len = 0;
+  while (s[len] != 0)
+    len++;
   return len;
 }
 
@@ -83,10 +126,11 @@ char *strdup(const char *str)
 {
   __ESBMC_HIDE:;
   size_t bufsz;
-  bufsz=(strlen(str)+1)*sizeof(char);
-  char *cpy=malloc(bufsz);
-  if(cpy==((void *)0)) return 0;
-  cpy=strcpy(cpy, str);
+  bufsz = (strlen(str) + 1);
+  char *cpy = (char *) malloc(bufsz * sizeof(char));
+  if (cpy == ((void *) 0))
+    return 0;
+  strcpy(cpy, str);
   return cpy;
 }
 
