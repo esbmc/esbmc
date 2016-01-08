@@ -161,11 +161,20 @@ void llvm_convertert::get_decl(
       typet t;
       get_type(fd.getType(), t);
 
-      std::string field_identifier =
-        get_var_name(fd.getName().str(), "");
+      std::string field_identifier;
+      struct_union_typet::componentt comp;
+      comp.type() = t;
 
-      struct_union_typet::componentt comp(field_identifier, t);
-      comp.set_pretty_name(fd.getName().str());
+      if(t.get_bool("anonymous"))
+      {
+        comp.name(to_struct_union_type(t).tag());
+        comp.pretty_name(to_struct_union_type(t).tag());
+      }
+      else
+      {
+        comp.name(get_var_name(fd.getName().str(), ""));
+        comp.pretty_name(fd.getName().str());
+      }
 
       if(fd.isBitField())
       {
@@ -778,7 +787,7 @@ void llvm_convertert::get_type(
       symbolt &s = context.symbols.find(it->second)->second;
       new_type = s.type;
 
-      if (tag.isAnonymousStructOrUnion())
+      if (tag.getName().str().empty())
         new_type.set("anonymous", true);
 
       break;
