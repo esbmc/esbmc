@@ -123,10 +123,6 @@ private:
     const clang::CastExpr &cast,
     exprt &new_expr);
 
-  void get_predefined_expr(
-    const clang::PredefinedExpr &pred_expr,
-    exprt &new_expr);
-
   void get_default_symbol(
     symbolt &symbol,
     typet type,

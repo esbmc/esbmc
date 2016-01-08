@@ -1033,7 +1033,7 @@ void llvm_convertert::get_expr(
       const clang::PredefinedExpr &pred_expr =
         static_cast<const clang::PredefinedExpr&>(stmt);
 
-      get_predefined_expr(pred_expr, new_expr);
+      convert_string_literal(*pred_expr.getFunctionName(), new_expr);
       break;
     }
 
@@ -2195,36 +2195,6 @@ void llvm_convertert::get_compound_assign_expr(
     gen_typecast(ns, rhs, lhs.type());
 
   new_expr.copy_to_operands(lhs, rhs);
-}
-
-void llvm_convertert::get_predefined_expr(
-  const clang::PredefinedExpr& pred_expr,
-  exprt& new_expr)
-{
-  typet t;
-  get_type(pred_expr.getType(), t);
-
-  switch (pred_expr.getIdentType())
-  {
-    case clang::PredefinedExpr::Func:
-    case clang::PredefinedExpr::Function:
-    case clang::PredefinedExpr::LFunction:
-    case clang::PredefinedExpr::FuncDName:
-    case clang::PredefinedExpr::FuncSig:
-    case clang::PredefinedExpr::PrettyFunction:
-    case clang::PredefinedExpr::PrettyFunctionNoVirtual:
-      break;
-    default:
-      std::cerr << "Conversion of unsupported clang predefined expr: \""
-        << pred_expr.getIdentType() << "\" to expression" << std::endl;
-      pred_expr.dumpColor();
-      abort();
-  }
-
-  exprt string;
-  convert_string_literal(*pred_expr.getFunctionName(), new_expr);
-
-  new_expr.swap(string);
 }
 
 void llvm_convertert::get_default_symbol(
