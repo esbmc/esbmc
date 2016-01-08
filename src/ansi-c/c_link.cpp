@@ -367,10 +367,12 @@ Function: c_linkt::typecheck
 void c_linkt::typecheck()
 {
   Forall_symbols(it, new_context.symbols)
-  { // build module clash table
+  {
+    // build module clash table
     if(it->second.file_local &&
        known_modules.find(it->second.module)!=known_modules.end())
-    { // we could have a clash
+    {
+      // we could have a clash
       unsigned counter=0;
       std::string newname=id2string(it->second.name);
 
@@ -387,7 +389,7 @@ void c_linkt::typecheck()
         subst.location() = it->second.location;
         symbol_fixer.insert(it->second.name,
           static_cast<const typet&>(static_cast<const irept&>(subst)));
-	subst.type()=it->second.type;
+        subst.type()=it->second.type;
         symbol_fixer.insert(it->second.name, subst);
       }
     }
