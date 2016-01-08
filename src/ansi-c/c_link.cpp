@@ -278,6 +278,15 @@ void c_linkt::duplicate_symbol(
         // store new type
         in_context.type=new_symbol.type;
       }
+      else if(old_type.is_pointer() && new_type.is_array())
+      {
+        // store new type
+        in_context.type=new_symbol.type;
+      }
+      else if(old_type.is_array() && new_type.is_pointer())
+      {
+        // ignore
+      }
       else if(old_type.is_array() &&
               new_type.is_incomplete_array())
       {
