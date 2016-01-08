@@ -16,7 +16,6 @@
 #include <bitvector.h>
 
 #include <ansi-c/c_types.h>
-#include <ansi-c/ansi_c_expr.h>
 #include <ansi-c/type2name.h>
 
 #include <boost/filesystem.hpp>
@@ -2222,8 +2221,8 @@ void llvm_convertert::get_predefined_expr(
       abort();
   }
 
-  string_constantt string;
-  string.set_value(pred_expr.getFunctionName()->getString().str());
+  exprt string;
+  convert_string_literal(*pred_expr.getFunctionName(), new_expr);
 
   new_expr.swap(string);
 }
