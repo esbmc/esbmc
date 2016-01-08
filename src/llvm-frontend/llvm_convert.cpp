@@ -514,6 +514,10 @@ void llvm_convertert::get_function(
     type.arguments().push_back(param);
   }
 
+  // Apparently, if the type has no arguments, we assume ellipsis
+  if(!type.arguments().size())
+    type.make_ellipsis();
+
   added_symbol.type = type;
 
   // We need: a type, a name, and an optional body
