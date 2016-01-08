@@ -269,30 +269,33 @@ void c_linkt::duplicate_symbol(
 
     if(!base_type_eq(in_context.type, new_symbol.type, ns))
     {
-      if(ns.follow(in_context.type).id()=="incomplete_array" &&
-         ns.follow(new_symbol.type).is_array())
+      const typet &old_type = ns.follow(in_context.type);
+      const typet &new_type = ns.follow(new_symbol.type);
+
+      if(old_type.is_incomplete_array() &&
+         new_type.is_array())
       {
         // store new type
         in_context.type=new_symbol.type;
       }
-      else if(ns.follow(in_context.type).is_array() &&
-              ns.follow(new_symbol.type).id()=="incomplete_array")
+      else if(old_type.is_array() &&
+              new_type.is_incomplete_array())
       {
         // ignore
       }
-      else if(in_context.type.id()=="incomplete_struct" &&
-              new_symbol.type.id()=="struct")
+      else if(old_type.id()=="incomplete_struct" &&
+              new_type.is_struct())
       {
         // store new type
         in_context.type=new_symbol.type;
       }
-      else if(in_context.type.id()=="struct" &&
-              new_symbol.type.id()=="incomplete_struct")
+      else if(old_type.is_struct() &&
+              new_type.id()=="incomplete_struct")
       {
         // ignore
       }
-      else if(ns.follow(in_context.type).id()=="pointer" &&
-              ns.follow(new_symbol.type).id()=="incomplete_array")
+      else if(old_type.is_pointer() &&
+              new_type.is_incomplete_array())
       {
         // ignore
       }
