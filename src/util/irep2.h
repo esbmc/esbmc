@@ -3015,7 +3015,7 @@ public:
   std::vector<irep_idt> exception_list;
 
 // Type mangling:
-  typedef esbmct::field_traits<std::vector<irep_idt>, code_cpp_throw_data, &code_cpp_throw_data::exception_list> exception_list_field;
+  typedef esbmct::field_traits<std::vector<irep_idt>, code_cpp_throw_decl_data, &code_cpp_throw_decl_data::exception_list> exception_list_field;
   typedef esbmct::expr2t_traits<exception_list_field>::type traits;
 };
 
