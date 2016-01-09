@@ -165,7 +165,7 @@ void llvm_convertert::get_decl(
       struct_union_typet::componentt comp;
       comp.type() = t;
 
-      if(t.get_bool("anonymous"))
+      if((t.is_struct() || t.is_union()) && fd.getName().str().empty())
       {
         comp.name(to_struct_union_type(t).tag());
         comp.pretty_name(to_struct_union_type(t).tag());
@@ -339,15 +339,7 @@ void llvm_convertert::get_struct_union_class_fields(
 
     // If we are parsing a field declaration, add it to the components
     if(decl->getKind() == clang::Decl::Field)
-    {
-      if(comp.type().get_bool("anonymous"))
-      {
-        comp.name(comp.type().tag());
-        comp.pretty_name(comp.type().tag());
-      }
-
       type.components().push_back(comp);
-    }
   }
 }
 
@@ -759,9 +751,6 @@ void llvm_convertert::get_type(
 
       symbolt &s = context.symbols.find(it->second)->second;
       new_type = s.type;
-
-      if (tag.getName().str().empty())
-        new_type.set("anonymous", true);
 
       break;
     }
@@ -1203,10 +1192,6 @@ void llvm_convertert::get_expr(
 
       exprt base;
       get_expr(*member.getBase(), base);
-
-      // If this is anonymous, than get the name from the tag
-      if(base.type().get_bool("anonymous"))
-        base.component_name(base.type().tag());
 
       exprt comp;
       get_decl(*member.getMemberDecl(), comp);
