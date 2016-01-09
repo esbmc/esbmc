@@ -1767,6 +1767,14 @@ do_count_sub_exprs<const std::vector<expr2tc>>(const std::vector<expr2tc> &item)
   return item.size();
 }
 
+typedef std::size_t lolnoop;
+inline std::size_t
+hash_value(lolnoop val)
+{
+  return val;
+}
+
+#if 0
 template <class derived, class subclass,
 typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
 typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
@@ -1910,13 +1918,6 @@ esbmct::expr_methods<derived, subclass,
     return tmp;
 
   return tmp;
-}
-
-typedef std::size_t lolnoop;
-inline std::size_t
-hash_value(lolnoop val)
-{
-  return val;
 }
 
 template <class derived, class subclass,
@@ -2161,6 +2162,7 @@ esbmct::expr_methods<derived, subclass,
   do_type_list_operands(derived_this->*field6_ptr, inp);
   return;
 }
+#endif
 
 /************************ Second attempt at type templates ********************/
 
