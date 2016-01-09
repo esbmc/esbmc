@@ -2173,14 +2173,14 @@ template <class derived, class subclass, typename traits, typename enable>
 const expr2tc *
 esbmct::expr_methods2<derived, subclass, traits, enable>::get_sub_expr(unsigned int i) const
 {
-  return superclass::get_sub_expr(0, i); // Skips expr_id
+  return superclass::get_sub_expr_rec(0, i); // Skips expr_id
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 expr2tc *
 esbmct::expr_methods2<derived, subclass, traits, enable>::get_sub_expr_nc(unsigned int i)
 {
-  return superclass::get_sub_expr_nc(0, i); // Skips expr_id
+  return superclass::get_sub_expr_nc_rec(0, i); // Skips expr_id
 }
 
 template <class derived, class subclass, typename traits, typename enable>
