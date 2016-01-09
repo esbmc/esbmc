@@ -28,7 +28,7 @@ void *__ESBMC_pthread_end_values[1];
 
 unsigned int num_total_threads = 0;
 unsigned int num_threads_running = 0;
-int blocked_threads_count = 0;
+unsigned int blocked_threads_count = 0;
 
 pthread_t __ESBMC_get_thread_id(void);
 
