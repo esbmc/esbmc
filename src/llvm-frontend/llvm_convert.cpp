@@ -18,8 +18,6 @@
 #include <ansi-c/c_types.h>
 #include <ansi-c/type2name.h>
 
-#include <boost/filesystem.hpp>
-
 #include "typecast.h"
 
 llvm_convertert::llvm_convertert(
@@ -2305,12 +2303,20 @@ void llvm_convertert::get_location(
 
 std::string llvm_convertert::get_modulename_from_path()
 {
-  return boost::filesystem::path(current_path).stem().string();
+  std::string filename = get_filename_from_path();
+
+  if(filename.find_last_of('.') != std::string::npos)
+    return filename.substr(0, current_path.find_last_of('.'));
+
+  return filename;
 }
 
 std::string llvm_convertert::get_filename_from_path()
 {
-  return boost::filesystem::path(current_path).filename().string();
+  if(current_path.find_last_of('/') != std::string::npos)
+    return current_path.substr(current_path.find_last_of('/'));
+
+  return current_path;
 }
 
 void llvm_convertert::move_symbol_to_context(
