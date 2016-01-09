@@ -70,20 +70,12 @@ private:
     const clang::ParmVarDecl &pdecl,
     exprt &param);
 
-  void get_enum(
-    const clang::EnumDecl &enumd,
-    exprt &new_expr);
-
   void get_struct_union_class(
     const clang::RecordDecl &recordd);
 
   void get_struct_union_class_fields(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
-
-  void get_enum_constants(
-    const clang::EnumConstantDecl &enumcd,
-    exprt &new_expr);
 
   void get_type(
     const clang::QualType &the_type,

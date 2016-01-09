@@ -59,8 +59,6 @@ class llvm_adjust
 
     void adjust_code(codet &code);
     void adjust_expression(codet &code);
-    void adjust_label(code_labelt &code);
-    void adjust_block(codet &code);
     void adjust_ifthenelse(codet &code);
     void adjust_while(codet &code);
     void adjust_for(codet &code);

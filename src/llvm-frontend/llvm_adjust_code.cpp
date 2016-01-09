@@ -25,10 +25,12 @@ void llvm_adjust::adjust_code(codet& code)
   if(statement=="expression")
     adjust_expression(code);
   else if(statement=="label")
-    adjust_label(to_code_label(code));
+  {
+  }
   else if(statement=="block" ||
           statement=="decl-block")
-    adjust_block(code);
+  {
+  }
   else if(statement=="ifthenelse")
     adjust_ifthenelse(code);
   else if(statement=="while" ||
@@ -115,14 +117,6 @@ void llvm_adjust::adjust_expression(codet& code)
       code.swap(function_call);
     }
   }
-}
-
-void llvm_adjust::adjust_label(code_labelt& code)
-{
-}
-
-void llvm_adjust::adjust_block(codet& code)
-{
 }
 
 void llvm_adjust::adjust_ifthenelse(codet& code)
