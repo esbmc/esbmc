@@ -145,11 +145,10 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case ASSERT:
-    if (!cur_state->guard.is_false()) {
-      if (!no_assertions ||
-        !cur_state->source.pc->location.user_provided()
-        || deadlock_check) {
-
+    if (!cur_state->guard.is_false())
+    {
+      if (!no_assertions || !cur_state->source.pc->location.user_provided())
+      {
         std::string msg = cur_state->source.pc->location.comment().as_string();
         if (msg == "") msg = "assertion";
 

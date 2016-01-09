@@ -41,7 +41,6 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   depth_limit(atol(options.get_option("depth").c_str())),
   break_insn(atol(options.get_option("break-at").c_str())),
   memory_leak_check(options.get_bool_option("memory-leak-check")),
-  deadlock_check(options.get_bool_option("deadlock-check")),
   no_assertions(options.get_bool_option("no-assertions")),
   no_simplify(options.get_bool_option("no-simplify")),
   no_unwinding_assertions(options.get_bool_option("no-unwinding-assertions")),
@@ -115,7 +114,6 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;
   memory_leak_check = sym.memory_leak_check;
-  deadlock_check = sym.deadlock_check;
   no_assertions = sym.no_assertions;
   no_simplify = sym.no_simplify;
   no_unwinding_assertions = sym.no_unwinding_assertions;

@@ -709,9 +709,6 @@ protected:
   /** Flag as to whether we're performing memory leak checks. Corresponds to
    *  the option --memory-leak-check */
   bool memory_leak_check;
-  /** Flag as to whether we're performing deadlock checking. Corresponds to
-   *  the option --deadlock-check */
-  bool deadlock_check;
   /** Flag as to whether we're checking user assertions. Corresponds to
    *  the option --no-assertions */
   bool no_assertions;
