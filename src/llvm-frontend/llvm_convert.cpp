@@ -146,7 +146,7 @@ void llvm_convertert::get_decl(
     {
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
-      get_function(fd, new_expr);
+      get_function(fd);
       break;
     }
 
@@ -212,7 +212,7 @@ void llvm_convertert::get_decl(
     {
       const clang::RecordDecl &record =
         static_cast<const clang::RecordDecl &>(decl);
-      get_struct_union_class(record, new_expr);
+      get_struct_union_class(record);
       break;
     }
 
@@ -252,8 +252,7 @@ void llvm_convertert::get_decl(
 }
 
 void llvm_convertert::get_struct_union_class(
-  const clang::RecordDecl& recordd,
-  exprt& new_expr)
+  const clang::RecordDecl& recordd)
 {
   if(recordd.isClass())
   {
@@ -420,8 +419,7 @@ void llvm_convertert::get_var(
 }
 
 void llvm_convertert::get_function(
-  const clang::FunctionDecl &fd,
-  exprt &new_expr)
+  const clang::FunctionDecl &fd)
 {
   // If the function is not defined but this is not the definition, skip it
   if(fd.isDefined() && !fd.isThisDeclarationADefinition())

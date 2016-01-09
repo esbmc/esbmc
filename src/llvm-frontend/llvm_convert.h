@@ -64,8 +64,7 @@ private:
     exprt &new_expr);
 
   void get_function(
-    const clang::FunctionDecl &fd,
-    exprt &new_expr);
+    const clang::FunctionDecl &fd);
 
   void get_function_params(
     const clang::ParmVarDecl &pdecl,
@@ -76,8 +75,7 @@ private:
     exprt &new_expr);
 
   void get_struct_union_class(
-    const clang::RecordDecl &recordd,
-    exprt &new_expr);
+    const clang::RecordDecl &recordd);
 
   void get_struct_union_class_fields(
     const clang::RecordDecl &recordd,
