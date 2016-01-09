@@ -115,9 +115,6 @@ static void internal_additions(std::string &code)
     "unsigned char nondet_uchar();\n"
     "signed char nondet_schar();\n"
 
-    // Digital filters code
-    "_Bool __ESBMC_check_stability(float den[], float num[]);\n"
-
 	// Digital controllers code
     "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
     "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"

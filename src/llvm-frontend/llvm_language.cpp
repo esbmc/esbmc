@@ -323,9 +323,6 @@ void llvm_languaget::internal_additions()
     "float nondet_float();\n"
     "double nondet_double();"
 
-    // Digital filters code
-    "_Bool __ESBMC_check_stability(float den[], float num[]);\n"
-
     // Digital controllers code
     "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
     "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"

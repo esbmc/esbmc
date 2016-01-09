@@ -341,14 +341,6 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
     intrinsic_kill_monitor(art);
   } else if (symname == "__ESBMC_realloc") {
     intrinsic_realloc(func_call, art);
-  } else if (symname == "__ESBMC_check_stability") {
-    intrinsic_check_stability(func_call, art);
-  } else if (symname == "__ESBMC_generate_cascade_controllers") {
-    // intrinsic_generate_cascade_controllers(func_call, art);
-  } else if (symname == "__ESBMC_generate_delta_coefficients") {
-    // intrinsic_generate_delta_coefficients(func_call, art);
-  } else if (symname == "__ESBMC_check_delta_stability") {
-    // intrinsic_check_delta_stability(func_call, art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
     std::cerr << std::endl << "The name in question: " << symname << std::endl;
