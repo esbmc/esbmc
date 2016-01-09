@@ -2212,7 +2212,7 @@ esbmct::type_methods2<derived, subclass, traits, enable>::clone(void) const -> c
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
-  return type2tc(new_obj);
+  return container2tc(new_obj);
 }
 
 template <class derived, class subclass, typename traits, typename enable>
