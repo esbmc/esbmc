@@ -29,7 +29,7 @@ public:
 
   // See SSA_stept.
   std::vector<dstring> stack_trace;
-  
+
   bool is_assignment() const { return type==ASSIGNMENT; }
   bool is_assume() const     { return type==ASSUME; }
   bool is_assert() const     { return type==ASSERT; }
@@ -39,24 +39,24 @@ public:
 
   typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT, SKIP, RENUMBER } typet;
   typet type;
-    
+
   goto_programt::const_targett pc;
 
   // this transition done by given thread number
   unsigned thread_nr;
-  
+
   // for assume, assert, goto
   bool guard;
-  
+
   // for assert
   std::string comment;
 
   // in SSA
   expr2tc lhs, rhs;
-  
+
   // this is a constant
   expr2tc value;
-  
+
   // original expression
   expr2tc original_lhs;
 
@@ -67,7 +67,7 @@ public:
   void output(
     const class namespacet &ns,
     std::ostream &out) const;
-    
+
   goto_trace_stept():
     step_nr(0),
     thread_nr(0),
