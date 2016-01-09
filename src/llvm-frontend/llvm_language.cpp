@@ -191,8 +191,8 @@ bool llvm_languaget::parse(const std::string& path)
   clang::tooling::FixedCompilationDatabase Compilations("./", compiler_string);
 
   std::vector<std::string> sources;
-  sources.push_back(path);
   sources.push_back("/esbmc_intrinsics.h");
+  sources.push_back(path);
 
   clang::tooling::ClangTool Tool(Compilations, sources);
   Tool.mapVirtualFile("/esbmc_intrinsics.h", intrinsics);
