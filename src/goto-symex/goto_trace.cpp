@@ -17,7 +17,6 @@
 #include <boost/version.hpp>
 
 #include "goto_trace.h"
-#include "VarMap.h"
 #include <std_types.h>
 
 #include <boost/algorithm/string.hpp>
@@ -238,110 +237,6 @@ show_state_header(
   out << "----------------------------------------------------" << std::endl;
 }
 
-std::string
-get_varname_from_guard (
-  goto_tracet::stepst::const_iterator &it,
-  const goto_tracet &goto_trace __attribute__((unused)))
-{
-  std::string varname;
-  exprt old_irep_guard = migrate_expr_back(it->pc->guard);
-  exprt guard_operand = old_irep_guard.op0();
-  if (!guard_operand.operands().empty()) {
-    if (!guard_operand.op0().identifier().as_string().empty()) {
-      char identstr[guard_operand.op0().identifier().as_string().length()];
-      strcpy(identstr, guard_operand.op0().identifier().c_str());
-      int j = 0;
-      char * tok;
-      tok = strtok(identstr, "::");
-      while (tok != NULL) {
-	if (j == 4)
-	  varname = tok;
-	tok = strtok(NULL, "::");
-	j++;
-      }
-    }
-  }
-  return varname;
-}
-
-void
-get_metada_from_llvm(
-  goto_tracet::stepst::const_iterator &it, const goto_tracet &goto_trace)
-{
-  char line[it->pc->location.get_line().as_string().length()];
-  strcpy(line, it->pc->location.get_line().c_str());
-  if (!is_nil_expr(it->rhs) && is_struct_type(it->rhs)) {
-    struct_type2t &struct_type =
-      const_cast<struct_type2t&>(to_struct_type(it->original_lhs->type));
-
-    std::string ident = to_symbol2t(it->original_lhs).get_symbol_name();
-    std::string struct_name = ident.substr(ident.find_last_of(":") + 1);
-
-    u_int i = 0, j = 0;
-    for (std::vector<type2tc>::const_iterator itt = struct_type.members.begin();
-         itt != struct_type.members.end(); itt++, i++)
-    {
-      std::string comp_name = struct_type.member_names[j].as_string();
-      std::string key_map = struct_name + "." +
-                            struct_type.member_names[j].as_string().c_str();
-      if (goto_trace.llvm_varmap.find(key_map) !=
-          goto_trace.llvm_varmap.end() ) {
-	std::string newname = goto_trace.llvm_varmap.find(key_map)->second;
-	struct_type.member_names[j] = irep_idt(newname);
-      }
-      j++;
-    }
-  }
-  if (!goto_trace.llvm_linemap.find(line)->second.empty()) {
-    char VarInfo[goto_trace.llvm_linemap.find(line)->second.length()];
-    if (!goto_trace.llvm_linemap.find(line)->second.empty()) {
-      strcpy(VarInfo, goto_trace.llvm_linemap.find(line)->second.c_str());
-    }
-    char * pch;
-    pch = strtok(VarInfo, "@#");
-    int k = 0;
-    while (pch != NULL) {
-      if (k == 0) const_cast<goto_tracet*>(&goto_trace)->FileName = pch;
-      if (k == 1) const_cast<goto_tracet*>(&goto_trace)->LineNumber = pch;
-      if (k == 2) const_cast<goto_tracet*>(&goto_trace)->FuncName = pch;
-      if (k == 3) const_cast<goto_tracet*>(&goto_trace)->VarName = pch;
-      if (k == 4) const_cast<goto_tracet*>(&goto_trace)->OrigVarName = pch;
-      pch = strtok(NULL, "@#");
-      k++;
-    }
-
-    //********************change indentifier***********************************/
-    if (!is_nil_expr(it->original_lhs) && is_symbol2t(it->original_lhs)) {
-      expr2tc &lhs = const_cast<expr2tc&>(it->original_lhs);
-      char identstr[to_symbol2t(it->original_lhs).get_symbol_name().size()];
-      strcpy(identstr, to_symbol2t(it->original_lhs).get_symbol_name().c_str());
-      int j = 0;
-      char * tok;
-      tok = strtok(identstr, "::");
-      std::string newidentifier;
-      while (tok != NULL) {
-	if (j <= 1) newidentifier = newidentifier + tok + "::";
-	if (j == 2) newidentifier = newidentifier + goto_trace.FuncName + "::";
-	if (j == 3) newidentifier = newidentifier + tok + "::";
-	if (j == 4) {
-	  if (!goto_trace.OrigVarName.empty()) newidentifier = newidentifier +
-	                                                       goto_trace.
-	                                                       OrigVarName;
-	  else newidentifier = newidentifier + tok;
-	}
-	tok = strtok(NULL, "::");
-	j++;
-      }
-      lhs = symbol2tc(lhs->type, irep_idt(newidentifier));
-    }
-    //**********************************************************************/
-
-    const_cast<locationt*>(&it->pc->location)->set_file(goto_trace.FileName);
-    const_cast<locationt*>(&it->pc->location)->set_line(goto_trace.LineNumber);
-    const_cast<locationt*>(&it->pc->location)->set_function(goto_trace.FuncName);
-  }
-}
-
 void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::string & filename, const namespacet & ns, const goto_tracet & goto_trace)
 {
   tokenizer_executable_path = tokenizer_path;
@@ -514,95 +409,77 @@ show_goto_trace(
   unsigned prev_step_nr = 0;
   bool first_step = true;
 
-  if (!goto_trace.metadata_filename.empty())
-    const_cast<goto_tracet*>(&goto_trace)->open_llvm_varmap();
-
   for (goto_tracet::stepst::const_iterator
        it = goto_trace.steps.begin();
        it != goto_trace.steps.end();
        it++)
   {
-    switch (it->type) {
-    case goto_trace_stept::ASSERT:
-      if (!it->guard) {
-        show_state_header(out, *it, it->pc->location, it->step_nr);
-	out << "Violated property:" << std::endl;
-	if (!it->pc->location.is_nil()) {
-	  if (!goto_trace.metadata_filename.empty()) {
-	    get_metada_from_llvm(it, goto_trace);
-	  }
-	  out << "  " << it->pc->location << std::endl;
-	}
-
-	out << "  " << it->comment << std::endl;
-
-        if (!goto_trace.metadata_filename.empty() &&
-            !is_constant_bool2t(it->pc->guard)) {
-          std::string assertsrt, varname;
-          assertsrt = from_expr(ns, "", it->pc->guard);
-          varname = get_varname_from_guard(it, goto_trace);
-          if (!goto_trace.llvm_varmap.find(varname)->second.empty()) {
-            assertsrt.replace(assertsrt.find(varname),
-                              varname.length(),
-                              goto_trace.llvm_varmap.find(varname)->second);
-            out << "  " << assertsrt << std::endl;
-          }
-        } else {
-          out << "  " << from_expr(ns, "", it->pc->guard) << std::endl;
-        }
-	out << std::endl;
-
-        // Having printed a property violation, don't print more steps.
-        return;
-      }
-      break;
-
-    case goto_trace_stept::ASSUME:
-      break;
-
-    case goto_trace_stept::ASSIGNMENT:
-      if (it->pc->is_assign() || it->pc->is_return() ||
-          (it->pc->is_other() && is_nil_expr(it->lhs))) {
-	if (prev_step_nr != it->step_nr || first_step) {
-	  first_step = false;
-	  prev_step_nr = it->step_nr;
-	  if (!goto_trace.metadata_filename.empty()) {
-	    get_metada_from_llvm(it, goto_trace);
-	  }
-	  show_state_header(out, *it, it->pc->location, it->step_nr);
-	}
-	counterexample_value(out, ns, it->original_lhs, it->value);
-      }
-      break;
-
-    case goto_trace_stept::OUTPUT:
+    switch (it->type)
     {
-      printf_formattert printf_formatter;
+      case goto_trace_stept::ASSERT:
+        if (!it->guard)
+        {
+          show_state_header(out, *it, it->pc->location, it->step_nr);
+          out << "Violated property:" << std::endl;
+          if (!it->pc->location.is_nil())
+            out << "  " << it->pc->location << std::endl;
+          out << "  " << it->comment << std::endl;
 
-      std::list<exprt> vec;
+          if (it->pc->is_assert())
+            out << "  " << from_expr(ns, "", it->pc->guard) << std::endl;
 
-      for (std::list<expr2tc>::const_iterator it2 = it->output_args.begin();
-           it2 != it->output_args.end(); it2++) {
-	vec.push_back(migrate_expr_back(*it2));
+          // Having printed a property violation, don't print more steps.
+          return;
+        }
+        break;
+
+      case goto_trace_stept::ASSUME:
+        break;
+
+      case goto_trace_stept::ASSIGNMENT:
+        if (it->pc->is_assign() || it->pc->is_return()
+            || (it->pc->is_other() && is_nil_expr(it->lhs)))
+        {
+          if (prev_step_nr != it->step_nr || first_step)
+          {
+            first_step = false;
+            prev_step_nr = it->step_nr;
+            show_state_header(out, *it, it->pc->location, it->step_nr);
+          }
+          counterexample_value(out, ns, it->original_lhs, it->value);
+        }
+        break;
+
+      case goto_trace_stept::OUTPUT:
+      {
+        printf_formattert printf_formatter;
+
+        std::list<exprt> vec;
+
+        for (std::list<expr2tc>::const_iterator it2 = it->output_args.begin();
+            it2 != it->output_args.end(); it2++)
+        {
+          vec.push_back(migrate_expr_back(*it2));
+        }
+
+        printf_formatter(it->format_string, vec);
+        printf_formatter.print(out);
+        out << std::endl;
+
+        break;
       }
 
-      printf_formatter(it->format_string, vec);
-      printf_formatter.print(out);
-      out << std::endl;
-    }
-    break;
+      case goto_trace_stept::SKIP:
+        // Something deliberately ignored
+        break;
 
-    case goto_trace_stept::SKIP:
-      // Something deliberately ignored
-      break;
+      case goto_trace_stept::RENUMBER:
+        out << "Renumbered pointer to ";
+        counterexample_value(out, ns, it->lhs, it->value);
+        break;
 
-    case goto_trace_stept::RENUMBER:
-      out << "Renumbered pointer to ";
-      counterexample_value(out, ns, it->lhs, it->value);
-      break;
-
-    default:
-      assert(false);
+      default:
+        assert(false);
     }
   }
 }

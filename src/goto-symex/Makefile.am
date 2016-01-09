@@ -6,5 +6,5 @@ libsymex_a_SOURCES = \
       symex_goto.cpp builtin_functions.cpp slice.cpp symex_other.cpp \
       xml_goto_trace.cpp symex_valid_object.cpp \
       dynamic_allocation.cpp symex_catch.cpp renaming.cpp \
-      execution_state.cpp reachability_tree.cpp VarMap.cpp
+      execution_state.cpp reachability_tree.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util

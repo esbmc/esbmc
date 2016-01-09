@@ -92,8 +92,6 @@ void bmct::error_trace(smt_convt &smt_conv,
   goto_tracet goto_trace;
   build_goto_trace(equation, smt_conv, goto_trace);
 
-  goto_trace.metadata_filename = options.get_option("llvm-metadata");
-
   std::string graphml_output_filename = options.get_option("witnesspath");
   std::string tokenizer_path;
   if(!graphml_output_filename.empty())

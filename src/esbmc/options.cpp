@@ -22,7 +22,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"outfile",		string,		""	},
 { 0,	"witnesspath",		string,		""	},
 { 0,	"tokenizer",		string,		""	},
-{ 0,	"llvm-metadata",		string,		""	},
 { 0,	"no-pointer-check",	switc,		""	},
 { 0,	"document-subgoals",	switc,		""	},
 { 0,	"all-claims",		switc,		""	},
