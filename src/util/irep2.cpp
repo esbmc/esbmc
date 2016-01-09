@@ -2189,7 +2189,7 @@ template <class derived, class subclass, typename traits, typename enable>
 unsigned int
 esbmct::expr_methods2<derived, subclass, traits, enable>::get_num_sub_exprs(void) const
 {
-  return superclass::get_num_sub_exprs(); // Skips expr_id
+  return superclass::get_num_sub_exprs_rec(); // Skips expr_id
 }
 
 template <class derived, class subclass, typename traits, typename enable>
