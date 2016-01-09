@@ -608,8 +608,7 @@ void goto_convertt::do_function_call_symbol(
     const std::string &description=
       get_string_constant(arguments[1]);
 
-    if(options.get_bool_option("no-assertions") &&
-   	   !(description.find("Deadlocked state") != std::string::npos))
+    if(options.get_bool_option("no-assertions"))
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);

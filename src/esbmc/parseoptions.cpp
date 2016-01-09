@@ -242,7 +242,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("deadlock-check", true);
     options.set_option("atomicity-check", false);
-    options.set_option("no-assertions", true);
   }
   else
     options.set_option("deadlock-check", false);
