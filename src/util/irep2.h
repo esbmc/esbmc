@@ -310,6 +310,10 @@ protected:
   type2t(const type2t &ref);
 
 public:
+  // Provide base / container types for some templates stuck on top:
+  typedef type2tc container_type;
+  typedef type2t base_type;
+
   virtual ~type2t() { };
 
   /** Fetch bit width of this type.
@@ -571,6 +575,10 @@ protected:
   expr2t(const expr2t &ref);
 
 public:
+  // Provide base / container types for some templates stuck on top:
+  typedef expr2tc container_type;
+  typedef expr2t base_type;
+
   virtual ~expr2t() { };
 
   /** Clone method. Self explanatory. */
@@ -1064,6 +1072,8 @@ namespace esbmct {
   {
   public:
     typedef type_methods2<derived, subclass, typename boost::mpl::pop_front<traits>::type, enable> superclass;
+    typedef typename subclass::container_type container2tc;
+    typedef typename subclass::base_type base2t;
 
     template <typename ...Args> type_methods2(Args... args) : superclass(args...) { }
 
@@ -1074,10 +1084,10 @@ namespace esbmct {
     // defining a copy constructor that exactly matches the (only) use case.
     type_methods2(const derived &ref) : superclass(ref) { }
 
-    type2tc clone(void) const;
+    container2tc clone(void) const;
     list_of_memberst tostring(unsigned int indent) const;
-    bool cmp(const type2t &ref) const;
-    int lt(const type2t &ref) const;
+    bool cmp(const base2t &ref) const;
+    int lt(const base2t &ref) const;
     size_t do_crc(size_t seed) const;
     void hash(crypto_hash &hash) const;
 
@@ -1087,8 +1097,8 @@ namespace esbmct {
     typedef typename boost::mpl::front<traits>::type membr_ptr;
 
     void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const;
-    bool cmp_rec(const type2t &ref) const;
-    int lt_rec(const type2t &ref) const;
+    bool cmp_rec(const base2t &ref) const;
+    int lt_rec(const base2t &ref) const;
     void do_crc_rec() const;
     void hash_rec(crypto_hash &hash) const;
 

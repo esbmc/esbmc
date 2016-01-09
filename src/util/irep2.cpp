@@ -2207,8 +2207,8 @@ esbmct::expr_methods2<derived, subclass, traits, enable>::list_operands(std::lis
 // Types
 
 template <class derived, class subclass, typename traits, typename enable>
-type2tc
-esbmct::type_methods2<derived, subclass, traits, enable>::clone(void) const
+auto
+esbmct::type_methods2<derived, subclass, traits, enable>::clone(void) const -> container2tc
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
@@ -2227,14 +2227,14 @@ esbmct::type_methods2<derived, subclass, traits, enable>::tostring(unsigned int 
 
 template <class derived, class subclass, typename traits, typename enable>
 bool
-esbmct::type_methods2<derived, subclass, traits, enable>::cmp(const type2t &ref) const
+esbmct::type_methods2<derived, subclass, traits, enable>::cmp(const base2t &ref) const
 {
   return cmp_rec(ref); // _includes_ type_id / expr_id
 }
 
 template <class derived, class subclass, typename traits, typename enable>
 int
-esbmct::type_methods2<derived, subclass, traits, enable>::lt(const type2t &ref) const
+esbmct::type_methods2<derived, subclass, traits, enable>::lt(const base2t &ref) const
 {
   return lt_rec(ref); // _includes_ type_id / expr_id
 }
@@ -2288,7 +2288,7 @@ esbmct::type_methods2<derived, subclass, traits, enable>::tostring_rec(unsigned 
 
 template <class derived, class subclass, typename traits, typename enable>
 bool
-esbmct::type_methods2<derived, subclass, traits, enable>::cmp_rec(const type2t &ref) const
+esbmct::type_methods2<derived, subclass, traits, enable>::cmp_rec(const base2t &ref) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
@@ -2302,7 +2302,7 @@ esbmct::type_methods2<derived, subclass, traits, enable>::cmp_rec(const type2t &
 
 template <class derived, class subclass, typename traits, typename enable>
 int
-esbmct::type_methods2<derived, subclass, traits, enable>::lt_rec(const type2t &ref) const
+esbmct::type_methods2<derived, subclass, traits, enable>::lt_rec(const base2t &ref) const
 {
   int tmp;
   const derived *derived_this = static_cast<const derived*>(this);
