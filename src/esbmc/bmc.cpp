@@ -584,8 +584,7 @@ bool bmct::run_thread()
 
     ret = run_solver(*equation, runtime_solver);
 
-    if(&symex->get_cur_state() != nullptr)
-    symex->get_cur_state().target = nullptr;
+    // TODO: symex->get_cur_state().target may leak
     delete equation;
     delete result;
     return ret;
