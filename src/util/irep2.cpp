@@ -2386,7 +2386,7 @@ expr2tc *
 esbmct::type_methods2<derived, subclass, traits, enable>::get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
 {
   expr2tc *ptr;
-  const derived *derived_this = static_cast<const derived*>(this);
+  derived *derived_this = static_cast<derived*>(this);
   auto m_ptr = membr_ptr::value;
 
   // XXX -- this takes a _reference_ to cur_idx, and maybe modifies.
