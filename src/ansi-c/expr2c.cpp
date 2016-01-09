@@ -2819,7 +2819,7 @@ Function: expr2ct::convert_sizeof
 
 std::string expr2ct::convert_sizeof(
   const exprt &src,
-  unsigned precedence)
+  unsigned precedence __attribute__((unused)))
 {
   std::string dest="sizeof(";
   dest+=convert(static_cast<const typet&>(src.find("sizeof-type")));
