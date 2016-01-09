@@ -391,9 +391,11 @@ void llvm_convertert::get_var(
   }
 
   symbol.lvalue = true;
-  symbol.static_lifetime = vd.hasGlobalStorage();
+  symbol.static_lifetime = (vd.getStorageClass() == clang::SC_Static)
+    || vd.hasGlobalStorage();
   symbol.is_extern = vd.hasExternalStorage();
-  symbol.file_local = !vd.isExternallyVisible();
+  symbol.file_local = (vd.getStorageClass() == clang::SC_Static)
+    || (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
   // Save the variable address and name to the object map
   std::string symbol_name = symbol.name.as_string();
@@ -477,7 +479,7 @@ void llvm_convertert::get_function(
   symbol.lvalue = true;
   symbol.is_extern = fd.getStorageClass() == clang::SC_Extern
                      || fd.getStorageClass() == clang::SC_PrivateExtern;
-  symbol.file_local = !fd.isExternallyVisible();
+  symbol.file_local = (fd.getStorageClass() == clang::SC_Static);
 
   move_symbol_to_context(symbol);
 
