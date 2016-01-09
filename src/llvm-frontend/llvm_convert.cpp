@@ -2304,7 +2304,7 @@ std::string llvm_convertert::get_modulename_from_path()
   std::string filename = get_filename_from_path();
 
   if(filename.find_last_of('.') != std::string::npos)
-    return filename.substr(0, current_path.find_last_of('.'));
+    return filename.substr(0, filename.find_last_of('.'));
 
   return filename;
 }
@@ -2312,7 +2312,7 @@ std::string llvm_convertert::get_modulename_from_path()
 std::string llvm_convertert::get_filename_from_path()
 {
   if(current_path.find_last_of('/') != std::string::npos)
-    return current_path.substr(current_path.find_last_of('/'));
+    return current_path.substr(current_path.find_last_of('/') + 1);
 
   return current_path;
 }
