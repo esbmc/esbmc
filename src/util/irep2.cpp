@@ -1709,7 +1709,7 @@ do_get_sub_expr<std::vector<expr2tc>>(const std::vector<expr2tc> &item,
 
 template <class T>
 bool
-do_get_sub_expr(T &item __attribute__((unused)),
+do_get_sub_expr_nc(T &item __attribute__((unused)),
                 unsigned int idx __attribute__((unused)),
                 unsigned int &it __attribute__((unused)),
                 expr2tc *&ptr __attribute__((unused)))
@@ -1719,7 +1719,7 @@ do_get_sub_expr(T &item __attribute__((unused)),
 
 template <>
 bool
-do_get_sub_expr<expr2tc>(expr2tc &item, unsigned int idx, unsigned int &it,
+do_get_sub_expr_nc<expr2tc>(expr2tc &item, unsigned int idx, unsigned int &it,
                          expr2tc *&ptr)
 {
   if (idx == it) {
@@ -1733,7 +1733,7 @@ do_get_sub_expr<expr2tc>(expr2tc &item, unsigned int idx, unsigned int &it,
 
 template <>
 bool
-do_get_sub_expr<std::vector<expr2tc>>(std::vector<expr2tc> &item,
+do_get_sub_expr_nc<std::vector<expr2tc>>(std::vector<expr2tc> &item,
                                       unsigned int idx, unsigned int &it,
                                       expr2tc *&ptr)
 {
@@ -2390,7 +2390,7 @@ esbmct::type_methods2<derived, subclass, traits, enable>::get_sub_expr_nc_rec(un
   auto m_ptr = membr_ptr::value;
 
   // XXX -- this takes a _reference_ to cur_idx, and maybe modifies.
-  if (do_get_sub_expr(derived_this->*m_ptr, desired, cur_idx, ptr))
+  if (do_get_sub_expr_nc(derived_this->*m_ptr, desired, cur_idx, ptr))
     return ptr;
 
   return superclass::get_sub_expr_nc_rec(cur_idx, desired);
