@@ -180,7 +180,7 @@ private:
     typet type,
     exprt &dest);
 
-  void parse_float(
+  std::string parse_float(
     llvm::SmallVector<char, 32> &src,
     mp_integer &significand,
     mp_integer &exponent);

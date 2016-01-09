@@ -96,20 +96,19 @@ void llvm_convertert::convert_float_literal(
   llvm::SmallVector<char, 32> string;
   val.toString(string, 32, 0);
 
-  dest = constant_exprt(type);
-  unsigned width = atoi(dest.type().width().c_str());
-
+  unsigned width = bv_width(type);
   mp_integer value;
+  std::string float_string;
 
   if(!val.isInfinity())
   {
     mp_integer significand;
     mp_integer exponent;
 
-    parse_float(string, significand, exponent);
+    float_string = parse_float(string, significand, exponent);
 
     unsigned fraction_bits;
-    const std::string &integer_bits = dest.type().integer_bits().as_string();
+    const std::string &integer_bits = type.integer_bits().as_string();
 
     if (integer_bits == "")
       fraction_bits = width / 2;
@@ -136,12 +135,17 @@ void llvm_convertert::convert_float_literal(
   {
     // saturate: use "biggest value"
     value = power(2, width - 1) - 1;
+    float_string = "2147483647.99999999976716935634613037109375";
   }
 
-  dest.value(integer2binary(value, width));
+  dest =
+    constant_exprt(
+      integer2binary(value, bv_width(type)),
+      float_string,
+      type);
 }
 
-void llvm_convertert::parse_float(
+std::string llvm_convertert::parse_float(
   llvm::SmallVector<char, 32> &src,
   mp_integer &significand,
   mp_integer &exponent)
@@ -191,4 +195,6 @@ void llvm_convertert::parse_float(
     exponent = string2integer(str_exponent);
 
   exponent -= str_fraction_part.size();
+
+  return str_whole_number;
 }
