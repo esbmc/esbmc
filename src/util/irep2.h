@@ -1124,6 +1124,9 @@ namespace esbmct {
     type_methods2(const derived &ref) : subclass(ref) { }
 
   protected:
+    typedef typename subclass::container_type container2tc;
+    typedef typename subclass::base_type base2t;
+
     // Rather than trying to specialize and implement in the cpp file, terminate
     // here.
     void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
@@ -1134,14 +1137,14 @@ namespace esbmct {
       return;
     }
 
-    bool cmp_rec(const type2t &ref) const
+    bool cmp_rec(const base2t &ref) const
     {
       // If it made it this far, we passed
       (void)ref;
       return true;
     }
 
-    int lt_rec(const type2t &ref) const
+    int lt_rec(const base2t &ref) const
     {
       // If it made it this far, we passed
       (void)ref;
