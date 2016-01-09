@@ -3057,7 +3057,7 @@ public:
                                type> basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass \
                                > basename##_expr_methods_asdf; \
-  typedef esbmct::expr_methods2<basename##2t, superclass, boost::mpl::vector<>> basename##_expr_methods;
+  typedef esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits> basename##_expr_methods;
 
 irep_typedefs(constant_int, constant_int_data, esbmct::takestype,
               BigInt, constant_int_data, &constant_int_data::constant_value);
