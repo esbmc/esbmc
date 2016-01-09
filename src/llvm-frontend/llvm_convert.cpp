@@ -187,15 +187,6 @@ void llvm_convertert::get_decl(
       break;
     }
 
-    // Typedef declaration
-    case clang::Decl::Typedef:
-    {
-      const clang::TypedefDecl &tdd =
-        static_cast<const clang::TypedefDecl&>(decl);
-      get_typedef(tdd, new_expr);
-      break;
-    }
-
     case clang::Decl::IndirectField:
     {
       const clang::IndirectFieldDecl &fd =
@@ -240,7 +231,13 @@ void llvm_convertert::get_decl(
     // or integer value (enum constant)
     case clang::Decl::Enum:
     case clang::Decl::EnumConstant:
+
+    // Typedef declaration, we can ignore this. LLVM will give us
+    // the underlying type defined by the typedef, so we don't need
+    // to add them to the context
+    case clang::Decl::Typedef:
       break;
+
 
     case clang::Decl::Namespace:
     case clang::Decl::TypeAlias:
@@ -352,32 +349,6 @@ void llvm_convertert::get_struct_union_class_fields(
       type.components().push_back(comp);
     }
   }
-}
-
-void llvm_convertert::get_typedef(
-  const clang::TypedefDecl &tdd,
-  exprt &new_expr)
-{
-  // Get type
-  typet t;
-  get_type(tdd.getUnderlyingType().getCanonicalType(), t);
-
-  locationt location_begin;
-  get_location_from_decl(tdd, location_begin);
-
-  symbolt symbol;
-  get_default_symbol(
-    symbol,
-    t,
-    tdd.getName().str(),
-    get_modulename_from_path() + "::" + tdd.getName().str(),
-    location_begin,
-    false); // There is no such thing as static typedef on ANSI-C
-
-  symbol.is_type = true;
-  symbol.is_macro = true;
-
-  move_symbol_to_context(symbol);
 }
 
 void llvm_convertert::get_var(

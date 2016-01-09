@@ -59,10 +59,6 @@ private:
     const clang::Decl &decl,
     exprt &new_expr);
 
-  void get_typedef(
-    const clang::TypedefDecl &tdd,
-    exprt &new_expr);
-
   void get_var(
     const clang::VarDecl &vd,
     exprt &new_expr);
