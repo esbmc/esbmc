@@ -830,9 +830,6 @@ class symbol2t;
  *  this header, via the medium of templates. */
 namespace esbmct {
 
-  class blank_method_operand {
-  };
-
   /** Maximum number of fields to support in expr2t subclasses. This value
    *  controls the types of any arrays that need to consider the number of
    *  fields. Unfortunately it can't control template parameters, because
