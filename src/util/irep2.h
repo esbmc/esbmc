@@ -1135,7 +1135,14 @@ namespace esbmct {
     }
   };
 
-  // Head definition of expr_methods2 XXX XXX explain
+  /** Expression methods template for expr ireps.
+   *  This class works on the same principle as @irep_methods2 but provides
+   *  head methods for list_operands, get_sub_expr and so forth, which are
+   *  specific to expression ireps. The actual implementation of these methods
+   *  are provided in irep_methods to avoid un-necessary recursion but are
+   *  protected; here we provide the head methods publically to allow the
+   *  programmer to call in.
+   *  */
   template <class derived, class baseclass, typename traits, typename enable>
     class expr_methods2 : public irep_methods2<derived, baseclass, traits, enable>
   {
