@@ -10,8 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ANSI_C_CONVERT_TYPE_H
 
 #include <message_stream.h>
+#include <c_types.h>
 
-#include <ansi-c/c_types.h>
 #include <ansi-c/c_qualifiers.h>
 #include <ansi-c/c_storage_spec.h>
 

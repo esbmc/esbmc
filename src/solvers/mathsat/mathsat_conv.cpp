@@ -6,7 +6,7 @@
 // :|
 #include <gmp.h>
 
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 smt_convt *
 create_new_mathsat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,

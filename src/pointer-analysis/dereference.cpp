@@ -22,8 +22,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_expr.h>
 #include <cprover_prefix.h>
 #include <type_byte_size.h>
+#include <c_types.h>
 
-#include <ansi-c/c_types.h>
 #include <ansi-c/c_typecast.h>
 #include <pointer-analysis/value_set.h>
 #include <langapi/language_util.h>

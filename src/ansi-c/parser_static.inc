@@ -3,8 +3,7 @@
 #include <std_expr.h>
 #include <expr_util.h>
 #include <i2string.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #define mto(x, y) (x)->move_to_operands(*(y))
 #define mts(x, y) (x)->move_to_subtypes(*(y))

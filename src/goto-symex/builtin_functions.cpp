@@ -19,14 +19,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cprover_prefix.h>
 #include <std_types.h>
 #include <base_type.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
+#include <dcutil.h>
 
 #include "goto_symex.h"
 #include "execution_state.h"
 #include "reachability_tree.h"
-#include "../ansi-c/convert_float_literal.h"
-#include "../util/dcutil.h"
 
 #include <iomanip>
 #include <limits>

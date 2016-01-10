@@ -16,8 +16,7 @@
 #include <arith_tools.h>
 #include <base_type.h>
 #include <std_expr.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include <langapi/language_util.h>
 

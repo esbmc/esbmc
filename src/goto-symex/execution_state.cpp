@@ -21,7 +21,7 @@
 #include <string2array.h>
 #include <std_expr.h>
 #include <expr_util.h>
-#include "../ansi-c/c_types.h"
+#include <c_types.h>
 #include <simplify_expr.h>
 #include "config.h"
 

@@ -18,12 +18,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <simplify_expr.h>
 #include <base_type.h>
 #include <std_expr.h>
+#include <string_constant.h>
+#include <c_types.h>
 
-#include "c_types.h"
 #include "c_typecast.h"
 #include "c_typecheck_base.h"
 #include "c_sizeof.h"
-#include "ansi_c_expr.h"
 
 /*******************************************************************\
 

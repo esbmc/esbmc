@@ -13,8 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <location.h>
 #include <cprover_prefix.h>
 #include <prefix.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "goto_convert_class.h"
 #include "goto_functions.h"

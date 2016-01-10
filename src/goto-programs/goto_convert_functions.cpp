@@ -15,12 +15,12 @@ Date: June 2003
 #include <std_code.h>
 #include <std_expr.h>
 #include <type_byte_size.h>
+#include <c_types.h>
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
 #include "remove_skip.h"
 #include "i2string.h"
-#include "ansi-c/c_types.h"
 
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,

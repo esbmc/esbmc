@@ -14,8 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <i2string.h>
 #include <arith_tools.h>
 #include <prefix.h>
-
-#include <ansi-c/ansi_c_expr.h>
+#include <string_constant.h>
 
 #include "cpp_typecheck.h"
 #include "cpp_typecheck_resolve.h"

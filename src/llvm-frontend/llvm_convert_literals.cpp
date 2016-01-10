@@ -10,11 +10,8 @@
 #include <arith_tools.h>
 #include <bitvector.h>
 #include <expr_util.h>
-
-#include <ansi-c/c_types.h>
-#include <ansi-c/ansi_c_expr.h>
-
-#include <sstream>
+#include <c_types.h>
+#include <string_constant.h>
 
 void llvm_convertert::convert_character_literal(
   const clang::CharacterLiteral char_literal,

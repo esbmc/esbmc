@@ -14,8 +14,8 @@
 #include <arith_tools.h>
 #include <i2string.h>
 #include <bitvector.h>
+#include <c_types.h>
 
-#include <ansi-c/c_types.h>
 #include <ansi-c/type2name.h>
 
 #include "typecast.h"

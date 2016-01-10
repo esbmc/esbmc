@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <location.h>
 #include <std_types.h>
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "cpp_type2name.h"
 #include "cpp_declarator_converter.h"

@@ -8,9 +8,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <arith_tools.h>
 #include <std_types.h>
+#include <c_types.h>
 
-#include "ansi_c_expr.h"
-#include "c_types.h"
+#include "string_constant.h"
 
 string_constantt::string_constantt():exprt("string-constant")
 {

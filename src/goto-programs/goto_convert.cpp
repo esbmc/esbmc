@@ -11,11 +11,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <i2string.h>
 #include <cprover_prefix.h>
-//#include <expr_util.h>
 #include <prefix.h>
 #include <std_expr.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "goto_convert_class.h"
 #include "remove_skip.h"

@@ -18,8 +18,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_code.h>
 #include <std_expr.h>
 #include <type_byte_size.h>
+#include <c_types.h>
 
-#include <ansi-c/c_types.h>
 
 #include "goto_convert_class.h"
 

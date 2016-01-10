@@ -1,5 +1,5 @@
 #include <sstream>
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 #include <base_type.h>
 #include "smt_conv.h"
 #include "smt_tuple_flat.h"

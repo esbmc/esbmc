@@ -4,7 +4,7 @@
 
 #include <base_type.h>
 #include <arith_tools.h>
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "smt_conv.h"
 #include <solvers/prop/literal.h>

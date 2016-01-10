@@ -15,8 +15,8 @@
 #include <config.h>
 #include <message.h>
 #include <bitvector.h>
+#include <c_types.h>
 
-#include <ansi-c/c_types.h>
 #include <ansi-c/c_main.h>
 
 bool llvm_main(

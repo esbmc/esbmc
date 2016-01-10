@@ -2,8 +2,8 @@
 #include <set>
 #include <utility>
 
+#include <c_types.h>
 #include "array_conv.h"
-#include <ansi-c/c_types.h>
 
 static inline bool
 array_indexes_are_same(
