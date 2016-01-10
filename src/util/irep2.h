@@ -1112,10 +1112,6 @@ namespace esbmct {
     void list_operands(std::list<expr2tc*> &inp);
   };
 
-  // Meta goo
-  class takestype;
-  class notype;
-
   // So that we can write such things as:
   //
   //   constant_int2tc bees(type, val);
