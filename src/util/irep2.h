@@ -950,19 +950,19 @@ namespace esbmct {
   typedef expr2t_traits<> expr2t_default_traits;
 
   // Declaration
-  template <class derived, class subclass, typename traits, typename enable = void>
+  template <class derived, class baseclass, typename traits, typename enable = void>
     class type_methods2;
-  template <class derived, class subclass, typename traits, typename enable = void>
+  template <class derived, class baseclass, typename traits, typename enable = void>
     class expr_methods2;
 
   // Recursive instance
-  template <class derived, class subclass, typename traits, typename enable>
-    class type_methods2 : public type_methods2<derived, subclass, typename boost::mpl::pop_front<traits>::type, enable>
+  template <class derived, class baseclass, typename traits, typename enable>
+    class type_methods2 : public type_methods2<derived, baseclass, typename boost::mpl::pop_front<traits>::type, enable>
   {
   public:
-    typedef type_methods2<derived, subclass, typename boost::mpl::pop_front<traits>::type, enable> superclass;
-    typedef typename subclass::container_type container2tc;
-    typedef typename subclass::base_type base2t;
+    typedef type_methods2<derived, baseclass, typename boost::mpl::pop_front<traits>::type, enable> superclass;
+    typedef typename baseclass::container_type container2tc;
+    typedef typename baseclass::base_type base2t;
 
     template <typename ...Args> type_methods2(Args... args) : superclass(args...) { }
 
@@ -1001,20 +1001,20 @@ namespace esbmct {
   };
 
   // Base instance
-  template <class derived, class subclass, typename X>
-    class type_methods2<derived, subclass, X,
+  template <class derived, class baseclass, typename X>
+    class type_methods2<derived, baseclass, X,
                         typename boost::enable_if<typename boost::mpl::empty<X>::type>::type>
-      : public subclass
+      : public baseclass
   {
   public:
-    template <typename ...Args> type_methods2(Args... args) : subclass(args...) { }
+    template <typename ...Args> type_methods2(Args... args) : baseclass(args...) { }
 
     // Copy constructor. See note for non-specialized definition.
-    type_methods2(const derived &ref) : subclass(ref) { }
+    type_methods2(const derived &ref) : baseclass(ref) { }
 
   protected:
-    typedef typename subclass::container_type container2tc;
-    typedef typename subclass::base_type base2t;
+    typedef typename baseclass::container_type container2tc;
+    typedef typename baseclass::base_type base2t;
 
     // Rather than trying to specialize and implement in the cpp file, terminate
     // here.
@@ -1085,11 +1085,11 @@ namespace esbmct {
   };
 
   // Head definition of expr_methods2 XXX XXX explain
-  template <class derived, class subclass, typename traits, typename enable>
-    class expr_methods2 : public type_methods2<derived, subclass, traits, enable>
+  template <class derived, class baseclass, typename traits, typename enable>
+    class expr_methods2 : public type_methods2<derived, baseclass, traits, enable>
   {
   public:
-    typedef type_methods2<derived, subclass, traits, enable> superclass;
+    typedef type_methods2<derived, baseclass, traits, enable> superclass;
 
     template <typename ...Args> expr_methods2(Args... args) : superclass(args...) { }
 
