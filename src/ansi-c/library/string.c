@@ -71,9 +71,10 @@ char *strncat(char *dst, const char *src, size_t n)
 size_t strlen(const char *s)
 {
   __ESBMC_HIDE:;
-  const char *eos = s;
-  while (*eos++);
-  return (int) (eos - s - 1);
+  size_t len = 0;
+  while (s[len] != 0)
+    len++;
+  return len;
 }
 
 int strcmp(const char *p1, const char *p2)
