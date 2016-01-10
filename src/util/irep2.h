@@ -2261,7 +2261,10 @@ class invalid_pointer_ops : public pointer_ops
 {
 public:
   // Forward constructors downwards
-  template <typename ...Args> invalid_pointer_ops(Args... args) : pointer_ops(args...) {}
+  invalid_pointer_ops(const type2tc &t, expr2t::expr_ids id, const expr2tc &p)
+    : pointer_ops(t, id, p) { }
+  invalid_pointer_ops(const invalid_pointer_ops &ref)
+    : pointer_ops(ref) { }
 
 // Type mangling:
   typedef esbmct::expr2t_traits_always_construct<ptr_obj_field> traits;
