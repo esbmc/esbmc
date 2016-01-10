@@ -1774,9 +1774,9 @@ hash_value(lolnoop val)
   return val;
 }
 
-/************************ Second attempt at type templates ********************/
+/************************ Second attempt at irep templates ********************/
 
-// Implementations of type methods, recursively.
+// Implementations of common methods, recursively.
 
 // Top level type method definition (above recursive def)
 // exprs
