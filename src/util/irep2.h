@@ -893,8 +893,13 @@ namespace esbmct {
     typedef int type;
   };
 
-  /** Vardic type2t boilerplate methods. */
-
+  /** Record for properties of an irep field.
+   *  This type records, for any particular field:
+   *    * It's type
+   *    * The class that it's a member of
+   *    * A class pointer to this field
+   *  The aim being that we have enough information about the field to
+   *  manipulate it without any further traits. */
   template <typename R, typename C, R C::* v>
     class field_traits
   {
@@ -918,6 +923,9 @@ namespace esbmct {
     static constexpr membr_ptr value = v;
   };
 
+  /** Trait class for type2t ireps.
+   *  This takes a list of field traits and puts it in a vector, with the record
+   *  for the type_id field (common to all type2t's) put that the front. */
   template <typename ...Args>
     class type2t_traits
   {
@@ -926,8 +934,14 @@ namespace esbmct {
     typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_id_field>::type type;
   };
 
+  /** Default trait types for type2t. Assumes no fields. */
   typedef type2t_traits<>::type type2t_default_traits;
 
+  /** Trait class for expr2t ireps.
+   *  This takes a list of field traits and puts it in a vector, with the record
+   *  for the expr_id field (common to all expr2t's) put that the front. Records
+   *  some additional flags about the usage of the expression -- specifically
+   *  what a unary constructor will do (@see something2tc::something2tc) */
   template <typename ...Args>
     class expr2t_traits
   {
@@ -950,15 +964,43 @@ namespace esbmct {
     static constexpr unsigned int num_fields = boost::mpl::size<type>::type::value;
   };
 
-//  typedef expr2t_traits<> expr2t_default_traits;
-
-  // Declaration
+  // Declaration of irep and expr methods templates.
   template <class derived, class baseclass, typename traits, typename enable = void>
     class irep_methods2;
   template <class derived, class baseclass, typename traits, typename enable = void>
     class expr_methods2;
 
-  // Recursive instance
+  /** Definition of irep methods template.
+   *
+   *  @param derived The inheritor class, like add2t
+   *  @param baseclass Class containing fields for methods to be defined over
+   *  @param traits Type traits for baseclass
+   *
+   *  A typical irep inheritance looks like this, descending from the base
+   *  irep class to the most derived class:
+   *
+   *    b          Base class, such as type2t or expr2t
+   *    d          Data class, containing storage fields for ireps
+   *    m          Terminal methods class (see below)
+   *    M
+   *    M            Recursive chain of irep_methods2 classes. Each one
+   *    M            implements methods for one field, and calls to a superclass
+   *    M            to handle remaining fields
+   *    M
+   *    t          Top level class such as add2t
+   *
+   *  The effect is thus: one takes a base class containing storage fields,
+   *  instantiate irep_methods2 on top of it which unrolls to one template
+   *  instance per field (plus a specialized terminal when there are no more
+   *  fields). Then, have the top level class inherit from the chain of
+   *  irep_methods classes. This avoids the writing of certain boilerplate
+   *  methods at the expense of writing type trait information.
+   *
+   *  Technically one could typedef the top level irep_methods class to be the
+   *  top level class itself; however putting a 'cap' on it (as it were) avoids
+   *  decades worth of template errors if a programmer uses the irep
+   *  incorrectly.
+   */
   template <class derived, class baseclass, typename traits, typename enable>
     class irep_methods2 : public irep_methods2<derived, baseclass, typename boost::mpl::pop_front<traits>::type, enable>
   {
