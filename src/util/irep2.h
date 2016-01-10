@@ -1018,6 +1018,9 @@ namespace esbmct {
     // defining a copy constructor that exactly matches the (only) use case.
     irep_methods2(const derived &ref) : superclass(ref) { }
 
+    // Top level / public methods for this irep. These methods are virtual, set
+    // up any relevant computation, and then call the recursive instances below
+    // to perform the actual work over fields.
     container2tc clone(void) const;
     list_of_memberst tostring(unsigned int indent) const;
     bool cmp(const base2t &ref) const;
@@ -1026,10 +1029,13 @@ namespace esbmct {
     void hash(crypto_hash &hash) const;
 
   protected:
+    // Fetch the type information about the field we are concerned with out
+    // of the current type trait we're working on.
     typedef typename boost::mpl::front<traits>::type::result_type cur_type;
     typedef typename boost::mpl::front<traits>::type::source_class base_class;
     typedef typename boost::mpl::front<traits>::type membr_ptr;
 
+    // Recursive instances of boilerplate methods.
     void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const;
     bool cmp_rec(const base2t &ref) const;
     int lt_rec(const base2t &ref) const;
