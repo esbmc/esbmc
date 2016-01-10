@@ -823,9 +823,60 @@ static inline std::string get_expr_id(const expr2tc &expr)
   return get_expr_id(*expr);
 }
 
-/** A namespace for "ESBMC templates".
- *  This means anything designed to mess with expressions or types declared in
- *  this header, via the medium of templates. */
+/** Template for providing templated methods to irep classes (type2t/expr2t).
+ *
+ *  What this does: we give irep_methods2 a type trait record that contains
+ *  a boost::mpl::vector, the elements of which describe each field in the
+ *  class we're operating on. For each field we get:
+ *
+ *    - The type of the field
+ *    - The class that field is part of
+ *    - A pointer offset to that field.
+ *
+ *  What this means, is that we can @a type @a generically access a member
+ *  of a class from within the template, without knowing what type it is,
+ *  what its name is, or even what type contains it.
+ *
+ *  We can then use that to make all the boring methods of ireps type
+ *  generic too. For example: we can make the comparision method by accessing
+ *  each field in the class we're dealing with, passing them to another
+ *  function to do the comparison (with the type resolved by templates or
+ *  via overloading), and then inspecting the output of that.
+ *
+ *  In fact, we can make type generic implementations of all the following
+ *  methods in expr2t: clone, tostring, cmp, lt, do_crc, list_operands, hash.
+ *  Similar methods, minus the operands, can be made generic in type2t.
+ *
+ *  So, that's what these templates provide; an irep class can be made by
+ *  inheriting from this template, telling it what class it'll end up with,
+ *  and what to subclass from, and what the fields in the class being derived
+ *  from look like. This means we can construct a type hierarchy with whatever
+ *  inheretence we like and whatever fields we like, then latch irep_methods2
+ *  on top of that to implement all the anoying boring boilerplate code.
+ *
+ *  ----
+ *
+ *  In addition, we also define container types for each irep, which is
+ *  essentially a type-safeish wrapper around a std::shared_ptr (i.e.,
+ *  reference counter). One can create a new irep with syntax such as:
+ *
+ *    foo2tc bar(type, operand1, operand2);
+ *
+ *  As well as copy-constructing a container around an expr to make it type
+ *  specific:
+ *
+ *    expr2tc foo = something();
+ *    foo2tc bar(foo);
+ *
+ *  Assertions in the construction will ensure that the expression is in fact
+ *  of type foo2t. One can transparently access the irep fields through
+ *  dereference, such as:
+ *
+ *    bar->operand1 = 0;
+ *
+ *  This all replicates the CBMC expression situation, but with the addition
+ *  of types.
+ */
 namespace esbmct {
 
   /** Maximum number of fields to support in expr2t subclasses. This value
@@ -841,61 +892,6 @@ namespace esbmct {
   public:
     typedef int type;
   };
-
-  /** Template for providing templated methods to irep classes (type2t/expr2t).
-   *
-   *  What this does: we give irep_methods2 a type trait record that contains
-   *  a boost::mpl::vector, the elements of which describe each field in the
-   *  class we're operating on. For each field we get:
-   *
-   *    - The type of the field
-   *    - The class that field is part of
-   *    - A pointer offset to that field.
-   *
-   *  What this means, is that we can @a type @a generically access a member
-   *  of a class from within the template, without knowing what type it is,
-   *  what its name is, or even what type contains it.
-   *
-   *  We can then use that to make all the boring methods of ireps type
-   *  generic too. For example: we can make the comparision method by accessing
-   *  each field in the class we're dealing with, passing them to another
-   *  function to do the comparison (with the type resolved by templates or
-   *  via overloading), and then inspecting the output of that.
-   *
-   *  In fact, we can make type generic implementations of all the following
-   *  methods in expr2t: clone, tostring, cmp, lt, do_crc, list_operands, hash.
-   *  Similar methods, minus the operands, can be made generic in type2t.
-   *
-   *  So, that's what these templates provide; an irep class can be made by
-   *  inheriting from this template, telling it what class it'll end up with,
-   *  and what to subclass from, and what the fields in the class being derived
-   *  from look like. This means we can construct a type hierarchy with whatever
-   *  inheretence we like and whatever fields we like, then latch irep_methods2
-   *  on top of that to implement all the anoying boring boilerplate code.
-   *
-   *  ----
-   *
-   *  In addition, we also define container types for each irep, which is
-   *  essentially a type-safeish wrapper around a std::shared_ptr (i.e.,
-   *  reference counter). One can create a new irep with syntax such as:
-   *
-   *    foo2tc bar(type, operand1, operand2);
-   *
-   *  As well as copy-constructing a container around an expr to make it type
-   *  specific:
-   *
-   *    expr2tc foo = something();
-   *    foo2tc bar(foo);
-   *
-   *  Assertions in the construction will ensure that the expression is in fact
-   *  of type foo2t. One can transparently access the irep fields through
-   *  dereference, such as:
-   *
-   *    bar->operand1 = 0;
-   *
-   *  This all replicates the CBMC expression situation, but with the addition
-   *  of types.
-   */
 
   /** Vardic type2t boilerplate methods. */
 
