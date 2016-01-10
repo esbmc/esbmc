@@ -1820,7 +1820,7 @@ esbmct::expr_methods2<derived, baseclass, traits, enable>::list_operands(std::li
 
 template <class derived, class baseclass, typename traits, typename enable>
 auto
-esbmct::type_methods2<derived, baseclass, traits, enable>::clone(void) const -> container2tc
+esbmct::irep_methods2<derived, baseclass, traits, enable>::clone(void) const -> container2tc
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
@@ -1829,7 +1829,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::clone(void) const -> 
 
 template <class derived, class baseclass, typename traits, typename enable>
 list_of_memberst
-esbmct::type_methods2<derived, baseclass, traits, enable>::tostring(unsigned int indent) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::tostring(unsigned int indent) const
 {
   list_of_memberst thevector;
 
@@ -1839,21 +1839,21 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::tostring(unsigned int
 
 template <class derived, class baseclass, typename traits, typename enable>
 bool
-esbmct::type_methods2<derived, baseclass, traits, enable>::cmp(const base2t &ref) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::cmp(const base2t &ref) const
 {
   return cmp_rec(ref); // _includes_ type_id / expr_id
 }
 
 template <class derived, class baseclass, typename traits, typename enable>
 int
-esbmct::type_methods2<derived, baseclass, traits, enable>::lt(const base2t &ref) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::lt(const base2t &ref) const
 {
   return lt_rec(ref); // _includes_ type_id / expr_id
 }
 
 template <class derived, class baseclass, typename traits,  typename enable>
 size_t
-esbmct::type_methods2<derived, baseclass, traits,  enable>::do_crc(size_t seed) const
+esbmct::irep_methods2<derived, baseclass, traits,  enable>::do_crc(size_t seed) const
 {
 
   if (this->crc_val != 0) {
@@ -1876,7 +1876,7 @@ esbmct::type_methods2<derived, baseclass, traits,  enable>::do_crc(size_t seed) 
 
 template <class derived, class baseclass, typename traits, typename enable>
 void
-esbmct::type_methods2<derived, baseclass, traits, enable>::hash(crypto_hash &hash) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::hash(crypto_hash &hash) const
 {
 
   hash_rec(hash); // _includes_ type_id / expr_id
@@ -1887,7 +1887,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::hash(crypto_hash &has
 
 template <class derived, class baseclass, typename traits, typename enable>
 void
-esbmct::type_methods2<derived, baseclass, traits, enable>::tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
 {
   // Insert our particular member to string list.
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1900,7 +1900,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::tostring_rec(unsigned
 
 template <class derived, class baseclass, typename traits, typename enable>
 bool
-esbmct::type_methods2<derived, baseclass, traits, enable>::cmp_rec(const base2t &ref) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::cmp_rec(const base2t &ref) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
@@ -1914,7 +1914,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::cmp_rec(const base2t 
 
 template <class derived, class baseclass, typename traits, typename enable>
 int
-esbmct::type_methods2<derived, baseclass, traits, enable>::lt_rec(const base2t &ref) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::lt_rec(const base2t &ref) const
 {
   int tmp;
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1930,7 +1930,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::lt_rec(const base2t &
 
 template <class derived, class baseclass, typename traits, typename enable>
 void
-esbmct::type_methods2<derived, baseclass, traits, enable>::do_crc_rec() const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::do_crc_rec() const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
@@ -1943,7 +1943,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::do_crc_rec() const
 
 template <class derived, class baseclass, typename traits, typename enable>
 void
-esbmct::type_methods2<derived, baseclass, traits, enable>::hash_rec(crypto_hash &hash) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::hash_rec(crypto_hash &hash) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
@@ -1954,7 +1954,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::hash_rec(crypto_hash 
 
 template <class derived, class baseclass, typename traits, typename enable>
 void
-esbmct::type_methods2<derived, baseclass, traits, enable>::list_operands_rec(std::list<const expr2tc*> &inp) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::list_operands_rec(std::list<const expr2tc*> &inp) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
@@ -1966,7 +1966,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::list_operands_rec(std
 
 template <class derived, class baseclass, typename traits, typename enable>
 void
-esbmct::type_methods2<derived, baseclass, traits, enable>::list_operands_rec(std::list<expr2tc*> &inp)
+esbmct::irep_methods2<derived, baseclass, traits, enable>::list_operands_rec(std::list<expr2tc*> &inp)
 {
   derived *derived_this = static_cast<derived*>(this);
   auto m_ptr = membr_ptr::value;
@@ -1978,7 +1978,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::list_operands_rec(std
 
 template <class derived, class baseclass, typename traits, typename enable>
 const expr2tc *
-esbmct::type_methods2<derived, baseclass, traits, enable>::get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
 {
   const expr2tc *ptr;
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1993,7 +1993,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::get_sub_expr_rec(unsi
 
 template <class derived, class baseclass, typename traits, typename enable>
 expr2tc *
-esbmct::type_methods2<derived, baseclass, traits, enable>::get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
+esbmct::irep_methods2<derived, baseclass, traits, enable>::get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
 {
   expr2tc *ptr;
   derived *derived_this = static_cast<derived*>(this);
@@ -2008,7 +2008,7 @@ esbmct::type_methods2<derived, baseclass, traits, enable>::get_sub_expr_nc_rec(u
 
 template <class derived, class baseclass, typename traits, typename enable>
 unsigned int
-esbmct::type_methods2<derived, baseclass, traits, enable>::get_num_sub_exprs_rec(void) const
+esbmct::irep_methods2<derived, baseclass, traits, enable>::get_num_sub_exprs_rec(void) const
 {
   unsigned int num = 0;
   const derived *derived_this = static_cast<const derived*>(this);
@@ -2271,19 +2271,19 @@ std::string concat2t::field_names [esbmct::num_type_fields]  =
 
 // Explicit template instanciations
 
-template class esbmct::type_methods2<bool_type2t, type2t, typename esbmct::type2t_default_traits::type>;
-template class esbmct::type_methods2<empty_type2t, type2t, typename esbmct::type2t_default_traits::type>;
-template class esbmct::type_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits::type>;
-template class esbmct::type_methods2<struct_type2t, struct_union_data, struct_union_data::traits::type>;
-template class esbmct::type_methods2<union_type2t, struct_union_data, struct_union_data::traits::type>;
-template class esbmct::type_methods2<unsignedbv_type2t, bv_data, bv_data::traits::type>;
-template class esbmct::type_methods2<signedbv_type2t, bv_data, bv_data::traits::type>;
-template class esbmct::type_methods2<code_type2t, code_data, code_data::traits::type>;
-template class esbmct::type_methods2<array_type2t, array_data, array_data::traits::type>;
-template class esbmct::type_methods2<pointer_type2t, pointer_data, pointer_data::traits::type>;
-template class esbmct::type_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits::type>;
-template class esbmct::type_methods2<string_type2t, string_data, string_data::traits::type>;
-template class esbmct::type_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits::type>;
+template class esbmct::irep_methods2<bool_type2t, type2t, typename esbmct::type2t_default_traits::type>;
+template class esbmct::irep_methods2<empty_type2t, type2t, typename esbmct::type2t_default_traits::type>;
+template class esbmct::irep_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits::type>;
+template class esbmct::irep_methods2<struct_type2t, struct_union_data, struct_union_data::traits::type>;
+template class esbmct::irep_methods2<union_type2t, struct_union_data, struct_union_data::traits::type>;
+template class esbmct::irep_methods2<unsignedbv_type2t, bv_data, bv_data::traits::type>;
+template class esbmct::irep_methods2<signedbv_type2t, bv_data, bv_data::traits::type>;
+template class esbmct::irep_methods2<code_type2t, code_data, code_data::traits::type>;
+template class esbmct::irep_methods2<array_type2t, array_data, array_data::traits::type>;
+template class esbmct::irep_methods2<pointer_type2t, pointer_data, pointer_data::traits::type>;
+template class esbmct::irep_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits::type>;
+template class esbmct::irep_methods2<string_type2t, string_data, string_data::traits::type>;
+template class esbmct::irep_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits::type>;
 
 // Explicit instanciation for exprs.
 

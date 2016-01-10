@@ -951,27 +951,27 @@ namespace esbmct {
 
   // Declaration
   template <class derived, class baseclass, typename traits, typename enable = void>
-    class type_methods2;
+    class irep_methods2;
   template <class derived, class baseclass, typename traits, typename enable = void>
     class expr_methods2;
 
   // Recursive instance
   template <class derived, class baseclass, typename traits, typename enable>
-    class type_methods2 : public type_methods2<derived, baseclass, typename boost::mpl::pop_front<traits>::type, enable>
+    class irep_methods2 : public irep_methods2<derived, baseclass, typename boost::mpl::pop_front<traits>::type, enable>
   {
   public:
-    typedef type_methods2<derived, baseclass, typename boost::mpl::pop_front<traits>::type, enable> superclass;
+    typedef irep_methods2<derived, baseclass, typename boost::mpl::pop_front<traits>::type, enable> superclass;
     typedef typename baseclass::container_type container2tc;
     typedef typename baseclass::base_type base2t;
 
-    template <typename ...Args> type_methods2(Args... args) : superclass(args...) { }
+    template <typename ...Args> irep_methods2(Args... args) : superclass(args...) { }
 
     // Copy constructor. Construct from derived ref rather than just
-    // type_methods2, because the template above will be able to directly
+    // irep_methods2, because the template above will be able to directly
     // match a const derived &, and so the compiler won't cast it up to
-    // const type_methods2 & and call the copy constructor. Fix this by
+    // const irep_methods2 & and call the copy constructor. Fix this by
     // defining a copy constructor that exactly matches the (only) use case.
-    type_methods2(const derived &ref) : superclass(ref) { }
+    irep_methods2(const derived &ref) : superclass(ref) { }
 
     container2tc clone(void) const;
     list_of_memberst tostring(unsigned int indent) const;
@@ -1002,15 +1002,15 @@ namespace esbmct {
 
   // Base instance
   template <class derived, class baseclass, typename X>
-    class type_methods2<derived, baseclass, X,
+    class irep_methods2<derived, baseclass, X,
                         typename boost::enable_if<typename boost::mpl::empty<X>::type>::type>
       : public baseclass
   {
   public:
-    template <typename ...Args> type_methods2(Args... args) : baseclass(args...) { }
+    template <typename ...Args> irep_methods2(Args... args) : baseclass(args...) { }
 
     // Copy constructor. See note for non-specialized definition.
-    type_methods2(const derived &ref) : baseclass(ref) { }
+    irep_methods2(const derived &ref) : baseclass(ref) { }
 
   protected:
     typedef typename baseclass::container_type container2tc;
@@ -1086,14 +1086,14 @@ namespace esbmct {
 
   // Head definition of expr_methods2 XXX XXX explain
   template <class derived, class baseclass, typename traits, typename enable>
-    class expr_methods2 : public type_methods2<derived, baseclass, traits, enable>
+    class expr_methods2 : public irep_methods2<derived, baseclass, traits, enable>
   {
   public:
-    typedef type_methods2<derived, baseclass, traits, enable> superclass;
+    typedef irep_methods2<derived, baseclass, traits, enable> superclass;
 
     template <typename ...Args> expr_methods2(Args... args) : superclass(args...) { }
 
-    // See notes on type_methods2 copy constructor
+    // See notes on irep_methods2 copy constructor
     expr_methods2(const derived &ref) : superclass(ref) { }
 
     void list_operands(std::list<const expr2tc*> &inp) const;
@@ -1363,19 +1363,19 @@ public:
 
 // Then give them a typedef name
 
-typedef esbmct::type_methods2<bool_type2t, type2t, typename esbmct::type2t_default_traits::type> bool_type_methods;
-typedef esbmct::type_methods2<empty_type2t, type2t, typename esbmct::type2t_default_traits::type> empty_type_methods;
-typedef esbmct::type_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits::type> symbol_type_methods;
-typedef esbmct::type_methods2<struct_type2t, struct_union_data, struct_union_data::traits::type> struct_type_methods;
-typedef esbmct::type_methods2<union_type2t, struct_union_data, struct_union_data::traits::type> union_type_methods;
-typedef esbmct::type_methods2<unsignedbv_type2t, bv_data, bv_data::traits::type> unsignedbv_type_methods;
-typedef esbmct::type_methods2<signedbv_type2t, bv_data, bv_data::traits::type> signedbv_type_methods;
-typedef esbmct::type_methods2<code_type2t, code_data, code_data::traits::type> code_type_methods;
-typedef esbmct::type_methods2<array_type2t, array_data, array_data::traits::type> array_type_methods;
-typedef esbmct::type_methods2<pointer_type2t, pointer_data, pointer_data::traits::type> pointer_type_methods;
-typedef esbmct::type_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits::type> fixedbv_type_methods;
-typedef esbmct::type_methods2<string_type2t, string_data, string_data::traits::type> string_type_methods;
-typedef esbmct::type_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits::type> cpp_name_type_methods;
+typedef esbmct::irep_methods2<bool_type2t, type2t, typename esbmct::type2t_default_traits::type> bool_type_methods;
+typedef esbmct::irep_methods2<empty_type2t, type2t, typename esbmct::type2t_default_traits::type> empty_type_methods;
+typedef esbmct::irep_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits::type> symbol_type_methods;
+typedef esbmct::irep_methods2<struct_type2t, struct_union_data, struct_union_data::traits::type> struct_type_methods;
+typedef esbmct::irep_methods2<union_type2t, struct_union_data, struct_union_data::traits::type> union_type_methods;
+typedef esbmct::irep_methods2<unsignedbv_type2t, bv_data, bv_data::traits::type> unsignedbv_type_methods;
+typedef esbmct::irep_methods2<signedbv_type2t, bv_data, bv_data::traits::type> signedbv_type_methods;
+typedef esbmct::irep_methods2<code_type2t, code_data, code_data::traits::type> code_type_methods;
+typedef esbmct::irep_methods2<array_type2t, array_data, array_data::traits::type> array_type_methods;
+typedef esbmct::irep_methods2<pointer_type2t, pointer_data, pointer_data::traits::type> pointer_type_methods;
+typedef esbmct::irep_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits::type> fixedbv_type_methods;
+typedef esbmct::irep_methods2<string_type2t, string_data, string_data::traits::type> string_type_methods;
+typedef esbmct::irep_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits::type> cpp_name_type_methods;
 
 /** Boolean type.
  *  Identifies a boolean type. Contains no additional data.
