@@ -842,11 +842,11 @@ namespace esbmct {
     typedef int type;
   };
 
-  /** Template for providing templated methods to expr2t classes.
+  /** Template for providing templated methods to irep classes (type2t/expr2t).
    *
-   *  What this does: we give expr_methods a set of template parameters that
-   *  describe the structure of an expr2t subclass. For each field, we give
-   *  the template:
+   *  What this does: we give irep_methods2 a type trait record that contains
+   *  a boost::mpl::vector, the elements of which describe each field in the
+   *  class we're operating on. For each field we get:
    *
    *    - The type of the field
    *    - The class that field is part of
@@ -856,7 +856,7 @@ namespace esbmct {
    *  of a class from within the template, without knowing what type it is,
    *  what its name is, or even what type contains it.
    *
-   *  We can then use that to make all the boring methods of expr2t type
+   *  We can then use that to make all the boring methods of ireps type
    *  generic too. For example: we can make the comparision method by accessing
    *  each field in the class we're dealing with, passing them to another
    *  function to do the comparison (with the type resolved by templates or
@@ -864,29 +864,17 @@ namespace esbmct {
    *
    *  In fact, we can make type generic implementations of all the following
    *  methods in expr2t: clone, tostring, cmp, lt, do_crc, list_operands, hash.
+   *  Similar methods, minus the operands, can be made generic in type2t.
    *
-   *  So, that's what this template provides; an expr2t class can be made by
+   *  So, that's what these templates provide; an irep class can be made by
    *  inheriting from this template, telling it what class it'll end up with,
    *  and what to subclass from, and what the fields in the class being derived
    *  from look like. This means we can construct a type hierarchy with whatever
-   *  inheretence we like and whatever fields we like, then latch expr_methods
+   *  inheretence we like and whatever fields we like, then latch irep_methods2
    *  on top of that to implement all the anoying boring boilerplate code.
    *
    *  ----
    *
-   *  The constructors also need come documentation - We want to be able to
-   *  pass constructor arguments down to the class we're deriving from
-   *  without any additional boilerplate. However, unfortunately, we can't
-   *  make a vardic constructor, nor generate a bunch of explicit constructors
-   *  because they'll attempt to link against subclass constructors that don't
-   *  exist.
-   *
-   *  The solution to this is a series of explicit constructors that get
-   *  disabled by some boost magic depending on what the template parameters
-   *  are. The upshot is that however many number of template arguments are
-   *  provided, a constructor with that many arguments (plus expr id and type)
-   *  is enabled. For more information on how this is made possible, first
-   *  consult a doctor, then mail jmorse.
    *
    */
 
