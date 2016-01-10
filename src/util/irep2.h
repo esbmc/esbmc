@@ -933,6 +933,18 @@ namespace esbmct {
   public:
     typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id> expr_id_field;
     typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>, expr_id_field>::type type;
+    static constexpr bool always_construct = false;
+  };
+
+  // Hack to force something2tc to always construct the traits' type, rather
+  // that copy construct. Due to misery and ambiguity elsewhere.
+  template <typename ...Args>
+    class expr2t_traits_always_construct
+  {
+  public:
+    typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id> expr_id_field;
+    typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>, expr_id_field>::type type;
+    static constexpr bool always_construct = true;
   };
 
   typedef expr2t_traits<>::type expr2t_default_traits;
@@ -2098,7 +2110,7 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<expr2tc, not_data, &not_data::value> value_field;
-  typedef esbmct::expr2t_traits<value_field>::type traits;
+  typedef esbmct::expr2t_traits_always_construct<value_field>::type traits;
 };
 
 class logic_2ops : public logical_ops
