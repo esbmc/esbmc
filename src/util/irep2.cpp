@@ -2271,19 +2271,19 @@ std::string concat2t::field_names [esbmct::num_type_fields]  =
 
 // Explicit template instanciations
 
-template class esbmct::type_methods2<bool_type2t, type2t, typename esbmct::type2t_default_traits>;
-template class esbmct::type_methods2<empty_type2t, type2t, typename esbmct::type2t_default_traits>;
-template class esbmct::type_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits>;
-template class esbmct::type_methods2<struct_type2t, struct_union_data, struct_union_data::traits>;
-template class esbmct::type_methods2<union_type2t, struct_union_data, struct_union_data::traits>;
-template class esbmct::type_methods2<unsignedbv_type2t, bv_data, bv_data::traits>;
-template class esbmct::type_methods2<signedbv_type2t, bv_data, bv_data::traits>;
-template class esbmct::type_methods2<code_type2t, code_data, code_data::traits>;
-template class esbmct::type_methods2<array_type2t, array_data, array_data::traits>;
-template class esbmct::type_methods2<pointer_type2t, pointer_data, pointer_data::traits>;
-template class esbmct::type_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits>;
-template class esbmct::type_methods2<string_type2t, string_data, string_data::traits>;
-template class esbmct::type_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits>;
+template class esbmct::type_methods2<bool_type2t, type2t, typename esbmct::type2t_default_traits::type>;
+template class esbmct::type_methods2<empty_type2t, type2t, typename esbmct::type2t_default_traits::type>;
+template class esbmct::type_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits::type>;
+template class esbmct::type_methods2<struct_type2t, struct_union_data, struct_union_data::traits::type>;
+template class esbmct::type_methods2<union_type2t, struct_union_data, struct_union_data::traits::type>;
+template class esbmct::type_methods2<unsignedbv_type2t, bv_data, bv_data::traits::type>;
+template class esbmct::type_methods2<signedbv_type2t, bv_data, bv_data::traits::type>;
+template class esbmct::type_methods2<code_type2t, code_data, code_data::traits::type>;
+template class esbmct::type_methods2<array_type2t, array_data, array_data::traits::type>;
+template class esbmct::type_methods2<pointer_type2t, pointer_data, pointer_data::traits::type>;
+template class esbmct::type_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits::type>;
+template class esbmct::type_methods2<string_type2t, string_data, string_data::traits::type>;
+template class esbmct::type_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits::type>;
 
 // Explicit instanciation for exprs.
 
@@ -2293,11 +2293,11 @@ template class esbmct::type_methods2<cpp_name_type2t, cpp_name_data, cpp_name_da
 #undef irep_typedefs
 #undef irep_typedefs_empty
 
-#define irep_typedefs(basename, superclass, type, ...) \
-  template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits>;
+#define irep_typedefs(basename, superclass, type_tag, ...) \
+  template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits::type>;
 
-#define irep_typedefs_empty(basename, superclass, type) \
-  template class  esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;
+#define irep_typedefs_empty(basename, superclass, type_tag) \
+  template class  esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits::type>;
 
 irep_typedefs(constant_int, constant_int_data, esbmct::takestype,
               BigInt, constant_int_data, &constant_int_data::constant_value);
