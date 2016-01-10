@@ -34,23 +34,7 @@ void llvm_convertert::convert_string_literal(
   const clang::StringLiteral string_literal,
   exprt &dest)
 {
-  typet type;
-  get_type(string_literal.getType(), type);
-
-  exprt string = gen_zero(type);
-
-  typet &elem_type = type.subtype();
-  for(u_int byte = 0; byte < string_literal.getLength(); ++byte)
-  {
-    exprt elem =
-      constant_exprt(
-        integer2binary(string_literal.getCodeUnit(byte), bv_width(elem_type)),
-        integer2string(string_literal.getCodeUnit(byte)),
-        elem_type);
-
-    string.operands().at(byte) = elem;
-  }
-
+  string_constantt string(string_literal.getString().str());
   dest.swap(string);
 }
 
