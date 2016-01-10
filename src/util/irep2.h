@@ -2607,7 +2607,7 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<expr2tc, code_expression_data, &code_expression_data::operand> operand_field;
-  typedef esbmct::expr2t_traits<operand_field> traits;
+  typedef esbmct::expr2t_traits_always_construct<operand_field> traits;
 };
 
 class code_goto_data : public code_base
