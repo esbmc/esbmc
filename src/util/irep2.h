@@ -823,9 +823,6 @@ static inline std::string get_expr_id(const expr2tc &expr)
   return get_expr_id(*expr);
 }
 
-// Forward dec for some subsequent constructor hacks.
-class symbol2t;
-
 /** A namespace for "ESBMC templates".
  *  This means anything designed to mess with expressions or types declared in
  *  this header, via the medium of templates. */
