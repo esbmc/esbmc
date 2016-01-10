@@ -26,6 +26,7 @@
 #include <boost/mpl/empty.hpp>
 #include <boost/mpl/push_front.hpp>
 #include <boost/mpl/pop_front.hpp>
+#include <boost/mpl/size.hpp>
 
 #include <boost/static_assert.hpp>
 
@@ -933,6 +934,7 @@ namespace esbmct {
     typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id> expr_id_field;
     typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>, expr_id_field>::type type;
     static constexpr bool always_construct = false;
+    static constexpr unsigned int num_fields = boost::mpl::size<type>::type::value;
   };
 
   // Hack to force something2tc to always construct the traits' type, rather
@@ -944,6 +946,7 @@ namespace esbmct {
     typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id> expr_id_field;
     typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>, expr_id_field>::type type;
     static constexpr bool always_construct = true;
+    static constexpr unsigned int num_fields = boost::mpl::size<type>::type::value;
   };
 
 //  typedef expr2t_traits<> expr2t_default_traits;
