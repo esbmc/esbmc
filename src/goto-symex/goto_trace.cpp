@@ -41,21 +41,22 @@ goto_trace_stept::output(
 {
   out << "*** ";
 
-  switch (type) {
-  case goto_trace_stept::ASSERT:
-    out << "ASSERT";
-    break;
+  switch (type)
+  {
+    case goto_trace_stept::ASSERT:
+      out << "ASSERT";
+      break;
 
-  case goto_trace_stept::ASSUME:
-    out << "ASSUME";
-    break;
+    case goto_trace_stept::ASSUME:
+      out << "ASSUME";
+      break;
 
-  case goto_trace_stept::ASSIGNMENT:
-    out << "ASSIGNMENT";
-    break;
+    case goto_trace_stept::ASSIGNMENT:
+      out << "ASSIGNMENT";
+      break;
 
-  default:
-    assert(false);
+    default:
+      assert(false);
   }
 
   if (type == ASSERT || type == ASSUME)
@@ -83,7 +84,8 @@ goto_trace_stept::output(
 
   out << std::endl;
 
-  if (pc->is_other() || pc->is_assign()) {
+  if (pc->is_other() || pc->is_assign())
+  {
     irep_idt identifier;
 
     if (!is_nil_expr(original_lhs))
@@ -91,17 +93,19 @@ goto_trace_stept::output(
     else
       identifier = to_symbol2t(lhs).get_symbol_name();
 
-    out << "  " << identifier
-        << " = " << from_expr(ns, identifier, value)
+    out << "  " << identifier << " = " << from_expr(ns, identifier, value)
         << std::endl;
-  } else if (pc->is_assert())    {
-    if (!guard) {
+  }
+  else if (pc->is_assert())
+  {
+    if (!guard)
+    {
       out << "Violated property:" << std::endl;
       if (pc->location.is_nil())
-	out << "  " << pc->location << std::endl;
+        out << "  " << pc->location << std::endl;
 
       if (comment != "")
-	out << "  " << comment << std::endl;
+        out << "  " << comment << std::endl;
       out << "  " << from_expr(ns, "", pc->guard) << std::endl;
       out << std::endl;
     }
@@ -120,18 +124,21 @@ counterexample_value(
 
   if (is_nil_expr(value))
     value_string = "(assignment removed)";
-  else {
+  else
+  {
     value_string = from_expr(ns, identifier, value);
 
-    if (is_constant_expr(value)) {
-      if (is_bv_type(value)) {
-	value_string += " (" +
-	                integer2string(to_constant_int2t(value).constant_value)
-	                + ")";
-      } else if (is_fixedbv_type(value)) {
-	value_string += " (" +
-	                to_constant_fixedbv2t(value).value.to_ansi_c_string() +
-	                ")";
+    if (is_constant_expr(value))
+    {
+      if (is_bv_type(value))
+      {
+        value_string +=
+          " (" + integer2string(to_constant_int2t(value).constant_value) + ")";
+      }
+      else if (is_fixedbv_type(value))
+      {
+        value_string +=
+          " (" + to_constant_fixedbv2t(value).value.to_ansi_c_string() + ")";
       }
     }
   }
@@ -142,8 +149,7 @@ counterexample_value(
   if (!ns.lookup(identifier, symbol))
     if (symbol->pretty_name != "")
       name = id2string(symbol->pretty_name);
-  out << "  " << name << "=" << value_string
-      << std::endl;
+  out << "  " << name << "=" << value_string << std::endl;
 }
 
 void
@@ -152,60 +158,59 @@ show_goto_trace_gui(
 {
   locationt previous_location;
 
-  for (goto_tracet::stepst::const_iterator
-       it = goto_trace.steps.begin();
-       it != goto_trace.steps.end();
-       it++)
+  for (goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
+      it != goto_trace.steps.end(); it++)
   {
     const locationt &location = it->pc->location;
 
-    if (it->type == goto_trace_stept::ASSERT &&
-        !it->guard) {
-      out << "FAILED" << std::endl
-          << it->comment << std::endl // value
+    if ((it->type == goto_trace_stept::ASSERT) && !it->guard)
+    {
+      out << "FAILED" << std::endl << it->comment
+          << std::endl // value
           << std::endl // PC
-          << location.file() << std::endl
-          << location.line() << std::endl
+          << location.file() << std::endl << location.line() << std::endl
           << location.column() << std::endl;
-    } else if (it->type == goto_trace_stept::ASSIGNMENT)      {
+    }
+    else if (it->type == goto_trace_stept::ASSIGNMENT)
+    {
       irep_idt identifier;
 
       if (!is_nil_expr(it->original_lhs))
-	identifier = to_symbol2t(it->original_lhs).get_symbol_name();
+        identifier = to_symbol2t(it->original_lhs).get_symbol_name();
       else
-	identifier = to_symbol2t(it->lhs).get_symbol_name();
+        identifier = to_symbol2t(it->lhs).get_symbol_name();
 
       std::string value_string = from_expr(ns, identifier, it->value);
 
       const symbolt *symbol;
       irep_idt base_name;
       if (!ns.lookup(identifier, symbol))
-	base_name = symbol->base_name;
+        base_name = symbol->base_name;
 
       out << "TRACE" << std::endl;
 
-      out << identifier << ","
-          << base_name << ","
-          << get_type_id(it->value->type) << ","
-          << value_string << std::endl
-          << it->step_nr << std::endl
-          << it->pc->location.file() << std::endl
-          << it->pc->location.line() << std::endl
-          << it->pc->location.column() << std::endl;
-    } else if (location != previous_location)      {
+      out << identifier << "," << base_name << ","
+          << get_type_id(it->value->type) << "," << value_string << std::endl
+          << it->step_nr << std::endl << it->pc->location.file() << std::endl
+          << it->pc->location.line() << std::endl << it->pc->location.column()
+          << std::endl;
+    }
+    else if (location != previous_location)
+    {
       // just the location
 
-      if (location.file() != "") {
-	out << "TRACE" << std::endl;
+      if (location.file() != "")
+      {
+        out << "TRACE" << std::endl;
 
-	out << ","             // identifier
-	    << ","             // base_name
-	    << ","             // type
-	    << "" << std::endl // value
-	    << it->step_nr << std::endl
-	    << location.file() << std::endl
-	    << location.line() << std::endl
-	    << location.column() << std::endl;
+        out
+            << ","             // identifier
+            << ","             // base_name
+            << ","             // type
+            << ""
+            << std::endl // value
+            << it->step_nr << std::endl << location.file() << std::endl
+            << location.line() << std::endl << location.column() << std::endl;
       }
     }
 
@@ -225,8 +230,7 @@ show_state_header(
   else
     out << "State " << step_nr;
 
-  out << " " << location
-      << " thread " << state.thread_nr << std::endl;
+  out << " " << location << " thread " << state.thread_nr << std::endl;
 
   // Print stack trace
 
@@ -247,7 +251,8 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
   std::map<int, std::map<int, std::string> > mapped_tokens;
 
   /* creating nodes and edges */
-  boost::property_tree::ptree first_node; node_p first_node_p;
+  boost::property_tree::ptree first_node;
+  node_p first_node_p;
   first_node_p.isEntryNode = true;
   create_node(first_node, first_node_p);
   graph.add_child("node", first_node);
@@ -255,139 +260,168 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path, std::st
   boost::property_tree::ptree & last_created_node = first_node;
   std::string last_function = "";
 
-  for (goto_tracet::stepst::const_iterator it = goto_trace.steps.begin(); it != goto_trace.steps.end(); it++){
+  for (goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
+      it != goto_trace.steps.end(); it++)
+  {
 
-	/* check if is a internal call */
-    std::string::size_type find_bt = it->pc->location.to_string().find("built-in", 0);
-    std::string::size_type find_lib = it->pc->location.to_string().find("library", 0);
-    bool is_internal_call = find_bt != std::string::npos || find_lib != std::string::npos;
+    /* check if is a internal call */
+    std::string::size_type find_bt =
+      it->pc->location.to_string().find("built-in", 0);
+    std::string::size_type find_lib =
+      it->pc->location.to_string().find("library", 0);
+    bool is_internal_call = (find_bt != std::string::npos)
+                             || find_lib != std::string::npos;
 
-    if ((it->type == goto_trace_stept::ASSIGNMENT) && (is_internal_call == false)){
+    if ((it->type == goto_trace_stept::ASSIGNMENT)
+        && (is_internal_call == false))
+    {
 
       const irep_idt &identifier = to_symbol2t(it->lhs).get_symbol_name();
 
       /* check if is a temporary assignment */
       std::string id_str = id2string(identifier);
       std::string::size_type find_tmp = id_str.find("::$tmp::", 0);
-      if (find_tmp != std::string::npos){
+      if (find_tmp != std::string::npos)
         continue;
-      }
 
-      boost::property_tree::ptree current_node; node_p current_node_p;
+      boost::property_tree::ptree current_node;
+      node_p current_node_p;
       current_node_p.threadNumber = it->thread_nr;
       create_node(current_node, current_node_p);
       graph.add_child("node", current_node);
 
-      std::string filename = it->pc->location.get_file().as_string();;
-      int line_number = std::atoi(it->pc->location.get_line().as_string().c_str());
+      std::string filename = it->pc->location.get_file().as_string();
+      int line_number =
+        std::atoi(it->pc->location.get_line().as_string().c_str());
 
       /* check if tokens already ok */
-      if(mapped_tokens.size() == 0){
+      if (mapped_tokens.size() == 0)
         convert_c_file_in_tokens(filename, mapped_tokens);
-      }
-  	  boost::property_tree::ptree current_edge; edge_p current_edge_p;
-	  current_edge_p.originFileName = filename;
 
-	  /* adjusts assumptions */
-	  /* left hand */
-	  std::vector<std::string> split;
-	  std::string lhs_str = from_expr(ns, identifier, it->lhs);
-	  boost::split(split,lhs_str,boost::is_any_of("@"));
-	  lhs_str = split[0];
-      std::string::size_type findamp = lhs_str.find( "&", 0 );
-	  if( findamp != std::string::npos ) {
-	    lhs_str = lhs_str.substr(0,findamp);
-	  }
-	  std::string::size_type findds = lhs_str.find( "$", 0 );
-	  if( findds != std::string::npos ) {
-		lhs_str = lhs_str.substr(0,findds);
-	  }
+      boost::property_tree::ptree current_edge;
+      edge_p current_edge_p;
+      current_edge_p.originFileName = filename;
 
-	  /* check if isn't an array (modify assumptions) */
-	  if (it->lhs->type->type_id != it->lhs->type->array_id){
-		/* common cases */
-		std::string value_str = from_expr(ns, identifier, it->value);
-	    /* remove memory address */
-        std::string::size_type findat = value_str.find( "@", 0 );
-        if( findat != std::string::npos ) {
-          value_str = value_str.substr(0,findat);
-        }
+      /* adjusts assumptions */
+      /* left hand */
+      std::vector<std::string> split;
+      std::string lhs_str = from_expr(ns, identifier, it->lhs);
+      boost::split(split, lhs_str, boost::is_any_of("@"));
+      lhs_str = split[0];
+      std::string::size_type findamp = lhs_str.find("&", 0);
+      if (findamp != std::string::npos)
+        lhs_str = lhs_str.substr(0, findamp);
+
+      std::string::size_type findds = lhs_str.find("$", 0);
+      if (findds != std::string::npos)
+        lhs_str = lhs_str.substr(0, findds);
+
+      /* check if isn't an array (modify assumptions) */
+      if (it->lhs->type->type_id != it->lhs->type->array_id)
+      {
+        /* common cases */
+        std::string value_str = from_expr(ns, identifier, it->value);
+        /* remove memory address */
+        std::string::size_type findat = value_str.find("@", 0);
+        if (findat != std::string::npos)
+          value_str = value_str.substr(0, findat);
+
         /* remove float suffix */
-        std::string::size_type findfs = value_str.find( "f", 0 );
-        if( findfs != std::string::npos ) {
-          value_str = value_str.substr(0,findfs);
-        }
+        std::string::size_type findfs = value_str.find("f", 0);
+        if (findfs != std::string::npos)
+          value_str = value_str.substr(0, findfs);
+
         /* check if has a double &quote */
-        std::string::size_type findq1 = value_str.find( "\"", 0 );
-        if( findq1 != std::string::npos ) {
-          std::string::size_type findq2 = value_str.find( "\"", findq1 + 1 );
-          if( findq2 == std::string::npos ) {
+        std::string::size_type findq1 = value_str.find("\"", 0);
+        if (findq1 != std::string::npos)
+        {
+          std::string::size_type findq2 = value_str.find("\"", findq1 + 1);
+          if (findq2 == std::string::npos)
             value_str = value_str + "\"";
-          }
         }
-	    std::string assumption = lhs_str + " = " + value_str + ";";
-	    std::string::size_type findesbm = assumption.find( "__ESBMC", 0 );
-	    std::string::size_type finddma = assumption.find( "&dynamic_", 0 );
-	    std::string::size_type findivo = assumption.find( "invalid-object", 0 );
-	    bool is_union = (it->rhs->type->type_id == it->rhs->type->union_id);
-	    bool is_struct = (it->rhs->type->type_id == it->rhs->type->struct_id);
-	    /* TODO check if is union, struct or dynamic attr, need more specifications of validation tools */
-	    bool is_esbmc_or_dynamic = ((findesbm != std::string::npos) || (finddma != std::string::npos) || (findivo != std::string::npos) || is_union || is_struct);
-	    if (is_esbmc_or_dynamic == false){
-	      current_edge_p.assumption = assumption;
-	    }
-	  }
 
-	  /* check if entered in a function */
-	  std::string function_name = it->pc->function.as_string();
-	  size_t f = function_name.find("c::");
-	  if (f == 0){
-	    function_name.replace(f, std::string("c::").length(), "");
-	  }
-	  if (function_name != last_function){
-	    current_edge_p.enterFunction = function_name;
-		last_function = function_name;
-	  }
+        std::string assumption = lhs_str + " = " + value_str + ";";
+        std::string::size_type findesbm = assumption.find("__ESBMC", 0);
+        std::string::size_type finddma = assumption.find("&dynamic_", 0);
+        std::string::size_type findivo = assumption.find("invalid-object", 0);
+        bool is_union = (it->rhs->type->type_id == it->rhs->type->union_id);
+        bool is_struct = (it->rhs->type->type_id == it->rhs->type->struct_id);
 
-	  /* check if has a line number (to get tokens) */
-	  if (line_number != 0){
-	    current_edge_p.lineNumberInOrigin = line_number;
-	    if (mapped_tokens.size() != 0){
-	      std::map<int, std::string> current_line_tokens = mapped_tokens[line_number];
-	      std::map<int,std::string>::iterator it;
-	      std::string token_set = "";
-	      if (current_line_tokens.size() == 1){
-		    token_set = std::to_string(current_line_tokens.begin()->first);
-	      }else{
-		    int first = current_line_tokens.begin()->first;
-		    int end = first + current_line_tokens.end()->first - 1;
-		    token_set = token_set + std::to_string(current_line_tokens.begin()->first) + "," + std::to_string(end);
-	      }
-	      std::string source_code = "";
-	      for (it=current_line_tokens.begin(); it!=current_line_tokens.end(); ++it){
-	        source_code = source_code + it->second + " ";
-	      }
-	      current_edge_p.sourcecode = source_code.substr(0, source_code.length() - 1);
-	      current_edge_p.tokenSet = token_set;
-	      current_edge_p.originTokenSet = token_set;
-	    }
-	  }
+        /* TODO check if is union, struct or dynamic attr,
+         * need more specifications of validation tools */
+        bool is_esbmc_or_dynamic = ((findesbm != std::string::npos)
+            || (finddma != std::string::npos) || (findivo != std::string::npos)
+            || is_union || is_struct);
+        if (is_esbmc_or_dynamic == false)
+          current_edge_p.assumption = assumption;
+      }
 
-	  create_edge(current_edge, current_edge_p, last_created_node, current_node);
-	  graph.add_child("edge", current_edge);
-	  last_created_node = current_node;
-	}
+      /* check if entered in a function */
+      std::string function_name = it->pc->function.as_string();
+      size_t f = function_name.find("c::");
+      if (f == 0)
+        function_name.replace(f, std::string("c::").length(), "");
+
+      if (function_name != last_function)
+      {
+        current_edge_p.enterFunction = function_name;
+        last_function = function_name;
+      }
+
+      /* check if has a line number (to get tokens) */
+      if (line_number != 0)
+      {
+        current_edge_p.lineNumberInOrigin = line_number;
+        if (mapped_tokens.size() != 0)
+        {
+          std::map<int, std::string> current_line_tokens =
+            mapped_tokens[line_number];
+          std::map<int, std::string>::iterator it;
+          std::string token_set = "";
+          if (current_line_tokens.size() == 1)
+          {
+            token_set = std::to_string(current_line_tokens.begin()->first);
+          }
+          else
+          {
+            int first = current_line_tokens.begin()->first;
+            int end = first + current_line_tokens.end()->first - 1;
+            token_set = token_set
+              + std::to_string(current_line_tokens.begin()->first) + ","
+              + std::to_string(end);
+          }
+          std::string source_code = "";
+          for (it = current_line_tokens.begin();
+              it != current_line_tokens.end(); ++it)
+          {
+            source_code = source_code + it->second + " ";
+          }
+          current_edge_p.sourcecode =
+            source_code.substr(0, source_code.length() - 1);
+          current_edge_p.tokenSet = token_set;
+          current_edge_p.originTokenSet = token_set;
+        }
+      }
+
+      create_edge(current_edge, current_edge_p, last_created_node,
+        current_node);
+      graph.add_child("edge", current_edge);
+      last_created_node = current_node;
+    }
   }
 
   /* violation node */
 
-  boost::property_tree::ptree violation_node; node_p violation_node_p;
+  boost::property_tree::ptree violation_node;
+  node_p violation_node_p;
   violation_node_p.isViolationNode = true;
   create_node(violation_node, violation_node_p);
   graph.add_child("node", violation_node);
 
-  boost::property_tree::ptree violation_edge; edge_p violation_edge_p;
-  create_edge(violation_edge, violation_edge_p, last_created_node, violation_node);
+  boost::property_tree::ptree violation_edge;
+  edge_p violation_edge_p;
+  create_edge(violation_edge, violation_edge_p, last_created_node,
+    violation_node);
   graph.add_child("edge", violation_edge);
 
   /* write graphml */
@@ -409,10 +443,8 @@ show_goto_trace(
   unsigned prev_step_nr = 0;
   bool first_step = true;
 
-  for (goto_tracet::stepst::const_iterator
-       it = goto_trace.steps.begin();
-       it != goto_trace.steps.end();
-       it++)
+  for (goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
+      it != goto_trace.steps.end(); it++)
   {
     switch (it->type)
     {
@@ -427,6 +459,7 @@ show_goto_trace(
 
           if (it->pc->is_assert())
             out << "  " << from_expr(ns, "", it->pc->guard) << std::endl;
+          out << std::endl;
 
           // Having printed a property violation, don't print more steps.
           return;
