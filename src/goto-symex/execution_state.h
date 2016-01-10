@@ -75,9 +75,9 @@ class execution_statet : public goto_symext
    */
   execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
                    reachability_treet *art,
-                   symex_targett *_target,
+                   std::shared_ptr<symex_targett> _target,
                    contextt &context,
-                   ex_state_level2t *l2init,
+                   std::shared_ptr<ex_state_level2t> l2init,
                    optionst &options,
                    message_handlert &message_handler);
 
@@ -108,7 +108,7 @@ class execution_statet : public goto_symext
   public:
     ex_state_level2t(execution_statet &ref);
     virtual ~ex_state_level2t();
-    virtual ex_state_level2t *clone(void) const;
+    virtual std::shared_ptr<renaming::level2t> clone(void) const;
     virtual void rename(expr2tc &lhs_symbol, unsigned count);
     virtual void rename(expr2tc &identifier);
 
@@ -125,7 +125,7 @@ class execution_statet : public goto_symext
   public:
     state_hashing_level2t(execution_statet &ref);
     virtual ~state_hashing_level2t(void);
-    virtual state_hashing_level2t *clone(void) const;
+    virtual std::shared_ptr<renaming::level2t> clone(void) const;
     virtual void make_assignment(expr2tc &lhs_symbol,
                                      const expr2tc &const_value,
                                      const expr2tc &assigned_value);
@@ -219,7 +219,7 @@ class execution_statet : public goto_symext
    *  @see dfs_execution_statet
    *  @return New, duplicated execution state
    */
-  virtual execution_statet *clone(void) const = 0;
+  virtual std::shared_ptr<execution_statet> clone(void) const = 0;
 
   /**
    *  Make one symbolic execution step.
@@ -533,7 +533,7 @@ class execution_statet : public goto_symext
   unsigned int last_active_thread;
   /** Global L2 state of this execution_statet. It's also copied as a reference
    *  into each threads own state. */
-  ex_state_level2t *state_level2;
+  std::shared_ptr<ex_state_level2t> state_level2;
   /** Global pointer tracking state record. */
   value_sett global_value_set;
   /** Current active states thread ID. */
@@ -636,20 +636,22 @@ class dfs_execution_statet : public execution_statet
                    const goto_functionst &goto_functions,
                    const namespacet &ns,
                    reachability_treet *art,
-                   symex_targett *_target,
+                   std::shared_ptr<symex_targett> _target,
                    contextt &context,
                    optionst &options,
                    message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
                          options.get_bool_option("state-hashing")
-                             ? new state_hashing_level2t(*this)
-                             : new ex_state_level2t(*this),
+                             ? std::shared_ptr<state_hashing_level2t>(
+                                 new state_hashing_level2t(*this))
+                             : std::shared_ptr<ex_state_level2t>(
+                                 new ex_state_level2t(*this)),
                              options, _message_handler)
   {
   };
 
   dfs_execution_statet(const dfs_execution_statet &ref);
-  dfs_execution_statet *clone(void) const;
+  virtual std::shared_ptr<execution_statet> clone(void) const;
   virtual ~dfs_execution_statet(void);
 };
 
@@ -666,14 +668,16 @@ class schedule_execution_statet : public execution_statet
                    const goto_functionst &goto_functions,
                    const namespacet &ns,
                    reachability_treet *art,
-                   symex_targett *_target,
+                   std::shared_ptr<symex_targett> _target,
                    contextt &context,
                    optionst &options,
                    unsigned int *ptotal_claims,
                    unsigned int *premaining_claims,
                    message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
-                         new ex_state_level2t(*this), options, _message_handler)
+                         std::shared_ptr<ex_state_level2t>(
+                           new ex_state_level2t(*this)),
+                         options, _message_handler)
   {
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;
@@ -682,7 +686,7 @@ class schedule_execution_statet : public execution_statet
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref);
-  schedule_execution_statet *clone(void) const;
+  virtual std::shared_ptr<execution_statet> clone(void) const;
   virtual ~schedule_execution_statet(void);
   virtual void claim(const expr2tc &expr, const std::string &msg);
 

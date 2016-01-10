@@ -68,11 +68,12 @@ goto_symext::assume(const expr2tc &assumption)
   return;
 }
 
-goto_symext::symex_resultt *
+std::shared_ptr<goto_symext::symex_resultt>
 goto_symext::get_symex_result(void)
 {
 
-  return new goto_symext::symex_resultt(target, total_claims, remaining_claims);
+  return std::shared_ptr<goto_symext::symex_resultt>(
+    new goto_symext::symex_resultt(target, total_claims, remaining_claims));
 }
 
 void

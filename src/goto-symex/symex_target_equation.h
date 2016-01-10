@@ -163,21 +163,21 @@ public:
   void output(std::ostream &out) const;
   void short_output(std::ostream &out,
                     bool show_ignored = false) const;
-  
+
   void check_for_duplicate_assigns() const;
 
   void clear()
   {
     SSA_steps.clear();
   }
-  
+
   unsigned int clear_assertions();
 
-  virtual symex_targett *clone(void) const
+  virtual std::shared_ptr<symex_targett> clone(void) const
   {
     // No pointers or anything that requires ownership modification, can just
     // duplicate self.
-    return new symex_target_equationt(*this);
+    return std::shared_ptr<symex_targett>(new symex_target_equationt(*this));
   }
 
   virtual void push_ctx(void);
@@ -198,7 +198,7 @@ public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
 
-  virtual symex_targett *clone(void) const;
+  virtual std::shared_ptr<symex_targett> clone(void) const;
 
   virtual void convert(smt_convt &smt_conv);
   void flush_latest_instructions(void);

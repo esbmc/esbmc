@@ -56,13 +56,25 @@ public:
                                            ns, options);
 
     if (options.get_bool_option("smt-during-symex")) {
-      symex = new reachability_treet(funcs, ns, options,
-                          new runtime_encoded_equationt(ns, *runtime_solver),
-                          _context, _message_handler);
+      symex =
+        new reachability_treet(
+          funcs,
+          ns,
+          options,
+          std::shared_ptr<runtime_encoded_equationt>(
+            new runtime_encoded_equationt(ns, *runtime_solver)),
+          _context,
+          _message_handler);
     } else {
-      symex = new reachability_treet(funcs, ns, options,
-                                     new symex_target_equationt(ns),
-                                     _context, _message_handler);
+      symex =
+        new reachability_treet(
+          funcs,
+          ns,
+          options,
+          std::shared_ptr<symex_target_equationt>(
+            new symex_target_equationt(ns)),
+          _context,
+          _message_handler);
     }
   }
 

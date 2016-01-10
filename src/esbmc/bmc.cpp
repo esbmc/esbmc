@@ -454,8 +454,7 @@ bool bmct::run(void)
 
 bool bmct::run_thread()
 {
-  goto_symext::symex_resultt *result;
-  symex_target_equationt *equation;
+  std::shared_ptr<goto_symext::symex_resultt> result;
   bool ret;
 
   fine_timet symex_start = current_time();
@@ -499,14 +498,15 @@ bool bmct::run_thread()
   str << "s";
   status(str.str());
 
-  equation = dynamic_cast<symex_target_equationt*>(result->target);
+  auto equation =
+    std::dynamic_pointer_cast<symex_target_equationt>(result->target);
 
   print(8, "size of program expression: "+
-           i2string((unsigned long)equation->SSA_steps.size())+
+           i2string((unsigned long)equation.get()->SSA_steps.size())+
            " assignments");
 
   if (options.get_bool_option("double-assign-check")) {
-    equation->check_for_duplicate_assigns();
+    equation.get()->check_for_duplicate_assigns();
   }
 
   try
@@ -563,7 +563,7 @@ bool bmct::run_thread()
     }
 
     if (options.get_bool_option("ltl")) {
-      int res = ltl_run_thread(equation);
+      int res = ltl_run_thread(equation.get());
       // Record that we've seen this outcome; later decide what the least
       // outcome was.
       ltl_results_seen[res]++;
@@ -584,9 +584,6 @@ bool bmct::run_thread()
 
     ret = run_solver(*equation, runtime_solver);
 
-    // TODO: symex->get_cur_state().target may leak
-    delete equation;
-    delete result;
     return ret;
   }
 
