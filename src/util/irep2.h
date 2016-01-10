@@ -846,12 +846,6 @@ namespace esbmct {
     typedef int type;
   };
 
-  // Syntactic sugar for some type munging, see below.
-  #define enable_if_eq(arbitary, c1, c2) typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<c1,c2>, arbitary>::type* = NULL
-  #define enable_if_not_eq(arbitary, c1, c2) typename boost::lazy_enable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<c1,c2> >, arbitary>::type* = NULL
-  #define disable_if_eq(arbitary, c1, c2) typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<c1,c2>, arbitary>::type* = NULL
-  #define disable_if_not_eq(arbitary, c1, c2) typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<c1,c2> >, arbitary>::type* = NULL
-
   /** Template for providing templated methods to expr2t classes.
    *
    *  What this does: we give expr_methods a set of template parameters that
