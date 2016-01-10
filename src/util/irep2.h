@@ -833,8 +833,9 @@ namespace esbmct {
 
   /** Maximum number of fields to support in expr2t subclasses. This value
    *  controls the types of any arrays that need to consider the number of
-   *  fields. Unfortunately it can't control template parameters, because
-   *  vardic templates are C++11. */
+   *  fields.
+   *  I've yet to find a way of making this play nice with the new variardic
+   *  way of defining ireps. */
   const unsigned int num_type_fields = 6;
 
   // Dummy type tag - exists to be an arbitary, local class, for use in some
