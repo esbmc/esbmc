@@ -1258,16 +1258,6 @@ namespace esbmct {
       assert(init->expr_id == expid);
     }
 
-    // Quick hack for symbol2t: it has a form of constructor where it only takes
-    // the type and the (name-munged) symbol name, and extracts the correct
-    // pieces of info from the name. However that requries the container
-    // constructor to support this.
-    template <class arbitary = ::esbmct::dummy_type_tag>
-    something2tc(const type2tc &t,
-                 const irep_idt &arg1,
-                 typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<contained,symbol2t>, arbitary >::type* = NULL)
-          : expr2tc(new contained(t, arg1)) { }
-
     const contained &operator*() const
     {
       return static_cast<const contained&>(*expr2tc::get());
