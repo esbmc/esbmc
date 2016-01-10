@@ -140,6 +140,12 @@
   for (idx = 0, ptr = theexpr.get()->get_sub_expr_nc(0); ptr != 0; \
        idx++, ptr = theexpr.get()->get_sub_expr_nc(idx))
 
+// Even crazier forward decs,
+namespace esbmct {
+  template <typename ...Args> class expr2t_traits;
+  typedef expr2t_traits<> expr2t_default_traits;
+}
+
 class type2t;
 class expr2t;
 class constant_array2t;
@@ -578,6 +584,8 @@ public:
   // Provide base / container types for some templates stuck on top:
   typedef expr2tc container_type;
   typedef expr2t base_type;
+  // Also provide base traits
+  typedef esbmct::expr2t_default_traits traits;
 
   virtual ~expr2t() { };
 
@@ -947,7 +955,7 @@ namespace esbmct {
     static constexpr bool always_construct = true;
   };
 
-  typedef expr2t_traits<> expr2t_default_traits;
+//  typedef expr2t_traits<> expr2t_default_traits;
 
   // Declaration
   template <class derived, class baseclass, typename traits, typename enable = void>
@@ -1141,7 +1149,7 @@ namespace esbmct {
     // latter, and the end user can worry about how to cast up to a not2tc.
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const expr2tc &init,
-                 typename boost::lazy_disable_if<boost::mpl::and_<boost::fusion::result_of::equal_to<field1_type,expr2tc>,boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids> >, arbitary>::type* = NULL
+                 typename boost::lazy_disable_if<boost::mpl::bool_<contained::traits::always_construct == true>, arbitary>::type* = NULL
                  ) : expr2tc(init)
     {
       assert(init->expr_id == expid);
