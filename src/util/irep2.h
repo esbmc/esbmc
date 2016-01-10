@@ -2480,7 +2480,7 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<expr2tc, object_ops, &object_ops::value> value_field;
-  typedef esbmct::expr2t_traits<value_field> traits;
+  typedef esbmct::expr2t_traits_always_construct<value_field> traits;
 };
 
 class sideeffect_data : public expr2t
