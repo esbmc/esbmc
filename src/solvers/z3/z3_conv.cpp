@@ -143,7 +143,7 @@ z3_convt::init_addr_space_array(void)
     Z3_get_tuple_sort_mk_decl(ctx, addr_space_tuple_sort);
   addr_space_tuple_decl = z3::func_decl(ctx, tmp_addr_space_decl);
 
-  addr_space_arr_sort = 
+  addr_space_arr_sort =
                   ctx.array_sort(ctx.esbmc_int_sort(), addr_space_tuple_sort);
 
   return;
