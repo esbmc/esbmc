@@ -875,7 +875,26 @@ namespace esbmct {
    *
    *  ----
    *
+   *  In addition, we also define container types for each irep, which is
+   *  essentially a type-safeish wrapper around a std::shared_ptr (i.e.,
+   *  reference counter). One can create a new irep with syntax such as:
    *
+   *    foo2tc bar(type, operand1, operand2);
+   *
+   *  As well as copy-constructing a container around an expr to make it type
+   *  specific:
+   *
+   *    expr2tc foo = something();
+   *    foo2tc bar(foo);
+   *
+   *  Assertions in the construction will ensure that the expression is in fact
+   *  of type foo2t. One can transparently access the irep fields through
+   *  dereference, such as:
+   *
+   *    bar->operand1 = 0;
+   *
+   *  This all replicates the CBMC expression situation, but with the addition
+   *  of types.
    */
 
   /** Vardic type2t boilerplate methods. */
