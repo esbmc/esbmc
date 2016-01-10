@@ -1051,7 +1051,9 @@ namespace esbmct {
     unsigned int get_num_sub_exprs_rec(void) const;
   };
 
-  // Base instance
+  // Base instance of irep_methods2. This is a template specialization that
+  // matches (via boost::enable_if) when the list of fields to operate on is
+  // now empty. Finish up the remaining computation, if any.
   template <class derived, class baseclass, typename X>
     class irep_methods2<derived, baseclass, X,
                         typename boost::enable_if<typename boost::mpl::empty<X>::type>::type>
@@ -1067,8 +1069,6 @@ namespace esbmct {
     typedef typename baseclass::container_type container2tc;
     typedef typename baseclass::base_type base2t;
 
-    // Rather than trying to specialize and implement in the cpp file, terminate
-    // here.
     void tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
     {
       (void)idx;
