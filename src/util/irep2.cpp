@@ -2511,8 +2511,8 @@ irep_typedefs(code_function_call, code_funccall_data, esbmct::notype,
 irep_typedefs(code_comma, code_comma_data, esbmct::takestype,
               expr2tc, code_comma_data, &code_comma_data::side_1,
               expr2tc, code_comma_data, &code_comma_data::side_2);
-irep_typedefs(invalid_pointer, pointer_ops, esbmct::notype,
-              expr2tc, pointer_ops, &pointer_ops::ptr_obj);
+irep_typedefs(invalid_pointer, invalid_pointer_ops, esbmct::notype,
+              expr2tc, invalid_pointer_ops, &invalid_pointer_ops::ptr_obj);
 irep_typedefs(buffer_size, buffer_size_data, esbmct::takestype,
               expr2tc, buffer_size_data, &buffer_size_data::value);
 irep_typedefs(code_asm, code_asm_data, esbmct::notype,

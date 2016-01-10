@@ -2256,6 +2256,17 @@ public:
   typedef esbmct::expr2t_traits<ptr_obj_field> traits;
 };
 
+// Special class for invalid_pointer2t, which needs always-construct forcing
+class invalid_pointer_ops : public pointer_ops
+{
+public:
+  // Forward constructors downwards
+  template <typename ...Args> invalid_pointer_ops(Args... args) : pointer_ops(args...) {}
+
+// Type mangling:
+  typedef esbmct::expr2t_traits_always_construct<ptr_obj_field> traits;
+};
+
 class byte_ops : public expr2t
 {
 public:
@@ -3022,7 +3033,7 @@ irep_typedefs(code_function_call, code_funccall_data, esbmct::notype,
 irep_typedefs(code_comma, code_comma_data, esbmct::takestype,
               expr2tc, code_comma_data, &code_comma_data::side_1,
               expr2tc, code_comma_data, &code_comma_data::side_2);
-irep_typedefs(invalid_pointer, pointer_ops, esbmct::notype,
+irep_typedefs(invalid_pointer, invalid_pointer_ops, esbmct::notype,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
 irep_typedefs(buffer_size, buffer_size_data, esbmct::takestype,
               expr2tc, buffer_size_data, &buffer_size_data::value);
