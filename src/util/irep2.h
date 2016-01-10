@@ -1122,19 +1122,7 @@ namespace esbmct {
   //
   // We need a class derived from expr2tc that takes the correct set of
   // constructor arguments, which means yet more template goo.
-  template <class contained, unsigned int expid, class superclass,class hastype,
-     typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
-     field1_type field1_class::*field1_ptr = &field1_class::expr_id,
-     typename field2_type = const expr2t::expr_ids, class field2_class = expr2t,
-     field2_type field2_class::*field2_ptr = &field2_class::expr_id,
-     typename field3_type = const expr2t::expr_ids, class field3_class = expr2t,
-     field3_type field3_class::*field3_ptr = &field3_class::expr_id,
-     typename field4_type = const expr2t::expr_ids, class field4_class = expr2t,
-     field4_type field4_class::*field4_ptr = &field4_class::expr_id,
-     typename field5_type = const expr2t::expr_ids, class field5_class = expr2t,
-     field5_type field5_class::*field5_ptr = &field5_class::expr_id,
-     typename field6_type = const expr2t::expr_ids, class field6_class = expr2t,
-     field6_type field6_class::*field6_ptr = &field6_class::expr_id>
+  template <class contained, unsigned int expid, class superclass,class hastype>
   class something2tc : public expr2tc {
     public:
     // Blank initialization of a container class -> store NULL
@@ -2814,7 +2802,7 @@ public:
 
 #define irep_typedefs(basename, superclass, type_tag, ...) \
   typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
-                               type_tag, __VA_ARGS__> basename##2tc; \
+                               type_tag> basename##2tc; \
   typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits::type> basename##_expr_methods;
 
 // Special case for some empty ireps,
