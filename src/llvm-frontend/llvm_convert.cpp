@@ -83,11 +83,15 @@ bool llvm_convertert::convert_top_level_decl()
       it != translation_unit->top_level_end();
       it++)
     {
+      const clang::Decl& decl = (**it);
+      if(!convert_this_decl(decl))
+        continue;
+
       // Update ASTContext as it changes for each source file
-      ASTContext = &(*it)->getASTContext();
+      ASTContext = &decl.getASTContext();
 
       exprt dummy_decl;
-      get_decl(**it, dummy_decl);
+      get_decl(decl, dummy_decl);
     }
   }
 
