@@ -268,7 +268,9 @@ Function: language_uit::show_symbol_table_plain
 
 void language_uit::show_symbol_table_plain(std::ostream &out)
 {
-  out << std::endl << "Symbols:" << std::endl << std::endl;
+  out << std::endl << "Symbols:" << std::endl;
+  out << "Number of symbols: " << context.symbols.size() << std::endl;
+  out << std::endl;
 
   // we want to sort alphabetically
   std::set<std::string> symbols;
