@@ -1,5 +1,4 @@
-
-const char *strerror(int);
+#include <string.h>
 
 int main()
 {
