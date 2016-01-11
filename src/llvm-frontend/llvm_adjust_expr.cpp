@@ -625,11 +625,9 @@ void llvm_adjust::adjust_side_effect_function_call(
     {
       // maybe this is an undeclared function
       // let's just add it
-      const irep_idt &identifier=f_op.identifier();
-
       symbolt new_symbol;
 
-      new_symbol.name=identifier;
+      new_symbol.name=f_op.identifier();
       new_symbol.base_name=f_op.name();
       new_symbol.location=expr.location();
       new_symbol.type=f_op.type();
