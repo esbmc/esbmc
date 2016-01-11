@@ -228,6 +228,7 @@ void llvm_languaget::show_parse(std::ostream& out __attribute__((unused)))
       it++)
     {
       (*it)->dump();
+      std::cout << std::endl;
     }
   }
 }
