@@ -39,6 +39,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
     goto_functionst goto_functions;
 
     config.set(cmdline);
+    config.options.set_option("keep-unused", true);
 
     // Depends on command line options and config
     init_expr_constants();
