@@ -117,7 +117,7 @@ elif grep -q "VERIFICATION FAILED" ${TMPFILE}; then
 
     if test ${IS_OVERFLOW_BENCHMARK} != 1; then
       # Do we still have time to check the witness?
-      diff_timeout=$((875 - (END-START)))
+      diff_timeout=$((800 - (END-START)))
 
       # if there is enough time, we try to validate the witness
       if test ${diff_timeout} -gt 0; then
