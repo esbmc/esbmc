@@ -494,12 +494,11 @@ void llvm_convertert::get_function(
   added_symbol.type = type;
 
   // We need: a type, a name, and an optional body
-  clang::Stmt *body = fd.getBody();
-
-  if(body)
+  if(fd.hasBody())
   {
     exprt body_exprt;
-    get_expr(*body, body_exprt);
+    get_expr(*fd.getBody(), body_exprt);
+
     added_symbol.value = body_exprt;
   }
 }
