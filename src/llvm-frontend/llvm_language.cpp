@@ -271,43 +271,73 @@ bool llvm_languaget::final(contextt& context, message_handlert& message_handler)
 
 void llvm_languaget::internal_additions()
 {
-  intrinsics+=
+  intrinsics +=
+    "__attribute__((used))\n"
     "void __ESBMC_assume(_Bool assumption);\n"
+    "__attribute__((used))\n"
     "void assert(_Bool assertion);\n"
+    "__attribute__((used))\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
+    "__attribute__((used))\n"
     "_Bool __ESBMC_same_object(const void *, const void *);\n"
 
     // pointers
+    "__attribute__((used))\n"
     "unsigned __ESBMC_POINTER_OBJECT(const void *p);\n"
+    "__attribute__((used))\n"
     "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
 
     // malloc
     // This will be set to infinity size array at llvm_adjust
     // TODO: We definitely need a better solution for this
+    "__attribute__((used))\n"
     "_Bool __ESBMC_alloc[1];\n"
+    "__attribute__((used))\n"
     "_Bool __ESBMC_deallocated[1];\n"
+    "__attribute__((used))\n"
     "_Bool __ESBMC_is_dynamic[1];\n"
+    "__attribute__((used))\n"
     "unsigned long __ESBMC_alloc_size[1];\n"
 
+    "__attribute__((used))\n"
     "void *__ESBMC_realloc(void *ptr, long unsigned int size);\n"
 
     // float stuff
+    "__attribute__((used))\n"
     "_Bool __ESBMC_isnan(double f);\n"
+    "__attribute__((used))\n"
     "_Bool __ESBMC_isfinite(double f);\n"
+    "__attribute__((used))\n"
     "_Bool __ESBMC_isinf(double f);\n"
+    "__attribute__((used))\n"
     "_Bool __ESBMC_isnormal(double f);\n"
 
     // absolute value
+    "__attribute__((used))\n"
     "int __ESBMC_abs(int x);\n"
+    "__attribute__((used))\n"
     "long int __ESBMC_labs(long int x);\n"
+    "__attribute__((used))\n"
     "double __ESBMC_fabs(double x);\n"
+    "__attribute__((used))\n"
     "long double __ESBMC_fabsl(long double x);\n"
+    "__attribute__((used))\n"
     "float __ESBMC_fabsf(float x);\n"
+
+    // Digital controllers code
+    "__attribute__((used))\n"
+    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
+    "__attribute__((used))\n"
+    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"
+    "__attribute__((used))\n"
+    "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);\n"
 
     // Forward decs for pthread main thread begin/end hooks. Because they're
     // pulled in from the C library, they need to be declared prior to pulling
     // them in, for type checking.
+    "__attribute__((used))\n"
     "void pthread_start_main_hook(void);\n"
+    "__attribute__((used))\n"
     "void pthread_end_main_hook(void);\n"
 
     // Forward declarations for nondeterministic types.
@@ -323,11 +353,6 @@ void llvm_languaget::internal_additions()
     "_Bool nondet_bool();\n"
     "float nondet_float();\n"
     "double nondet_double();"
-
-    // Digital controllers code
-    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
-    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"
-    "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);\n"
 
     // And again, for TACAS VERIFIER versions,
     "int __VERIFIER_nondet_int();\n"
