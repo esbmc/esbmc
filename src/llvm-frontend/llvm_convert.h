@@ -184,6 +184,8 @@ private:
 
   const clang::FunctionDecl* get_top_FunctionDecl_from_Stmt(
     const clang::Stmt &stmt);
+
+  bool convert_this_decl(const clang::Decl &decl);
 };
 
 #endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */

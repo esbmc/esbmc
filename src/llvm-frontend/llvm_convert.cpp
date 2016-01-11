@@ -2454,3 +2454,37 @@ const clang::FunctionDecl* llvm_convertert::get_top_FunctionDecl_from_Stmt(
 
   return nullptr;
 }
+
+bool llvm_convertert::convert_this_decl(const clang::Decl& decl)
+{
+  // If the flag to keep unused calls is set, we convert them all
+  if(config.options.get_bool_option("keep-unused"))
+    return true;
+
+  const clang::NamedDecl ndecl =
+    static_cast<const clang::NamedDecl &>(decl);
+
+  // If we're checking an function, passed through --function flag, we
+  // should convert it too
+  if(ndecl.getName().str() == config.main)
+    return true;
+
+  if(decl.isFunctionOrFunctionTemplate())
+  {
+    // TODO: We cannot activate this code until the language_file class
+    // be rewritten to parse/typecheck all files once, instead of a per
+    // file approach
+#if 0
+    const clang::FunctionDecl &fd =
+      static_cast<const clang::FunctionDecl&>(decl);
+
+    if(fd.isMain())
+      return true;
+#else
+    return true;
+#endif
+  }
+
+  // Otherwise, don't convert it
+  return decl.isUsed();
+}
