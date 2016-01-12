@@ -835,6 +835,15 @@ void llvm_convertert::get_type(
       break;
     }
 
+    case clang::Type::Attributed:
+    {
+      const clang::AttributedType &att =
+        static_cast<const clang::AttributedType &>(the_type);
+
+      get_type(att.desugar(), new_type);
+      break;
+    }
+
     default:
       std::cerr << "**** ERROR: ";
       std::cerr << "No clang <=> ESBMC migration for type "
