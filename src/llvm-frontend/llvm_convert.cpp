@@ -112,8 +112,10 @@ void llvm_convertert::get_decl(
     // Label declaration
     case clang::Decl::Label:
     {
-      std::cerr << "ESBMC currently does not support label declaration"
+      std::cerr << "**** ERROR: ";
+      std::cerr << "ESBMC does not support label declaration"
                 << std::endl;
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
 
       const clang::LabelDecl &ld =
@@ -248,9 +250,11 @@ void llvm_convertert::get_decl(
     case clang::Decl::Captured:
     case clang::Decl::Import:
     default:
-      std::cerr << "Unrecognized / unimplemented decl "
+      std::cerr << "**** ERROR: ";
+      std::cerr << "Unrecognized / unimplemented clang declaration "
                 << decl.getDeclKindName() << std::endl;
       decl.dumpColor();
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
   }
 }
@@ -260,12 +264,16 @@ void llvm_convertert::get_struct_union_class(
 {
   if(recordd.isClass())
   {
+    std::cerr << "**** ERROR: ";
     std::cerr << "Class is not supported yet" << std::endl;
+    std::cerr << "CONVERSION ERROR" << std::endl;
     abort();
   }
   else if(recordd.isInterface())
   {
+    std::cerr << "**** ERROR: ";
     std::cerr << "Interface is not supported yet" << std::endl;
+    std::cerr << "CONVERSION ERROR" << std::endl;
     abort();
   }
 
@@ -626,8 +634,10 @@ void llvm_convertert::get_type(
       llvm::APInt val = arr.getSize();
       if(val.getBitWidth() > 64)
       {
+        std::cerr << "**** ERROR: ";
         std::cerr << "ESBMC currently does not support integers bigger "
                       "than 64 bits" << std::endl;
+        std::cerr << "CONVERSION ERROR" << std::endl;
         abort();
       }
 
@@ -740,7 +750,9 @@ void llvm_convertert::get_type(
 
       if(tag.isClass())
       {
+        std::cerr << "**** ERROR: ";
         std::cerr << "Class Type is not supported yet" << std::endl;
+        std::cerr << "CONVERSION ERROR" << std::endl;
         abort();
       }
 
@@ -779,10 +791,12 @@ void llvm_convertert::get_type(
       }
       else
       {
+        std::cerr << "**** ERROR: ";
         std::cerr << "ESBMC cannot handle desugared TypeOfExpr, "
                   << "please report this benchmark to the developers"
                   << std::endl;
         tofe.dump();
+        std::cerr << "CONVERSION ERROR" << std::endl;
         abort();
       }
 
@@ -800,10 +814,12 @@ void llvm_convertert::get_type(
       }
       else
       {
+        std::cerr << "**** ERROR: ";
         std::cerr << "ESBMC cannot handle desugared TypeOf, "
                   << "please report this benchmark to the developers"
                   << std::endl;
         toft.dump();
+        std::cerr << "CONVERSION ERROR" << std::endl;
         abort();
       }
 
@@ -820,9 +836,11 @@ void llvm_convertert::get_type(
     }
 
     default:
+      std::cerr << "**** ERROR: ";
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
       the_type.dump();
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
   }
 
@@ -891,8 +909,10 @@ void llvm_convertert::get_builtin_type(
 
     case clang::BuiltinType::UInt128:
       // Various simplification / big-int related things use uint64_t's...
+      std::cerr << "**** ERROR: ";
       std::cerr << "ESBMC currently does not support integers bigger "
                     "than 64 bits" << std::endl;
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
       break;
 
@@ -918,8 +938,10 @@ void llvm_convertert::get_builtin_type(
 
     case clang::BuiltinType::Int128:
       // Various simplification / big-int related things use uint64_t's...
+      std::cerr << "**** ERROR: ";
       std::cerr << "ESBMC currently does not support integers bigger "
                     "than 64 bits" << std::endl;
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
       break;
 
@@ -939,9 +961,11 @@ void llvm_convertert::get_builtin_type(
       break;
 
     default:
+      std::cerr << "**** ERROR: ";
       std::cerr << "Unrecognized clang builtin type "
-      << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str()
-      << std::endl;
+          << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str()
+          << std::endl;
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
   }
 
@@ -1016,8 +1040,10 @@ void llvm_convertert::get_expr(
 
       if(val.getBitWidth() > 64)
       {
+        std::cerr << "**** ERROR: ";
         std::cerr << "ESBMC currently does not support integers bigger "
                      "than 64 bits" << std::endl;
+        std::cerr << "CONVERSION ERROR" << std::endl;
         abort();
       }
 
@@ -1213,8 +1239,10 @@ void llvm_convertert::get_expr(
 
     case clang::Stmt::AddrLabelExprClass:
     {
+      std::cerr << "**** ERROR: ";
       std::cerr << "ESBMC currently does not support label as values"
                 << std::endl;
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
 
       const clang::AddrLabelExpr &addrlabelExpr =
@@ -1674,8 +1702,10 @@ void llvm_convertert::get_expr(
 
     case clang::Stmt::IndirectGotoStmtClass:
     {
+      std::cerr << "**** ERROR: ";
       std::cerr << "ESBMC currently does not support indirect gotos"
                 << std::endl;
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
 
       const clang::IndirectGotoStmt &goto_stmt =
@@ -1723,9 +1753,11 @@ void llvm_convertert::get_expr(
       const clang::Decl *decl = get_top_FunctionDecl_from_Stmt(ret);
       if(!decl)
       {
+        std::cerr << "**** ERROR: ";
         std::cerr << "ESBMC could not find the parent scope for "
                   << "the following return statement:" << std::endl;
         ret.dump();
+        std::cerr << "CONVERSION ERROR" << std::endl;
         abort();
       }
 
@@ -1772,9 +1804,11 @@ void llvm_convertert::get_expr(
     case clang::Stmt::AtomicExprClass:
     case clang::Stmt::AttributedStmtClass:
     default:
+      std::cerr << "**** ERROR: ";
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
       stmt.dumpColor();
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
   }
 
@@ -1856,9 +1890,11 @@ void llvm_convertert::get_decl_ref(
     }
 
     default:
+      std::cerr << "**** ERROR: ";
       std::cerr << "Conversion of unsupported clang decl ref: \"";
       std::cerr << decl.getDeclKindName() << "\" to expression" << std::endl;
       decl.dump();
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
   }
 
@@ -1914,9 +1950,11 @@ void llvm_convertert::get_cast_expr(
       break;
 
     default:
+      std::cerr << "**** ERROR: ";
       std::cerr << "Conversion of unsupported clang cast operator: \"";
       std::cerr << cast.getCastKindName() << "\" to expression" << std::endl;
       cast.dumpColor();
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
   }
 
@@ -1976,10 +2014,12 @@ void llvm_convertert::get_unary_operator_expr(
       break;
 
     default:
+      std::cerr << "**** ERROR: ";
       std::cerr << "Conversion of unsupported clang unary operator: \"";
       std::cerr << clang::UnaryOperator::getOpcodeStr(uniop.getOpcode()).str()
                 << "\" to expression" << std::endl;
       uniop.dumpColor();
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
   }
 
@@ -2143,9 +2183,11 @@ void llvm_convertert::get_compound_assign_expr(
       break;
 
     default:
+      std::cerr << "**** ERROR: ";
       std::cerr << "Conversion of unsupported clang binary operator: \"";
       std::cerr << compop.getOpcodeStr().str() << "\" to expression" << std::endl;
       compop.dumpColor();
+      std::cerr << "CONVERSION ERROR" << std::endl;
       abort();
   }
 
