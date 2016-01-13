@@ -19,7 +19,7 @@ BENCHMARK_FALSE_VALID_DEREF="(${PROPERTY_INVALID_POINTER_TAG}|${PROPERTY_ARRAY_B
 tokenizer_path=./tokenizer
 
 # Path to the ESBMC binary
-path_to_esbmc=esbmc
+path_to_esbmc=./esbmc
 
 # cpachecker command
 cpa_command="scripts/cpa.sh -noout -witness-check "
@@ -49,7 +49,6 @@ Options:
             property_list=$OPTARG
             
             if grep -q -E "LTL[(]G (valid-free|valid-deref|valid-memtrack)" $OPTARG; then
-              echo "Unsupported Property"
               IS_MEMSAFETY_BENCHMARK=1
             elif grep -q -E "LTL[(]F end" $OPTARG; then
               echo "Unsupported Property"
@@ -72,12 +71,8 @@ if ! [ -f "${benchmark}" ]; then
     exit 1
 fi
 
-if [ ! -d "witnesses" ]; then
-    mkdir witnesses
-fi
-
 # Add graphml informations
-TMPGRAPHML="witnesses/`basename ${benchmark}`_witness.graphml"
+TMPGRAPHML="error-witness.graphml"
 cmdline="$cmdline --witnesspath $TMPGRAPHML --tokenizer $tokenizer_path"
 
 if test $IS_OVERFLOW_BENCHMARK = 1; then
@@ -107,7 +102,9 @@ timeout=0
 END=$(date +%s);
 
 # Postprocessing: first, collect some facts
-if grep -q "VERIFICATION FAILED" ${TMPFILE}; then
+if grep -i -q "Timed out" ${TMPFILE}; then
+  timeout=1
+elif grep -q "VERIFICATION FAILED" ${TMPFILE}; then
 
   valid_fail=0
 
@@ -118,9 +115,9 @@ if grep -q "VERIFICATION FAILED" ${TMPFILE}; then
     fi
   else 
 
-    if test ${IS_OVERFLOW_BENCHMARK} != 1; then    
+    if test ${IS_OVERFLOW_BENCHMARK} != 1; then
       # Do we still have time to check the witness?
-      diff_timeout=$((875 - (END-START)))
+      diff_timeout=$((800 - (END-START)))
 
       # if there is enough time, we try to validate the witness
       if test ${diff_timeout} -gt 0; then
@@ -166,8 +163,6 @@ if grep -q "VERIFICATION FAILED" ${TMPFILE}; then
   fi
 elif grep -q "VERIFICATION SUCCESSFUL" ${TMPFILE}; then
   success=1
-elif grep -i -q "Timed out" ${TMPFILE}; then
-  timeout=1
 fi
 
 get_memsafety_violated_property() {
@@ -184,7 +179,9 @@ get_memsafety_violated_property() {
 # a counterexample first. The output file may contain both success and failure,
 # if a smaller unwind bound didn't uncover the error. But if there's a
 # counterexample, then there's an error.
-if test $failed = 1; then
+if test $timeout = 1; then
+    echo "Timed Out"
+elif test $failed = 1; then
 
     VPROP=""
     if test ${IS_OVERFLOW_BENCHMARK} = 1; then
@@ -199,8 +196,6 @@ if test $failed = 1; then
 elif test $success = 1; then
     echo "TRUE"
     # Clean up after ourselves
-elif test $timeout = 1; then
-    echo "Timed Out"
 else
     echo "UNKNOWN"
 fi

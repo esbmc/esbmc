@@ -150,15 +150,15 @@ dnl Unless of course you're on a mac, in which case clang will frequently
 dnl generate new warnings, and you probably want it off. This should be used
 dnl with care in that case.
 AS_IF([test "x$enable_werror" = "xno"], [
-  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x"]])
+  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++11"]])
   AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W"]])
 ], [
   dnl not disabled -> enable werror
-  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x -Werror"]])
+  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++11 -Werror"]])
   AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W -Werror"]])
 ])
 
-AC_SUBST([ESBMC_CXXFLAGS_WARNINGS],[["-Wall -Wextra -W -std=c++0x"]])
+AC_SUBST([ESBMC_CXXFLAGS_WARNINGS],[["-Wall -Wextra -W -std=c++11"]])
 
 AC_HEADER_STDC
 
