@@ -55,57 +55,57 @@ private:
   bool convert_builtin_types();
   bool convert_top_level_decl();
 
-  void get_decl(
+  bool get_decl(
     const clang::Decl &decl,
     exprt &new_expr);
 
-  void get_var(
+  bool get_var(
     const clang::VarDecl &vd,
     exprt &new_expr);
 
-  void get_function(
+  bool get_function(
     const clang::FunctionDecl &fd);
 
-  void get_function_params(
+  bool get_function_params(
     const clang::ParmVarDecl &pdecl,
     exprt &param);
 
-  void get_struct_union_class(
+  bool get_struct_union_class(
     const clang::RecordDecl &recordd);
 
-  void get_struct_union_class_fields(
+  bool get_struct_union_class_fields(
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
-  void get_type(
+  bool get_type(
     const clang::QualType &the_type,
     typet &new_type);
 
-  void get_builtin_type(
+  bool get_builtin_type(
     const clang::BuiltinType &bt,
     typet &new_type);
 
-  void get_expr(
+  bool get_expr(
     const clang::Stmt &stmt,
     exprt &new_expr);
 
-  void get_decl_ref(
+  bool get_decl_ref(
     const clang::Decl &decl,
     exprt &new_expr);
 
-  void get_binary_operator_expr(
+  bool get_binary_operator_expr(
     const clang::BinaryOperator &binop,
     exprt &new_expr);
 
-  void get_compound_assign_expr(
+  bool get_compound_assign_expr(
     const clang::CompoundAssignOperator& compop,
     exprt& new_expr);
 
-  void get_unary_operator_expr(
+  bool get_unary_operator_expr(
     const clang::UnaryOperator &uniop,
     exprt &new_expr);
 
-  void get_cast_expr(
+  bool get_cast_expr(
     const clang::CastExpr &cast,
     exprt &new_expr);
 
@@ -129,8 +129,9 @@ private:
     std::string name,
     std::string function_name);
 
-  std::string get_tag_name(
-    const clang::RecordDecl& recordd);
+  bool get_tag_name(
+    const clang::RecordDecl& recordd,
+    std::string &identifier);
 
   void get_location_from_decl(
     const clang::Decl& decl,
@@ -152,20 +153,20 @@ private:
     symbolt &old_symbol,
     symbolt &new_symbol);
 
-  void convert_character_literal(
+  bool convert_character_literal(
     const clang::CharacterLiteral char_literal,
     exprt &dest);
 
-  void convert_string_literal(
+  bool convert_string_literal(
     const clang::StringLiteral string_literal,
     exprt &dest);
 
-  void convert_integer_literal(
+  bool convert_integer_literal(
     llvm::APInt val,
     typet type,
     exprt &dest);
 
-  void convert_float_literal(
+  bool convert_float_literal(
     llvm::APFloat val,
     typet type,
     exprt &dest);
@@ -175,7 +176,7 @@ private:
     mp_integer &significand,
     mp_integer &exponent);
 
-  void search_add_type_map(
+  bool search_add_type_map(
     const clang::TagDecl &tag,
     type_mapt::iterator &type_it);
 

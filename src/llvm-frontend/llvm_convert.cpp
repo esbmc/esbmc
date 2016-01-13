@@ -61,7 +61,8 @@ bool llvm_convertert::convert_builtin_types()
       static_cast<const clang::TypedefType &>(*q_va_list_type.getTypePtr());
 
     exprt dummy;
-    get_decl(*t.getDecl(), dummy);
+    if(get_decl(*t.getDecl(), dummy))
+      return true;
   }
 
   // TODO: clang offers several informations from the target architecture,
@@ -91,7 +92,8 @@ bool llvm_convertert::convert_top_level_decl()
       ASTContext = &decl.getASTContext();
 
       exprt dummy_decl;
-      get_decl(decl, dummy_decl);
+      if(get_decl(decl, dummy_decl))
+        return true;
     }
   }
 
@@ -101,7 +103,7 @@ bool llvm_convertert::convert_top_level_decl()
 // This method convert declarations. They are called when those declarations
 // are to be added to the context. If a variable or function is being called
 // but then get_decl_expr is called instead
-void llvm_convertert::get_decl(
+bool llvm_convertert::get_decl(
   const clang::Decl& decl,
   exprt &new_expr)
 {
@@ -112,11 +114,9 @@ void llvm_convertert::get_decl(
     // Label declaration
     case clang::Decl::Label:
     {
-      std::cerr << "**** ERROR: ";
       std::cerr << "ESBMC does not support label declaration"
                 << std::endl;
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      return true;
 
       const clang::LabelDecl &ld =
         static_cast<const clang::LabelDecl&>(decl);
@@ -134,8 +134,7 @@ void llvm_convertert::get_decl(
     {
       const clang::VarDecl &vd =
         static_cast<const clang::VarDecl&>(decl);
-      get_var(vd, new_expr);
-      break;
+      return get_var(vd, new_expr);
     }
 
     // Declaration of function's parameter
@@ -143,8 +142,7 @@ void llvm_convertert::get_decl(
     {
       const clang::ParmVarDecl &param =
         static_cast<const clang::ParmVarDecl &>(decl);
-      get_function_params(param, new_expr);
-      break;
+      return get_function_params(param, new_expr);
     }
 
     // Declaration of functions
@@ -152,8 +150,7 @@ void llvm_convertert::get_decl(
     {
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
-      get_function(fd);
-      break;
+      return get_function(fd);
     }
 
     // Field inside a struct/union
@@ -163,7 +160,8 @@ void llvm_convertert::get_decl(
         static_cast<const clang::FieldDecl&>(decl);
 
       typet t;
-      get_type(fd.getType(), t);
+      if(get_type(fd.getType(), t))
+        return true;
 
       std::string field_identifier;
       struct_union_typet::componentt comp;
@@ -183,7 +181,9 @@ void llvm_convertert::get_decl(
       if(fd.isBitField())
       {
         exprt width;
-        get_expr(*fd.getBitWidth(), width);
+        if(get_expr(*fd.getBitWidth(), width))
+          return true;
+
         comp.type().width(width.cformat());
       }
 
@@ -197,7 +197,8 @@ void llvm_convertert::get_decl(
         static_cast<const clang::IndirectFieldDecl &>(decl);
 
       typet t;
-      get_type(fd.getType(), t);
+      if(get_type(fd.getType(), t))
+        return true;
 
       struct_union_typet::componentt comp(fd.getName().str(), t);
       comp.set_pretty_name(fd.getName().str());
@@ -205,7 +206,9 @@ void llvm_convertert::get_decl(
       if(fd.getAnonField()->isBitField())
       {
         exprt width;
-        get_expr(*fd.getAnonField()->getBitWidth(), width);
+        if(get_expr(*fd.getAnonField()->getBitWidth(), width))
+          return true;
+
         comp.type().width(width.cformat());
       }
 
@@ -218,7 +221,10 @@ void llvm_convertert::get_decl(
     {
       const clang::RecordDecl &record =
         static_cast<const clang::RecordDecl &>(decl);
-      get_struct_union_class(record);
+
+      if(get_struct_union_class(record))
+        return true;
+
       break;
     }
 
@@ -242,7 +248,6 @@ void llvm_convertert::get_decl(
     case clang::Decl::Typedef:
       break;
 
-
     case clang::Decl::Namespace:
     case clang::Decl::TypeAlias:
     case clang::Decl::FileScopeAsm:
@@ -254,27 +259,24 @@ void llvm_convertert::get_decl(
       std::cerr << "Unrecognized / unimplemented clang declaration "
                 << decl.getDeclKindName() << std::endl;
       decl.dumpColor();
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      return true;
   }
+
+  return false;
 }
 
-void llvm_convertert::get_struct_union_class(
+bool llvm_convertert::get_struct_union_class(
   const clang::RecordDecl& recordd)
 {
   if(recordd.isClass())
   {
-    std::cerr << "**** ERROR: ";
     std::cerr << "Class is not supported yet" << std::endl;
-    std::cerr << "CONVERSION ERROR" << std::endl;
-    abort();
+    return true;
   }
   else if(recordd.isInterface())
   {
-    std::cerr << "**** ERROR: ";
     std::cerr << "Interface is not supported yet" << std::endl;
-    std::cerr << "CONVERSION ERROR" << std::endl;
-    abort();
+    return true;
   }
 
   struct_union_typet t;
@@ -289,7 +291,10 @@ void llvm_convertert::get_struct_union_class(
   // Try to get the definition
   clang::RecordDecl *record_def = recordd.getDefinition();
 
-  std::string identifier = get_tag_name(recordd);
+  std::string identifier;
+  if(get_tag_name(recordd, identifier))
+    return true;
+
   t.tag(identifier);
 
   locationt location_begin;
@@ -322,12 +327,14 @@ void llvm_convertert::get_struct_union_class(
 
   // Don't continue to parse if it doesn't have a complete definition
   if(!record_def)
-    return;
+    return false;
 
   // Now get the symbol back to continue the conversion
   symbolt &added_symbol = context.symbols.find(symbol_name)->second;
 
-  get_struct_union_class_fields(*record_def, t);
+  if(get_struct_union_class_fields(*record_def, t))
+    return true;
+
   added_symbol.type = t;
 
   // This change on the pretty_name is just to beautify the output
@@ -335,30 +342,36 @@ void llvm_convertert::get_struct_union_class(
     added_symbol.pretty_name = "struct " + identifier;
   else if(recordd.isUnion())
     added_symbol.pretty_name = "union " + identifier;
+
+  return false;
 }
 
-void llvm_convertert::get_struct_union_class_fields(
+bool llvm_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &recordd,
   struct_union_typet &type)
 {
   for(const auto &decl : recordd.decls())
   {
     struct_typet::componentt comp;
-    get_decl(*decl, comp);
+    if(get_decl(*decl, comp))
+      return true;
 
     // If we are parsing a field declaration, add it to the components
     if(decl->getKind() == clang::Decl::Field)
       type.components().push_back(comp);
   }
+
+  return false;
 }
 
-void llvm_convertert::get_var(
+bool llvm_convertert::get_var(
   const clang::VarDecl &vd,
   exprt &new_expr)
 {
   // Get type
   typet t;
-  get_type(vd.getType(), t);
+  if(get_type(vd.getType(), t))
+    return true;
 
   std::string function_name = "";
   if(vd.getDeclContext()->isFunctionOrMethod())
@@ -418,7 +431,9 @@ void llvm_convertert::get_var(
   if(vd.hasInit())
   {
     exprt val;
-    get_expr(*vd.getInit(), val);
+    if(get_expr(*vd.getInit(), val))
+      return true;
+
     gen_typecast(ns, val, t);
 
     added_symbol.value = val;
@@ -428,14 +443,15 @@ void llvm_convertert::get_var(
   decl.location() = location_begin;
 
   new_expr = decl;
+  return false;
 }
 
-void llvm_convertert::get_function(
+bool llvm_convertert::get_function(
   const clang::FunctionDecl &fd)
 {
   // If the function is not defined but this is not the definition, skip it
   if(fd.isDefined() && !fd.isThisDeclarationADefinition())
-    return;
+    return false;
 
   // TODO: use fd.isMain to flag and check the flag on llvm_adjust_expr
   // to saner way to add argc/argv/envp
@@ -449,7 +465,9 @@ void llvm_convertert::get_function(
 
   // Return type
   typet return_type;
-  get_type(fd.getReturnType(), return_type);
+  if(get_type(fd.getReturnType(), return_type))
+    return true;
+
   type.return_type() = return_type;
 
   if(fd.isVariadic())
@@ -491,7 +509,9 @@ void llvm_convertert::get_function(
   for (const auto &pdecl : fd.params())
   {
     code_typet::argumentt param;
-    get_function_params(*pdecl, param);
+    if(get_function_params(*pdecl, param))
+      return true;
+
     type.arguments().push_back(param);
   }
 
@@ -505,20 +525,24 @@ void llvm_convertert::get_function(
   if(fd.hasBody())
   {
     exprt body_exprt;
-    get_expr(*fd.getBody(), body_exprt);
+    if(get_expr(*fd.getBody(), body_exprt))
+      return true;
 
     added_symbol.value = body_exprt;
   }
+
+  return false;
 }
 
-void llvm_convertert::get_function_params(
+bool llvm_convertert::get_function_params(
   const clang::ParmVarDecl &pdecl,
   exprt &param)
 {
   std::string name = pdecl.getName().str();
 
   typet param_type;
-  get_type(pdecl.getOriginalType(), param_type);
+  if(get_type(pdecl.getOriginalType(), param_type))
+    return true;
 
   param = code_typet::argumentt();
   param.type() = param_type;
@@ -529,7 +553,7 @@ void llvm_convertert::get_function_params(
   // when the function is defined, the exprt is filled for the sake of
   // beautification
   if(name.empty())
-    return;
+    return false;
 
   locationt location_begin;
   get_location_from_decl(pdecl, location_begin);
@@ -562,12 +586,13 @@ void llvm_convertert::get_function_params(
   // If the function is not defined, we don't need to add it's parameter
   // to the context, they will never be used
   if(!funcd.isDefined())
-    return;
+    return false;
 
   move_symbol_to_context(param_symbol);
+  return false;
 }
 
-void llvm_convertert::get_type(
+bool llvm_convertert::get_type(
   const clang::QualType &q_type,
   typet &new_type)
 {
@@ -580,7 +605,10 @@ void llvm_convertert::get_type(
     {
       const clang::BuiltinType &bt =
         static_cast<const clang::BuiltinType&>(the_type);
-      get_builtin_type(bt, new_type);
+
+      if(get_builtin_type(bt, new_type))
+        return true;
+
       break;
     }
 
@@ -589,7 +617,10 @@ void llvm_convertert::get_type(
     {
       const clang::ParenType &pt =
         static_cast<const clang::ParenType&>(the_type);
-      get_type(pt.getInnerType(), new_type);
+
+      if(get_type(pt.getInnerType(), new_type))
+        return true;
+
       break;
     }
 
@@ -601,7 +632,8 @@ void llvm_convertert::get_type(
       const clang::QualType &pointee = pt.getPointeeType();
 
       typet sub_type;
-      get_type(pointee, sub_type);
+      if(get_type(pointee, sub_type))
+        return true;
 
       // Special case, pointers to structs/unions/classes must not
       // have a copy of it, but a reference to the type
@@ -621,7 +653,10 @@ void llvm_convertert::get_type(
     {
       const clang::DecayedType &pt =
         static_cast<const clang::DecayedType&>(the_type);
-      get_type(pt.getDecayedType(), new_type);
+
+      if(get_type(pt.getDecayedType(), new_type))
+        return true;
+
       break;
     }
 
@@ -634,15 +669,14 @@ void llvm_convertert::get_type(
       llvm::APInt val = arr.getSize();
       if(val.getBitWidth() > 64)
       {
-        std::cerr << "**** ERROR: ";
         std::cerr << "ESBMC currently does not support integers bigger "
                       "than 64 bits" << std::endl;
-        std::cerr << "CONVERSION ERROR" << std::endl;
-        abort();
+        return true;
       }
 
       typet the_type;
-      get_type(arr.getElementType(), the_type);
+      if(get_type(arr.getElementType(), the_type))
+        return true;
 
       array_typet type(the_type);
       type.size() =
@@ -662,7 +696,8 @@ void llvm_convertert::get_type(
         static_cast<const clang::IncompleteArrayType &>(the_type);
 
       typet sub_type;
-      get_type(arr.getElementType(), sub_type);
+      if(get_type(arr.getElementType(), sub_type))
+        return true;
 
       new_type = gen_pointer_type(sub_type);
       break;
@@ -675,10 +710,12 @@ void llvm_convertert::get_type(
         static_cast<const clang::VariableArrayType &>(the_type);
 
       exprt size_expr;
-      get_expr(*arr.getSizeExpr(), size_expr);
+      if(get_expr(*arr.getSizeExpr(), size_expr))
+        return true;
 
       typet the_type;
-      get_type(arr.getElementType(), the_type);
+      if(get_type(arr.getElementType(), the_type))
+        return true;
 
       array_typet type;
       type.size() = size_expr;
@@ -700,14 +737,19 @@ void llvm_convertert::get_type(
 
       // Return type
       const clang::QualType ret_type = func.getReturnType();
+
       typet return_type;
-      get_type(ret_type, return_type);
+      if(get_type(ret_type, return_type))
+        return true;
+
       type.return_type() = return_type;
 
       for (const auto &ptype : func.getParamTypes())
       {
         typet param_type;
-        get_type(ptype, param_type);
+        if(get_type(ptype, param_type))
+          return true;
+
         type.arguments().push_back(param_type);
       }
 
@@ -724,8 +766,11 @@ void llvm_convertert::get_type(
 
       // Return type
       const clang::QualType ret_type = func.getReturnType();
+
       typet return_type;
-      get_type(ret_type, return_type);
+      if(get_type(ret_type, return_type))
+        return true;
+
       type.return_type() = return_type;
 
       new_type = type;
@@ -737,9 +782,13 @@ void llvm_convertert::get_type(
     {
       const clang::TypedefType &pt =
         static_cast<const clang::TypedefType &>(the_type);
+
       clang::QualType q_typedef_type =
         pt.getDecl()->getUnderlyingType().getCanonicalType();
-      get_type(q_typedef_type, new_type);
+
+      if(get_type(q_typedef_type, new_type))
+        return true;
+
       break;
     }
 
@@ -750,15 +799,14 @@ void llvm_convertert::get_type(
 
       if(tag.isClass())
       {
-        std::cerr << "**** ERROR: ";
         std::cerr << "Class Type is not supported yet" << std::endl;
-        std::cerr << "CONVERSION ERROR" << std::endl;
-        abort();
+        return true;
       }
 
       // Search for the type on the type map
       type_mapt::iterator it;
-      search_add_type_map(tag, it);
+      if(search_add_type_map(tag, it))
+        return true;
 
       symbolt &s = context.symbols.find(it->second)->second;
       new_type = s.type;
@@ -776,7 +824,9 @@ void llvm_convertert::get_type(
     {
       const clang::ElaboratedType &et =
         static_cast<const clang::ElaboratedType &>(the_type);
-      get_type(et.getNamedType(), new_type);
+
+      if(get_type(et.getNamedType(), new_type))
+        return true;
       break;
     }
 
@@ -785,20 +835,8 @@ void llvm_convertert::get_type(
       const clang::TypeOfExprType &tofe =
         static_cast<const clang::TypeOfExprType &>(the_type);
 
-      if(tofe.isSugared())
-      {
-        get_type(tofe.desugar(), new_type);
-      }
-      else
-      {
-        std::cerr << "**** ERROR: ";
-        std::cerr << "ESBMC cannot handle desugared TypeOfExpr, "
-                  << "please report this benchmark to the developers"
-                  << std::endl;
-        tofe.dump();
-        std::cerr << "CONVERSION ERROR" << std::endl;
-        abort();
-      }
+      if(get_type(tofe.desugar(), new_type))
+        return true;
 
       break;
     }
@@ -808,20 +846,8 @@ void llvm_convertert::get_type(
       const clang::TypeOfType &toft =
         static_cast<const clang::TypeOfType &>(the_type);
 
-      if(toft.isSugared())
-      {
-        get_type(toft.desugar(), new_type);
-      }
-      else
-      {
-        std::cerr << "**** ERROR: ";
-        std::cerr << "ESBMC cannot handle desugared TypeOf, "
-                  << "please report this benchmark to the developers"
-                  << std::endl;
-        toft.dump();
-        std::cerr << "CONVERSION ERROR" << std::endl;
-        abort();
-      }
+      if(get_type(toft.desugar(), new_type))
+        return true;
 
       break;
     }
@@ -831,7 +857,9 @@ void llvm_convertert::get_type(
       const clang::LValueReferenceType &lvrt =
         static_cast<const clang::LValueReferenceType &>(the_type);
 
-      get_type(lvrt.getPointeeTypeAsWritten(), new_type);
+      if(get_type(lvrt.getPointeeTypeAsWritten(), new_type))
+        return true;
+
       break;
     }
 
@@ -840,24 +868,26 @@ void llvm_convertert::get_type(
       const clang::AttributedType &att =
         static_cast<const clang::AttributedType &>(the_type);
 
-      get_type(att.desugar(), new_type);
+      if(get_type(att.desugar(), new_type))
+        return true;
+
       break;
     }
 
     default:
-      std::cerr << "**** ERROR: ";
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
       the_type.dump();
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      return true;
   }
 
   if(q_type.isConstQualified())
     new_type.cmt_constant(true);
+
+  return false;
 }
 
-void llvm_convertert::get_builtin_type(
+bool llvm_convertert::get_builtin_type(
   const clang::BuiltinType& bt,
   typet& new_type)
 {
@@ -918,12 +948,10 @@ void llvm_convertert::get_builtin_type(
 
     case clang::BuiltinType::UInt128:
       // Various simplification / big-int related things use uint64_t's...
-      std::cerr << "**** ERROR: ";
       std::cerr << "ESBMC currently does not support integers bigger "
                     "than 64 bits" << std::endl;
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
-      break;
+      bt.dump();
+      return true;
 
     case clang::BuiltinType::Short:
       new_type = signed_short_int_type();
@@ -947,12 +975,10 @@ void llvm_convertert::get_builtin_type(
 
     case clang::BuiltinType::Int128:
       // Various simplification / big-int related things use uint64_t's...
-      std::cerr << "**** ERROR: ";
       std::cerr << "ESBMC currently does not support integers bigger "
                     "than 64 bits" << std::endl;
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
-      break;
+      bt.dump();
+      return true;
 
     case clang::BuiltinType::Float:
       new_type = float_type();
@@ -970,18 +996,18 @@ void llvm_convertert::get_builtin_type(
       break;
 
     default:
-      std::cerr << "**** ERROR: ";
       std::cerr << "Unrecognized clang builtin type "
           << bt.getName(clang::PrintingPolicy(clang::LangOptions())).str()
           << std::endl;
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      bt.dump();
+      return true;
   }
 
   new_type.set("#c_type", c_type);
+  return false;
 }
 
-void llvm_convertert::get_expr(
+bool llvm_convertert::get_expr(
   const clang::Stmt& stmt,
   exprt& new_expr)
 {
@@ -1013,7 +1039,10 @@ void llvm_convertert::get_expr(
     {
       const clang::OpaqueValueExpr &opaque_expr =
         static_cast<const clang::OpaqueValueExpr &>(stmt);
-      get_expr(*opaque_expr.getSourceExpr(), new_expr);
+
+      if(get_expr(*opaque_expr.getSourceExpr(), new_expr))
+        return true;
+
       break;
     }
 
@@ -1026,7 +1055,9 @@ void llvm_convertert::get_expr(
       const clang::Decl &dcl =
         static_cast<const clang::Decl&>(*decl.getDecl());
 
-      get_decl_ref(dcl, new_expr);
+      if(get_decl_ref(dcl, new_expr))
+        return true;
+
       break;
     }
 
@@ -1036,7 +1067,9 @@ void llvm_convertert::get_expr(
       const clang::PredefinedExpr &pred_expr =
         static_cast<const clang::PredefinedExpr&>(stmt);
 
-      convert_string_literal(*pred_expr.getFunctionName(), new_expr);
+      if(convert_string_literal(*pred_expr.getFunctionName(), new_expr))
+        return true;
+
       break;
     }
 
@@ -1049,17 +1082,18 @@ void llvm_convertert::get_expr(
 
       if(val.getBitWidth() > 64)
       {
-        std::cerr << "**** ERROR: ";
         std::cerr << "ESBMC currently does not support integers bigger "
                      "than 64 bits" << std::endl;
-        std::cerr << "CONVERSION ERROR" << std::endl;
-        abort();
+        return true;
       }
 
       typet the_type;
-      get_type(integer_literal.getType(), the_type);
+      if(get_type(integer_literal.getType(), the_type))
+        return true;
 
-      convert_integer_literal(val, the_type, new_expr);
+      if(convert_integer_literal(val, the_type, new_expr))
+        return true;
+
       break;
     }
 
@@ -1069,7 +1103,9 @@ void llvm_convertert::get_expr(
       const clang::CharacterLiteral &char_literal =
         static_cast<const clang::CharacterLiteral&>(stmt);
 
-      convert_character_literal(char_literal, new_expr);
+      if(convert_character_literal(char_literal, new_expr))
+        return true;
+
       break;
     }
 
@@ -1080,9 +1116,12 @@ void llvm_convertert::get_expr(
         static_cast<const clang::FloatingLiteral&>(stmt);
 
       typet t;
-      get_type(float_literal.getType(), t);
+      if(get_type(float_literal.getType(), t))
+        return true;
 
-      convert_float_literal(float_literal.getValue(), t, new_expr);
+      if(convert_float_literal(float_literal.getValue(), t, new_expr))
+        return true;
+
       break;
     }
 
@@ -1092,7 +1131,9 @@ void llvm_convertert::get_expr(
       const clang::StringLiteral &string_literal =
         static_cast<const clang::StringLiteral&>(stmt);
 
-      convert_string_literal(string_literal, new_expr);
+      if(convert_string_literal(string_literal, new_expr))
+        return true;
+
       break;
     }
 
@@ -1102,7 +1143,10 @@ void llvm_convertert::get_expr(
     {
       const clang::ParenExpr& p =
         static_cast<const clang::ParenExpr &>(stmt);
-      get_expr(*p.getSubExpr(), new_expr);
+
+      if(get_expr(*p.getSubExpr(), new_expr))
+        return true;
+
       break;
     }
 
@@ -1111,7 +1155,10 @@ void llvm_convertert::get_expr(
     {
       const clang::UnaryOperator &uniop =
         static_cast<const clang::UnaryOperator &>(stmt);
-      get_unary_operator_expr(uniop, new_expr);
+
+      if(get_unary_operator_expr(uniop, new_expr))
+        return true;
+
       break;
     }
 
@@ -1122,13 +1169,16 @@ void llvm_convertert::get_expr(
         static_cast<const clang::ArraySubscriptExpr &>(stmt);
 
       typet t;
-      get_type(arr.getType(), t);
+      if(get_type(arr.getType(), t))
+        return true;
 
       exprt array;
-      get_expr(*arr.getLHS(), array);
+      if(get_expr(*arr.getLHS(), array))
+        return true;
 
       exprt pos;
-      get_expr(*arr.getRHS(), pos);
+      if(get_expr(*arr.getRHS(), pos))
+        return true;
 
       new_expr = index_exprt(array, pos, t);
       break;
@@ -1172,13 +1222,15 @@ void llvm_convertert::get_expr(
         assert(unary.getKind() == clang::UETT_SizeOf);
 
         typet t;
-        get_type(unary.getType(), t);
+        if(get_type(unary.getType(), t))
+          return true;
 
         new_expr = exprt("sizeof", t);
       }
 
       typet size_type;
-      get_type(unary.getTypeOfArgument(), size_type);
+      if(get_type(unary.getTypeOfArgument(), size_type))
+        return true;
 
       if(size_type.is_struct() || size_type.is_union())
       {
@@ -1199,11 +1251,14 @@ void llvm_convertert::get_expr(
         static_cast<const clang::CallExpr &>(stmt);
 
       const clang::Stmt *callee = function_call.getCallee();
+
       exprt callee_expr;
-      get_expr(*callee, callee_expr);
+      if(get_expr(*callee, callee_expr))
+        return true;
 
       typet type;
-      get_type(function_call.getType(), type);
+      if(get_type(function_call.getType(), type))
+        return true;
 
       side_effect_expr_function_callt call;
       call.function() = callee_expr;
@@ -1211,7 +1266,9 @@ void llvm_convertert::get_expr(
 
       for (const clang::Expr *arg : function_call.arguments()) {
         exprt single_arg;
-        get_expr(*arg, single_arg);
+        if(get_expr(*arg, single_arg))
+          return true;
+
         call.arguments().push_back(single_arg);
       }
 
@@ -1225,10 +1282,12 @@ void llvm_convertert::get_expr(
         static_cast<const clang::MemberExpr &>(stmt);
 
       exprt base;
-      get_expr(*member.getBase(), base);
+      if(get_expr(*member.getBase(), base))
+        return true;
 
       exprt comp;
-      get_decl(*member.getMemberDecl(), comp);
+      if(get_decl(*member.getMemberDecl(), comp))
+        return true;
 
       new_expr = member_exprt(base, comp.name(), comp.type());
       break;
@@ -1240,7 +1299,8 @@ void llvm_convertert::get_expr(
         static_cast<const clang::CompoundLiteralExpr &>(stmt);
 
       exprt initializer;
-      get_expr(*compound.getInitializer(), initializer);
+      if(get_expr(*compound.getInitializer(), initializer))
+        return true;
 
       new_expr = initializer;
       break;
@@ -1248,17 +1308,17 @@ void llvm_convertert::get_expr(
 
     case clang::Stmt::AddrLabelExprClass:
     {
-      std::cerr << "**** ERROR: ";
       std::cerr << "ESBMC currently does not support label as values"
                 << std::endl;
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      stmt.dumpColor();
+      return true;
 
       const clang::AddrLabelExpr &addrlabelExpr =
         static_cast<const clang::AddrLabelExpr &>(stmt);
 
       exprt label;
-      get_decl(*addrlabelExpr.getLabel(), label);
+      if(get_decl(*addrlabelExpr.getLabel(), label))
+        return true;
 
       new_expr = address_of_exprt(label);
       break;
@@ -1270,10 +1330,12 @@ void llvm_convertert::get_expr(
         static_cast<const clang::StmtExpr &>(stmt);
 
       typet t;
-      get_type(stmtExpr.getType(), t);
+      if(get_type(stmtExpr.getType(), t))
+        return true;
 
       exprt subStmt;
-      get_expr(*stmtExpr.getSubStmt(), subStmt);
+      if(get_expr(*stmtExpr.getSubStmt(), subStmt))
+        return true;
 
       side_effect_exprt stmt_expr("statement_expression", t);
       stmt_expr.copy_to_operands(subStmt);
@@ -1290,7 +1352,10 @@ void llvm_convertert::get_expr(
     {
       const clang::CastExpr &cast =
         static_cast<const clang::CastExpr &>(stmt);
-      get_cast_expr(cast, new_expr);
+
+      if(get_cast_expr(cast, new_expr))
+        return true;
+
       break;
     }
 
@@ -1300,7 +1365,10 @@ void llvm_convertert::get_expr(
     {
       const clang::BinaryOperator &binop =
         static_cast<const clang::BinaryOperator&>(stmt);
-      get_binary_operator_expr(binop, new_expr);
+
+      if(get_binary_operator_expr(binop, new_expr))
+        return true;
+
       break;
     }
 
@@ -1311,16 +1379,20 @@ void llvm_convertert::get_expr(
         static_cast<const clang::ConditionalOperator &>(stmt);
 
       exprt cond;
-      get_expr(*ternary_if.getCond(), cond);
+      if(get_expr(*ternary_if.getCond(), cond))
+        return true;
 
       exprt then;
-      get_expr(*ternary_if.getTrueExpr(), then);
+      if(get_expr(*ternary_if.getTrueExpr(), then))
+        return true;
 
       exprt else_expr;
-      get_expr(*ternary_if.getFalseExpr(), else_expr);
+      if(get_expr(*ternary_if.getFalseExpr(), else_expr))
+        return true;
 
       typet t;
-      get_type(ternary_if.getType(), t);
+      if(get_type(ternary_if.getType(), t))
+        return true;
 
       exprt if_expr("if", t);
       if_expr.copy_to_operands(cond, then, else_expr);
@@ -1336,13 +1408,16 @@ void llvm_convertert::get_expr(
         static_cast<const clang::BinaryConditionalOperator &>(stmt);
 
       exprt cond;
-      get_expr(*ternary_if.getCond(), cond);
+      if(get_expr(*ternary_if.getCond(), cond))
+        return true;
 
       exprt else_expr;
-      get_expr(*ternary_if.getFalseExpr(), else_expr);
+      if(get_expr(*ternary_if.getFalseExpr(), else_expr))
+        return true;
 
       typet t;
-      get_type(ternary_if.getType(), t);
+      if(get_type(ternary_if.getType(), t))
+        return true;
 
       side_effect_exprt gcc_ternary("gcc_conditional_expression");
       gcc_ternary.copy_to_operands(cond, else_expr);
@@ -1358,7 +1433,8 @@ void llvm_convertert::get_expr(
         static_cast<const clang::InitListExpr &>(stmt);
 
       typet t;
-      get_type(init_stmt.getType(), t);
+      if(get_type(init_stmt.getType(), t))
+        return true;
 
       exprt inits;
 
@@ -1371,7 +1447,8 @@ void llvm_convertert::get_expr(
         for (unsigned int i = 0; i < num; i++)
         {
           exprt init;
-          get_expr(*init_stmt.getInit(i), init);
+          if(get_expr(*init_stmt.getInit(i), init))
+            return true;
 
           typet elem_type;
 
@@ -1396,7 +1473,8 @@ void llvm_convertert::get_expr(
       else
       {
         assert(init_stmt.getNumInits() == 1);
-        get_expr(*init_stmt.getInit(0), inits);
+        if(get_expr(*init_stmt.getInit(0), inits))
+          return true;
       }
 
       new_expr = inits;
@@ -1409,7 +1487,8 @@ void llvm_convertert::get_expr(
         static_cast<const clang::ImplicitValueInitExpr &>(stmt);
 
       typet t;
-      get_type(init_stmt.getType(), t);
+      if(get_type(init_stmt.getType(), t))
+        return true;
 
       new_expr = gen_zero(t);
       break;
@@ -1419,7 +1498,10 @@ void llvm_convertert::get_expr(
     {
       const clang::GenericSelectionExpr &gen =
         static_cast<const clang::GenericSelectionExpr&>(stmt);
-      get_expr(*gen.getResultExpr(), new_expr);
+
+      if(get_expr(*gen.getResultExpr(), new_expr))
+        return true;
+
       break;
     }
 
@@ -1429,10 +1511,12 @@ void llvm_convertert::get_expr(
         static_cast<const clang::VAArgExpr&>(stmt);
 
       exprt expr;
-      get_expr(*vaa.getSubExpr(), expr);
+      if(get_expr(*vaa.getSubExpr(), expr))
+        return true;
 
       typet t;
-      get_type(vaa.getType(), t);
+      if(get_type(vaa.getType(), t))
+        return true;
 
       exprt vaa_expr("builtin_va_arg", t);
       vaa_expr.copy_to_operands(expr);
@@ -1462,7 +1546,9 @@ void llvm_convertert::get_expr(
         it++)
       {
         exprt single_decl;
-        get_decl(**it, single_decl);
+        if(get_decl(**it, single_decl))
+          return true;
+
         decls.operands().push_back(single_decl);
       }
 
@@ -1485,9 +1571,10 @@ void llvm_convertert::get_expr(
       code_blockt block;
       for (const auto &stmt : compound_stmt.body()) {
         exprt statement;
-        get_expr(*stmt, statement);
-        convert_expression_to_code(statement);
+        if(get_expr(*stmt, statement))
+          return true;
 
+        convert_expression_to_code(statement);
         block.operands().push_back(statement);
       }
 
@@ -1511,10 +1598,13 @@ void llvm_convertert::get_expr(
         static_cast<const clang::CaseStmt &>(stmt);
 
       exprt value;
-      get_expr(*case_stmt.getLHS(), value);
+      if(get_expr(*case_stmt.getLHS(), value))
+        return true;
 
       exprt sub_stmt;
-      get_expr(*case_stmt.getSubStmt(), sub_stmt);
+      if(get_expr(*case_stmt.getSubStmt(), sub_stmt))
+        return true;
+
       convert_expression_to_code(sub_stmt);
 
       codet label("label");
@@ -1535,7 +1625,9 @@ void llvm_convertert::get_expr(
         static_cast<const clang::DefaultStmt &>(stmt);
 
       exprt sub_stmt;
-      get_expr(*default_stmt.getSubStmt(), sub_stmt);
+      if(get_expr(*default_stmt.getSubStmt(), sub_stmt))
+        return true;
+
       convert_expression_to_code(sub_stmt);
 
       codet label("label");
@@ -1553,7 +1645,9 @@ void llvm_convertert::get_expr(
         static_cast<const clang::LabelStmt &>(stmt);
 
       exprt sub_stmt;
-      get_expr(*label_stmt.getSubStmt(), sub_stmt);
+      if(get_expr(*label_stmt.getSubStmt(), sub_stmt))
+        return true;
+
       convert_expression_to_code(sub_stmt);
 
       codet label("label");
@@ -1573,21 +1667,27 @@ void llvm_convertert::get_expr(
         static_cast<const clang::IfStmt &>(stmt);
 
       exprt cond;
-      get_expr(*ifstmt.getCond(), cond);
+      if(get_expr(*ifstmt.getCond(), cond))
+        return true;
 
       exprt then;
-      get_expr(*ifstmt.getThen(), then);
+      if(get_expr(*ifstmt.getThen(), then))
+        return true;
+
       convert_expression_to_code(then);
 
       codet if_expr("ifthenelse");
       if_expr.copy_to_operands(cond, then);
 
-      if(ifstmt.getElse())
+      const clang::Stmt *else_stmt = ifstmt.getElse();
+
+      if(else_stmt)
       {
         exprt else_expr;
-        get_expr(*ifstmt.getElse(), else_expr);
-        convert_expression_to_code(else_expr);
+        if(get_expr(*else_stmt, else_expr))
+          return true;
 
+        convert_expression_to_code(else_expr);
         if_expr.copy_to_operands(else_expr);
       }
 
@@ -1602,10 +1702,12 @@ void llvm_convertert::get_expr(
         static_cast<const clang::SwitchStmt &>(stmt);
 
       exprt value;
-      get_expr(*switch_stmt.getCond(), value);
+      if(get_expr(*switch_stmt.getCond(), value))
+        return true;
 
       codet body;
-      get_expr(*switch_stmt.getBody(), body);
+      if(get_expr(*switch_stmt.getBody(), body))
+        return true;
 
       code_switcht switch_code;
       switch_code.value() = value;
@@ -1623,10 +1725,13 @@ void llvm_convertert::get_expr(
         static_cast<const clang::WhileStmt &>(stmt);
 
       exprt cond;
-      get_expr(*while_stmt.getCond(), cond);
+      if(get_expr(*while_stmt.getCond(), cond))
+        return true;
 
       codet body = code_skipt();
-      get_expr(*while_stmt.getBody(), body);
+      if(get_expr(*while_stmt.getBody(), body))
+        return true;
+
       convert_expression_to_code(body);
 
       code_whilet code_while;
@@ -1645,10 +1750,13 @@ void llvm_convertert::get_expr(
         static_cast<const clang::DoStmt &>(stmt);
 
       exprt cond;
-      get_expr(*do_stmt.getCond(), cond);
+      if(get_expr(*do_stmt.getCond(), cond))
+        return true;
 
       codet body = code_skipt();
-      get_expr(*do_stmt.getBody(), body);
+      if(get_expr(*do_stmt.getBody(), body))
+        return true;
+
       convert_expression_to_code(body);
 
       code_dowhilet code_while;
@@ -1669,21 +1777,32 @@ void llvm_convertert::get_expr(
         static_cast<const clang::ForStmt &>(stmt);
 
       codet init = code_skipt();
-      if(for_stmt.getInit())
-        get_expr(*for_stmt.getInit(), init);
+      const clang::Stmt *init_stmt = for_stmt.getInit();
+      if(init_stmt)
+        if(get_expr(*init_stmt, init))
+          return true;
+
       convert_expression_to_code(init);
 
       exprt cond = true_exprt();
-      if(for_stmt.getCond())
-        get_expr(*for_stmt.getCond(), cond);
+      const clang::Stmt *cond_stmt = for_stmt.getCond();
+      if(cond_stmt)
+        if(get_expr(*cond_stmt, cond))
+          return true;
 
       codet inc = code_skipt();
-      if(for_stmt.getInc())
-        get_expr(*for_stmt.getInc(), inc);
+      const clang::Stmt *inc_stmt = for_stmt.getInc();
+      if(inc_stmt)
+        get_expr(*inc_stmt, inc);
+
       convert_expression_to_code(inc);
 
       codet body = code_skipt();
-      get_expr(*for_stmt.getBody(), body);
+      const clang::Stmt *body_stmt = for_stmt.getBody();
+      if(body_stmt)
+        if(get_expr(*body_stmt, body))
+          return true;
+
       convert_expression_to_code(body);
 
       code_fort code_for;
@@ -1711,11 +1830,10 @@ void llvm_convertert::get_expr(
 
     case clang::Stmt::IndirectGotoStmtClass:
     {
-      std::cerr << "**** ERROR: ";
       std::cerr << "ESBMC currently does not support indirect gotos"
                 << std::endl;
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      stmt.dumpColor();
+      return true;
 
       const clang::IndirectGotoStmt &goto_stmt =
         static_cast<const clang::IndirectGotoStmt &>(stmt);
@@ -1732,7 +1850,8 @@ void llvm_convertert::get_expr(
       else
       {
         exprt target;
-        get_expr(*goto_stmt.getTarget(), target);
+        if(get_expr(*goto_stmt.getTarget(), target))
+          return true;
 
         codet code_goto("gcc_goto");
         code_goto.copy_to_operands(target);
@@ -1762,19 +1881,18 @@ void llvm_convertert::get_expr(
       const clang::Decl *decl = get_top_FunctionDecl_from_Stmt(ret);
       if(!decl)
       {
-        std::cerr << "**** ERROR: ";
         std::cerr << "ESBMC could not find the parent scope for "
                   << "the following return statement:" << std::endl;
-        ret.dump();
-        std::cerr << "CONVERSION ERROR" << std::endl;
-        abort();
+        ret.dumpColor();
+        return true;
       }
 
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(*decl);
 
       typet return_type;
-      get_type(fd.getReturnType(), return_type);
+      if(get_type(fd.getReturnType(), return_type))
+        return true;
 
       code_returnt ret_expr;
       if(ret.getRetValue())
@@ -1782,9 +1900,10 @@ void llvm_convertert::get_expr(
         const clang::Expr &retval = *ret.getRetValue();
 
         exprt val;
-        get_expr(retval, val);
-        gen_typecast(ns, val, return_type);
+        if(get_expr(retval, val))
+          return true;
 
+        gen_typecast(ns, val, return_type);
         ret_expr.return_value() = val;
       }
 
@@ -1813,18 +1932,17 @@ void llvm_convertert::get_expr(
     case clang::Stmt::AtomicExprClass:
     case clang::Stmt::AttributedStmtClass:
     default:
-      std::cerr << "**** ERROR: ";
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
       stmt.dumpColor();
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      return true;
   }
 
   new_expr.location() = location_begin;
+  return false;
 }
 
-void llvm_convertert::get_decl_ref(
+bool llvm_convertert::get_decl_ref(
   const clang::Decl& decl,
   exprt& new_expr)
 {
@@ -1841,7 +1959,9 @@ void llvm_convertert::get_decl_ref(
       std::size_t address = reinterpret_cast<std::size_t>(&vd);
       identifier = object_map.find(address)->second;
 
-      get_type(vd.getType(), type);
+      if(get_type(vd.getType(), type))
+        return true;
+
       break;
     }
 
@@ -1853,7 +1973,9 @@ void llvm_convertert::get_decl_ref(
       std::size_t address = reinterpret_cast<std::size_t>(&vd);
       identifier = object_map.find(address)->second;
 
-      get_type(vd.getType(), type);
+      if(get_type(vd.getType(), type))
+        return true;
+
       break;
     }
 
@@ -1877,7 +1999,9 @@ void llvm_convertert::get_decl_ref(
         identifier = it->second;
       }
 
-      get_type(fd.getType(), type);
+      if(get_type(fd.getType(), type))
+        return true;
+
       break;
     }
 
@@ -1893,18 +2017,15 @@ void llvm_convertert::get_decl_ref(
             bv_width(int_type())),
           integer2string(enumcd.getInitVal().getSExtValue()),
           int_type());
-      return;
 
-      break;
+      return false;
     }
 
     default:
-      std::cerr << "**** ERROR: ";
       std::cerr << "Conversion of unsupported clang decl ref: \"";
       std::cerr << decl.getDeclKindName() << "\" to expression" << std::endl;
-      decl.dump();
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      decl.dumpColor();
+      return true;
   }
 
   new_expr = exprt("symbol", type);
@@ -1915,17 +2036,21 @@ void llvm_convertert::get_decl_ref(
     new_expr.name(identifier.substr(identifier.find_last_of("::")+1));
   else
     new_expr.name(identifier);
+
+  return false;
 }
 
-void llvm_convertert::get_cast_expr(
+bool llvm_convertert::get_cast_expr(
   const clang::CastExpr& cast,
   exprt& new_expr)
 {
   exprt expr;
-  get_expr(*cast.getSubExpr(), expr);
+  if(get_expr(*cast.getSubExpr(), expr))
+    return true;
 
   typet type;
-  get_type(cast.getType(), type);
+  if(get_type(cast.getType(), type))
+    return true;
 
   switch(cast.getCastKind())
   {
@@ -1959,26 +2084,27 @@ void llvm_convertert::get_cast_expr(
       break;
 
     default:
-      std::cerr << "**** ERROR: ";
       std::cerr << "Conversion of unsupported clang cast operator: \"";
       std::cerr << cast.getCastKindName() << "\" to expression" << std::endl;
       cast.dumpColor();
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      return true;
   }
 
   new_expr = expr;
+  return false;
 }
 
-void llvm_convertert::get_unary_operator_expr(
+bool llvm_convertert::get_unary_operator_expr(
   const clang::UnaryOperator& uniop,
   exprt& new_expr)
 {
   typet uniop_type;
-  get_type(uniop.getType(), uniop_type);
+  if(get_type(uniop.getType(), uniop_type))
+    return true;
 
   exprt unary_sub;
-  get_expr(*uniop.getSubExpr(), unary_sub);
+  if(get_expr(*uniop.getSubExpr(), unary_sub))
+    return true;
 
   switch (uniop.getOpcode())
   {
@@ -2023,19 +2149,18 @@ void llvm_convertert::get_unary_operator_expr(
       break;
 
     default:
-      std::cerr << "**** ERROR: ";
       std::cerr << "Conversion of unsupported clang unary operator: \"";
       std::cerr << clang::UnaryOperator::getOpcodeStr(uniop.getOpcode()).str()
                 << "\" to expression" << std::endl;
       uniop.dumpColor();
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      return true;
   }
 
   new_expr.operands().push_back(unary_sub);
+  return false;
 }
 
-void llvm_convertert::get_binary_operator_expr(
+bool llvm_convertert::get_binary_operator_expr(
   const clang::BinaryOperator& binop,
   exprt& new_expr)
 {
@@ -2129,23 +2254,26 @@ void llvm_convertert::get_binary_operator_expr(
     {
       const clang::CompoundAssignOperator &compop =
         static_cast<const clang::CompoundAssignOperator &>(binop);
-      get_compound_assign_expr(compop, new_expr);
-      return;
+      return get_compound_assign_expr(compop, new_expr);
     }
   }
 
   exprt lhs;
-  get_expr(*binop.getLHS(), lhs);
+  if(get_expr(*binop.getLHS(), lhs))
+    return true;
 
   exprt rhs;
-  get_expr(*binop.getRHS(), rhs);
+  if(get_expr(*binop.getRHS(), rhs))
+    return true;
 
-  get_type(binop.getType(), new_expr.type());
+  if(get_type(binop.getType(), new_expr.type()))
+    return true;
 
   new_expr.copy_to_operands(lhs, rhs);
+  return false;
 }
 
-void llvm_convertert::get_compound_assign_expr(
+bool llvm_convertert::get_compound_assign_expr(
   const clang::CompoundAssignOperator& compop,
   exprt& new_expr)
 {
@@ -2192,26 +2320,28 @@ void llvm_convertert::get_compound_assign_expr(
       break;
 
     default:
-      std::cerr << "**** ERROR: ";
       std::cerr << "Conversion of unsupported clang binary operator: \"";
       std::cerr << compop.getOpcodeStr().str() << "\" to expression" << std::endl;
       compop.dumpColor();
-      std::cerr << "CONVERSION ERROR" << std::endl;
-      abort();
+      return true;
   }
 
   exprt lhs;
-  get_expr(*compop.getLHS(), lhs);
+  if(get_expr(*compop.getLHS(), lhs))
+    return true;
 
   exprt rhs;
-  get_expr(*compop.getRHS(), rhs);
+  if(get_expr(*compop.getRHS(), rhs))
+    return true;
 
-  get_type(compop.getType(), new_expr.type());
+  if(get_type(compop.getType(), new_expr.type()))
+    return true;
 
   if(!lhs.type().is_pointer())
     gen_typecast(ns, rhs, lhs.type());
 
   new_expr.copy_to_operands(lhs, rhs);
+  return false;
 }
 
 void llvm_convertert::get_default_symbol(
@@ -2276,11 +2406,10 @@ std::string llvm_convertert::get_param_name(
   return pretty_name;
 }
 
-std::string llvm_convertert::get_tag_name(
-  const clang::RecordDecl& recordd)
+bool llvm_convertert::get_tag_name(
+  const clang::RecordDecl& recordd,
+  std::string &identifier)
 {
-  std::string pretty_name = "";
-
   if(recordd.getName().str().empty())
   {
     clang::RecordDecl *record_def = recordd.getDefinition();
@@ -2294,16 +2423,17 @@ std::string llvm_convertert::get_tag_name(
       // This should never be reached
       abort();
 
-    get_struct_union_class_fields(*record_def, t);
+    if(get_struct_union_class_fields(*record_def, t))
+      return true;
 
-    pretty_name += "#anon#" + type2name(t);
+    identifier += "#anon#" + type2name(t);
   }
   else
   {
-    pretty_name += recordd.getName().str();
+    identifier += recordd.getName().str();
   }
 
-  return pretty_name;
+  return false;
 }
 
 void llvm_convertert::get_location_from_decl(
@@ -2457,7 +2587,7 @@ void llvm_convertert::convert_expression_to_code(exprt& expr)
   expr.swap(code);
 }
 
-void llvm_convertert::search_add_type_map(
+bool llvm_convertert::search_add_type_map(
   const clang::TagDecl &tag,
   type_mapt::iterator &type_it)
 {
@@ -2469,15 +2599,16 @@ void llvm_convertert::search_add_type_map(
   {
     // Force the declaration to be added to the type_map
     exprt decl;
-    get_decl(tag, decl);
+    if(get_decl(tag, decl))
+      return true;
   }
 
   type_it = type_map.find(address);
   if(type_it == type_map.end())
-  {
     // BUG! This should be added already
-    abort();
-  }
+    return true;
+
+  return false;
 }
 
 const clang::Decl* llvm_convertert::get_DeclContext_from_Stmt(

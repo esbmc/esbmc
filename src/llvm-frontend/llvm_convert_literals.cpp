@@ -13,29 +13,34 @@
 #include <c_types.h>
 #include <string_constant.h>
 
-void llvm_convertert::convert_character_literal(
+bool llvm_convertert::convert_character_literal(
   const clang::CharacterLiteral char_literal,
   exprt &dest)
 {
   typet type;
-  get_type(char_literal.getType(), type);
+  if(get_type(char_literal.getType(), type))
+    return true;
 
   dest =
     constant_exprt(
       integer2binary(char_literal.getValue(), bv_width(type)),
       integer2string(char_literal.getValue()),
       type);
+
+  return false;
 }
 
-void llvm_convertert::convert_string_literal(
+bool llvm_convertert::convert_string_literal(
   const clang::StringLiteral string_literal,
   exprt &dest)
 {
   string_constantt string(string_literal.getString().str());
   dest.swap(string);
+
+  return false;
 }
 
-void llvm_convertert::convert_integer_literal(
+bool llvm_convertert::convert_integer_literal(
   llvm::APInt val,
   typet type,
   exprt &dest)
@@ -61,9 +66,10 @@ void llvm_convertert::convert_integer_literal(
   }
 
   dest.swap(the_val);
+  return false;
 }
 
-void llvm_convertert::convert_float_literal(
+bool llvm_convertert::convert_float_literal(
   llvm::APFloat val,
   typet type,
   exprt &dest)
@@ -71,7 +77,7 @@ void llvm_convertert::convert_float_literal(
   if(!config.ansi_c.use_fixed_for_float)
   {
     std::cerr << "floatbv unsupported, sorry" << std::endl;
-    abort();
+    return false;
   }
 
   llvm::SmallVector<char, 32> string;
@@ -124,6 +130,8 @@ void llvm_convertert::convert_float_literal(
       integer2binary(value, bv_width(type)),
       float_string,
       type);
+
+  return false;
 }
 
 std::string llvm_convertert::parse_float(
