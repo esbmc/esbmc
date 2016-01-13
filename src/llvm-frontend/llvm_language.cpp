@@ -166,6 +166,8 @@ void llvm_languaget::build_compiler_string(
 
   for(auto inc : config.ansi_c.include_paths)
     compiler_string.push_back("-I" + inc);
+
+  compiler_string.push_back("-D__NO_CTYPE");
 }
 
 bool llvm_languaget::parse(
