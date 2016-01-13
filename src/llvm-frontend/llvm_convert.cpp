@@ -2515,14 +2515,6 @@ bool llvm_convertert::convert_this_decl(const clang::Decl& decl)
   if(config.options.get_bool_option("keep-unused"))
     return true;
 
-  const clang::NamedDecl ndecl =
-    static_cast<const clang::NamedDecl &>(decl);
-
-  // If we're checking an function, passed through --function flag, we
-  // should convert it too
-  if(ndecl.getName().str() == config.main)
-    return true;
-
   if(decl.isFunctionOrFunctionTemplate())
   {
     // TODO: We cannot activate this code until the language_file class
@@ -2531,6 +2523,11 @@ bool llvm_convertert::convert_this_decl(const clang::Decl& decl)
 #if 0
     const clang::FunctionDecl &fd =
       static_cast<const clang::FunctionDecl&>(decl);
+
+    // If we're checking an function, passed through --function flag, we
+    // should convert it
+    if(fd.getName().str() == config.main)
+      return true;
 
     if(fd.isMain())
       return true;
