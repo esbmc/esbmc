@@ -16,6 +16,7 @@ class string_constantt:public exprt
 public:
   string_constantt();
   explicit string_constantt(const irep_idt &value);
+  explicit string_constantt(const irep_idt &value, const typet type);
 
   friend inline const string_constantt &to_string_constant(const exprt &expr)
   {
@@ -28,7 +29,7 @@ public:
     assert(expr.id()=="string-constant");
     return static_cast<string_constantt &>(expr);
   }
-  
+
   void set_value(const irep_idt &value);
 
   const irep_idt &get_value() const
