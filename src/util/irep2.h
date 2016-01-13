@@ -876,6 +876,20 @@ static inline std::string get_expr_id(const expr2tc &expr)
  *
  *  This all replicates the CBMC expression situation, but with the addition
  *  of types.
+ *
+ *  ----
+ *
+ *  Problems: there's an ambiguity between the construction of some new ireps,
+ *  and the downcasting from one type to another. If one were to say:
+ *
+ *    not2tc foo(someotherexpr);
+ *
+ *  Are we constructing a new "not" expression, the inversion of someotherexpr,
+ *  or downcasting it to a not2t reference? Currently it's configurable with
+ *  some traits hacks, but the ambiguity is alas something that has to be lived
+ *  with. All similar ireps are configured to always construct.
+ *
+ *  (The required traits hacks need cleaning up too).
  */
 namespace esbmct {
 
