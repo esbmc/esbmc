@@ -21,6 +21,7 @@
 #undef memset
 #undef memcpy
 #undef memmove
+#undef memchr
 
 char *strcpy(char *dst, const char *src)
 {
@@ -98,16 +99,25 @@ int strcmp(const char *p1, const char *p2)
 int strncmp(const char *s1, const char *s2, size_t n)
 {
   __ESBMC_HIDE:;
-  if (!n)
-    return 0;
-
-  while (--n && *s1 && *s1 == *s2)
+  size_t i=0;
+  unsigned char ch1, ch2;
+  do
   {
-    s1++;
-    s2++;
-  }
+    ch1=s1[i];
+    ch2=s2[i];
 
-  return *(unsigned char *) s1 - *(unsigned char *) s2;
+    if(ch1==ch2)
+    {
+    }
+    else if(ch1<ch2)
+      return -1;
+    else
+      return 1;
+
+    i++;
+  }
+  while(ch1!=0 && ch2!=0 && i<n);
+  return 0;
 }
 
 char *strchr(const char *s, int ch)
@@ -279,13 +289,22 @@ void *memmove(void *dest, const void *src, size_t n)
 int memcmp(const void *s1, const void *s2, size_t n)
 {
   __ESBMC_HIDE:;
-  int res;
+  int res = 0;
   const unsigned char *sc1 = s1, *sc2 = s2;
   for (; n != 0; n--)
   {
-    res = (sc1++) - (sc2++);
+    res = (*sc1++) - (*sc2++);
     if (res != 0)
       return res;
   }
   return res;
+}
+
+void *memchr(const void *buf, int ch, size_t n) {
+  while (n && (*(unsigned char *) buf != (unsigned char) ch)) {
+    buf = (unsigned char *) buf + 1;
+    n--;
+  }
+
+  return (n ? (void *) buf : NULL);
 }
