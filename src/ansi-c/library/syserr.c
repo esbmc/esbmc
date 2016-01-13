@@ -106,10 +106,11 @@ const char *const sys_errlist[] = {
   /* 89 EREMOTEIO       */  "Remote I/O error",
 };
 
-int sys_nerr = sizeof(sys_errlist) / sizeof(sys_errlist[0]);
 
 char *strerror(int errnum) {
   if (errnum < 0) errnum = -errnum;
+
+  int sys_nerr = sizeof(sys_errlist) / sizeof(sys_errlist[0]);
 
   if (errnum >= sys_nerr) {
     return "Unknown error";
