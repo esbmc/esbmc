@@ -154,21 +154,19 @@ private:
     symbolt &new_symbol);
 
   bool convert_character_literal(
-    const clang::CharacterLiteral char_literal,
+    const clang::CharacterLiteral &char_literal,
     exprt &dest);
 
   bool convert_string_literal(
-    const clang::StringLiteral string_literal,
+    const clang::StringLiteral &string_literal,
     exprt &dest);
 
   bool convert_integer_literal(
-    llvm::APInt val,
-    typet type,
+    const clang::IntegerLiteral &integer_literal,
     exprt &dest);
 
   bool convert_float_literal(
-    llvm::APFloat val,
-    typet type,
+    const clang::FloatingLiteral &floating_literal,
     exprt &dest);
 
   std::string parse_float(

@@ -14,7 +14,7 @@
 #include <string_constant.h>
 
 bool llvm_convertert::convert_character_literal(
-  const clang::CharacterLiteral char_literal,
+  const clang::CharacterLiteral &char_literal,
   exprt &dest)
 {
   typet type;
@@ -31,7 +31,7 @@ bool llvm_convertert::convert_character_literal(
 }
 
 bool llvm_convertert::convert_string_literal(
-  const clang::StringLiteral string_literal,
+  const clang::StringLiteral &string_literal,
   exprt &dest)
 {
   string_constantt string(string_literal.getString().str());
@@ -41,10 +41,22 @@ bool llvm_convertert::convert_string_literal(
 }
 
 bool llvm_convertert::convert_integer_literal(
-  llvm::APInt val,
-  typet type,
+  const clang::IntegerLiteral &integer_literal,
   exprt &dest)
 {
+  llvm::APInt val = integer_literal.getValue();
+
+  if(val.getBitWidth() > 64)
+  {
+    std::cerr << "ESBMC currently does not support integers bigger "
+        "than 64 bits" << std::endl;
+    return true;
+  }
+
+  typet type;
+  if(get_type(integer_literal.getType(), type))
+    return true;
+
   assert(type.is_unsignedbv() || type.is_signedbv());
 
   exprt the_val;
@@ -70,8 +82,7 @@ bool llvm_convertert::convert_integer_literal(
 }
 
 bool llvm_convertert::convert_float_literal(
-  llvm::APFloat val,
-  typet type,
+  const clang::FloatingLiteral &floating_literal,
   exprt &dest)
 {
   if(!config.ansi_c.use_fixed_for_float)
@@ -79,6 +90,12 @@ bool llvm_convertert::convert_float_literal(
     std::cerr << "floatbv unsupported, sorry" << std::endl;
     return false;
   }
+
+  typet type;
+  if(get_type(floating_literal.getType(), type))
+    return true;
+
+  llvm::APFloat val = floating_literal.getValue();
 
   llvm::SmallVector<char, 32> string;
   val.toString(string, 32, 0);

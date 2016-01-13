@@ -1078,20 +1078,8 @@ bool llvm_convertert::get_expr(
     {
       const clang::IntegerLiteral &integer_literal =
         static_cast<const clang::IntegerLiteral&>(stmt);
-      llvm::APInt val = integer_literal.getValue();
 
-      if(val.getBitWidth() > 64)
-      {
-        std::cerr << "ESBMC currently does not support integers bigger "
-                     "than 64 bits" << std::endl;
-        return true;
-      }
-
-      typet the_type;
-      if(get_type(integer_literal.getType(), the_type))
-        return true;
-
-      if(convert_integer_literal(val, the_type, new_expr))
+      if(convert_integer_literal(integer_literal, new_expr))
         return true;
 
       break;
@@ -1112,14 +1100,10 @@ bool llvm_convertert::get_expr(
     // A float value
     case clang::Stmt::FloatingLiteralClass:
     {
-      const clang::FloatingLiteral &float_literal =
+      const clang::FloatingLiteral &floating_literal =
         static_cast<const clang::FloatingLiteral&>(stmt);
 
-      typet t;
-      if(get_type(float_literal.getType(), t))
-        return true;
-
-      if(convert_float_literal(float_literal.getValue(), t, new_expr))
+      if(convert_float_literal(floating_literal, new_expr))
         return true;
 
       break;
