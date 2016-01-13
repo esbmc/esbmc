@@ -224,8 +224,7 @@ void goto_symext::symex_assign_rec(
   } else if (is_typecast2t(lhs)) {
     symex_assign_typecast(lhs, rhs, guard);
    } else if (is_constant_string2t(lhs) ||
-           is_null_object2t(lhs) ||
-           is_zero_string2t(lhs))
+           is_null_object2t(lhs))
   {
     // ignore
   } else if (is_byte_extract2t(lhs)) {

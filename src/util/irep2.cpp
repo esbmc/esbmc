@@ -555,8 +555,6 @@ static const char *expr_names[] = {
   "with",
   "member",
   "index",
-  "zero_string",
-  "zero_length_string",
   "isnan",
   "overflow",
   "overflow_cast",
@@ -583,7 +581,6 @@ static const char *expr_names[] = {
   "code_function_call",
   "code_comma_id",
   "invalid_pointer",
-  "buffer_size",
   "code_asm",
   "cpp_del_array",
   "cpp_delete",
@@ -2188,10 +2185,6 @@ std::string member2t::field_names [esbmct::num_type_fields]  =
 { "source_value", "member_name", "", "", ""};
 std::string index2t::field_names [esbmct::num_type_fields]  =
 { "source_value", "index", "", "", ""};
-std::string zero_string2t::field_names [esbmct::num_type_fields]  =
-{ "string", "", "", "", ""};
-std::string zero_length_string2t::field_names [esbmct::num_type_fields]  =
-{ "string", "", "", "", ""};
 std::string isnan2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string overflow2t::field_names [esbmct::num_type_fields]  =
@@ -2246,8 +2239,6 @@ std::string code_comma2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names [esbmct::num_type_fields]  =
 { "pointer_obj", "", "", "", ""};
-std::string buffer_size2t::field_names [esbmct::num_type_fields]  =
-{ "value", "", "", "", ""};
 std::string code_asm2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string code_cpp_del_array2t::field_names [esbmct::num_type_fields]  =
@@ -2347,8 +2338,6 @@ irep_typedefs(byte_update, byte_update_data);
 irep_typedefs(with, with_data);
 irep_typedefs(member, member_data);
 irep_typedefs(index, index_data);
-irep_typedefs(zero_string, string_ops);
-irep_typedefs(zero_length_string, string_ops);
 irep_typedefs(isnan, isnan_data);
 irep_typedefs(overflow, overflow_ops);
 irep_typedefs(overflow_cast, overflow_cast_data);
@@ -2376,7 +2365,6 @@ irep_typedefs(object_descriptor, object_desc_data);
 irep_typedefs(code_function_call, code_funccall_data);
 irep_typedefs(code_comma, code_comma_data);
 irep_typedefs(invalid_pointer, invalid_pointer_ops);
-irep_typedefs(buffer_size, buffer_size_data);
 irep_typedefs(code_asm, code_asm_data);
 irep_typedefs(code_cpp_del_array, code_expression_data);
 irep_typedefs(code_cpp_delete, code_expression_data);

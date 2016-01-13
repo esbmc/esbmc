@@ -630,8 +630,7 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
 
   if (is_address_of2t(expr) || is_pointer_type(expr) ||
       is_valid_object2t(expr) || is_dynamic_size2t(expr) ||
-      is_dynamic_size2t(expr) || is_zero_string2t(expr) ||
-      is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
+      is_dynamic_size2t(expr)) {
     return;
   } else if (is_symbol2t(expr)) {
     expr2tc newexpr = expr;

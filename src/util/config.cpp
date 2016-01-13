@@ -173,11 +173,6 @@ bool configt::set(const cmdlinet &cmdline)
     #endif
   }
 
-  if(cmdline.isset("string-abstraction"))
-    ansi_c.string_abstraction=true;
-  else
-    ansi_c.string_abstraction=false;
-
   if(cmdline.isset("no-lock-check"))
     ansi_c.lock_check=false;
   else

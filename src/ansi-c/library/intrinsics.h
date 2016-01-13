@@ -5,10 +5,6 @@ void __ESBMC_atomic_end(void);
 void __ESBMC_yield(void);
 void __ESBMC_switch_to(unsigned int tid);
 
-int __ESBMC_buffer_size(void *b);
-_Bool __ESBMC_is_zero_string(char *s);
-int __ESBMC_zero_string_length(char *s);
-
 int __ESBMC_abs(int x);
 long int __ESBMC_labs(long int x);
 double __ESBMC_fabs(double x);

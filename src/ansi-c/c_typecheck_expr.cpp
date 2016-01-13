@@ -1531,44 +1531,6 @@ void c_typecheck_baset::do_special_functions(
       expr.swap(same_object_expr);
       //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
     }
-    else if(identifier==CPROVER_PREFIX "buffer_size")
-    {
-      if(expr.arguments().size()!=1)
-      {
-        err_location(f_op);
-        throw "buffer_size expects one operand";
-      }
-
-      exprt buffer_size_expr("buffer_size", uint_type());
-      buffer_size_expr.operands()=expr.arguments();
-      expr.swap(buffer_size_expr);
-    }
-    else if(identifier==CPROVER_PREFIX "is_zero_string")
-    {
-      if(expr.arguments().size()!=1)
-      {
-        err_location(f_op);
-        throw "is_zero_string expects one operand";
-      }
-
-      exprt is_zero_string_expr("is_zero_string", bool_typet());
-      is_zero_string_expr.operands()=expr.arguments();
-      is_zero_string_expr.cmt_lvalue(true); // make it an lvalue
-      expr.swap(is_zero_string_expr);
-    }
-    else if(identifier==CPROVER_PREFIX "zero_string_length")
-    {
-      if(expr.arguments().size()!=1)
-      {
-        err_location(f_op);
-        throw "zero_string_length expects one operand";
-      }
-
-      exprt zero_string_length_expr("zero_string_length", uint_type());
-      zero_string_length_expr.operands()=expr.arguments();
-      zero_string_length_expr.cmt_lvalue(true); // make it an lvalue
-      expr.swap(zero_string_length_expr);
-    }
     else if(identifier==CPROVER_PREFIX "POINTER_OFFSET")
     {
       if(expr.arguments().size()!=1)
