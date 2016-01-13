@@ -946,6 +946,7 @@ bool llvm_convertert::get_builtin_type(
       c_type = "unsigned long long";
       break;
 
+    case clang::BuiltinType::Int128:
     case clang::BuiltinType::UInt128:
       // Various simplification / big-int related things use uint64_t's...
       std::cerr << "ESBMC currently does not support integers bigger "
@@ -972,13 +973,6 @@ bool llvm_convertert::get_builtin_type(
       new_type = long_long_int_type();
       c_type = "signed long long";
       break;
-
-    case clang::BuiltinType::Int128:
-      // Various simplification / big-int related things use uint64_t's...
-      std::cerr << "ESBMC currently does not support integers bigger "
-                    "than 64 bits" << std::endl;
-      bt.dump();
-      return true;
 
     case clang::BuiltinType::Float:
       new_type = float_type();

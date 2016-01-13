@@ -44,20 +44,13 @@ bool llvm_convertert::convert_integer_literal(
   const clang::IntegerLiteral &integer_literal,
   exprt &dest)
 {
-  llvm::APInt val = integer_literal.getValue();
-
-  if(val.getBitWidth() > 64)
-  {
-    std::cerr << "ESBMC currently does not support integers bigger "
-        "than 64 bits" << std::endl;
-    return true;
-  }
-
   typet type;
   if(get_type(integer_literal.getType(), type))
     return true;
 
   assert(type.is_unsignedbv() || type.is_signedbv());
+
+  llvm::APInt val = integer_literal.getValue();
 
   exprt the_val;
   if (type.is_unsignedbv())
