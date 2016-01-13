@@ -2239,6 +2239,19 @@ public:
   typedef esbmct::expr2t_traits<value_field> traits;
 };
 
+class isinf_data : public arith_1op
+{
+public:
+  isinf_data(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v)
+    : arith_1op(t, id, v) { }
+  isinf_data(const isinf_data &ref)
+    : arith_1op(ref) { }
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, arith_1op, &arith_1op::value> value_field;
+  typedef esbmct::expr2t_traits_always_construct<value_field> traits;
+};
+
 class arith_2ops : public arith_ops
 {
 public:
@@ -2944,8 +2957,8 @@ irep_typedefs(code_cpp_catch, code_cpp_catch_data);
 irep_typedefs(code_cpp_throw, code_cpp_throw_data);
 irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data);
 irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
-irep_typedefs(isinf, arith_1op);
-irep_typedefs(isnormal, arith_1op);
+irep_typedefs(isinf, isinf_data);
+irep_typedefs(isnormal, isinf_data); // Ho hum
 irep_typedefs(concat, bit_2ops);
 
 /** Constant integer class.

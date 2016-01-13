@@ -2384,6 +2384,6 @@ irep_typedefs(code_cpp_catch, code_cpp_catch_data);
 irep_typedefs(code_cpp_throw, code_cpp_throw_data);
 irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data);
 irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
-irep_typedefs(isinf, arith_1op);
-irep_typedefs(isnormal, arith_1op);
+irep_typedefs(isinf, isinf_data);
+irep_typedefs(isnormal, isinf_data);
 irep_typedefs(concat, bit_2ops);
