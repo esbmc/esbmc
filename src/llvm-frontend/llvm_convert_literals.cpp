@@ -34,7 +34,11 @@ bool llvm_convertert::convert_string_literal(
   const clang::StringLiteral &string_literal,
   exprt &dest)
 {
-  string_constantt string(string_literal.getString().str());
+  typet type;
+  if(get_type(string_literal.getType(), type))
+    return true;
+
+  string_constantt string(string_literal.getBytes().str(), type);
   dest.swap(string);
 
   return false;
