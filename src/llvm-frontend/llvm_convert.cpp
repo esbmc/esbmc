@@ -1174,9 +1174,9 @@ bool llvm_convertert::get_expr(
 
       new_expr =
         constant_exprt(
-          integer2binary(val.getSExtValue(), bv_width(int_type())),
+          integer2binary(val.getSExtValue(), bv_width(uint_type())),
           integer2string(val.getSExtValue()),
-          int_type());
+          uint_type());
       break;
     }
 
