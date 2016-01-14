@@ -88,10 +88,10 @@ void goto_k_inductiont::goto_k_induction()
     it != function_loops.rend();
     ++it)
   {
-    assert(!it->second.get_goto_program().empty());
+    assert(!it->get_goto_program().empty());
 
     // Start the loop conversion
-    convert_finite_loop(it->second);
+    convert_finite_loop(*it);
   }
 }
 

@@ -37,7 +37,7 @@ void goto_unwindt::goto_unwind()
     it != function_loops.rend();
     ++it)
   {
-    assert(!it->second.get_goto_program().empty());
+    assert(!it->get_goto_program().empty());
     unwind_program(goto_function.body, it);
 
     // remove skips
@@ -51,7 +51,7 @@ void goto_unwindt::unwind_program(
 {
   // Get loop exit goto number
   unsigned exit_number =
-    (--loop->second.get_goto_program().instructions.end())->location_number;
+    (--loop->get_goto_program().instructions.end())->location_number;
 
   // Increment pointer by 1, it will point to the first instruction
   // after the end of the loop
@@ -100,11 +100,11 @@ void goto_unwindt::unwind_program(
   goto_programt::targett t_skip=goto_program.insert(loop_exit);
   goto_programt::targett loop_iter=t_skip;
 
-  const goto_programt::targett loop_head = loop->first;
+  const goto_programt::targett loop_head = loop->get_original_loop_head();
 
   t_skip->make_skip();
-  t_skip->location=loop_head->location;
-  t_skip->function=loop_head->function;
+  t_skip->location = loop_head->location;
+  t_skip->function = loop_head->function;
 
   // record the exit point of first iteration
   iteration_points[0]=loop_iter;
