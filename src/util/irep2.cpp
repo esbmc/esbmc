@@ -1886,6 +1886,13 @@ template <class derived, class baseclass, typename traits, typename enable>
 void
 esbmct::irep_methods2<derived, baseclass, traits, enable>::tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
 {
+  // Skip over type fields in expressions. Alas, this is a design oversight,
+  // without this we would screw up the field name list.
+  if (std::is_same<cur_type, type2tc>::value && std::is_base_of<expr2t,derived>::value) {
+    superclass::tostring_rec(idx, vec, indent);
+    return;
+  }
+
   // Insert our particular member to string list.
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
