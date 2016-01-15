@@ -8,6 +8,7 @@
 #include <stdarg.h>
 
 #include <vector>
+#include <functional>
 
 #include <ac_config.h>
 
@@ -578,6 +579,12 @@ protected:
   /** Copy constructor */
   expr2t(const expr2t &ref);
 
+  typedef std::function<void (const expr2tc &expr)> const_op_delegate;
+  typedef std::function<void (expr2tc &expr)> op_delegate;
+
+  virtual void foreach_operand_impl_const(const_op_delegate &expr) const = 0;
+  virtual void foreach_operand_impl(op_delegate &expr) = 0;
+
 public:
   // Provide base / container types for some templates stuck on top:
   typedef expr2tc container_type;
@@ -771,6 +778,27 @@ public:
    *          simplified object if it can.
    */
   virtual expr2tc do_simplify(bool second = false) const;
+
+  /** Indirect, abstract operand iteration.
+   *  Provide a lambda-based accessor equivalent to the forall_operands2 macro
+   *  where anonymous code (actually a delegate?) gets run over each operand
+   *  expression. Because the full type of the expression isn't known by the
+   *  caller, and each delegate is it's own type, we need to wrap it in a
+   *  std::function before funneling it through a virtual function.
+   */
+  template <typename T>
+  void foreach_operand(T &t) const
+  {
+    const_op_delegate wrapped(std::cref(t));
+    foreach_operand_impl_const(wrapped);
+  }
+
+  template <typename T>
+  void Foreach_operand(T &t)
+  {
+    op_delegate wrapped(std::ref(t));
+    foreach_operand_impl(wrapped);
+  }
 
   /** Instance of expr_ids recording tihs exprs type. */
   const expr_ids expr_id;
@@ -1170,6 +1198,10 @@ namespace esbmct {
     const expr2tc *get_sub_expr(unsigned int i) const;
     expr2tc *get_sub_expr_nc(unsigned int i);
     unsigned int get_num_sub_exprs(void) const;
+
+    void foreach_operand_impl_const(expr2t::const_op_delegate &expr) const;
+    void foreach_operand_impl(expr2t::op_delegate &expr);
+
   protected:
     void list_operands(std::list<expr2tc*> &inp);
   };

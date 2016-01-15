@@ -1813,6 +1813,20 @@ esbmct::expr_methods2<derived, baseclass, traits, enable>::list_operands(std::li
   superclass::list_operands_rec(inp); // Skips expr_id
 }
 
+template <class derived, class baseclass, typename traits, typename enable>
+void
+esbmct::expr_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_const(expr2t::const_op_delegate &f) const
+{
+(void)expr;
+}
+
+template <class derived, class baseclass, typename traits, typename enable>
+void
+esbmct::expr_methods2<derived, baseclass, traits, enable>::foreach_operand_impl(expr2t::op_delegate &f)
+{
+(void)expr;
+}
+
 // Types
 
 template <class derived, class baseclass, typename traits, typename enable>
