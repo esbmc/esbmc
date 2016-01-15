@@ -2,6 +2,10 @@
 
 #include "boolector_conv.h"
 
+extern "C" {
+#include <btorcore.h>
+}
+
 smt_convt *
 create_new_boolector_solver(bool int_encoding, const namespacet &ns,
                             bool is_cpp, const optionst &options,
@@ -95,7 +99,9 @@ boolector_convt::l_get(const smt_ast *l)
 const std::string
 boolector_convt::solver_text()
 {
-  return "Boolector";
+  std::string ss = "Boolector ";
+  ss += btor_version(btor);
+  return ss;
 }
 
 void
