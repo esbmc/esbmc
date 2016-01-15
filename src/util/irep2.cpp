@@ -1817,14 +1817,14 @@ template <class derived, class baseclass, typename traits, typename enable>
 void
 esbmct::expr_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_const(expr2t::const_op_delegate &f) const
 {
-(void)expr;
+  superclass::foreach_operand_impl_const_rec(f);
 }
 
 template <class derived, class baseclass, typename traits, typename enable>
 void
 esbmct::expr_methods2<derived, baseclass, traits, enable>::foreach_operand_impl(expr2t::op_delegate &f)
 {
-(void)expr;
+  superclass::foreach_operand_impl_rec(f);
 }
 
 // Types
@@ -2034,6 +2034,54 @@ esbmct::irep_methods2<derived, baseclass, traits, enable>::get_num_sub_exprs_rec
 
   num = do_count_sub_exprs(derived_this->*m_ptr);
   return num + superclass::get_num_sub_exprs_rec();
+}
+
+// Generic operand type: skip over it.
+template <typename T>
+template <class derived, class baseclass, typename traits, typename enable>
+void
+esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
+{
+  superclass::foreach_operand_impl_const_rec(f);
+}
+
+// Operand iteration specialized for expr2tc: call delegate.
+template <typename T>
+template <class derived, class baseclass, typename traits, typename enable>
+void
+esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_const_rec<expr2tc>(expr2t::const_op_delegate &f) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  // Call delegate
+  f(derived_this->*m_ptr);
+
+  superclass::foreach_operand_impl_const_rec(f);
+}
+
+// Generic (nonconst) operand type: skip over it.
+template <typename T>
+template <class derived, class baseclass, typename traits, typename enable>
+void
+esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_rec<T>(expr2t::op_delegate &f)
+{
+  superclass::foreach_operand_impl_rec(f);
+}
+
+// Operand iteration specialized for expr2tc: call delegate.
+template <typename T>
+template <class derived, class baseclass, typename traits, typename enable>
+void
+esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_rec<expr2tc>(expr2t::op_delegate &f)
+{
+  derived *derived_this = static_cast<derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  // Call delegate
+  f(derived_this->*m_ptr);
+
+  superclass::foreach_operand_impl_rec(f);
 }
 
 /********************** Constants and explicit instantiations *****************/

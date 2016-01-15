@@ -570,6 +570,9 @@ public:
   /** Type for list of non-constant expr operands */
   typedef std::list<expr2tc*> Expr_operands;
 
+  typedef std::function<void (const expr2tc &expr)> const_op_delegate;
+  typedef std::function<void (expr2tc &expr)> op_delegate;
+
 protected:
   /** Primary constructor.
    *  @param type Type of this new expr
@@ -578,9 +581,6 @@ protected:
   expr2t(const type2tc type, expr_ids id);
   /** Copy constructor */
   expr2t(const expr2t &ref);
-
-  typedef std::function<void (const expr2tc &expr)> const_op_delegate;
-  typedef std::function<void (expr2tc &expr)> op_delegate;
 
   virtual void foreach_operand_impl_const(const_op_delegate &expr) const = 0;
   virtual void foreach_operand_impl(op_delegate &expr) = 0;
@@ -1089,6 +1089,13 @@ namespace esbmct {
     const expr2tc *get_sub_expr_rec(unsigned int cur_count, unsigned int desired) const;
     expr2tc *get_sub_expr_nc_rec(unsigned int cur_count, unsigned int desired);
     unsigned int get_num_sub_exprs_rec(void) const;
+
+    // Select implementation body through template specialization on cur_type.
+    template <typename T = cur_type>
+    void foreach_operand_impl_rec(expr2t::op_delegate &f);
+
+    template <typename T = cur_type>
+    void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const;
   };
 
   // Base instance of irep_methods2. This is a template specialization that
@@ -1172,6 +1179,16 @@ namespace esbmct {
     unsigned int get_num_sub_exprs_rec(void) const
     {
       return 0;
+    }
+
+    void foreach_operand_impl_rec(expr2t::op_delegate &f)
+    {
+      return;
+    }
+
+    void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
+    {
+      return;
     }
   };
 
