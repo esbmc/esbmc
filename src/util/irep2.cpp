@@ -1888,6 +1888,8 @@ esbmct::irep_methods2<derived, baseclass, traits, enable>::tostring_rec(unsigned
 {
   // Skip over type fields in expressions. Alas, this is a design oversight,
   // without this we would screw up the field name list.
+  // It escapes me why this isn't printed here anyway, it gets printed in the
+  // end.
   if (std::is_same<cur_type, type2tc>::value && std::is_base_of<expr2t,derived>::value) {
     superclass::tostring_rec(idx, vec, indent);
     return;
