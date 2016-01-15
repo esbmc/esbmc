@@ -958,7 +958,8 @@ namespace esbmct {
   {
   public:
     typedef field_traits<const expr2t::expr_ids, expr2t, &expr2t::expr_id> expr_id_field;
-    typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>, expr_id_field>::type type;
+    typedef field_traits<type2tc, expr2t, &expr2t::type> type_field;
+    typedef typename boost::mpl::push_front<typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::type, expr_id_field>::type type;
     static constexpr bool always_construct = false;
     static constexpr unsigned int num_fields = boost::mpl::size<type>::type::value;
   };
