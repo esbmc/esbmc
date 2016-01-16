@@ -1214,10 +1214,11 @@ typecast2t::do_simplify(bool second) const
     newobj.get()->type = type;
 
     std::list<expr2tc>::const_iterator it2 = set2.begin();
-    Forall_operands2(it3, idx2, newobj) {
-      *it3 = *it2;
-      it2++;
-    }
+    newobj.get()->Foreach_operand([this, &it2] (expr2tc &e) {
+        e= *it2;
+        it2++;
+      }
+    );
 
     // Caller won't simplify us further if it's called us with second=true, so
     // give simplification another shot ourselves.
@@ -1417,16 +1418,17 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
     return expr2tc();
 
   expr2tc new_operand = operand->clone();
-  Forall_operands2(it, idx, new_operand) {
-    expr2tc tmp = (**it).simplify();
-    if (!is_nil_expr(tmp)) {
-      *it= tmp;
-      simplified = true;
-    }
+  new_operand.get()->Foreach_operand([this, &simplified, &num_const] (expr2tc &e) {
+      expr2tc tmp = (*e).simplify();
+      if (!is_nil_expr(tmp)) {
+        e = tmp;
+        simplified = true;
+      }
 
-    if (is_constant_expr(*it))
-      num_const++;
-  }
+      if (is_constant_expr(e))
+        num_const++;
+    }
+  );
 
   // If we don't have two constant operands, we can't simplify this expression.
   // We also don't want the underlying addition / whatever to become

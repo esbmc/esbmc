@@ -246,9 +246,10 @@ void goto_symex_statet::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, idx, expr) {
-      rename(*it);
-    }
+    expr.get()->Foreach_operand([this] (expr2tc &e) {
+        rename(e);
+      }
+    );
   }
 }
 
@@ -285,9 +286,10 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, idx, expr) {
-      rename_address(*it);
-    }
+    expr.get()->Foreach_operand([this] (expr2tc &e) {
+        rename_address(e);
+      }
+    );
   }
 }
 

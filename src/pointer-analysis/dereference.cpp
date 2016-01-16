@@ -136,12 +136,13 @@ dereferencet::dereference_expr(
   switch (deref_expr_handler_actions[expr->expr_id]) {
   case deref_recurse:
   {
-    Forall_operands2(it, idx, expr) {
-      if (is_nil_expr(*it))
-        continue;
+    expr.get()->Foreach_operand([this, &guard, &mode] (expr2tc &e) {
+        if (is_nil_expr(e))
+          return;
 
-      dereference_expr(*it, guard, mode);
-    }
+        dereference_expr(e, guard, mode);
+      }
+    );
     break;
   }
   case deref_munge_guard:
@@ -188,9 +189,7 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
     // Take the current size of the guard, so that we can reset it later.
     unsigned old_guards=guard.size();
 
-    Forall_operands2(it, idx, expr) {
-      expr2tc &op = *it;
-
+    expr.get()->Foreach_operand([this, &guard, &expr] (expr2tc &op) {
       assert(is_bool_type(op));
 
       // Handle any derererences in this operand
@@ -205,6 +204,7 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
         guard.add(op);
       }
     }
+    );
 
     // Reset guard to where it was.
     guard.resize(old_guards);
