@@ -780,11 +780,24 @@ public:
   virtual expr2tc do_simplify(bool second = false) const;
 
   /** Indirect, abstract operand iteration.
+   *
    *  Provide a lambda-based accessor equivalent to the forall_operands2 macro
    *  where anonymous code (actually a delegate?) gets run over each operand
    *  expression. Because the full type of the expression isn't known by the
    *  caller, and each delegate is it's own type, we need to wrap it in a
    *  std::function before funneling it through a virtual function.
+   *
+   *  For the purpose of this method, an operand is another instance of an
+   *  expr2tc. This means the delegate will be called on any expr2tc field of
+   *  the expression, in the order they appear in the traits. For a vector of
+   *  expressions, the delegate will be called for each element, in order.
+   *
+   *  The uncapitalized version is const; the capitalized version is non-const
+   *  (and so one needs to .get() a mutable expr2t pointer when calling). When
+   *  modifying operands, preserving type correctness is imperative.
+   *
+   *  @param t A delegate to be called for each expression operand; must have
+   *           a type of void f(const expr2tc &)
    */
   template <typename T>
   void foreach_operand(T &&t) const
