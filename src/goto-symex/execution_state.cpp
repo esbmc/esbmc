@@ -655,9 +655,10 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
     }
   }
 
-  forall_operands2(it, op_list, expr) {
-    get_expr_globals(ns, *it, globals_list);
-  }
+  expr->foreach_operand([this, &globals_list, &ns] (const expr2tc &e) {
+    get_expr_globals(ns, e, globals_list);
+    }
+  );
 }
 
 bool

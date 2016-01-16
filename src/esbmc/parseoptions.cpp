@@ -1376,9 +1376,12 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
 
     used_syms.insert(sym);
   } else {
-    Forall_operands2(it, idx, e)
-      if (!is_nil_expr(*it))
-        replace_symbol_names(*it, prefix, strings, used_syms);
+    e.get()->Foreach_operand([&prefix, &strings, &used_syms] (expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          replace_symbol_names(e, prefix, strings, used_syms);
+      }
+    );
   }
 
   return;
@@ -1481,8 +1484,10 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   if (!is_symbol2t(expr)) {
     unsigned int globals = 0;
 
-    forall_operands2(it, idx, expr)
-      globals += calc_globals_used(ns, *it);
+    expr->foreach_operand([&globals, &ns] (const expr2tc &e) {
+      globals += calc_globals_used(ns, e);
+      }
+    );
 
     return globals;
   }
