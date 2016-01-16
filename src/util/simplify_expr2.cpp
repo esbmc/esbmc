@@ -1201,10 +1201,11 @@ typecast2t::do_simplify(bool second) const
     // and the type we're casting to isn't _supposed_ to result in a loss of
     // information, push the cast downwards.
     std::list<expr2tc> set2;
-    forall_operands2(it, idx, from) {
-      expr2tc cast = expr2tc(new typecast2t(type, *it));
+    from->foreach_operand([&set2, this] (const expr2tc &e) {
+      expr2tc cast = expr2tc(new typecast2t(type, e));
       set2.push_back(cast);
     }
+    );
 
     // Now clone the expression and update its operands.
     expr2tc newobj = expr2tc(from->clone());
