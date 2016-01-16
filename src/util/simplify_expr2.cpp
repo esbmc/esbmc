@@ -208,11 +208,10 @@ rebalance_associative_tree(const expr2t &expr, std::list<expr2tc> &ops,
   // faster than stringly stuff.
 
   // Extract immediate operands
-  std::list<const expr2tc*> immediate_operands;
-  expr.list_operands(immediate_operands);
-  for (std::list<const expr2tc*>::const_iterator
-       it = immediate_operands.begin(); it != immediate_operands.end(); it++)
-      fetch_ops_from_this_type(ops, expr.expr_id, **it);
+  expr.foreach_operand([&ops, &expr] (const expr2tc &e) {
+      fetch_ops_from_this_type(ops, expr.expr_id, e);
+    }
+  );
 
   // Are there enough constant values in there?
   unsigned int const_values = 0;
