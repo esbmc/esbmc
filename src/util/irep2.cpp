@@ -1774,7 +1774,7 @@ hash_value(lolnoop val)
 // Local template for implementing delegate calling, with type dependency.
 template <typename T, typename U>
 void
-call_expr_delegate(T ref, U f)
+call_expr_delegate(T &ref, U &f)
 {
   // Don't do anything normally.
   (void)ref;
@@ -1784,7 +1784,7 @@ call_expr_delegate(T ref, U f)
 
 template <>
 void
-call_expr_delegate<const expr2tc &, expr2t::const_op_delegate &>
+call_expr_delegate<const expr2tc,expr2t::const_op_delegate>
                   (const expr2tc &ref, expr2t::const_op_delegate &f)
 {
   f(ref);
@@ -1793,7 +1793,7 @@ call_expr_delegate<const expr2tc &, expr2t::const_op_delegate &>
 
 template <>
 void
-call_expr_delegate<expr2tc &, expr2t::op_delegate &>
+call_expr_delegate<expr2tc, expr2t::op_delegate>
                   (expr2tc &ref, expr2t::op_delegate &f)
 {
   f(ref);
@@ -1802,7 +1802,7 @@ call_expr_delegate<expr2tc &, expr2t::op_delegate &>
 
 template <>
 void
-call_expr_delegate<const std::vector<expr2tc> &, expr2t::const_op_delegate &>
+call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>
                  (const std::vector<expr2tc> &ref, expr2t::const_op_delegate &f)
 {
   for (const expr2tc &r : ref)
@@ -1813,7 +1813,7 @@ call_expr_delegate<const std::vector<expr2tc> &, expr2t::const_op_delegate &>
 
 template <>
 void
-call_expr_delegate<std::vector<expr2tc> &, expr2t::op_delegate &>
+call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>
                   (std::vector<expr2tc> &ref, expr2t::op_delegate &f)
 {
   for (expr2tc &r : ref)
