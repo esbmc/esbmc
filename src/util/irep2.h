@@ -702,28 +702,6 @@ public:
    */
   virtual void hash(crypto_hash &hash) const;
 
-  /** Generate a list of expr operands.
-   *  Use forall_operands2 instead; this method is overridden by subclasses and
-   *  when invoked fills the inp list with pointers to any exprs that make up
-   *  this expr. Any fields that aren't expr-based (i.e., the field name in
-   *  a member2t expr) are not entered into this list.
-   *
-   *  Comes in a const and non-const flavour. When using the non-const flavour,
-   *  one can overwrite field-exprs within another expr without knowing the
-   *  exprs concrete type. In this case, it's immensely important to preserve
-   *  type correctness.
-   *
-   *  @see forall_operands2
-   *  @see Forall_operands2
-   *  @param inp List of pointers to exprs that are in fields of this expr.
-   */
-  virtual void list_operands(std::list<const expr2tc*> &inp) const = 0;
-
-  /** Generate a list of expr operands.
-   *  See the other const version of this method
-   */
-  virtual void list_operands(std::list<expr2tc*> &inp) = 0;
-
   /** Fetch a sub-operand.
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
@@ -759,7 +737,7 @@ public:
    *  const).
    *
    *  If simplification failed the first time around, the simplify method will
-   *  simplify this expressions operands for it via the medium of list_operands,
+   *  simplify this expressions individual operands,
    *  and will then call an expr with the simplified operands to see if it's now
    *  become simplifiable. This call occurs whether or not any operands were
    *  actually simplified, see below.
@@ -882,7 +860,7 @@ static inline std::string get_expr_id(const expr2tc &expr)
  *  via overloading), and then inspecting the output of that.
  *
  *  In fact, we can make type generic implementations of all the following
- *  methods in expr2t: clone, tostring, cmp, lt, do_crc, list_operands, hash.
+ *  methods in expr2t: clone, tostring, cmp, lt, do_crc, hash.
  *  Similar methods, minus the operands, can be made generic in type2t.
  *
  *  So, that's what these templates provide; an irep class can be made by
@@ -1097,8 +1075,6 @@ namespace esbmct {
 
     // These methods are specific to expressions rather than types, and are
     // placed here to avoid un-necessary recursion in expr_methods2.
-    void list_operands_rec(std::list<const expr2tc*> &inp) const;
-    void list_operands_rec(std::list<expr2tc*> &inp);
     const expr2tc *get_sub_expr_rec(unsigned int cur_count, unsigned int desired) const;
     expr2tc *get_sub_expr_nc_rec(unsigned int cur_count, unsigned int desired);
     unsigned int get_num_sub_exprs_rec(void) const;
@@ -1158,19 +1134,6 @@ namespace esbmct {
       return;
     }
 
-    // Expr methods
-    void list_operands_rec(std::list<const expr2tc*> &inp) const
-    {
-      (void)inp;
-      return;
-    }
-
-    void list_operands_rec(std::list<expr2tc*> &inp)
-    {
-      (void)inp;
-      return;
-    }
-
     const expr2tc *get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
     {
       // No result, so desired must exceed the number of idx's
@@ -1205,7 +1168,7 @@ namespace esbmct {
 
   /** Expression methods template for expr ireps.
    *  This class works on the same principle as @irep_methods2 but provides
-   *  head methods for list_operands, get_sub_expr and so forth, which are
+   *  head methods for get_sub_expr and so forth, which are
    *  specific to expression ireps. The actual implementation of these methods
    *  are provided in irep_methods to avoid un-necessary recursion but are
    *  protected; here we provide the head methods publically to allow the
@@ -1222,16 +1185,12 @@ namespace esbmct {
     // See notes on irep_methods2 copy constructor
     expr_methods2(const derived &ref) : superclass(ref) { }
 
-    void list_operands(std::list<const expr2tc*> &inp) const;
     const expr2tc *get_sub_expr(unsigned int i) const;
     expr2tc *get_sub_expr_nc(unsigned int i);
     unsigned int get_num_sub_exprs(void) const;
 
     void foreach_operand_impl_const(expr2t::const_op_delegate &expr) const;
     void foreach_operand_impl(expr2t::op_delegate &expr);
-
-  protected:
-    void list_operands(std::list<expr2tc*> &inp);
   };
 
   // So that we can write such things as:
