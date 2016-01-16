@@ -787,14 +787,14 @@ public:
    *  std::function before funneling it through a virtual function.
    */
   template <typename T>
-  void foreach_operand(T &t) const
+  void foreach_operand(T &&t) const
   {
     const_op_delegate wrapped(std::cref(t));
     foreach_operand_impl_const(wrapped);
   }
 
   template <typename T>
-  void Foreach_operand(T &t)
+  void Foreach_operand(T &&t)
   {
     op_delegate wrapped(std::ref(t));
     foreach_operand_impl(wrapped);
