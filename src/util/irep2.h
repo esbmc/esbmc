@@ -1090,11 +1090,7 @@ namespace esbmct {
     expr2tc *get_sub_expr_nc_rec(unsigned int cur_count, unsigned int desired);
     unsigned int get_num_sub_exprs_rec(void) const;
 
-    // Select implementation body through template specialization on cur_type.
-    template <typename T = cur_type>
     void foreach_operand_impl_rec(expr2t::op_delegate &f);
-
-    template <typename T = cur_type>
     void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const;
   };
 
@@ -1183,11 +1179,13 @@ namespace esbmct {
 
     void foreach_operand_impl_rec(expr2t::op_delegate &f)
     {
+      (void)f;
       return;
     }
 
     void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
     {
+      (void)f;
       return;
     }
   };

@@ -1771,6 +1771,57 @@ hash_value(lolnoop val)
   return val;
 }
 
+// Local template for implementing delegate calling, with type dependency.
+template <typename T, typename U>
+void
+call_expr_delegate(T ref, U f)
+{
+  // Don't do anything normally.
+  (void)ref;
+  (void)f;
+  return;
+}
+
+template <>
+void
+call_expr_delegate<const expr2tc &, expr2t::const_op_delegate &>
+                  (const expr2tc &ref, expr2t::const_op_delegate &f)
+{
+  f(ref);
+  return;
+}
+
+template <>
+void
+call_expr_delegate<expr2tc &, expr2t::op_delegate &>
+                  (expr2tc &ref, expr2t::op_delegate &f)
+{
+  f(ref);
+  return;
+}
+
+template <>
+void
+call_expr_delegate<const std::vector<expr2tc> &, expr2t::const_op_delegate &>
+                 (const std::vector<expr2tc> &ref, expr2t::const_op_delegate &f)
+{
+  for (const expr2tc &r : ref)
+    f(r);
+
+  return;
+}
+
+template <>
+void
+call_expr_delegate<std::vector<expr2tc> &, expr2t::op_delegate &>
+                  (std::vector<expr2tc> &ref, expr2t::op_delegate &f)
+{
+  for (expr2tc &r : ref)
+    f(r);
+
+  return;
+}
+
 /************************ Second attempt at irep templates ********************/
 
 // Implementations of common methods, recursively.
@@ -2036,50 +2087,29 @@ esbmct::irep_methods2<derived, baseclass, traits, enable>::get_num_sub_exprs_rec
   return num + superclass::get_num_sub_exprs_rec();
 }
 
-// Generic operand type: skip over it.
-template <typename T>
+// Operand iteration specialized for expr2tc: call delegate.
 template <class derived, class baseclass, typename traits, typename enable>
 void
 esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
-{
-  superclass::foreach_operand_impl_const_rec(f);
-}
-
-// Operand iteration specialized for expr2tc: call delegate.
-template <typename T>
-template <class derived, class baseclass, typename traits, typename enable>
-void
-esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_const_rec<expr2tc>(expr2t::const_op_delegate &f) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
 
   // Call delegate
-  f(derived_this->*m_ptr);
+  call_expr_delegate(derived_this->*m_ptr, f);
 
   superclass::foreach_operand_impl_const_rec(f);
 }
 
-// Generic (nonconst) operand type: skip over it.
-template <typename T>
 template <class derived, class baseclass, typename traits, typename enable>
 void
-esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_rec<T>(expr2t::op_delegate &f)
-{
-  superclass::foreach_operand_impl_rec(f);
-}
-
-// Operand iteration specialized for expr2tc: call delegate.
-template <typename T>
-template <class derived, class baseclass, typename traits, typename enable>
-void
-esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_rec<expr2tc>(expr2t::op_delegate &f)
+esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_rec(expr2t::op_delegate &f)
 {
   derived *derived_this = static_cast<derived*>(this);
   auto m_ptr = membr_ptr::value;
 
   // Call delegate
-  f(derived_this->*m_ptr);
+  call_expr_delegate(derived_this->*m_ptr, f);
 
   superclass::foreach_operand_impl_rec(f);
 }
