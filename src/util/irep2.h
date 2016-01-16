@@ -101,47 +101,6 @@
   for (std::vector<std::string>::iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
-/** Iterate over all expr-like operands in an irep.
- *  This macro automates iterating over sub-expressions in an irep. It takes the
- *  name of an irep container ptr to make, and an integer to track indexes with,
- *  and creates them in scope. A for loop then executes the next statement with
- *  the container ptr pointing at a sub-expr. Fixed-type operands (such as the
- *  member name in a member2t) are not part of the list.
- *
- *  NB: This iterates of expr2tc _pointers_. So, you need to dereference first
- *  the ptr, then the container.
- *
- *  @see Forall_operands2
- *  @param it Name to give iterator to be declared
- *  @param idx Name for index tracking integer.
- *  @param theexpr expr2tc to retrieve list of operands from.
- */
-#define forall_operands2(ptr, idx, theexpr) \
-  const expr2tc *ptr; \
-  unsigned int idx; \
-  for (idx = 0, ptr = theexpr->get_sub_expr(0); ptr != 0; \
-       idx++, ptr = theexpr->get_sub_expr(idx))
-
-/** Like forall_operands2, but for non-const exprs.
- *
- *  If you feel the need to replace the contents of an expression without
- *  knowing its concrete type (i.e., in simplification) you can assign an
- *  expr2tc into the expr using one of these operand pointers.
- *
- *  Ideally this method should stop existing in the future, and instead we
- *  should constly iterate over sub-exprs, and then call set_sub_expr or
- *  something. I don't think there are that many use cases where every sub expr
- *  gets rewritten, and in these circumstances we're needlessly duplicating
- *  exprs.
- *
- *  @see forall_operands2
- */
-#define Forall_operands2(ptr, idx, theexpr) \
-  expr2tc *ptr; \
-  unsigned int idx; \
-  for (idx = 0, ptr = theexpr.get()->get_sub_expr_nc(0); ptr != 0; \
-       idx++, ptr = theexpr.get()->get_sub_expr_nc(idx))
-
 // Even crazier forward decs,
 namespace esbmct {
   template <typename ...Args> class expr2t_traits;

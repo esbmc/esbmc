@@ -365,8 +365,10 @@ void goto_symex_statet::get_original_name(expr2tc &expr) const
   if (is_nil_expr(expr))
     return;
 
-  Forall_operands2(it, idx, expr)
-    get_original_name(*it);
+  expr.get()->Foreach_operand([this] (expr2tc &e) {
+      get_original_name(e);
+    }
+  );
 
   if (is_symbol2t(expr))
   {

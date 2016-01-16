@@ -489,13 +489,14 @@ expr2t::simplify(void) const
   // An operand has been changed; clone ourselves and update.
   expr2tc new_us = clone();
   std::list<expr2tc>::iterator it2 = newoperands.begin();
-  Forall_operands2(it, idx, new_us) {
-    if ((*it2) == NULL)
-      ; // No change in operand;
-    else
-      *it = *it2; // Operand changed; overwrite with new one.
-    it2++;
-  }
+  new_us.get()->Foreach_operand([this, &it2] (expr2tc &e) {
+      if ((*it2) == NULL)
+        ; // No change in operand;
+      else
+        e = *it2; // Operand changed; overwrite with new one.
+      it2++;
+    }
+  );
 
   // Finally, attempt simplification again.
   expr2tc tmp = new_us->do_simplify(true);
