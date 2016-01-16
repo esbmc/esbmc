@@ -362,9 +362,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     goto nocvt;
   special_cases = false;
 
-  // Convert /all the arguments/.
-  forall_operands2(it, idx, expr) {
-    args[i] = convert_ast(*it);
+  // Convert /all the arguments/. Via magical delegates.
+  expr->foreach_operand(
+      [this, &args, &i, &used_sorts, &seen_signed_operand, make_ints_reals]
+      (const expr2tc &e)
+    {
+    args[i] = convert_ast(e);
 
     if (make_ints_reals && args[i]->sort->id == SMT_SORT_INT) {
       args[i] = mk_func_app(mk_sort(SMT_SORT_REAL), SMT_FUNC_INT2REAL, args[i]);
@@ -372,9 +375,10 @@ smt_convt::convert_ast(const expr2tc &expr)
 
     used_sorts |= args[i]->sort->id;
     i++;
-    if (is_signedbv_type(*it) || is_fixedbv_type(*it))
+    if (is_signedbv_type(e) || is_fixedbv_type(e))
       seen_signed_operand = true;
-  }
+    }
+  );
 nocvt:
 
   sort = convert_sort(expr->type);

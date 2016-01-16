@@ -179,8 +179,10 @@ fetch_ops_from_this_type(std::list<expr2tc> &ops, expr2t::expr_ids id,
 {
 
   if (expr->expr_id == id) {
-    forall_operands2(it, idx, expr)
-      fetch_ops_from_this_type(ops, id, *it);
+    expr->foreach_operand([&ops, id] (const expr2tc &e) {
+      fetch_ops_from_this_type(ops, id, e);
+      }
+    );
   } else {
     ops.push_back(expr);
   }

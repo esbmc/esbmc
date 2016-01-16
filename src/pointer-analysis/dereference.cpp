@@ -70,9 +70,17 @@ bool dereferencet::has_dereference(const expr2tc &expr) const
   if (is_nil_expr(expr))
     return false;
 
-  forall_operands2(it, idx, expr)
-    if(has_dereference(*it))
-      return true;
+  // Check over each operand,
+  bool result = false;
+  expr->foreach_operand([this, &result] (const expr2tc &e) {
+    if (has_dereference(e))
+      result = true;
+    }
+  );
+
+  // If a derefing operand is found, return true.
+  if (result == true)
+    return true;
 
   if (is_dereference2t(expr) ||
      (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value)))

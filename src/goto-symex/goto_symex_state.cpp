@@ -99,11 +99,17 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_add2t(expr))
   {
-    forall_operands2(it, idx, expr)
-      if(!constant_propagation(*it))
-        return false;
+    bool noconst = true;
 
-    return true;
+    // Use noconst as a flag to indicate (and short-circuit) when a non
+    // constant propagatable expr is found.
+    expr->foreach_operand([this, &noconst] (const expr2tc &e) {
+      if(noconst && !constant_propagation(e))
+        noconst = false;
+      }
+    );
+
+    return noconst;
   }
   else if (is_constant_array_of2t(expr))
   {
@@ -122,11 +128,15 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_constant_struct2t(expr))
   {
-    forall_operands2(it, idx, expr)
-      if(!constant_propagation(*it))
-        return false;
+    bool noconst = true;
 
-    return true;
+    expr->foreach_operand([this, &noconst] (const expr2tc &e) {
+      if (noconst && !constant_propagation(e))
+        noconst = false;
+      }
+    );
+
+    return noconst;
   }
   else if (is_constant_union2t(expr))
   {

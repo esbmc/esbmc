@@ -1481,8 +1481,10 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   if (!is_symbol2t(expr)) {
     unsigned int globals = 0;
 
-    forall_operands2(it, idx, expr)
-      globals += calc_globals_used(ns, *it);
+    expr->foreach_operand([&globals, &ns] (const expr2tc &e) {
+      globals += calc_globals_used(ns, e);
+      }
+    );
 
     return globals;
   }
