@@ -1784,8 +1784,16 @@ dereferencet::check_alignment(unsigned long minwidth, const expr2tc offset,
                               const guardt &guard)
 {
   expr2tc mask_expr = gen_ulong(minwidth - 1);
-  bitand2tc anded(mask_expr->type, mask_expr, offset);
-  notequal2tc neq(anded, gen_ulong(0));
+  expr2tc neq;
+
+  if (options.get_bool_option("int-encoding")) {
+    expr2tc align = gen_ulong(minwidth);
+    modulus2tc moded(align->type, offset, align);
+    neq = notequal2tc(moded, zero_ulong);
+  } else {
+    bitand2tc anded(mask_expr->type, mask_expr, offset);
+    neq = notequal2tc(anded, gen_ulong(0));
+  }
 
   guardt tmp_guard2 = guard;
   tmp_guard2.add(neq);
