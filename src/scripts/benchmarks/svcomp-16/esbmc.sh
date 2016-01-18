@@ -22,7 +22,7 @@ tokenizer_path=./tokenizer
 path_to_esbmc=./esbmc
 
 # cpachecker command
-cpa_command="scripts/cpa.sh -noout -witness-check "
+cpa_command=" ./scripts/cpa.sh -disable-java-assertions -witness-check -heap 10000m -setprop cpa.arg.errorPath.graphml=error-witness.graphml "
 
 # Benchmark result controlling flags
 IS_OVERFLOW_BENCHMARK=0
@@ -127,12 +127,12 @@ elif grep -q "VERIFICATION FAILED" ${TMPFILE}; then
 
         cd cpachecker/
         cpa_graph=" -spec ../${TMPGRAPHML}"
-        cpa_prop=" -spec ${property_list}"
+        cpa_prop=" -spec ../${property_list}"
         cpa_timeout=" -timelimit ${diff_timeout} "
         echo "Checking witness with CPAChecker "
-        echo "Command: ""${cpa_command} ${cpa_graph} ${cpa_prop} ${cpa_timeout} ${benchmark} > ${TMPCPALOG} 2>${TMPEXECLOG}"
-        ${cpa_command} ${cpa_graph} ${cpa_prop} ${cpa_timeout} ${benchmark} > ${TMPCPALOG} 2>${TMPEXECLOG} &
-        cd ..
+        echo "Command: ""${cpa_command} ${cpa_graph} ${cpa_prop} ${cpa_timeout} ../${benchmark} > ${TMPCPALOG} 2>${TMPEXECLOG}"
+        ${cpa_command} ${cpa_graph} ${cpa_prop} ${cpa_timeout} ../${benchmark} > ${TMPCPALOG} 2>${TMPEXECLOG} &
+        cd ../
 
         timer=0
         while [ ${timer} -lt ${diff_timeout} ]
@@ -153,7 +153,7 @@ elif grep -q "VERIFICATION FAILED" ${TMPFILE}; then
         done
  
       fi
-    fi  
+    fi
   
     valid_fail=1;
   fi
