@@ -363,9 +363,8 @@ void llvm_adjust::adjust_index(index_exprt& index)
     const typet &index_full_type=ns.follow(index_expr.type());
 
     if(!array_full_type.is_array() &&
-        array_full_type.id()!="pointer" &&
-        (index_full_type.is_array() ||
-            index_full_type.id()=="pointer"))
+        !array_full_type.is_pointer() &&
+        (index_full_type.is_array() || index_full_type.is_pointer()))
       std::swap(array_expr, index_expr);
   }
 
