@@ -70,9 +70,17 @@ bool dereferencet::has_dereference(const expr2tc &expr) const
   if (is_nil_expr(expr))
     return false;
 
-  forall_operands2(it, idx, expr)
-    if(has_dereference(*it))
-      return true;
+  // Check over each operand,
+  bool result = false;
+  expr->foreach_operand([this, &result] (const expr2tc &e) {
+    if (has_dereference(e))
+      result = true;
+    }
+  );
+
+  // If a derefing operand is found, return true.
+  if (result == true)
+    return true;
 
   if (is_dereference2t(expr) ||
      (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value)))
@@ -128,12 +136,13 @@ dereferencet::dereference_expr(
   switch (deref_expr_handler_actions[expr->expr_id]) {
   case deref_recurse:
   {
-    Forall_operands2(it, idx, expr) {
-      if (is_nil_expr(*it))
-        continue;
+    expr.get()->Foreach_operand([this, &guard, &mode] (expr2tc &e) {
+        if (is_nil_expr(e))
+          return;
 
-      dereference_expr(*it, guard, mode);
-    }
+        dereference_expr(e, guard, mode);
+      }
+    );
     break;
   }
   case deref_munge_guard:
@@ -180,9 +189,7 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
     // Take the current size of the guard, so that we can reset it later.
     unsigned old_guards=guard.size();
 
-    Forall_operands2(it, idx, expr) {
-      expr2tc &op = *it;
-
+    expr.get()->Foreach_operand([this, &guard, &expr] (expr2tc &op) {
       assert(is_bool_type(op));
 
       // Handle any derererences in this operand
@@ -197,6 +204,7 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
         guard.add(op);
       }
     }
+    );
 
     // Reset guard to where it was.
     guard.resize(old_guards);
@@ -1776,8 +1784,16 @@ dereferencet::check_alignment(unsigned long minwidth, const expr2tc offset,
                               const guardt &guard)
 {
   expr2tc mask_expr = gen_ulong(minwidth - 1);
-  bitand2tc anded(mask_expr->type, mask_expr, offset);
-  notequal2tc neq(anded, gen_ulong(0));
+  expr2tc neq;
+
+  if (options.get_bool_option("int-encoding")) {
+    expr2tc align = gen_ulong(minwidth);
+    modulus2tc moded(align->type, offset, align);
+    neq = notequal2tc(moded, zero_ulong);
+  } else {
+    bitand2tc anded(mask_expr->type, mask_expr, offset);
+    neq = notequal2tc(anded, gen_ulong(0));
+  }
 
   guardt tmp_guard2 = guard;
   tmp_guard2.add(neq);

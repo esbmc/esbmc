@@ -220,8 +220,10 @@ void goto_program_dereferencet::dereference_instruction(
       code_expression2t &theexp = to_code_expression2t(i.code);
       dereference_expr(theexp.operand, checks_only, dereferencet::READ);
     } else if (is_code_printf2t(i.code)) {
-      Forall_operands2(it, idx, i.code)
-        dereference_expr(*it, checks_only, dereferencet::READ);
+      i.code.get()->Foreach_operand([this, &checks_only] (expr2tc &e) {
+          dereference_expr(e, checks_only, dereferencet::READ);
+        }
+      );
     } else if (is_code_free2t(i.code)) {
       code_free2t &free = to_code_free2t(i.code);
       expr2tc operand = free.operand;

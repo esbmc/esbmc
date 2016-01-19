@@ -886,10 +886,12 @@ void value_sett::assign(
           add_to_sets=true;
         }
 #endif
-        forall_operands2(it, idx, rhs) {
-          assign(lhs_index, *it, add_to_sets);
-          add_to_sets = true;
-        }
+        rhs->foreach_operand([this, &add_to_sets, &lhs_index] (const expr2tc &e)
+          {
+            assign(lhs_index, e, add_to_sets);
+            add_to_sets = true;
+          }
+        );
       }
       else if (is_with2t(rhs))
       {

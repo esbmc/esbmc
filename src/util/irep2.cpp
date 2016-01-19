@@ -489,13 +489,14 @@ expr2t::simplify(void) const
   // An operand has been changed; clone ourselves and update.
   expr2tc new_us = clone();
   std::list<expr2tc>::iterator it2 = newoperands.begin();
-  Forall_operands2(it, idx, new_us) {
-    if ((*it2) == NULL)
-      ; // No change in operand;
-    else
-      *it = *it2; // Operand changed; overwrite with new one.
-    it2++;
-  }
+  new_us.get()->Foreach_operand([this, &it2] (expr2tc &e) {
+      if ((*it2) == NULL)
+        ; // No change in operand;
+      else
+        e = *it2; // Operand changed; overwrite with new one.
+      it2++;
+    }
+  );
 
   // Finally, attempt simplification again.
   expr2tc tmp = new_us->do_simplify(true);
@@ -1548,71 +1549,6 @@ do_type_hash(const expr2t::expr_ids &i __attribute__((unused)),
   return; // Dummy field crc
 }
 
-static inline __attribute__((always_inline)) void do_type_list_operands(const symbol_data::renaming_level &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const type2t::type_ids &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const bool &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const sideeffect_data::allockind  &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const unsigned int &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const BigInt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const fixedbvt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const dstring &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const expr2t::expr_ids &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<irep_idt> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
-
-static inline __attribute__((always_inline)) void do_type_list_operands(symbol_data::renaming_level &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(type2t::type_ids &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(bool &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(sideeffect_data::allockind &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(unsigned int &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(BigInt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(fixedbvt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(dstring &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(const expr2t::expr_ids &theval __attribute__((unused)), std::list< expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<irep_idt> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-
-static inline __attribute__((always_inline)) void
-do_type_list_operands(expr2tc &theval, std::list<expr2tc*> &inp)
-{
-  if (is_nil_expr(theval))
-    return;
-
-  inp.push_back(&theval);
-}
-
-static inline __attribute__((always_inline)) void
-do_type_list_operands(std::vector<expr2tc> &theval, std::list<expr2tc*> &inp)
-{
-  for (std::vector<expr2tc>::iterator it = theval.begin(); it != theval.end();
-       it++) {
-    if (!is_nil_expr(*it))
-      inp.push_back(&(*it));
-  }
-}
-
-static inline __attribute__((always_inline)) void
-do_type_list_operands(const expr2tc &theval, std::list<const expr2tc *> &inp)
-{
-  if (is_nil_expr(theval))
-    return;
-
-  inp.push_back(&theval);
-}
-
-static inline __attribute__((always_inline)) void
-do_type_list_operands(const std::vector<expr2tc> &theval,
-                      std::list<const expr2tc *> &inp)
-{
-  for (std::vector<expr2tc>::const_iterator it = theval.begin();
-       it != theval.end(); it++) {
-    if (!is_nil_expr(*it))
-      inp.push_back(&(*it));
-  }
-}
-
 template <typename T>
 void
 do_type2string(const T &thething, unsigned int idx,
@@ -1754,6 +1690,57 @@ hash_value(lolnoop val)
   return val;
 }
 
+// Local template for implementing delegate calling, with type dependency.
+template <typename T, typename U>
+void
+call_expr_delegate(T &ref, U &f)
+{
+  // Don't do anything normally.
+  (void)ref;
+  (void)f;
+  return;
+}
+
+template <>
+void
+call_expr_delegate<const expr2tc,expr2t::const_op_delegate>
+                  (const expr2tc &ref, expr2t::const_op_delegate &f)
+{
+  f(ref);
+  return;
+}
+
+template <>
+void
+call_expr_delegate<expr2tc, expr2t::op_delegate>
+                  (expr2tc &ref, expr2t::op_delegate &f)
+{
+  f(ref);
+  return;
+}
+
+template <>
+void
+call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>
+                 (const std::vector<expr2tc> &ref, expr2t::const_op_delegate &f)
+{
+  for (const expr2tc &r : ref)
+    f(r);
+
+  return;
+}
+
+template <>
+void
+call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>
+                  (std::vector<expr2tc> &ref, expr2t::op_delegate &f)
+{
+  for (expr2tc &r : ref)
+    f(r);
+
+  return;
+}
+
 /************************ Second attempt at irep templates ********************/
 
 // Implementations of common methods, recursively.
@@ -1784,16 +1771,16 @@ esbmct::expr_methods2<derived, baseclass, traits, enable>::get_num_sub_exprs(voi
 
 template <class derived, class baseclass, typename traits, typename enable>
 void
-esbmct::expr_methods2<derived, baseclass, traits, enable>::list_operands(std::list<const expr2tc*> &inp) const
+esbmct::expr_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_const(expr2t::const_op_delegate &f) const
 {
-  superclass::list_operands_rec(inp); // Skips expr_id
+  superclass::foreach_operand_impl_const_rec(f);
 }
 
 template <class derived, class baseclass, typename traits, typename enable>
 void
-esbmct::expr_methods2<derived, baseclass, traits, enable>::list_operands(std::list<expr2tc*> &inp)
+esbmct::expr_methods2<derived, baseclass, traits, enable>::foreach_operand_impl(expr2t::op_delegate &f)
 {
-  superclass::list_operands_rec(inp); // Skips expr_id
+  superclass::foreach_operand_impl_rec(f);
 }
 
 // Types
@@ -1942,30 +1929,6 @@ esbmct::irep_methods2<derived, baseclass, traits, enable>::hash_rec(crypto_hash 
 }
 
 template <class derived, class baseclass, typename traits, typename enable>
-void
-esbmct::irep_methods2<derived, baseclass, traits, enable>::list_operands_rec(std::list<const expr2tc*> &inp) const
-{
-  const derived *derived_this = static_cast<const derived*>(this);
-  auto m_ptr = membr_ptr::value;
-
-  do_type_list_operands(derived_this->*m_ptr, inp);
-
-  superclass::list_operands_rec(inp);
-}
-
-template <class derived, class baseclass, typename traits, typename enable>
-void
-esbmct::irep_methods2<derived, baseclass, traits, enable>::list_operands_rec(std::list<expr2tc*> &inp)
-{
-  derived *derived_this = static_cast<derived*>(this);
-  auto m_ptr = membr_ptr::value;
-
-  do_type_list_operands(derived_this->*m_ptr, inp);
-
-  superclass::list_operands_rec(inp);
-}
-
-template <class derived, class baseclass, typename traits, typename enable>
 const expr2tc *
 esbmct::irep_methods2<derived, baseclass, traits, enable>::get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
 {
@@ -2005,6 +1968,33 @@ esbmct::irep_methods2<derived, baseclass, traits, enable>::get_num_sub_exprs_rec
 
   num = do_count_sub_exprs(derived_this->*m_ptr);
   return num + superclass::get_num_sub_exprs_rec();
+}
+
+// Operand iteration specialized for expr2tc: call delegate.
+template <class derived, class baseclass, typename traits, typename enable>
+void
+esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  // Call delegate
+  call_expr_delegate(derived_this->*m_ptr, f);
+
+  superclass::foreach_operand_impl_const_rec(f);
+}
+
+template <class derived, class baseclass, typename traits, typename enable>
+void
+esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_rec(expr2t::op_delegate &f)
+{
+  derived *derived_this = static_cast<derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  // Call delegate
+  call_expr_delegate(derived_this->*m_ptr, f);
+
+  superclass::foreach_operand_impl_rec(f);
 }
 
 /********************** Constants and explicit instantiations *****************/

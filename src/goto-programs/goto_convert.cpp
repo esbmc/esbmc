@@ -1046,8 +1046,10 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
 
   unsigned int globals = 0;
 
-  forall_operands2(it, idx, expr)
-    globals += get_expr_number_globals(*it);
+  expr->foreach_operand([this, &globals] (const expr2tc &e) {
+    globals += get_expr_number_globals(e);
+    }
+  );
 
   return globals;
 }

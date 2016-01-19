@@ -20,9 +20,11 @@ Author: Daniel Kroening, kroening@kroening.com
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
 
-  Forall_operands2(it, idx, expr)
-    if (!is_nil_expr(*it))
-      default_replace_dynamic_allocation(*it);
+  expr.get()->Foreach_operand([this] (expr2tc &e) {
+    if (!is_nil_expr(e))
+      default_replace_dynamic_allocation(e);
+     }
+   );
 
   if (is_valid_object2t(expr))
   {

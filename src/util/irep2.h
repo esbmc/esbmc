@@ -8,6 +8,7 @@
 #include <stdarg.h>
 
 #include <vector>
+#include <functional>
 
 #include <ac_config.h>
 
@@ -99,47 +100,6 @@
 #define Forall_names(it, vect) \
   for (std::vector<std::string>::iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
-
-/** Iterate over all expr-like operands in an irep.
- *  This macro automates iterating over sub-expressions in an irep. It takes the
- *  name of an irep container ptr to make, and an integer to track indexes with,
- *  and creates them in scope. A for loop then executes the next statement with
- *  the container ptr pointing at a sub-expr. Fixed-type operands (such as the
- *  member name in a member2t) are not part of the list.
- *
- *  NB: This iterates of expr2tc _pointers_. So, you need to dereference first
- *  the ptr, then the container.
- *
- *  @see Forall_operands2
- *  @param it Name to give iterator to be declared
- *  @param idx Name for index tracking integer.
- *  @param theexpr expr2tc to retrieve list of operands from.
- */
-#define forall_operands2(ptr, idx, theexpr) \
-  const expr2tc *ptr; \
-  unsigned int idx; \
-  for (idx = 0, ptr = theexpr->get_sub_expr(0); ptr != 0; \
-       idx++, ptr = theexpr->get_sub_expr(idx))
-
-/** Like forall_operands2, but for non-const exprs.
- *
- *  If you feel the need to replace the contents of an expression without
- *  knowing its concrete type (i.e., in simplification) you can assign an
- *  expr2tc into the expr using one of these operand pointers.
- *
- *  Ideally this method should stop existing in the future, and instead we
- *  should constly iterate over sub-exprs, and then call set_sub_expr or
- *  something. I don't think there are that many use cases where every sub expr
- *  gets rewritten, and in these circumstances we're needlessly duplicating
- *  exprs.
- *
- *  @see forall_operands2
- */
-#define Forall_operands2(ptr, idx, theexpr) \
-  expr2tc *ptr; \
-  unsigned int idx; \
-  for (idx = 0, ptr = theexpr.get()->get_sub_expr_nc(0); ptr != 0; \
-       idx++, ptr = theexpr.get()->get_sub_expr_nc(idx))
 
 // Even crazier forward decs,
 namespace esbmct {
@@ -569,6 +529,9 @@ public:
   /** Type for list of non-constant expr operands */
   typedef std::list<expr2tc*> Expr_operands;
 
+  typedef std::function<void (const expr2tc &expr)> const_op_delegate;
+  typedef std::function<void (expr2tc &expr)> op_delegate;
+
 protected:
   /** Primary constructor.
    *  @param type Type of this new expr
@@ -577,6 +540,9 @@ protected:
   expr2t(const type2tc type, expr_ids id);
   /** Copy constructor */
   expr2t(const expr2t &ref);
+
+  virtual void foreach_operand_impl_const(const_op_delegate &expr) const = 0;
+  virtual void foreach_operand_impl(op_delegate &expr) = 0;
 
 public:
   // Provide base / container types for some templates stuck on top:
@@ -695,28 +661,6 @@ public:
    */
   virtual void hash(crypto_hash &hash) const;
 
-  /** Generate a list of expr operands.
-   *  Use forall_operands2 instead; this method is overridden by subclasses and
-   *  when invoked fills the inp list with pointers to any exprs that make up
-   *  this expr. Any fields that aren't expr-based (i.e., the field name in
-   *  a member2t expr) are not entered into this list.
-   *
-   *  Comes in a const and non-const flavour. When using the non-const flavour,
-   *  one can overwrite field-exprs within another expr without knowing the
-   *  exprs concrete type. In this case, it's immensely important to preserve
-   *  type correctness.
-   *
-   *  @see forall_operands2
-   *  @see Forall_operands2
-   *  @param inp List of pointers to exprs that are in fields of this expr.
-   */
-  virtual void list_operands(std::list<const expr2tc*> &inp) const = 0;
-
-  /** Generate a list of expr operands.
-   *  See the other const version of this method
-   */
-  virtual void list_operands(std::list<expr2tc*> &inp) = 0;
-
   /** Fetch a sub-operand.
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
@@ -752,7 +696,7 @@ public:
    *  const).
    *
    *  If simplification failed the first time around, the simplify method will
-   *  simplify this expressions operands for it via the medium of list_operands,
+   *  simplify this expressions individual operands,
    *  and will then call an expr with the simplified operands to see if it's now
    *  become simplifiable. This call occurs whether or not any operands were
    *  actually simplified, see below.
@@ -771,6 +715,40 @@ public:
    *          simplified object if it can.
    */
   virtual expr2tc do_simplify(bool second = false) const;
+
+  /** Indirect, abstract operand iteration.
+   *
+   *  Provide a lambda-based accessor equivalent to the forall_operands2 macro
+   *  where anonymous code (actually a delegate?) gets run over each operand
+   *  expression. Because the full type of the expression isn't known by the
+   *  caller, and each delegate is it's own type, we need to wrap it in a
+   *  std::function before funneling it through a virtual function.
+   *
+   *  For the purpose of this method, an operand is another instance of an
+   *  expr2tc. This means the delegate will be called on any expr2tc field of
+   *  the expression, in the order they appear in the traits. For a vector of
+   *  expressions, the delegate will be called for each element, in order.
+   *
+   *  The uncapitalized version is const; the capitalized version is non-const
+   *  (and so one needs to .get() a mutable expr2t pointer when calling). When
+   *  modifying operands, preserving type correctness is imperative.
+   *
+   *  @param t A delegate to be called for each expression operand; must have
+   *           a type of void f(const expr2tc &)
+   */
+  template <typename T>
+  void foreach_operand(T &&t) const
+  {
+    const_op_delegate wrapped(std::cref(t));
+    foreach_operand_impl_const(wrapped);
+  }
+
+  template <typename T>
+  void Foreach_operand(T &&t)
+  {
+    op_delegate wrapped(std::ref(t));
+    foreach_operand_impl(wrapped);
+  }
 
   /** Instance of expr_ids recording tihs exprs type. */
   const expr_ids expr_id;
@@ -841,7 +819,7 @@ static inline std::string get_expr_id(const expr2tc &expr)
  *  via overloading), and then inspecting the output of that.
  *
  *  In fact, we can make type generic implementations of all the following
- *  methods in expr2t: clone, tostring, cmp, lt, do_crc, list_operands, hash.
+ *  methods in expr2t: clone, tostring, cmp, lt, do_crc, hash.
  *  Similar methods, minus the operands, can be made generic in type2t.
  *
  *  So, that's what these templates provide; an irep class can be made by
@@ -1056,11 +1034,12 @@ namespace esbmct {
 
     // These methods are specific to expressions rather than types, and are
     // placed here to avoid un-necessary recursion in expr_methods2.
-    void list_operands_rec(std::list<const expr2tc*> &inp) const;
-    void list_operands_rec(std::list<expr2tc*> &inp);
     const expr2tc *get_sub_expr_rec(unsigned int cur_count, unsigned int desired) const;
     expr2tc *get_sub_expr_nc_rec(unsigned int cur_count, unsigned int desired);
     unsigned int get_num_sub_exprs_rec(void) const;
+
+    void foreach_operand_impl_rec(expr2t::op_delegate &f);
+    void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const;
   };
 
   // Base instance of irep_methods2. This is a template specialization that
@@ -1114,19 +1093,6 @@ namespace esbmct {
       return;
     }
 
-    // Expr methods
-    void list_operands_rec(std::list<const expr2tc*> &inp) const
-    {
-      (void)inp;
-      return;
-    }
-
-    void list_operands_rec(std::list<expr2tc*> &inp)
-    {
-      (void)inp;
-      return;
-    }
-
     const expr2tc *get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
     {
       // No result, so desired must exceed the number of idx's
@@ -1145,11 +1111,23 @@ namespace esbmct {
     {
       return 0;
     }
+
+    void foreach_operand_impl_rec(expr2t::op_delegate &f)
+    {
+      (void)f;
+      return;
+    }
+
+    void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
+    {
+      (void)f;
+      return;
+    }
   };
 
   /** Expression methods template for expr ireps.
    *  This class works on the same principle as @irep_methods2 but provides
-   *  head methods for list_operands, get_sub_expr and so forth, which are
+   *  head methods for get_sub_expr and so forth, which are
    *  specific to expression ireps. The actual implementation of these methods
    *  are provided in irep_methods to avoid un-necessary recursion but are
    *  protected; here we provide the head methods publically to allow the
@@ -1166,12 +1144,12 @@ namespace esbmct {
     // See notes on irep_methods2 copy constructor
     expr_methods2(const derived &ref) : superclass(ref) { }
 
-    void list_operands(std::list<const expr2tc*> &inp) const;
     const expr2tc *get_sub_expr(unsigned int i) const;
     expr2tc *get_sub_expr_nc(unsigned int i);
     unsigned int get_num_sub_exprs(void) const;
-  protected:
-    void list_operands(std::list<expr2tc*> &inp);
+
+    void foreach_operand_impl_const(expr2t::const_op_delegate &expr) const;
+    void foreach_operand_impl(expr2t::op_delegate &expr);
   };
 
   // So that we can write such things as:

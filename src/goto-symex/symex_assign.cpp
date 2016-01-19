@@ -494,9 +494,10 @@ void goto_symext::replace_nondet(expr2tc &expr)
   }
   else
   {
-    Forall_operands2(it, idx, expr) {
-      if (!is_nil_expr(*it))
-        replace_nondet(*it);
-    }
+    expr.get()->Foreach_operand([this] (expr2tc &e) {
+        if (!is_nil_expr(e))
+          replace_nondet(e);
+      }
+    );
   }
 }

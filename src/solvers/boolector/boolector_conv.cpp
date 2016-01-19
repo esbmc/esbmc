@@ -124,8 +124,11 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   unsigned int i;
 
   assert(numargs <= 4);
-  for (i = 0; i < numargs; i++)
+  for (i = 0; i < numargs; i++) {
     asts[i] = btor_ast_downcast(args[i]);
+    // Structs should never reach the SMT solver
+    assert(asts[i]->sort->id != SMT_SORT_STRUCT);
+  }
 
   switch (k) {
   case SMT_FUNC_BVADD:

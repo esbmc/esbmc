@@ -99,11 +99,17 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_add2t(expr))
   {
-    forall_operands2(it, idx, expr)
-      if(!constant_propagation(*it))
-        return false;
+    bool noconst = true;
 
-    return true;
+    // Use noconst as a flag to indicate (and short-circuit) when a non
+    // constant propagatable expr is found.
+    expr->foreach_operand([this, &noconst] (const expr2tc &e) {
+      if(noconst && !constant_propagation(e))
+        noconst = false;
+      }
+    );
+
+    return noconst;
   }
   else if (is_constant_array_of2t(expr))
   {
@@ -122,11 +128,15 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_constant_struct2t(expr))
   {
-    forall_operands2(it, idx, expr)
-      if(!constant_propagation(*it))
-        return false;
+    bool noconst = true;
 
-    return true;
+    expr->foreach_operand([this, &noconst] (const expr2tc &e) {
+      if (noconst && !constant_propagation(e))
+        noconst = false;
+      }
+    );
+
+    return noconst;
   }
   else if (is_constant_union2t(expr))
   {
@@ -236,9 +246,10 @@ void goto_symex_statet::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, idx, expr) {
-      rename(*it);
-    }
+    expr.get()->Foreach_operand([this] (expr2tc &e) {
+        rename(e);
+      }
+    );
   }
 }
 
@@ -275,9 +286,10 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, idx, expr) {
-      rename_address(*it);
-    }
+    expr.get()->Foreach_operand([this] (expr2tc &e) {
+        rename_address(e);
+      }
+    );
   }
 }
 
@@ -353,8 +365,10 @@ void goto_symex_statet::get_original_name(expr2tc &expr) const
   if (is_nil_expr(expr))
     return;
 
-  Forall_operands2(it, idx, expr)
-    get_original_name(*it);
+  expr.get()->Foreach_operand([this] (expr2tc &e) {
+      get_original_name(e);
+    }
+  );
 
   if (is_symbol2t(expr))
   {
