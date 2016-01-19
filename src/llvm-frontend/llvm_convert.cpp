@@ -544,6 +544,13 @@ bool llvm_convertert::get_function_params(
   if(get_type(pdecl.getOriginalType(), param_type))
     return true;
 
+  if(param_type.is_array())
+  {
+    param_type.id("pointer");
+    param_type.remove("size");
+    param_type.remove("#constant");
+  }
+
   param = code_typet::argumentt();
   param.type() = param_type;
   param.cmt_base_name(name);
