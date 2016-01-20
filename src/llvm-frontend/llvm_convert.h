@@ -133,13 +133,21 @@ private:
     const clang::RecordDecl& recordd,
     std::string &identifier);
 
+  void get_start_location_from_stmt(
+    const clang::Stmt& stmt,
+    locationt &location);
+
+  void get_final_location_from_stmt(
+    const clang::Stmt& stmt,
+    locationt &location);
+
   void get_location_from_decl(
     const clang::Decl& decl,
-    locationt &location_begin);
+    locationt &location);
 
   void get_location(
-    const clang::SourceLocation loc,
-    std::string function_name,
+    const clang::SourceLocation &loc,
+    std::string &function_name,
     locationt &location);
 
   std::string get_filename_from_path();

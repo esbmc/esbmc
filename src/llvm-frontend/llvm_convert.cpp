@@ -1012,17 +1012,8 @@ bool llvm_convertert::get_expr(
   const clang::Stmt& stmt,
   exprt& new_expr)
 {
-  std::string function_name = "";
-
-  const clang::FunctionDecl* fd = get_top_FunctionDecl_from_Stmt(stmt);
-  if(fd)
-    function_name = fd->getName().str();
-
-  locationt location_begin;
-  get_location(
-    stmt.getSourceRange().getBegin(),
-    function_name,
-    location_begin);
+  locationt location;
+  get_start_location_from_stmt(stmt, location);
 
   switch(stmt.getStmtClass())
   {
@@ -1565,10 +1556,8 @@ bool llvm_convertert::get_expr(
 
       // Set the end location for blocks
       locationt location_end;
-      get_location(
-        stmt.getSourceRange().getEnd(),
-        function_name,
-        location_end);
+      get_final_location_from_stmt(stmt, location_end);
+
       block.end_location(location_end);
 
       new_expr = block;
@@ -1923,7 +1912,7 @@ bool llvm_convertert::get_expr(
       return true;
   }
 
-  new_expr.location() = location_begin;
+  new_expr.location() = location;
   return false;
 }
 
@@ -2421,9 +2410,45 @@ bool llvm_convertert::get_tag_name(
   return false;
 }
 
+void llvm_convertert::get_start_location_from_stmt(
+  const clang::Stmt& stmt,
+  locationt &location)
+{
+  sm = &ASTContext->getSourceManager();
+
+  std::string function_name = "";
+
+  const clang::FunctionDecl* fd = get_top_FunctionDecl_from_Stmt(stmt);
+  if(fd)
+    function_name = fd->getName().str();
+
+  get_location(
+    stmt.getSourceRange().getBegin(),
+    function_name,
+    location);
+}
+
+void llvm_convertert::get_final_location_from_stmt(
+  const clang::Stmt& stmt,
+  locationt &location)
+{
+  sm = &ASTContext->getSourceManager();
+
+  std::string function_name = "";
+
+  const clang::FunctionDecl* fd = get_top_FunctionDecl_from_Stmt(stmt);
+  if(fd)
+    function_name = fd->getName().str();
+
+  get_location(
+    stmt.getSourceRange().getEnd(),
+    function_name,
+    location);
+}
+
 void llvm_convertert::get_location_from_decl(
   const clang::Decl& decl,
-  locationt &location_begin)
+  locationt &location)
 {
   sm = &ASTContext->getSourceManager();
 
@@ -2440,12 +2465,12 @@ void llvm_convertert::get_location_from_decl(
   get_location(
     decl.getSourceRange().getBegin(),
     function_name,
-    location_begin);
+    location);
 }
 
 void llvm_convertert::get_location(
-  clang::SourceLocation loc,
-  std::string function_name,
+  const clang::SourceLocation &loc,
+  std::string &function_name,
   locationt &location)
 {
   if(!sm)
