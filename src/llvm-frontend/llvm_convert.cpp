@@ -567,17 +567,15 @@ bool llvm_convertert::get_function_params(
   locationt location_begin;
   get_location_from_decl(pdecl, location_begin);
 
-  const clang::FunctionDecl &funcd =
-    static_cast<const clang::FunctionDecl &>(*pdecl.getParentFunctionOrMethod());
-
-  std::string function_name = funcd.getName().str();
+  std::string pretty_name;
+  get_function_param_name(pdecl, pretty_name);
 
   symbolt param_symbol;
   get_default_symbol(
     param_symbol,
     param_type,
     name,
-    get_param_name(name, function_name),
+    pretty_name,
     location_begin,
     false); // function parameter cannot be static
 
@@ -592,9 +590,12 @@ bool llvm_convertert::get_function_params(
   std::size_t address = reinterpret_cast<std::size_t>(&pdecl);
   object_map[address] = param_symbol.name.as_string();
 
+  const clang::FunctionDecl &fd =
+    static_cast<const clang::FunctionDecl &>(*pdecl.getParentFunctionOrMethod());
+
   // If the function is not defined, we don't need to add it's parameter
   // to the context, they will never be used
-  if(!funcd.isDefined())
+  if(!fd.isDefined())
     return false;
 
   move_symbol_to_context(param_symbol);
@@ -2363,17 +2364,19 @@ std::string llvm_convertert::get_var_name(
   return pretty_name;
 }
 
-std::string llvm_convertert::get_param_name(
-  std::string name,
-  std::string function_name)
+void llvm_convertert::get_function_param_name(
+  const clang::ParmVarDecl& pd,
+  std::string& name)
 {
-  // TODO
-//  std::string pretty_name = get_modulename_from_path() + "::";
-  std::string pretty_name = "balh::";
-  pretty_name += function_name + "::";
-  pretty_name += name;
+  locationt pd_location;
+  get_location_from_decl(pd, pd_location);
 
-  return pretty_name;
+  const clang::FunctionDecl &fd =
+    static_cast<const clang::FunctionDecl &>(*pd.getParentFunctionOrMethod());
+
+  name = get_modulename_from_path(pd_location.file().as_string()) + "::";
+  name += fd.getName().str() + "::";
+  name += pd.getName().str();
 }
 
 void llvm_convertert::get_function_name(

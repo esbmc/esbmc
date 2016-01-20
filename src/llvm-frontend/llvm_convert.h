@@ -122,9 +122,9 @@ private:
     std::string name,
     std::string function_name);
 
-  std::string get_param_name(
-    std::string name,
-    std::string function_name);
+  void get_function_param_name(
+    const clang::ParmVarDecl &pd,
+    std::string &name);
 
   void get_function_name(
     const clang::FunctionDecl& fd,
