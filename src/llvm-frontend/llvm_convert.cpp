@@ -309,8 +309,7 @@ bool llvm_convertert::get_struct_union_class(
     t,
     identifier,
     "tag-" + identifier,
-    location_begin,
-    false); // There is no such thing as static struct/union/class on ANSI-C
+    location_begin);
 
   // Save the struct/union/class type address and name to the type map
   std::string symbol_name = symbol.name.as_string();
@@ -388,8 +387,7 @@ bool llvm_convertert::get_var(
     t,
     vd.getName().str(),
     identifier,
-    location_begin,
-    false);
+    location_begin);
 
   if (vd.hasGlobalStorage() && !vd.hasInit())
   {
@@ -483,8 +481,7 @@ bool llvm_convertert::get_function(
     type,
     base_name,
     pretty_name,
-    location_begin,
-    false);
+    location_begin);
 
   std::string symbol_name = symbol.name.as_string();
 
@@ -568,8 +565,7 @@ bool llvm_convertert::get_function_params(
     param_type,
     name,
     pretty_name,
-    location_begin,
-    false); // function parameter cannot be static
+    location_begin); // function parameter cannot be static
 
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
@@ -2308,8 +2304,7 @@ void llvm_convertert::get_default_symbol(
   typet type,
   std::string base_name,
   std::string pretty_name,
-  locationt location,
-  bool is_local)
+  locationt location)
 {
   symbol.mode = "C";
   // TODO
@@ -2318,22 +2313,7 @@ void llvm_convertert::get_default_symbol(
   symbol.type = type;
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
-  symbol.name = get_default_name(pretty_name, is_local);
-}
-
-std::string llvm_convertert::get_default_name(
-  std::string name,
-  bool is_local)
-{
-  std::string symbol_name = "c::";
-
-  // TODO
-//  if(is_local)
-//    symbol_name += get_modulename_from_path() + "::";
-
-  symbol_name += name;
-
-  return symbol_name;
+  symbol.name = "c::" + pretty_name;
 }
 
 void llvm_convertert::get_field_name(

@@ -112,12 +112,7 @@ private:
     typet type,
     std::string base_name,
     std::string pretty_name,
-    locationt location,
-    bool is_local);
-
-  std::string get_default_name(
-    std::string name,
-    bool is_local);
+    locationt location);
 
   void get_field_name(
     const clang::FieldDecl &fd,
