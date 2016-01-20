@@ -1968,6 +1968,14 @@ array_iface::default_convert_array_of(smt_astt init_val,
   // We now an initializer, and a size of array to build. So:
   // Repeatedly store things into this.
   // XXX int mode
+
+  if (init_val->sort->id == SMT_SORT_BOOL && !supports_bools_in_arrays) {
+    smt_astt zero = ctx->mk_smt_bvint(BigInt(0), false, 1);
+    smt_astt one = ctx->mk_smt_bvint(BigInt(0), false, 1);
+    smt_sortt result_sort = ctx->mk_sort(SMT_SORT_BV, 1, false);
+    init_val = ctx->mk_func_app(result_sort, SMT_FUNC_ITE, init_val, one, zero);
+  }
+
   smt_sortt domwidth = ctx->mk_int_bv_sort(array_size);
   smt_sortt arrsort = ctx->mk_sort(SMT_SORT_ARRAY, domwidth, init_val->sort);
   smt_astt newsym_ast =

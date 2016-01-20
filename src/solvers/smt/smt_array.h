@@ -39,7 +39,7 @@ public:
   virtual const smt_ast *convert_array_of(smt_astt init_val,
                                            unsigned long domain_width) = 0;
 
-  static const smt_ast *default_convert_array_of(smt_astt init_val,
+  const smt_ast *default_convert_array_of(smt_astt init_val,
                                           unsigned long domain_width,
                                           smt_convt *ctx);
 
