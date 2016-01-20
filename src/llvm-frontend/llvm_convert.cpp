@@ -479,7 +479,7 @@ bool llvm_convertert::get_function(
   get_location_from_decl(fd, location_begin);
 
   std::string base_name, pretty_name;
-  get_function_name(fd, base_name, pretty_name);
+  get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
 
   symbolt symbol;
   get_default_symbol(
@@ -1961,7 +1961,7 @@ bool llvm_convertert::get_decl_ref(
         static_cast<const clang::FunctionDecl&>(decl);
 
       std::string base_name, pretty_name;
-      get_function_name(fd, base_name, pretty_name);
+      get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
 
       identifier = "c::" + pretty_name;
 
