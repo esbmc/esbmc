@@ -478,14 +478,17 @@ bool llvm_convertert::get_function(
   locationt location_begin;
   get_location_from_decl(fd, location_begin);
 
+  std::string base_name, pretty_name;
+  get_function_name(fd, base_name, pretty_name);
+
   symbolt symbol;
   get_default_symbol(
     symbol,
     type,
-    fd.getName().str(),
-    fd.getName().str(),
+    base_name,
+    pretty_name,
     location_begin,
-    !fd.isExternallyVisible());
+    false);
 
   std::string symbol_name = symbol.name.as_string();
 
@@ -1957,20 +1960,10 @@ bool llvm_convertert::get_decl_ref(
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
 
-      std::size_t address = reinterpret_cast<std::size_t>(&fd);
+      std::string base_name, pretty_name;
+      get_function_name(fd, base_name, pretty_name);
 
-      // We may not find the function's symbol, because it is
-      // undefined or not defined at all
-      object_mapt::iterator it = object_map.find(address);
-      if(it == object_map.end())
-      {
-        identifier =
-          get_default_name(fd.getName().str(), !fd.isExternallyVisible());
-      }
-      else
-      {
-        identifier = it->second;
-      }
+      identifier = "c::" + pretty_name;
 
       if(get_type(fd.getType(), type))
         return true;
@@ -2381,6 +2374,23 @@ std::string llvm_convertert::get_param_name(
   pretty_name += name;
 
   return pretty_name;
+}
+
+void llvm_convertert::get_function_name(
+  const clang::FunctionDecl& fd,
+  std::string &base_name,
+  std::string &pretty_name)
+{
+  base_name = pretty_name = fd.getName().str();
+
+  if(!fd.isExternallyVisible())
+  {
+    locationt fd_location;
+    get_location_from_decl(fd, fd_location);
+
+    pretty_name = get_modulename_from_path(fd_location.file().as_string());
+    pretty_name += "::" + base_name;
+  }
 }
 
 bool llvm_convertert::get_tag_name(

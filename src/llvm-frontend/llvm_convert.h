@@ -126,6 +126,11 @@ private:
     std::string name,
     std::string function_name);
 
+  void get_function_name(
+    const clang::FunctionDecl& fd,
+    std::string &base_name,
+    std::string &pretty_name);
+
   bool get_tag_name(
     const clang::RecordDecl& recordd,
     std::string &identifier);
