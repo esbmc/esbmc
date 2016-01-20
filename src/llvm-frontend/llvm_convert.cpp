@@ -28,7 +28,8 @@ llvm_convertert::llvm_convertert(
     ns(context),
     ASTs(_ASTs),
     current_scope_var_num(1),
-    anon_counter(0),
+    anon_var_counter(0),
+    anon_tag_counter(0),
     sm(nullptr)
 {
 }
@@ -162,20 +163,23 @@ bool llvm_convertert::get_decl(
       if(get_type(fd.getType(), t))
         return true;
 
-      std::string field_identifier;
       struct_union_typet::componentt comp;
       comp.type() = t;
 
+      std::string name, pretty_name;
       if((t.is_struct() || t.is_union()) && fd.getName().str().empty())
       {
-        comp.name(to_struct_union_type(t).tag());
-        comp.pretty_name(to_struct_union_type(t).tag());
+        name = to_struct_union_type(t).tag().as_string();
+        pretty_name = "#anon" + i2string(anon_tag_counter++);
       }
       else
       {
-        comp.name(get_var_name(fd.getName().str(), ""));
-        comp.pretty_name(fd.getName().str());
+        get_field_name(fd, name);
+        pretty_name = name;
       }
+
+      comp.name(name);
+      comp.pretty_name(pretty_name);
 
       if(fd.isBitField())
       {
@@ -372,16 +376,8 @@ bool llvm_convertert::get_var(
   if(get_type(vd.getType(), t))
     return true;
 
-  std::string function_name = "";
-  if(vd.getDeclContext()->isFunctionOrMethod())
-  {
-    const clang::FunctionDecl &funcd =
-      static_cast<const clang::FunctionDecl &>(*vd.getDeclContext());
-
-    function_name = funcd.getName().str();
-  }
-
-  std::string identifier = get_var_name(vd.getName().str(), function_name);
+  std::string identifier;
+  get_var_name(vd, identifier);
 
   locationt location_begin;
   get_location_from_decl(vd, location_begin);
@@ -393,7 +389,7 @@ bool llvm_convertert::get_var(
     vd.getName().str(),
     identifier,
     location_begin,
-    !vd.isExternallyVisible());
+    false);
 
   if (vd.hasGlobalStorage() && !vd.hasInit())
   {
@@ -2340,24 +2336,38 @@ std::string llvm_convertert::get_default_name(
   return symbol_name;
 }
 
-std::string llvm_convertert::get_var_name(
-  std::string name,
-  std::string function_name)
+void llvm_convertert::get_field_name(
+  const clang::FieldDecl& fd,
+  std::string &name)
 {
-  std::string pretty_name = "";
+  name = fd.getName().str();
 
   if(name.empty())
-    pretty_name = "#anon"+i2string(anon_counter++);
+    name += "#anon" + i2string(anon_var_counter++);
+}
 
-  // This means a global/static variable
-  if(!function_name.empty())
+void llvm_convertert::get_var_name(
+  const clang::VarDecl& vd,
+  std::string& name)
+{
+  if(!vd.isExternallyVisible())
   {
-    pretty_name += function_name + "::";
-    pretty_name += integer2string(current_scope_var_num++) + "::";
+    locationt vd_location;
+    get_location_from_decl(vd, vd_location);
+
+    name += get_modulename_from_path(vd_location.file().as_string()) + "::";
   }
 
-  pretty_name += name;
-  return pretty_name;
+  if(vd.getDeclContext()->isFunctionOrMethod())
+  {
+    const clang::FunctionDecl &funcd =
+      static_cast<const clang::FunctionDecl &>(*vd.getDeclContext());
+
+    name += funcd.getName().str() + "::";
+    name += integer2string(current_scope_var_num++) + "::";
+  }
+
+  name += vd.getName().str();
 }
 
 void llvm_convertert::get_function_param_name(

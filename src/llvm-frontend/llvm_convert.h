@@ -36,7 +36,8 @@ private:
   std::vector<std::unique_ptr<clang::ASTUnit> > &ASTs;
 
   unsigned int current_scope_var_num;
-  unsigned int anon_counter;
+  unsigned int anon_var_counter;
+  unsigned int anon_tag_counter;
 
   clang::SourceManager *sm;
 
@@ -118,9 +119,13 @@ private:
     std::string name,
     bool is_local);
 
-  std::string get_var_name(
-    std::string name,
-    std::string function_name);
+  void get_field_name(
+    const clang::FieldDecl &fd,
+    std::string &name);
+
+  void get_var_name(
+    const clang::VarDecl &vd,
+    std::string &name);
 
   void get_function_param_name(
     const clang::ParmVarDecl &pd,
