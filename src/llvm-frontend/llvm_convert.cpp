@@ -492,10 +492,6 @@ bool llvm_convertert::get_function(
 
   std::string symbol_name = symbol.name.as_string();
 
-  // Save the function address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(&fd);
-  object_map[address] = symbol.name.as_string();
-
   symbol.lvalue = true;
   symbol.is_extern = fd.getStorageClass() == clang::SC_Extern
                      || fd.getStorageClass() == clang::SC_PrivateExtern;
