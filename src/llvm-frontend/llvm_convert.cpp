@@ -306,6 +306,7 @@ bool llvm_convertert::get_struct_union_class(
   symbolt symbol;
   get_default_symbol(
     symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
     t,
     identifier,
     "tag-" + identifier,
@@ -384,6 +385,7 @@ bool llvm_convertert::get_var(
   symbolt symbol;
   get_default_symbol(
     symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
     t,
     vd.getName().str(),
     identifier,
@@ -478,6 +480,7 @@ bool llvm_convertert::get_function(
   symbolt symbol;
   get_default_symbol(
     symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
     type,
     base_name,
     pretty_name,
@@ -562,6 +565,7 @@ bool llvm_convertert::get_function_params(
   symbolt param_symbol;
   get_default_symbol(
     param_symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
     param_type,
     name,
     pretty_name,
@@ -2301,14 +2305,14 @@ bool llvm_convertert::get_compound_assign_expr(
 
 void llvm_convertert::get_default_symbol(
   symbolt& symbol,
+  std::string module_name,
   typet type,
   std::string base_name,
   std::string pretty_name,
   locationt location)
 {
   symbol.mode = "C";
-  // TODO
-//  symbol.module = get_modulename_from_path();
+  symbol.module = module_name;
   symbol.location = location;
   symbol.type = type;
   symbol.base_name = base_name;

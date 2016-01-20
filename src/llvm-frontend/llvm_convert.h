@@ -109,6 +109,7 @@ private:
 
   void get_default_symbol(
     symbolt &symbol,
+    std::string module_name,
     typet type,
     std::string base_name,
     std::string pretty_name,
