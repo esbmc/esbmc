@@ -18,12 +18,12 @@ string_constantt::string_constantt()
 }
 
 string_constantt::string_constantt(const irep_idt &value)
-  : string_constantt(value, char_type())
+  : string_constantt(value, array_typet(char_type()))
 {
 }
 
 string_constantt::string_constantt(const irep_idt &value, const typet type)
-  : exprt("string-constant", array_typet(type))
+  : exprt("string-constant", type)
 {
   set_value(value);
 }
