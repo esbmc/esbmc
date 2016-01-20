@@ -35,10 +35,7 @@ private:
   namespacet ns;
   std::vector<std::unique_ptr<clang::ASTUnit> > &ASTs;
 
-  std::string current_path;
-
   unsigned int current_scope_var_num;
-
   unsigned int anon_counter;
 
   clang::SourceManager *sm;
@@ -145,13 +142,17 @@ private:
     const clang::Decl& decl,
     locationt &location);
 
-  void get_location(
-    const clang::SourceLocation &loc,
+  void set_location(
+    clang::PresumedLoc &PLoc,
     std::string &function_name,
     locationt &location);
 
-  std::string get_filename_from_path();
-  std::string get_modulename_from_path();
+  void get_presumed_location(
+    const clang::SourceLocation &loc,
+    clang::PresumedLoc &PLoc);
+
+  std::string get_filename_from_path(std::string path);
+  std::string get_modulename_from_path(std::string path);
 
   void convert_expression_to_code(exprt& expr);
 

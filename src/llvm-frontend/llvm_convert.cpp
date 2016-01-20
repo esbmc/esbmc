@@ -27,7 +27,6 @@ llvm_convertert::llvm_convertert(
     context(_context),
     ns(context),
     ASTs(_ASTs),
-    current_path(""),
     current_scope_var_num(1),
     anon_counter(0),
     sm(nullptr)
@@ -2327,7 +2326,8 @@ void llvm_convertert::get_default_symbol(
   bool is_local)
 {
   symbol.mode = "C";
-  symbol.module = get_modulename_from_path();
+  // TODO
+//  symbol.module = get_modulename_from_path();
   symbol.location = location;
   symbol.type = type;
   symbol.base_name = base_name;
@@ -2341,8 +2341,9 @@ std::string llvm_convertert::get_default_name(
 {
   std::string symbol_name = "c::";
 
-  if(is_local)
-    symbol_name += get_modulename_from_path() + "::";
+  // TODO
+//  if(is_local)
+//    symbol_name += get_modulename_from_path() + "::";
 
   symbol_name += name;
 
@@ -2373,7 +2374,9 @@ std::string llvm_convertert::get_param_name(
   std::string name,
   std::string function_name)
 {
-  std::string pretty_name = get_modulename_from_path() + "::";
+  // TODO
+//  std::string pretty_name = get_modulename_from_path() + "::";
+  std::string pretty_name = "balh::";
   pretty_name += function_name + "::";
   pretty_name += name;
 
@@ -2422,10 +2425,10 @@ void llvm_convertert::get_start_location_from_stmt(
   if(fd)
     function_name = fd->getName().str();
 
-  get_location(
-    stmt.getSourceRange().getBegin(),
-    function_name,
-    location);
+  clang::PresumedLoc PLoc;
+  get_presumed_location(stmt.getSourceRange().getBegin(), PLoc);
+
+  set_location(PLoc, function_name, location);
 }
 
 void llvm_convertert::get_final_location_from_stmt(
@@ -2440,10 +2443,10 @@ void llvm_convertert::get_final_location_from_stmt(
   if(fd)
     function_name = fd->getName().str();
 
-  get_location(
-    stmt.getSourceRange().getEnd(),
-    function_name,
-    location);
+  clang::PresumedLoc PLoc;
+  get_presumed_location(stmt.getSourceRange().getEnd(), PLoc);
+
+  set_location(PLoc, function_name, location);
 }
 
 void llvm_convertert::get_location_from_decl(
@@ -2462,40 +2465,43 @@ void llvm_convertert::get_location_from_decl(
     function_name = funcd.getName().str();
   }
 
-  get_location(
-    decl.getSourceRange().getBegin(),
-    function_name,
-    location);
+  clang::PresumedLoc PLoc;
+  get_presumed_location(decl.getSourceRange().getBegin(), PLoc);
+
+  set_location(PLoc, function_name, location);
 }
 
-void llvm_convertert::get_location(
-  const clang::SourceLocation &loc,
-  std::string &function_name,
-  locationt &location)
+void llvm_convertert::get_presumed_location(
+  const clang::SourceLocation& loc,
+  clang::PresumedLoc &PLoc)
 {
   if(!sm)
     return;
 
   clang::SourceLocation SpellingLoc = sm->getSpellingLoc(loc);
-  clang::PresumedLoc PLoc = sm->getPresumedLoc(SpellingLoc);
+  PLoc = sm->getPresumedLoc(SpellingLoc);
+}
 
+void llvm_convertert::set_location(
+  clang::PresumedLoc &PLoc,
+  std::string &function_name,
+  locationt &location)
+{
   if (PLoc.isInvalid()) {
     location.set_file("<invalid sloc>");
     return;
   }
 
-  current_path = PLoc.getFilename();
-
   location.set_line(PLoc.getLine());
-  location.set_file(get_filename_from_path());
+  location.set_file(get_filename_from_path(PLoc.getFilename()));
 
   if(!function_name.empty())
     location.set_function(function_name);
 }
 
-std::string llvm_convertert::get_modulename_from_path()
+std::string llvm_convertert::get_modulename_from_path(std::string path)
 {
-  std::string filename = get_filename_from_path();
+  std::string filename = get_filename_from_path(path);
 
   if(filename.find_last_of('.') != std::string::npos)
     return filename.substr(0, filename.find_last_of('.'));
@@ -2503,12 +2509,12 @@ std::string llvm_convertert::get_modulename_from_path()
   return filename;
 }
 
-std::string llvm_convertert::get_filename_from_path()
+std::string llvm_convertert::get_filename_from_path(std::string path)
 {
-  if(current_path.find_last_of('/') != std::string::npos)
-    return current_path.substr(current_path.find_last_of('/') + 1);
+  if(path.find_last_of('/') != std::string::npos)
+    return path.substr(path.find_last_of('/') + 1);
 
-  return current_path;
+  return path;
 }
 
 void llvm_convertert::move_symbol_to_context(
