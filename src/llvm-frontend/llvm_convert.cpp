@@ -413,7 +413,7 @@ bool llvm_convertert::get_var(
   // Save the variable address and name to the object map
   std::string symbol_name = symbol.name.as_string();
 
-  std::size_t address = reinterpret_cast<std::size_t>(&vd);
+  std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
   object_map[address] = symbol_name;
 
   // We have to add the symbol before converting the initial assignment
@@ -587,7 +587,7 @@ bool llvm_convertert::get_function_params(
   param.location() = param_symbol.location;
 
   // Save the function's param address and name to the object map
-  std::size_t address = reinterpret_cast<std::size_t>(&pdecl);
+  std::size_t address = reinterpret_cast<std::size_t>(pdecl.getFirstDecl());
   object_map[address] = param_symbol.name.as_string();
 
   const clang::FunctionDecl &fd =
@@ -1933,7 +1933,7 @@ bool llvm_convertert::get_decl_ref(
       const clang::VarDecl &vd =
         static_cast<const clang::VarDecl&>(decl);
 
-      std::size_t address = reinterpret_cast<std::size_t>(&vd);
+      std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
       identifier = object_map.find(address)->second;
 
       if(get_type(vd.getType(), type))
@@ -1947,7 +1947,7 @@ bool llvm_convertert::get_decl_ref(
       const clang::ParmVarDecl &vd =
         static_cast<const clang::ParmVarDecl&>(decl);
 
-      std::size_t address = reinterpret_cast<std::size_t>(&vd);
+      std::size_t address = reinterpret_cast<std::size_t>(vd.getFirstDecl());
       identifier = object_map.find(address)->second;
 
       if(get_type(vd.getType(), type))
