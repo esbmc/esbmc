@@ -369,9 +369,9 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   else if(identifier=="c::__func__")
   {
     // this is an ANSI-C standard compliant hack to get the function name
-    string_constantt s;
-    s.set_value(location.get_function());
+    string_constantt s(location.get_function());
     s.location()=location;
+
     expr.swap(s);
   }
   else

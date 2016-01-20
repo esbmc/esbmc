@@ -14,7 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 class string_constantt:public exprt
 {
 public:
-  string_constantt();
   explicit string_constantt(const irep_idt &value);
   explicit string_constantt(const irep_idt &value, const typet type);
 

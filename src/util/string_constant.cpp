@@ -12,11 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "string_constant.h"
 
-string_constantt::string_constantt()
- : string_constantt(irep_idt(), char_type())
-{
-}
-
 string_constantt::string_constantt(const irep_idt &value)
   : string_constantt(value, array_typet(char_type()))
 {
