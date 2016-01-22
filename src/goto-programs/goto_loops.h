@@ -36,6 +36,7 @@ public:
 
   void find_function_loops();
   void output(std::ostream &out = std::cout);
+  void dump();
 
 protected:
   contextt &context;
