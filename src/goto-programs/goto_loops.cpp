@@ -147,3 +147,8 @@ void goto_loopst::add_loop_var(loopst &loop, const exprt& expr)
       add_loop_var(loop, *it);
   }
 }
+
+void goto_loopst::dump()
+{
+  output(std::cout);
+}
