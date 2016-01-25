@@ -651,49 +651,63 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
     if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size" ||
         name == "c::__ESBMC_is_dynamic") {
       return;
-    } else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
-    	std::list<unsigned int> threadId_list;
-    	std::map<expr2tc,std::list<unsigned int>>::iterator it_find;
-    	it_find = vars_map.find(expr);
+    }
+    else if ((symbol->static_lifetime || symbol->type.is_dynamic_set()))
+    {
+      std::list<unsigned int> threadId_list;
+      std::map<expr2tc, std::list<unsigned int>>::iterator it_find;
+      it_find = vars_map.find(expr);
 
-    	//the expression was accessed in another interleaving
-    	if (it_find != vars_map.end()){
+      //the expression was accessed in another interleaving
+      if (it_find != vars_map.end())
+      {
+        threadId_list = it_find->second;
+        threadId_list.push_back(get_active_state().top().level1.thread_id);
 
-    		threadId_list = it_find->second;
-    		threadId_list.push_back(get_active_state().top().level1.thread_id);
+        vars_map.insert(
+          std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
 
-    		vars_map.insert(std::pair<expr2tc, std::list<unsigned int>>(expr,threadId_list));
+        std::list<unsigned int>::iterator it_list;
+        for (it_list = threadId_list.begin(); it_list != threadId_list.end();
+            ++it_list)
+        {
 
-    		std::list<unsigned int>::iterator it_list;
-    		for(it_list=threadId_list.begin(); it_list!=threadId_list.end(); ++it_list){
-
-    			//find if some thread access the same expression
-    			if(*it_list!=get_active_state().top().level1.thread_id){
-    				globals_list.insert(expr);
-    				is_global.insert(std::pair<expr2tc, bool>(expr,true));
-    			}
-    			//expression was not accessed by other thread
-    			else{
-    				std::map<expr2tc, bool>::iterator its_global;
-    				its_global = is_global.find(expr);
-    				//expression was defined as global in another interleaving
-    				if (its_global != is_global.end()){
-    					globals_list.insert(expr);
-    				}
-    			}
-    		}
-    		//first access of expression
-    	}else{
-    		std::map<expr2tc, bool>::iterator its_global;
-    		its_global = is_global.find(expr);
-    		if (its_global != is_global.end()){
-    			globals_list.insert(expr);
-    		}else{
-    			threadId_list.push_back(get_active_state().top().level1.thread_id);
-    			vars_map.insert(std::pair<expr2tc, std::list<unsigned int>>(expr,threadId_list));
-    			globals_list.insert(expr);
-    		}
-    	}
+          //find if some thread access the same expression
+          if (*it_list != get_active_state().top().level1.thread_id)
+          {
+            globals_list.insert(expr);
+            is_global.insert(std::pair<expr2tc, bool>(expr, true));
+          }
+          //expression was not accessed by other thread
+          else
+          {
+            std::map<expr2tc, bool>::iterator its_global;
+            its_global = is_global.find(expr);
+            //expression was defined as global in another interleaving
+            if (its_global != is_global.end())
+            {
+              globals_list.insert(expr);
+            }
+          }
+        }
+        //first access of expression
+      }
+      else
+      {
+        std::map<expr2tc, bool>::iterator its_global;
+        its_global = is_global.find(expr);
+        if (its_global != is_global.end())
+        {
+          globals_list.insert(expr);
+        }
+        else
+        {
+          threadId_list.push_back(get_active_state().top().level1.thread_id);
+          vars_map.insert(
+            std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
+          globals_list.insert(expr);
+        }
+      }
     } else {
       return;
     }
