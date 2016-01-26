@@ -21,7 +21,6 @@ bool contextt::add(const symbolt &symbol)
     return true;
 
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.base_name, symbol.name));
-  symbol_module_map.insert(std::pair<irep_idt, irep_idt>(symbol.module, symbol.name));
 
   return false;
 }
@@ -40,7 +39,6 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   }
 
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.base_name, symbol.name));
-  symbol_module_map.insert(std::pair<irep_idt, irep_idt>(symbol.module, symbol.name));
 
   result.first->second.swap(symbol);
   new_symbol=&result.first->second;

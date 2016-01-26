@@ -48,7 +48,6 @@ public:
 
   symbolst symbols;
   symbol_base_mapt symbol_base_map;
-  symbol_module_mapt symbol_module_map;
 
   bool add(const symbolt &symbol);
   bool move(symbolt &symbol, symbolt *&new_symbol);
@@ -60,7 +59,6 @@ public:
   {
     symbols.clear();
     symbol_base_map.clear();
-    symbol_module_map.clear();
   }
 
   void show(std::ostream &out = std::cout) const;
@@ -72,7 +70,6 @@ public:
   {
     symbols.swap(other.symbols);
     symbol_base_map.swap(other.symbol_base_map);
-    symbol_module_map.swap(other.symbol_module_map);
   }
 
   bool has_symbol(const irep_idt &name) const
