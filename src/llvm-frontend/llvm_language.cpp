@@ -167,7 +167,17 @@ void llvm_languaget::build_compiler_string(
   for(auto inc : config.ansi_c.include_paths)
     compiler_string.push_back("-I" + inc);
 
+  // Ignore ctype defined by the system
   compiler_string.push_back("-D__NO_CTYPE");
+
+  // Realloc should call __ESBMC_realloc
+  compiler_string.push_back("-Drealloc=__ESBMC_realloc");
+
+  // Force llvm see all files as .c
+  // This forces the preprocessor to be called even in preprocessed files
+  // which allow us to perform transformations using -D
+  compiler_string.push_back("-x");
+  compiler_string.push_back("c");
 }
 
 bool llvm_languaget::parse(

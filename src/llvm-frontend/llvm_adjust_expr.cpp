@@ -621,50 +621,13 @@ void llvm_adjust::adjust_side_effect_function_call(
   if(f_op.id()=="symbol")
   {
     const irep_idt &identifier = f_op.identifier();
-
-    bool dead = config.options.get_bool_option("deadlock-check");
-    bool lock = config.options.get_bool_option("lock-order-check");
-
-    if(identifier == "c::pthread_join")
-    {
-      if(dead)
-        f_op.identifier("c::pthread_join_switch");
-      else
-        f_op.identifier("c::pthread_join_noswitch");
-    }
-    else if(identifier == "c::pthread_mutex_lock")
-    {
-      if(dead)
-        f_op.identifier("c::thread_mutex_lock_check");
-      else if(lock)
-        f_op.identifier("c::pthread_mutex_lock_nocheck");
-      else
-        f_op.identifier("c::pthread_mutex_lock_noassert");
-    }
-    else if(identifier == "c::pthread_mutex_unlock")
-    {
-      if(dead)
-        f_op.identifier("c::pthread_mutex_unlock_check");
-      else if(lock)
-        f_op.identifier("c::pthread_mutex_unlock_nocheck");
-      else
-        f_op.identifier("c::pthread_mutex_unlock_noassert");
-    }
-    else if(identifier == "c::pthread_cond_wait")
-    {
-      if(dead)
-        f_op.identifier("c::pthread_cond_wait_check");
-      else
-        f_op.identifier("c::pthread_cond_wait_nocheck");
-    }
-
-    if(context.symbols.find(f_op.identifier())==context.symbols.end())
+    if(context.symbols.find(identifier)==context.symbols.end())
     {
       // maybe this is an undeclared function
       // let's just add it
       symbolt new_symbol;
 
-      new_symbol.name=f_op.identifier();
+      new_symbol.name=identifier;
       new_symbol.base_name=f_op.name();
       new_symbol.location=expr.location();
       new_symbol.type=f_op.type();
