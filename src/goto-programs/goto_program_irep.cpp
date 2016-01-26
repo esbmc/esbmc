@@ -25,10 +25,7 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
   irep.type_id((long) instruction.type);
 
   irep.guard(migrate_expr_back(instruction.guard));
-    
-  if (instruction.event!="")
-    irep.event(instruction.event);
-  
+
   if(! instruction.targets.empty())
   {
     irept tgts;
@@ -85,7 +82,6 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
   instruction.location = static_cast<const locationt&>(irep.location());
   instruction.type = static_cast<goto_program_instruction_typet>(
                   atoi(irep.type_id().c_str()));
-  instruction.event = irep.event_irep().id();
 
   // don't touch the targets, the goto_programt conversion does that
 
