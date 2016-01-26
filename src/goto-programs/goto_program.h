@@ -369,6 +369,15 @@ public:
 
   //! Adds an instruction of given type at the end.
   //! \return The newly added instruction.
+  inline targett add_instruction(instructiont &instruction)
+  {
+    instructions.push_back(instructiont(instruction));
+    targett tmp = instructions.end();
+    return --tmp;
+  }
+
+  //! Adds an instruction of given type at the end.
+  //! \return The newly added instruction.
   inline targett add_instruction(goto_program_instruction_typet type)
   {
     instructions.push_back(instructiont(type));

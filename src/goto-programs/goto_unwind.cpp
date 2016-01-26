@@ -137,12 +137,11 @@ void goto_unwindt::unwind_program(
     std::vector<goto_programt::targett> target_vector;
     target_vector.reserve(target_map.size());
 
-    for(goto_programt::targett t=loop_head;
+    for(goto_programt::targett t = loop->get_original_loop_head();
         t!=loop_exit; t++)
     {
       assert(t!=goto_program.instructions.end());
-      goto_programt::targett copied_t=copies.add_instruction();
-      *copied_t=*t;
+      goto_programt::targett copied_t=copies.add_instruction(*t);
       target_vector.push_back(copied_t);
     }
 
