@@ -50,8 +50,7 @@ void goto_unwindt::unwind_program(
   function_loopst::reverse_iterator loop)
 {
   // Get loop exit goto number
-  unsigned exit_number =
-    (--loop->get_goto_program().instructions.end())->location_number;
+  unsigned exit_number = loop->get_original_loop_exit()->location_number;
 
   // Increment pointer by 1, it will point to the first instruction
   // after the end of the loop
