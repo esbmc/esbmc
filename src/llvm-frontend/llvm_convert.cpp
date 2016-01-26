@@ -2285,6 +2285,8 @@ bool llvm_convertert::get_compound_assign_expr(
       return true;
   }
 
+  // TODO: this whole conversion is incomplete
+
   exprt lhs;
   if(get_expr(*compop.getLHS(), lhs))
     return true;
