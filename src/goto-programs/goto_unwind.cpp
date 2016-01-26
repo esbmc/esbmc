@@ -107,8 +107,8 @@ void goto_unwindt::unwind_program(
 
   {
     unsigned count=0;
-    for(goto_programt::targett t=loop_head;
-        t!=loop_exit; t++, count++)
+    for(goto_programt::targett t = loop->get_original_loop_head();
+        t != loop_exit; t++, count++)
     {
       assert(t!=goto_program.instructions.end());
       target_map[t]=count;
@@ -161,7 +161,7 @@ void goto_unwindt::unwind_program(
         if(m_it!=target_map.end()) // intra-loop?
         {
           assert(m_it->second<target_vector.size());
-          *t_it=target_vector[m_it->second];
+          *t_it=target_vector[m_it->second - 1];
         }
       }
     }
