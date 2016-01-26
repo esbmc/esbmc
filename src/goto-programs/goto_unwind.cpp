@@ -70,10 +70,7 @@ void goto_unwindt::unwind_program(
     }
   }
 
-  std::vector<goto_programt::targett> iteration_points;
-
   assert(unwind!=0);
-  iteration_points.resize(unwind);
 
   if(loop_exit!=goto_program.instructions.begin())
   {
@@ -104,9 +101,6 @@ void goto_unwindt::unwind_program(
   t_skip->make_skip();
   t_skip->location = loop_head->location;
   t_skip->function = loop_head->function;
-
-  // record the exit point of first iteration
-  iteration_points[0]=loop_iter;
 
   // build a map for branch targets inside the loop
   std::map<goto_programt::targett, unsigned> target_map;
@@ -151,9 +145,6 @@ void goto_unwindt::unwind_program(
       *copied_t=*t;
       target_vector.push_back(copied_t);
     }
-
-    // record exit point of this copy
-    iteration_points[i]=target_vector.back();
 
     // adjust the intra-loop branches
 
