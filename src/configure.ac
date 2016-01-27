@@ -85,7 +85,7 @@ AC_CHECK_HEADERS([openssl/sha.h], [AC_DEFINE([OPENSSL_HEADERS], [], [Have openss
 dnl LLVM stuff
 dnl You will need the LLVM's and ncurses' static libraries
 AS_VAR_APPEND(LDFLAGS, " `llvm-config --ldflags`")
-AS_VAR_APPEND(LIBS, " -lboost_filesystem -lboost_system -lclangIndex -lclangTooling -lclangDriver -lclangFrontend -lclangParse -lclangSerialization -lclangSema -lclangAnalysis -lclangEdit -lclangLex -lclangAST -lclangARCMigrate -lclangBasic -lLLVMBitReader -lLLVMOption -lLLVMMC -lLLVMMCParser -lLLVMSupport -lz -ltinfo -ldl")
+AS_VAR_APPEND(LIBS, " -lclangTooling -lclangDriver -lclangFrontend -lclangParse -lclangSerialization -lclangSema -lclangAnalysis -lclangEdit -lclangLex -lclangAST -lclangBasic -lLLVMBitReader -lLLVMOption -lLLVMMC -lLLVMMCParser -lLLVMSupport -lz -ltinfo -ldl")
 
 AC_HEADER_STDBOOL
 AC_TYPE_UID_T
