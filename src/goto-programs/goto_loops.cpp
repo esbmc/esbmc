@@ -11,17 +11,11 @@
 
 void goto_loopst::find_function_loops()
 {
-  std::map<unsigned int, goto_programt::instructionst::iterator> targets;
-
   for(goto_programt::instructionst::iterator
       it=goto_function.body.instructions.begin();
       it!=goto_function.body.instructions.end();
       it++)
   {
-    // Record location number and targets
-    if (it->is_target())
-      targets[it->location_number] = it;
-
     // We found a loop, let's record its instructions
     if (it->is_backwards_goto())
     {
@@ -30,8 +24,7 @@ void goto_loopst::find_function_loops()
       if((*it->targets.begin())->location_number == it->location_number)
         continue;
 
-      create_function_loop(
-        targets[(*it->targets.begin())->location_number], it);
+      create_function_loop(*it->targets.begin(), it);
     }
   }
 }

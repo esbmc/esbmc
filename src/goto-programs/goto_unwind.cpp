@@ -50,25 +50,11 @@ void goto_unwindt::unwind_program(
   function_loopst::reverse_iterator loop)
 {
   // Get loop exit goto number
-  unsigned exit_number = loop->get_original_loop_exit()->location_number;
+  goto_programt::targett loop_exit = loop->get_original_loop_exit();
 
   // Increment pointer by 1, it will point to the first instruction
   // after the end of the loop
-  ++exit_number;
-
-  // So we can get the instruction after the exit
-  goto_programt::targett loop_exit;
-  for(goto_programt::instructionst::iterator
-      it=goto_function.body.instructions.begin();
-      it!=goto_function.body.instructions.end();
-      it++)
-  {
-    if(it->location_number == exit_number)
-    {
-      loop_exit = it;
-      break;
-    }
-  }
+  loop_exit++;
 
   assert(unwind!=0);
 
@@ -108,7 +94,7 @@ void goto_unwindt::unwind_program(
   {
     unsigned count=0;
     for(goto_programt::targett t = loop->get_original_loop_head();
-        t != loop_exit; t++, count++)
+        t != loop->get_original_loop_exit(); t++, count++)
     {
       assert(t!=goto_program.instructions.end());
       target_map[t]=count;
@@ -138,7 +124,7 @@ void goto_unwindt::unwind_program(
     target_vector.reserve(target_map.size());
 
     for(goto_programt::targett t = loop->get_original_loop_head();
-        t!=loop_exit; t++)
+        t!=loop->get_original_loop_exit(); t++)
     {
       assert(t!=goto_program.instructions.end());
       goto_programt::targett copied_t=copies.add_instruction(*t);
