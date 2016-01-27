@@ -147,7 +147,7 @@ void goto_unwindt::unwind_program(
         if(m_it!=target_map.end()) // intra-loop?
         {
           assert(m_it->second<target_vector.size());
-          *t_it=target_vector[m_it->second - 1];
+          *t_it=target_vector[m_it->second];
         }
       }
     }
