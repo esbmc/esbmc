@@ -20,10 +20,6 @@ void goto_loopst::find_function_loops()
     if (it->is_backwards_goto())
     {
       assert(it->targets.size() == 1);
-
-      if((*it->targets.begin())->location_number == it->location_number)
-        continue;
-
       create_function_loop(*it->targets.begin(), it);
     }
   }
@@ -41,6 +37,12 @@ void goto_loopst::create_function_loop(
   // Set original iterators
   it1->set_original_loop_head(loop_head);
   it1->set_original_loop_exit(loop_exit);
+
+  // This means something like:
+  // A: goto A;
+  // There is no body, so we can skip it
+  if(loop_head->location_number == loop_exit->location_number)
+    return;
 
   // Copy the loop body
   while (it != loop_exit)

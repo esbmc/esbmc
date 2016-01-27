@@ -37,7 +37,6 @@ void goto_unwindt::goto_unwind()
     it != function_loops.rend();
     ++it)
   {
-    assert(!it->get_goto_program().empty());
     unwind_program(goto_function.body, it);
 
     // remove skips
