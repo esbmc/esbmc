@@ -52,16 +52,11 @@ bool llvm_convertert::convert()
 bool llvm_convertert::convert_builtin_types()
 {
   // Convert va_list_tag
-  // TODO: from clang 3.8 we'll have a member VaListTagDecl and a method
-  // getVaListTagDecl() that might make the following code redundant
-  clang::QualType q_va_list_type = ASTContext->getVaListTagType();
-  if(!q_va_list_type.isNull())
+  const clang::Decl *q_va_list_decl = ASTContext->getVaListTagDecl();
+  if(q_va_list_decl)
   {
-    const clang::TypedefType &t =
-      static_cast<const clang::TypedefType &>(*q_va_list_type.getTypePtr());
-
     exprt dummy;
-    if(get_decl(*t.getDecl(), dummy))
+    if(get_decl(*q_va_list_decl, dummy))
       return true;
   }
 
