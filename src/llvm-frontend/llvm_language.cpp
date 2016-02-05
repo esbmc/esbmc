@@ -19,9 +19,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <ansi-c/c_link.h>
 #include <ansi-c/gcc_builtin_headers.h>
 
-#include <boost/algorithm/string.hpp>
-#include <boost/filesystem.hpp>
-
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 
