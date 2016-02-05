@@ -25,23 +25,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
 
-std::string get_output_from_cmd(std::string cmd)
-{
-  std::string data;
-  FILE * stream;
-  const int max_buffer = 1024;
-  char buffer[max_buffer];
-  cmd.append(" 2>&1");
-
-  stream = popen(cmd.c_str(), "r");
-  if (stream) {
-    while (!feof(stream))
-      if (fgets(buffer, max_buffer, stream) != NULL) data.append(buffer);
-    pclose(stream);
-  }
-  return data;
-}
-
 languaget *new_llvm_language()
 {
   return new llvm_languaget;
@@ -49,7 +32,7 @@ languaget *new_llvm_language()
 
 llvm_languaget::llvm_languaget()
 {
-  search_clang_headers();
+  add_clang_headers();
   internal_additions();
 }
 
@@ -57,63 +40,10 @@ llvm_languaget::~llvm_languaget()
 {
 }
 
-// TODO: What should we do when building static binaries?
-void llvm_languaget::search_clang_headers()
-{
-  // This will give us something like:
-  // clang: /usr/bin/clang /usr/lib/clang /usr/include/clang /usr/lib64/ccache/clang
-  std::string output = get_output_from_cmd("whereis -b clang");
-
-  // The path should be something path_to_clang/clang
-  if(output.find("/clang") == std::string::npos)
-  {
-    std::cerr << "Error: ESBMC couldn't find clang on the system" << std::endl;
-    abort();
-  }
-
-  // Remove "clang: " from the output
-  output = output.substr(output.find(":") + 2);
-
-  // Split the sequence of paths, if any
-  std::vector<std::string> clang_paths;
-  boost::split(clang_paths, output, boost::is_any_of(" "));
-
-  for(auto path : clang_paths)
-  {
-    // Remove clang so we get the path where they are located
-    path.replace(path.find("clang"), sizeof("clang")-1, "../lib/clang/");
-
-    // Get clang's version directory
-    boost::filesystem::path p(path);
-
-    // If the path doesn't exist, ignore it
-    if(!boost::filesystem::exists(p))
-      continue;
-
-    boost::filesystem::directory_iterator it{p};
-
-    // Update path with full possible path for header
-    // This will look like: /usr/bin/../lib/clang/3.5.0/include/stddef.h
-    path = it->path().string() + "/include";
-
-    // Finally look for the header
-    if(boost::filesystem::exists(path + "/stddef.h"))
-    {
-      // Found!
-      headers_path = path;
-      return;
-    }
-  }
-
-  std::cerr << "Error: ESBMC couldn't find clang's stddef.h on the system" << std::endl;
-  abort();
-}
-
 void llvm_languaget::build_compiler_string(
   std::vector<std::string> &compiler_string)
 {
-  compiler_string.push_back("-I");
-  compiler_string.push_back(headers_path.c_str());
+  compiler_string.push_back("-I.");
 
   // Append mode arg
   switch(config.ansi_c.word_size)
@@ -208,6 +138,11 @@ bool llvm_languaget::parse(const std::string& path)
 
   clang::tooling::ClangTool Tool(Compilations, sources);
   Tool.mapVirtualFile("/esbmc_intrinsics.h", intrinsics);
+
+  for(auto it = clang_headers_name.begin(), it1 = clang_headers_content.begin();
+      (it != clang_headers_name.end()) && (it1 != clang_headers_content.end());
+      ++it, ++it1)
+    Tool.mapVirtualFile(*it, *it1);
 
   Tool.buildASTs(ASTs);
 

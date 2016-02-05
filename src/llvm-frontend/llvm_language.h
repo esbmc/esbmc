@@ -84,12 +84,17 @@ protected:
     return "c::main";
   }
 
-  void search_clang_headers();
+  void add_clang_headers();
+
   void build_compiler_string(std::vector<std::string> &compiler_string);
 
-  std::string headers_path;
   std::string intrinsics;
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
+
+  // For some reason clang can't understand the string when we use
+  // a vector of pairs strings (name, content)
+  std::vector<std::string> clang_headers_name;
+  std::vector<std::string> clang_headers_content;
 };
 
 languaget *new_llvm_language();
