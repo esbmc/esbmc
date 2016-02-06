@@ -87,14 +87,8 @@ Function: bmct::successful_trace
 void bmct::successful_trace(smt_convt &smt_conv,
                        symex_target_equationt &equation)
 {
-  status("Building successful trace");
 
   goto_tracet goto_trace;
-
-  /* FIXME - currently, the build goto trace fails in successful case */
-  //build_goto_trace(equation, smt_conv, goto_trace);
-
-  goto_trace.metadata_filename = options.get_option("llvm-metadata");
 
   std::string graphml_output_filename = options.get_option("witness-path");
   std::string tokenizer_path;
@@ -108,12 +102,19 @@ void bmct::successful_trace(smt_convt &smt_conv,
   switch(ui)
   {
     case ui_message_handlert::GRAPHML:
-      generate_goto_trace_in_graphml_format(
+  	  status("Building successful trace");
+
+  	  /* FIXME - currently, the goto trace construction fails in successful case */
+  	  //build_goto_trace(equation, smt_conv, goto_trace);
+  	  goto_trace.metadata_filename = options.get_option("llvm-metadata");
+
+  	  generate_goto_trace_in_graphml_format(
         tokenizer_path,
         graphml_output_filename,
         ns,
         goto_trace
   	  );
+
       std::cout
   	    << "The correctness witness using GraphML format is available in: "
         << options.get_option("witness-path")

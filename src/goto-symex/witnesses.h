@@ -22,6 +22,7 @@
 typedef struct graph_props
 {
   std::string sourcecodeLanguage;
+  std::string witnessType;
 } graph_p;
 
 typedef struct node_props
@@ -31,6 +32,8 @@ typedef struct node_props
   bool isViolationNode = false;
   bool isEntryNode = false;
   bool isSinkNode = false;
+  std::string invariant;
+  std::string invariantScope;
 } node_p;
 
 typedef struct edge_props
@@ -168,6 +171,20 @@ void create_node(boost::property_tree::ptree & node, node_p & node_props)
     data_entry.put_value("true");
     node.add_child("data", data_entry);
   }
+  if (!node_props.invariant.empty())
+  {
+    boost::property_tree::ptree data_invariant;
+    data_invariant.add("<xmlattr>.key", "invariant");
+    data_invariant.put_value(node_props.invariant);
+    node.add_child("data", data_invariant);
+  }
+  if (!node_props.invariantScope.empty())
+  {
+    boost::property_tree::ptree data_invariant;
+    data_invariant.add("<xmlattr>.key", "invariant.scope");
+    data_invariant.put_value(node_props.invariantScope);
+    node.add_child("data", data_invariant);
+  }
 }
 
 void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
@@ -227,6 +244,17 @@ void create_graphml(boost::property_tree::ptree & graphml,
       "http://graphml.graphdrawing.org/xmlns");
   graphml.add("graphml.<xmlattr>.xmlns:xsi",
       "http://www.w3.org/2001/XMLSchema-instance");
+
+  boost::property_tree::ptree key_witnessType;
+  key_witnessType.add("<xmlattr>.id", "witness-type");
+  key_witnessType.put(
+      boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+      "witness-type");
+  key_witnessType.put(
+      boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+      "string");
+  key_witnessType.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", key_witnessType);
 
   boost::property_tree::ptree key_assumption;
   key_assumption.add("<xmlattr>.id", "assumption");
@@ -307,6 +335,28 @@ void create_graphml(boost::property_tree::ptree & graphml,
   key_originfile_default.put_value(file_path);
   key_originfile.add_child("default", key_originfile_default);
   graphml.add_child("graphml.key", key_originfile);
+
+  boost::property_tree::ptree key_invariant;
+  key_invariant.add("<xmlattr>.id", "invariant");
+  key_invariant.put(
+      boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+      "invariant");
+  key_invariant.put(
+      boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+      "string");
+  key_invariant.add("<xmlattr>.for", "node");
+  graphml.add_child("graphml.key", key_invariant);
+
+  boost::property_tree::ptree key_invariantScope;
+  key_invariantScope.add("<xmlattr>.id", "invariant.scope");
+  key_invariantScope.put(
+      boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+      "invariant.scope");
+  key_invariantScope.put(
+      boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+      "string");
+  key_invariantScope.add("<xmlattr>.for", "node");
+  graphml.add_child("graphml.key", key_invariantScope);
 
   boost::property_tree::ptree key_nodeType;
   key_nodeType.add("<xmlattr>.id", "nodetype");
@@ -399,6 +449,7 @@ void create_graphml(boost::property_tree::ptree & graphml,
       "string");
   key_returnFunction.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", key_returnFunction);
+
 }
 
 void create_graph(boost::property_tree::ptree & graph)
