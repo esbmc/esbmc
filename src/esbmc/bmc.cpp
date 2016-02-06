@@ -90,9 +90,9 @@ void bmct::successful_trace(smt_convt &smt_conv,
   status("Building successful trace");
 
   goto_tracet goto_trace;
-  build_goto_trace(equation, smt_conv, goto_trace);
 
-  exit(1);
+  /* FIXME - currently, the build goto trace fails in successful case */
+  //build_goto_trace(equation, smt_conv, goto_trace);
 
   goto_trace.metadata_filename = options.get_option("llvm-metadata");
 
@@ -105,24 +105,50 @@ void bmct::successful_trace(smt_convt &smt_conv,
 	tokenizer_path = options.get_option("tokenizer");
   }
 
-  switch (ui)
+  switch(ui)
   {
     case ui_message_handlert::GRAPHML:
-      std::cout << "The correctness witness using GraphML format is available in: "
-    	        << options.get_option("witness-path") << std::endl;
       generate_goto_trace_in_graphml_format(
         tokenizer_path,
         graphml_output_filename,
         ns,
         goto_trace
-	  );
+  	  );
+      std::cout
+  	    << "The correctness witness using GraphML format is available in: "
+        << options.get_option("witness-path")
+  	    << std::endl;
+    break;
+
+    case ui_message_handlert::OLD_GUI:
+      std::cout << "SUCCESS" << std::endl
+                << "Verification successful" << std::endl
+                << ""     << std::endl
+                << ""     << std::endl
+                << ""     << std::endl
+                << ""     << std::endl;
+    break;
+
+    case ui_message_handlert::PLAIN:
+    break;
+
+    case ui_message_handlert::XML_UI:
+    {
+      xmlt xml("cprover-status");
+      xml.data="SUCCESS";
+      std::cout << xml;
+      std::cout << std::endl;
+    }
     break;
 
     default:
       assert(false);
-    break;
   }
+
+  status("VERIFICATION SUCCESSFUL");
+
 }
+
 /*******************************************************************\
 
 Function: bmct::error_trace
@@ -154,23 +180,27 @@ void bmct::error_trace(smt_convt &smt_conv,
   switch (ui)
   {
     case ui_message_handlert::GRAPHML:
-      std::cout << "The violation witness using GraphML format is available in: "
-                << options.get_option("witness-path") << std::endl;
-
       generate_goto_trace_in_graphml_format(
         tokenizer_path,
         graphml_output_filename,
         ns,
         goto_trace);
+      std::cout
+	    << "The violation witness using GraphML format is available in: "
+        << options.get_option("witness-path")
+		<< std::endl;
+      std::cout << std::endl << "Counterexample:" << std::endl;
+      show_goto_trace(std::cout, ns, goto_trace);
+    break;
 
     case ui_message_handlert::PLAIN:
       std::cout << std::endl << "Counterexample:" << std::endl;
       show_goto_trace(std::cout, ns, goto_trace);
-      break;
+    break;
 
     case ui_message_handlert::OLD_GUI:
       show_goto_trace_gui(std::cout, ns, goto_trace);
-      break;
+    break;
 
     case ui_message_handlert::XML_UI:
     {
@@ -271,6 +301,9 @@ void bmct::report_success()
     break;
 
     case ui_message_handlert::PLAIN:
+    break;
+
+    case ui_message_handlert::GRAPHML:
     break;
 
     case ui_message_handlert::XML_UI:
@@ -809,7 +842,6 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
       if(!options.get_bool_option("base-case"))
       {
         successful_trace(*solver, equation);
-        report_success();
       }
       else
         status("No bug has been found in the base case");
@@ -834,15 +866,15 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
 
       return true;
 
-  // Return failure if we didn't actually check anything, we just emitted the
-  // test information to an SMTLIB formatted file. Causes esbmc to quit
-  // immediately (with no error reported)
-  case smt_convt::P_SMTLIB:
-    return true;
+    // Return failure if we didn't actually check anything, we just emitted the
+    // test information to an SMTLIB formatted file. Causes esbmc to quit
+    // immediately (with no error reported)
+    case smt_convt::P_SMTLIB:
+      return true;
 
-  default:
-    error("decision procedure failed");
-    return true;
+    default:
+      error("decision procedure failed");
+      return true;
   }
 }
 
