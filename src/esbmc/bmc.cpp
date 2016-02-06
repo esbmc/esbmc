@@ -74,6 +74,57 @@ void bmct::do_cbmc(smt_convt &solver, symex_target_equationt &equation)
 
 /*******************************************************************\
 
+Function: bmct::successful_trace
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void bmct::successful_trace(smt_convt &smt_conv,
+                       symex_target_equationt &equation)
+{
+  status("Building successful trace");
+
+  goto_tracet goto_trace;
+  build_goto_trace(equation, smt_conv, goto_trace);
+
+  exit(1);
+
+  goto_trace.metadata_filename = options.get_option("llvm-metadata");
+
+  std::string graphml_output_filename = options.get_option("witness-path");
+  std::string tokenizer_path;
+
+  if(!graphml_output_filename.empty())
+  {
+    set_ui(ui_message_handlert::GRAPHML);
+	tokenizer_path = options.get_option("tokenizer");
+  }
+
+  switch (ui)
+  {
+    case ui_message_handlert::GRAPHML:
+      std::cout << "The correctness witness using GraphML format is available in: "
+    	        << options.get_option("witness-path") << std::endl;
+      generate_goto_trace_in_graphml_format(
+        tokenizer_path,
+        graphml_output_filename,
+        ns,
+        goto_trace
+	  );
+    break;
+
+    default:
+      assert(false);
+    break;
+  }
+}
+/*******************************************************************\
+
 Function: bmct::error_trace
 
   Inputs:
@@ -92,7 +143,7 @@ void bmct::error_trace(smt_convt &smt_conv,
   goto_tracet goto_trace;
   build_goto_trace(equation, smt_conv, goto_trace);
 
-  std::string graphml_output_filename = options.get_option("witnesspath");
+  std::string graphml_output_filename = options.get_option("witness-path");
   std::string tokenizer_path;
   if(!graphml_output_filename.empty())
   {
@@ -103,8 +154,8 @@ void bmct::error_trace(smt_convt &smt_conv,
   switch (ui)
   {
     case ui_message_handlert::GRAPHML:
-      std::cout << "The counterexample in GraphML format is available in: "
-               << options.get_option("witnesspath") << std::endl;
+      std::cout << "The violation witness using GraphML format is available in: "
+                << options.get_option("witness-path") << std::endl;
 
       generate_goto_trace_in_graphml_format(
         tokenizer_path,
@@ -210,19 +261,19 @@ void bmct::report_success()
 
   switch(ui)
   {
-  case ui_message_handlert::OLD_GUI:
-    std::cout << "SUCCESS" << std::endl
-              << "Verification successful" << std::endl
-              << ""     << std::endl
-              << ""     << std::endl
-              << ""     << std::endl
-              << ""     << std::endl;
+    case ui_message_handlert::OLD_GUI:
+      std::cout << "SUCCESS" << std::endl
+                << "Verification successful" << std::endl
+                << ""     << std::endl
+                << ""     << std::endl
+                << ""     << std::endl
+                << ""     << std::endl;
     break;
 
-  case ui_message_handlert::PLAIN:
+    case ui_message_handlert::PLAIN:
     break;
 
-  case ui_message_handlert::XML_UI:
+    case ui_message_handlert::XML_UI:
     {
       xmlt xml("cprover-status");
       xml.data="SUCCESS";
@@ -231,8 +282,8 @@ void bmct::report_success()
     }
     break;
 
-  default:
-    assert(false);
+    default:
+      assert(false);
   }
 
 }
@@ -569,6 +620,8 @@ bool bmct::run_thread()
 
     if(result->remaining_claims==0)
     {
+      /** TODO - modify to print an empty graphml if the */
+      /* successful_trace(runtime_solver,*equation); */
       report_success();
       return false;
     }
@@ -754,7 +807,10 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
   {
     case smt_convt::P_UNSATISFIABLE:
       if(!options.get_bool_option("base-case"))
+      {
+        successful_trace(*solver, equation);
         report_success();
+      }
       else
         status("No bug has been found in the base case");
       return false;

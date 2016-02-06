@@ -19,11 +19,14 @@ void build_goto_trace(
 {
   unsigned step_nr=0;
 
+  std::cout << "BEFORE GOTO TRACE" << std::endl;
+
   for(symex_target_equationt::SSA_stepst::const_iterator
       it=target.SSA_steps.begin();
       it!=target.SSA_steps.end();
       it++)
   {
+
     const symex_target_equationt::SSA_stept &SSA_step=*it;
     tvt result;
     result=smt_conv.l_get(SSA_step.guard_ast);

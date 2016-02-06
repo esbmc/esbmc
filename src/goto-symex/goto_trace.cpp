@@ -251,6 +251,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path,
   boost::property_tree::ptree graph;
   std::map<int, std::map<int, std::string> > mapped_tokens;
 
+
   bool already_initialized = false;
   boost::property_tree::ptree last_created_node;
   std::string last_function = "";
@@ -429,18 +430,20 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path,
     last_created_node = current_node;
   }
 
-  /* violation node */
-  boost::property_tree::ptree violation_node;
-  node_p violation_node_p;
-  violation_node_p.isViolationNode = true;
-  create_node(violation_node, violation_node_p);
-  graph.add_child("node", violation_node);
+  if (already_initialized == true){
+    /* violation node */
+    boost::property_tree::ptree violation_node;
+    node_p violation_node_p;
+    violation_node_p.isViolationNode = true;
+    create_node(violation_node, violation_node_p);
+    graph.add_child("node", violation_node);
 
-  boost::property_tree::ptree violation_edge;
-  edge_p violation_edge_p;
-  create_edge(violation_edge, violation_edge_p, last_created_node,
+    boost::property_tree::ptree violation_edge;
+    edge_p violation_edge_p;
+    create_edge(violation_edge, violation_edge_p, last_created_node,
       violation_node);
-  graph.add_child("edge", violation_edge);
+    graph.add_child("edge", violation_edge);
+  }
 
   /* write graphml */
   graphml.add_child("graphml.graph", graph);

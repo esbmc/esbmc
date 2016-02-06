@@ -183,7 +183,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.cmdline(cmdline);
 
   /* graphML generation options check */
-  if(cmdline.isset("witnesspath") && cmdline.isset("tokenizer"))
+  if(cmdline.isset("witness-path") && cmdline.isset("tokenizer"))
   {
     std::string tokenizer_path = cmdline.getval("tokenizer");
     std::ifstream tfile(tokenizer_path);
@@ -194,14 +194,14 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
       exit(1);
     }
 
-    options.set_option("witnesspath", cmdline.getval("witnesspath"));
+    options.set_option("witness-path", cmdline.getval("witness-path"));
     options.set_option("no-slice", true);
     options.set_option("tokenizer", cmdline.getval("tokenizer"));
   }
-  else if(cmdline.isset("witnesspath") && !cmdline.isset("tokenizer"))
+  else if(cmdline.isset("witness-path") && !cmdline.isset("tokenizer"))
   {
     std::cout
-        << "For graphML generation is necessary be set a tokenizer (use --tokenizer path)"
+        << "For GraphML generation is necessary to set a tokenizer (use --tokenizer path)"
         << std::endl;
     exit(1);
   }
@@ -1819,9 +1819,7 @@ void cbmc_parseoptionst::help()
     " --show-goto-functions        show goto program\n"
     " --extended-try-analysis      check all the try block, even when an exception is throw\n"
     " --version                    show current ESBMC version and exit\n"
-    " --witnesspath filename       output counterexample in graphML format\n"
-    " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
-    "                              program for graphML generation\n"
+    " --witness-path filename      generate a verification result witness in GraphML format\n"
     " --clang-frontend             parse source files using clang (beta)\n\n"
     "BMC options\n"
     " --function name              set main function name\n"
