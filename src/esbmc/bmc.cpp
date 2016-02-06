@@ -109,6 +109,7 @@ void bmct::successful_trace(smt_convt &smt_conv,
   	  goto_trace.metadata_filename = options.get_option("llvm-metadata");
 
   	  generate_goto_trace_in_graphml_format(
+  		true,
         tokenizer_path,
         graphml_output_filename,
         ns,
@@ -182,6 +183,7 @@ void bmct::error_trace(smt_convt &smt_conv,
   {
     case ui_message_handlert::GRAPHML:
       generate_goto_trace_in_graphml_format(
+    	false,
         tokenizer_path,
         graphml_output_filename,
         ns,

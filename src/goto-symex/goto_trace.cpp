@@ -241,7 +241,113 @@ show_state_header(
   out << "----------------------------------------------------" << std::endl;
 }
 
-void generate_goto_trace_in_graphml_format(std::string & tokenizer_path,
+std::string
+get_varname_from_guard (
+  goto_tracet::stepst::const_iterator &it,
+  const goto_tracet &goto_trace __attribute__((unused)))
+{
+  std::string varname;
+  exprt old_irep_guard = migrate_expr_back(it->pc->guard);
+  exprt guard_operand = old_irep_guard.op0();
+  if (!guard_operand.operands().empty()) {
+    if (!guard_operand.op0().identifier().as_string().empty()) {
+      char identstr[guard_operand.op0().identifier().as_string().length()];
+      strcpy(identstr, guard_operand.op0().identifier().c_str());
+      int j = 0;
+      char * tok;
+      tok = strtok(identstr, "::");
+      while (tok != NULL) {
+	if (j == 4)
+	  varname = tok;
+	tok = strtok(NULL, "::");
+	j++;
+      }
+    }
+  }
+  return varname;
+}
+
+void
+get_metada_from_llvm(
+  goto_tracet::stepst::const_iterator &it, const goto_tracet &goto_trace)
+{
+  char line[it->pc->location.get_line().as_string().length()];
+  strcpy(line, it->pc->location.get_line().c_str());
+  if (!is_nil_expr(it->rhs) && is_struct_type(it->rhs)) {
+    struct_type2t &struct_type =
+      const_cast<struct_type2t&>(to_struct_type(it->original_lhs->type));
+
+    std::string ident = to_symbol2t(it->original_lhs).get_symbol_name();
+    std::string struct_name = ident.substr(ident.find_last_of(":") + 1);
+
+    u_int i = 0, j = 0;
+    for (std::vector<type2tc>::const_iterator itt = struct_type.members.begin();
+         itt != struct_type.members.end(); itt++, i++)
+    {
+      std::string comp_name = struct_type.member_names[j].as_string();
+      std::string key_map = struct_name + "." +
+                            struct_type.member_names[j].as_string().c_str();
+      if (goto_trace.llvm_varmap.find(key_map) !=
+          goto_trace.llvm_varmap.end() ) {
+	std::string newname = goto_trace.llvm_varmap.find(key_map)->second;
+	struct_type.member_names[j] = irep_idt(newname);
+      }
+      j++;
+    }
+  }
+  if (!goto_trace.llvm_linemap.find(line)->second.empty()) {
+    char VarInfo[goto_trace.llvm_linemap.find(line)->second.length()];
+    if (!goto_trace.llvm_linemap.find(line)->second.empty()) {
+      strcpy(VarInfo, goto_trace.llvm_linemap.find(line)->second.c_str());
+    }
+    char * pch;
+    pch = strtok(VarInfo, "@#");
+    int k = 0;
+    while (pch != NULL) {
+      if (k == 0) const_cast<goto_tracet*>(&goto_trace)->FileName = pch;
+      if (k == 1) const_cast<goto_tracet*>(&goto_trace)->LineNumber = pch;
+      if (k == 2) const_cast<goto_tracet*>(&goto_trace)->FuncName = pch;
+      if (k == 3) const_cast<goto_tracet*>(&goto_trace)->VarName = pch;
+      if (k == 4) const_cast<goto_tracet*>(&goto_trace)->OrigVarName = pch;
+      pch = strtok(NULL, "@#");
+      k++;
+    }
+
+    //********************change indentifier***********************************/
+    if (!is_nil_expr(it->original_lhs) && is_symbol2t(it->original_lhs)) {
+      expr2tc &lhs = const_cast<expr2tc&>(it->original_lhs);
+      char identstr[to_symbol2t(it->original_lhs).get_symbol_name().size()];
+      strcpy(identstr, to_symbol2t(it->original_lhs).get_symbol_name().c_str());
+      int j = 0;
+      char * tok;
+      tok = strtok(identstr, "::");
+      std::string newidentifier;
+      while (tok != NULL) {
+	if (j <= 1) newidentifier = newidentifier + tok + "::";
+	if (j == 2) newidentifier = newidentifier + goto_trace.FuncName + "::";
+	if (j == 3) newidentifier = newidentifier + tok + "::";
+	if (j == 4) {
+	  if (!goto_trace.OrigVarName.empty()) newidentifier = newidentifier +
+	                                                       goto_trace.
+	                                                       OrigVarName;
+	  else newidentifier = newidentifier + tok;
+	}
+	tok = strtok(NULL, "::");
+	j++;
+      }
+      lhs = symbol2tc(lhs->type, irep_idt(newidentifier));
+    }
+    //**********************************************************************/
+
+    const_cast<locationt*>(&it->pc->location)->set_file(goto_trace.FileName);
+    const_cast<locationt*>(&it->pc->location)->set_line(goto_trace.LineNumber);
+    const_cast<locationt*>(&it->pc->location)->set_function(goto_trace.FuncName);
+  }
+}
+
+void generate_goto_trace_in_graphml_format(
+	const bool is_correctness,
+	std::string & tokenizer_path,
     std::string & filename, const namespacet & ns,
     const goto_tracet & goto_trace)
 {
@@ -250,7 +356,6 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path,
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
   std::map<int, std::map<int, std::string> > mapped_tokens;
-
 
   bool already_initialized = false;
   boost::property_tree::ptree last_created_node;
@@ -430,7 +535,7 @@ void generate_goto_trace_in_graphml_format(std::string & tokenizer_path,
     last_created_node = current_node;
   }
 
-  if (already_initialized == true){
+  if (already_initialized == true && !is_correctness){
     /* violation node */
     boost::property_tree::ptree violation_node;
     node_p violation_node_p;
