@@ -116,6 +116,9 @@ bool language_uit::parse(const std::string &filename)
     return true;
   }
 
+  if(config.options.get_bool_option("llvm-frontend"))
+    mode++;
+
   // Check that it opens
   std::ifstream infile(filename.c_str());
   if(!infile)
