@@ -193,7 +193,7 @@ void add_cprover_library(
   DeleteFile(symname_buffer);
 #endif
 
-  forall_symbols(it, new_ctx.symbols) {
+  forall_symbols(it, new_ctx.get_unordered_symbols()) {
     generate_symbol_deps(it->first, it->second.value, symbol_deps);
     generate_symbol_deps(it->first, it->second.type, symbol_deps);
   }
@@ -220,9 +220,9 @@ void add_cprover_library(
    * haven't pulled in, then pull them in. We finish when we've made a pass
    * that adds no new symbols. */
 
-  forall_symbols(it, new_ctx.symbols) {
-    symbolst::const_iterator used_sym = context.symbols.find(it->second.name);
-    if (used_sym != context.symbols.end() && used_sym->second.value.is_nil()){
+  forall_symbols(it, new_ctx.get_unordered_symbols()) {
+    symbolst::const_iterator used_sym = context.get_unordered_symbols().find(it->second.name);
+    if (used_sym != context.get_unordered_symbols().end() && used_sym->second.value.is_nil()){
       store_ctx.add(it->second);
       ingest_symbol(it->first, symbol_deps, to_include);
     }
@@ -231,8 +231,8 @@ void add_cprover_library(
   for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
             nameit != to_include.end(); nameit++) {
 
-    symbolst::const_iterator used_sym = new_ctx.symbols.find(*nameit);
-    if (used_sym != new_ctx.symbols.end()) {
+    symbolst::const_iterator used_sym = new_ctx.get_unordered_symbols().find(*nameit);
+    if (used_sym != new_ctx.get_unordered_symbols().end()) {
       store_ctx.add(used_sym->second);
       ingest_symbol(used_sym->first, symbol_deps, to_include);
     }

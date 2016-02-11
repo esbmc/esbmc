@@ -33,9 +33,9 @@ void c_finalize_expression(
     if(expr.type().id()=="incomplete_array")
     {
       symbolst::const_iterator it=
-        context.symbols.find(expr.identifier());
+        context.get_unordered_symbols().find(expr.identifier());
 
-      if(it==context.symbols.end())
+      if(it==context.get_unordered_symbols().end())
       {
         message_streamt message_stream(message_handler);
         message_stream.str
@@ -44,7 +44,7 @@ void c_finalize_expression(
         message_stream.error();
         throw 0;
       }
-      
+
       const symbolt &symbol=it->second;
 
       if(symbol.type.is_array())
@@ -57,7 +57,7 @@ void c_finalize_expression(
           << "symbol `" << symbol.display_name()
           << "' has incomplete type";
         message_stream.error();
-        throw 0;            
+        throw 0;
       }
       else
       {
@@ -67,7 +67,7 @@ void c_finalize_expression(
           << "symbol `" << symbol.display_name()
           << "' has unexpected type";
         message_stream.error();
-        throw 0;      
+        throw 0;
       }
     }
   }
@@ -95,7 +95,7 @@ bool c_final(contextt &context, message_handlert &message_handler)
 
   try
   {
-    Forall_symbols(it, context.symbols)
+    Forall_symbols(it, context.get_unordered_symbols())
     {
       symbolt &symbol=it->second;
 

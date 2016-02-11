@@ -56,13 +56,13 @@ void static_lifetime_init(
   dest=code_blockt();
 
   // Do assignments based on "value".
-  forall_symbols(it, context.symbols)
+  forall_symbols(it, context.get_unordered_symbols())
     if(it->second.static_lifetime)
       init_variable(dest, it->second);
 
   // call designated "initialization" functions
 
-  forall_symbols(it, context.symbols)
+  forall_symbols(it, context.get_unordered_symbols())
   {
     if(it->second.type.initialization() &&
        it->second.type.is_code())
@@ -102,9 +102,9 @@ bool c_main(
     forall_symbol_base_map(it, context.symbol_base_map, config.main)
     {
       // look it up
-      symbolst::const_iterator s_it=context.symbols.find(it->second);
+      symbolst::const_iterator s_it=context.get_unordered_symbols().find(it->second);
 
-      if(s_it==context.symbols.end()) continue;
+      if(s_it==context.get_unordered_symbols().end()) continue;
 
       if(s_it->second.type.is_code())
         matches.push_back(it->second);
@@ -137,9 +137,9 @@ bool c_main(
     main_symbol=standard_main;
 
   // look it up
-  symbolst::const_iterator s_it=context.symbols.find(main_symbol);
+  symbolst::const_iterator s_it=context.get_unordered_symbols().find(main_symbol);
 
-  if(s_it==context.symbols.end())
+  if(s_it==context.get_unordered_symbols().end())
     return false; // give up, no main
 
   const symbolt &symbol=s_it->second;

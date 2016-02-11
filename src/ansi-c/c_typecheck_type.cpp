@@ -106,8 +106,8 @@ void c_typecheck_baset::typecheck_code_type(code_typet &type)
             identifier=m_it->second;
         }
 
-        symbolst::iterator s_it=context.symbols.find(identifier);
-        if(s_it==context.symbols.end())
+        symbolst::iterator s_it=context.get_unordered_symbols().find(identifier);
+        if(s_it==context.get_unordered_symbols().end())
         {
           err_location(argument);
           throw "failed to find K&R function argument symbol";
@@ -385,9 +385,9 @@ void c_typecheck_baset::typecheck_symbol_type(typet &type)
 
   const irep_idt &identifier=type.identifier();
 
-  symbolst::const_iterator s_it=context.symbols.find(identifier);
+  symbolst::const_iterator s_it=context.get_unordered_symbols().find(identifier);
 
-  if(s_it==context.symbols.end())
+  if(s_it==context.get_unordered_symbols().end())
   {
     err_location(type);
     str << "type symbol `" << identifier << "' not found";

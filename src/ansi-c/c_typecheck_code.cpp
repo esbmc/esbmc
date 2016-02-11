@@ -275,9 +275,9 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   // look it up
   const irep_idt &identifier=code.op0().identifier();
 
-  symbolst::iterator s_it=context.symbols.find(identifier);
+  symbolst::iterator s_it=context.get_unordered_symbols().find(identifier);
 
-  if(s_it==context.symbols.end())
+  if(s_it==context.get_unordered_symbols().end())
   {
     err_location(code);
     throw "failed to find decl symbol in context";

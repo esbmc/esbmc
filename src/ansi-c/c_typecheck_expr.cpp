@@ -230,9 +230,9 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   }
 
   const irep_idt &identifier=type.identifier();
-  symbolst::const_iterator s_it=context.symbols.find(identifier);
+  symbolst::const_iterator s_it=context.get_unordered_symbols().find(identifier);
 
-  if(s_it==context.symbols.end())
+  if(s_it==context.get_unordered_symbols().end())
   {
     err_location(expr);
     str << "failed to find symbol `" << identifier << "'";
@@ -329,9 +329,9 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   const irep_idt &identifier=expr.identifier();
 
   // look it up
-  symbolst::const_iterator s_it=context.symbols.find(identifier);
+  symbolst::const_iterator s_it=context.get_unordered_symbols().find(identifier);
 
-  if(s_it==context.symbols.end())
+  if(s_it==context.get_unordered_symbols().end())
   {
     err_location(expr);
     str << "failed to find symbol `" << identifier << "'";
@@ -1423,7 +1423,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   {
     replace_symbol(f_op);
 
-    if(context.symbols.find(f_op.identifier())==context.symbols.end())
+    if(context.get_unordered_symbols().find(f_op.identifier())==context.get_unordered_symbols().end())
     {
       // maybe this is an undeclared function
       // let's just add it
