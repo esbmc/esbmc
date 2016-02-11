@@ -272,7 +272,7 @@ void language_uit::show_symbol_table_plain(std::ostream &out)
 
   const namespacet ns(context);
 
-  forall_symbols(it, context.symbols)
+  forall_symbols(it, context.get_unordered_symbols())
   {
     const symbolt &symbol=it->second;
 
