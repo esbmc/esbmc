@@ -82,7 +82,7 @@ void goto_convert_functionst::goto_convert()
 
   symbol_listt symbol_list;
 
-  Forall_symbols(it, context.symbols)
+  Forall_symbols(it, context.get_unordered_symbols())
   {
     if(!it->second.is_type && it->second.type.is_code())
       symbol_list.push_back(&it->second);
@@ -187,8 +187,8 @@ Function: goto_convert_functionst::convert_function
 
 void goto_convert_functionst::convert_function(const irep_idt &identifier)
 {
-  symbolst::iterator s_it=context.symbols.find(identifier);
-  assert(s_it != context.symbols.end());
+  symbolst::iterator s_it=context.get_unordered_symbols().find(identifier);
+  assert(s_it != context.get_unordered_symbols().end());
 
   convert_function(s_it->second);
 }
@@ -507,7 +507,7 @@ goto_convert_functionst::wallop_type(irep_idt name,
     wallop_type(*it, typenames, sname);
 
   // And finally perform renaming.
-  symbolst::iterator it = context.symbols.find(name);
+  symbolst::iterator it = context.get_unordered_symbols().find(name);
   rename_types(it->second.type, it->second, sname);
   deps.clear();
   return;
@@ -526,7 +526,7 @@ goto_convert_functionst::thrash_type_symbols(void)
   // thing has no types, and there's no way (in C++ converted code at least)
   // to decide what name is a type or not.
   typename_sett names;
-  forall_symbols(it, context.symbols) {
+  forall_symbols(it, context.get_unordered_symbols()) {
     collect_expr(it->second.value, names);
     collect_type(it->second.type, names);
   }
@@ -535,7 +535,7 @@ goto_convert_functionst::thrash_type_symbols(void)
 
   typename_mapt typenames;
 
-  forall_symbols(it, context.symbols) {
+  forall_symbols(it, context.get_unordered_symbols()) {
     if (names.find(it->second.name) != names.end()) {
       typename_sett list;
       collect_expr(it->second.value, list);
@@ -556,7 +556,7 @@ goto_convert_functionst::thrash_type_symbols(void)
     wallop_type(it->first, typenames, it->first);
 
   // And now all the types have a fixed form, rename types in all existing code.
-  Forall_symbols(it, context.symbols) {
+  Forall_symbols(it, context.get_unordered_symbols()) {
     rename_types(it->second.type, it->second, it->first);
     rename_exprs(it->second.value, it->second, it->first);
   }
@@ -575,7 +575,7 @@ goto_convert_functionst::fixup_unions(void)
   // them _as_ unions get converted into byte array accesses at the pointer
   // dereference layer.
 
-   Forall_symbols(it, context.symbols) {
+   Forall_symbols(it, context.get_unordered_symbols()) {
     fix_union_type(it->second.type, false);
     fix_union_expr(it->second.value);
   }

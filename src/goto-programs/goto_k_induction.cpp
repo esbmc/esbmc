@@ -34,7 +34,7 @@ void add_global_vars(const exprt& expr)
 
 void get_global_vars(contextt &context)
 {
-  forall_symbols(it, context.symbols) {
+  forall_symbols(it, context.get_unordered_symbols()) {
     if(it->second.static_lifetime && !it->second.type.is_pointer())
     {
       exprt s = symbol_expr(it->second);

@@ -34,9 +34,9 @@ public:
   {
 	const irep_idt identifier="tmp_"+id2string(object);
 
-    const symbolst::const_iterator it=context.symbols.find(identifier);
+    const symbolst::const_iterator it=context.get_unordered_symbols().find(identifier);
 
-    if(it!=context.symbols.end())
+    if(it!=context.get_unordered_symbols().end())
       return it->second;
 
     w_guards.push_back(identifier);

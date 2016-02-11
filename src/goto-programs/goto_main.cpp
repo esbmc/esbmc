@@ -116,9 +116,9 @@ void goto_convert(
 {
   // find main symbol
   const symbolst::const_iterator s_it=
-    context.symbols.find("main");
+    context.get_unordered_symbols().find("main");
 
-  if(s_it==context.symbols.end())
+  if(s_it==context.get_unordered_symbols().end())
     throw "failed to find main symbol";
 
   const symbolt &symbol=s_it->second;
