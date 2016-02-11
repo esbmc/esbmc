@@ -1022,7 +1022,9 @@ execution_statet::init_property_monitors(void)
   std::map<std::string, std::string> strings;
 
   symbolst::const_iterator it;
-  for (it = new_context.symbols.begin(); it != new_context.symbols.end(); it++){
+  for(it = new_context.get_unordered_symbols().begin();
+      it != new_context.get_unordered_symbols().end(); it++)
+  {
     if (it->first.as_string().find("__ESBMC_property_") != std::string::npos) {
       // Munge back into the shape of an actual string
       std::string str = "";
