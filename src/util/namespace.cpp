@@ -29,10 +29,10 @@ unsigned namespacet::get_max(const std::string &prefix) const
   unsigned m=0;
 
   if(context1!=NULL)
-    m=std::max(m, ::get_max(prefix, context1->symbols));
+    m=std::max(m, ::get_max(prefix, context1->get_unordered_symbols()));
 
   if(context2!=NULL)
-    m=std::max(m, ::get_max(prefix, context2->symbols));
+    m=std::max(m, ::get_max(prefix, context2->get_unordered_symbols()));
 
   return m;
 }
@@ -45,9 +45,9 @@ bool namespacet::lookup(
 
   if(context1!=NULL)
   {
-    it=context1->symbols.find(name);
+    it=context1->get_unordered_symbols().find(name);
 
-    if(it!=context1->symbols.end())
+    if(it!=context1->get_unordered_symbols().end())
     {
       symbol=&(it->second);
       return false;
@@ -56,9 +56,9 @@ bool namespacet::lookup(
 
   if(context2!=NULL)
   {
-    it=context2->symbols.find(name);
+    it=context2->get_unordered_symbols().find(name);
 
-    if(it!=context2->symbols.end())
+    if(it!=context2->get_unordered_symbols().end())
     {
       symbol=&(it->second);
       return false;
