@@ -46,7 +46,6 @@ class contextt
 public:
   typedef ::symbolst symbolst;
 
-  symbolst symbols;
   symbol_base_mapt symbol_base_map;
   symbol_module_mapt symbol_module_map;
 
@@ -78,6 +77,11 @@ public:
   {
     return symbols.find(name)!=symbols.end();
   }
+
+  const symbolst& get_unordered_symbols() const;
+
+private:
+  symbolst symbols;
 };
 
 std::ostream &operator << (std::ostream &out, const contextt &context);
