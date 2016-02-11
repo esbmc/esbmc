@@ -78,7 +78,12 @@ public:
     return symbols.find(name)!=symbols.end();
   }
 
-  const symbolst& get_unordered_symbols() const;
+  const symbolst& get_unordered_symbols() const
+  { return symbols; }
+
+  symbolst& get_unordered_symbols()
+  { return symbols; }
+
 
 private:
   symbolst symbols;
