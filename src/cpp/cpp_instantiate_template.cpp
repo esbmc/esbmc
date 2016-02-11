@@ -163,11 +163,11 @@ void cpp_typecheckt::mark_template_instantiated(
     const irep_idt &template_pattern_name,
     const irep_idt &instantiated_symbol_name)
 {
-  assert(context.symbols.find(template_symbol_name) != context.symbols.end());
+  assert(context.get_unordered_symbols().find(template_symbol_name) != context.get_unordered_symbols().end());
 
   // Set a flag in the template's value indicating that this has been
   // instantiated, and what the instantiated things symbol is.
-  symbolt &s=context.symbols.find(template_symbol_name)->second;
+  symbolt &s=context.get_unordered_symbols().find(template_symbol_name)->second;
   irept &new_instances = s.value.add("template_instances");
   new_instances.set(template_pattern_name, instantiated_symbol_name);
   return;
@@ -224,8 +224,8 @@ cpp_typecheckt::handle_recursive_template_instance(
       // (Unless it already exists).
 
       irep_idt link_symbol = instance + "$recurse";
-      symbolst::const_iterator it = context.symbols.find(link_symbol);
-      if (it != context.symbols.end())
+      symbolst::const_iterator it = context.get_unordered_symbols().find(link_symbol);
+      if (it != context.get_unordered_symbols().end())
         return &it->second;
 
       // Nope; create it.
@@ -263,11 +263,11 @@ bool cpp_typecheckt::has_incomplete_args(
     _arguments.begin(); it != _arguments.end(); it++)
   {
     const typet& e = it->type();
-    if (context.symbols.find(e.identifier())
-      != context.symbols.end())
+    if (context.get_unordered_symbols().find(e.identifier())
+      != context.get_unordered_symbols().end())
     {
       symbolt &arg_sym =
-        context.symbols.find(e.identifier())->second;
+        context.get_unordered_symbols().find(e.identifier())->second;
 
       if (arg_sym.type.id() == "incomplete_struct")
       {
@@ -426,7 +426,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   // been instantiated using these arguments
   {
     // need non-const handle on template symbol
-    symbolt &s=context.symbols.find(template_symbol.name)->second;
+    symbolt &s=context.get_unordered_symbols().find(template_symbol.name)->second;
     irept &instantiated_with=s.value.add("instantiated_with");
     instantiated_with.get_sub().push_back(specialization_template_args);
   }
@@ -540,9 +540,9 @@ const symbolt &cpp_typecheckt::instantiate_template(
   if(is_template_method)
   {
     contextt::symbolst::iterator it=
-      context.symbols.find(class_name);
+      context.get_unordered_symbols().find(class_name);
 
-    assert(it!=context.symbols.end());
+    assert(it!=context.get_unordered_symbols().end());
 
     symbolt &symb = it->second;
 
@@ -590,7 +590,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
     irep_idt sym_name = to_struct_type(symb.type).components().back().name();
     mark_template_instantiated(template_symbol.name, subscope_name, sym_name);
-    symbolt &final_sym = context.symbols.find(sym_name)->second;
+    symbolt &final_sym = context.get_unordered_symbols().find(sym_name)->second;
 
     // Propagate the '#template' attributes
     final_sym.type.set("#template", new_decl.find("#template"));

@@ -260,7 +260,7 @@ void cpp_typecheckt::static_initialization()
   disable_access_control = true;
 
   // first do zero initialization
-  forall_symbols(s_it, context.symbols)
+  forall_symbols(s_it, context.get_unordered_symbols())
   {
     const symbolt &symbol=s_it->second;
 
@@ -288,7 +288,7 @@ void cpp_typecheckt::static_initialization()
 
   while(!dinis.empty())
   {
-    symbolt &symbol=context.symbols.find(dinis.front())->second;
+    symbolt &symbol=context.get_unordered_symbols().find(dinis.front())->second;
     dinis.pop_front();
 
     if(symbol.is_extern)
@@ -386,7 +386,7 @@ void cpp_typecheckt::do_not_typechecked()
 
     std::vector<symbolt*> to_typecheck_list;
 
-    Forall_symbols(s_it, context.symbols)
+    Forall_symbols(s_it, context.get_unordered_symbols())
     {
       symbolt &symbol=s_it->second;
 
@@ -423,7 +423,7 @@ void cpp_typecheckt::do_not_typechecked()
   }
   while(cont);
 
-  Forall_symbols(s_it, context.symbols)
+  Forall_symbols(s_it, context.get_unordered_symbols())
   {
     symbolt &symbol=s_it->second;
     if(symbol.value.id()=="cpp_not_typechecked")
@@ -445,9 +445,9 @@ Function: cpp_typecheckt::clean_up
 
 void cpp_typecheckt::clean_up()
 {
-  contextt::symbolst::iterator it=context.symbols.begin();
+  contextt::symbolst::iterator it=context.get_unordered_symbols().begin();
 
-  while(it!=context.symbols.end())
+  while(it!=context.get_unordered_symbols().end())
   {
     contextt::symbolst::iterator cur_it = it;
     it++;
@@ -456,7 +456,7 @@ void cpp_typecheckt::clean_up()
 
     if(symbol.type.get_bool("is_template"))
     {
-      context.symbols.erase(cur_it);
+      context.get_unordered_symbols().erase(cur_it);
       continue;
     }
     else if(symbol.type.id()=="struct" ||

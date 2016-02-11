@@ -117,9 +117,9 @@ symbolt &cpp_declarator_convertert::convert(
 
     // try static first
     contextt::symbolst::iterator c_it=
-      cpp_typecheck.context.symbols.find(final_identifier);
+      cpp_typecheck.context.get_unordered_symbols().find(final_identifier);
 
-    if(c_it==cpp_typecheck.context.symbols.end())
+    if(c_it==cpp_typecheck.context.get_unordered_symbols().end())
     {
       // adjust type if it's a non-static member function
       if(final_type.id()=="code")
@@ -129,9 +129,9 @@ symbolt &cpp_declarator_convertert::convert(
       get_final_identifier();
 
       // try again
-      c_it=cpp_typecheck.context.symbols.find(final_identifier);
+      c_it=cpp_typecheck.context.get_unordered_symbols().find(final_identifier);
 
-      if(c_it==cpp_typecheck.context.symbols.end())
+      if(c_it==cpp_typecheck.context.get_unordered_symbols().end())
       {
         cpp_typecheck.err_location(declarator.name());
         cpp_typecheck.str << "member `" << base_name
@@ -141,7 +141,7 @@ symbolt &cpp_declarator_convertert::convert(
       }
     }
 
-    assert(c_it!=cpp_typecheck.context.symbols.end());
+    assert(c_it!=cpp_typecheck.context.get_unordered_symbols().end());
 
     symbolt &symbol=c_it->second;
 
@@ -209,9 +209,9 @@ symbolt &cpp_declarator_convertert::convert(
 
     // already there?
     contextt::symbolst::iterator c_it=
-      cpp_typecheck.context.symbols.find(final_identifier);
+      cpp_typecheck.context.get_unordered_symbols().find(final_identifier);
 
-    if(c_it==cpp_typecheck.context.symbols.end())
+    if(c_it==cpp_typecheck.context.get_unordered_symbols().end())
       return convert_new_symbol(storage_spec, member_spec, declarator);
 
     symbolt &symbol=c_it->second;

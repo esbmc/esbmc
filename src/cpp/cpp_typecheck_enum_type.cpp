@@ -119,9 +119,9 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
   // check if we have it
 
   contextt::symbolst::iterator previous_symbol=
-    context.symbols.find(symbol_name);
+    context.get_unordered_symbols().find(symbol_name);
 
-  if(previous_symbol!=context.symbols.end())
+  if(previous_symbol!=context.get_unordered_symbols().end())
   {
     // we do!
 

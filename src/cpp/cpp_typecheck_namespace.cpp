@@ -43,9 +43,9 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
     cpp_scopes.current_scope().prefix+id2string(final_name);
 
   contextt::symbolst::const_iterator it=
-    context.symbols.find(identifier);
+    context.get_unordered_symbols().find(identifier);
 
-  if(it!=context.symbols.end())
+  if(it!=context.get_unordered_symbols().end())
   {
     if(namespace_spec.alias().is_not_nil())
     {

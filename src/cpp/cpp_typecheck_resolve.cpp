@@ -1998,16 +1998,16 @@ exprt cpp_typecheck_resolvet::resolve(
   // XXX - this isn't going to work recursively.
   if (want == VAR && result.id() == "symbol") {
     symbolt &sym =
-      cpp_typecheck.context.symbols.find(result.identifier())->second;
+      cpp_typecheck.context.get_unordered_symbols().find(result.identifier())->second;
     if (sym.value.get("#speculative_template") == "1") {
       sym.value.set("#template_in_use", "1");
     }
   } else if (want == VAR && result.id() == "member") {
     // Is this a fake-member, i.e. a member with component_name == symbol name?
-    if (cpp_typecheck.context.symbols.find(result.component_name()) !=
-        cpp_typecheck.context.symbols.end()) {
+    if (cpp_typecheck.context.get_unordered_symbols().find(result.component_name()) !=
+        cpp_typecheck.context.get_unordered_symbols().end()) {
       symbolt &sym =
-        cpp_typecheck.context.symbols.find(result.component_name())->second;
+        cpp_typecheck.context.get_unordered_symbols().find(result.component_name())->second;
       if (sym.value.get("#speculative_template") == "1") {
         sym.value.set("#template_in_use", "1");
       }
@@ -2031,11 +2031,11 @@ void cpp_typecheck_resolvet::check_incomplete_template_class(exprt result, wantt
   if (t.identifier() == irep_idt())
     return;
 
-  if (cpp_typecheck.context.symbols.find(t.identifier())
-    != cpp_typecheck.context.symbols.end())
+  if (cpp_typecheck.context.get_unordered_symbols().find(t.identifier())
+    != cpp_typecheck.context.get_unordered_symbols().end())
   {
     symbolt &sym =
-      cpp_typecheck.context.symbols.find(t.identifier())->second;
+      cpp_typecheck.context.get_unordered_symbols().find(t.identifier())->second;
 
     // It is a template and it wasn't instantiated?
     if (sym.type.id() == "incomplete_struct"
@@ -2044,10 +2044,10 @@ void cpp_typecheck_resolvet::check_incomplete_template_class(exprt result, wantt
       exprt template_expr = static_cast<const exprt&>(sym.type.find(
         "#template"));
 
-      if (cpp_typecheck.context.symbols.find(template_expr.id())
-        != cpp_typecheck.context.symbols.end())
+      if (cpp_typecheck.context.get_unordered_symbols().find(template_expr.id())
+        != cpp_typecheck.context.get_unordered_symbols().end())
       {
-        symbolt &template_sym = cpp_typecheck.context.symbols.find(
+        symbolt &template_sym = cpp_typecheck.context.get_unordered_symbols().find(
           template_expr.id())->second;
 
         // If it is nil, it was forward declared, when it got a body,

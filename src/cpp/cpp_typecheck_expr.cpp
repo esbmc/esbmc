@@ -1359,9 +1359,9 @@ void cpp_typecheckt::typecheck_expr_member(
   {
     // Check if the function body has to be typechecked
     contextt::symbolst::iterator it=
-      context.symbols.find(component_name);
+      context.get_unordered_symbols().find(component_name);
 
-    assert(it!=context.symbols.end());
+    assert(it!=context.get_unordered_symbols().end());
 
     symbolt &func_symb=it->second;
 
@@ -2330,7 +2330,7 @@ void cpp_typecheckt::typecheck_method_application(
   if(symbol.value.id()=="cpp_not_typechecked" &&
       !symbol.value.get_bool("is_used"))
   {
-    context.symbols[symbol.name].value.set("is_used", true);
+    context.get_unordered_symbols()[symbol.name].value.set("is_used", true);
   }
 }
 
@@ -2377,7 +2377,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
       if(expr.op0().identifier()!="")
       {
         symbolt &symbol=
-            context.symbols.find(expr.op0().identifier())->second;
+            context.get_unordered_symbols().find(expr.op0().identifier())->second;
         if(expr.op1().has_operands())
         {
           exprt &initializer=
@@ -2405,7 +2405,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
             if(!is_included) //find
             {
               symbolt &symbol_temp=
-                  context.symbols.find(expr.op0().op0().identifier())->second;
+                  context.get_unordered_symbols().find(expr.op0().op0().identifier())->second;
               symbol_temp.value.id("array");
               symbol_temp.value.operands().push_back(initializer.op0());
             }
@@ -2694,9 +2694,9 @@ void cpp_typecheckt::typecheck_expr_function_identifier(exprt &expr)
   {
     // Check if the function body has to be typechecked
     contextt::symbolst::iterator it=
-      context.symbols.find(expr.identifier());
+      context.get_unordered_symbols().find(expr.identifier());
 
-    assert(it != context.symbols.end());
+    assert(it != context.get_unordered_symbols().end());
 
     symbolt &func_symb = it->second;
 

@@ -234,9 +234,9 @@ void cpp_typecheckt::typecheck_compound_type(
   // check if we have it already
 
   contextt::symbolst::iterator previous_symbol=
-    context.symbols.find(symbol_name);
+    context.get_unordered_symbols().find(symbol_name);
 
-  if(previous_symbol!=context.symbols.end())
+  if(previous_symbol!=context.get_unordered_symbols().end())
   {
     // we do!
 
@@ -576,9 +576,9 @@ void cpp_typecheckt::typecheck_compound_declarator(
       irep_idt vt_name = "virtual_table::"+symbol.name.as_string();
 
       contextt::symbolst::iterator vtit =
-        context.symbols.find(vt_name);
+        context.get_unordered_symbols().find(vt_name);
 
-      if(vtit == context.symbols.end())
+      if(vtit == context.get_unordered_symbols().end())
       {
         // first time: create a virtual-table symbol type
         symbolt vt_symb_type;
@@ -595,7 +595,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
         bool failed = context.move(vt_symb_type);
         assert(!failed);
         (void)failed; //ndebug
-        vtit = context.symbols.find(vt_name);
+        vtit = context.get_unordered_symbols().find(vt_name);
 
         // add a virtual-table pointer
         struct_typet::componentt compo;
@@ -1492,9 +1492,9 @@ void cpp_typecheckt::typecheck_member_function(
     str << "failed to insert new symbol: " << symbol.name.c_str() << std::endl;
 
     contextt::symbolst::iterator symb_it =
-      context.symbols.find(symbol.name);
+      context.get_unordered_symbols().find(symbol.name);
 
-    if(symb_it != context.symbols.end())
+    if(symb_it != context.get_unordered_symbols().end())
     {
       str << "name of previous symbol: " << symb_it->second.name << std::endl;
       str << "location of previous symbol: ";
@@ -1628,7 +1628,7 @@ void cpp_typecheckt::convert_compound_ano_union(
   struct_typet::componentst &components)
 {
   symbolt &struct_union_symbol=
-    context.symbols[follow(declaration.type()).name()];
+    context.get_unordered_symbols()[follow(declaration.type()).name()];
 
   if(declaration.storage_spec().is_static() ||
      declaration.storage_spec().is_mutable())
