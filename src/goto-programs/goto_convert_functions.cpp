@@ -187,10 +187,10 @@ Function: goto_convert_functionst::convert_function
 
 void goto_convert_functionst::convert_function(const irep_idt &identifier)
 {
-  symbolst::iterator s_it=context.get_unordered_symbols().find(identifier);
-  assert(s_it != context.get_unordered_symbols().end());
+  symbolt *s = context.find_symbol(identifier);
+  assert(s != nullptr);
 
-  convert_function(s_it->second);
+  convert_function(*s);
 }
 
 /*******************************************************************\
@@ -507,8 +507,8 @@ goto_convert_functionst::wallop_type(irep_idt name,
     wallop_type(*it, typenames, sname);
 
   // And finally perform renaming.
-  symbolst::iterator it = context.get_unordered_symbols().find(name);
-  rename_types(it->second.type, it->second, sname);
+  symbolt* s = context.find_symbol(name);
+  rename_types(s->type, *s, sname);
   deps.clear();
   return;
 }
