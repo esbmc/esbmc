@@ -445,18 +445,13 @@ Function: cpp_typecheckt::clean_up
 
 void cpp_typecheckt::clean_up()
 {
-  contextt::symbolst::iterator it=context.get_unordered_symbols().begin();
-
-  while(it!=context.get_unordered_symbols().end())
+  Forall_symbols(it, context.get_unordered_symbols())
   {
-    contextt::symbolst::iterator cur_it = it;
-    it++;
-
-    symbolt &symbol = cur_it->second;
+    symbolt &symbol = it->second;
 
     if(symbol.type.get_bool("is_template"))
     {
-      context.get_unordered_symbols().erase(cur_it);
+      context.get_unordered_symbols().erase(it);
       continue;
     }
     else if(symbol.type.id()=="struct" ||
