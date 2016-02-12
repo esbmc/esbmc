@@ -88,3 +88,18 @@ const symbolt* contextt::find_symbol(irep_idt name) const
 
   return nullptr;
 }
+
+void contextt::erase_symbol(irep_idt name)
+{
+  symbolst::iterator it = symbols.find(name);
+  assert(it != symbols.end());
+
+  // Remove from map
+  symbols.erase(name);
+
+  // Remove from vector
+  ordered_symbols.erase(
+    std::remove_if(ordered_symbols.begin(), ordered_symbols.end(),
+      [&name](const symbolt *s) { return s->name == name; }),
+    ordered_symbols.end());
+}

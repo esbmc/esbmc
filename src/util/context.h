@@ -102,6 +102,8 @@ public:
   symbolt* find_symbol(irep_idt name);
   const symbolt* find_symbol(irep_idt name) const;
 
+  void erase_symbol(irep_idt name);
+
 private:
   symbolst symbols;
   ordered_symbolst ordered_symbols;
