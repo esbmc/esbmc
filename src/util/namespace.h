@@ -50,8 +50,10 @@ public:
     return tmp;
   }
 
+  namespacet() = delete;
+
   namespacet(const contextt &_context)
-  { context1=&_context; context2=NULL; }
+  { context1=&_context; context2=nullptr; }
 
   namespacet(const contextt &_context1, const contextt &_context2)
   { context1=&_context1; context2=&_context2; }
