@@ -451,7 +451,7 @@ void cpp_typecheckt::clean_up()
 
     if(symbol.type.get_bool("is_template"))
     {
-      context.get_unordered_symbols().erase(it);
+      context.erase_symbol(it->first);
       continue;
     }
     else if(symbol.type.id()=="struct" ||

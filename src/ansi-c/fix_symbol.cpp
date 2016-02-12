@@ -56,7 +56,7 @@ void fix_symbolt::fix_context(contextt &context)
 
     symbolt s = *symb;
     s.name = t_it->second.identifier();
-    context.get_unordered_symbols().erase(t_it->first);
+    context.erase_symbol(t_it->first);
     context.move(s);
   }
 }
