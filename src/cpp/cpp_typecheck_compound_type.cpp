@@ -1623,8 +1623,8 @@ void cpp_typecheckt::convert_compound_ano_union(
   const irep_idt &access,
   struct_typet::componentst &components)
 {
-  symbolt &struct_union_symbol=
-    context.get_unordered_symbols()[follow(declaration.type()).name()];
+  symbolt &struct_union_symbol =
+    *context.find_symbol(follow(declaration.type()).name());
 
   if(declaration.storage_spec().is_static() ||
      declaration.storage_spec().is_mutable())

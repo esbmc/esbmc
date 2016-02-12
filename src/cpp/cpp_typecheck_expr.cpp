@@ -2328,7 +2328,7 @@ void cpp_typecheckt::typecheck_method_application(
   if(symbol.value.id()=="cpp_not_typechecked" &&
       !symbol.value.get_bool("is_used"))
   {
-    context.get_unordered_symbols()[symbol.name].value.set("is_used", true);
+    context.find_symbol(symbol.name)->value.set("is_used", true);
   }
 }
 
