@@ -32,10 +32,9 @@ void c_finalize_expression(
   {
     if(expr.type().id()=="incomplete_array")
     {
-      symbolst::const_iterator it=
-        context.get_unordered_symbols().find(expr.identifier());
+      const symbolt* s = context.find_symbol(expr.identifier());
 
-      if(it==context.get_unordered_symbols().end())
+      if(s == nullptr)
       {
         message_streamt message_stream(message_handler);
         message_stream.str
@@ -45,7 +44,7 @@ void c_finalize_expression(
         throw 0;
       }
 
-      const symbolt &symbol=it->second;
+      const symbolt &symbol = *s;
 
       if(symbol.type.is_array())
         expr.type()=symbol.type;

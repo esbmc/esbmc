@@ -362,7 +362,7 @@ void c_linkt::typecheck()
       unsigned counter=0;
       std::string newname=id2string(it->second.name);
 
-      while (context.get_unordered_symbols().find(newname)!=context.get_unordered_symbols().end())
+      while(context.find_symbol(newname) != nullptr)
       { // there is a clash, rename!
         counter++;
         newname = id2string(it->second.name) + "#-mc-" + i2string(counter);

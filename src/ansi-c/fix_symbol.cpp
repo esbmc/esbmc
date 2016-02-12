@@ -51,12 +51,12 @@ void fix_symbolt::fix_context(contextt &context)
       t_it!=type_map.end();
       t_it++)
   {
-    symbolst::iterator s_it=context.get_unordered_symbols().find(t_it->first);
-    assert(s_it!=context.get_unordered_symbols().end());
+    symbolt* symb = context.find_symbol(t_it->first);
+    assert(symb != nullptr);
 
-    symbolt s=s_it->second;
-    s.name=t_it->second.identifier();
-    context.get_unordered_symbols().erase(s_it);
+    symbolt s = *symb;
+    s.name = t_it->second.identifier();
+    context.get_unordered_symbols().erase(t_it->first);
     context.move(s);
   }
 }

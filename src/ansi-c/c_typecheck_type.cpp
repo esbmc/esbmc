@@ -106,14 +106,14 @@ void c_typecheck_baset::typecheck_code_type(code_typet &type)
             identifier=m_it->second;
         }
 
-        symbolst::iterator s_it=context.get_unordered_symbols().find(identifier);
-        if(s_it==context.get_unordered_symbols().end())
+        symbolt* s = context.find_symbol(identifier);
+        if(s == nullptr)
         {
           err_location(argument);
           throw "failed to find K&R function argument symbol";
         }
 
-        symbolt &symbol=s_it->second;
+        symbolt &symbol = *s;
 
         if(symbol.type.id()=="KnR")
         {
@@ -385,16 +385,15 @@ void c_typecheck_baset::typecheck_symbol_type(typet &type)
 
   const irep_idt &identifier=type.identifier();
 
-  symbolst::const_iterator s_it=context.get_unordered_symbols().find(identifier);
-
-  if(s_it==context.get_unordered_symbols().end())
+  symbolt* s = context.find_symbol(identifier);
+  if(s == nullptr)
   {
     err_location(type);
     str << "type symbol `" << identifier << "' not found";
     throw 0;
   }
 
-  const symbolt &symbol=s_it->second;
+  const symbolt &symbol = *s;
 
   if(!symbol.is_type)
   {
