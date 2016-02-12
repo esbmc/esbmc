@@ -45,6 +45,7 @@ class contextt
 {
 public:
   typedef ::symbolst symbolst;
+  typedef std::vector<symbolt*> ordered_symbolst;
 
   symbol_base_mapt symbol_base_map;
   symbol_module_mapt symbol_module_map;
@@ -88,11 +89,22 @@ public:
     return symbols;
   }
 
+  const ordered_symbolst& get_ordered_symbols() const
+  {
+    return ordered_symbols;
+  }
+
+  ordered_symbolst& get_ordered_symbols()
+  {
+    return ordered_symbols;
+  }
+
   symbolt* find_symbol(irep_idt name);
   const symbolt* find_symbol(irep_idt name) const;
 
 private:
   symbolst symbols;
+  ordered_symbolst ordered_symbols;
 };
 
 std::ostream &operator << (std::ostream &out, const contextt &context);
