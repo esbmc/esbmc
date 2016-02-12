@@ -28,10 +28,10 @@ unsigned namespacet::get_max(const std::string &prefix) const
 {
   unsigned m=0;
 
-  if(context1!=NULL)
+  if(context1 != nullptr)
     m=std::max(m, ::get_max(prefix, context1->get_unordered_symbols()));
 
-  if(context2!=NULL)
+  if(context2 != nullptr)
     m=std::max(m, ::get_max(prefix, context2->get_unordered_symbols()));
 
   return m;
