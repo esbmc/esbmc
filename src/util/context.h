@@ -79,11 +79,17 @@ public:
   }
 
   const symbolst& get_unordered_symbols() const
-  { return symbols; }
+  {
+    return symbols;
+  }
 
   symbolst& get_unordered_symbols()
-  { return symbols; }
+  {
+    return symbols;
+  }
 
+  symbolt* find_symbol(irep_idt name);
+  const symbolt* find_symbol(irep_idt name) const;
 
 private:
   symbolst symbols;

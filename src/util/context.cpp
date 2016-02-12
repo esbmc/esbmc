@@ -61,3 +61,23 @@ std::ostream &operator << (std::ostream &out, const contextt &context)
   context.show(out);
   return out;
 }
+
+symbolt* contextt::find_symbol(irep_idt name)
+{
+  symbolst::iterator it = symbols.find(name);
+
+  if(it != symbols.end())
+    return &(it->second);
+
+  return nullptr;
+}
+
+const symbolt* contextt::find_symbol(irep_idt name) const
+{
+  symbolst::const_iterator it = symbols.find(name);
+
+  if(it != symbols.end())
+    return &(it->second);
+
+  return nullptr;
+}
