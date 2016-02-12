@@ -233,14 +233,12 @@ void cpp_typecheckt::typecheck_compound_type(
 
   // check if we have it already
 
-  contextt::symbolst::iterator previous_symbol=
-    context.get_unordered_symbols().find(symbol_name);
-
-  if(previous_symbol!=context.get_unordered_symbols().end())
+  symbolt* previous_symbol = context.find_symbol(symbol_name);
+  if(previous_symbol != nullptr)
   {
     // we do!
 
-    symbolt &symbol=previous_symbol->second;
+    symbolt &symbol = *previous_symbol;
 
     if(has_body)
     {
@@ -575,10 +573,9 @@ void cpp_typecheckt::typecheck_compound_declarator(
       // get the virtual-table symbol type
       irep_idt vt_name = "virtual_table::"+symbol.name.as_string();
 
-      contextt::symbolst::iterator vtit =
-        context.get_unordered_symbols().find(vt_name);
+      symbolt* s = context.find_symbol(vt_name);
 
-      if(vtit == context.get_unordered_symbols().end())
+      if(s == nullptr)
       {
         // first time: create a virtual-table symbol type
         symbolt vt_symb_type;
@@ -595,7 +592,8 @@ void cpp_typecheckt::typecheck_compound_declarator(
         bool failed = context.move(vt_symb_type);
         assert(!failed);
         (void)failed; //ndebug
-        vtit = context.get_unordered_symbols().find(vt_name);
+
+        s = context.find_symbol(vt_name);
 
         // add a virtual-table pointer
         struct_typet::componentt compo;
@@ -609,10 +607,9 @@ void cpp_typecheckt::typecheck_compound_declarator(
         put_compound_into_scope(compo);
       }
 
-      assert(vtit->second.type.id()=="struct");
+      assert(s->type.id()=="struct");
 
-      struct_typet &virtual_table=
-        to_struct_type(vtit->second.type);
+      struct_typet &virtual_table = to_struct_type(s->type);
 
       component.set("virtual_name", virtual_name);
       component.set("is_virtual", is_virtual);
@@ -620,7 +617,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
       // add an entry to the virtual table
       struct_typet::componentt vt_entry;
       vt_entry.type() = pointer_typet(component.type());
-      vt_entry.set_name(vtit->first.as_string()+"::"+virtual_name);
+      vt_entry.set_name(vt_name.as_string()+"::"+virtual_name);
       vt_entry.set("base_name", virtual_name);
       vt_entry.set("pretty_name", virtual_name);
       vt_entry.set("access", "public");
@@ -1491,14 +1488,13 @@ void cpp_typecheckt::typecheck_member_function(
     err_location(symbol.location);
     str << "failed to insert new symbol: " << symbol.name.c_str() << std::endl;
 
-    contextt::symbolst::iterator symb_it =
-      context.get_unordered_symbols().find(symbol.name);
+    symbolt* symb_it = context.find_symbol(symbol.name);
 
-    if(symb_it != context.get_unordered_symbols().end())
+    if(symb_it != nullptr)
     {
-      str << "name of previous symbol: " << symb_it->second.name << std::endl;
+      str << "name of previous symbol: " << symbol.name << std::endl;
       str << "location of previous symbol: ";
-      err_location(symb_it->second.location);
+      err_location(symb_it->location);
     }
 
     throw 0;

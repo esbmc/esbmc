@@ -288,7 +288,7 @@ void cpp_typecheckt::static_initialization()
 
   while(!dinis.empty())
   {
-    symbolt &symbol=context.get_unordered_symbols().find(dinis.front())->second;
+    symbolt &symbol = *context.find_symbol(dinis.front());
     dinis.pop_front();
 
     if(symbol.is_extern)
