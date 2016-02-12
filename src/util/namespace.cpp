@@ -41,26 +41,21 @@ bool namespacet::lookup(
   const irep_idt &name,
   const symbolt *&symbol) const
 {
-  symbolst::const_iterator it;
+  const symbolt* s = nullptr;
 
-  if(context1!=NULL)
+  s = context1->find_symbol(name);
+  if(s != nullptr)
   {
-    it=context1->get_unordered_symbols().find(name);
-
-    if(it!=context1->get_unordered_symbols().end())
-    {
-      symbol=&(it->second);
-      return false;
-    }
+    symbol = s;
+    return false;
   }
 
-  if(context2!=NULL)
+  if(context2 != nullptr)
   {
-    it=context2->get_unordered_symbols().find(name);
-
-    if(it!=context2->get_unordered_symbols().end())
+    s = context2->find_symbol(name);
+    if(s != nullptr)
     {
-      symbol=&(it->second);
+      symbol = s;
       return false;
     }
   }
