@@ -515,10 +515,10 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   switch (k) {
   case SMT_FUNC_ADD:
   case SMT_FUNC_BVADD:
-    return new_ast(mk_add(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e + asts[1]->e), s);
   case SMT_FUNC_SUB:
   case SMT_FUNC_BVSUB:
-    return new_ast(mk_sub(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e - asts[1]->e), s);
   case SMT_FUNC_MUL:
   case SMT_FUNC_BVMUL:
     return new_ast((asts[0]->e * asts[1]->e), s);
@@ -562,25 +562,25 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVNOT:
     return new_ast((~asts[0]->e), s);
   case SMT_FUNC_BVNXOR:
-    return new_ast(mk_bvxnor(asts[0]->e, asts[1]->e), s);
+    return new_ast(!(asts[0]->e ^ asts[1]->e), s);
   case SMT_FUNC_BVNOR:
-    return new_ast(mk_bvnor(asts[0]->e, asts[1]->e), s);
+    return new_ast(!(asts[0]->e | asts[1]->e), s);
   case SMT_FUNC_BVNAND:
-    return new_ast(mk_bvnor(asts[0]->e, asts[1]->e), s);
+    return new_ast(!(asts[0]->e & asts[1]->e), s);
   case SMT_FUNC_BVXOR:
-    return new_ast(mk_bvxor(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e ^ asts[1]->e), s);
   case SMT_FUNC_BVOR:
-    return new_ast(mk_bvor(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e | asts[1]->e), s);
   case SMT_FUNC_BVAND:
-    return new_ast(mk_bvand(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e & asts[1]->e), s);
   case SMT_FUNC_IMPLIES:
-    return new_ast(mk_implies(asts[0]->e, asts[1]->e), s);
+    return new_ast(implies(asts[0]->e, asts[1]->e), s);
   case SMT_FUNC_XOR:
     return new_ast(mk_xor(asts[0]->e, asts[1]->e), s);
   case SMT_FUNC_OR:
-    return new_ast(mk_or(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e || asts[1]->e), s);
   case SMT_FUNC_AND:
-    return new_ast(mk_and(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e && asts[1]->e), s);
   case SMT_FUNC_NOT:
     return new_ast(!asts[0]->e, s);
   // NB: mk_{l,g}t{,e} ignore unsigned arg in integer mode.
