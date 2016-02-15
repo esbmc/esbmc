@@ -566,7 +566,7 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVNOR:
     return new_ast(mk_bvnor(asts[0]->e, asts[1]->e), s);
   case SMT_FUNC_BVNAND:
-    return new_ast(mk_bvnor(asts[0]->e, asts[1]->e), s);
+    return new_ast(mk_bvnand(asts[0]->e, asts[1]->e), s);
   case SMT_FUNC_BVXOR:
     return new_ast(mk_bvxor(asts[0]->e, asts[1]->e), s);
   case SMT_FUNC_BVOR:
