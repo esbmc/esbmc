@@ -60,7 +60,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   assumpt_mode = false;
 
   z3::config conf;
-  conf.set("MODEL", true);
   conf.set("RELEVANCY", 0);
   conf.set("SOLVER", true);
   // Disabling this option results in the enablement of --symex-thread-guard on
