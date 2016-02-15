@@ -73,7 +73,7 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   z3_ctx = ctx;
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
 
-  solver = z3::solver(ctx);
+  solver = z3::solver(ctx, z3::solver::simple());
 
   setup_pointer_sort();
 
