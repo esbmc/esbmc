@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_CONTEXT_H
 
 #include <iostream>
-
+#include <functional>
 #include <map>
 
 #include <hash_cont.h>
@@ -44,6 +44,10 @@ typedef std::multimap<irep_idt, irep_idt> symbol_module_mapt;
 class contextt
 {
 public:
+
+  typedef std::function<void (const symbolt &symbol)> const_symbol_delegate;
+  typedef std::function<void (symbolt &symbol)> symbol_delegate;
+
   typedef ::symbolst symbolst;
   typedef std::vector<symbolt*> ordered_symbolst;
 
@@ -104,9 +108,26 @@ public:
 
   void erase_symbol(irep_idt name);
 
+  template <typename T>
+  void foreach_operand(T &&t) const
+  {
+    const_symbol_delegate wrapped(std::cref(t));
+    foreach_operand_impl_const(wrapped);
+  }
+
+  template <typename T>
+  void Foreach_operand(T &&t)
+  {
+    symbol_delegate wrapped(std::ref(t));
+    foreach_operand_impl(wrapped);
+  }
+
 private:
   symbolst symbols;
   ordered_symbolst ordered_symbols;
+
+  void foreach_operand_impl_const(const_symbol_delegate &expr) const;
+  void foreach_operand_impl(symbol_delegate &expr);
 };
 
 std::ostream &operator << (std::ostream &out, const contextt &context);

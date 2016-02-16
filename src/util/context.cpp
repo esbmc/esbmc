@@ -103,3 +103,23 @@ void contextt::erase_symbol(irep_idt name)
       [&name](const symbolt *s) { return s->name == name; }),
     ordered_symbols.end());
 }
+
+void contextt::foreach_operand_impl_const(const_symbol_delegate& expr) const
+{
+  for(symbolst::const_iterator it = symbols.begin();
+      it != symbols.end();
+      it++)
+  {
+    expr(it->second);
+  }
+}
+
+void contextt::foreach_operand_impl(symbol_delegate& expr)
+{
+  for(symbolst::iterator it = symbols.begin();
+      it != symbols.end();
+      it++)
+  {
+    expr(it->second);
+  }
+}
