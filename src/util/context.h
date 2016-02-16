@@ -61,38 +61,11 @@ public:
 
   void show(std::ostream &out = std::cout) const;
 
-  const irept &value(const irep_idt &name) const;
-
   void swap(contextt &other)
   {
     symbols.swap(other.symbols);
     symbol_base_map.swap(other.symbol_base_map);
     symbol_module_map.swap(other.symbol_module_map);
-  }
-
-  bool has_symbol(const irep_idt &name) const
-  {
-    return symbols.find(name)!=symbols.end();
-  }
-
-  const symbolst& get_unordered_symbols() const
-  {
-    return symbols;
-  }
-
-  symbolst& get_unordered_symbols()
-  {
-    return symbols;
-  }
-
-  const ordered_symbolst& get_ordered_symbols() const
-  {
-    return ordered_symbols;
-  }
-
-  ordered_symbolst& get_ordered_symbols()
-  {
-    return ordered_symbols;
   }
 
   symbolt* find_symbol(irep_idt name);

@@ -8,13 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "context.h"
 
-const irept &contextt::value(const irep_idt &name) const
-{
-  symbolst::const_iterator it=symbols.find(name);
-  if(it==symbols.end()) return get_nil_irep();
-  return it->second.value;
-}
-
 bool contextt::add(const symbolt &symbol)
 {
   std::pair<symbolst::iterator, bool> result=
