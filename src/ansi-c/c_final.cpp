@@ -94,15 +94,15 @@ bool c_final(contextt &context, message_handlert &message_handler)
 
   try
   {
-    Forall_symbols(it, context.get_unordered_symbols())
-    {
-      symbolt &symbol=it->second;
-
-      if(symbol.mode=="C")
+    context.Foreach_operand(
+      [&context, &message_handler] (symbolt& s)
       {
-        c_finalize_expression(context, symbol.value, message_handler);
+        if(s.mode=="C")
+        {
+          c_finalize_expression(context, s.value, message_handler);
+        }
       }
-    }
+    );
   }
 
   catch(int e)

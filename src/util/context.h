@@ -20,10 +20,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 typedef hash_map_cont<irep_idt, symbolt, irep_id_hash> symbolst;
 
-#define Forall_symbols(it, expr) \
-  for(symbolst::iterator it=(expr).begin(); \
-      it!=(expr).end(); it++)
-
 typedef std::multimap<irep_idt, irep_idt> symbol_base_mapt;
 typedef std::multimap<irep_idt, irep_idt> symbol_module_mapt;
 

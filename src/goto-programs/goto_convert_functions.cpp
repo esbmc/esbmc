@@ -81,12 +81,13 @@ void goto_convert_functionst::goto_convert()
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
-
-  Forall_symbols(it, context.get_unordered_symbols())
-  {
-    if(!it->second.is_type && it->second.type.is_code())
-      symbol_list.push_back(&it->second);
-  }
+  context.Foreach_operand(
+    [&symbol_list] (symbolt& s)
+    {
+    if(!s.is_type && s.type.is_code())
+      symbol_list.push_back(&s);
+    }
+  );
 
   for(symbol_listt::iterator
       it=symbol_list.begin();
@@ -562,10 +563,13 @@ goto_convert_functionst::thrash_type_symbols(void)
     wallop_type(it->first, typenames, it->first);
 
   // And now all the types have a fixed form, rename types in all existing code.
-  Forall_symbols(it, context.get_unordered_symbols()) {
-    rename_types(it->second.type, it->second, it->first);
-    rename_exprs(it->second.value, it->second, it->first);
-  }
+  context.Foreach_operand(
+    [this] (symbolt& s)
+    {
+      rename_types(s.type, s, s.name);
+      rename_exprs(s.value, s, s.name);
+    }
+  );
 
   return;
 }
@@ -581,10 +585,13 @@ goto_convert_functionst::fixup_unions(void)
   // them _as_ unions get converted into byte array accesses at the pointer
   // dereference layer.
 
-   Forall_symbols(it, context.get_unordered_symbols()) {
-    fix_union_type(it->second.type, false);
-    fix_union_expr(it->second.value);
-  }
+  context.Foreach_operand(
+    [this] (symbolt& s)
+    {
+      fix_union_type(s.type, false);
+      fix_union_expr(s.value);
+    }
+  );
 }
 
 void

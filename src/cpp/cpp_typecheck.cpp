@@ -386,18 +386,17 @@ void cpp_typecheckt::do_not_typechecked()
 
     std::vector<symbolt*> to_typecheck_list;
 
-    Forall_symbols(s_it, context.get_unordered_symbols())
-    {
-      symbolt &symbol=s_it->second;
-
-      if(symbol.value.id()=="cpp_not_typechecked" &&
-         symbol.value.get_bool("is_used"))
+    context.Foreach_operand(
+      [&to_typecheck_list] (symbolt& s)
       {
-        assert(symbol.type.id()=="code");
-
-        to_typecheck_list.push_back(&symbol);
+        if(s.value.id()=="cpp_not_typechecked" &&
+           s.value.get_bool("is_used"))
+        {
+          assert(s.type.is_code());
+          to_typecheck_list.push_back(&s);
+        }
       }
-    }
+    );
 
     for (symbolt *sym : to_typecheck_list) {
       if (sym->base_name =="operator=")
@@ -423,12 +422,13 @@ void cpp_typecheckt::do_not_typechecked()
   }
   while(cont);
 
-  Forall_symbols(s_it, context.get_unordered_symbols())
-  {
-    symbolt &symbol=s_it->second;
-    if(symbol.value.id()=="cpp_not_typechecked")
-      symbol.value.make_nil();
-  }
+  context.Foreach_operand(
+    [] (symbolt& s)
+    {
+      if(s.value.id()=="cpp_not_typechecked")
+        s.value.make_nil();
+    }
+  );
 }
 
 /*******************************************************************\
@@ -445,53 +445,52 @@ Function: cpp_typecheckt::clean_up
 
 void cpp_typecheckt::clean_up()
 {
-  Forall_symbols(it, context.get_unordered_symbols())
-  {
-    symbolt &symbol = it->second;
-
-    if(symbol.type.get_bool("is_template"))
+  context.Foreach_operand(
+    [this] (symbolt& s)
     {
-      context.erase_symbol(it->first);
-      continue;
-    }
-    else if(symbol.type.id()=="struct" ||
-            symbol.type.id()=="union")
-    {
-      struct_typet &struct_type=
-        to_struct_type(symbol.type);
-
-      const struct_typet::componentst &components=
-        struct_type.components();
-
-      struct_typet::componentst data_members;
-      data_members.reserve(components.size());
-
-      struct_typet::componentst &function_members=
-        struct_type.methods();
-
-      function_members.reserve(components.size());
-
-      for(struct_typet::componentst::const_iterator
-          compo_it=components.begin();
-          compo_it!=components.end();
-          compo_it++)
+      if(s.type.get_bool("is_template"))
       {
-        if(compo_it->get_bool("is_static") ||
-           compo_it->is_type())
-        {
-          // skip it
-        }
-        else if(compo_it->type().id()=="code")
-        {
-          function_members.push_back(*compo_it);
-        }
-        else
-        {
-          data_members.push_back(*compo_it);
-        }
+        context.erase_symbol(s.name);
+        return;
       }
+      else if(s.type.is_struct() ||
+              s.type.is_union())
+      {
+        struct_typet &struct_type = to_struct_type(s.type);
 
-      struct_type.components().swap(data_members);
+        const struct_typet::componentst &components =
+          struct_type.components();
+
+        struct_typet::componentst data_members;
+        data_members.reserve(components.size());
+
+        struct_typet::componentst &function_members =
+          struct_type.methods();
+
+        function_members.reserve(components.size());
+
+        for(struct_typet::componentst::const_iterator
+            compo_it = components.begin();
+            compo_it != components.end();
+            compo_it++)
+        {
+          if(compo_it->get_bool("is_static") ||
+             compo_it->is_type())
+          {
+            // skip it
+          }
+          else if(compo_it->type().id()=="code")
+          {
+            function_members.push_back(*compo_it);
+          }
+          else
+          {
+            data_members.push_back(*compo_it);
+          }
+        }
+
+        struct_type.components().swap(data_members);
+      }
     }
-  }
+  );
 }
