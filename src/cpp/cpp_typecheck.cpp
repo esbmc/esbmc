@@ -260,31 +260,31 @@ void cpp_typecheckt::static_initialization()
   disable_access_control = true;
 
   // first do zero initialization
-  forall_symbols(s_it, context.get_unordered_symbols())
-  {
-    const symbolt &symbol=s_it->second;
+  context.foreach_operand(
+    [this, &block_sini] (const symbolt& s)
+    {
+      if(!s.static_lifetime || s.mode!=current_mode)
+        return;
 
-    if(!symbol.static_lifetime || symbol.mode!=current_mode)
-      continue;
+      // it has a non-code initializer already?
+      if(s.value.is_not_nil() &&
+         s.value.id()!="code")
+        return;
 
-    // it has a non-code initializer already?
-    if(symbol.value.is_not_nil() &&
-       symbol.value.id()!="code")
-      continue;
+      // it's a declaration only
+      if(s.is_extern)
+        return;
 
-    // it's a declaration only
-    if(symbol.is_extern)
-      continue;
+      if(!s.lvalue)
+        return;
 
-    if(!symbol.lvalue)
-      continue;
-
-    zero_initializer(
-      cpp_symbol_expr(symbol),
-      symbol.type,
-      symbol.location,
-      block_sini.operands());
-  }
+      zero_initializer(
+        cpp_symbol_expr(s),
+        s.type,
+        s.location,
+        block_sini.operands());
+    }
+  );
 
   while(!dinis.empty())
   {

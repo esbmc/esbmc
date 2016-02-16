@@ -20,10 +20,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 typedef hash_map_cont<irep_idt, symbolt, irep_id_hash> symbolst;
 
-#define forall_symbols(it, expr) \
-  for(symbolst::const_iterator it=(expr).begin(); \
-      it!=(expr).end(); it++)
-
 #define Forall_symbols(it, expr) \
   for(symbolst::iterator it=(expr).begin(); \
       it!=(expr).end(); it++)

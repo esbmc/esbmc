@@ -32,11 +32,12 @@ bool write_goto_binary(
 
   write_long( out, lcontext.get_unordered_symbols().size() );
 
-  forall_symbols(it, lcontext.get_unordered_symbols())
-  {
-    const symbolt &sym = it->second;
-    symbolconverter.convert(sym, out);
-  }
+  lcontext.foreach_operand(
+    [&symbolconverter, &out] (const symbolt& s)
+    {
+      symbolconverter.convert(s, out);
+    }
+  );
 
   unsigned cnt=0;
   forall_goto_functions(it, functions)

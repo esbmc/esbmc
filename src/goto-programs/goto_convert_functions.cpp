@@ -526,23 +526,29 @@ goto_convert_functionst::thrash_type_symbols(void)
   // thing has no types, and there's no way (in C++ converted code at least)
   // to decide what name is a type or not.
   typename_sett names;
-  forall_symbols(it, context.get_unordered_symbols()) {
-    collect_expr(it->second.value, names);
-    collect_type(it->second.type, names);
-  }
+  context.foreach_operand(
+    [this, &names] (const symbolt& s)
+    {
+      collect_expr(s.value, names);
+      collect_type(s.type, names);
+    }
+  );
 
   // Try to compute their dependencies.
 
   typename_mapt typenames;
-
-  forall_symbols(it, context.get_unordered_symbols()) {
-    if (names.find(it->second.name) != names.end()) {
-      typename_sett list;
-      collect_expr(it->second.value, list);
-      collect_type(it->second.type, list);
-      typenames[it->second.name] = list;
+  context.foreach_operand(
+    [this, &names, &typenames] (const symbolt& s)
+    {
+      if (names.find(s.name) != names.end())
+      {
+        typename_sett list;
+        collect_expr(s.value, list);
+        collect_type(s.type, list);
+        typenames[s.name] = list;
+      }
     }
-  }
+  );
 
   for (typename_mapt::iterator it = typenames.begin(); it != typenames.end(); it++)
     it->second.erase(it->first);

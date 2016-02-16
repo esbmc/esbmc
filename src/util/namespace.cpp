@@ -11,15 +11,17 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "namespace.h"
 
-unsigned get_max(const std::string &prefix, const symbolst &symbols)
+unsigned get_max(const std::string &prefix, const contextt *context)
 {
   unsigned max_nr=0;
 
-  forall_symbols(it, symbols)
-    if(strncmp(it->first.c_str(), prefix.c_str(), prefix.size())==0)
-      max_nr=
-        std::max(unsigned(atoi(it->first.c_str()+prefix.size())),
-                 max_nr);
+  context->foreach_operand(
+    [&prefix, &max_nr] (const symbolt& s)
+    {
+      if(!strncmp(s.name.c_str(), prefix.c_str(), prefix.size()))
+        max_nr = std::max(unsigned(atoi(s.name.c_str()+prefix.size())), max_nr);
+    }
+  );
 
   return max_nr;
 }
@@ -29,10 +31,10 @@ unsigned namespacet::get_max(const std::string &prefix) const
   unsigned m=0;
 
   if(context1 != nullptr)
-    m=std::max(m, ::get_max(prefix, context1->get_unordered_symbols()));
+    m=std::max(m, ::get_max(prefix, context1));
 
   if(context2 != nullptr)
-    m=std::max(m, ::get_max(prefix, context2->get_unordered_symbols()));
+    m=std::max(m, ::get_max(prefix, context2));
 
   return m;
 }

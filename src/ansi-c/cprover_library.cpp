@@ -193,10 +193,13 @@ void add_cprover_library(
   DeleteFile(symname_buffer);
 #endif
 
-  forall_symbols(it, new_ctx.get_unordered_symbols()) {
-    generate_symbol_deps(it->first, it->second.value, symbol_deps);
-    generate_symbol_deps(it->first, it->second.type, symbol_deps);
-  }
+  new_ctx.foreach_operand(
+    [&symbol_deps] (const symbolt& s)
+    {
+      generate_symbol_deps(s.name, s.value, symbol_deps);
+      generate_symbol_deps(s.name, s.type, symbol_deps);
+    }
+  );
 
   // Add two hacks; we migth use either pthread_mutex_lock or the checked
   // variety; so if one version is used, pull in the other too.
@@ -220,15 +223,17 @@ void add_cprover_library(
    * haven't pulled in, then pull them in. We finish when we've made a pass
    * that adds no new symbols. */
 
-  forall_symbols(it, new_ctx.get_unordered_symbols())
-  {
-    const symbolt* s = context.find_symbol(it->second.name);
-    if (s != nullptr && s->value.is_nil())
+  new_ctx.foreach_operand(
+    [&context, &store_ctx, &symbol_deps, &to_include] (const symbolt& s)
     {
-      store_ctx.add(it->second);
-      ingest_symbol(it->first, symbol_deps, to_include);
+      const symbolt* symbol = context.find_symbol(s.name);
+      if (symbol != nullptr && symbol->value.is_nil())
+      {
+        store_ctx.add(s);
+        ingest_symbol(s.name, symbol_deps, to_include);
+      }
     }
-  }
+  );
 
   for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
       nameit != to_include.end();

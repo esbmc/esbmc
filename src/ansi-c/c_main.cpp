@@ -56,22 +56,26 @@ void static_lifetime_init(
   dest=code_blockt();
 
   // Do assignments based on "value".
-  forall_symbols(it, context.get_unordered_symbols())
-    if(it->second.static_lifetime)
-      init_variable(dest, it->second);
+  context.foreach_operand(
+    [&dest] (const symbolt& s)
+    {
+      if(s.static_lifetime)
+        init_variable(dest, s);
+    }
+  );
 
   // call designated "initialization" functions
-
-  forall_symbols(it, context.get_unordered_symbols())
-  {
-    if(it->second.type.initialization() &&
-       it->second.type.is_code())
+  context.foreach_operand(
+    [&dest] (const symbolt& s)
     {
-      code_function_callt function_call;
-      function_call.function()=symbol_expr(it->second);
-      dest.move_to_operands(function_call);
+      if(s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
     }
-  }
+  );
 }
 
 /*******************************************************************\

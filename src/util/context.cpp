@@ -59,8 +59,13 @@ void contextt::show(std::ostream &out) const
 {
   out << std::endl << "Symbols:" << std::endl;
 
-  forall_symbols(it, symbols)
-    out << it->second;
+  // Do assignments based on "value".
+  foreach_operand(
+    [] (const symbolt& s)
+    {
+      s.dump();
+    }
+  );
 }
 
 std::ostream &operator << (std::ostream &out, const contextt &context)

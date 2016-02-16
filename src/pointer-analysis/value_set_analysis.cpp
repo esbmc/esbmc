@@ -153,10 +153,13 @@ void value_set_analysist::get_globals(
   std::list<value_sett::entryt> &dest)
 {
   // static ones
-  forall_symbols(it, ns.get_context().get_unordered_symbols())
-    if(it->second.lvalue &&
-       it->second.static_lifetime)
-      get_entries(it->second, dest);
+  ns.get_context().foreach_operand(
+    [this, &dest] (const symbolt& s)
+    {
+      if(s.lvalue && s.static_lifetime)
+        get_entries(s, dest);
+    }
+  );
 }
 
 bool value_set_analysist::check_type(const typet &type)

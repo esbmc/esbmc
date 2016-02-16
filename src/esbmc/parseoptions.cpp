@@ -1290,22 +1290,25 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
 {
   std::map<std::string, std::string> strings;
 
-  forall_symbols(it, context.get_unordered_symbols())
-  {
-    if (it->first.as_string().find("__ESBMC_property_") != std::string::npos) {
-      // Munge back into the shape of an actual string
-      std::string str = "";
-      forall_operands(iter2, it->second.value) {
-        char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
-        if (c != 0)
-          str += c;
-        else
-          break;
-      }
+  context.foreach_operand(
+    [this, &strings] (const symbolt& s)
+    {
+      if (s.name.as_string().find("__ESBMC_property_") != std::string::npos)
+      {
+        // Munge back into the shape of an actual string
+        std::string str = "";
+        forall_operands(iter2, s.value) {
+          char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
+          if (c != 0)
+            str += c;
+          else
+            break;
+        }
 
-      strings[it->first.as_string()] = str;
+        strings[s.name.as_string()] = str;
+      }
     }
-  }
+  );
 
   std::map<std::string, std::pair<std::set<std::string>, expr2tc> > monitors;
   std::map<std::string, std::string>::const_iterator str_it;
