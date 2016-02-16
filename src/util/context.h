@@ -114,6 +114,11 @@ public:
     foreach_operand_impl(wrapped);
   }
 
+  unsigned int size() const
+  {
+    return symbols.size();
+  }
+
 private:
   symbolst symbols;
   ordered_symbolst ordered_symbols;
