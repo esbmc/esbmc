@@ -30,7 +30,7 @@ bool write_goto_binary(
   symbol_serializationt symbolconverter(irepc);
   goto_function_serializationt gfconverter(irepc);
 
-  write_long( out, lcontext.get_unordered_symbols().size() );
+  write_long( out, lcontext.size() );
 
   lcontext.foreach_operand(
     [&symbolconverter, &out] (const symbolt& s)
