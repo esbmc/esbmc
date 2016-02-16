@@ -19,6 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string_hash.h>
 
 typedef hash_map_cont<irep_idt, symbolt, irep_id_hash> symbolst;
+typedef std::vector<const symbolt*> ordered_symbolst;
 
 typedef std::multimap<irep_idt, irep_idt> symbol_base_mapt;
 typedef std::multimap<irep_idt, irep_idt> symbol_module_mapt;
@@ -35,13 +36,12 @@ typedef std::multimap<irep_idt, irep_idt> symbol_module_mapt;
 
 class contextt
 {
-public:
-
   typedef std::function<void (const symbolt &symbol)> const_symbol_delegate;
   typedef std::function<void (symbolt &symbol)> symbol_delegate;
 
+public:
   typedef ::symbolst symbolst;
-  typedef std::vector<symbolt*> ordered_symbolst;
+  typedef ::ordered_symbolst ordered_symbolst;
 
   symbol_base_mapt symbol_base_map;
   symbol_module_mapt symbol_module_map;

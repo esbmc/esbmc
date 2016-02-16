@@ -14,14 +14,12 @@ bool contextt::add(const symbolt &symbol)
     symbols.insert(std::pair<irep_idt, symbolt>(symbol.name, symbol));
 
   if(!result.second)
-  {
-    ordered_symbols.push_back(&result.first->second);
     return true;
-  }
 
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.base_name, symbol.name));
   symbol_module_map.insert(std::pair<irep_idt, irep_idt>(symbol.module, symbol.name));
 
+  ordered_symbols.push_back(&result.first->second);
   return false;
 }
 
@@ -34,7 +32,6 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
 
   if(!result.second)
   {
-    ordered_symbols.push_back(&result.first->second);
     new_symbol = &result.first->second;
     return true;
   }
@@ -42,9 +39,10 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.base_name, symbol.name));
   symbol_module_map.insert(std::pair<irep_idt, irep_idt>(symbol.module, symbol.name));
 
+  ordered_symbols.push_back(&result.first->second);
+
   result.first->second.swap(symbol);
   new_symbol=&result.first->second;
-
   return false;
 }
 
@@ -92,10 +90,7 @@ void contextt::erase_symbol(irep_idt name)
   symbolst::iterator it = symbols.find(name);
   assert(it != symbols.end());
 
-  // Remove from map
   symbols.erase(name);
-
-  // Remove from vector
   ordered_symbols.erase(
     std::remove_if(ordered_symbols.begin(), ordered_symbols.end(),
       [&name](const symbolt *s) { return s->name == name; }),
