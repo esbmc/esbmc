@@ -56,7 +56,9 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   ctx.init(conf, int_encoding);
 
   solver =
-     (z3::tactic(ctx, "solve-eqs") &
+     (z3::tactic(ctx, "simplify") &
+      z3::tactic(ctx, "solve-eqs") &
+      z3::tactic(ctx, "simplify") &
       z3::tactic(ctx, "smt")).mk_solver();
 
    z3::params p(ctx);
