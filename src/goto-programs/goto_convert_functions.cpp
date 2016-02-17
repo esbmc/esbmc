@@ -81,7 +81,7 @@ void goto_convert_functionst::goto_convert()
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
-  context.Foreach_operand(
+  context.Foreach_operand_in_order(
     [&symbol_list] (symbolt& s)
     {
     if(!s.is_type && s.type.is_code())

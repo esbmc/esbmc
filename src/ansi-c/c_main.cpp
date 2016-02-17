@@ -56,7 +56,7 @@ void static_lifetime_init(
   dest=code_blockt();
 
   // Do assignments based on "value".
-  context.foreach_operand(
+  context.foreach_operand_in_order(
     [&dest] (const symbolt& s)
     {
       if(s.static_lifetime)
@@ -65,7 +65,7 @@ void static_lifetime_init(
   );
 
   // call designated "initialization" functions
-  context.foreach_operand(
+  context.foreach_operand_in_order(
     [&dest] (const symbolt& s)
     {
       if(s.type.initialization() && s.type.is_code())

@@ -392,7 +392,7 @@ void c_linkt::typecheck()
 
   symbol_fixer.fix_context(new_context);
 
-  new_context.Foreach_operand(
+  new_context.Foreach_operand_in_order(
     [this] (symbolt& s)
     {
       symbol_fixer.fix_symbol(s);
