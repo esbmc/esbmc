@@ -19,7 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string_hash.h>
 
 typedef hash_map_cont<irep_idt, symbolt, irep_id_hash> symbolst;
-typedef std::vector<const symbolt*> ordered_symbolst;
+typedef std::vector<symbolt*> ordered_symbolst;
 
 typedef std::multimap<irep_idt, irep_idt> symbol_base_mapt;
 typedef std::multimap<irep_idt, irep_idt> symbol_module_mapt;
@@ -74,6 +74,20 @@ public:
   void erase_symbol(irep_idt name);
 
   template <typename T>
+  void foreach_operand_in_order(T &&t) const
+  {
+    const_symbol_delegate wrapped(std::cref(t));
+    foreach_operand_impl_in_order_const(wrapped);
+  }
+
+  template <typename T>
+  void Foreach_operand_in_order(T &&t)
+  {
+    symbol_delegate wrapped(std::ref(t));
+    foreach_operand_impl_in_order(wrapped);
+  }
+
+  template <typename T>
   void foreach_operand(T &&t) const
   {
     const_symbol_delegate wrapped(std::cref(t));
@@ -98,8 +112,9 @@ private:
 
   void foreach_operand_impl_const(const_symbol_delegate &expr) const;
   void foreach_operand_impl(symbol_delegate &expr);
-};
 
-std::ostream &operator << (std::ostream &out, const contextt &context);
+  void foreach_operand_impl_in_order_const(const_symbol_delegate &expr) const;
+  void foreach_operand_impl_in_order(symbol_delegate &expr);
+};
 
 #endif

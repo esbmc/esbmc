@@ -116,3 +116,24 @@ void contextt::foreach_operand_impl(symbol_delegate& expr)
     expr(it->second);
   }
 }
+
+void contextt::foreach_operand_impl_in_order_const(
+    const_symbol_delegate& expr) const
+{
+  for(ordered_symbolst::const_iterator it = ordered_symbols.begin();
+      it != ordered_symbols.end();
+      it++)
+  {
+    expr(**it);
+  }
+}
+
+void contextt::foreach_operand_impl_in_order(symbol_delegate& expr)
+{
+  for(ordered_symbolst::iterator it = ordered_symbols.begin();
+      it != ordered_symbols.end();
+      it++)
+  {
+    expr(**it);
+  }
+}
