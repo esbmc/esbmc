@@ -44,13 +44,6 @@ create_new_z3_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
   return conv;
 }
 
-Z3_ast workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
-                                          Z3_bool is_signed);
-Z3_ast workaround_Z3_mk_bvadd_no_underflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
-Z3_ast workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
-Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
-                                          Z3_bool is_signed);
-Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 : smt_convt(int_encoding, _ns, is_cpp), array_iface(true, true),ctx(false)
 {
