@@ -55,12 +55,13 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   z3::config conf;
   ctx.init(conf, int_encoding);
 
-  z3::params p(ctx);
-  p.set("relevancy", (unsigned int) 0);
-
   solver =
-    (z3::tactic(ctx, "solve-eqs") &
-     with(z3::tactic(ctx, "smt"), p)).mk_solver();
+     (z3::tactic(ctx, "solve-eqs") &
+      z3::tactic(ctx, "smt")).mk_solver();
+
+   z3::params p(ctx);
+   p.set("relevancy", (unsigned int) 0);
+   solver.set(p);
 
   z3_ctx = ctx;
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
@@ -133,7 +134,7 @@ z3_convt::init_addr_space_array(void)
     Z3_get_tuple_sort_mk_decl(ctx, addr_space_tuple_sort);
   addr_space_tuple_decl = z3::func_decl(ctx, tmp_addr_space_decl);
 
-  addr_space_arr_sort = 
+  addr_space_arr_sort =
                   ctx.array_sort(ctx.esbmc_int_sort(), addr_space_tuple_sort);
 
   return;
