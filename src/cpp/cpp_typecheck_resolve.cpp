@@ -1084,7 +1084,7 @@ exprt cpp_typecheck_resolvet::do_builtin(
   else if(base_name=="context")
   {
     dest=exprt("constant", typet("empty"));
-    cpp_typecheck.context.show(cpp_typecheck.str);
+    cpp_typecheck.context.dump();
     cpp_typecheck.warning();
   }
   else

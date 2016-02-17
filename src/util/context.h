@@ -59,7 +59,7 @@ public:
     symbol_module_map.clear();
   }
 
-  void show(std::ostream &out = std::cout) const;
+  void dump() const;
 
   void swap(contextt &other)
   {

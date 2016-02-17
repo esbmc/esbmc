@@ -46,9 +46,9 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
   return false;
 }
 
-void contextt::show(std::ostream &out) const
+void contextt::dump() const
 {
-  out << std::endl << "Symbols:" << std::endl;
+  std::cout << std::endl << "Symbols:" << std::endl;
 
   // Do assignments based on "value".
   foreach_operand(
@@ -57,12 +57,7 @@ void contextt::show(std::ostream &out) const
       s.dump();
     }
   );
-}
 
-std::ostream &operator << (std::ostream &out, const contextt &context)
-{
-  context.show(out);
-  return out;
 }
 
 symbolt* contextt::find_symbol(irep_idt name)
