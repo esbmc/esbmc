@@ -143,6 +143,7 @@ namespace z3 {
 
         static void error_handler(Z3_context c __attribute__((unused)), Z3_error_code e) {
             std::cerr << "Z3 error " << e << " encountered" << std::endl;
+            std::cerr << Z3_get_error_msg(c, e) << std::endl;
             abort();
           }
         void init(config & c) {
