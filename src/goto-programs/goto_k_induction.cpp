@@ -87,18 +87,8 @@ void goto_k_inductiont::goto_k_induction()
   {
     assert(!it->second.get_goto_program().empty());
 
-    if(it->second.is_infinite_loop()
-       || (options.get_bool_option("k-induction-nondet-loops")
-           && it->second.is_nondet_loop()))
-    {
-      // Start the loop conversion
-      convert_infinite_loop(it->second);
-    }
-    else
-    {
-      // Start the loop conversion
-      convert_finite_loop(it->second);
-    }
+    // Start the loop conversion
+    convert_finite_loop(it->second);
   }
 }
 
