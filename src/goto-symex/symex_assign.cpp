@@ -224,8 +224,7 @@ void goto_symext::symex_assign_rec(
   } else if (is_typecast2t(lhs)) {
     symex_assign_typecast(lhs, rhs, guard);
    } else if (is_constant_string2t(lhs) ||
-           is_null_object2t(lhs) ||
-           is_zero_string2t(lhs))
+           is_null_object2t(lhs))
   {
     // ignore
   } else if (is_byte_extract2t(lhs)) {
@@ -492,9 +491,10 @@ void goto_symext::replace_nondet(expr2tc &expr)
   }
   else
   {
-    Forall_operands2(it, idx, expr) {
-      if (!is_nil_expr(*it))
-        replace_nondet(*it);
-    }
+    expr.get()->Foreach_operand([this] (expr2tc &e) {
+        if (!is_nil_expr(e))
+          replace_nondet(e);
+      }
+    );
   }
 }

@@ -62,9 +62,6 @@ static void internal_additions(std::string &code)
     "void assert(_Bool assertion);\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
     "_Bool __ESBMC_same_object(const void *, const void *);\n"
-    "_Bool __ESBMC_is_zero_string(const void *);\n"
-    "unsigned __ESBMC_zero_string_length(const void *);\n"
-    "unsigned __ESBMC_buffer_size(const void *);\n"
 
     // traces
     "void CBMC_trace(int lvl, const char* event, ...);\n"

@@ -42,10 +42,9 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
     cpp_identifier_prefix(current_mode)+"::"+
     cpp_scopes.current_scope().prefix+id2string(final_name);
 
-  contextt::symbolst::const_iterator it=
-    context.symbols.find(identifier);
+  symbolt* s = context.find_symbol(identifier);
 
-  if(it!=context.symbols.end())
+  if(s != nullptr)
   {
     if(namespace_spec.alias().is_not_nil())
     {
@@ -53,22 +52,22 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
       str << "namespace alias `" << final_name
           << "' previously declared" << std::endl;
       str << "location of previous declaration: "
-          << it->second.location;
+          << s->location;
       throw 0;
     }
 
-    if(it->second.type.id()!="namespace")
+    if(s->type.id() != "namespace")
     {
       err_location(namespace_spec);
       str << "namespace `" << final_name
           << "' previously declared" << std::endl;
       str << "location of previous declaration: "
-          << it->second.location;
+          << s->location;
       throw 0;
     }
 
     // enter that scope
-    cpp_scopes.set_scope(it->first);
+    cpp_scopes.set_scope(identifier);
   }
   else
   {

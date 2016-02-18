@@ -275,15 +275,14 @@ void c_typecheck_baset::typecheck_decl(codet &code)
   // look it up
   const irep_idt &identifier=code.op0().identifier();
 
-  symbolst::iterator s_it=context.symbols.find(identifier);
-
-  if(s_it==context.symbols.end())
+  symbolt* s = context.find_symbol(identifier);
+  if(s == nullptr)
   {
     err_location(code);
     throw "failed to find decl symbol in context";
   }
 
-  symbolt &symbol=s_it->second;
+  symbolt &symbol = *s;
 
   // see if it's a typedef
   // or a function

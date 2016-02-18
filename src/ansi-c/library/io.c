@@ -41,17 +41,6 @@ FILE *fopen(const char *filename, const char *m)
   return f;
 }
 
-FILE *fopen_strabs(const char *filename, const char *m)
-{
-  __ESBMC_HIDE:;
-  FILE *f=malloc(sizeof(FILE));
-
-  __ESBMC_assert(__ESBMC_is_zero_string(f), "fopen zero-termination of 1st argument");
-  __ESBMC_assert(__ESBMC_is_zero_string(m), "fopen zero-termination of 2nd argument");
-
-  return f;
-}
-
 int fclose(FILE *stream)
 {
   __ESBMC_HIDE:;
@@ -68,39 +57,10 @@ FILE *fdopen(int handle, const char *m)
   return f;
 }
 
-FILE *fdopen_abs(int handle, const char *m)
-{
-  __ESBMC_HIDE:;
-  FILE *f=malloc(sizeof(FILE));
-
-  __ESBMC_assert(__ESBMC_is_zero_string(m),
-    "fdopen zero-termination of 2nd argument");
-
-  return f;
-}
-
 char *fgets(char *str, int size, FILE *stream)
 {
   __ESBMC_HIDE:;
   _Bool error;
-  /* XXX - this does nothing without string abstraction option */
-  return error?0:str;
-}
-
-char *fgets_strabs(char *str, int size, FILE *stream)
-{
-  __ESBMC_HIDE:;
-  _Bool error;
-
-  int resulting_size;
-  __ESBMC_assert(__ESBMC_buffer_size(str)>=size, "buffer-overflow in fgets");
-  if(size>0)
-  {
-    __ESBMC_assume(resulting_size<size);
-    __ESBMC_is_zero_string(str)=!error;
-    __ESBMC_zero_string_length(str)=resulting_size;
-  }
-
   return error?0:str;
 }
 
@@ -155,15 +115,6 @@ int fputs(const char *s, FILE *stream)
   int return_value;
   *stream;
   /* XXX - what? */
-  return return_value;
-}
-
-int fputs_strabs(const char *s, FILE *stream)
-{
-  // just return nondet
-  int return_value;
-  __ESBMC_assert(__ESBMC_is_zero_string(s), "fputs zero-termination of 1st argument");
-  *stream;
   return return_value;
 }
 

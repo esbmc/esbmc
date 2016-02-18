@@ -16,9 +16,11 @@ symex_slicet::symex_slicet()
 void symex_slicet::get_symbols(const expr2tc &expr)
 {
 
-  forall_operands2(it, idx, expr)
-    if (!is_nil_expr(*it))
-      get_symbols(*it);
+  expr->foreach_operand([this] (const expr2tc &e) {
+    if (!is_nil_expr(e))
+      get_symbols(e);
+    }
+  );
 
   if (is_symbol2t(expr)) {
     const symbol2t &tmp = to_symbol2t(expr);

@@ -56,22 +56,26 @@ void static_lifetime_init(
   dest=code_blockt();
 
   // Do assignments based on "value".
-  forall_symbols(it, context.symbols)
-    if(it->second.static_lifetime)
-      init_variable(dest, it->second);
+  context.foreach_operand_in_order(
+    [&dest] (const symbolt& s)
+    {
+      if(s.static_lifetime)
+        init_variable(dest, s);
+    }
+  );
 
   // call designated "initialization" functions
-
-  forall_symbols(it, context.symbols)
-  {
-    if(it->second.type.initialization() &&
-       it->second.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest] (const symbolt& s)
     {
-      code_function_callt function_call;
-      function_call.function()=symbol_expr(it->second);
-      dest.move_to_operands(function_call);
+      if(s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
     }
-  }
+  );
 }
 
 /*******************************************************************\
@@ -102,11 +106,11 @@ bool c_main(
     forall_symbol_base_map(it, context.symbol_base_map, config.main)
     {
       // look it up
-      symbolst::const_iterator s_it=context.symbols.find(it->second);
+      symbolt* s = context.find_symbol(it->second);
 
-      if(s_it==context.symbols.end()) continue;
+      if(s == nullptr) continue;
 
-      if(s_it->second.type.is_code())
+      if(s->type.is_code())
         matches.push_back(it->second);
     }
 
@@ -137,12 +141,11 @@ bool c_main(
     main_symbol=standard_main;
 
   // look it up
-  symbolst::const_iterator s_it=context.symbols.find(main_symbol);
-
-  if(s_it==context.symbols.end())
+  symbolt* s = context.find_symbol(main_symbol);
+  if(s == nullptr)
     return false; // give up, no main
 
-  const symbolt &symbol=s_it->second;
+  const symbolt &symbol = *s;
 
   // check if it has a body
   if(symbol.value.is_nil())
@@ -233,31 +236,6 @@ bool c_main(
         assumption.set_statement("assume");
         assumption.move_to_operands(ge);
         init_code.move_to_operands(assumption);
-      }
-
-      {
-        /* zero_string doesn't work yet */
-
-        /*
-        exprt zero_string("zero_string", array_typet());
-        zero_string.type().subtype()=char_type();
-        zero_string.type().size("infinity");
-        exprt index("index", char_type());
-        index.copy_to_operands(zero_string, gen_zero(uint_type()));
-        exprt address_of("address_of", pointer_typet());
-        address_of.type().subtype()=char_type();
-        address_of.copy_to_operands(index);
-
-        if(argv_symbol.type.subtype()!=address_of.type())
-          address_of.make_typecast(argv_symbol.type.subtype());
-
-        // assign argv[*] to the address of a string-object
-        exprt array_of("array_of", argv_symbol.type);
-        array_of.copy_to_operands(address_of);
-
-        init_code.copy_to_operands(
-          code_assignt(symbol_expr(argv_symbol), array_of));
-        */
       }
 
       {

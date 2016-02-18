@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <sstream>
 
 #include "smt_conv.h"
@@ -479,6 +480,10 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     const constant_string2t &str = to_constant_string2t(obj.ptr_obj);
     std::string identifier =
       "address_of_str_const(" + str.value.as_string() + ")";
+
+    // XXX Oh look -- this is vulnerable to the poison null byte.
+    std::replace(identifier.begin(), identifier.end(), '\0', '_');
+
     return convert_identifier_pointer(obj.ptr_obj, identifier);
   } else if (is_constant_array2t(obj.ptr_obj)) {
     // This can occur (rather than being a constant string) when the C++

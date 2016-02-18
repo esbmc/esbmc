@@ -41,7 +41,6 @@ extern "C" {
 #include <goto-programs/show_claims.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/read_goto_binary.h>
-#include <goto-programs/string_abstraction.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_k_induction.h>
 
@@ -1291,22 +1290,25 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
 {
   std::map<std::string, std::string> strings;
 
-  symbolst::const_iterator it;
-  for (it = context.symbols.begin(); it != context.symbols.end(); it++) {
-    if (it->first.as_string().find("__ESBMC_property_") != std::string::npos) {
-      // Munge back into the shape of an actual string
-      std::string str = "";
-      forall_operands(iter2, it->second.value) {
-        char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
-        if (c != 0)
-          str += c;
-        else
-          break;
-      }
+  context.foreach_operand(
+    [this, &strings] (const symbolt& s)
+    {
+      if (s.name.as_string().find("__ESBMC_property_") != std::string::npos)
+      {
+        // Munge back into the shape of an actual string
+        std::string str = "";
+        forall_operands(iter2, s.value) {
+          char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
+          if (c != 0)
+            str += c;
+          else
+            break;
+        }
 
-      strings[it->first.as_string()] = str;
+        strings[s.name.as_string()] = str;
+      }
     }
-  }
+  );
 
   std::map<std::string, std::pair<std::set<std::string>, expr2tc> > monitors;
   std::map<std::string, std::string>::const_iterator str_it;
@@ -1377,9 +1379,12 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
 
     used_syms.insert(sym);
   } else {
-    Forall_operands2(it, idx, e)
-      if (!is_nil_expr(*it))
-        replace_symbol_names(*it, prefix, strings, used_syms);
+    e.get()->Foreach_operand([&prefix, &strings, &used_syms] (expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          replace_symbol_names(e, prefix, strings, used_syms);
+      }
+    );
   }
 
   return;
@@ -1482,8 +1487,10 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   if (!is_symbol2t(expr)) {
     unsigned int globals = 0;
 
-    forall_operands2(it, idx, expr)
-      globals += calc_globals_used(ns, *it);
+    expr->foreach_operand([&globals, &ns] (const expr2tc &e) {
+      globals += calc_globals_used(ns, e);
+      }
+    );
 
     return globals;
   }
@@ -1607,13 +1614,6 @@ bool cbmc_parseoptionst::process_goto_program(
     }
 
     goto_check(ns, options, goto_functions);
-
-    if(cmdline.isset("string-abstraction"))
-    {
-      status("String Abstraction");
-      string_abstraction(context,
-        *get_message_handler(), goto_functions);
-    }
 
 #if 0
     // This disabled code used to run the pointer static analysis and produce

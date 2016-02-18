@@ -34,12 +34,12 @@ void value_set_analysist::add_vars(
   const goto_programt &goto_program)
 {
   typedef std::list<value_sett::entryt> entry_listt;
-  
+
   // get the globals
   entry_listt globals;
   get_globals(globals);
 
-  // cache the list for the locals to speed things up  
+  // cache the list for the locals to speed things up
   typedef hash_map_cont<irep_idt, entry_listt, irep_id_hash> entry_cachet;
   entry_cachet entry_cache;
 
@@ -51,7 +51,7 @@ void value_set_analysist::add_vars(
     value_sett &v=*(*this)[i_it].value_set;
 
     v.add_vars(globals);
-    
+
     for(goto_programt::local_variablest::const_iterator
         l_it=i_it->local_variables.begin();
         l_it!=i_it->local_variables.end();
@@ -63,7 +63,7 @@ void value_set_analysist::add_vars(
       if(e_it==entry_cache.end())
       {
         const symbolt &symbol=ns.lookup(*l_it);
-        
+
         std::list<value_sett::entryt> &entries=entry_cache[*l_it];
         get_entries(symbol, entries);
         v.add_vars(entries);
@@ -93,9 +93,9 @@ void value_set_analysist::get_entries_rec(
      t.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(t);
-    
+
     const struct_typet::componentst &c=struct_type.components();
-    
+
     for(struct_typet::componentst::const_iterator
         it=c.begin();
         it!=c.end();
@@ -132,32 +132,35 @@ void value_set_analysist::add_vars(
     forall_goto_program_instructions(i_it, f_it->second.body)
     {
       value_sett &v=*(*this)[i_it].value_set;
-    
+
       v.add_vars(globals);
-      
+
       for(goto_programt::local_variablest::const_iterator
           l_it=i_it->local_variables.begin();
           l_it!=i_it->local_variables.end();
           l_it++)
       {
         const symbolt &symbol=ns.lookup(*l_it);
-        
+
         std::list<value_sett::entryt> entries;
         get_entries(symbol, entries);
         v.add_vars(entries);
       }
     }
-}    
+}
 
 void value_set_analysist::get_globals(
   std::list<value_sett::entryt> &dest)
 {
   // static ones
-  forall_symbols(it, ns.get_context().symbols)
-    if(it->second.lvalue &&
-       it->second.static_lifetime)
-      get_entries(it->second, dest);
-}    
+  ns.get_context().foreach_operand(
+    [this, &dest] (const symbolt& s)
+    {
+      if(s.lvalue && s.static_lifetime)
+        get_entries(s, dest);
+    }
+  );
+}
 
 bool value_set_analysist::check_type(const typet &type)
 {
@@ -167,7 +170,7 @@ bool value_set_analysist::check_type(const typet &type)
           type.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(type);
-    
+
     const struct_typet::componentst &components=
       struct_type.components();
 
@@ -177,15 +180,15 @@ bool value_set_analysist::check_type(const typet &type)
         it++)
     {
       if(check_type(it->type())) return true;
-    }    
+    }
   }
   else if(type.is_array())
     return check_type(type.subtype());
   else if(type.id()=="symbol")
     return check_type(ns.follow(type));
-  
+
   return false;
-}    
+}
 
 void value_set_analysist::convert(
   const goto_programt &goto_program,
@@ -197,7 +200,7 @@ void value_set_analysist::convert(
   forall_goto_program_instructions(i_it, goto_program)
   {
     const ::locationt &location=i_it->location;
-    
+
     if(location==previous_location) continue;
 
     if(location.is_nil() || location.get_file()=="")
@@ -210,7 +213,7 @@ void value_set_analysist::convert(
     xmlt &xml_location=i.new_element("location");
     ::convert(location, xml_location);
     xml_location.name="location";
-    
+
     for(value_sett::valuest::const_iterator
         v_it=value_set.values.begin();
         v_it!=value_set.values.end();
@@ -219,10 +222,10 @@ void value_set_analysist::convert(
       xmlt &var=i.new_element("variable");
       var.new_element("identifier").data = v_it->first.the_string;
 
-      #if 0      
+      #if 0
       const value_sett::expr_sett &expr_set=
         v_it->second.expr_set();
-      
+
       for(value_sett::expr_sett::const_iterator
           e_it=expr_set.begin();
           e_it!=expr_set.end();
@@ -230,7 +233,7 @@ void value_set_analysist::convert(
       {
         std::string value_str=
           from_expr(ns, identifier, *e_it);
-        
+
         var.new_element("value").data=
           xmlt::escape(value_str);
       }
@@ -252,9 +255,9 @@ void convert(
       f_it++)
   {
     xmlt &f=dest.new_element("function");
-    
+
     f.new_element("identifier").data=xmlt::escape(id2string(f_it->first));
-    
+
     value_set_analysis.convert(f_it->second.body, f_it->first, f);
   }
 }
@@ -265,7 +268,7 @@ void convert(
   xmlt &dest)
 {
   dest=xmlt("value_set_analysis");
-  
+
   value_set_analysis.convert(
     goto_program,
     "",

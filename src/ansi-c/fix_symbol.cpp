@@ -24,10 +24,10 @@ void fix_symbolt::fix_symbol(symbolt &symbol)
 {
   type_mapt::const_iterator it=
     type_map.find(symbol.name);
-  
+
   if(it!=type_map.end())
     symbol.name=it->second.id();
-    
+
   replace(symbol.type);
   replace(symbol.value);
 }
@@ -51,12 +51,12 @@ void fix_symbolt::fix_context(contextt &context)
       t_it!=type_map.end();
       t_it++)
   {
-    symbolst::iterator s_it=context.symbols.find(t_it->first);
-    assert(s_it!=context.symbols.end());
+    symbolt* symb = context.find_symbol(t_it->first);
+    assert(symb != nullptr);
 
-    symbolt s=s_it->second;
-    s.name=t_it->second.identifier();
-    context.symbols.erase(s_it);
+    symbolt s = *symb;
+    s.name = t_it->second.identifier();
+    context.erase_symbol(t_it->first);
     context.move(s);
   }
 }
