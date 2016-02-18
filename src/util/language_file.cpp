@@ -218,30 +218,37 @@ bool language_filest::typecheck_module(
 
 void language_filest::typecheck_virtual_methods(contextt &context)
 {
-	  forall_symbols(s_it, context.symbols) {
-		const symbolt &symbol=s_it->second;
-		if(symbol.type.id()=="struct") {
+  // XXX: This should go away somewhere in the future
+  context.foreach_operand(
+    [this, &context] (const symbolt& s)
+    {
+      if(s.type.id()=="struct")
+      {
+        const struct_typet &struct_type = to_struct_type(s.type);
+        const struct_typet::componentst &components = struct_type.methods();
 
-			const struct_typet &struct_type=
-				to_struct_type(symbol.type);
-			const struct_typet::componentst &components=
-			    struct_type.methods();
+        for(struct_typet::componentst::const_iterator
+            c_it = components.begin();
+            c_it != components.end();
+            c_it++)
+        {
+          if(c_it->get_bool("is_virtual")
+             && !(c_it->get_bool("is_pure_virtual")))
+          {
+            const symbolt &member_function =
+              namespacet(context).lookup(c_it->get_name());
 
-			for(struct_typet::componentst::const_iterator c_it =
-				components.begin(); c_it != components.end(); c_it++) {
-
-				if(c_it->get_bool("is_virtual") && !(c_it->get_bool("is_pure_virtual"))) {
-					const symbolt &member_function = namespacet(context).lookup(c_it->get_name());
-
-					if (member_function.value.is_nil()) {
-						error(member_function.location.as_string()+": The virtual method isn't pure virtual and hasn't a method implementation ");
-						std::cerr << "CONVERSION ERROR" << std::endl;
-						throw 0;
-					}
-
-				}
-
-			}
-		}
-	  }
+            if (member_function.value.is_nil())
+            {
+              error(member_function.location.as_string()+
+                  ": The virtual method isn't pure virtual and hasn't a "
+                  "method implementation ");
+              std::cerr << "CONVERSION ERROR" << std::endl;
+              throw 0;
+            }
+          }
+        }
+      }
+    }
+  );
 }

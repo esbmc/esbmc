@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_CONTEXT_H
 
 #include <iostream>
-
+#include <functional>
 #include <map>
 
 #include <hash_cont.h>
@@ -19,14 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string_hash.h>
 
 typedef hash_map_cont<irep_idt, symbolt, irep_id_hash> symbolst;
-
-#define forall_symbols(it, expr) \
-  for(symbolst::const_iterator it=(expr).begin(); \
-      it!=(expr).end(); it++)
-
-#define Forall_symbols(it, expr) \
-  for(symbolst::iterator it=(expr).begin(); \
-      it!=(expr).end(); it++)
+typedef std::vector<symbolt*> ordered_symbolst;
 
 typedef std::multimap<irep_idt, irep_idt> symbol_base_mapt;
 typedef std::multimap<irep_idt, irep_idt> symbol_module_mapt;
@@ -43,10 +36,13 @@ typedef std::multimap<irep_idt, irep_idt> symbol_module_mapt;
 
 class contextt
 {
+  typedef std::function<void (const symbolt &symbol)> const_symbol_delegate;
+  typedef std::function<void (symbolt &symbol)> symbol_delegate;
+
 public:
   typedef ::symbolst symbolst;
+  typedef ::ordered_symbolst ordered_symbolst;
 
-  symbolst symbols;
   symbol_base_mapt symbol_base_map;
   symbol_module_mapt symbol_module_map;
 
@@ -63,9 +59,7 @@ public:
     symbol_module_map.clear();
   }
 
-  void show(std::ostream &out = std::cout) const;
-
-  const irept &value(const irep_idt &name) const;
+  void dump() const;
 
   void swap(contextt &other)
   {
@@ -74,12 +68,53 @@ public:
     symbol_module_map.swap(other.symbol_module_map);
   }
 
-  bool has_symbol(const irep_idt &name) const
-  {
-    return symbols.find(name)!=symbols.end();
-  }
-};
+  symbolt* find_symbol(irep_idt name);
+  const symbolt* find_symbol(irep_idt name) const;
 
-std::ostream &operator << (std::ostream &out, const contextt &context);
+  void erase_symbol(irep_idt name);
+
+  template <typename T>
+  void foreach_operand_in_order(T &&t) const
+  {
+    const_symbol_delegate wrapped(std::cref(t));
+    foreach_operand_impl_in_order_const(wrapped);
+  }
+
+  template <typename T>
+  void Foreach_operand_in_order(T &&t)
+  {
+    symbol_delegate wrapped(std::ref(t));
+    foreach_operand_impl_in_order(wrapped);
+  }
+
+  template <typename T>
+  void foreach_operand(T &&t) const
+  {
+    const_symbol_delegate wrapped(std::cref(t));
+    foreach_operand_impl_const(wrapped);
+  }
+
+  template <typename T>
+  void Foreach_operand(T &&t)
+  {
+    symbol_delegate wrapped(std::ref(t));
+    foreach_operand_impl(wrapped);
+  }
+
+  unsigned int size() const
+  {
+    return symbols.size();
+  }
+
+private:
+  symbolst symbols;
+  ordered_symbolst ordered_symbols;
+
+  void foreach_operand_impl_const(const_symbol_delegate &expr) const;
+  void foreach_operand_impl(symbol_delegate &expr);
+
+  void foreach_operand_impl_in_order_const(const_symbol_delegate &expr) const;
+  void foreach_operand_impl_in_order(symbol_delegate &expr);
+};
 
 #endif

@@ -1021,22 +1021,24 @@ execution_statet::init_property_monitors(void)
 {
   std::map<std::string, std::string> strings;
 
-  symbolst::const_iterator it;
-  for (it = new_context.symbols.begin(); it != new_context.symbols.end(); it++){
-    if (it->first.as_string().find("__ESBMC_property_") != std::string::npos) {
-      // Munge back into the shape of an actual string
-      std::string str = "";
-      forall_operands(iter2, it->second.value) {
-        char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
-        if (c != 0)
-          str += c;
-        else
-          break;
-      }
+  new_context.foreach_operand(
+    [&strings] (const symbolt& s)
+    {
+      if (s.name.as_string().find("__ESBMC_property_") != std::string::npos) {
+        // Munge back into the shape of an actual string
+        std::string str = "";
+        forall_operands(iter2, s.value) {
+          char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
+          if (c != 0)
+            str += c;
+          else
+            break;
+        }
 
-      strings[it->first.as_string()] = str;
+        strings[s.name.as_string()] = str;
+      }
     }
-  }
+  );
 
   std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
   std::map<std::string, std::string>::const_iterator str_it;

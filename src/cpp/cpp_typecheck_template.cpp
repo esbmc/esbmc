@@ -128,14 +128,13 @@ void cpp_typecheckt::typecheck_class_template(
 
   // check if we have it already
 
-  contextt::symbolst::iterator previous_symbol=
-    context.symbols.find(symbol_name);
+  symbolt* previous_symbol = context.find_symbol(symbol_name);
 
-  if(previous_symbol!=context.symbols.end())
+  if(previous_symbol != nullptr)
   {
     // there already
     cpp_declarationt &previous_declaration=
-      to_cpp_declaration(previous_symbol->second.type);
+      to_cpp_declaration(previous_symbol->type);
 
     bool previous_has_body=
       previous_declaration.type().body().is_not_nil();
@@ -147,7 +146,7 @@ void cpp_typecheckt::typecheck_class_template(
       str << "template struct `" << base_name
           << "' defined previously" << std::endl;
       str << "location of previous definition: "
-          << previous_symbol->second.location;
+          << previous_symbol->location;
       throw 0;
     }
 
@@ -158,7 +157,7 @@ void cpp_typecheckt::typecheck_class_template(
       salvage_default_parameters(
         previous_declaration.template_type(),
         declaration.template_type());
-      previous_symbol->second.type.swap(declaration);
+      previous_symbol->type.swap(declaration);
 
       // We also replace the template scope (the old one could be deleted).
       cpp_scopes.id_map[symbol_name]=&template_scope;
@@ -264,13 +263,12 @@ void cpp_typecheckt::typecheck_function_template(
 
   // check if we have it already
 
-  contextt::symbolst::iterator previous_symbol=
-    context.symbols.find(symbol_name);
+  symbolt* previous_symbol = context.find_symbol(symbol_name);
 
-  if(previous_symbol!=context.symbols.end())
+  if(previous_symbol != nullptr)
   {
     bool previous_has_value =
-     to_cpp_declaration(previous_symbol->second.type).
+     to_cpp_declaration(previous_symbol->type).
        declarators()[0].find("value").is_not_nil();
 
     if(has_value && previous_has_value)
@@ -279,13 +277,13 @@ void cpp_typecheckt::typecheck_function_template(
       str << "function template symbol `" << base_name
           << "' declared previously" << std::endl;
       str << "location of previous definition: "
-          << previous_symbol->second.location;
+          << previous_symbol->location;
       throw 0;
     }
 
     if(has_value)
     {
-      previous_symbol->second.type.swap(declaration);
+      previous_symbol->type.swap(declaration);
       cpp_scopes.id_map[symbol_name]=&template_scope;
     }
 
@@ -408,7 +406,7 @@ void cpp_typecheckt::typecheck_class_template_member(
 
   const cpp_idt &cpp_id=**(id_set.begin());
   symbolt &template_symbol=
-    context.symbols.find(cpp_id.identifier)->second;
+    *context.find_symbol(cpp_id.identifier);
 
   exprt *template_methods=&static_cast<exprt &>(
     template_symbol.value.add("template_methods"));
@@ -628,12 +626,10 @@ void cpp_typecheckt::convert_class_template_specialization(
     throw 0;
   }
 
-  contextt::symbolst::iterator s_it=
-    context.symbols.find((*id_set.begin())->identifier);
+  symbolt* s = context.find_symbol((*id_set.begin())->identifier);
+  assert(s != nullptr);
 
-  assert(s_it!=context.symbols.end());
-
-  symbolt &template_symbol=s_it->second;
+  symbolt &template_symbol = *s;
 
   if(!template_symbol.type.get_bool("is_template"))
   {

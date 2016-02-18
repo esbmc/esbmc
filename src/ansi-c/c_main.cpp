@@ -56,22 +56,26 @@ void static_lifetime_init(
   dest=code_blockt();
 
   // Do assignments based on "value".
-  forall_symbols(it, context.symbols)
-    if(it->second.static_lifetime)
-      init_variable(dest, it->second);
+  context.foreach_operand_in_order(
+    [&dest] (const symbolt& s)
+    {
+      if(s.static_lifetime)
+        init_variable(dest, s);
+    }
+  );
 
   // call designated "initialization" functions
-
-  forall_symbols(it, context.symbols)
-  {
-    if(it->second.type.initialization() &&
-       it->second.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest] (const symbolt& s)
     {
-      code_function_callt function_call;
-      function_call.function()=symbol_expr(it->second);
-      dest.move_to_operands(function_call);
+      if(s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
     }
-  }
+  );
 }
 
 /*******************************************************************\
@@ -102,11 +106,11 @@ bool c_main(
     forall_symbol_base_map(it, context.symbol_base_map, config.main)
     {
       // look it up
-      symbolst::const_iterator s_it=context.symbols.find(it->second);
+      symbolt* s = context.find_symbol(it->second);
 
-      if(s_it==context.symbols.end()) continue;
+      if(s == nullptr) continue;
 
-      if(s_it->second.type.is_code())
+      if(s->type.is_code())
         matches.push_back(it->second);
     }
 
@@ -137,12 +141,11 @@ bool c_main(
     main_symbol=standard_main;
 
   // look it up
-  symbolst::const_iterator s_it=context.symbols.find(main_symbol);
-
-  if(s_it==context.symbols.end())
+  symbolt* s = context.find_symbol(main_symbol);
+  if(s == nullptr)
     return false; // give up, no main
 
-  const symbolt &symbol=s_it->second;
+  const symbolt &symbol = *s;
 
   // check if it has a body
   if(symbol.value.is_nil())

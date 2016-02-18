@@ -230,9 +230,9 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   }
 
   const irep_idt &identifier=type.identifier();
-  symbolst::const_iterator s_it=context.symbols.find(identifier);
+  const symbolt* s = context.find_symbol(identifier);
 
-  if(s_it==context.symbols.end())
+  if(s == nullptr)
   {
     err_location(expr);
     str << "failed to find symbol `" << identifier << "'";
@@ -240,7 +240,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   }
 
   // found it
-  const symbolt &symbol=s_it->second;
+  const symbolt &symbol = *s;
   const irept &components=symbol.type.components();
   const irep_idt &member=expr.member_irep().identifier();
   bool found=false;
@@ -329,9 +329,9 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   const irep_idt &identifier=expr.identifier();
 
   // look it up
-  symbolst::const_iterator s_it=context.symbols.find(identifier);
+  symbolt* s = context.find_symbol(identifier);
 
-  if(s_it==context.symbols.end())
+  if(s == nullptr)
   {
     err_location(expr);
     str << "failed to find symbol `" << identifier << "'";
@@ -339,7 +339,7 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   }
 
   // found it
-  const symbolt &symbol=s_it->second;
+  const symbolt &symbol = *s;
 
   if(symbol.is_type)
   {
@@ -1423,7 +1423,8 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   {
     replace_symbol(f_op);
 
-    if(context.symbols.find(f_op.identifier())==context.symbols.end())
+    symbolt* s = context.find_symbol(f_op.identifier());
+    if(s == nullptr)
     {
       // maybe this is an undeclared function
       // let's just add it
