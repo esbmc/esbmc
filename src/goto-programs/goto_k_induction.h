@@ -88,8 +88,7 @@ protected:
     exprt &loop_cond);
   void duplicate_loop_body(
     goto_programt::targett &loop_head,
-    goto_programt::targett &loop_exit,
-    exprt& loop_cond);
+    goto_programt::targett &loop_exit);
   void convert_assert_to_assume(
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit);
