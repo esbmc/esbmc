@@ -16,57 +16,12 @@
 
 static unsigned int state_counter = 1;
 
-loopst::loop_varst global_vars;
-void add_global_vars(const exprt& expr)
-{
-  if (expr.is_symbol() && expr.type().id() != "code")
-  {
-    if(check_var_name(expr))
-      global_vars.insert(
-        std::pair<irep_idt, const exprt>(expr.identifier(), expr));
-  }
-  else
-  {
-    forall_operands(it, expr)
-      add_global_vars(*it);
-  }
-}
-
-void get_global_vars(contextt &context)
-{
-  context.foreach_operand(
-    [] (const symbolt& s)
-    {
-      if(s.static_lifetime && !s.type.is_pointer())
-      {
-        exprt sym_expr = symbol_expr(s);
-        if(s.value.id() == irep_idt("array_of"))
-          sym_expr.type() = s.value.type();
-        add_global_vars(sym_expr);
-      }
-    }
-  );
-}
-
-void dump_global_vars()
-{
-  std::cout << "Global variables:" << std::endl;
-
-  u_int i = 0;
-  for (std::pair<irep_idt, const exprt> expr : global_vars)
-    std::cout << ++i << ". \t" << "identifier: " << expr.first << std::endl
-    << " " << expr.second << std::endl << std::endl;
-  std::cout << std::endl;
-}
-
 void goto_k_induction(
   goto_functionst& goto_functions,
   contextt &context,
   optionst &options,
   message_handlert& message_handler)
 {
-  get_global_vars(context);
-
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
       goto_k_inductiont(
@@ -115,9 +70,6 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
     loop.output();
     return;
   }
-
-  // Add global vars to loop map
-  loop.add_var_to_loop(global_vars);
 
   // First, we need to fill the state member with the variables
   fill_state(loop);
@@ -382,9 +334,6 @@ void goto_k_inductiont::convert_infinite_loop(loopst &loop)
 
 void goto_k_inductiont::fill_state(loopst &loop)
 {
-  // Add global vars to loop map
-  loop.add_var_to_loop(global_vars);
-
   loopst::loop_varst loop_vars = loop.get_loop_vars();
 
   // State size will be the number of loop vars + global vars
