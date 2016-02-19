@@ -57,6 +57,7 @@ public:
     symbols.clear();
     symbol_base_map.clear();
     symbol_module_map.clear();
+    ordered_symbols.clear();
   }
 
   void dump() const;
@@ -66,6 +67,7 @@ public:
     symbols.swap(other.symbols);
     symbol_base_map.swap(other.symbol_base_map);
     symbol_module_map.swap(other.symbol_module_map);
+    ordered_symbols.swap(other.ordered_symbols);
   }
 
   symbolt* find_symbol(irep_idt name);
