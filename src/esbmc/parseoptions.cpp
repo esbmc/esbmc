@@ -924,12 +924,17 @@ int cbmc_parseoptionst::doit_k_induction()
   if(set_claims(goto_functions))
     return 7;
 
-  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
-  if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = -1;
+  // Get max number of iterations
+  unsigned long max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
-  u_int k_step = 1;
-  do
+  // The option unlimited-k-steps set the max number of iterations to UINTMAX_MAX
+  if(cmdline.isset("unlimited-k-steps"))
+    max_k_step = UINTMAX_MAX;
+
+  // Get the increment
+  unsigned long k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     {
       opts.set_option("base-case", true);
@@ -949,8 +954,6 @@ int cbmc_parseoptionst::doit_k_induction()
       if(do_bmc(bmc))
         return true;
     }
-
-    ++k_step;
 
     if(!opts.get_bool_option("disable-forward-condition"))
     {
@@ -981,10 +984,10 @@ int cbmc_parseoptionst::doit_k_induction()
       bmct bmc(goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
-      bmc.options.set_option("unwind", i2string(k_step));
+      bmc.options.set_option("unwind", i2string(k_step+1));
 
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
+      std::cout << i2string((unsigned long) k_step+1);
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking inductive step" << std::endl;
 
@@ -1002,7 +1005,7 @@ int cbmc_parseoptionst::doit_k_induction()
       if(!res)
         return res;
     }
-  } while(k_step <= max_k_step);
+  }
 
   status("Unable to prove or falsify the program, giving up.");
   status("VERIFICATION UNKNOWN");
@@ -1746,8 +1749,9 @@ void cbmc_parseoptionst::help()
     " --k-induction                prove by k-induction \n"
     " --k-induction-parallel       prove by k-induction, running each step on a separate process\n"
     " --constrain-all-states       remove all redundant states in the inductive step\n"
-    " --k-step nr                  set max k-step (default is 50)\n"
-    " --unlimited-k-steps          set max k-step to 4,294,967,295\n\n"
+    " --k-step nr                  set k increment (default is 1)\n"
+    " --max-k-step nr              set max number of iteration (default is 50)\n"
+    " --unlimited-k-steps          set max number of iteration to UINTMAX_MAX\n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
     " --round-robin                use the round robin scheduling approach\n"
