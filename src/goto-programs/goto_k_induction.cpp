@@ -320,9 +320,6 @@ void goto_k_inductiont::convert_infinite_loop(loopst &loop)
   // Assume states
   assume_state_vector(loop_exit);
 
-  // Flag this loop as converted
-  loop_exit->converted_loop = true;
-
   // We should clear the state by the end of the loop
   // This will be better encapsulated if we had an inductive step class
   // that inherit from loops where we could save all these information

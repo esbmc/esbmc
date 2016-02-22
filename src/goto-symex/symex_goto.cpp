@@ -315,7 +315,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
     const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
     // If the loop was not converted by the k-induction, don't add the assume
-    if(inductive_step and !instruction.converted_loop)
+    if(inductive_step)
       return;
 
     // generate unwinding assumption
