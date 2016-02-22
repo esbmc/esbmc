@@ -120,46 +120,14 @@ goto_symext::symex_step(reachability_treet & art)
 
   case ASSUME:
     if (!cur_state->guard.is_false()) {
-      expr2tc tmp = instruction.guard;
-      replace_nondet(tmp);
-
-      dereference(tmp, false);
-      replace_dynamic_allocation(tmp);
-
-      cur_state->rename(tmp);
-      do_simplify(tmp);
-
-      if (!is_true(tmp)) {
-        expr2tc tmp2 = tmp;
-        expr2tc tmp3 = tmp2;
-        cur_state->guard.guard_expr(tmp2);
-
-        assume(tmp2);
-
-        // we also add it to the state guard
-        cur_state->guard.add(tmp3);
-      }
+      symex_assume();
     }
     cur_state->source.pc++;
     break;
 
   case ASSERT:
     if (!cur_state->guard.is_false()) {
-      if (!no_assertions ||
-        !cur_state->source.pc->location.user_provided()
-        || deadlock_check) {
-
-        std::string msg = cur_state->source.pc->location.comment().as_string();
-        if (msg == "") msg = "assertion";
-
-        expr2tc tmp = instruction.guard;
-        replace_nondet(tmp);
-
-        dereference(tmp, false);
-        replace_dynamic_allocation(tmp);
-
-        claim(tmp, msg);
-      }
+      symex_assert();
     }
     cur_state->source.pc++;
     break;
@@ -301,6 +269,51 @@ goto_symext::symex_step(reachability_treet & art)
     std::cerr << "GOTO instruction type " << instruction.type;
     std::cerr << " not handled in goto_symext::symex_step" << std::endl;
     abort();
+  }
+}
+
+void goto_symext::symex_assume(void)
+{
+  const goto_programt::instructiont &instruction=*cur_state->source.pc;
+
+  expr2tc tmp = instruction.guard;
+  replace_nondet(tmp);
+
+  dereference(tmp, false);
+  replace_dynamic_allocation(tmp);
+
+  cur_state->rename(tmp);
+  do_simplify(tmp);
+
+  if (!is_true(tmp))
+  {
+    expr2tc tmp2 = tmp;
+    expr2tc tmp3 = tmp2;
+    cur_state->guard.guard_expr(tmp2);
+
+    assume(tmp2);
+
+    // we also add it to the state guard
+    cur_state->guard.add(tmp3);
+  }
+}
+
+void goto_symext::symex_assert(void)
+{
+  if (!no_assertions || !cur_state->source.pc->location.user_provided())
+  {
+    std::string msg = cur_state->source.pc->location.comment().as_string();
+    if (msg == "") msg = "assertion";
+
+    const goto_programt::instructiont &instruction=*cur_state->source.pc;
+
+    expr2tc tmp = instruction.guard;
+    replace_nondet(tmp);
+
+    dereference(tmp, false);
+    replace_dynamic_allocation(tmp);
+
+    claim(tmp, msg);
   }
 }
 
