@@ -905,8 +905,7 @@ int cbmc_parseoptionst::doit_k_induction()
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 
-  // Generate goto functions for base case and forward condition
-  status("\n*** Generating Base Case and Forward Condition ***");
+  // Generate goto functions
   goto_functionst goto_functions;
 
   optionst opts;
@@ -925,41 +924,6 @@ int cbmc_parseoptionst::doit_k_induction()
   if(set_claims(goto_functions))
     return 7;
 
-  goto_functionst *inductive_goto_functions = nullptr;
-
-  // Check if the inductive step was disabled
-  if(!opts.get_bool_option("disable-inductive-step"))
-  {
-    status("\n*** Generating Inductive Step ***");
-
-    // This will be changed to true if the code contains:
-    // 1. Dynamic allocated memory (during goto conversion)
-    // 2. Multithreaded code (during symbolic execution)
-    opts.set_option("disable-inductive-step", false);
-
-    // Generate goto functions for inductive step
-    // We'll clean the context so there is no function name clash
-    // It will generate the same context + inductive step's variables
-    context.clear();
-
-    inductive_goto_functions = new goto_functionst;
-    opts.set_option("inductive-step", true);
-
-    if(get_goto_program(opts, *inductive_goto_functions))
-      return 6;
-
-    if(cmdline.isset("show-claims"))
-    {
-      const namespacet ns(context);
-      show_claims(ns, get_ui(), *inductive_goto_functions);
-      return 0;
-    }
-
-    if(set_claims(*inductive_goto_functions))
-      return 7;
-  }
-
-  bool res = 0;
   u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
   if(cmdline.isset("unlimited-k-steps"))
     max_k_step = -1;
@@ -982,19 +946,8 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking base case" << std::endl;
 
-      res = do_bmc(bmc);
-
-      // If it was disabled during symbolic execution,
-      // remember to clean the inductive goto instructions
-      if(opts.get_bool_option("disable-inductive-step")
-         && inductive_goto_functions != nullptr)
-      {
-        delete inductive_goto_functions;
-        inductive_goto_functions = nullptr;
-      }
-
-      if(res)
-        return res;
+      if(do_bmc(bmc))
+        return true;
     }
 
     ++k_step;
@@ -1014,19 +967,8 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking forward condition" << std::endl;
 
-      // If it was disabled during symbolic execution,
-      // remember to clean the inductive goto instructions
-      if(opts.get_bool_option("disable-inductive-step")
-         && inductive_goto_functions != nullptr)
-      {
-        delete inductive_goto_functions;
-        inductive_goto_functions = nullptr;
-      }
-
-      res = do_bmc(bmc);
-
-      if(!res)
-        return res;
+      if(!do_bmc(bmc))
+        return true;
     }
 
     if(!opts.get_bool_option("disable-inductive-step"))
@@ -1035,7 +977,7 @@ int cbmc_parseoptionst::doit_k_induction()
       opts.set_option("forward-condition", false);
       opts.set_option("inductive-step", true);
 
-      bmct bmc(*inductive_goto_functions, opts, context, ui_message_handler);
+      bmct bmc(goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
       bmc.options.set_option("unwind", i2string(k_step));
@@ -1045,19 +987,14 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking inductive step" << std::endl;
 
+      bool res = true;
       try {
         res = do_bmc(bmc);
       }
       catch(int)
       {
-      }
-
-      // If the inductive step was disabled during symex,
-      // remember to free the inductive goto instructions
-      if(bmc.options.get_bool_option("disable-inductive-step"))
-      {
-        delete inductive_goto_functions;
-        inductive_goto_functions = nullptr;
+        // If there is a dynamic allocation during goto symex, an
+        // exception will be thrown and the inductive step is disabled
         continue;
       }
 
