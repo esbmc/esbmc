@@ -1547,7 +1547,6 @@ bool cbmc_parseoptionst::process_goto_program(
         std::cout << "**** WARNING: this program contains infinite loops, "
             << "so we are not applying the forward condition!"
             << std::endl;
-        return false;
       }
     }
 
