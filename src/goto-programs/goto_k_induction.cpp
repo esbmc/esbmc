@@ -82,13 +82,6 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
 
   // Assume the loop termination condition after the copy's exit
   assume_neg_loop_cond_after_loop(loop_exit, loop_cond);
-
-  // Duplicate the loop after loop_exit, but without the backward goto
-  duplicate_loop_body(loop_head, loop_exit);
-
-  // Convert assert into assumes on the original loop (don't touch the
-  // copy made on the last step)
-  convert_assert_to_assume(loop_head, loop_exit);
 }
 
 void goto_k_inductiont::get_loop_cond(
@@ -164,6 +157,7 @@ void goto_k_inductiont::assume_neg_loop_cond_after_loop(
   goto_function.body.insert_swap(_loop_exit, dest);
 }
 
+// Duplicate the loop after loop_exit, but without the backward goto
 void goto_k_inductiont::duplicate_loop_body(
   goto_programt::targett& loop_head,
   goto_programt::targett& loop_exit)
@@ -276,6 +270,8 @@ void goto_k_inductiont::duplicate_loop_body(
   remove_skip(goto_function.body);
 }
 
+// Convert assert into assumes on the original loop (don't touch the
+// copy made on the last step)
 void goto_k_inductiont::convert_assert_to_assume(
   goto_programt::targett& loop_head,
   goto_programt::targett& loop_exit)
