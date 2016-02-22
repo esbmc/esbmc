@@ -138,6 +138,7 @@ public:
       guard = true_expr;
       event="";
       code = expr2tc();
+      inductive_step_instruction = false;
     }
 
     inline void make_goto() { clear(GOTO); }
@@ -243,6 +244,7 @@ public:
       instruction.targets.swap(targets);
       instruction.local_variables.swap(local_variables);
       instruction.function.swap(function);
+      std::swap(inductive_step_instruction, instruction.inductive_step_instruction);
     }
 
     //! A globally unique number to identify a program location.
