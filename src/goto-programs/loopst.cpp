@@ -44,11 +44,6 @@ bool check_var_name(const exprt &expr)
   return true;
 }
 
-goto_programt& loopst::get_goto_program()
-{
-  return goto_program;
-}
-
 loopst::loop_varst &loopst::get_loop_vars()
 {
   return loop_vars;
@@ -82,7 +77,7 @@ void loopst::add_var_to_loop(loopst::loop_varst &_loop_vars)
 void loopst::add_var_to_loop(const exprt &expr)
 {
   loop_vars.insert(
-      std::pair<irep_idt, const exprt>(expr.identifier(), expr));
+    std::pair<irep_idt, const exprt>(expr.identifier(), expr));
 }
 
 bool loopst::is_loop_var(exprt& expr)
@@ -206,15 +201,14 @@ void loopst::dump()
   unsigned n=original_loop_head->location_number;
 
   std::cout << n << " is head of (size: ";
-  std::cout << goto_program.instructions.size();
+  std::cout << size;
   std::cout << ") { ";
 
-  for(goto_programt::instructionst::iterator l_it=
-      goto_program.instructions.begin();
-      l_it != goto_program.instructions.end();
+  for(goto_programt::instructionst::iterator l_it = original_loop_head;
+      l_it != original_loop_exit;
       ++l_it)
   {
-    if(l_it != goto_program.instructions.begin()) std::cout << ", ";
+    if(l_it != original_loop_head) std::cout << ", ";
     std::cout << (*l_it).location_number;
   }
   std::cout << " }" << std::endl;

@@ -43,8 +43,6 @@ void goto_k_inductiont::goto_k_induction()
     it != function_loops.end();
     ++it)
   {
-    assert(!it->get_goto_program().empty());
-
     // Disable forward condition if there is an infinite loop
     // We'll never be able to prove that the loop was fully unwinded
     if(it->is_infinite_loop())
@@ -309,8 +307,6 @@ void goto_k_inductiont::convert_assert_to_assume(
 
 void goto_k_inductiont::convert_infinite_loop(loopst &loop)
 {
-  assert(!loop.get_goto_program().instructions.empty());
-
   // First, we need to fill the state member with the variables
   fill_state(loop);
 
@@ -694,7 +690,7 @@ void goto_k_inductiont::convert_instruction(
 
     // find code in function map
     goto_functionst::function_mapt::iterator it =
-        goto_functions.function_map.find(identifier);
+      goto_functions.function_map.find(identifier);
 
     if (it == goto_functions.function_map.end()) {
       std::cerr << "failed to find `" + id2string(identifier) +

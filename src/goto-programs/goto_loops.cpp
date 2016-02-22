@@ -29,39 +29,36 @@ void goto_loopst::create_function_loop(
   goto_programt::instructionst::iterator loop_head,
   goto_programt::instructionst::iterator loop_exit)
 {
-  goto_programt::instructionst::iterator it=loop_head;
-
-  function_loops.push_front(loopst(context, goto_programt()));
-  function_loopst::iterator it1 = function_loops.begin();
-
-  // Set original iterators
-  it1->set_original_loop_head(loop_head);
-  it1->set_original_loop_exit(loop_exit);
-
   // This means something like:
   // A: goto A;
   // There is no body, so we can skip it
   if(loop_head->location_number == loop_exit->location_number)
     return;
 
+  goto_programt::instructionst::iterator it=loop_head;
+
+  function_loops.push_front(loopst(context));
+  function_loopst::iterator it1 = function_loops.begin();
+
+  // Set original iterators
+  it1->set_original_loop_head(loop_head);
+  it1->set_original_loop_exit(loop_exit);
+
+  std::size_t size = 0;
+
   // Copy the loop body
   while (it != loop_exit)
   {
-    goto_programt::targett new_instruction=
-      it1->get_goto_program().add_instruction();
-
     // This should be done only when we're running k-induction
     // Maybe a flag on the class?
     get_modified_variables(it, it1, function_name);
-
-    *new_instruction=*it;
     ++it;
+
+    // Count the number of instruction
+    ++size;
   }
 
-  // Finally, add the loop exit
-  goto_programt::targett new_instruction=
-    it1->get_goto_program().add_instruction();
-  *new_instruction=*loop_exit;
+  it1->set_size(size);
 }
 
 void goto_loopst::get_modified_variables(
