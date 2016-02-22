@@ -36,7 +36,7 @@ public:
   bool is_infinite_loop();
   bool is_nondet_loop();
 
-  void output(std::ostream &out = std::cout);
+  void dump();
   void dump_loop_vars();
 
 protected:

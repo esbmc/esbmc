@@ -70,7 +70,7 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
     std::cout << "**** WARNING: we couldn't find a loop condition for the "
               << " following loop, so we're not converting it."
               << std::endl << "Loop: ";
-    loop.output();
+    loop.dump();
     return;
   }
 

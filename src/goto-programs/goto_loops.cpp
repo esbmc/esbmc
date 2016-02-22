@@ -118,17 +118,6 @@ void goto_loopst::get_modified_variables(
   }
 }
 
-void goto_loopst::output(std::ostream &out)
-{
-  for(function_loopst::iterator
-      h_it=function_loops.begin();
-      h_it!=function_loops.end();
-      ++h_it)
-  {
-    h_it->output(out);
-  }
-}
-
 void goto_loopst::add_loop_var(loopst &loop, const exprt& expr)
 {
   if (expr.is_symbol() && expr.type().id() != "code")
@@ -145,5 +134,11 @@ void goto_loopst::add_loop_var(loopst &loop, const exprt& expr)
 
 void goto_loopst::dump()
 {
-  output(std::cout);
+  for(function_loopst::iterator
+      h_it=function_loops.begin();
+      h_it!=function_loops.end();
+      ++h_it)
+  {
+    h_it->dump();
+  }
 }
