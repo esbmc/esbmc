@@ -1541,14 +1541,12 @@ bool cbmc_parseoptionst::process_goto_program(
         options,
         ui_message_handler);
 
-      // If the inductive step was not enable, which means that the code
-      // does not have any infinite loop, disable inductive step
-      if(options.get_bool_option("disable-inductive-step"))
+      // Warn the user if the forward condition was disabled
+      if(options.get_bool_option("disable-forward-condition"))
       {
-        std::cout << "**** WARNING: this program does not contain neither infinite "
-                  << "loops nor nondet loops,  so we are not applying the inductive"
-                  << "step to this program!"
-                  << std::endl;
+        std::cout << "**** WARNING: this program contains infinite loops, "
+            << "so we are not applying the forward condition!"
+            << std::endl;
         return false;
       }
     }
