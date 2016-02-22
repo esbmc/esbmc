@@ -1526,7 +1526,8 @@ bool cbmc_parseoptionst::process_goto_program(
     }
 
     if(cmdline.isset("inductive-step")
-       || options.get_bool_option("inductive-step"))
+       || cmdline.isset("k-induction")
+       || cmdline.isset("k-induction-parallel"))
     {
       // If the inductive step was disabled during the conversion,
       // there is no point spending time trying to convert it,
