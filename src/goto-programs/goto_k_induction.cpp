@@ -38,9 +38,9 @@ void goto_k_induction(
 void goto_k_inductiont::goto_k_induction()
 {
   // Full unwind the program
-  for(function_loopst::reverse_iterator
-    it = function_loops.rbegin();
-    it != function_loops.rend();
+  for(function_loopst::iterator
+    it = function_loops.begin();
+    it != function_loops.end();
     ++it)
   {
     assert(!it->get_goto_program().empty());
@@ -57,8 +57,6 @@ void goto_k_inductiont::goto_k_induction()
 
 void goto_k_inductiont::convert_finite_loop(loopst& loop)
 {
-  assert(!loop.get_goto_program().instructions.empty());
-
   // Get current loop head and loop exit
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
@@ -76,7 +74,7 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
     return;
   }
 
-  // First, we need to fill the state member with the variables
+  // Fill the state member with the variables
   fill_state(loop);
 
   // Create the nondet assignments on the beginning of the loop
@@ -87,6 +85,11 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
 
   // Assume the loop termination condition after the copy's exit
   assume_neg_loop_cond_after_loop(loop_exit, loop_cond);
+
+  // Check if the loop exit needs to be updated
+  // We must point to the assume that was inserted in the previous
+  // transformation
+  adjust_loop_exit(loop_head, loop_exit);
 }
 
 void goto_k_inductiont::get_loop_cond(
@@ -160,6 +163,25 @@ void goto_k_inductiont::assume_neg_loop_cond_after_loop(
   ++_loop_exit;
 
   goto_function.body.insert_swap(_loop_exit, dest);
+}
+
+void goto_k_inductiont::adjust_loop_exit(
+  goto_programt::targett& loop_head,
+  goto_programt::targett& loop_exit)
+{
+  goto_programt::targett _loop_exit = loop_exit;
+  ++_loop_exit;
+
+  // Zero means that the instruction was added during
+  // the k-induction transformation
+  if(_loop_exit->location_number == 0)
+  {
+    // Clear the target
+    loop_head->targets.clear();
+
+    // And set the target to be the newly inserted assume(cond)
+    loop_head->targets.push_front(_loop_exit);
+  }
 }
 
 // Duplicate the loop after loop_exit, but without the backward goto

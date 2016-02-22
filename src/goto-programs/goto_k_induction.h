@@ -93,6 +93,10 @@ protected:
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit);
 
+  void adjust_loop_exit(
+    goto_programt::targett &loop_head,
+    goto_programt::targett &loop_exit);
+
   void copy(const codet &code,
     goto_program_instruction_typet type,
     goto_programt &dest);
