@@ -32,8 +32,7 @@ goto_symext::get_unwind_recursion(
 
   if (unwind != 0)
   {
-    if(options.get_bool_option("inductive-step")
-       && !options.get_bool_option("disable-inductive-step"))
+    if(inductive_step && !options.get_bool_option("disable-inductive-step"))
     {
       std::cout << "**** WARNING: this program contains recursive function calls,"
           << " so we are not applying the inductive step to this program!"
