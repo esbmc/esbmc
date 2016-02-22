@@ -972,7 +972,7 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << "*** Checking forward condition" << std::endl;
 
       if(!do_bmc(bmc))
-        return true;
+        return false;
     }
 
     if(!opts.get_bool_option("disable-inductive-step"))
@@ -991,9 +991,9 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking inductive step" << std::endl;
 
-      bool res = true;
       try {
-        res = do_bmc(bmc);
+        if(!do_bmc(bmc))
+          return false;
       }
       catch(int)
       {
@@ -1001,9 +1001,6 @@ int cbmc_parseoptionst::doit_k_induction()
         // exception will be thrown and the inductive step is disabled
         continue;
       }
-
-      if(!res)
-        return res;
     }
   }
 
