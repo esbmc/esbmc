@@ -270,23 +270,21 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     }
   }
 
-  if(cmdline.isset("base-case") || options.get_bool_option("base-case"))
+  if(cmdline.isset("base-case"))
   {
     options.set_option("base-case", true);
     options.set_option("no-unwinding-assertions", true);
     options.set_option("partial-loops", false);
   }
 
-  if(cmdline.isset("forward-condition")
-      || options.get_bool_option("forward-condition"))
+  if(cmdline.isset("forward-condition"))
   {
     options.set_option("forward-condition", true);
     options.set_option("no-unwinding-assertions", false);
     options.set_option("partial-loops", false);
   }
 
-  if(cmdline.isset("inductive-step")
-      || options.get_bool_option("inductive-step"))
+  if(cmdline.isset("inductive-step"))
   {
     options.set_option("inductive-step", true);
     options.set_option("no-unwinding-assertions", true);
