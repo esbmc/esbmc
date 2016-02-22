@@ -45,6 +45,11 @@ void goto_k_inductiont::goto_k_induction()
   {
     assert(!it->get_goto_program().empty());
 
+    // Disable forward condition if there is an infinite loop
+    // We'll never be able to prove that the loop was fully unwinded
+    if(it->is_infinite_loop())
+      options.set_option("disable-forward-condition", true);
+
     // Start the loop conversion
     convert_finite_loop(*it);
   }
