@@ -222,6 +222,14 @@ execution_statet::symex_step(reachability_treet &art)
 #endif
   }
 
+  // Don't convert if it's a inductive instruction and we are running the base
+  // case or forward condition
+  if((base_case || forward_condition) && instruction.inductive_step_instruction)
+  {
+    cur_state->source.pc++;
+    return;
+  }
+
   if (symex_trace) {
     const goto_programt p_dummy;
     goto_functionst::function_mapt::const_iterator it =
