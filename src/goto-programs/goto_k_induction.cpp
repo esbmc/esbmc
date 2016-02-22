@@ -65,7 +65,7 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   // If we didn't find a loop condition, don't change anything
   if(loop_cond.is_nil())
   {
-    std::cout << "**** WARNING: we couldn't find a loop condition for the "
+    std::cout << "**** WARNING: we couldn't find a loop condition for the"
               << " following loop, so we're not converting it."
               << std::endl << "Loop: ";
     loop.dump();
