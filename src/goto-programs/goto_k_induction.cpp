@@ -75,6 +75,9 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   // Fill the state member with the variables
   fill_state(loop);
 
+  // Assume the loop condition before go into the loop
+  assume_loop_cond_before_loop(loop_head, loop_cond);
+
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head);
 
