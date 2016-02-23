@@ -231,7 +231,7 @@ execution_statet::symex_step(reachability_treet &art)
   }
 
   if (symex_trace)
-    state.source.pc->output_instruction(ns, "", std::cout);
+    state.source.pc->output_instruction(ns, "", std::cout, false);
 
   switch (instruction.type) {
     case END_FUNCTION:
