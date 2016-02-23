@@ -230,15 +230,8 @@ execution_statet::symex_step(reachability_treet &art)
     return;
   }
 
-  if (symex_trace) {
-    const goto_programt p_dummy;
-    goto_functionst::function_mapt::const_iterator it =
-      goto_functions.function_map.find(instruction.function);
-
-    const goto_programt &p_real = it->second.body;
-    const goto_programt &p = (it == goto_functions.function_map.end()) ? p_dummy : p_real;
-    p.output(ns, "", std::cout);
-  }
+  if (symex_trace)
+    state.source.pc->output_instruction(ns, "", std::cout);
 
   switch (instruction.type) {
     case END_FUNCTION:
