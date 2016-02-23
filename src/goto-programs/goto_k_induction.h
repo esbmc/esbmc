@@ -93,7 +93,7 @@ protected:
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit);
 
-  void adjust_loop_exit(
+  void adjust_loop_head_and_exit(
     goto_programt::targett &loop_head,
     goto_programt::targett &loop_exit);
 
