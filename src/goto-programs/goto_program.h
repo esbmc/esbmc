@@ -284,6 +284,15 @@ public:
 
       return false;
     }
+
+    void dump() const;
+
+    void output_instruction(
+      const class namespacet &ns,
+      const irep_idt &identifier,
+      std::ostream &out,
+      bool show_location=true,
+      bool show_variables=false) const;
   };
 
   typedef std::list<class instructiont> instructionst;
@@ -389,16 +398,13 @@ public:
   }
 
   //! Output goto program to given stream
+  void dump() const;
+
+  //! Output goto-program to given stream
   std::ostream &output(
     const namespacet &ns,
     const irep_idt &identifier,
     std::ostream &out) const;
-
-  //! Output goto-program to given stream
-  inline std::ostream &output(std::ostream &out = std::cout) const
-  {
-    return output(namespacet(contextt()), "", out);
-  }
 
   //! Compute the target numbers
   void compute_target_numbers();
@@ -458,15 +464,6 @@ public:
 
   //! Does the goto program have an assertion?
   bool has_assertion() const;
-
-  std::ostream &output_instruction(
-    const class namespacet &ns,
-    const irep_idt &identifier,
-    std::ostream &out,
-    instructionst::const_iterator it,
-    bool show_location=true,
-    bool show_variables=false) const;
-
 };
 
 bool operator<(const goto_programt::const_targett i1,

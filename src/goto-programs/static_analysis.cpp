@@ -168,7 +168,7 @@ void static_analysis_baset::output(
 
     get_state(i_it).output(ns, out);
     out << std::endl;
-    goto_program.output_instruction(ns, identifier, out, i_it);
+    i_it->output_instruction(ns, identifier, out);
     out << std::endl;
   }
 }

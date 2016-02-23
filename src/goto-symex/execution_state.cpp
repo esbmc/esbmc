@@ -237,7 +237,7 @@ execution_statet::symex_step(reachability_treet &art)
 
     const goto_programt &p_real = it->second.body;
     const goto_programt &p = (it == goto_functions.function_map.end()) ? p_dummy : p_real;
-    p.output_instruction(ns, "", std::cout, state.source.pc, false, false);
+    p.output(ns, "", std::cout);
   }
 
   switch (instruction.type) {

@@ -1478,7 +1478,7 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
       }
 
       if (print_insn)
-        fit->second.body.output_instruction(ns, pit->function, std::cout, pit, true, false);
+        fit->second.body.output(ns, pit->function, std::cout);
     }
   }
 

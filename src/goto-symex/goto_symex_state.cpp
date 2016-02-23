@@ -404,7 +404,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
 
   if (!thread_ended) {
     std::cout << spaces << "Next instruction to be executed:" << std::endl;
-    source.prog->output_instruction(ns, "", std::cout, source.pc, true, false);
+    source.prog->output(ns, "", std::cout);
   }
 
   return;
