@@ -81,8 +81,10 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head);
 
-  // Assume the loop condition before go into the loop
-  assume_loop_cond_before_loop(loop_head, loop_cond);
+  // Get original head again
+  // Since we are using insert_swap to keep the targets, the
+  // original loop head as shifted to after the assume cond
+  while((++loop_head)->inductive_step_instruction);
 
   // Assume the loop termination condition after the copy's exit
   assume_neg_loop_cond_after_loop(loop_exit, loop_cond);
