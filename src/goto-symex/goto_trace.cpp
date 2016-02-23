@@ -355,7 +355,7 @@ void generate_goto_trace_in_graphml_format(
 
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
-  std::map<int, std::map<int, std::string> > mapped_tokens;
+  std::map<int, std::string> line_content_map;
 
   bool already_initialized = false;
   boost::property_tree::ptree last_created_node;
@@ -415,9 +415,9 @@ void generate_goto_trace_in_graphml_format(
         it->pc->location.get_line().as_string().c_str());
 
     /* check if tokens already ok */
-    if(mapped_tokens.size() == 0)
+    if (line_content_map.size() == 0)
     {
-      convert_c_file_in_tokens(filename, mapped_tokens);
+      map_line_number_to_content(filename, line_content_map);
     }
     boost::property_tree::ptree current_edge;
     edge_p current_edge_p;
@@ -502,32 +502,9 @@ void generate_goto_trace_in_graphml_format(
     {
       current_edge_p.startline = line_number;
       current_edge_p.endline = line_number;
-      if(mapped_tokens.size() != 0)
+      if (line_content_map.size() != 0)
       {
-        std::map<int, std::string> current_line_tokens =
-            mapped_tokens[line_number];
-        std::map<int, std::string>::iterator it;
-        std::string token_set = "";
-        if(current_line_tokens.size() == 1)
-        {
-          token_set = std::to_string(current_line_tokens.begin()->first);
-        }
-        else
-        {
-          int first = current_line_tokens.begin()->first;
-          int end = first + current_line_tokens.end()->first - 1;
-          token_set = token_set
-              + std::to_string(current_line_tokens.begin()->first) + ","
-              + std::to_string(end);
-        }
-        std::string source_code = "";
-        for(it = current_line_tokens.begin(); it != current_line_tokens.end();
-            ++it)
-        {
-          source_code = source_code + it->second + " ";
-        }
-        current_edge_p.sourcecode = source_code.substr(0,
-            source_code.length() - 1);
+        current_edge_p.sourcecode = line_content_map[line_number];
       }
     }
     create_edge(current_edge, current_edge_p, last_created_node, current_node);

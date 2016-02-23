@@ -108,28 +108,33 @@ void generate_tokens(std::string tokenized_line,
   }
 }
 
-void convert_c_file_in_tokens(std::string source_code_file,
-    std::map<int, std::map<int, std::string> > & mapped_tokens)
+std::string trim(std::string str)
+{
+  const std::string whitespace_characters = " \t\r\n";
+  size_t first_non_whitespace = str.find_first_not_of(whitespace_characters);
+  if (first_non_whitespace == std::string::npos)
+    return "";
+  size_t last_non_whitespace = str.find_last_not_of(whitespace_characters);
+  size_t length = last_non_whitespace - first_non_whitespace + 1;
+  return str.substr(first_non_whitespace, length);
+}
+
+void map_line_number_to_content(std::string source_code_file,
+    std::map<int, std::string> & line_content_map)
 {
   std::ifstream sfile(source_code_file);
-  if (!sfile || tokenizer_executable_path.length() == 0)
+  if (!sfile)
   {
     return;
   }
   std::string source_content = read_file(source_code_file);
   std::istringstream source_stream(source_content.c_str());
-  std::string temporary_file = "/tmp/esbmc-to-graphml.tmp";
   std::string line;
   int line_count = 0;
-  int token_index = 1;
   while (std::getline(source_stream, line))
   {
     line_count++;
-    write_file(temporary_file, line + "\n");
-    std::string tokenized_line = call_tokenize(temporary_file);
-    std::map<int, std::string> tokens;
-    generate_tokens(tokenized_line, tokens, token_index);
-    mapped_tokens[line_count] = tokens;
+    line_content_map[line_count] = trim(line);
   }
 }
 
