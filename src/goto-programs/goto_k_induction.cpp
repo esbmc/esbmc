@@ -134,7 +134,7 @@ void goto_k_inductiont::make_nondet_assign(goto_programt::targett& loop_head)
     copy(new_assign, ASSIGN, dest);
   }
 
-  goto_function.body.destructive_insert(loop_head, dest);
+  goto_function.body.insert_swap(loop_head, dest);
 }
 
 void goto_k_inductiont::assume_loop_cond_before_loop(
@@ -148,7 +148,7 @@ void goto_k_inductiont::assume_loop_cond_before_loop(
   else
     assume_cond(loop_cond, dest);
 
-  goto_function.body.destructive_insert(loop_head, dest);
+  goto_function.body.insert_swap(loop_head, dest);
 }
 
 void goto_k_inductiont::assume_neg_loop_cond_after_loop(
@@ -165,7 +165,7 @@ void goto_k_inductiont::assume_neg_loop_cond_after_loop(
   goto_programt::targett _loop_exit = loop_exit;
   ++_loop_exit;
 
-  goto_function.body.destructive_insert(_loop_exit, dest);
+  goto_function.body.insert_swap(_loop_exit, dest);
 }
 
 void goto_k_inductiont::adjust_loop_exit(
