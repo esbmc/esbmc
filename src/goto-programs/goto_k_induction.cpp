@@ -172,6 +172,9 @@ void goto_k_inductiont::adjust_loop_exit(
   goto_programt::targett& loop_head,
   goto_programt::targett& loop_exit)
 {
+  loop_exit->targets.clear();
+  loop_exit->targets.push_front(loop_head);
+
   goto_programt::targett _loop_exit = loop_exit;
   ++_loop_exit;
 
