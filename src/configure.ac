@@ -67,6 +67,11 @@ AC_CHECK_LIB([gomp], [omp_get_num_threads],
     [AC_MSG_WARN([No libgomp found: Z3 may want this])], []
 )
 
+AC_CHECK_LIB([dl], [dlerror],
+    [AS_VAR_APPEND(LIBS, " -ldl")],
+    [AC_MSG_WARN([No dl found: libgomp may want this])], []
+)
+
 AC_CHECK_LIB([gmp], [__gmpz_cmp],
     [AS_VAR_APPEND(LIBS, " -lgmp")],
     [AC_MSG_WARN([No libgmp found: various solvers require it])], []
