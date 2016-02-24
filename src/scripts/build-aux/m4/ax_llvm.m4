@@ -49,7 +49,7 @@ AC_DEFUN([AX_LLVM],
     fi
 
     LLVMLDFLAGS=`$LLVMCONFIG --ldflags`
-    LLVMLIBS=`$LLVMCONFIG --libs`
+    LLVMLIBS=`$LLVMCONFIG --libs mcparser option bitreader`
     SYSLIBS=`$LLVMCONFIG --system-libs 2>/dev/null`
     if test "x$?" = "x0"; then
       LLVMLDFLAGS="$LLVMLDFLAGS $SYSLIBS"
@@ -61,7 +61,7 @@ AC_DEFUN([AX_LLVM],
       fi
     done
     LDFLAGS="$LDFLAGS $LLVMLDFLAGS"
-    LIBS="$LIBS $LLVMLIBS"
+    LIBS="$LIBS $LLVMLIBS $SYSLIBS"
 
   fi
 

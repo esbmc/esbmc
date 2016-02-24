@@ -439,6 +439,9 @@
 /* Define to 1 if the system has the type `_Bool'. */
 #undef HAVE__BOOL
 
+/* define if the clang library is available */
+#undef HAVE_clang
+
 /* Build mode of the LLVM library. */
 #undef LLVM_BUILDMODE
 
