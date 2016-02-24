@@ -183,6 +183,9 @@
 /* Define to 1 if you have the `m' library (-lm). */
 #undef HAVE_LIBM
 
+/* Define if there is a working LLVM library. */
+#undef HAVE_LLVM
+
 /* Define to 1 if you have the `localeconv' function. */
 #undef HAVE_LOCALECONV
 
@@ -435,6 +438,15 @@
 
 /* Define to 1 if the system has the type `_Bool'. */
 #undef HAVE__BOOL
+
+/* Build mode of the LLVM library. */
+#undef LLVM_BUILDMODE
+
+/* Define if LLVM was compiled with NDEBUG. */
+#undef LLVM_NDEBUG
+
+/* Version of the LLVM library. */
+#undef LLVM_VERSION
 
 /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
    slash. */

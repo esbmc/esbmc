@@ -52,7 +52,9 @@ AC_LANG(C++)
 
 AC_CHECK_LIB([m], [fabs])
 
-AC_CHECK_LIB([pthread], [pthread_create], [AS_VAR_APPEND(LIBS, " -lpthread ")])
+AC_CHECK_LIB([pthread], [pthread_create],
+    [AS_VAR_APPEND(LIBS, " -lpthread ")]
+)
 
 dnl Some librt's depend on pthread, so prepend it to the libs
 AC_CHECK_LIB([rt], [timer_create],
@@ -60,13 +62,21 @@ AC_CHECK_LIB([rt], [timer_create],
     [AC_MSG_ERROR([No librt found])], []
 )
 
-AC_CHECK_LIB([gomp], [omp_get_num_threads], [
-             AS_VAR_SET(LIBS, " -lgomp $LIBS")
-             ], [AC_MSG_WARN([No libgomp found: Z3 may want this])], [])
+AC_CHECK_LIB([gomp], [omp_get_num_threads],
+    [AS_VAR_SET(LIBS, " -lgomp $LIBS")],
+    [AC_MSG_WARN([No libgomp found: Z3 may want this])], []
+)
 
 AC_CHECK_LIB([gmp], [__gmpz_cmp],
-             [AS_VAR_APPEND(LIBS, " -lgmp ")],
-             [AC_MSG_WARN([No libgmp found: various solvers require it])], [])
+    [AS_VAR_APPEND(LIBS, " -lgmp")],
+    [AC_MSG_WARN([No libgmp found: various solvers require it])], []
+)
+
+AX_LLVM(,[AC_MSG_FAILURE(LLVM v3.8 or higher is required.)])
+
+dnl LLVM stuff
+dnl You will need the LLVM's and ncurses' static libraries
+AS_VAR_APPEND(LIBS, " -lclangTooling -lclangDriver -lclangFrontend -lclangParse -lclangSerialization -lclangSema -lclangAnalysis -lclangEdit -lclangLex -lclangAST -lclangBasic -lLLVMBitReader -lLLVMOption -lLLVMMC -lLLVMMCParser -lLLVMSupport -lz -ltinfo -ldl")
 
 AC_CHECK_HEADERS([boost/mpl/if.hpp], [], [AC_MSG_ERROR([No boost mpl found])])
 AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], [AC_MSG_ERROR([No boost shared ptr found])])
@@ -80,11 +90,6 @@ AC_CHECK_HEADERS([unistd.h], [AC_DEFINE([HAVE_UNISTD], [], [Has unistd.h header]
 dnl We don't link directly against openssl, instead chosing to open at runtime.
 dnl However, don't try and build for it without openssl headers
 AC_CHECK_HEADERS([openssl/sha.h], [AC_DEFINE([OPENSSL_HEADERS], [], [Have openssl headers])], [])
-
-dnl LLVM stuff
-dnl You will need the LLVM's and ncurses' static libraries
-AS_VAR_APPEND(LDFLAGS, " `llvm-config --ldflags`")
-AS_VAR_APPEND(LIBS, " -lclangTooling -lclangDriver -lclangFrontend -lclangParse -lclangSerialization -lclangSema -lclangAnalysis -lclangEdit -lclangLex -lclangAST -lclangBasic -lLLVMBitReader -lLLVMOption -lLLVMMC -lLLVMMCParser -lLLVMSupport -lz -ltinfo -ldl")
 
 AC_HEADER_STDBOOL
 AC_TYPE_UID_T
