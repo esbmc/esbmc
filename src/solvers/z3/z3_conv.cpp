@@ -44,13 +44,6 @@ create_new_z3_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
   return conv;
 }
 
-Z3_ast workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
-                                          Z3_bool is_signed);
-Z3_ast workaround_Z3_mk_bvadd_no_underflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
-Z3_ast workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
-Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
-                                          Z3_bool is_signed);
-Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 : smt_convt(int_encoding, _ns, is_cpp), array_iface(true, true),ctx(false)
 {
@@ -60,20 +53,20 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   assumpt_mode = false;
 
   z3::config conf;
-  conf.set("MODEL", true);
-  conf.set("RELEVANCY", 0);
-  conf.set("SOLVER", true);
-  // Disabling this option results in the enablement of --symex-thread-guard on
-  // 03_exor_01 to not explode solving time. No idea why this is the case,
-  // doesn't affect any other solving time.
-  conf.set("ARRAY_ALWAYS_PROP_UPWARD", false);
-
   ctx.init(conf, int_encoding);
+
+  solver =
+     (z3::tactic(ctx, "simplify") &
+      z3::tactic(ctx, "solve-eqs") &
+      z3::tactic(ctx, "simplify") &
+      z3::tactic(ctx, "smt")).mk_solver();
+
+   z3::params p(ctx);
+   p.set("relevancy", (unsigned int) 0);
+   solver.set(p);
 
   z3_ctx = ctx;
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
-
-  solver = z3::solver(ctx);
 
   setup_pointer_sort();
 
@@ -515,10 +508,10 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   switch (k) {
   case SMT_FUNC_ADD:
   case SMT_FUNC_BVADD:
-    return new_ast(mk_add(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e + asts[1]->e), s);
   case SMT_FUNC_SUB:
   case SMT_FUNC_BVSUB:
-    return new_ast(mk_sub(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e - asts[1]->e), s);
   case SMT_FUNC_MUL:
   case SMT_FUNC_BVMUL:
     return new_ast((asts[0]->e * asts[1]->e), s);
@@ -562,25 +555,25 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVNOT:
     return new_ast((~asts[0]->e), s);
   case SMT_FUNC_BVNXOR:
-    return new_ast(mk_bvxnor(asts[0]->e, asts[1]->e), s);
+    return new_ast(!(asts[0]->e ^ asts[1]->e), s);
   case SMT_FUNC_BVNOR:
-    return new_ast(mk_bvnor(asts[0]->e, asts[1]->e), s);
+    return new_ast(!(asts[0]->e | asts[1]->e), s);
   case SMT_FUNC_BVNAND:
-    return new_ast(mk_bvnor(asts[0]->e, asts[1]->e), s);
+    return new_ast(!(asts[0]->e & asts[1]->e), s);
   case SMT_FUNC_BVXOR:
-    return new_ast(mk_bvxor(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e ^ asts[1]->e), s);
   case SMT_FUNC_BVOR:
-    return new_ast(mk_bvor(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e | asts[1]->e), s);
   case SMT_FUNC_BVAND:
-    return new_ast(mk_bvand(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e & asts[1]->e), s);
   case SMT_FUNC_IMPLIES:
-    return new_ast(mk_implies(asts[0]->e, asts[1]->e), s);
+    return new_ast(implies(asts[0]->e, asts[1]->e), s);
   case SMT_FUNC_XOR:
     return new_ast(mk_xor(asts[0]->e, asts[1]->e), s);
   case SMT_FUNC_OR:
-    return new_ast(mk_or(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e || asts[1]->e), s);
   case SMT_FUNC_AND:
-    return new_ast(mk_and(asts[0]->e, asts[1]->e), s);
+    return new_ast((asts[0]->e && asts[1]->e), s);
   case SMT_FUNC_NOT:
     return new_ast(!asts[0]->e, s);
   // NB: mk_{l,g}t{,e} ignore unsigned arg in integer mode.
@@ -975,193 +968,6 @@ namespace z3 {
     std::cout << "sort is " << Z3_sort_to_string(ctx(), Z3_get_sort(ctx(), m_ast)) << std::endl;
   }
 };
-
-Z3_ast
-workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
-                                   Z3_bool is_signed)
-{
-
-  if (is_signed == Z3_L_TRUE) {
-    Z3_sort s = Z3_get_sort(ctx, a1);
-    Z3_inc_ref(ctx, (Z3_ast)s);
-    Z3_ast zero = Z3_mk_int(ctx, 0, s);
-    Z3_inc_ref(ctx, zero);
-    Z3_ast add = Z3_mk_bvadd(ctx, a1, a2);
-    Z3_inc_ref(ctx, add);
-    Z3_ast lt1 = Z3_mk_bvslt(ctx, zero, a1);
-    Z3_inc_ref(ctx, lt1);
-    Z3_ast lt2 = Z3_mk_bvslt(ctx, zero, a2);
-    Z3_inc_ref(ctx, lt2);
-    Z3_ast args[2] = { lt1, lt2 };
-    Z3_ast theand = Z3_mk_and(ctx, 2, args);
-    Z3_inc_ref(ctx, theand);
-    Z3_ast lt3 = Z3_mk_bvslt(ctx, zero, add);
-    Z3_inc_ref(ctx, lt3);
-    Z3_ast imp = Z3_mk_implies(ctx, theand, lt3);
-    Z3_dec_ref(ctx, lt3);
-    Z3_dec_ref(ctx, theand);
-    Z3_dec_ref(ctx, lt2);
-    Z3_dec_ref(ctx, lt1);
-    Z3_dec_ref(ctx, add);
-    Z3_dec_ref(ctx, zero);
-    Z3_dec_ref(ctx, (Z3_ast)s);
-    return imp;
-  } else {
-    Z3_sort s = Z3_get_sort(ctx, a1);
-    Z3_inc_ref(ctx, (Z3_ast)s);
-    unsigned int sort_size = Z3_get_bv_sort_size(ctx, s);
-    Z3_ast ext1 = Z3_mk_zero_ext(ctx, 1, a1);
-    Z3_inc_ref(ctx, ext1);
-    Z3_ast ext2 = Z3_mk_zero_ext(ctx, 1, a2);
-    Z3_inc_ref(ctx, ext2);
-    Z3_ast add = Z3_mk_bvadd(ctx, ext1, ext2);
-    Z3_inc_ref(ctx, add);
-    Z3_sort s2 = Z3_mk_bv_sort(ctx, 1);
-    Z3_inc_ref(ctx, (Z3_ast)s2);
-    Z3_ast zero = Z3_mk_int(ctx, 0, s2);
-    Z3_inc_ref(ctx, zero);
-    Z3_ast ext = Z3_mk_extract(ctx, sort_size, sort_size, add);
-    Z3_inc_ref(ctx, ext);
-    Z3_ast eq = Z3_mk_eq(ctx, ext, zero);
-    Z3_dec_ref(ctx, ext);
-    Z3_dec_ref(ctx, zero);
-    Z3_dec_ref(ctx, (Z3_ast)s2);
-    Z3_dec_ref(ctx, add);
-    Z3_dec_ref(ctx, ext2);
-    Z3_dec_ref(ctx, ext1);
-    Z3_dec_ref(ctx, (Z3_ast)s);
-    return eq;
-  }
-}
-
-Z3_ast
-workaround_Z3_mk_bvadd_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2)
-{
-  Z3_sort s = Z3_get_sort(ctx, a1);
-  Z3_inc_ref(ctx, (Z3_ast)s);
-  Z3_ast zero = Z3_mk_int(ctx, 0, s);
-  Z3_inc_ref(ctx, zero);
-  Z3_ast add = Z3_mk_bvadd(ctx, a1, a2);
-  Z3_inc_ref(ctx, add);
-  Z3_ast lt1 = Z3_mk_bvslt(ctx, a1, zero);
-  Z3_inc_ref(ctx, lt1);
-  Z3_ast lt2 = Z3_mk_bvslt(ctx, a2, zero);
-  Z3_inc_ref(ctx, lt2);
-  Z3_ast args[2] = { lt1, lt2 };
-  Z3_ast theand = Z3_mk_and(ctx, 2, args);
-  Z3_inc_ref(ctx, theand);
-  Z3_ast lt3 = Z3_mk_bvslt(ctx, add, zero);
-  Z3_inc_ref(ctx, lt3);
-  Z3_ast imp = Z3_mk_implies(ctx, theand, lt3);
-  Z3_dec_ref(ctx, lt3);
-  Z3_dec_ref(ctx, theand);
-  Z3_dec_ref(ctx, lt2);
-  Z3_dec_ref(ctx, lt1);
-  Z3_dec_ref(ctx, add);
-  Z3_dec_ref(ctx, zero);
-  Z3_dec_ref(ctx, (Z3_ast)s);
-  return imp;
-}
-
-Z3_ast
-workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
-                                    Z3_bool is_signed)
-{
-
-  if (is_signed == Z3_L_TRUE) {
-    Z3_sort s = Z3_get_sort(ctx, a1);
-    Z3_inc_ref(ctx, (Z3_ast)s);
-    Z3_ast zero = Z3_mk_int(ctx, 0, s);
-    Z3_inc_ref(ctx, zero);
-    Z3_ast neg = Z3_mk_bvneg(ctx, a2);
-    Z3_inc_ref(ctx, neg);
-    Z3_ast no_under = workaround_Z3_mk_bvadd_no_underflow(ctx, a1, neg);
-    Z3_inc_ref(ctx, no_under);
-    Z3_ast lt1 = Z3_mk_bvslt(ctx, zero, a2);
-    Z3_inc_ref(ctx, lt1);
-    Z3_ast imp = Z3_mk_implies(ctx, lt1, no_under);
-    Z3_dec_ref(ctx, lt1);
-    Z3_dec_ref(ctx, no_under);
-    Z3_dec_ref(ctx, neg);
-    Z3_dec_ref(ctx, zero);
-    Z3_dec_ref(ctx, (Z3_ast)s);
-    return imp;
-  } else {
-    return Z3_mk_bvule(ctx, a2, a1);
-  }
-}
-
-extern "C" Z3_ast Z3_mk_bvsmin(Z3_context, Z3_sort);
-
-Z3_ast
-workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2)
-{
-
-  Z3_sort s = Z3_get_sort(ctx, a2);
-  Z3_inc_ref(ctx, (Z3_ast)s);
-  Z3_ast neg = Z3_mk_bvneg(ctx, a2);
-  Z3_inc_ref(ctx, neg);
-//  Z3_ast min = Z3_mk_bvsmin(ctx, s);
-//  Z3_inc_ref(ctx, min);
-  Z3_ast min;
-  {
-    unsigned int width = Z3_get_bv_sort_size(ctx, s);
-    Z3_ast sz = Z3_mk_int64(ctx, width - 1, s);
-    Z3_inc_ref(ctx, sz);
-    Z3_ast one = Z3_mk_int64(ctx, 1, s);
-    Z3_inc_ref(ctx, one);
-    Z3_ast msb = Z3_mk_bvshl(ctx, one, sz);
-    Z3_inc_ref(ctx, msb);
-    min = msb;
-    Z3_dec_ref(ctx, one);
-    Z3_dec_ref(ctx, sz);
-  }
-  Z3_ast no_over = workaround_Z3_mk_bvadd_no_overflow(ctx, a1, neg, 1);
-  Z3_inc_ref(ctx, no_over);
-  Z3_ast zero = Z3_mk_int(ctx, 0, s);
-  Z3_inc_ref(ctx, zero);
-  Z3_ast lt = Z3_mk_bvslt(ctx, a1, zero);
-  Z3_inc_ref(ctx, lt);
-  Z3_ast eq = Z3_mk_eq(ctx, a2, min);
-  Z3_inc_ref(ctx, eq);
-  Z3_ast ite = Z3_mk_ite(ctx, eq, lt, no_over);
-  Z3_dec_ref(ctx, eq);
-  Z3_dec_ref(ctx, lt);
-  Z3_dec_ref(ctx, zero);
-  Z3_dec_ref(ctx, no_over);
-  Z3_dec_ref(ctx, min);
-  Z3_dec_ref(ctx, neg);
-  Z3_dec_ref(ctx, (Z3_ast)s);
-  return ite;
-}
-
-Z3_ast
-workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a)
-{
-
-  Z3_sort s = Z3_get_sort(ctx, a);
-  Z3_inc_ref(ctx, (Z3_ast)s);
-  Z3_ast min;
-  {
-    unsigned int width = Z3_get_bv_sort_size(ctx, s);
-    Z3_ast sz = Z3_mk_int64(ctx, width - 1, s);
-    Z3_inc_ref(ctx, sz);
-    Z3_ast one = Z3_mk_int64(ctx, 1, s);
-    Z3_inc_ref(ctx, one);
-    Z3_ast msb = Z3_mk_bvshl(ctx, one, sz);
-    Z3_inc_ref(ctx, msb);
-    min = msb;
-    Z3_dec_ref(ctx, one);
-    Z3_dec_ref(ctx, sz);
-  }
-  Z3_ast eq = Z3_mk_eq(ctx, a, min);
-  Z3_inc_ref(ctx, eq);
-  Z3_ast thenot = Z3_mk_not(ctx, eq);
-  Z3_dec_ref(ctx, eq);
-  Z3_dec_ref(ctx, min);
-  Z3_dec_ref(ctx, (Z3_ast)s);
-  return thenot;
-}
 
 // ***************************** 'get' api *******************************
 

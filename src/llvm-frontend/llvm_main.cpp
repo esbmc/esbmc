@@ -35,11 +35,11 @@ bool llvm_main(
     forall_symbol_base_map(it, context.symbol_base_map, config.main)
     {
       // look it up
-      symbolst::const_iterator s_it=context.symbols.find(it->second);
+      symbolt* s = context.find_symbol(it->second);
 
-      if(s_it==context.symbols.end()) continue;
+      if(s == nullptr) continue;
 
-      if(s_it->second.type.is_code())
+      if(s->type.is_code())
         matches.push_back(it->second);
     }
 
@@ -70,12 +70,11 @@ bool llvm_main(
     main_symbol=standard_main;
 
   // look it up
-  symbolst::const_iterator s_it=context.symbols.find(main_symbol);
-
-  if(s_it==context.symbols.end())
+  symbolt* s = context.find_symbol(main_symbol);
+  if(s == nullptr)
     return false; // give up, no main
 
-  const symbolt &symbol=s_it->second;
+  const symbolt &symbol = *s;
 
   // check if it has a body
   if(symbol.value.is_nil())

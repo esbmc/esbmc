@@ -33,15 +33,18 @@ void add_global_vars(const exprt& expr)
 
 void get_global_vars(contextt &context)
 {
-  forall_symbols(it, context.symbols) {
-    if(it->second.static_lifetime && !it->second.type.is_pointer())
+  context.foreach_operand(
+    [] (const symbolt& s)
     {
-      exprt s = symbol_expr(it->second);
-      if(it->second.value.id()==irep_idt("array_of"))
-        s.type()=it->second.value.type();
-      add_global_vars(s);
+      if(s.static_lifetime && !s.type.is_pointer())
+      {
+        exprt sym_expr = symbol_expr(s);
+        if(s.value.id() == irep_idt("array_of"))
+          sym_expr.type() = s.value.type();
+        add_global_vars(sym_expr);
+      }
     }
-  }
+  );
 }
 
 void dump_global_vars()

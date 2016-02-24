@@ -328,7 +328,7 @@ bool llvm_convertert::get_struct_union_class(
     return false;
 
   // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = context.symbols.find(symbol_name)->second;
+  symbolt &added_symbol = *context.find_symbol(symbol_name);
 
   if(get_struct_union_class_fields(*record_def, t))
     return true;
@@ -413,7 +413,7 @@ bool llvm_convertert::get_var(
   move_symbol_to_context(symbol);
 
   // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = context.symbols.find(symbol_name)->second;
+  symbolt &added_symbol = *context.find_symbol(symbol_name);
 
   code_declt decl;
   decl.operands().push_back(symbol_expr(added_symbol));
@@ -491,7 +491,7 @@ bool llvm_convertert::get_function(
   move_symbol_to_context(symbol);
 
   // Now get the symbol back to continue the conversion
-  symbolt &added_symbol = context.symbols.find(symbol_name)->second;
+  symbolt &added_symbol = *context.find_symbol(symbol_name);
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
@@ -805,7 +805,7 @@ bool llvm_convertert::get_type(
       if(search_add_type_map(tag, it))
         return true;
 
-      symbolt &s = context.symbols.find(it->second)->second;
+      symbolt &s = *context.find_symbol(it->second);
       new_type = s.type;
 
       break;
@@ -2520,8 +2520,8 @@ std::string llvm_convertert::get_filename_from_path(std::string path)
 void llvm_convertert::move_symbol_to_context(
   symbolt& symbol)
 {
-  symbolst::iterator old_it=context.symbols.find(symbol.name);
-  if(old_it==context.symbols.end())
+  symbolt* s = context.find_symbol(symbol.name);
+  if(s == nullptr)
   {
     if (context.move(symbol))
     {
@@ -2533,8 +2533,7 @@ void llvm_convertert::move_symbol_to_context(
   }
   else
   {
-    symbolt &old_symbol = old_it->second;
-    check_symbol_redefinition(old_symbol, symbol);
+    check_symbol_redefinition(*s, symbol);
   }
 }
 

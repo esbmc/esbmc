@@ -118,14 +118,13 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
 
   // check if we have it
 
-  contextt::symbolst::iterator previous_symbol=
-    context.symbols.find(symbol_name);
+  symbolt* previous_symbol = context.find_symbol(symbol_name);
 
-  if(previous_symbol!=context.symbols.end())
+  if(previous_symbol != nullptr)
   {
     // we do!
 
-    symbolt &symbol=previous_symbol->second;
+    symbolt &symbol = *previous_symbol;
 
     if(has_body)
     {

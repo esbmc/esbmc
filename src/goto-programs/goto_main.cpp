@@ -67,14 +67,10 @@ void goto_convert(
   message_handlert &message_handler)
 {
   // find main symbol
-  const symbolst::const_iterator s_it=
-    context.symbols.find("main");
-
-  if(s_it==context.symbols.end())
+  const symbolt* s = context.find_symbol("main");
+  if(s == nullptr)
     throw "failed to find main symbol";
 
-  const symbolt &symbol=s_it->second;
-
   std::cout << "goto_convert : start converting symbol table to goto functions " << std::endl;
-  ::goto_convert(to_code(symbol.value), context, options, dest, message_handler);
+  ::goto_convert(to_code(s->value), context, options, dest, message_handler);
 }

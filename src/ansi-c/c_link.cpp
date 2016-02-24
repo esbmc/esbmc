@@ -31,9 +31,13 @@ public:
     ns(_context, _new_context),
     type_counter(0)
   {
-    Forall_symbols(it, context.symbols)
-      if (it->second.module!="")
-        known_modules.insert(it->second.module);
+    context.Foreach_operand(
+      [this] (symbolt& s)
+      {
+        if (!s.module.empty())
+          known_modules.insert(s.module);
+      }
+    );
   }
 
   virtual void typecheck();
@@ -366,42 +370,47 @@ Function: c_linkt::typecheck
 
 void c_linkt::typecheck()
 {
-  Forall_symbols(it, new_context.symbols)
-  {
-    // build module clash table
-    if(it->second.file_local &&
-       known_modules.find(it->second.module)!=known_modules.end())
+  new_context.Foreach_operand(
+    [this] (symbolt& s)
     {
-      // we could have a clash
-      unsigned counter=0;
-      std::string newname=id2string(it->second.name);
-
-      while (context.symbols.find(newname)!=context.symbols.end())
-      { // there is a clash, rename!
-        counter++;
-        newname = id2string(it->second.name) + "#-mc-" + i2string(counter);
-      }
-
-      if(counter>0)
+      // build module clash table
+      if(s.file_local && known_modules.find(s.module) != known_modules.end())
       {
-        exprt subst("symbol");
-        subst.identifier(newname);
-        subst.location() = it->second.location;
-        symbol_fixer.insert(it->second.name,
-          static_cast<const typet&>(static_cast<const irept&>(subst)));
-        subst.type()=it->second.type;
-        symbol_fixer.insert(it->second.name, subst);
+        // we could have a clash
+        unsigned counter=0;
+        std::string newname = id2string(s.name);
+
+        while(context.find_symbol(newname) != nullptr)
+        {
+          // there is a clash, rename!
+          counter++;
+          newname = id2string(s.name) + "#-mc-" + i2string(counter);
+        }
+
+        if(counter > 0)
+        {
+          exprt subst("symbol");
+          subst.identifier(newname);
+          subst.location() = s.location;
+          symbol_fixer.insert(
+            s.name,
+            static_cast<const typet&>(static_cast<const irept&>(subst)));
+          subst.type() = s.type;
+          symbol_fixer.insert(s.name, subst);
+        }
       }
     }
-  }
+  );
 
   symbol_fixer.fix_context(new_context);
 
-  Forall_symbols(it, new_context.symbols)
-  {
-    symbol_fixer.fix_symbol(it->second);
-    move(it->second);
-  }
+  new_context.Foreach_operand_in_order(
+    [this] (symbolt& s)
+    {
+      symbol_fixer.fix_symbol(s);
+      move(s);
+    }
+  );
 }
 
 /*******************************************************************\

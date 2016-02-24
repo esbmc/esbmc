@@ -32,12 +32,11 @@ public:
 
   const symbolt &get_guard_symbol(const irep_idt &object)
   {
-	const irep_idt identifier="tmp_"+id2string(object);
+    const irep_idt identifier="tmp_"+id2string(object);
 
-    const symbolst::const_iterator it=context.symbols.find(identifier);
-
-    if(it!=context.symbols.end())
-      return it->second;
+    const symbolt* s = context.find_symbol(identifier);
+    if(s != nullptr)
+      return *s;
 
     w_guards.push_back(identifier);
 

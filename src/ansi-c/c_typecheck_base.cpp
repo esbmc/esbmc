@@ -124,11 +124,10 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     // now: rename them
     std::string typestr = type2name(symbol.type);
     new_name = prefix+"tag-#anon#" + typestr;
-
     id_replace_map[symbol.name]=new_name;
 
-    symbolst::const_iterator it = context.symbols.find(new_name);
-    if(it!=context.symbols.end())
+    symbolt* s = context.find_symbol(new_name);
+    if(s != nullptr)
       return; // bail out, we have an appropriate symbol already.
 
     irep_idt newtag((std::string("#anon#") + typestr).c_str());
@@ -190,9 +189,8 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   }
 
   // see if we have it already
-  symbolst::iterator old_it=context.symbols.find(symbol.name);
-
-  if(old_it==context.symbols.end())
+  symbolt *s = context.find_symbol(symbol.name);
+  if(s == nullptr)
   {
     // just put into context
     symbolt *new_symbol;
@@ -203,7 +201,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     typecheck_new_symbol(*new_symbol);
   }
   else
-    typecheck_symbol_redefinition(old_it->second, symbol);
+    typecheck_symbol_redefinition(*s, symbol);
 }
 
 /*******************************************************************\
@@ -389,17 +387,15 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         {
           // fix the symbol, not just the type
           const irep_idt ident = old_symbol.type.identifier();
-          symbolst::iterator s_it=context.symbols.find(ident);
-
-          if(s_it==context.symbols.end())
+          symbolt* s = context.find_symbol(ident);
+          if(s == nullptr)
           {
             err_location(old_symbol.location);
             str << "failed to find symbol `" << ident << "'";
             throw 0;
           }
 
-          symbolt &symbol=s_it->second;
-
+          symbolt &symbol = *s;
           symbol.type=final_new;
         }
         else

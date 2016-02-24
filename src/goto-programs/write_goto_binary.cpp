@@ -30,16 +30,17 @@ bool write_goto_binary(
   symbol_serializationt symbolconverter(irepc);
   goto_function_serializationt gfconverter(irepc);
 
-  write_long( out, lcontext.symbols.size() );
-  
-  forall_symbols(it, lcontext.symbols)
-  {
-    const symbolt &sym = it->second;
-    symbolconverter.convert(sym, out);
-  }
+  write_long( out, lcontext.size() );
+
+  lcontext.foreach_operand(
+    [&symbolconverter, &out] (const symbolt& s)
+    {
+      symbolconverter.convert(s, out);
+    }
+  );
 
   unsigned cnt=0;
-  forall_goto_functions(it, functions)  
+  forall_goto_functions(it, functions)
     if (it->second.body_available)
       cnt++;
 
@@ -54,12 +55,12 @@ bool write_goto_binary(
     {
       it->second.body.compute_location_numbers();
       write_string(out, it->first.as_string());
-      gfconverter.convert(it->second, out);        
+      gfconverter.convert(it->second, out);
     }
   }
 
   //irepconverter.output_map(f);
-  //irepconverter.output_string_map(f);  
+  //irepconverter.output_string_map(f);
 
   return false;
 }

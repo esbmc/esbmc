@@ -24,9 +24,12 @@ bool llvm_adjust::adjust()
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
-
-  Forall_symbols(it, context.symbols)
-    symbol_list.push_back(&it->second);
+  context.Foreach_operand(
+    [&symbol_list] (symbolt& s)
+    {
+      symbol_list.push_back(&s);
+    }
+  );
 
   Forall_symbol_list(it, symbol_list)
   {
@@ -218,16 +221,16 @@ void llvm_adjust::adjust_symbol(exprt& expr)
   const irep_idt &identifier=expr.identifier();
 
   // look it up
-  symbolst::const_iterator s_it=context.symbols.find(identifier);
+  symbolt* s = context.find_symbol(identifier);
 
-  if(s_it==context.symbols.end())
+  if(s == nullptr)
   {
     std::cout << "failed to find symbol `" << identifier << "'" << std::endl;
     abort();
   }
 
   // found it
-  const symbolt &symbol=s_it->second;
+  const symbolt &symbol = *s;
 
   // save location
   locationt location=expr.location();
@@ -549,15 +552,16 @@ void llvm_adjust::adjust_type(typet &type)
   {
     const irep_idt &identifier=type.identifier();
 
-    symbolst::const_iterator s_it=context.symbols.find(identifier);
+    // look it up
+    symbolt* s = context.find_symbol(identifier);
 
-    if(s_it==context.symbols.end())
+    if(s == nullptr)
     {
       std::cout << "type symbol `" << identifier << "' not found" << std::endl;
       abort();
     }
 
-    const symbolt &symbol=s_it->second;
+    const symbolt &symbol = *s;
 
     if(!symbol.is_type)
     {
@@ -621,7 +625,8 @@ void llvm_adjust::adjust_side_effect_function_call(
   if(f_op.id()=="symbol")
   {
     const irep_idt &identifier = f_op.identifier();
-    if(context.symbols.find(identifier)==context.symbols.end())
+    symbolt* s = context.find_symbol(identifier);
+    if(s == nullptr)
     {
       // maybe this is an undeclared function
       // let's just add it
