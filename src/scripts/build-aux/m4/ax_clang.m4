@@ -15,29 +15,26 @@
 
 AC_DEFUN([AX_CLANG],
 [
-want_clang="yes"
+	AC_ARG_WITH([clang-libdir],
+	        AS_HELP_STRING([--with-clang-libdir=LIB_DIR],
+	        [Force given directory for clang libraries. Note that this will override library path detection, so use this parameter only if default library detection fails and you know exactly where your clang libraries are located.]),
+	        [
+	        if test -d "$withval"
+	        then
+	                ac_clang_lib_path="$withval"
+	        else
+	                AC_MSG_ERROR(--with-clang-libdir expected directory name)
+	        fi
+	        ],
+	        [ac_clang_lib_path=""]
+	)
 
-AC_ARG_WITH([clang-libdir],
-        AS_HELP_STRING([--with-clang-libdir=LIB_DIR],
-        [Force given directory for clang libraries. Note that this will override library path detection, so use this parameter only if default library detection fails and you know exactly where your clang libraries are located.]),
-        [
-        if test -d "$withval"
-        then
-                ac_clang_lib_path="$withval"
-        else
-                AC_MSG_ERROR(--with-clang-libdir expected directory name)
-        fi
-        ],
-        [ac_clang_lib_path=""]
-)
-
-if test "x$want_clang" = "xyes"; then
-    clang_lib_version_req=ifelse([$1], ,3.8,$1)
+    clang_lib_version_req=ifelse([$1], ,3.8.0,$1)
     clang_lib_version_req_shorten=`expr $clang_lib_version_req : '\([[0-9]]*\.[[0-9]]*\)'`
     clang_lib_version_req_major=`expr $clang_lib_version_req : '\([[0-9]]*\)'`
     clang_lib_version_req_minor=`expr $clang_lib_version_req : '[[0-9]]*\.\([[0-9]]*\)'`
     
-    WANT_clang_VERSION=`expr $clang_lib_version_req_major \* 100000 \+  $clang_lib_version_req_minor \* 100 \+ $clang_lib_version_req_sub_minor`
+    WANT_clang_VERSION=`expr $clang_lib_version_req_major \* 100000 \+  $clang_lib_version_req_minor \* 100`
     AC_MSG_CHECKING(for clang >= $clang_lib_version_req)
     succeeded=no
 
@@ -120,9 +117,9 @@ if test "x$want_clang" = "xyes"; then
     export CPPFLAGS
 
     LDFLAGS_SAVED="$LDFLAGS"
-    LDFLAGS="$LDFLAGS $clang_LDFLAGS"
+    LDFLAGS="$LDFLAGS $clang_LDFLAGS"comm
     export LDFLAGS
-    
+
     if test "$succeeded" != "yes" ; then
         if test "$_version" = "0" ; then
             AC_MSG_NOTICE([[We could not detect the clang libraries (version $_version_tmp or higher). If you have a staged clang library (still not installed) please specify \$CLANG_ROOT in your environment and do not give a PATH to --with-clang option.]])
@@ -140,7 +137,7 @@ if test "x$want_clang" = "xyes"; then
     fi
 
     CPPFLAGS="$CPPFLAGS_SAVED"
-    LDFLAGS="$LDFLAGS_SAVED"    
-fi
-  
+    LDFLAGS="$LDFLAGS_SAVED"
+
+    AC_MSG_RESULT(yes)
 ])
