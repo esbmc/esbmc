@@ -115,100 +115,100 @@ AC_DEFUN([AX_CLANG],
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find libclangTooling)
-    if ls "$clang_libs_path/libclangTooling.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangTooling"* >/dev/null 2>&1 ; then
          clang_LIBS="-lclangTooling"
     else
-         AC_MSG_NOTICE([Can't find libclangTooling.a])
+         AC_MSG_NOTICE([Can't find libclangTooling])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find libclangDriver)
-    if ls "$clang_libs_path/libclangDriver.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangDriver"* >/dev/null 2>&1 ; then
          clang_LIBS="$clang_LIBS -lclangDriver"
     else
-         AC_MSG_NOTICE([Can't find libclangDriver.a])
+         AC_MSG_NOTICE([Can't find libclangDriver])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find libclangFrontend)
-    if ls "$clang_libs_path/libclangFrontend.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangFrontend"* >/dev/null 2>&1 ; then
          clang_LIBS="$clang_LIBS -lclangFrontend"
     else
-         AC_MSG_NOTICE([Can't find libclangFrontend.a])
+         AC_MSG_NOTICE([Can't find libclangFrontend])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find libclangParse)
-    if ls "$clang_libs_path/libclangParse.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangParse"* >/dev/null 2>&1 ; then
          clang_LIBS="$clang_LIBS -lclangParse"
     else
-         AC_MSG_NOTICE([Can't find libclangParse.a])
+         AC_MSG_NOTICE([Can't find libclangParse])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find libclangSerialization)
-    if ls "$clang_libs_path/libclangSerialization.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangSerialization"* >/dev/null 2>&1 ; then
          clang_LIBS="$clang_LIBS -lclangSerialization"
     else
-         AC_MSG_NOTICE([Can't find libclangSerialization.a])
+         AC_MSG_NOTICE([Can't find libclangSerialization])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find libclangSema)
-    if ls "$clang_libs_path/libclangSema.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangSema"* >/dev/null 2>&1 ; then
          clang_LIBS="$clang_LIBS -lclangSema"
     else
-         AC_MSG_NOTICE([Can't find libclangSema.a])
+         AC_MSG_NOTICE([Can't find libclangSema])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find libclangAnalysis)
-    if ls "$clang_libs_path/libclangAnalysis.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangAnalysis"* >/dev/null 2>&1 ; then
          clang_LIBS="$clang_LIBS -lclangAnalysis"
     else
-         AC_MSG_NOTICE([Can't find libclangAnalysis.a])
+         AC_MSG_NOTICE([Can't find libclangAnalysis])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find libclangEdit)
-    if ls "$clang_libs_path/libclangEdit.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangEdit"* >/dev/null 2>&1 ; then
          clang_LIBS="$clang_LIBS -lclangEdit"
     else
-         AC_MSG_NOTICE([Can't find libclangEdit.a])
+         AC_MSG_NOTICE([Can't find libclangEdit])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find libclangLex)
-    if ls "$clang_libs_path/libclangLex.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangLex"* >/dev/null 2>&1 ; then
          clang_LIBS="$clang_LIBS -lclangLex"
     else
-         AC_MSG_NOTICE([Can't find libclangLex.a])
+         AC_MSG_NOTICE([Can't find libclangLex])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find clangAST)
-    if ls "$clang_libs_path/libclangAST.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangAST"* >/dev/null 2>&1 ; then
          clang_LIBS="$clang_LIBS -lclangAST"
     else
-         AC_MSG_NOTICE([Can't find libclangAST.a])
+         AC_MSG_NOTICE([Can't find libclangAST])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
 
     AC_MSG_CHECKING(if we can find libclangBasic)
-    if ls "$clang_libs_path/libclangBasic.a" >/dev/null 2>&1 ; then
+    if ls "$clang_libs_path/libclangBasic"* >/dev/null 2>&1 ; then
          clang_LIBS="$clang_LIBS -lclangBasic"
     else
-         AC_MSG_NOTICE([Can't find libclangBasic.a])
+         AC_MSG_NOTICE([Can't find libclangBasic])
          succeeded=no
     fi
     AC_MSG_RESULT(yes)
