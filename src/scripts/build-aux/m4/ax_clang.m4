@@ -69,7 +69,7 @@ AC_DEFUN([AX_CLANG],
     _version=0
     dnl first we check the system location for clang libraries and version
     if test "$ac_clang_lib_path" != ""; then
-        clang_includes=$ac_clang_lib_path/include/clang
+        clang_includes_path=$ac_clang_lib_path/include/clang
         for libsubdir in $libsubdirs ; do
             if ls "$ac_clang_lib_path/$libsubdir/libclang"* >/dev/null 2>&1 ; then break; fi
         done
@@ -84,7 +84,7 @@ AC_DEFUN([AX_CLANG],
             _version=$_version_tmp
             succeeded=yes
 
-            clang_libs=$ac_clang_lib_path/$libsubdir
+            clang_libs_path=$ac_clang_lib_path/$libsubdir
         	break;
         done
     elif test "$cross_compiling" != yes; then
@@ -104,16 +104,117 @@ AC_DEFUN([AX_CLANG],
                     _version=$_version_tmp
                     succeeded=yes
 
-                    clang_libs=$ac_clang_lib_path_tmp/$libsubdir
-                    clang_includes=$ac_clang_lib_path_tmp/include
+                    clang_libs_path=$ac_clang_lib_path_tmp/$libsubdir
+                    clang_includes_path=$ac_clang_lib_path_tmp/include
                 	break;
                 done
             fi
         done
     fi
 
-    clang_CPPFLAGS="-I$clang_includes"
-    clang_LDFLAGS="-L$clang_libs"
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find libclangTooling)
+    if ls "$clang_libs_path/libclangTooling.a" >/dev/null 2>&1 ; then
+         clang_LIBS="-lclangTooling"
+    else
+         AC_MSG_NOTICE([Can't find libclangTooling.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find libclangDriver)
+    if ls "$clang_libs_path/libclangDriver.a" >/dev/null 2>&1 ; then
+         clang_LIBS="$clang_LIBS -lclangDriver"
+    else
+         AC_MSG_NOTICE([Can't find libclangDriver.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find libclangFrontend)
+    if ls "$clang_libs_path/libclangFrontend.a" >/dev/null 2>&1 ; then
+         clang_LIBS="$clang_LIBS -lclangFrontend"
+    else
+         AC_MSG_NOTICE([Can't find libclangFrontend.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find libclangParse)
+    if ls "$clang_libs_path/libclangParse.a" >/dev/null 2>&1 ; then
+         clang_LIBS="$clang_LIBS -lclangParse"
+    else
+         AC_MSG_NOTICE([Can't find libclangParse.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find libclangSerialization)
+    if ls "$clang_libs_path/libclangSerialization.a" >/dev/null 2>&1 ; then
+         clang_LIBS="$clang_LIBS -lclangSerialization"
+    else
+         AC_MSG_NOTICE([Can't find libclangSerialization.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find libclangSema)
+    if ls "$clang_libs_path/libclangSema.a" >/dev/null 2>&1 ; then
+         clang_LIBS="$clang_LIBS -lclangSema"
+    else
+         AC_MSG_NOTICE([Can't find libclangSema.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find libclangAnalysis)
+    if ls "$clang_libs_path/libclangAnalysis.a" >/dev/null 2>&1 ; then
+         clang_LIBS="$clang_LIBS -lclangAnalysis"
+    else
+         AC_MSG_NOTICE([Can't find libclangAnalysis.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find libclangEdit)
+    if ls "$clang_libs_path/libclangEdit.a" >/dev/null 2>&1 ; then
+         clang_LIBS="$clang_LIBS -lclangEdit"
+    else
+         AC_MSG_NOTICE([Can't find libclangEdit.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find libclangLex)
+    if ls "$clang_libs_path/libclangLex.a" >/dev/null 2>&1 ; then
+         clang_LIBS="$clang_LIBS -lclangLex"
+    else
+         AC_MSG_NOTICE([Can't find libclangLex.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find clangAST)
+    if ls "$clang_libs_path/libclangAST.a" >/dev/null 2>&1 ; then
+         clang_LIBS="$clang_LIBS -lclangAST"
+    else
+         AC_MSG_NOTICE([Can't find libclangAST.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    AC_MSG_CHECKING(if we can find libclangBasic)
+    if ls "$clang_libs_path/libclangBasic.a" >/dev/null 2>&1 ; then
+         clang_LIBS="$clang_LIBS -lclangBasic"
+    else
+         AC_MSG_NOTICE([Can't find libclangBasic.a])
+         succeeded=no
+    fi
+    AC_MSG_RESULT(yes)
+
+    clang_CPPFLAGS="-I$clang_includes_path"
+    clang_LDFLAGS="-L$clang_libs_path"
 
     CPPFLAGS_SAVED="$CPPFLAGS"
     CPPFLAGS="$CPPFLAGS $clang_CPPFLAGS"
@@ -123,17 +224,20 @@ AC_DEFUN([AX_CLANG],
     LDFLAGS="$LDFLAGS $clang_LDFLAGS"
     export LDFLAGS
 
+	LIBS_SAVED="$LIBS"
+	LIBS="$LIBS $clang_LIBS"
+	export LIBS
+
     if test "$succeeded" != "yes" ; then
         if test "$_version" = "0" ; then
-            AC_MSG_NOTICE([[We could not detect the clang libraries (version $_version_tmp or higher). If you have a staged clang library (still not installed) please specify \$CLANG_ROOT in your environment and do not give a PATH to --with-clang option.]])
-        else
-            AC_MSG_NOTICE([Your clang libraries seems to old (version $_version).])
+            AC_MSG_NOTICE([[We could not detect the clang libraries (version $clang_lib_version_req or higher). If you have a staged clang library (still not installed) please specify \$CLANG_ROOT in your environment and do not give a PATH to --with-clang option.]])
         fi
         # execute ACTION-IF-NOT-FOUND (if present):
         ifelse([$3], , :, [$3])
     else
         AC_SUBST(clang_CPPFLAGS)
         AC_SUBST(clang_LDFLAGS)
+        AC_SUBST(clang_LIBS)
         AC_DEFINE(HAVE_clang,,[define if the clang library is available])
         # execute ACTION-IF-FOUND (if present):
         ifelse([$2], , :, [$2])
@@ -141,6 +245,5 @@ AC_DEFUN([AX_CLANG],
 
     CPPFLAGS="$CPPFLAGS_SAVED"
     LDFLAGS="$LDFLAGS_SAVED"
-
-    AC_MSG_RESULT(yes)
+    LIBS="$LIBS_SAVED"
 ])
