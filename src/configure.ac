@@ -79,10 +79,6 @@ AC_CHECK_LIB([gmp], [__gmpz_cmp],
 
 AX_CLANG(3.8.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
 
-dnl LLVM stuff
-dnl You will need the LLVM's and ncurses' static libraries
-AS_VAR_APPEND(LIBS, " -lclangTooling -lclangDriver -lclangFrontend -lclangParse -lclangSerialization -lclangSema -lclangAnalysis -lclangEdit -lclangLex -lclangAST -lclangBasic")
-
 AX_LLVM(,[AC_MSG_FAILURE(LLVM is required.)])
 
 AC_CHECK_HEADERS([boost/mpl/if.hpp], [], [AC_MSG_ERROR([No boost mpl found])])
