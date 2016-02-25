@@ -117,7 +117,7 @@ AC_DEFUN([AX_CLANG],
     export CPPFLAGS
 
     LDFLAGS_SAVED="$LDFLAGS"
-    LDFLAGS="$LDFLAGS $clang_LDFLAGS"comm
+    LDFLAGS="$LDFLAGS $clang_LDFLAGS"
     export LDFLAGS
 
     if test "$succeeded" != "yes" ; then
