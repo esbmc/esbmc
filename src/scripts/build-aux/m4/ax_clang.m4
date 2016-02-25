@@ -69,7 +69,7 @@ AC_DEFUN([AX_CLANG],
     _version=0
     dnl first we check the system location for clang libraries and version
     if test "$ac_clang_lib_path" != ""; then
-        clang_CPPFLAGS="-I$ac_clang_lib_path/include/clang"
+        clang_includes=$ac_clang_lib_path/include/clang
         for libsubdir in $libsubdirs ; do
             if ls "$ac_clang_lib_path/$libsubdir/libclang"* >/dev/null 2>&1 ; then break; fi
         done
@@ -84,7 +84,7 @@ AC_DEFUN([AX_CLANG],
             _version=$_version_tmp
             succeeded=yes
 
-            clang_LDFLAGS="-L$ac_clang_lib_path/$libsubdir"
+            clang_libs=$ac_clang_lib_path/$libsubdir
         	break;
         done
     elif test "$cross_compiling" != yes; then
@@ -104,13 +104,16 @@ AC_DEFUN([AX_CLANG],
                     _version=$_version_tmp
                     succeeded=yes
 
-                    clang_LDFLAGS="-L$ac_clang_lib_path_tmp/$libsubdir"
-                	clang_CPPFLAGS="-I$ac_clang_lib_path_tmp/include"
+                    clang_libs=$ac_clang_lib_path_tmp/$libsubdir
+                    clang_includes=$ac_clang_lib_path_tmp/include
                 	break;
                 done
             fi
         done
     fi
+
+    clang_CPPFLAGS="-I$clang_includes"
+    clang_LDFLAGS="-L$clang_libs"
 
     CPPFLAGS_SAVED="$CPPFLAGS"
     CPPFLAGS="$CPPFLAGS $clang_CPPFLAGS"
