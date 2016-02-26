@@ -82,6 +82,9 @@ AC_DEFUN([AX_LLVM],
       LIBS="$LIBS $LLVMLDFLAGS"
       AC_MSG_CHECKING([linking with LLVM])
       AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+#define __STDC_LIMIT_MACROS
+#define __STDC_CONSTANT_MACROS
+
 #include <llvm/Support/Debug.h>
 #include <llvm/Support/raw_ostream.h>
 ]],[[
