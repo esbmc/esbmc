@@ -357,6 +357,7 @@ void generate_goto_trace_in_graphml_format(
   bool already_initialized = false;
   boost::property_tree::ptree last_created_node;
   std::string last_function = "";
+  std::string last_filename = "";
 
   for(goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
       it != goto_trace.steps.end(); it++)
@@ -412,8 +413,9 @@ void generate_goto_trace_in_graphml_format(
         it->pc->location.get_line().as_string().c_str());
 
     /* check if tokens already ok */
-    if (line_content_map.size() == 0)
+    if (last_filename != filename)
     {
+      last_filename = filename;
       map_line_number_to_content(filename, line_content_map);
     }
     boost::property_tree::ptree current_edge;
