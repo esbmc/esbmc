@@ -107,7 +107,6 @@ void show_goto_trace(
 
 void generate_goto_trace_in_graphml_format(
   const bool is_correctness,
-  std::string & tokenizer_path,
   std::string & filename,
   const namespacet & ns,
   const goto_tracet & goto_trace);

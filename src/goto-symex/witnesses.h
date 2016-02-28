@@ -47,7 +47,6 @@ typedef struct edge_props
   std::string returnFromFunction = "";
 } edge_p;
 
-std::string tokenizer_executable_path;
 int node_count;
 int edge_count;
 
@@ -71,11 +70,6 @@ std::string execute_cmd(std::string command)
   }
   pclose(pipe);
   return result;
-}
-
-std::string call_tokenize(std::string file)
-{
-  return execute_cmd(tokenizer_executable_path + " " + file);
 }
 
 std::string read_file(std::string path)

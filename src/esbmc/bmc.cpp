@@ -91,12 +91,10 @@ void bmct::successful_trace(smt_convt &smt_conv,
   goto_tracet goto_trace;
 
   std::string graphml_output_filename = options.get_option("witness-path");
-  std::string tokenizer_path;
 
   if(!graphml_output_filename.empty())
   {
     set_ui(ui_message_handlert::GRAPHML);
-	tokenizer_path = options.get_option("tokenizer");
   }
 
   switch(ui)
@@ -110,7 +108,6 @@ void bmct::successful_trace(smt_convt &smt_conv,
 
   	  generate_goto_trace_in_graphml_format(
   		true,
-        tokenizer_path,
         graphml_output_filename,
         ns,
         goto_trace
@@ -172,11 +169,9 @@ void bmct::error_trace(smt_convt &smt_conv,
   build_goto_trace(equation, smt_conv, goto_trace);
 
   std::string graphml_output_filename = options.get_option("witness-path");
-  std::string tokenizer_path;
   if(!graphml_output_filename.empty())
   {
     set_ui(ui_message_handlert::GRAPHML);
-    tokenizer_path = options.get_option("tokenizer");
   }
 
   switch (ui)
@@ -184,7 +179,6 @@ void bmct::error_trace(smt_convt &smt_conv,
     case ui_message_handlert::GRAPHML:
       generate_goto_trace_in_graphml_format(
     	false,
-        tokenizer_path,
         graphml_output_filename,
         ns,
         goto_trace);

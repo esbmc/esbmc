@@ -346,13 +346,10 @@ get_metada_from_llvm(
 }
 
 void generate_goto_trace_in_graphml_format(
-	const bool is_correctness,
-	std::string & tokenizer_path,
-    std::string & filename, const namespacet & ns,
-    const goto_tracet & goto_trace)
+  const bool is_correctness,
+  std::string & filename, const namespacet & ns,
+  const goto_tracet & goto_trace)
 {
-  tokenizer_executable_path = tokenizer_path;
-
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
   std::map<int, std::string> line_content_map;

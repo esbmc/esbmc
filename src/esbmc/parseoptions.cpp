@@ -183,27 +183,10 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.cmdline(cmdline);
 
   /* graphML generation options check */
-  if(cmdline.isset("witness-path") && cmdline.isset("tokenizer"))
+  if(cmdline.isset("witness-path"))
   {
-    std::string tokenizer_path = cmdline.getval("tokenizer");
-    std::ifstream tfile(tokenizer_path);
-    if(!tfile)
-    {
-      std::cout << "The tokenizer path is invalid, check it and try again"
-          << std::endl;
-      exit(1);
-    }
-
     options.set_option("witness-path", cmdline.getval("witness-path"));
     options.set_option("no-slice", true);
-    options.set_option("tokenizer", cmdline.getval("tokenizer"));
-  }
-  else if(cmdline.isset("witness-path") && !cmdline.isset("tokenizer"))
-  {
-    std::cout
-        << "For GraphML generation is necessary to set a tokenizer (use --tokenizer path)"
-        << std::endl;
-    exit(1);
   }
 
   if(cmdline.isset("git-hash"))
