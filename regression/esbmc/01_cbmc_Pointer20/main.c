@@ -1,5 +1,3 @@
-int nondet_int();
-
 int *p;
 int global;
 

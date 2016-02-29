@@ -22,9 +22,9 @@
 #include <prefix.h>
 #include <fixedbv.h>
 #include <base_type.h>
+#include <c_types.h>
 
 #include "z3_conv.h"
-#include "../ansi-c/c_types.h"
 
 #ifdef DEBUG
 #define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \

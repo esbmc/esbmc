@@ -73,7 +73,7 @@ CL0:  for(i=1;i<=SIZE;i++)
 
 }
 
-main()
+int main()
 {
     matmul(a,b,c);
 }

@@ -1,6 +1,6 @@
 #include <sstream>
 
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include <base_type.h>
 
@@ -47,7 +47,7 @@ tuple_node_smt_ast::make_free(smt_convt *ctx)
   }
 }
 
-smt_astt 
+smt_astt
 tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
   // So - we need to generate an ite between true_val and false_val, that gets
@@ -100,7 +100,7 @@ tuple_node_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   destination->elements = elements;
 }
 
-smt_astt 
+smt_astt
 tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   const_cast<tuple_node_smt_ast*>(to_tuple_node_ast(other))->make_free(ctx);
@@ -129,7 +129,7 @@ tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   return ctx->make_conjunct(eqs);
 }
 
-smt_astt 
+smt_astt
 tuple_node_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
     expr2tc idx_expr __attribute__((unused)) /*ndebug*/) const
 {
@@ -146,7 +146,7 @@ tuple_node_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   return result;
 }
 
-smt_astt 
+smt_astt
 tuple_node_smt_ast::select(smt_convt *ctx __attribute__((unused)),
     const expr2tc &idx __attribute__((unused))) const
 {
@@ -154,7 +154,7 @@ tuple_node_smt_ast::select(smt_convt *ctx __attribute__((unused)),
   abort();
 }
 
-smt_astt 
+smt_astt
 tuple_node_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 {
   // Create an AST representing the i'th field of the tuple a. This means we
@@ -246,7 +246,7 @@ smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   return array_conv.mk_array_symbol(name, sort, subtype);
 }
 
-smt_astt 
+smt_astt
 smt_tuple_node_flattener::tuple_array_create(const type2tc &array_type,
                               smt_astt *inputargs,
                               bool const_array,
@@ -364,7 +364,7 @@ smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
   return outstruct;
 }
 
-smt_astt 
+smt_astt
 smt_tuple_node_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 {
 

@@ -1,7 +1,5 @@
 #define NULL 0
 
-void *malloc(unsigned size);
-
 struct list_el {
   int val;
   struct list_el *next;

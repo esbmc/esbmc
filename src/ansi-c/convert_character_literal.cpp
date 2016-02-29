@@ -10,8 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <arith_tools.h>
 #include <i2string.h>
+#include <c_types.h>
 
-#include <ansi-c/c_types.h>
 #include <ansi-c/unescape_string.h>
 
 #include "convert_character_literal.h"

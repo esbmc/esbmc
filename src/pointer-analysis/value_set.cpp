@@ -22,9 +22,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_code.h>
 #include <arith_tools.h>
 #include <type_byte_size.h>
+#include <c_types.h>
 
 #include <langapi/language_util.h>
-#include <ansi-c/c_types.h>
 
 #include "value_set.h"
 

@@ -55,6 +55,8 @@ extern "C" {
 
 #include <ansi-c/c_preprocess.h>
 
+#include <llvm-frontend/llvm_language.h>
+
 #include "parseoptions.h"
 #include "bmc.h"
 #include <ac_config.h>
@@ -240,7 +242,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   {
     options.set_option("deadlock-check", true);
     options.set_option("atomicity-check", false);
-    options.set_option("no-assertions", true);
   }
   else
     options.set_option("deadlock-check", false);
@@ -270,30 +271,27 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     }
   }
 
-  if(cmdline.isset("base-case") || options.get_bool_option("base-case"))
+  if(cmdline.isset("base-case"))
   {
     options.set_option("base-case", true);
     options.set_option("no-unwinding-assertions", true);
     options.set_option("partial-loops", false);
   }
 
-  if(cmdline.isset("forward-condition")
-      || options.get_bool_option("forward-condition"))
+  if(cmdline.isset("forward-condition"))
   {
     options.set_option("forward-condition", true);
     options.set_option("no-unwinding-assertions", false);
     options.set_option("partial-loops", false);
   }
 
-  if(cmdline.isset("inductive-step")
-      || options.get_bool_option("inductive-step"))
+  if(cmdline.isset("inductive-step"))
   {
     options.set_option("inductive-step", true);
     options.set_option("no-unwinding-assertions", true);
     options.set_option("partial-loops", true);
   }
 
-  // jmorse
   if(cmdline.isset("timeout"))
   {
 #ifdef _WIN32
@@ -349,6 +347,9 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     }
   }
 #endif
+
+  if(cmdline.isset("keep-unused"))
+    options.set_option("keep-unused", true);
 
   config.options = options;
 }
@@ -1144,7 +1145,7 @@ bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
     return true;
   }
 
-  catch(const std::string e)
+  catch(const std::string &e)
   {
     error(e);
     return true;
@@ -1165,6 +1166,12 @@ bool cbmc_parseoptionst::get_goto_program(
   fine_timet parse_start = current_time();
   try
   {
+    if(cmdline.args.size()==0)
+    {
+      error("Please provide a program to verify");
+      return true;
+    }
+
     if(cmdline.isset("binary"))
     {
       status("Reading GOTO program from file");
@@ -1178,14 +1185,18 @@ bool cbmc_parseoptionst::get_goto_program(
         return true;
       }
     }
+    else if(cmdline.isset("show-parse-tree"))
+    {
+      if(parse()) return true;
+
+      assert(language_files.filemap.size());
+      languaget &language = *language_files.filemap.begin()->second.language;
+      language.show_parse(std::cout);
+
+      return true;
+    }
     else
     {
-      if(cmdline.args.size()==0)
-      {
-        error("Please provide a program to verify");
-        return true;
-      }
-
       if(parse()) return true;
       if(typecheck()) return true;
       if(final()) return true;
@@ -1233,9 +1244,15 @@ bool cbmc_parseoptionst::get_goto_program(
     return true;
   }
 
-  catch(const std::string e)
+  catch(const std::string &e)
   {
     error(e);
+    return true;
+  }
+
+  catch(std::bad_alloc&)
+  {
+    std::cout << "Out of memory" << std::endl;
     return true;
   }
 
@@ -1276,9 +1293,14 @@ void cbmc_parseoptionst::preprocessing()
     error(e);
   }
 
-  catch(const std::string e)
+  catch(const std::string &e)
   {
     error(e);
+  }
+
+  catch(std::bad_alloc&)
+  {
+    std::cout << "Out of memory" << std::endl;
   }
 
   catch(int)
@@ -1704,7 +1726,7 @@ bool cbmc_parseoptionst::process_goto_program(
     return true;
   }
 
-  catch(const std::string e)
+  catch(const std::string &e)
   {
     error(e);
     return true;
@@ -1712,6 +1734,12 @@ bool cbmc_parseoptionst::process_goto_program(
 
   catch(int)
   {
+    return true;
+  }
+
+  catch(std::bad_alloc&)
+  {
+    std::cout << "Out of memory" << std::endl;
     return true;
   }
 
@@ -1739,6 +1767,60 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
   return res;
 }
 
+bool cbmc_parseoptionst::parse()
+{
+  return language_uit::parse();
+}
+
+bool cbmc_parseoptionst::parse(const std::string &filename)
+{
+  if(!cmdline.isset("llvm-frontend"))
+    return language_uit::parse(filename);
+
+  int mode=get_mode_filename(filename);
+
+  if(mode<0)
+  {
+    error("failed to figure out type of file", filename);
+    return true;
+  }
+
+  // Check that it opens
+  std::ifstream infile(filename.c_str());
+  if(!infile)
+  {
+    error("failed to open input file", filename);
+    return true;
+  }
+
+  language_filet language_file;
+  std::pair<language_filest::filemapt::iterator, bool>
+    result=language_files.filemap.insert(
+      std::pair<std::string, language_filet>(filename, language_file));
+
+  language_filet &lf=result.first->second;
+  lf.filename=filename;
+  // 2 is the magic number that represents LLVM
+  // In the future, we shall remove this and use only the llvm frontend
+  // for c and c++ code
+  lf.language=mode_table[2].new_language();
+  languaget &language=*lf.language;
+
+  status("Parsing using clang", filename);
+
+  if(language.parse(filename, *get_message_handler()))
+  {
+    if(get_ui()==ui_message_handlert::PLAIN)
+      std::cerr << "PARSING ERROR" << std::endl;
+
+    return true;
+  }
+
+  lf.get_modules();
+
+  return false;
+}
+
 void cbmc_parseoptionst::help()
 {
   std::cout <<
@@ -1751,7 +1833,7 @@ void cbmc_parseoptionst::help()
     " esbmc file.c ...              source file names\n"
     "\n"
     "Additonal options:\n\n"
-    " --- front-end options ---------------------------------------------------------\n\n"
+    "Front-end options\n"
     " -I path                      set include path\n"
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
@@ -1765,17 +1847,20 @@ void cbmc_parseoptionst::help()
     " --document-subgoals          generate subgoals documentation\n"
     " --no-library                 disable built-in abstract C library\n"
 //    " --binary                     read goto program instead of source code\n"
-//    " --llvm-metadata Filename     read the metadata file generated by LLVM\n"
     " --little-endian              allow little-endian word-byte conversions\n"
     " --big-endian                 allow big-endian word-byte conversions\n"
     " --16, --32, --64             set width of machine word\n"
+    " --unsigned-char              make \"char\" unsigned by default\n"
+    " --show-parse-tree            show parse tree\n"
+    " --show-symbol-table          show symbol table\n"
     " --show-goto-functions        show goto program\n"
     " --extended-try-analysis      check all the try block, even when an exception is throw\n"
     " --version                    show current ESBMC version and exit\n"
     " --witnesspath filename       output counterexample in graphML format\n"
     " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
-    "                              program for graphML generation\n\n"
-    " --- BMC options ---------------------------------------------------------------\n\n"
+    "                              program for graphML generation\n"
+    " --llvm-frontend              parse source files using clang (alpha)\n\n"
+    "BMC options\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"
     " --depth nr                   limit search depth\n"
@@ -1784,15 +1869,15 @@ void cbmc_parseoptionst::help()
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
     " --no-slice                   do not remove unused equations\n"
     " --falsification              incremental loop unwinding for bug searching\n\n"
-    " --- solver configuration ------------------------------------------------------\n\n"
+    "Solver configuration\n"
     " --boolector                  use Boolector (default)\n"
     " --z3                         use Z3\n"
     " --bv                         use solver with bit-vector arithmetic\n"
     " --ir                         use solver with integer/real arithmetic\n"
-    " --eager                      use eager instantiation with Z3\n"
-    " --lazy                       use lazy instantiation with Z3 (default)\n"
+    " --eager                      use eager instantiation\n"
+    " --lazy                       use lazy instantiation (default)\n"
     " --outfile Filename           output VCCs in SMT lib format to given file\n\n"
-    " --- property checking ---------------------------------------------------------\n\n"
+    "Property checking\n"
     " --no-assertions              ignore assertions\n"
     " --no-bounds-check            do not do array bounds check\n"
     " --no-div-by-zero-check       do not do division by zero check\n"
@@ -1803,24 +1888,26 @@ void cbmc_parseoptionst::help()
     " --data-races-check           enable data races check\n"
     " --lock-order-check           enable for lock acquisition ordering check\n"
     " --atomicity-check            enable atomicity check at visible assignments\n\n"
-    " --- k-induction----------------------------------------------------------------\n\n"
+    "K-induction\n"
     " --base-case                  check the base case\n"
     " --forward-condition          check the forward condition\n"
     " --inductive-step             check the inductive step\n"
     " --k-induction                prove by k-induction \n"
-    " --k-induction-parallel       prove by k-induction, running each step on a separate process\n"
+    " --k-induction-parallel       prove by k-induction, running each step on a separate\n"
+    "                              process\n"
     " --constrain-all-states       remove all redundant states in the inductive step\n"
-    " --k-step nr                  set max k-step (default is 50)\n"
+    " --k-step nr                  set max k-step (default is 50) \n"
     " --unlimited-k-steps          set max k-step to 4,294,967,295\n\n"
-    " --- scheduling approaches -----------------------------------------------------\n\n"
+    "Scheduling approaches\n"
     " --schedule                   use schedule recording approach \n"
     " --round-robin                use the round robin scheduling approach\n"
-    " --time-slice nr              set the time slice of the round robin algorithm (default is 1) \n\n"
-    " --- concurrency checking -----------------------------------------------------\n\n"
+    " --time-slice nr              set the time slice of the round robin algorithm\n"
+    "                              (default is 1) \n\n"
+    "Concurrency checking\n"
     " --context-switch nr          limit number of context switches for each thread \n"
     " --state-hashing              enable state-hashing, prunes duplicate states\n"
     " --control-flow-test          enable context switch before control flow tests\n"
-    " --no-por                     do not do partial order reduction\n"
+    " --no-por                     do not do partial order reduction\n\n"
     #ifdef _WIN32
     " --i386-macos                 set MACOS/I386 architecture\n"
     " --i386-linux                 set Linux/I386 architecture\n"
@@ -1833,7 +1920,7 @@ void cbmc_parseoptionst::help()
     #else
     #endif
     #endif
-    "\n --- Miscellaneous options -----------------------------------------------------\n\n"
+    "Miscellaneous options\n"
     " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
     " --timeout                    configure time limit, integer followed by {s,m,h}\n"
     " --enable-core-dump           don't disable core dump output\n"

@@ -1,5 +1,3 @@
-int nondet_int();
-
 typedef struct {
  int i;
 } xt;

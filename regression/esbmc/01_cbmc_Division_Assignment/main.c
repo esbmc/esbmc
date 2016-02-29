@@ -1,5 +1,3 @@
-_Bool nondet_bool();
-
 void main()
 {
   int i=2;

@@ -1,4 +1,4 @@
-main() {
+int main() {
 
   static int a = 0;
   

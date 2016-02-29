@@ -151,6 +151,7 @@ protected:
   void convert_sideeffect(exprt &expr, goto_programt &dest);
   void convert_block(const codet &code, goto_programt &dest);
   void convert_decl(const codet &code, goto_programt &dest);
+  void convert_decl_block(const codet &code, goto_programt &dest);
   void convert_expression(const codet &code, goto_programt &dest);
   void convert_assign(const code_assignt &code, goto_programt &dest);
   void convert_cpp_delete(const codet &code, goto_programt &dest);

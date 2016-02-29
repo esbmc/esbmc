@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <location.h>
 #include <std_types.h>
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "cpp_type2name.h"
 #include "cpp_declarator_converter.h"
@@ -509,7 +509,6 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
     if(!is_code)
     {
       // it is a variable
-      symbol.is_statevar=true;
       symbol.lvalue = !is_reference(symbol.type) &&
                       !(symbol.type.cmt_constant() &&
                       is_number(symbol.type) &&

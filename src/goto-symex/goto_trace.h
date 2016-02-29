@@ -19,18 +19,17 @@ Date: July 2005
 
 #include <fstream>
 #include <map>
-#include "VarMap.h"
 
 #include <goto-programs/goto_program.h>
 
-class goto_trace_stept 
+class goto_trace_stept
 {
 public:
   unsigned step_nr;
 
   // See SSA_stept.
   std::vector<dstring> stack_trace;
-  
+
   bool is_assignment() const { return type==ASSIGNMENT; }
   bool is_assume() const     { return type==ASSUME; }
   bool is_assert() const     { return type==ASSERT; }
@@ -40,24 +39,24 @@ public:
 
   typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT, SKIP, RENUMBER } typet;
   typet type;
-    
+
   goto_programt::const_targett pc;
 
   // this transition done by given thread number
   unsigned thread_nr;
-  
+
   // for assume, assert, goto
   bool guard;
-  
+
   // for assert
   std::string comment;
 
   // in SSA
   expr2tc lhs, rhs;
-  
+
   // this is a constant
   expr2tc value;
-  
+
   // original expression
   expr2tc original_lhs;
 
@@ -68,7 +67,7 @@ public:
   void output(
     const class namespacet &ns,
     std::ostream &out) const;
-    
+
   goto_trace_stept():
     step_nr(0),
     thread_nr(0),
@@ -83,15 +82,8 @@ public:
   typedef std::list<goto_trace_stept> stepst;
   typedef std::map< std::string, std::string, std::less< std::string > > mid;
   stepst steps;
-  mid llvm_linemap;
-  mid llvm_varmap;
-  std::string FileName;
-  std::string LineNumber;
-  std::string FuncName;
-  std::string VarName, OrigVarName;
+  std::string mode;
 
-  std::string mode, metadata_filename;
-  
   void clear()
   {
     mode.clear();
@@ -101,45 +93,7 @@ public:
   void output(
     const class namespacet &ns,
     std::ostream &out) const;
-
-  void open_llvm_varmap() {
-	  std::ifstream inVarMap(metadata_filename.c_str(), std::ios::in);
-	  if ( !inVarMap ) {
-	     std::cerr << "Metadata File could not be opened." << std::endl;
-	     exit( 1 );
-
-      } // end if
-	  VarMap vmap; // create record
-
-	  // read first record from file
-	  inVarMap.read( reinterpret_cast< char * >( &vmap ),
-	     sizeof( VarMap ) );
-
-	  // read all records from file
-	  while ( inVarMap && !inVarMap.eof() ) {
-
-	     // read record
-	     if ( vmap.getLineNumber() != "" )
-	    	llvm_linemap.insert( mid::value_type( vmap.getLineNumber() , vmap.getLineInfo() ) );
-	        llvm_varmap.insert( mid::value_type( vmap.getVarName() , vmap.getVarInfo() ) );
-
-	      // read next from file
-	     inVarMap.read( reinterpret_cast< char * >( &vmap ),
-	        sizeof( VarMap ) );
-
-	   } // end while
-
-  }
-
 };
-
-void get_metada_from_llvm(
-  goto_tracet::stepst::const_iterator &it,
-  const goto_tracet &goto_trace);
-
-std::string get_varname_from_guard(
-  goto_tracet::stepst::const_iterator &it,
-  const goto_tracet &goto_trace);
 
 void show_goto_trace_gui(
   std::ostream &out,

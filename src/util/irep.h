@@ -239,10 +239,6 @@ public:
     return get(a_module);
   }
 
-  inline const irep_idt &ordering(void) const {
-    return get(a_ordering);
-  }
-
   inline const irep_idt &pretty_name(void) const {
     return get(a_pretty_name);
   }
@@ -420,10 +416,6 @@ public:
     return get_bool(a_axiom);
   }
 
-  inline bool binding(void) const {
-    return get_bool(a_binding);
-  }
-
   inline bool cmt_constant(void) const {
     return get_bool(a_cmt_constant);
   }
@@ -442,10 +434,6 @@ public:
 
   inline bool file_local(void) const {
     return get_bool(a_file_local);
-  }
-
-  inline bool free_var(void) const {
-    return get_bool(a_free_var);
   }
 
   inline bool hex_or_oct(void) const {
@@ -476,12 +464,8 @@ public:
     return get_bool(a_invalid_object);
   }
 
-  inline bool is_actual(void) const {
-    return get_bool(a_is_actual);
-  }
-
-  inline bool is_exported(void) const {
-    return get_bool(a_is_exported);
+  inline bool is_parameter(void) const {
+    return get_bool(a_is_parameter);
   }
 
   inline bool is_expression(void) const {
@@ -492,28 +476,12 @@ public:
     return get_bool(a_is_extern);
   }
 
-  inline bool is_input(void) const {
-    return get_bool(a_is_input);
-  }
-
   inline bool is_macro(void) const {
     return get_bool(a_is_macro);
   }
 
-  inline bool is_output(void) const {
-    return get_bool(a_is_output);
-  }
-
-  inline bool is_statevar(void) const {
-    return get_bool(a_is_statevar);
-  }
-
   inline bool is_type(void) const {
     return get_bool(a_is_type);
-  }
-
-  inline bool is_volatile(void) const {
-    return get_bool(a_is_volatile);
   }
 
   inline bool cmt_lvalue(void) const {
@@ -680,10 +648,6 @@ public:
     set(a_base_name, val);
   }
 
-  inline void binding(bool val) {
-    set(a_binding, val);
-  }
-
   inline void code(const irept &val) {
     set(a_code, val);
   }
@@ -736,10 +700,6 @@ public:
     set(a_file_local, val);
   }
 
-  inline void free_var(bool val) {
-    set(a_free_var, val);
-  }
-
   inline void guard(const irept &val) {
     set(a_guard, val);
   }
@@ -772,12 +732,8 @@ public:
     set(a_invalid_object, val);
   }
 
-  inline void is_actual(bool val) {
-    set(a_is_actual, val);
-  }
-
-  inline void is_exported(bool val) {
-    set(a_is_exported, val);
+  inline void is_parameter(bool val) {
+    set(a_is_parameter, val);
   }
 
   inline void is_expression(bool val) {
@@ -788,28 +744,12 @@ public:
     set(a_is_extern, val);
   }
 
-  inline void is_input(bool val) {
-    set(a_is_input, val);
-  }
-
   inline void is_macro(bool val) {
     set(a_is_macro, val);
   }
 
-  inline void is_output(bool val) {
-    set(a_is_output, val);
-  }
-
-  inline void is_statevar(bool val) {
-    set(a_is_statevar, val);
-  }
-
   inline void is_type(bool val) {
     set(a_is_type, val);
-  }
-
-  inline void is_volatile(bool val) {
-    set(a_is_volatile, val);
   }
 
   inline void label(const irep_idt &val) {
@@ -846,10 +786,6 @@ public:
 
   inline void object_type(const irept &val) {
     set(a_object_type, val);
-  }
-
-  inline void ordering(unsigned int val) {
-    set(a_ordering, val);
   }
 
   inline void pretty_name(const irep_idt &val) {
@@ -1023,17 +959,17 @@ public:
   static const irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
   static const irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
   static const irep_idt a_access, a_destination, a_base_name, a_comment,a_event;
-  static const irep_idt a_literal, a_loopid, a_mode, a_module, a_ordering;
+  static const irep_idt a_literal, a_loopid, a_mode, a_module;
   static const irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
   static const irep_idt a_failed_symbol, a_dynamic, a_cmt_base_name, a_id_class;
   static const irep_idt a_cmt_identifier, a_cformat, a_cmt_width, a_axiom;
-  static const irep_idt a_binding, a_cmt_constant, a_default;
-  static const irep_idt a_ellipsis, a_explicit, a_file_local, a_free_var;
+  static const irep_idt a_cmt_constant, a_default;
+  static const irep_idt a_ellipsis, a_explicit, a_file_local;
   static const irep_idt a_hex_or_oct, a_hide, a_implicit, a_incomplete;
   static const irep_idt a_initialization, a_inlined, a_invalid_object;
-  static const irep_idt a_is_actual, a_is_exported, a_is_expression;
-  static const irep_idt a_is_extern, a_is_input, a_is_macro, a_is_output;
-  static const irep_idt a_is_statevar, a_is_type, a_is_volatile, a_cmt_lvalue;
+  static const irep_idt a_is_parameter, a_is_expression;
+  static const irep_idt a_is_extern, a_is_macro;
+  static const irep_idt a_is_type, a_cmt_lvalue;
   static const irep_idt a_lvalue, a_reference, a_static_lifetime, a_theorem;
   static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
   static const irep_idt a_zero_initializer, a_restricted, a_flavor;

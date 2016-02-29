@@ -1,6 +1,3 @@
-int nondet_int();
-void *malloc(unsigned s);
-void free(void *p);
 
 typedef struct {
     int i;

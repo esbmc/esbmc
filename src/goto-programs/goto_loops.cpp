@@ -11,27 +11,16 @@
 
 void goto_loopst::find_function_loops()
 {
-  std::map<unsigned int, goto_programt::instructionst::iterator> targets;
-
   for(goto_programt::instructionst::iterator
       it=goto_function.body.instructions.begin();
       it!=goto_function.body.instructions.end();
       it++)
   {
-    // Record location number and targets
-    if (it->is_target())
-      targets[it->location_number] = it;
-
     // We found a loop, let's record its instructions
     if (it->is_backwards_goto())
     {
       assert(it->targets.size() == 1);
-
-      if((*it->targets.begin())->location_number == it->location_number)
-        continue;
-
-      create_function_loop(
-        targets[(*it->targets.begin())->location_number], it);
+      create_function_loop(*it->targets.begin(), it);
     }
   }
 }
@@ -42,21 +31,24 @@ void goto_loopst::create_function_loop(
 {
   goto_programt::instructionst::iterator it=loop_head;
 
-  std::pair<goto_programt::targett, loopst>
-    p(loop_head, loopst(context, goto_programt()));
-
-  function_loopst::iterator it1 =
-    function_loops.insert(p).first;
+  function_loops.push_front(loopst(context, goto_programt()));
+  function_loopst::iterator it1 = function_loops.begin();
 
   // Set original iterators
-  it1->second.set_original_loop_head(loop_head);
-  it1->second.set_original_loop_exit(loop_exit);
+  it1->set_original_loop_head(loop_head);
+  it1->set_original_loop_exit(loop_exit);
+
+  // This means something like:
+  // A: goto A;
+  // There is no body, so we can skip it
+  if(loop_head->location_number == loop_exit->location_number)
+    return;
 
   // Copy the loop body
   while (it != loop_exit)
   {
     goto_programt::targett new_instruction=
-      it1->second.get_goto_program().add_instruction();
+      it1->get_goto_program().add_instruction();
 
     // This should be done only when we're running k-induction
     // Maybe a flag on the class?
@@ -68,7 +60,7 @@ void goto_loopst::create_function_loop(
 
   // Finally, add the loop exit
   goto_programt::targett new_instruction=
-    it1->second.get_goto_program().add_instruction();
+    it1->get_goto_program().add_instruction();
   *new_instruction=*loop_exit;
 }
 
@@ -80,7 +72,7 @@ void goto_loopst::get_modified_variables(
   if(instruction->is_assign())
   {
     const code_assign2t &assign = to_code_assign2t(instruction->code);
-    add_loop_var(loop->second, migrate_expr_back(assign.target));
+    add_loop_var(*loop, migrate_expr_back(assign.target));
   }
   else if(instruction->is_function_call())
   {
@@ -93,7 +85,7 @@ void goto_loopst::get_modified_variables(
       return;
 
     // First, add its return
-    add_loop_var(loop->second, migrate_expr_back(function_call.ret));
+    add_loop_var(*loop, migrate_expr_back(function_call.ret));
 
     // The run over the function body and get the modified variables there
     irep_idt &identifier = to_symbol2t(function_call.function).thename;
@@ -133,7 +125,7 @@ void goto_loopst::output(std::ostream &out)
       h_it!=function_loops.end();
       ++h_it)
   {
-    h_it->second.output(out);
+    h_it->output(out);
   }
 }
 
@@ -149,4 +141,9 @@ void goto_loopst::add_loop_var(loopst &loop, const exprt& expr)
     forall_operands(it, expr)
       add_loop_var(loop, *it);
   }
+}
+
+void goto_loopst::dump()
+{
+  output(std::cout);
 }

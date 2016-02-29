@@ -18,8 +18,6 @@ int test(){
    return 0;
 }
 
-int nondet_int();
-
 int main(){
 
    n = 2;//nondet_int(); //__NONDET__();

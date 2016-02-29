@@ -16,8 +16,7 @@
 #include <arith_tools.h>
 #include <base_type.h>
 #include <std_expr.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include <langapi/language_util.h>
 
@@ -115,7 +114,7 @@ goto_symext::argument_assignments(
 	                      "\" type mismatch: got " +
 	                      get_type_id((*it1)->type)+ ", expected " +
 	                      get_type_id(arg_type);
-          std::cerr << error;
+          std::cerr << error << std::endl;
           abort();
 	}
       }

@@ -1,4 +1,3 @@
-void *malloc(unsigned size);
 
 struct S {
   int (* func) ();

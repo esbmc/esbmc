@@ -39,7 +39,7 @@ unsigned long src[1024] =
   0
 };
 unsigned long dst[1024];
-main()
+int main()
 {
   unsigned long *s, *d;
   unsigned long x;

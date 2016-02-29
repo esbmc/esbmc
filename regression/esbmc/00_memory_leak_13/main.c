@@ -1,4 +1,3 @@
-void *malloc(unsigned int s);
 
 struct nodet {
   struct nodet *n;

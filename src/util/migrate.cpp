@@ -8,7 +8,7 @@
 #include <simplify_expr.h>
 #include <type_byte_size.h>
 
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 // File for old irep -> new irep conversions.
 

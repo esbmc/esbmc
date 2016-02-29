@@ -7,7 +7,7 @@ swap(int x,int y){
   a[y]=tmp;
 }
 
-main(){
+int main(){
   int j,i;
   a[0]=0;
   a[1]=1;

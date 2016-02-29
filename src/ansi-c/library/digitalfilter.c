@@ -1,4 +1,5 @@
-#include <digitalfilter.h>
+#include <assert.h>
+#include "intrinsics.h"
 
 #define CLOCK		16000000
 #define CYCLE		1/CLOCK
@@ -74,7 +75,7 @@ float minFixed(int k, int l)
 	return (-1.0f)*(float)powInt(2,k-1);
 }
 
-int wrap(int kX, int kLowerBound, int kUpperBound)  
+int wrap(int kX, int kLowerBound, int kUpperBound)
 {
     int range_size = kUpperBound - kLowerBound + 1;
 

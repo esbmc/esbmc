@@ -10,8 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ANSI_C_CONVERT_TYPE_H
 
 #include <message_stream.h>
+#include <c_types.h>
 
-#include <ansi-c/c_types.h>
 #include <ansi-c/c_qualifiers.h>
 #include <ansi-c/c_storage_spec.h>
 
@@ -26,22 +26,22 @@ public:
 
   // storage spec
   c_storage_spect c_storage_spec;
-       
+
   // qualifiers
   c_qualifierst c_qualifiers;
 
   void read(const typet &type);
   void write(typet &type);
-  
+
   locationt location;
-  
+
   std::list<typet> other;
-  
+
   ansi_c_convert_typet(message_handlert &_message_handler):
     message_streamt(_message_handler)
   {
   }
-  
+
   void clear()
   {
     unsigned_cnt=signed_cnt=char_cnt=int_cnt=short_cnt=
@@ -53,7 +53,7 @@ public:
     c_storage_spec.clear();
     c_qualifiers.clear();
   }
-  
+
 protected:
   void read_rec(const typet &type);
 };

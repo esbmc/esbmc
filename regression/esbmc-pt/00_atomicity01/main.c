@@ -1,8 +1,7 @@
 #include <pthread.h>
 #include <assert.h>
 
-int nondet_int();
-int xl=nondet_int(), y=nondet_int(), z=nondet_int();
+int xl, y, z;
 
 void* t1(void* arg) {
   xl=y+z;

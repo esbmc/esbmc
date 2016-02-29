@@ -1,7 +1,3 @@
-
-_Bool nondet_bool();
-float nondet_float();
-
 int main()
 {
   

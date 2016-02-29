@@ -1,4 +1,3 @@
-int nondet_int();
 int arr[2] = {0,0};
 
 int main()

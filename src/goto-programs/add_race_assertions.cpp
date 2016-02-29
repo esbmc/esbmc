@@ -75,18 +75,6 @@ protected:
   contextt &context;
 };
 
-/*******************************************************************\
-
-Function: w_guardst::add_initialization
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void w_guardst::add_initialization(goto_programt &goto_program) const
 {
   goto_programt::targett t=goto_program.instructions.begin();
@@ -108,18 +96,6 @@ void w_guardst::add_initialization(goto_programt &goto_program) const
     t++;
   }
 }
-
-/*******************************************************************\
-
-Function: add_race_assertions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void add_race_assertions(
   value_setst &value_sets,
@@ -206,18 +182,6 @@ void add_race_assertions(
   remove_skip(goto_program);
 }
 
-/*******************************************************************\
-
-Function: add_race_assertions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void add_race_assertions(
   value_setst &value_sets,
   contextt &context,
@@ -230,18 +194,6 @@ void add_race_assertions(
   w_guards.add_initialization(goto_program);
   goto_program.update();
 }
-
-/*******************************************************************\
-
-Function: add_race_assertions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void add_race_assertions(
   value_setst &value_sets,

@@ -9,8 +9,6 @@ void cmp_str(char* s1, char* s2, int n) {
   assert ((n <= 0) || (*s1 != *s2));
 }
 
-char nondet_char();
-
 #define MAX 3
 
 int main () {

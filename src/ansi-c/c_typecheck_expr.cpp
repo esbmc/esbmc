@@ -18,12 +18,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <simplify_expr.h>
 #include <base_type.h>
 #include <std_expr.h>
+#include <string_constant.h>
+#include <c_types.h>
 
-#include "c_types.h"
 #include "c_typecast.h"
 #include "c_typecheck_base.h"
 #include "c_sizeof.h"
-#include "ansi_c_expr.h"
 
 /*******************************************************************\
 
@@ -74,7 +74,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_side_effect(to_side_effect_expr(expr));
   else if(expr.id()=="constant")
     typecheck_expr_constant(expr);
-  else if(expr.id()=="infinit")
+  else if(expr.id()=="infinity")
   {
     // ignore
   }
@@ -369,9 +369,9 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   else if(identifier=="c::__func__")
   {
     // this is an ANSI-C standard compliant hack to get the function name
-    string_constantt s;
-    s.set_value(location.get_function());
+    string_constantt s(location.get_function());
     s.location()=location;
+
     expr.swap(s);
   }
   else

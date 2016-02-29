@@ -438,7 +438,7 @@ runtime_encoded_equationt::convert(smt_convt &smt_conv)
   return;
 }
 
-symex_targett *
+std::shared_ptr<symex_targett>
 runtime_encoded_equationt::clone(void) const
 {
   // Only permit cloning at the start of a run - there should never be any data
@@ -447,8 +447,9 @@ runtime_encoded_equationt::clone(void) const
   // sets up a new exploration.
   assert(SSA_steps.size() == 0 && "runtime_encoded_equationt shouldn't be "
          "cloned when it contains data");
-  runtime_encoded_equationt *nthis = new runtime_encoded_equationt(*this);
-  nthis->cvt_progress = nthis->SSA_steps.end();
+  auto nthis =
+    std::shared_ptr<runtime_encoded_equationt>(new runtime_encoded_equationt(*this));
+  nthis.get()->cvt_progress = nthis.get()->SSA_steps.end();
   return nthis;
 }
 

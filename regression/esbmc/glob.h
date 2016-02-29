@@ -56,5 +56,3 @@ typedef char u_char;
 
 #define GLOB_ABORTED -1
 
-// For SatAbs
-extern int nondet_int (void);

@@ -17,6 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 // Look at std_expr.h instead.
 //
 
+exprt gen_zero(const typet &type, bool array_as_array_of);
 exprt gen_zero(const typet &type);
 exprt gen_one(const typet &type);
 exprt gen_not(const exprt &op);

@@ -268,11 +268,12 @@ Function: language_uit::show_symbol_table_plain
 
 void language_uit::show_symbol_table_plain(std::ostream &out)
 {
-  out << std::endl << "Symbols:" << std::endl << std::endl;
+  out << std::endl << "Symbols:" << std::endl;
+  out << "Number of symbols: " << context.size() << std::endl;
+  out << std::endl;
 
   const namespacet ns(context);
-
-  context.foreach_operand(
+  context.foreach_operand_in_order(
     [&out, &ns] (const symbolt& s)
     {
       int mode;
@@ -285,7 +286,7 @@ void language_uit::show_symbol_table_plain(std::ostream &out)
         if(mode<0) throw "symbol "+id2string(s.name)+" has unknown mode";
       }
 
-      std::auto_ptr<languaget> p(mode_table[mode].new_language());
+      std::unique_ptr<languaget> p(mode_table[mode].new_language());
       std::string type_str, value_str;
 
       if(s.type.is_not_nil())
@@ -308,13 +309,7 @@ void language_uit::show_symbol_table_plain(std::ostream &out)
       if(s.file_local)      out << " file_local";
       if(s.is_type)         out << " type";
       if(s.is_extern)       out << " extern";
-      if(s.is_input)        out << " input";
-      if(s.is_output)       out << " output";
       if(s.is_macro)        out << " macro";
-      if(s.is_actual)       out << " actual";
-      if(s.binding)         out << " binding";
-      if(s.free_var)        out << " free_var";
-      if(s.is_statevar)     out << " statevar";
 
       out << std::endl;
       out << "Location....: " << s.location << std::endl;

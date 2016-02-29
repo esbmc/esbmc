@@ -22,16 +22,10 @@ typedef hash_map_cont<irep_idt, symbolt, irep_id_hash> symbolst;
 typedef std::vector<symbolt*> ordered_symbolst;
 
 typedef std::multimap<irep_idt, irep_idt> symbol_base_mapt;
-typedef std::multimap<irep_idt, irep_idt> symbol_module_mapt;
 
 #define forall_symbol_base_map(it, expr, base_name) \
   for(symbol_base_mapt::const_iterator it=(expr).lower_bound(base_name), \
                                        it_end=(expr).upper_bound(base_name); \
-      it!=it_end; it++)
-
-#define forall_symbol_module_map(it, expr, module) \
-  for(symbol_module_mapt::const_iterator it=(expr).lower_bound(module), \
-                                         it_end=(expr).upper_bound(module); \
       it!=it_end; it++)
 
 class contextt
@@ -44,7 +38,6 @@ public:
   typedef ::ordered_symbolst ordered_symbolst;
 
   symbol_base_mapt symbol_base_map;
-  symbol_module_mapt symbol_module_map;
 
   bool add(const symbolt &symbol);
   bool move(symbolt &symbol, symbolt *&new_symbol);
@@ -56,7 +49,6 @@ public:
   {
     symbols.clear();
     symbol_base_map.clear();
-    symbol_module_map.clear();
     ordered_symbols.clear();
   }
 
@@ -66,7 +58,6 @@ public:
   {
     symbols.swap(other.symbols);
     symbol_base_map.swap(other.symbol_base_map);
-    symbol_module_map.swap(other.symbol_module_map);
     ordered_symbols.swap(other.ordered_symbols);
   }
 

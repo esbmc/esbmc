@@ -9,6 +9,8 @@
 #define va_copy(d,s)    __builtin_va_copy(d,s)
 #define __GNUC_VA_LIST
 #define __gnuc_va_list	__builtin_va_list
+#ifndef __ESBMC_CLANG_PARSER
 #define va_list		__builtin_va_list
+#endif
 
 #endif /* __ESBMC_HEADERS_STDARG_H_ */

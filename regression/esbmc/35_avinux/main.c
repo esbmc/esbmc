@@ -4884,8 +4884,6 @@ void ata_exec_command(struct ata_port *ap , struct ata_taskfile *tf )
   return;
 }
 }
-//#line 7 "/home/matze/workspace_TestPlugins/Linux2.6.14.1/linux-2.6.14.1/drivers/scsi/slicheader.h"
-extern _Bool nondet_bool();
 //#line 9 "/home/matze/workspace_TestPlugins/Linux2.6.14.1/linux-2.6.14.1/drivers/scsi/slicheader.h"
 int __SLIC_state_handler_installed  =    0;
 //#line 10 "/home/matze/workspace_TestPlugins/Linux2.6.14.1/linux-2.6.14.1/drivers/scsi/slicheader.h"
@@ -14040,8 +14038,8 @@ void ata_scsi_simulate(u16 *id , struct scsi_cmnd *cmd , void (*done)(struct scs
 }
 //#line 59 "include/linux/slab.h"
 extern kmem_cache_t *kmem_cache_create(char const   * , size_t  , size_t  , unsigned long  ,
-                                       void /*(*)*/(*__perl_script_tmp)(void * , kmem_cache_t * , unsigned long  ) ,
-                                       void /*(*)*/(*__perl_script_tmp)(void * , kmem_cache_t * , unsigned long  ) ) ;
+                                       void (*ctor)(void * , kmem_cache_t * , unsigned long  ) ,
+                                       void (*dtor)(void * , kmem_cache_t * , unsigned long  ) ) ;
 //#line 62
 extern int kmem_cache_destroy(kmem_cache_t * ) ;
 //#line 24 "include/linux/mempool.h"

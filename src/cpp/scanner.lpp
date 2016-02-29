@@ -12,8 +12,8 @@ static int isatty(int) { return 0; }
 #include <expr.h>
 #include <arith_tools.h>
 #include <config.h>
+#include <c_types.h>
 
-#include <ansi-c/c_types.h>
 #include <ansi-c/preprocessor_line.h>
 
 #include <ansi-c/convert_float_literal.h>

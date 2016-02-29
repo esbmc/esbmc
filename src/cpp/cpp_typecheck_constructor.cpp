@@ -10,8 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <std_code.h>
 #include <std_expr.h>
 #include <expr_util.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "cpp_typecheck.h"
 #include "cpp_util.h"

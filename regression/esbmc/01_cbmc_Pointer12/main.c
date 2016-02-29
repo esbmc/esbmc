@@ -9,7 +9,7 @@ void f(const int *p)
   *q=1;
 }
 
-main()
+int main()
 {
   int x;
   

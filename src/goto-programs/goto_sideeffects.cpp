@@ -11,23 +11,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <rename.h>
 #include <cprover_prefix.h>
 #include <i2string.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "goto_convert_class.h"
-
-
-/*******************************************************************\
-
-Function: goto_convertt::make_temp_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::make_temp_symbol(
   exprt &expr,
@@ -46,18 +32,6 @@ void goto_convertt::make_temp_symbol(
 
   expr=symbol_expr(new_symbol);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::read
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::read(exprt &expr, goto_programt &dest)
 {
@@ -85,18 +59,6 @@ void goto_convertt::read(exprt &expr, goto_programt &dest)
   expr=symbol_expr(new_symbol);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::has_sideeffect
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool goto_convertt::has_sideeffect(const exprt &expr)
 {
   forall_operands(it, expr)
@@ -108,18 +70,6 @@ bool goto_convertt::has_sideeffect(const exprt &expr)
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::has_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool goto_convertt::has_function_call(const exprt &expr)
 {
@@ -134,18 +84,6 @@ bool goto_convertt::has_function_call(const exprt &expr)
   return false;
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::remove_sideeffects
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::remove_sideeffects(
   exprt &expr,
   goto_programt &dest,
@@ -154,18 +92,6 @@ void goto_convertt::remove_sideeffects(
   guardt guard;
   remove_sideeffects(expr, guard, dest, result_is_used);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::remove_sideeffects
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::remove_sideeffects(
   exprt &expr,
@@ -368,18 +294,6 @@ void goto_convertt::remove_sideeffects(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::address_of_replace_objects
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::address_of_replace_objects(
   exprt &expr,
   goto_programt &dest)
@@ -398,18 +312,6 @@ void goto_convertt::address_of_replace_objects(
     Forall_operands(it, expr)
       address_of_replace_objects(*it, dest);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::remove_assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::remove_assignment(
   exprt &expr,
@@ -433,18 +335,6 @@ void goto_convertt::remove_assignment(
   dest.destructive_append(tmp_program);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::remove_pre
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::remove_pre(
   exprt &expr,
   guardt &guard,
@@ -465,18 +355,6 @@ void goto_convertt::remove_pre(
   guard_program(guard, tmp_program);
   dest.destructive_append(tmp_program);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::remove_post
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::remove_post(
   exprt &expr,
@@ -508,18 +386,6 @@ void goto_convertt::remove_post(
   guard_program(guard, tmp_program);
   dest.destructive_append(tmp_program);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::remove_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::remove_function_call(
   exprt &expr,
@@ -583,18 +449,6 @@ void goto_convertt::remove_function_call(
   dest.destructive_append(tmp_program);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::replace_new_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::replace_new_object(
   const exprt &object,
   exprt &dest)
@@ -605,18 +459,6 @@ void goto_convertt::replace_new_object(
     Forall_operands(it, dest)
       replace_new_object(object, *it);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::remove_cpp_new
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::remove_cpp_new(
   exprt &expr,
@@ -653,18 +495,6 @@ void goto_convertt::remove_cpp_new(
   guard_program(guard, tmp_program);
   dest.destructive_append(tmp_program);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::remove_temporary_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::remove_temporary_object(
   exprt &expr,
@@ -705,18 +535,6 @@ void goto_convertt::remove_temporary_object(
 
   expr=symbol_expr(new_symbol);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::remove_statement_expression
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::remove_statement_expression(
   exprt &expr,
@@ -768,18 +586,6 @@ void goto_convertt::remove_statement_expression(
       throw "statement_expression expects expression as last statement";
   }
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::remove_gcc_conditional_expression
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::remove_gcc_conditional_expression(
   exprt &expr,

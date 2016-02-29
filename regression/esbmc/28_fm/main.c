@@ -116,7 +116,7 @@ _Bool rtb_Logical_Operator1;
 
 int f1();
 
-main(){
+int main(){
   // initializations
 	Unit_Delay_g = FALSE;
 	Unit_Delay_a_DSTATE = FALSE;
@@ -167,17 +167,14 @@ main(){
 
 }
 
-// non deterministic boolean value
-_Bool nondet_in();
-
 // function that describes the flasher module
 f1() {
-		in8=nondet_in();
-		in9=nondet_in();
-		in10=nondet_in();
-		in11=nondet_in();
-		in12=nondet_in();
-		in13=nondet_in();
+		in8=nondet_bool();
+		in9=nondet_bool();
+		in10=nondet_bool();
+		in11=nondet_bool();
+		in12=nondet_bool();
+		in13=nondet_bool();
 
 
 

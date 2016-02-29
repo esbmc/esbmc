@@ -13,23 +13,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <location.h>
 #include <cprover_prefix.h>
 #include <prefix.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "goto_convert_class.h"
 #include "goto_functions.h"
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,
@@ -41,18 +28,6 @@ void goto_convertt::convert_function_call(
     function_call.arguments(),
     dest);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_function_call(
   const exprt &lhs,
@@ -95,62 +70,14 @@ void goto_convertt::do_function_call(
   else if(new_function.id()=="NULL-object")
   {
   }
-#if 0
-  else if(new_function.id()=="member"
-          && new_function.has_operands()
-          && new_function.op0().statement()=="typeid")
-  {
-    // Let's create an instruction for typeid
-
-    // First, construct a code with all the necessary typeid infos
-    exprt typeid_code("sideeffect");
-    typeid_code.set("type", function.op0().op1().op0().find("#cpp_type"));
-
-    typeid_code.statement("typeid");
-
-    typeid_code.operands().push_back(function.op0().op1().op0());
-    typeid_code.location() = function.location();
-
-    typeid_code.id("code");
-    typeid_code.type()=typet("code");
-
-    // Second, copy to the goto-program
-    copy(to_code(typeid_code), OTHER, dest);
-
-    // We must check if the is a exception list
-    // If there is, we must throw the exception
-    const exprt& exception_list=
-      static_cast<const exprt&>(function.op0().find("exception_list"));
-
-    if(exception_list.is_not_nil())
-    {
-      // Add new instruction throw
-      goto_programt::targett t=dest.add_instruction(THROW);
-      codet c("cpp-throw");
-      c.set("exception_list", exception_list);
-      migrate_expr(c, t->code);
-      t->location=function.location();
-    }
-  }
-#endif
   else
   {
     err_location(function);
-    throw "unexpected function argument: "+new_function.id_string();
+    std::cerr << "unexpected function argument: " + new_function.id_string()
+              << std::endl;
+    abort();
   }
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_function_call_if
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_function_call_if(
   const exprt &lhs,
@@ -227,18 +154,6 @@ void goto_convertt::do_function_call_if(
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_function_call_dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_function_call_dereference(
   const exprt &lhs,

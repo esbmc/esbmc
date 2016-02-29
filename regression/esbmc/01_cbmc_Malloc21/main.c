@@ -1,7 +1,5 @@
 int *global;
 
-void *malloc(unsigned);
-
 struct X
 {
   int i;

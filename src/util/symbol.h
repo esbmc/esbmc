@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <iostream>
 #include <algorithm>
+#include <list>
 
 #include "expr.h"
 #include "location.h"
@@ -32,17 +33,11 @@ public:
     return pretty_name==""?name:pretty_name;
   }
 
-  unsigned ordering;
-
   // global use
-  bool is_type, is_macro, is_exported,
-       is_input, is_output, is_statevar;
-
-  // PVS
-  bool is_actual, free_var, binding;
+  bool is_type, is_macro, is_parameter;
 
   // ANSI-C
-  bool lvalue, static_lifetime, file_local, is_extern, is_volatile;
+  bool lvalue, static_lifetime, file_local, is_extern;
 
   symbolt()
   {
@@ -54,10 +49,7 @@ public:
     value.make_nil();
     location.make_nil();
     lvalue=static_lifetime=file_local=is_extern=
-    free_var=
-    is_type=is_actual=is_macro=is_exported=binding=
-    is_volatile=is_input=is_output=is_statevar=false;
-    ordering=0;
+    is_type=is_parameter=is_macro=false;
     name=module=base_name=mode=pretty_name="";
   }
 
@@ -76,20 +68,13 @@ public:
 
     #define SYM_SWAP2(x) std::swap(x, b.x)
 
-    SYM_SWAP2(ordering);
     SYM_SWAP2(is_type);
     SYM_SWAP2(is_macro);
-    SYM_SWAP2(is_exported);
-    SYM_SWAP2(is_input);
-    SYM_SWAP2(is_output);
-    SYM_SWAP2(is_statevar);
-    SYM_SWAP2(is_actual);
-    SYM_SWAP2(free_var);
+    SYM_SWAP2(is_parameter);
     SYM_SWAP2(lvalue);
     SYM_SWAP2(static_lifetime);
     SYM_SWAP2(file_local);
     SYM_SWAP2(is_extern);
-    SYM_SWAP2(is_volatile);
   }
 
   void show(std::ostream &out = std::cout) const;
@@ -102,12 +87,14 @@ public:
 std::ostream &operator<<(std::ostream &out,
                          const symbolt &symbol);
 
-#include <list>
-
-typedef std::list<symbolt> symbol_listt;
+typedef std::list<symbolt*> symbol_listt;
 
 #define forall_symbol_list(it, expr) \
   for(symbol_listt::const_iterator it=(expr).begin(); \
+      it!=(expr).end(); it++)
+
+#define Forall_symbol_list(it, expr) \
+  for(symbol_listt::iterator it=(expr).begin(); \
       it!=(expr).end(); it++)
 
 typedef std::list<const symbolt *> symbolptr_listt;

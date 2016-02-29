@@ -3,8 +3,7 @@
 #include <std_expr.h>
 #include <expr_util.h>
 #include <i2string.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #define mto(x, y) (x)->move_to_operands(*(y))
 #define mts(x, y) (x)->move_to_subtypes(*(y))
@@ -54,20 +53,20 @@ static void statement(exprt &expr, const std::string &id)
 static void decl_statement(exprt &dest, ansi_c_declarationt &decl, exprt &initializer)
 {
   codet decl_statement("decl");
-  
+
   symbol_exprt symbol;
   symbol.set_identifier(decl.name());
-  
+
   decl_statement.move_to_operands(symbol);
-  
+
   if(initializer.is_not_nil())
   {
     decl.decl_value()=initializer;
     decl_statement.move_to_operands(initializer);
   }
-  
+
   PARSER.move_declaration(decl);
-  
+
   dest.move_to_operands(decl_statement);
 }
 
@@ -104,17 +103,17 @@ static void merge_types(typet *dest, typet *src)
 }
 
 static void make_subtype(typet &dest, typet &src)
-{  
+{
   // inserts "src" into "dest"
   // e.g., src is a pointer or array,
   // dest is a symbol or type
-  
+
   // find spot where to insert this
-  
+
   // Inserting a nil type makes precisely no change.
   if (src.is_nil())
     return;
-  
+
   assert(src.is_array() ||
          src.id()=="incomplete_array" ||
          src.id()=="pointer" ||
@@ -128,7 +127,7 @@ static void make_subtype(typet &dest, typet &src)
   {
     // see if we need to walk down
     typet *sub=p;
-    
+
     if(p->id()=="merged_type")
     {
       // do last one
@@ -143,7 +142,7 @@ static void make_subtype(typet &dest, typet &src)
        sub->id()=="declarator")
     {
       // walk down
-      p=&sub->subtype();    
+      p=&sub->subtype();
     }
     else
     {
@@ -155,11 +154,11 @@ static void make_subtype(typet &dest, typet &src)
       else
       {
         // *p is now type or symbol
-    
+
         // save symbol
         typet symbol=*p;
         p->swap(src);
-      
+
         // find spot where to put symbol
         while(true)
         {
@@ -185,7 +184,7 @@ static void make_subtype(typet &dest, typet &src)
 }
 
 static void do_pointer(typet &ptr, typet &dest)
-{  
+{
   set(ptr, "pointer");
   ptr.subtype().make_nil();
   make_subtype(dest, ptr);
@@ -195,10 +194,10 @@ static void do_pointer(typet &ptr, typet &dest)
 static void do_enum_members(
   const typet &enum_type,
   exprt &members)
-{  
+{
   exprt value;
 
-  // start with 0  
+  // start with 0
   value=gen_zero(int_type());
 
   Forall_operands(it, members)
@@ -212,10 +211,10 @@ static void do_enum_members(
 
     exprt symbol_expr("symbol");
     symbol_expr.identifier(it->name());
-    
+
     value=exprt("+");
-    value.copy_to_operands(symbol_expr, gen_one(int_type()));    
-    
+    value.copy_to_operands(symbol_expr, gen_one(int_type()));
+
     PARSER.copy_declaration(*it);
   }
 }
@@ -240,7 +239,7 @@ static void do_tag(typet &key, typet &tag)
   tag.location()=declaration.location();
 
   declaration.type().id("incomplete_"+declaration.type().id_string());
-  PARSER.move_declaration(declaration);                    
+  PARSER.move_declaration(declaration);
 }
 
 static void create_function_scope(exprt &expr)
@@ -252,15 +251,15 @@ static void create_function_scope(exprt &expr)
   std::string prefix=PARSER.current_scope().prefix+
                      id2string(declaration.get_base_name())+"::";
   PARSER.new_scope(prefix);
-  
+
   if(declaration.type().is_code())
   {
     code_typet &code_type=to_code_type(declaration.type());
-    
+
     code_typet::argumentst &arguments=code_type.arguments();
-    
+
     unsigned anon_count=0;
-    
+
     // do the parameter declarations
     for(code_typet::argumentst::iterator
         it=arguments.begin();
@@ -270,7 +269,7 @@ static void create_function_scope(exprt &expr)
       if(it->id()=="declaration")
       {
         ansi_c_declarationt &arg_decl=to_ansi_c_declaration(*it);
-        
+
         if(arg_decl.type().id()=="incomplete_array")
           arg_decl.type().id("pointer");
 
@@ -279,14 +278,14 @@ static void create_function_scope(exprt &expr)
 
         // make sure we know it's an argument
         arg_decl.set_is_argument(true);
-          
+
         // fix name
         arg_decl.set_name(
           PARSER.current_scope().prefix+id2string(arg_decl.get_base_name()));
-      
+
         // copy declaration
         PARSER.copy_declaration(arg_decl);
-      
+
         // add to scope
         PARSER.current_scope().name_map
           [arg_decl.get_base_name()].id_class=ANSI_C_SYMBOL;

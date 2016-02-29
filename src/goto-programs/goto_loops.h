@@ -36,6 +36,7 @@ public:
 
   void find_function_loops();
   void output(std::ostream &out = std::cout);
+  void dump();
 
 protected:
   contextt &context;
@@ -43,7 +44,7 @@ protected:
   goto_functionst &goto_functions;
   goto_functiont &goto_function;
 
-  typedef std::map<goto_programt::targett, loopst> function_loopst;
+  typedef std::list<loopst> function_loopst;
   function_loopst function_loops;
 
   void create_function_loop(

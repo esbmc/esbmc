@@ -1,5 +1,5 @@
 main.c
---decide
+
 ^EXIT=0$
 ^SIGNAL=0$
 ^VERIFICATION SUCCESSFUL$

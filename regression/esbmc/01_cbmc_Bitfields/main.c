@@ -23,8 +23,8 @@ struct bft {
 };
  
 
-int main() {
-  struct bft bf;
+int main(){
+  struct bft bf = {6, 1, 1, 1, 3};
    
   assert(bf.a<=7);
   assert(bf.b<=1);

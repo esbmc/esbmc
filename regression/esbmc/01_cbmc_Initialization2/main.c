@@ -1,5 +1,3 @@
-int nondet_int();
-
 int Test = nondet_int();
 
 int f()

@@ -26,10 +26,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex_state.h"
 #include "symex_target.h"
 
-#ifdef EIGEN_LIB
-#include <unsupported/Eigen/Polynomials>
-#endif
-
 class reachability_treet; // Forward dec
 class execution_statet; // Forward dec
 
@@ -56,7 +52,7 @@ public:
    */
   goto_symext(const namespacet &_ns, contextt &_new_context,
               const goto_functionst &goto_functions,
-              symex_targett *_target, optionst &opts);
+              std::shared_ptr<symex_targett> _target, optionst &opts);
   goto_symext(const goto_symext &sym);
   goto_symext& operator=(const goto_symext &sym);
 
@@ -91,10 +87,13 @@ public:
    */
   class symex_resultt {
   public:
-    symex_resultt(symex_targett *t, unsigned int claims, unsigned int remain) :
-      target(t), total_claims(claims), remaining_claims(remain) { };
+    symex_resultt(
+      std::shared_ptr<symex_targett> t,
+      unsigned int claims,
+      unsigned int remain)
+      : target(t), total_claims(claims), remaining_claims(remain) { };
 
-    symex_targett *target;
+    std::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
   };
@@ -121,7 +120,7 @@ public:
   /**
    *  Create a symex result for this run.
    */
-  symex_resultt *get_symex_result(void);
+  std::shared_ptr<goto_symext::symex_resultt> get_symex_result(void);
 
   /**
    *  Symbolically execute one instruction.
@@ -406,33 +405,6 @@ protected:
   /** Terminate the monitor thread */
   void intrinsic_kill_monitor(reachability_treet &art);
 
-#ifdef EIGEN_LIB
-  // Digital system stability related functions
-  typedef Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootType RootType;
-  typedef Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType RootsType;
-#endif
-
-  /** Check digital filter stability */
-  void intrinsic_check_stability(const code_function_call2t &call,
-                                 reachability_treet &art);
-
-  /** Generate controllers in cascade form */
-  void intrinsic_generate_cascade_controllers(const code_function_call2t &call,
-                                 reachability_treet &art);
-
-  /** Generate delta coefficients */
-  void intrinsic_generate_delta_coefficients(const code_function_call2t &call,
-                                 reachability_treet &art);
-
-  /** Check delta stability */
-  void intrinsic_check_delta_stability(const code_function_call2t &call,
-                                 reachability_treet &art);
-
-#ifdef EIGEN_LIB
-  /** Get roots of a polynomial */
-  int get_roots(expr2tc array_element, std::vector<RootType>& roots);
-#endif
-
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
 
@@ -663,7 +635,7 @@ protected:
   /** GOTO functions that we're operating over. */
   const goto_functionst &goto_functions;
   /** Target listening to the execution trace */
-  symex_targett *target;
+  std::shared_ptr<symex_targett> target;
   /** Target thread we're currently operating upon */
   goto_symex_statet *cur_state;
   /** Symbol names for modelling arrays.
@@ -709,9 +681,6 @@ protected:
   /** Flag as to whether we're performing memory leak checks. Corresponds to
    *  the option --memory-leak-check */
   bool memory_leak_check;
-  /** Flag as to whether we're performing deadlock checking. Corresponds to
-   *  the option --deadlock-check */
-  bool deadlock_check;
   /** Flag as to whether we're checking user assertions. Corresponds to
    *  the option --no-assertions */
   bool no_assertions;
