@@ -1,6 +1,3 @@
-_Bool nondet_bool();
-void *malloc(unsigned s);
-
 int analyze_this()
 {
   char *p_char=malloc(sizeof(char));

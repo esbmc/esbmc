@@ -1,9 +1,6 @@
-typedef unsigned int size_t;
-
-void *malloc(size_t size);
+#include <stdio.h>
 
 typedef struct {
-  enum blockstate bs;
   int id;
   int version;
 } block;

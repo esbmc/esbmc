@@ -1,7 +1,5 @@
 #include "bind.h"
 
-int nondet_int();
-
 int dn_expand(const u_char *msg, const u_char *eomorig,
               const u_char *comp_dn, char *exp_dn, int length)
 {

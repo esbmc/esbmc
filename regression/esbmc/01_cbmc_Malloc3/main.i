@@ -2,8 +2,6 @@
 # 1 "<built-in>"
 # 1 "<command-line>"
 # 1 "main.c"
-void *malloc(unsigned size);
-void free(void *p);
 
 int main() {
   int *p;

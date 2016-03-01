@@ -1,9 +1,6 @@
 #include <stdio.h>
 //#include <stdlib.h>
 
-//void *malloc(unsigned size);
-//void free(void *p);
-
 static struct rec
 {
     int i;

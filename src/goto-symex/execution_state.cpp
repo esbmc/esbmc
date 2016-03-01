@@ -21,7 +21,7 @@
 #include <string2array.h>
 #include <std_expr.h>
 #include <expr_util.h>
-#include "../ansi-c/c_types.h"
+#include <c_types.h>
 #include <simplify_expr.h>
 #include "config.h"
 
@@ -32,9 +32,9 @@ std::map<expr2tc, bool> is_global;
 execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    const namespacet &ns,
                                    reachability_treet *art,
-                                   symex_targett *_target,
+                                   std::shared_ptr<symex_targett> _target,
                                    contextt &context,
-                                   ex_state_level2t *l2init,
+                                   std::shared_ptr<ex_state_level2t> l2init,
                                    optionst &options,
                                    message_handlert &_message_handler) :
   goto_symext(ns, context, goto_functions, _target, options),
@@ -114,7 +114,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(ex.state_level2->clone()),
+  state_level2(std::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
   global_value_set(ex.global_value_set),
   message_handler(ex.message_handler)
 {
@@ -200,8 +200,6 @@ execution_statet::operator=(const execution_statet &ex)
 
 execution_statet::~execution_statet()
 {
-  delete state_level2;
-  vars_map.clear();
 };
 
 void
@@ -473,7 +471,7 @@ execution_statet::is_cur_state_guard_false(void)
     expr2tc parent_guard = threads_state[active_thread].guard.as_expr();
 
     runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
-                                                 (target);
+                                                 (target.get());
 
     equality2tc the_question(true_expr, parent_guard);
 
@@ -885,8 +883,10 @@ crypto_hash
 execution_statet::generate_hash(void) const
 {
 
-  state_hashing_level2t *l2 =dynamic_cast<state_hashing_level2t*>(state_level2);
-  assert(l2 != NULL);
+  auto l2 =
+    std::dynamic_pointer_cast<state_hashing_level2t>(state_level2);
+  assert(l2 != nullptr);
+
   crypto_hash state = l2->generate_l2_state_hash();
   std::string str = state.to_string();
 
@@ -1076,11 +1076,11 @@ execution_statet::ex_state_level2t::~ex_state_level2t(void)
 {
 }
 
-execution_statet::ex_state_level2t *
+std::shared_ptr<renaming::level2t>
 execution_statet::ex_state_level2t::clone(void) const
 {
 
-  return new ex_state_level2t(*this);
+  return std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this));
 }
 
 void
@@ -1101,22 +1101,19 @@ dfs_execution_statet::~dfs_execution_statet(void)
   // Delete target; or if we're encoding at runtime, pop a context.
   if (smt_during_symex)
     target->pop_ctx();
-  else if (target != NULL)
-    delete target;
 }
 
-dfs_execution_statet* dfs_execution_statet::clone(void) const
+std::shared_ptr<execution_statet> dfs_execution_statet::clone(void) const
 {
-  dfs_execution_statet *d;
-
-  d = new dfs_execution_statet(*this);
+  std::shared_ptr<dfs_execution_statet> d =
+    std::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
 
   // Duplicate target equation; or if we're encoding at runtime, push a context.
   if (smt_during_symex) {
-    d->target = target;
-    d->target->push_ctx();
+    d.get()->target = target;
+    d.get()->target->push_ctx();
   } else {
-    d->target = target->clone();
+    d.get()->target = target.get()->clone();
   }
 
   return d;
@@ -1132,14 +1129,13 @@ schedule_execution_statet::~schedule_execution_statet(void)
   // Don't delete equation. Schedule requires all this data.
 }
 
-schedule_execution_statet* schedule_execution_statet::clone(void) const
+std::shared_ptr<execution_statet> schedule_execution_statet::clone(void) const
 {
-  schedule_execution_statet *s;
-
-  s = new schedule_execution_statet(*this);
+  std::shared_ptr<schedule_execution_statet> s =
+    std::shared_ptr<schedule_execution_statet>(new schedule_execution_statet(*this));
 
   // Don't duplicate target equation.
-  s->target = target;
+  s.get()->target = target;
   return s;
 }
 
@@ -1178,11 +1174,11 @@ execution_statet::state_hashing_level2t::~state_hashing_level2t(void)
 {
 }
 
-execution_statet::state_hashing_level2t *
+std::shared_ptr<renaming::level2t>
 execution_statet::state_hashing_level2t::clone(void) const
 {
 
-  return new state_hashing_level2t(*this);
+  return std::shared_ptr<state_hashing_level2t>(new state_hashing_level2t(*this));
 }
 
 void

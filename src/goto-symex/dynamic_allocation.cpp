@@ -12,8 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cprover_prefix.h>
 #include <expr_util.h>
 #include <std_expr.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "goto_symex.h"
 #include "dynamic_allocation.h"

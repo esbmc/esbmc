@@ -14,8 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <i2string.h>
 #include <arith_tools.h>
 #include <prefix.h>
-
-#include <ansi-c/ansi_c_expr.h>
+#include <string_constant.h>
 
 #include "cpp_typecheck.h"
 #include "cpp_typecheck_resolve.h"
@@ -1747,8 +1746,7 @@ exprt cpp_typecheck_resolvet::resolve(
     {
       // __func__ is an ANSI-C standard compliant hack to get the function name
       // __FUNCTION__ and __PRETTY_FUNCTION__ are GCC-specific
-      string_constantt s;
-      s.set_value(location.get_function());
+      string_constantt s(location.get_function());
       s.location()=location;
       return s;
     }

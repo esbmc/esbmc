@@ -133,6 +133,9 @@ void add_cprover_library(
   contextt &context,
   message_handlert &message_handler)
 {
+  if(config.ansi_c.lib==configt::ansi_ct::libt::LIB_NONE)
+    return;
+
   contextt new_ctx, store_ctx;
   goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;

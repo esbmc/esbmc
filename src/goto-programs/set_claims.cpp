@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "set_claims.h"
 
-/*******************************************************************\
-
-Function: set_claims
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert_claims(
   const std::list<std::string> &claims,
   std::set<unsigned> &unsigned_claims)
@@ -32,18 +20,6 @@ void convert_claims(
       it++)
     unsigned_claims.insert(atoi(it->c_str()));
 }
-
-/*******************************************************************\
-
-Function: set_claims
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void set_claims(
   goto_programt &goto_program,
@@ -75,18 +51,6 @@ void set_claims(
   }
 }
 
-/*******************************************************************\
-
-Function: set_claims
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void set_claims(
   goto_programt &goto_program,
   const std::list<std::string> &claims)
@@ -106,18 +70,6 @@ void set_claims(
   if(count<largest)
     throw "claim "+i2string(largest)+" not found";
 }
-
-/*******************************************************************\
-
-Function: set_claims
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void set_claims(
   goto_functionst &goto_functions,

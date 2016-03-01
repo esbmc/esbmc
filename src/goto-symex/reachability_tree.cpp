@@ -29,7 +29,7 @@ reachability_treet::reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
     optionst &opts,
-    symex_targett *target,
+    std::shared_ptr<symex_targett> target,
     contextt &context,
     message_handlert &_message_handler) :
     goto_functions(goto_functions),
@@ -64,7 +64,7 @@ reachability_treet::reachability_treet(
 void
 reachability_treet::setup_for_new_explore(void)
 {
-  symex_targett *targ;
+  std::shared_ptr<symex_targett> targ;
 
   execution_states.clear();
 
@@ -90,7 +90,7 @@ reachability_treet::setup_for_new_explore(void)
     schedule_target = NULL;
   }
 
-  execution_states.push_back(s);
+  execution_states.push_back(std::shared_ptr<execution_statet>(s));
   cur_state_it = execution_states.begin();
   targ->push_ctx(); // Start with a depth of 1.
 }
@@ -160,7 +160,7 @@ reachability_treet::create_next_state(void)
   execution_statet &ex_state = get_cur_state();
 
   if (next_thread_id != ex_state.threads_state.size()) {
-    execution_statet *new_state = ex_state.clone();
+    auto new_state = ex_state.clone();
     execution_states.push_back(new_state);
 
     //begin - H.Savino
@@ -262,7 +262,7 @@ bool reachability_treet::is_has_complete_formula()
 void reachability_treet::switch_to_next_execution_state()
 {
 
-  std::list<execution_statet*>::iterator it = cur_state_it;
+  std::list<std::shared_ptr<execution_statet> >::iterator it = cur_state_it;
   it++;
 
   if(it != execution_states.end()) {
@@ -280,7 +280,7 @@ void reachability_treet::switch_to_next_execution_state()
 
 bool reachability_treet::reset_to_unexplored_state()
 {
-  std::list<execution_statet*>::iterator it;
+  std::list<std::shared_ptr<execution_statet> >::iterator it;
 
   // After executing up to a point where all threads have ended and returning
   // that equation to the caller, free and remove fully explored execution
@@ -291,12 +291,10 @@ bool reachability_treet::reset_to_unexplored_state()
   // all depths from the current execution state are explored, so delete it.
 
   it = cur_state_it--;
-  delete *it;
   execution_states.erase(it);
 
   while(execution_states.size() > 0 && !step_next_state()) {
     it = cur_state_it--;
-    delete *it;
     execution_states.erase(it);
   }
 
@@ -308,7 +306,7 @@ bool reachability_treet::reset_to_unexplored_state()
     // continuing forwards. They've all already been checked, in the trace we
     // just backtracked from. Thus there's no point in checking them again.
     symex_target_equationt *eq =
-      static_cast<symex_target_equationt*>((*cur_state_it)->target);
+      static_cast<symex_target_equationt*>((*cur_state_it)->target.get());
     unsigned int num_asserts = eq->clear_assertions();
 
     // Remove them from the count of remaining assertions to check. This allows
@@ -324,7 +322,7 @@ bool reachability_treet::reset_to_unexplored_state()
 void reachability_treet::go_next_state()
 {
 
-  std::list<execution_statet*>::iterator it = cur_state_it;
+  std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
   it++;
   if(it != execution_states.end())
     cur_state_it++;
@@ -339,7 +337,6 @@ void reachability_treet::go_next_state()
       if (execution_states.size() == 1)
         (*it)->finish_formula();
 
-      delete *it;
       execution_states.erase(it);
     }
 
@@ -350,13 +347,13 @@ void reachability_treet::go_next_state()
 
 reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
 {
-  std::list<execution_statet*>::const_iterator it;
+  std::list<std::shared_ptr<execution_statet>>::const_iterator it;
 
   // Iterate through each position in the DFS tree recording data into this
   // object.
   for (it = rt.execution_states.begin(); it != rt.execution_states.end();it++){
     reachability_treet::dfs_position::dfs_state state;
-    execution_statet *ex = *it;
+    auto ex = *it;
     state.location_number = ex->get_active_state().source.pc->location_number;
     state.num_threads = ex->threads_state.size();
     state.explored = ex->DFS_traversed;
@@ -515,7 +512,7 @@ fail:
 void
 reachability_treet::print_ileave_trace(void) const
 {
-  std::list<execution_statet*>::const_iterator it;
+  std::list<std::shared_ptr<execution_statet>>::const_iterator it;
   int i = 0;
 
   std::cout << "Context switch trace for interleaving:" << std::endl;
@@ -659,7 +656,7 @@ reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   return true;
 }
 
-goto_symext::symex_resultt *
+std::shared_ptr<goto_symext::symex_resultt>
 reachability_treet::get_next_formula()
 {
 
@@ -712,7 +709,7 @@ reachability_treet::setup_next_formula(void)
   return reset_to_unexplored_state();
 }
 
-goto_symext::symex_resultt *
+std::shared_ptr<goto_symext::symex_resultt>
 reachability_treet::generate_schedule_formula()
 {
 
@@ -744,8 +741,9 @@ reachability_treet::generate_schedule_formula()
     go_next_state();
   }
 
-  return new goto_symext::symex_resultt(schedule_target, schedule_total_claims,
-                                        schedule_remaining_claims);
+  return std::shared_ptr<goto_symext::symex_resultt>(
+    new goto_symext::symex_resultt(schedule_target, schedule_total_claims,
+                                   schedule_remaining_claims));
 }
 
 bool

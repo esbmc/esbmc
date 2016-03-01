@@ -237,18 +237,6 @@ void goto_programt::instructiont::output_instruction(
   }
 }
 
-/*******************************************************************\
-
-Function: operator<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool operator<(const goto_programt::const_targett i1,
                const goto_programt::const_targett i2)
 {

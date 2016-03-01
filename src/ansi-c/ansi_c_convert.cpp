@@ -30,7 +30,7 @@ void ansi_c_convertt::convert(ansi_c_parse_treet &ansi_c_parse_tree)
   for(ansi_c_parse_treet::declarationst::iterator
       it=ansi_c_parse_tree.declarations.begin();
       it!=ansi_c_parse_tree.declarations.end();
-      it++)
+      ++it)
     convert_declaration(*it);
 }
 
@@ -242,16 +242,6 @@ void ansi_c_convertt::convert_code(codet &code)
     if(code.operands().size()==1)
       convert_expr(code.op0());
   }
-  else if(statement=="decl")
-  {
-    assert(code.operands().size()==1 ||
-           code.operands().size()==2);
-
-    convert_type(code.op0().type());
-
-    if(code.operands().size()==2)
-      convert_expr(code.op1());
-  }
   else if(statement=="skip")
   {
   }
@@ -365,7 +355,7 @@ void ansi_c_convertt::convert_type(
     for(code_typet::argumentst::iterator
         it=arguments.begin();
         it!=arguments.end();
-        it++)
+        ++it)
     {
       if(it->id()=="declaration")
       {

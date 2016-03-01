@@ -15,24 +15,12 @@ Date: June 2003
 #include <std_code.h>
 #include <std_expr.h>
 #include <type_byte_size.h>
+#include <c_types.h>
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
 #include "remove_skip.h"
 #include "i2string.h"
-#include "ansi-c/c_types.h"
-
-/*******************************************************************\
-
-Function: goto_convert_functionst::goto_convert_functionst
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,
@@ -48,33 +36,9 @@ goto_convert_functionst::goto_convert_functionst(
 	  inlining=true;
 }
 
-/*******************************************************************\
-
-Function: goto_convert_functionst::~goto_convert_functionst
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 goto_convert_functionst::~goto_convert_functionst()
 {
 }
-
-/*******************************************************************\
-
-Function: goto_convert_functionst::goto_convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convert_functionst::goto_convert()
 {
@@ -100,18 +64,6 @@ void goto_convert_functionst::goto_convert()
   functions.compute_location_numbers();
 }
 
-/*******************************************************************\
-
-Function: goto_convert_functionst::hide
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool goto_convert_functionst::hide(const goto_programt &goto_program)
 {
   for(goto_programt::instructionst::const_iterator
@@ -131,18 +83,6 @@ bool goto_convert_functionst::hide(const goto_programt &goto_program)
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_convert_functionst::add_return
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convert_functionst::add_return(
   goto_functiont &f,
@@ -173,18 +113,6 @@ void goto_convert_functionst::add_return(
   migrate_expr(rhs, tmp_expr);
   t->code = code_return2tc(tmp_expr);
 }
-
-/*******************************************************************\
-
-Function: goto_convert_functionst::convert_function
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convert_functionst::convert_function(const irep_idt &identifier)
 {
@@ -303,18 +231,6 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   if(hide(f.body))
     f.type.hide(true);
 }
-
-/*******************************************************************\
-
-Function: goto_convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convert(
   contextt &context,

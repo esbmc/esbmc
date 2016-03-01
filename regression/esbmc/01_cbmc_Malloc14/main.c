@@ -1,6 +1,4 @@
-#define NULL 0
-
-void *malloc(unsigned size);
+#include <stdio.h>
 
 struct list_el {
   int val;

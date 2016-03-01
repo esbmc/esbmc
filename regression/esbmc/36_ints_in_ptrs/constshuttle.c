@@ -1,7 +1,5 @@
 #include <stdbool.h>
 
-bool nondet_bool();
-
 int
 main()
 {

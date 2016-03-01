@@ -1,5 +1,3 @@
-void *malloc(unsigned);
-void free(void *);
 
 int main()
 {

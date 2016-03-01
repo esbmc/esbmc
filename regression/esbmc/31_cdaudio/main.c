@@ -7701,7 +7701,7 @@ int main(void)
 }
 }
 char _SLAM_alloc_dummy  ;
-extern int ( /* missing proto */  malloc)() ;
+
 char *nondet_malloc(int i ) 
 { int __BLAST_NONDET___0 ;
   int tmp ;
@@ -8031,7 +8031,7 @@ PCONFIGURATION_INFORMATION IoGetConfigurationInformation(void)
 
   {
   {
-  tmp = nondet_malloc(sizeof(CONFIGURATION_INFORMATION ));
+  tmp = malloc(sizeof(CONFIGURATION_INFORMATION ));
   }
   return ((void *)tmp);
 }

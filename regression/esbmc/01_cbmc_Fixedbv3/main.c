@@ -1,5 +1,3 @@
-int nondet_int();
-
 double d = 0.0;
 
 void f1()

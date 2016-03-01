@@ -1,5 +1,3 @@
-char nondet_char();
-
 int main()
 {
   char ch=nondet_char();

@@ -1,3 +1,19 @@
+#include <ctype.h>
+
+#undef isalnum
+#undef isalpha
+#undef isblank
+#undef iscntrl
+#undef isdigit
+#undef isgraph
+#undef islower
+#undef isprint
+#undef ispunct
+#undef isspace
+#undef isupper
+#undef isxdigit
+#undef tolower
+#undef toupper
 
 int isalnum(int c)
 { return (c>='a' && c<='z') || (c>='A' && c<='Z') || (c>='0' && c<='9'); }

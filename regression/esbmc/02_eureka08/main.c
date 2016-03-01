@@ -1,5 +1,5 @@
 int a[2];
-main(){
+int main(){
   int i,j;
   i=0;
   while(i<2){

@@ -124,7 +124,6 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     // now: rename them
     std::string typestr = type2name(symbol.type);
     new_name = prefix+"tag-#anon#" + typestr;
-
     id_replace_map[symbol.name]=new_name;
 
     symbolt* s = context.find_symbol(new_name);
@@ -219,7 +218,7 @@ Function: c_typecheck_baset::typecheck_new_symbol
 
 void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
 {
-  if(symbol.is_actual)
+  if(symbol.is_parameter)
     adjust_function_argument(symbol.type);
 
   // check initializer, if needed
@@ -397,7 +396,6 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
           }
 
           symbolt &symbol = *s;
-
           symbol.type=final_new;
         }
         else

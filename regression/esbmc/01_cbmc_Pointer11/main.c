@@ -1,11 +1,9 @@
-int nondet_int();
-
 struct S
 {
   int a, b;
 };
 
-main()
+int main()
 {
   struct S s[10];
   int *p, *q, x=nondet_int(), y=nondet_int();

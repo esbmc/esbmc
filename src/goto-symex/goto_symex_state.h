@@ -93,7 +93,7 @@ public:
   {
   public:
     unsigned depth;
-    renaming::level2t *level2_ptr;
+    std::shared_ptr<renaming::level2t> level2_ptr;
     renaming::level2t &level2;
     value_sett value_set;
     guardt guard;
@@ -125,7 +125,6 @@ public:
 
   public:
     ~goto_statet() {
-      delete level2_ptr;
       return;
     }
   };

@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <assert.h>
 
+#include <string2array.h>
 #include <config.h>
 #include <simplify_expr_class.h>
 #include <expr_util.h>
@@ -102,7 +103,7 @@ bool check_c_implicit_typecast(
   const typet &src_type,
   const typet &dest_type)
 {
-  // check qualifiers  
+  // check qualifiers
 
   if(src_type.id()=="pointer" && dest_type.id()=="pointer" &&
      src_type.subtype().cmt_constant() &&
@@ -201,7 +202,7 @@ bool check_c_implicit_typecast(
               dest_subtype.id()=="empty")  // to void from anything
         return false;
     }
-    
+
     if((dest_type.is_array() ||
         dest_type.id()=="incomplete_array") &&
        (src_type.subtype()==dest_type.subtype())) return false;
@@ -229,12 +230,12 @@ Function: c_typecastt::follow_with_qualifiers
 typet c_typecastt::follow_with_qualifiers(const typet &src_type)
 {
   if(src_type.id()!="symbol") return src_type;
-  
+
   c_qualifierst qualifiers(src_type);
-  
+
   typet dest_type=ns.follow(src_type);
   qualifiers.write(dest_type);
-  
+
   return dest_type;
 }
 
@@ -254,7 +255,7 @@ c_typecastt::c_typet c_typecastt::get_c_type(
   const typet &type)
 {
   unsigned width=atoi(type.width().c_str());
-  
+
   if(type.id()=="signedbv")
   {
     if(width<=config.ansi_c.char_width)
@@ -308,8 +309,8 @@ c_typecastt::c_typet c_typecastt::get_c_type(
   }
   else if(type.id()=="symbol")
     return get_c_type(ns.follow(type));
-    
-  return OTHER;  
+
+  return OTHER;
 }
 
 /*******************************************************************\
@@ -329,14 +330,13 @@ void c_typecastt::implicit_typecast_arithmetic(
   c_typet c_type)
 {
   typet new_type;
-  
+
   const typet &expr_type=ns.follow(expr.type());
-  
+
   switch(c_type)
   {
   case PTR:
-    if(expr_type.is_array() ||
-       expr_type.id()=="incomplete_array")
+    if(expr_type.is_array())
     {
       new_type.id("pointer");
       new_type.subtype()=expr_type.subtype();
@@ -344,7 +344,7 @@ void c_typecastt::implicit_typecast_arithmetic(
     }
     return;
 
-  case BOOL:       new_type=typet("bool"); break;
+  case BOOL:       new_type=bool_type(); break;
   case CHAR:       assert(false); // should always be promoted
   case UCHAR:      assert(false); // should always be promoted
   case INT:        new_type=int_type(); break;
@@ -360,21 +360,7 @@ void c_typecastt::implicit_typecast_arithmetic(
   }
 
   if(new_type!=expr_type)
-  {
-    if(new_type.id()=="pointer" &&
-       (expr_type.is_array() ||
-        expr_type.id()=="incomplete_array"))
-    {
-      exprt index_expr("index", expr_type.subtype());
-      index_expr.reserve_operands(2);
-      index_expr.move_to_operands(expr);
-      index_expr.copy_to_operands(gen_zero(index_type()));
-      expr=exprt("address_of", new_type);
-      expr.move_to_operands(index_expr);
-    }
-    else
-      do_typecast(expr, new_type);
-  }
+    do_typecast(expr, new_type);
 }
 
 /*******************************************************************\
@@ -411,10 +397,10 @@ Function: c_typecastt::implicit_typecast
 void c_typecastt::implicit_typecast(
   exprt &expr,
   const typet &type)
-{    
+{
   typet src_type=follow_with_qualifiers(expr.type()),
         dest_type=follow_with_qualifiers(type);
-  
+
   implicit_typecast_followed(expr, src_type, dest_type);
 }
 
@@ -449,13 +435,13 @@ void c_typecastt::implicit_typecast_followed(
       expr.value("NULL");
       return; // ok
     }
-  
+
     if(src_type.id()=="pointer" ||
        src_type.is_array() ||
        src_type.id()=="incomplete_array")
     {
       // we are quite generous about pointers
-      
+
       const typet &src_sub=ns.follow(src_type.subtype());
       const typet &dest_sub=ns.follow(dest_type.subtype());
 
@@ -501,7 +487,20 @@ void c_typecastt::implicit_typecast_followed(
       return; // ok
     }
   }
-  
+  else if(dest_type.id()=="array")
+  {
+    if(expr.id() == "string-constant")
+    {
+      expr.type() = dest_type;
+
+      exprt dest;
+      string2array(expr, dest);
+      expr.swap(dest);
+
+      return;
+    }
+  }
+
   if(check_c_implicit_typecast(src_type, dest_type))
     errors.push_back("implicit conversion not permitted");
   else if(src_type!=dest_type)
@@ -535,12 +534,12 @@ void c_typecastt::implicit_typecast_arithmetic(
 
   implicit_typecast_arithmetic(expr1, max_type);
   implicit_typecast_arithmetic(expr2, max_type);
-  
+
   if(max_type==PTR)
   {
     if(c_type1==VOIDPTR)
       do_typecast(expr1, expr2.type());
-    
+
     if(c_type2==VOIDPTR)
       do_typecast(expr2, expr1.type());
   }
@@ -562,18 +561,17 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
 {
   // special case: array -> pointer is actually
   // something like address_of
-  
+
   const typet &dest_type=ns.follow(dest.type());
 
-  if(dest_type.is_array() || 
-     dest_type.id()=="incomplete_array")
+  if(dest_type.is_array())
   {
     index_exprt index;
     index.array()=dest;
     index.index()=gen_zero(index_type());
     index.type()=dest_type.subtype();
     dest=gen_address_of(index);
-    if(ns.follow(dest.type())!=ns.follow(type))
+    if(ns.follow(dest.type()) != ns.follow(type))
       dest.make_typecast(type);
     return;
   }
@@ -581,7 +579,7 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
   if(dest_type!=type)
   {
     dest.make_typecast(type);
-    
+
     if(dest.op0().is_constant())
     {
       // preserve #c_sizeof_type -- don't make it a reference!

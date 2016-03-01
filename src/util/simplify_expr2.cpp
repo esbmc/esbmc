@@ -4,7 +4,7 @@
 
 #include <boost/static_assert.hpp>
 
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 #include <base_type.h>
 #include <type_byte_size.h>
 

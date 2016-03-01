@@ -1,5 +1,5 @@
 int a[10];
-main(){
+int main(){
   int i,j;
 
   i=0;

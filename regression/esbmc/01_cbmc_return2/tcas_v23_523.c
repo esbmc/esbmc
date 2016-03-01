@@ -151,7 +151,7 @@ int alt_sep_test()
     return alt_sep;
 }
 
-main(int argc, char*argv[])
+int main(int argc, char*argv[])
 {
 
   initialize();

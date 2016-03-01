@@ -46,7 +46,9 @@ void unescape_string(const std::string &src, std::string &dest)
       case 'r': dest+='\r'; break; /* CR (0x0d) */
       case 'f': dest+='\f'; break; /* FF (0x0c) */
       case 'a': dest+='\a'; break; /* BEL (0x07) */
-      
+      case '"': dest.push_back('"'); break;
+      case '\'': dest.push_back('\''); break;
+
       case 'x': // hex
         i++;
 
@@ -57,27 +59,27 @@ void unescape_string(const std::string &src, std::string &dest)
             i++;
             hex+=src[i];
           }
-        
+
           unsigned int result;
           sscanf(hex.c_str(), "%x", &result);
           ch=result;
         }
-        
+
         dest+=ch;
-      
+
         break;
-      
+
       default:
         if(isdigit(ch)) // octal
         {
           std::string octal;
-          
+
           while(isdigit(src[i]))
           {
             octal+=src[i];
             i++;
           }
-          
+
           unsigned int result;
           sscanf(octal.c_str(), "%o", &result);
           ch=result;

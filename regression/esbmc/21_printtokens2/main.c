@@ -20,7 +20,7 @@
 #define TRUE 1
 #define FALSE 0
 
-main(argc,argv)
+int main(argc,argv)
 int argc;
 char *argv[3];
 {  char *fname;

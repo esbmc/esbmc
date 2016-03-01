@@ -39,7 +39,7 @@ static struct queue prio_queue[MAXPRIO + 1]; /* blocked queue is [0] */
 
 
 
-main(argc, argv) /* n3, n2, n1 : # of processes at prio3 ... */
+int main(argc, argv) /* n3, n2, n1 : # of processes at prio3 ... */
 int argc;
 char *argv[];
 {

@@ -8,7 +8,7 @@ p(){
   a[j]=tmp;
 }
 
-main(){
+int main(){
   i=0;
   j=1;
   a[i]=100;

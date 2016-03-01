@@ -11,9 +11,9 @@ Author:
 #include <arith_tools.h>
 #include <expr_util.h>
 #include <simplify_expr_class.h>
+#include <c_types.h>
 
 #include <ansi-c/c_qualifiers.h>
-#include <ansi-c/c_types.h>
 
 #include "cpp_typecheck.h"
 

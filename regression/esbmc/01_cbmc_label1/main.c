@@ -8,8 +8,10 @@ int f()
 
 int main()
 {
-l:
-l2:
-  int i=f();
-  goto l;
+  l:
+  l2:
+  {
+    int i=f();
+    goto l;
+  }
 }

@@ -5,11 +5,10 @@
  *      Author: mramalho
  */
 
-#include <util/std_expr.h>
-#include <util/expr_util.h>
-#include <ansi-c/c_types.h>
-
+#include <c_types.h>
 #include <i2string.h>
+#include <std_expr.h>
+#include <expr_util.h>
 
 #include "goto_k_induction.h"
 #include "remove_skip.h"

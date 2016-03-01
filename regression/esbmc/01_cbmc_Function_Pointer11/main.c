@@ -1,4 +1,3 @@
-unsigned nondet_uint();
 unsigned fritz(unsigned x) { return x+1; }
 unsigned franz(unsigned x) { return x; }
 

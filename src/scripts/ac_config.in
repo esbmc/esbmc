@@ -1,8 +1,5 @@
 /* scripts/ac_config.in.  Generated from configure.ac by autoheader.  */
 
-/* Have Eigen library */
-#undef EIGEN_LIB
-
 /* List of ESBMC headers available to us */
 #undef ESBMC_AVAILABLE_SOLVERS
 
@@ -117,9 +114,6 @@
 /* Define if you have the _dyld_func_lookup function. */
 #undef HAVE_DYLD
 
-/* Define to 1 if you have the <eigen3/Eigen/Eigen> header file. */
-#undef HAVE_EIGEN3_EIGEN_EIGEN
-
 /* Define to 1 if the system has the type `error_t'. */
 #undef HAVE_ERROR_T
 
@@ -188,6 +182,9 @@
 
 /* Define to 1 if you have the `m' library (-lm). */
 #undef HAVE_LIBM
+
+/* Define if there is a working LLVM library. */
+#undef HAVE_LLVM
 
 /* Define to 1 if you have the `localeconv' function. */
 #undef HAVE_LOCALECONV
@@ -441,6 +438,18 @@
 
 /* Define to 1 if the system has the type `_Bool'. */
 #undef HAVE__BOOL
+
+/* define if the clang library is available */
+#undef HAVE_clang
+
+/* Build mode of the LLVM library. */
+#undef LLVM_BUILDMODE
+
+/* Define if LLVM was compiled with NDEBUG. */
+#undef LLVM_NDEBUG
+
+/* Version of the LLVM library. */
+#undef LLVM_VERSION
 
 /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
    slash. */

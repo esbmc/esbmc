@@ -1,7 +1,5 @@
 #include "common.h"
 
-#define NULL 0
-
 char UnComp[800 + 40];
 char CompBuf[800];
 static char Buf[] = "/* Replacement routines for standard C routines. */\0#define CONSOLE 0\0#ifndef SUN\0#define stderr CONSOLE\0#define EOF (-1)\0#endif /* SUN */\0\0#include \"buf.c\"\0\0char* outbuf = 0;\0\0int getchar()\0{ static char *bufp = Buf;\0  static int n = Buflen;\0#ifdef TEST\0  if ( n == 0 ) {   /* buffer is empty */\0    n = strtol ( bufp, &bufp, 10 ); /* read char size from 1st string. */\0    }\0#endif TEST\0  return ( --n >= 0 ) ? (unsigned char) *bufp++ : EOF;\0}  \0\0/*void putchar ( c)\0  char c;\0{ \0  fprintf(stderr,\"putchar: c = %x \\n\", c);\0  *outbuf++ = c;\0}\0 */\0#ifndef SUN\0void exit( x )\0  int x;\0{\0  fprintf (stderr, \"exit(0x%x)\\n\", x);\0#ifdef XINU\0  userret();               /* Must link with XINU? */\0#endif /* XINU */\0}\0 \0int putc( dev,  c)   /* putc defined bu XINU. */\0  int dev;\0  char c;\0{\0/* if (dev == CONSOLE)  */\0}\0#endif /* SUN */\0xff\0xff\0xff\0xff\0xff\0xff\0xff\0xff\0";
@@ -190,7 +188,7 @@ int Compress(argc, argv)
 }
 void cl_hash(register count_int hsize);
 void output(register code_int code);
-compress()
+void compress()
 {
   register long fcode;
   register code_int i = 0;
@@ -274,7 +272,7 @@ compress()
     }
   if (bytes_out > in_count)
     exit_stat = 2;
-  return 0;
+  return;
 }
 static char buf[12];
 char_type lmask[9] = {0xff, 0xfe, 0xfc, 0xf8, 0xf0, 0xe0, 0xc0, 0x80, 0x00};
@@ -348,7 +346,7 @@ void output(code)
       offset = 0;
     }
 }
-decompress()
+void decompress()
 {
   register char_type *stackp;
   register int finchar;
@@ -363,7 +361,7 @@ decompress()
   finchar = oldcode = getcode();
   if (oldcode == -1)
     {
-      return 0;
+      return;
     }
   *outbuf++ = (char) finchar;
   stackp = ((char_type *) & ((char_type *) (htab))[1 << 12]);
@@ -404,7 +402,7 @@ decompress()
 	}
       oldcode = incode;
     }
-  return 0;
+  return;
 }
 code_int
 getcode()
@@ -481,7 +479,7 @@ oops()
     ("uncompress: corrupt input\n");
   return (1);
 }
-cl_block()
+void cl_block()
 {
   register long int rat;
   checkpoint = in_count + 10000;
@@ -513,7 +511,7 @@ cl_block()
       clear_flg = 1;
       output((code_int) 256);
     }
-  return 0;
+  return;
 }
 void cl_hash(hsize)
      register count_int hsize;
@@ -566,10 +564,10 @@ prratio(num, den)
   ("%d.%02d%%", q / 100, q % 100);
   return 0;
 }
-version()
+void version()
 {
   ("%s\n", rcs_ident);
   ("Options: ");
   ("BITS = %d\n", 12);
-  return 0;
+  return;
 }

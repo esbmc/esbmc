@@ -1,5 +1,3 @@
-unsigned nondet_uint();
-
 int new_intu(unsigned int lower, unsigned int upper)
 {
     unsigned int val = (unsigned) 1u << 31;

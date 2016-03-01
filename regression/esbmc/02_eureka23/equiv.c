@@ -24,8 +24,6 @@ int f2(unsigned char a, unsigned char b)
 //  assert(result==a*b);
 }
 
-unsigned char nondet_uchar();
-
 int main()
 {
   unsigned char a, b;

@@ -1,5 +1,5 @@
 main.c
---decide --no-pointer-check
+ --no-pointer-check
 ^EXIT=0$
 ^SIGNAL=0$
 ^VERIFICATION SUCCESSFUL$

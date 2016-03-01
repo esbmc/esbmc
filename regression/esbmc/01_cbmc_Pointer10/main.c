@@ -1,5 +1,3 @@
-int nondet_int();
-
 struct S
 {
   int x;
@@ -7,7 +5,7 @@ struct S
   int z;
 };
 
-main()
+int main()
 {
   struct S s;
   int *p;

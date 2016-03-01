@@ -25,7 +25,7 @@ const char *msg;
 {
 }
 
-main()
+int main()
 {
   struct X x;
   

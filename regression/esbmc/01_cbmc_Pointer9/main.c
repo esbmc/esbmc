@@ -1,5 +1,3 @@
-int nondet_int();
-
 typedef struct str1 {
   int x;
 } Str1;
@@ -14,7 +12,7 @@ void f1(int *px)
   *px = 1234;
 }
 
-main()
+int main()
 {
   int flag;
   int *ref = NULL;

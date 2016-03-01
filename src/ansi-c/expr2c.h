@@ -104,6 +104,10 @@ protected:
     const exprt &src,
     unsigned precedence);
 
+  std::string convert_sizeof(
+    const exprt &src,
+    unsigned precedence);
+
   std::string convert_unary(
     const exprt &src, const std::string &symbol,
     unsigned precedence);
@@ -133,12 +137,14 @@ protected:
   std::string convert_code_expression(const codet &src, unsigned indent);
   std::string convert_code_return(const codet &src, unsigned indent);
   std::string convert_code_goto(const codet &src, unsigned indent);
+  std::string convert_code_gcc_goto(const codet &src, unsigned indent);
   std::string convert_code_assume(const codet &src, unsigned indent);
   std::string convert_code_assert(const codet &src, unsigned indent);
   std::string convert_code_break(const codet &src, unsigned indent);
   std::string convert_code_switch(const codet &src, unsigned indent);
   std::string convert_code_continue(const codet &src, unsigned indent);
   std::string convert_code_decl(const codet &src, unsigned indent);
+  std::string convert_code_decl_block(const codet &src, unsigned indent);
   std::string convert_code_function_call(const code_function_callt &src, unsigned indent);
   std::string convert_code_lock(const codet &src, unsigned indent);
   std::string convert_code_unlock(const codet &src, unsigned indent);
@@ -150,6 +156,8 @@ protected:
   std::string convert_malloc(const exprt &src, unsigned &precedence);
   std::string convert_alloca(const exprt &src, unsigned &precedence);
   std::string convert_nondet(const exprt &src, unsigned &precedence);
+  std::string convert_statement_expression(const exprt &src, unsigned &precedence);
+
 
   virtual std::string convert_symbol(const exprt &src, unsigned &precedence);
   std::string convert_predicate_symbol(const exprt &src, unsigned &precedence);

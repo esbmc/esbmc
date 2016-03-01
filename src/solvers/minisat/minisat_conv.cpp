@@ -1,7 +1,7 @@
 #include <set>
 #include <sstream>
 
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "minisat_conv.h"
 

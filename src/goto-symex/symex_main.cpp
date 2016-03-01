@@ -16,17 +16,16 @@
 #include <prefix.h>
 #include <std_expr.h>
 #include <expr_util.h>
+#include <std_expr.h>
+#include <c_types.h>
+#include <simplify_expr.h>
+#include <config.h>
 
 #include "goto_symex.h"
 #include "goto_symex_state.h"
 #include "execution_state.h"
 #include "symex_target_equation.h"
 #include "reachability_tree.h"
-
-#include <std_expr.h>
-#include "../ansi-c/c_types.h"
-#include <simplify_expr.h>
-#include "config.h"
 
 void
 goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
@@ -68,11 +67,12 @@ goto_symext::assume(const expr2tc &assumption)
   return;
 }
 
-goto_symext::symex_resultt *
+std::shared_ptr<goto_symext::symex_resultt>
 goto_symext::get_symex_result(void)
 {
 
-  return new goto_symext::symex_resultt(target, total_claims, remaining_claims);
+  return std::shared_ptr<goto_symext::symex_resultt>(
+    new goto_symext::symex_resultt(target, total_claims, remaining_claims));
 }
 
 void
@@ -354,14 +354,6 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
     intrinsic_kill_monitor(art);
   } else if (symname == "__ESBMC_realloc") {
     intrinsic_realloc(func_call, art);
-  } else if (symname == "__ESBMC_check_stability") {
-    intrinsic_check_stability(func_call, art);
-  } else if (symname == "__ESBMC_generate_cascade_controllers") {
-    // intrinsic_generate_cascade_controllers(func_call, art);
-  } else if (symname == "__ESBMC_generate_delta_coefficients") {
-    // intrinsic_generate_delta_coefficients(func_call, art);
-  } else if (symname == "__ESBMC_check_delta_stability") {
-    // intrinsic_check_delta_stability(func_call, art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
     std::cerr << std::endl << "The name in question: " << symname << std::endl;

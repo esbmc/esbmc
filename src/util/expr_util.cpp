@@ -9,8 +9,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "expr_util.h"
 #include "fixedbv.h"
 #include "bitvector.h"
+#include "std_expr.h"
 
 exprt gen_zero(const typet &type)
+{
+  return gen_zero(type, false);
+}
+
+exprt gen_zero(const typet &type, bool array_as_array_of)
 {
   exprt result;
 
@@ -47,6 +53,38 @@ exprt gen_zero(const typet &type)
   else if(type_id=="pointer")
   {
     result.value("NULL");
+  }
+  else if(type_id=="struct")
+  {
+    result=struct_exprt(type);
+    for(auto comp : to_struct_type(type).components())
+      result.copy_to_operands(gen_zero(comp.type(), array_as_array_of));
+  }
+  else if(type_id=="array")
+  {
+    if(array_as_array_of)
+    {
+      result = array_of_exprt(gen_zero(type.subtype(), array_as_array_of), type);
+    }
+    else
+    {
+      array_typet arr_type = to_array_type(type);
+
+      mp_integer size = string2integer(arr_type.size().value().as_string(), 2);
+      for(uint64_t i=0; i < size.to_uint64(); i++)
+        result.copy_to_operands(gen_zero(type.subtype(), array_as_array_of));
+    }
+  }
+  else if(type_id=="union")
+  {
+    union_exprt new_result(type);
+    new_result.set_component_name(
+      to_union_type(type).components().begin()->name());
+
+    new_result.copy_to_operands(
+      gen_zero(to_union_type(type).components().begin()->type(), array_as_array_of));
+
+    result = new_result;
   }
   else
     result.make_nil();

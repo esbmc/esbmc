@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "destructor.h"
 
-/*******************************************************************\
-
-Function: get_destructor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 code_function_callt get_destructor(
   const namespacet &ns,
   const typet &type)

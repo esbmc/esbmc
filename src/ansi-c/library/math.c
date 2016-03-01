@@ -11,12 +11,12 @@
 #include "intrinsics.h"
 
 #define M_PI     3.14159265358979323846
-#define M_PI_2   1.57079632679489661923132169164      // Pi/2
+#define M_PI_2   1.57079632679489661923      // Pi/2
 #define PREC 1e-16
 #define M_LN10   2.30258509299404568402
 #define DBL_EPSILON 2.2204460492503131e-16
 
-#define M_E      2.71828182845905
+#define M_E     2.7182818284590452354
 #define M_E2    (M_E * M_E)
 #define M_E4    (M_E2 * M_E2)
 #define M_E8    (M_E4 * M_E4)
@@ -81,7 +81,7 @@ int __fpclassifyf(float f) {
   return FP_SUBNORMAL;
 }
 
-int __fpclassify(long double d) {
+int __fpclassify(double d) {
   if(__ESBMC_isnan(d)) return FP_NAN;
   if(__ESBMC_isinf(d)) return FP_INFINITE;
   if(d==0) return FP_ZERO;
@@ -93,6 +93,7 @@ int fegetround() { return __ESBMC_rounding_mode; }
 
 int fesetround(int __rounding_direction) {
   __ESBMC_rounding_mode=__rounding_direction;
+  return __ESBMC_rounding_mode;
 }
 
 double fabs(double x) {
@@ -180,7 +181,7 @@ double sqrt(double n)
  */
 
 #define TINY 0.293873587705571877E-38   /* smallest no = 2**-128        */
-#define HUGE 0.170141183460469230E+39   /* largest no = 2**+127         */
+#define HUGE 3.40282347e+38F   /* largest no = 2**+127         */
 #define LOG_HUGE 0.880296919311130543E+02       /* log of HUGE          */
 #define LOG_TINY -0.887228391116729997E+02      /* log of TINY          */
 #define MIN_EXP -128                    /* minimum base 2 exponent      */

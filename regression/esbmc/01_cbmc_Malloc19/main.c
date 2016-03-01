@@ -1,4 +1,3 @@
-void *malloc(unsigned);
 
 void *my_malloc(unsigned size)
 {

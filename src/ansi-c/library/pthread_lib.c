@@ -1,5 +1,4 @@
 #include <errno.h>
-#include <stdbool.h>
 #include <pthread.h>
 
 #include "intrinsics.h"
@@ -23,13 +22,18 @@ void __ESBMC_set_thread_internal_data(unsigned int tid,
 #define __ESBMC_rwlock_field(a) ((a).__data.__lock)
 
 /* Global tracking data. Should all initialize to 0 / false */
-static _Bool pthread_thread_running[__ESBMC_constant_infinity_uint];
-static _Bool pthread_thread_ended[__ESBMC_constant_infinity_uint];
-static void *pthread_end_values[__ESBMC_constant_infinity_uint];
+_Bool __ESBMC_pthread_thread_running[1];
+_Bool __ESBMC_pthread_thread_ended[1];
+void *__ESBMC_pthread_end_values[1];
 
-static unsigned int num_total_threads = 0;
-static unsigned int num_threads_running = 0;
-static int blocked_threads_count = 0;
+unsigned int num_total_threads = 0;
+unsigned int num_threads_running = 0;
+unsigned int blocked_threads_count = 0;
+
+pthread_t __ESBMC_get_thread_id(void);
+
+void __ESBMC_really_atomic_begin(void);
+void __ESBMC_really_atomic_end(void);
 
 /************************** Thread creation and exit **************************/
 
@@ -56,7 +60,7 @@ pthread_end_main_hook(void)
 void
 pthread_trampoline(void)
 {
-__ESBMC_hide:
+  __ESBMC_HIDE:;
   struct __pthread_start_data startdata;
   unsigned int threadid;
   void *exit_val;
@@ -68,8 +72,8 @@ __ESBMC_hide:
 
   __ESBMC_atomic_begin();
   threadid = __ESBMC_get_thread_id();
-  pthread_end_values[threadid] = exit_val;
-  pthread_thread_ended[threadid] = true;
+  __ESBMC_pthread_end_values[threadid] = exit_val;
+  __ESBMC_pthread_thread_ended[threadid] = 1;
   num_threads_running--;
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end(); // Never reached; doesn't matter.
@@ -81,7 +85,7 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
   void *(*start_routine)(void *),
   void *arg)
 {
-__ESBMC_hide:
+  __ESBMC_HIDE:;
   unsigned int thread_id;
   struct __pthread_start_data startdata = {
     start_routine, arg
@@ -91,9 +95,9 @@ __ESBMC_hide:
   thread_id = __ESBMC_spawn_thread(pthread_trampoline);
   num_total_threads++;
   num_threads_running++;
-  pthread_thread_running[thread_id] = true;
-  pthread_thread_ended[thread_id] = false;
-  pthread_end_values[thread_id] = NULL;
+  __ESBMC_pthread_thread_running[thread_id] = 1;
+  __ESBMC_pthread_thread_ended[thread_id] = 0;
+  __ESBMC_pthread_end_values[thread_id] = NULL;
   __ESBMC_set_thread_internal_data(thread_id, startdata);
 
   // pthread_t is actually an unsigned long int; identify a thread using just
@@ -101,16 +105,17 @@ __ESBMC_hide:
   *thread = thread_id;
 
   __ESBMC_atomic_end();
+  return 0; // We never fail
 }
 
 void
 pthread_exit(void *retval)
 {
-__ESBMC_hide:
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   unsigned int threadid = __ESBMC_get_thread_id();
-  pthread_end_values[threadid] = retval;
-  pthread_thread_ended[threadid] = true;
+  __ESBMC_pthread_end_values[threadid] = retval;
+  __ESBMC_pthread_thread_ended[threadid] = 1;
   num_threads_running--;
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
@@ -119,20 +124,19 @@ __ESBMC_hide:
 pthread_t
 pthread_self(void)
 {
-
   return __ESBMC_get_thread_id();
 }
 
 int
 pthread_join_switch(pthread_t thread, void **retval)
 {
-__ESBMC_hide:
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
   // Detect whether the target thread has ended or not. If it isn't, mark us as
   // waiting for its completion. That fact can be used for deadlock detection
   // elsewhere.
-  bool ended = pthread_thread_ended[thread];
+  _Bool ended = __ESBMC_pthread_thread_ended[thread];
   if (!ended) {
     blocked_threads_count++;
     // If there are now no more threads unblocked, croak.
@@ -142,7 +146,7 @@ __ESBMC_hide:
 
   // Fetch exit code
   if (retval != NULL)
-    *retval = pthread_end_values[thread];
+    *retval = __ESBMC_pthread_end_values[thread];
 
   // In all circumstances, allow a switch away from this thread to permit
   // deadlock checking,
@@ -157,18 +161,18 @@ __ESBMC_hide:
 int
 pthread_join_noswitch(pthread_t thread, void **retval)
 {
-__ESBMC_hide:
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
   // If the other thread hasn't ended, assume false, because further progress
   // isn't going to be made. Wait for an interleaving where this is true
   // instead. This function isn't designed for deadlock detection.
-  bool ended = pthread_thread_ended[thread];
+  _Bool ended = __ESBMC_pthread_thread_ended[thread];
   __ESBMC_assume(ended);
 
   // Fetch exit code
   if (retval != NULL)
-    *retval = pthread_end_values[thread];
+    *retval = __ESBMC_pthread_end_values[thread];
 
   __ESBMC_really_atomic_end();
 
@@ -181,7 +185,7 @@ int
 pthread_mutex_init(
   pthread_mutex_t *mutex, const pthread_mutexattr_t *mutexattr)
 {
-__ESBMC_HIDE:
+  __ESBMC_HIDE:;
   __ESBMC_mutex_lock_field(*mutex) = 0;
   __ESBMC_mutex_count_field(*mutex) = 0;
   __ESBMC_mutex_owner_field(*mutex) = 0;
@@ -191,7 +195,7 @@ __ESBMC_HIDE:
 int
 pthread_mutex_lock_noassert(pthread_mutex_t *mutex)
 {
-__ESBMC_HIDE:
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
   __ESBMC_mutex_lock_field(*mutex) = 1;
@@ -202,7 +206,7 @@ __ESBMC_HIDE:
 int
 pthread_mutex_lock_nocheck(pthread_mutex_t *mutex)
 {
-__ESBMC_HIDE:
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assume(!__ESBMC_mutex_lock_field(*mutex));
   __ESBMC_mutex_lock_field(*mutex) = 1;
@@ -213,7 +217,7 @@ __ESBMC_HIDE:
 int
 pthread_mutex_unlock_noassert(pthread_mutex_t *mutex)
 {
-__ESBMC_HIDE:
+  __ESBMC_HIDE:;
   __ESBMC_mutex_lock_field(*mutex) = 0;
   return 0;
 }
@@ -221,7 +225,7 @@ __ESBMC_HIDE:
 int
 pthread_mutex_unlock_nocheck(pthread_mutex_t *mutex)
 {
-__ESBMC_HIDE:
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assert(__ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
   __ESBMC_mutex_lock_field(*mutex) = 0;
@@ -232,7 +236,7 @@ __ESBMC_HIDE:
 int
 pthread_mutex_lock_check(pthread_mutex_t *mutex)
 {
-__ESBMC_HIDE:
+  __ESBMC_HIDE:;
   _Bool unlocked = 1;
 
   __ESBMC_atomic_begin();
@@ -260,7 +264,7 @@ __ESBMC_HIDE:
 int
 pthread_mutex_unlock_check(pthread_mutex_t *mutex)
 {
-__ESBMC_HIDE:
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assert(__ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
   __ESBMC_mutex_lock_field(*mutex) = 0;
@@ -282,11 +286,13 @@ pthread_mutex_trylock(pthread_mutex_t *mutex)
 int
 pthread_mutex_destroy(pthread_mutex_t *mutex)
 {
+  return 0;
 }
 
 int
 pthread_rwlock_destroy(pthread_rwlock_t *lock)
 {
+  return 0;
 }
 
 /************************ rwlock mainpulation routines ************************/
@@ -294,23 +300,27 @@ pthread_rwlock_destroy(pthread_rwlock_t *lock)
 int
 pthread_rwlock_init(pthread_rwlock_t *lock, const pthread_rwlockattr_t *attr)
 {
-  __ESBMC_HIDE : __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_HIDE:;
+  __ESBMC_rwlock_field(*lock) = 0;
+  return 0;
 }
 
 int
 pthread_rwlock_rdlock(pthread_rwlock_t *lock)
-{ /* TODO */
+{
+  return 0;
 }
 
 int
 pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
-{ /* TODO */
+{
+  return 0;
 }
 
 int
 pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 {
-  __ESBMC_HIDE :
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   if (__ESBMC_rwlock_field(*lock)) {
     __ESBMC_atomic_end();
@@ -324,13 +334,15 @@ pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 int
 pthread_rwlock_unlock(pthread_rwlock_t *lock)
 {
-  __ESBMC_HIDE : __ESBMC_rwlock_field(*lock) = 0;
+  __ESBMC_HIDE:;
+  __ESBMC_rwlock_field(*lock) = 0;
+  return 0;
 }
 
 int
 pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 {
-  __ESBMC_HIDE :
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assume(!__ESBMC_rwlock_field(*lock));
   __ESBMC_rwlock_field(*lock) = 1;
@@ -341,12 +353,17 @@ pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 /************************ condvar mainpulation routines ***********************/
 
 // this is currently unimplemented.
-int pthread_cond_broadcast(pthread_cond_t *cond);
+int pthread_cond_broadcast(pthread_cond_t *cond)
+{
+  __ESBMC_HIDE:;
+  return 0;
+}
 
 int
 pthread_cond_init(
   pthread_cond_t *cond, __const pthread_condattr_t *cond_attr)
 {
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_cond_lock_field(*cond) = 0;
   __ESBMC_cond_broadcast_seq_field(*cond) = 0;
@@ -357,7 +374,7 @@ pthread_cond_init(
 int
 pthread_cond_destroy(pthread_cond_t *__cond)
 {
-__ESBMC_HIDE:
+  __ESBMC_HIDE:;
   __ESBMC_cond_lock_field(*__cond) = 0;
   return 0;
 }
@@ -365,16 +382,15 @@ __ESBMC_HIDE:
 extern int
 pthread_cond_signal(pthread_cond_t *__cond)
 {
-__ESBMC_HIDE:
+  __ESBMC_HIDE:;
   __ESBMC_cond_lock_field(*__cond) = 0;
-
   return 0;
 }
 
 static void
 do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
 {
-__ESBMC_HIDE:
+  __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
   if (assrt)
@@ -400,7 +416,7 @@ __ESBMC_HIDE:
   __ESBMC_atomic_begin();
 
   // Have we been signalled?
-  bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
+  _Bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
 
   // Don't consider any other interleavings aside from the ones where we've
   // been signalled. As with mutexes, we should discard this trace and look
@@ -424,7 +440,7 @@ __ESBMC_HIDE:
 int
 pthread_cond_wait_nocheck(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
-
+  __ESBMC_HIDE:;
   do_pthread_cond_wait(cond, mutex, 0);
   return 0;
 }
@@ -432,7 +448,7 @@ pthread_cond_wait_nocheck(pthread_cond_t *cond, pthread_mutex_t *mutex)
 int
 pthread_cond_wait_check(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
-
+  __ESBMC_HIDE:;
   do_pthread_cond_wait(cond, mutex, 1);
   return 0;
 }
