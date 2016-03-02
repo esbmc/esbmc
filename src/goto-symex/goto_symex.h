@@ -624,6 +624,8 @@ protected:
    */
   irep_idt guard_identifier_s;
 
+  /** Loop numbers. */
+  std::stack<unsigned> loop_numbers;
   /** Number of assertions executed. */
   unsigned total_claims;
   /** Number of assertions remaining to be discharged. */

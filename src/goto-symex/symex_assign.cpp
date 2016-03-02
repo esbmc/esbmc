@@ -121,6 +121,7 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   base_case = sym.base_case;
   forward_condition = sym.forward_condition;
   inductive_step = sym.inductive_step;
+  loop_numbers = sym.loop_numbers;
 
   valid_ptr_arr_name = sym.valid_ptr_arr_name;
   alloc_size_arr_name = sym.alloc_size_arr_name;
