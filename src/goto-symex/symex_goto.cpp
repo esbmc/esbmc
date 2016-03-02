@@ -313,10 +313,6 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
 
   if (base_case || inductive_step)
   {
-    // If the loop was not converted by the k-induction, don't add the assume
-    if(inductive_step)
-      return;
-
     // generate unwinding assumption
     expr2tc guarded_expr=negated_cond;
     cur_state->guard.guard_expr(guarded_expr);
