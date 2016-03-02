@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <clang/Frontend/ASTUnit.h>
 
-class llvm_languaget: public languaget
+class clang_c_languaget: public languaget
 {
 public:
   virtual bool preprocess(
@@ -68,11 +68,11 @@ public:
     const namespacet &ns);
 
   virtual languaget *new_language()
-  { return new llvm_languaget; }
+  { return new clang_c_languaget; }
 
   // constructor, destructor
-  virtual ~llvm_languaget();
-  llvm_languaget();
+  virtual ~clang_c_languaget();
+  clang_c_languaget();
 
 protected:
   void internal_additions();
@@ -97,6 +97,6 @@ protected:
   std::vector<std::string> clang_headers_content;
 };
 
-languaget *new_llvm_language();
+languaget *new_clang_c_language();
 
 #endif

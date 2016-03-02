@@ -1,19 +1,18 @@
 /*
- * llvmtypecheck.cpp
+ * clang_c_convert_literals.cpp
  *
  *  Created on: Jul 23, 2015
  *      Author: mramalho
  */
-
-#include "llvm_convert.h"
 
 #include <arith_tools.h>
 #include <bitvector.h>
 #include <expr_util.h>
 #include <c_types.h>
 #include <string_constant.h>
+#include "clang_c_convert.h"
 
-bool llvm_convertert::convert_character_literal(
+bool clang_c_convertert::convert_character_literal(
   const clang::CharacterLiteral &char_literal,
   exprt &dest)
 {
@@ -30,7 +29,7 @@ bool llvm_convertert::convert_character_literal(
   return false;
 }
 
-bool llvm_convertert::convert_string_literal(
+bool clang_c_convertert::convert_string_literal(
   const clang::StringLiteral &string_literal,
   exprt &dest)
 {
@@ -44,7 +43,7 @@ bool llvm_convertert::convert_string_literal(
   return false;
 }
 
-bool llvm_convertert::convert_integer_literal(
+bool clang_c_convertert::convert_integer_literal(
   const clang::IntegerLiteral &integer_literal,
   exprt &dest)
 {
@@ -78,7 +77,7 @@ bool llvm_convertert::convert_integer_literal(
   return false;
 }
 
-bool llvm_convertert::convert_float_literal(
+bool clang_c_convertert::convert_float_literal(
   const clang::FloatingLiteral &floating_literal,
   exprt &dest)
 {
@@ -148,7 +147,7 @@ bool llvm_convertert::convert_float_literal(
   return false;
 }
 
-std::string llvm_convertert::parse_float(
+std::string clang_c_convertert::parse_float(
   llvm::SmallVector<char, 32> &src,
   mp_integer &significand,
   mp_integer &exponent)

@@ -6,13 +6,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include "clang_c_language.h"
+
 #include <sstream>
 #include <fstream>
-
-#include <llvm_language.h>
-#include <llvm_convert.h>
-#include <llvm_adjust.h>
-#include <llvm_main.h>
 
 #include <ansi-c/cprover_library.h>
 #include <ansi-c/c_preprocess.h>
@@ -21,23 +18,26 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
+#include "clang_c_adjust.h"
+#include "clang_c_convert.h"
+#include "clang_c_main.h"
 
-languaget *new_llvm_language()
+languaget *new_clang_c_language()
 {
-  return new llvm_languaget;
+  return new clang_c_languaget;
 }
 
-llvm_languaget::llvm_languaget()
+clang_c_languaget::clang_c_languaget()
 {
   add_clang_headers();
   internal_additions();
 }
 
-llvm_languaget::~llvm_languaget()
+clang_c_languaget::~clang_c_languaget()
 {
 }
 
-void llvm_languaget::build_compiler_string(
+void clang_c_languaget::build_compiler_string(
   std::vector<std::string> &compiler_string)
 {
   compiler_string.push_back("-I.");
@@ -100,14 +100,14 @@ void llvm_languaget::build_compiler_string(
   // Realloc should call __ESBMC_realloc
   compiler_string.push_back("-Drealloc=__ESBMC_realloc");
 
-  // Force llvm see all files as .c
+  // Force clang see all files as .c
   // This forces the preprocessor to be called even in preprocessed files
   // which allow us to perform transformations using -D
   compiler_string.push_back("-x");
   compiler_string.push_back("c");
 }
 
-bool llvm_languaget::parse(
+bool clang_c_languaget::parse(
   const std::string &path,
   message_handlert &message_handler)
 {
@@ -120,7 +120,7 @@ bool llvm_languaget::parse(
   return parse(path);
 }
 
-bool llvm_languaget::parse(const std::string& path)
+bool clang_c_languaget::parse(const std::string& path)
 {
   // Finish the compiler string
   std::vector<std::string> compiler_string;
@@ -154,7 +154,7 @@ bool llvm_languaget::parse(const std::string& path)
   return false;
 }
 
-bool llvm_languaget::typecheck(
+bool clang_c_languaget::typecheck(
   contextt& context,
   const std::string& module,
   message_handlert& message_handler)
@@ -162,7 +162,7 @@ bool llvm_languaget::typecheck(
   return convert(context, module, message_handler);
 }
 
-void llvm_languaget::show_parse(std::ostream& out __attribute__((unused)))
+void clang_c_languaget::show_parse(std::ostream& out __attribute__((unused)))
 {
   for (auto &translation_unit : ASTs)
   {
@@ -177,25 +177,25 @@ void llvm_languaget::show_parse(std::ostream& out __attribute__((unused)))
   }
 }
 
-bool llvm_languaget::convert(
+bool clang_c_languaget::convert(
   contextt &context,
   const std::string &module,
   message_handlert &message_handler)
 {
   contextt new_context;
 
-  llvm_convertert converter(new_context, ASTs);
+  clang_c_convertert converter(new_context, ASTs);
   if(converter.convert())
     return true;
 
-  llvm_adjust adjuster(new_context);
+  clang_c_adjust adjuster(new_context);
   if(adjuster.adjust())
     return true;
 
   return c_link(context, new_context, message_handler, module);
 }
 
-bool llvm_languaget::preprocess(
+bool clang_c_languaget::preprocess(
   const std::string &path __attribute__((unused)),
   std::ostream &outstream __attribute__((unused)),
   message_handlert &message_handler __attribute__((unused)))
@@ -207,13 +207,13 @@ bool llvm_languaget::preprocess(
   return false;
 }
 
-bool llvm_languaget::final(contextt& context, message_handlert& message_handler)
+bool clang_c_languaget::final(contextt& context, message_handlert& message_handler)
 {
   add_cprover_library(context, message_handler);
-  return llvm_main(context, "c::", "c::main", message_handler);
+  return clang_main(context, "c::", "c::main", message_handler);
 }
 
-void llvm_languaget::internal_additions()
+void clang_c_languaget::internal_additions()
 {
   intrinsics +=
     "__attribute__((used))\n"
@@ -232,7 +232,7 @@ void llvm_languaget::internal_additions()
     "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
 
     // malloc
-    // This will be set to infinity size array at llvm_adjust
+    // This will be set to infinity size array at clang_c_adjust
     // TODO: We definitely need a better solution for this
     "__attribute__((used))\n"
     "_Bool __ESBMC_alloc[1];\n"
@@ -315,7 +315,7 @@ void llvm_languaget::internal_additions()
     "\n";
 }
 
-bool llvm_languaget::from_expr(
+bool clang_c_languaget::from_expr(
   const exprt &expr __attribute__((unused)),
   std::string &code __attribute__((unused)),
   const namespacet &ns __attribute__((unused)))
@@ -325,7 +325,7 @@ bool llvm_languaget::from_expr(
   return true;
 }
 
-bool llvm_languaget::from_type(
+bool clang_c_languaget::from_type(
   const typet &type __attribute__((unused)),
   std::string &code __attribute__((unused)),
   const namespacet &ns __attribute__((unused)))
@@ -335,7 +335,7 @@ bool llvm_languaget::from_type(
   return true;
 }
 
-bool llvm_languaget::to_expr(
+bool clang_c_languaget::to_expr(
   const std::string &code __attribute__((unused)),
   const std::string &module __attribute__((unused)),
   exprt &expr __attribute__((unused)),

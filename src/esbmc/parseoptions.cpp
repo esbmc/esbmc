@@ -55,7 +55,7 @@ extern "C" {
 
 #include <ansi-c/c_preprocess.h>
 
-#include <llvm-frontend/llvm_language.h>
+#include <clang-c-frontend/clang_c_language.h>
 
 #include "parseoptions.h"
 #include "bmc.h"
@@ -1805,7 +1805,7 @@ void cbmc_parseoptionst::help()
     " --witnesspath filename       output counterexample in graphML format\n"
     " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
     "                              program for graphML generation\n"
-    " --llvm-frontend              parse source files using clang (alpha)\n\n"
+    " --clang-frontend              parse source files using clang (alpha)\n\n"
     "BMC options\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"

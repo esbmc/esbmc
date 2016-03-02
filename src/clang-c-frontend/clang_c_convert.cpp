@@ -1,11 +1,11 @@
 /*
- * llvmtypecheck.cpp
+ * clang_c_convert.cpp
  *
  *  Created on: Jul 23, 2015
  *      Author: mramalho
  */
 
-#include "llvm_convert.h"
+#include "clang_c_convert.h"
 
 #include <std_code.h>
 #include <std_expr.h>
@@ -20,7 +20,7 @@
 
 #include "typecast.h"
 
-llvm_convertert::llvm_convertert(
+clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit> > &_ASTs)
   : ASTContext(&(*(*_ASTs.begin())->top_level_begin())->getASTContext()),
@@ -34,11 +34,11 @@ llvm_convertert::llvm_convertert(
 {
 }
 
-llvm_convertert::~llvm_convertert()
+clang_c_convertert::~clang_c_convertert()
 {
 }
 
-bool llvm_convertert::convert()
+bool clang_c_convertert::convert()
 {
   if(convert_builtin_types())
     return true;
@@ -49,7 +49,7 @@ bool llvm_convertert::convert()
   return false;
 }
 
-bool llvm_convertert::convert_builtin_types()
+bool clang_c_convertert::convert_builtin_types()
 {
   // Convert va_list_tag
   const clang::Decl *q_va_list_decl = ASTContext->getVaListTagDecl();
@@ -68,7 +68,7 @@ bool llvm_convertert::convert_builtin_types()
   return false;
 }
 
-bool llvm_convertert::convert_top_level_decl()
+bool clang_c_convertert::convert_top_level_decl()
 {
   // Iterate through each translation unit and their global symbols, creating
   // symbols as we go.
@@ -98,7 +98,7 @@ bool llvm_convertert::convert_top_level_decl()
 // This method convert declarations. They are called when those declarations
 // are to be added to the context. If a variable or function is being called
 // but then get_decl_expr is called instead
-bool llvm_convertert::get_decl(
+bool clang_c_convertert::get_decl(
   const clang::Decl& decl,
   exprt &new_expr)
 {
@@ -230,7 +230,7 @@ bool llvm_convertert::get_decl(
     // code is an empty declaration
     case clang::Decl::Empty:
 
-    // If this fails, llvm will not generate the ASTs, we can
+    // If this fails, clang will not generate the ASTs, we can
     // safely skip it
     case clang::Decl::StaticAssert:
 
@@ -240,7 +240,7 @@ bool llvm_convertert::get_decl(
     case clang::Decl::Enum:
     case clang::Decl::EnumConstant:
 
-    // Typedef declaration, we can ignore this. LLVM will give us
+    // Typedef declaration, we can ignore this; clang will give us
     // the underlying type defined by the typedef, so we don't need
     // to add them to the context
     case clang::Decl::Typedef:
@@ -263,7 +263,7 @@ bool llvm_convertert::get_decl(
   return false;
 }
 
-bool llvm_convertert::get_struct_union_class(
+bool clang_c_convertert::get_struct_union_class(
   const clang::RecordDecl& recordd)
 {
   if(recordd.isClass())
@@ -344,7 +344,7 @@ bool llvm_convertert::get_struct_union_class(
   return false;
 }
 
-bool llvm_convertert::get_struct_union_class_fields(
+bool clang_c_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &recordd,
   struct_union_typet &type)
 {
@@ -362,7 +362,7 @@ bool llvm_convertert::get_struct_union_class_fields(
   return false;
 }
 
-bool llvm_convertert::get_var(
+bool clang_c_convertert::get_var(
   const clang::VarDecl &vd,
   exprt &new_expr)
 {
@@ -436,14 +436,14 @@ bool llvm_convertert::get_var(
   return false;
 }
 
-bool llvm_convertert::get_function(
+bool clang_c_convertert::get_function(
   const clang::FunctionDecl &fd)
 {
   // If the function is not defined but this is not the definition, skip it
   if(fd.isDefined() && !fd.isThisDeclarationADefinition())
     return false;
 
-  // TODO: use fd.isMain to flag and check the flag on llvm_adjust_expr
+  // TODO: use fd.isMain to flag and check the flag on clang_c_adjust_expr
   // to saner way to add argc/argv/envp
 
   // Set initial variable name, it will be used for variables' name
@@ -523,7 +523,7 @@ bool llvm_convertert::get_function(
   return false;
 }
 
-bool llvm_convertert::get_function_params(
+bool clang_c_convertert::get_function_params(
   const clang::ParmVarDecl &pdecl,
   exprt &param)
 {
@@ -589,7 +589,7 @@ bool llvm_convertert::get_function_params(
   return false;
 }
 
-bool llvm_convertert::get_type(
+bool clang_c_convertert::get_type(
   const clang::QualType &q_type,
   typet &new_type)
 {
@@ -884,7 +884,7 @@ bool llvm_convertert::get_type(
   return false;
 }
 
-bool llvm_convertert::get_builtin_type(
+bool clang_c_convertert::get_builtin_type(
   const clang::BuiltinType& bt,
   typet& new_type)
 {
@@ -998,7 +998,7 @@ bool llvm_convertert::get_builtin_type(
   return false;
 }
 
-bool llvm_convertert::get_expr(
+bool clang_c_convertert::get_expr(
   const clang::Stmt& stmt,
   exprt& new_expr)
 {
@@ -1156,7 +1156,7 @@ bool llvm_convertert::get_expr(
       const clang::OffsetOfExpr &offset =
         static_cast<const clang::OffsetOfExpr &>(stmt);
 
-      // Use LLVM to calculate offsetof
+      // Use clang to calculate offsetof
       llvm::APSInt val;
       assert(offset.EvaluateAsInt(val, *ASTContext));
 
@@ -1173,7 +1173,7 @@ bool llvm_convertert::get_expr(
       const clang::UnaryExprOrTypeTraitExpr &unary =
         static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
 
-      // Use LLVM to calculate sizeof/alignof
+      // Use clang to calculate sizeof/alignof
       llvm::APSInt val;
       if(unary.EvaluateAsInt(val, *ASTContext))
       {
@@ -1802,7 +1802,7 @@ bool llvm_convertert::get_expr(
       const clang::IndirectGotoStmt &goto_stmt =
         static_cast<const clang::IndirectGotoStmt &>(stmt);
 
-      // LLVM was able to compute the target, so this became a
+      // clang was able to compute the target, so this became a
       // common goto
       if(goto_stmt.getConstantTarget())
       {
@@ -1906,7 +1906,7 @@ bool llvm_convertert::get_expr(
   return false;
 }
 
-bool llvm_convertert::get_decl_ref(
+bool clang_c_convertert::get_decl_ref(
   const clang::Decl& decl,
   exprt& new_expr)
 {
@@ -1994,7 +1994,7 @@ bool llvm_convertert::get_decl_ref(
   return false;
 }
 
-bool llvm_convertert::get_cast_expr(
+bool clang_c_convertert::get_cast_expr(
   const clang::CastExpr& cast,
   exprt& new_expr)
 {
@@ -2048,7 +2048,7 @@ bool llvm_convertert::get_cast_expr(
   return false;
 }
 
-bool llvm_convertert::get_unary_operator_expr(
+bool clang_c_convertert::get_unary_operator_expr(
   const clang::UnaryOperator& uniop,
   exprt& new_expr)
 {
@@ -2114,7 +2114,7 @@ bool llvm_convertert::get_unary_operator_expr(
   return false;
 }
 
-bool llvm_convertert::get_binary_operator_expr(
+bool clang_c_convertert::get_binary_operator_expr(
   const clang::BinaryOperator& binop,
   exprt& new_expr)
 {
@@ -2227,7 +2227,7 @@ bool llvm_convertert::get_binary_operator_expr(
   return false;
 }
 
-bool llvm_convertert::get_compound_assign_expr(
+bool clang_c_convertert::get_compound_assign_expr(
   const clang::CompoundAssignOperator& compop,
   exprt& new_expr)
 {
@@ -2300,7 +2300,7 @@ bool llvm_convertert::get_compound_assign_expr(
   return false;
 }
 
-void llvm_convertert::get_default_symbol(
+void clang_c_convertert::get_default_symbol(
   symbolt& symbol,
   std::string module_name,
   typet type,
@@ -2317,7 +2317,7 @@ void llvm_convertert::get_default_symbol(
   symbol.name = "c::" + pretty_name;
 }
 
-void llvm_convertert::get_field_name(
+void clang_c_convertert::get_field_name(
   const clang::FieldDecl& fd,
   std::string &name)
 {
@@ -2327,7 +2327,7 @@ void llvm_convertert::get_field_name(
     name += "#anon" + i2string(anon_var_counter++);
 }
 
-void llvm_convertert::get_var_name(
+void clang_c_convertert::get_var_name(
   const clang::VarDecl& vd,
   std::string& name)
 {
@@ -2351,7 +2351,7 @@ void llvm_convertert::get_var_name(
   name += vd.getName().str();
 }
 
-void llvm_convertert::get_function_param_name(
+void clang_c_convertert::get_function_param_name(
   const clang::ParmVarDecl& pd,
   std::string& name)
 {
@@ -2366,7 +2366,7 @@ void llvm_convertert::get_function_param_name(
   name += pd.getName().str();
 }
 
-void llvm_convertert::get_function_name(
+void clang_c_convertert::get_function_name(
   const clang::FunctionDecl& fd,
   std::string &base_name,
   std::string &pretty_name)
@@ -2383,7 +2383,7 @@ void llvm_convertert::get_function_name(
   }
 }
 
-bool llvm_convertert::get_tag_name(
+bool clang_c_convertert::get_tag_name(
   const clang::RecordDecl& recordd,
   std::string &identifier)
 {
@@ -2413,7 +2413,7 @@ bool llvm_convertert::get_tag_name(
   return false;
 }
 
-void llvm_convertert::get_start_location_from_stmt(
+void clang_c_convertert::get_start_location_from_stmt(
   const clang::Stmt& stmt,
   locationt &location)
 {
@@ -2431,7 +2431,7 @@ void llvm_convertert::get_start_location_from_stmt(
   set_location(PLoc, function_name, location);
 }
 
-void llvm_convertert::get_final_location_from_stmt(
+void clang_c_convertert::get_final_location_from_stmt(
   const clang::Stmt& stmt,
   locationt &location)
 {
@@ -2449,7 +2449,7 @@ void llvm_convertert::get_final_location_from_stmt(
   set_location(PLoc, function_name, location);
 }
 
-void llvm_convertert::get_location_from_decl(
+void clang_c_convertert::get_location_from_decl(
   const clang::Decl& decl,
   locationt &location)
 {
@@ -2471,7 +2471,7 @@ void llvm_convertert::get_location_from_decl(
   set_location(PLoc, function_name, location);
 }
 
-void llvm_convertert::get_presumed_location(
+void clang_c_convertert::get_presumed_location(
   const clang::SourceLocation& loc,
   clang::PresumedLoc &PLoc)
 {
@@ -2482,7 +2482,7 @@ void llvm_convertert::get_presumed_location(
   PLoc = sm->getPresumedLoc(SpellingLoc);
 }
 
-void llvm_convertert::set_location(
+void clang_c_convertert::set_location(
   clang::PresumedLoc &PLoc,
   std::string &function_name,
   locationt &location)
@@ -2499,7 +2499,7 @@ void llvm_convertert::set_location(
     location.set_function(function_name);
 }
 
-std::string llvm_convertert::get_modulename_from_path(std::string path)
+std::string clang_c_convertert::get_modulename_from_path(std::string path)
 {
   std::string filename = get_filename_from_path(path);
 
@@ -2509,7 +2509,7 @@ std::string llvm_convertert::get_modulename_from_path(std::string path)
   return filename;
 }
 
-std::string llvm_convertert::get_filename_from_path(std::string path)
+std::string clang_c_convertert::get_filename_from_path(std::string path)
 {
   if(path.find_last_of('/') != std::string::npos)
     return path.substr(path.find_last_of('/') + 1);
@@ -2517,7 +2517,7 @@ std::string llvm_convertert::get_filename_from_path(std::string path)
   return path;
 }
 
-void llvm_convertert::move_symbol_to_context(
+void clang_c_convertert::move_symbol_to_context(
   symbolt& symbol)
 {
   symbolt* s = context.find_symbol(symbol.name);
@@ -2537,21 +2537,21 @@ void llvm_convertert::move_symbol_to_context(
   }
 }
 
-void llvm_convertert::dump_type_map()
+void clang_c_convertert::dump_type_map()
 {
   std::cout << "Type_map:" << std::endl;
   for (auto it : type_map)
     std::cout << it.first << ": " << it.second << std::endl;
 }
 
-void llvm_convertert::dump_object_map()
+void clang_c_convertert::dump_object_map()
 {
   std::cout << "Object_map:" << std::endl;
   for (auto it : object_map)
     std::cout << it.first << ": " << it.second << std::endl;
 }
 
-void llvm_convertert::check_symbol_redefinition(
+void clang_c_convertert::check_symbol_redefinition(
   symbolt& old_symbol,
   symbolt& new_symbol)
 {
@@ -2562,7 +2562,7 @@ void llvm_convertert::check_symbol_redefinition(
     {
       if(old_symbol.value.is_not_nil())
       {
-        // If this is a invalid redefinition, LLVM will complain and
+        // If this is a invalid redefinition, clang will complain and
         // won't convert the program. We should safely to ignore this.
       }
       else
@@ -2578,7 +2578,7 @@ void llvm_convertert::check_symbol_redefinition(
     {
       if(old_symbol.type.is_not_nil())
       {
-        // If this is a invalid redefinition, LLVM will complain and
+        // If this is a invalid redefinition, clang will complain and
         // won't convert the program. We should safely to ignore this.
       }
       else
@@ -2590,7 +2590,7 @@ void llvm_convertert::check_symbol_redefinition(
   }
 }
 
-void llvm_convertert::convert_expression_to_code(exprt& expr)
+void clang_c_convertert::convert_expression_to_code(exprt& expr)
 {
   if(expr.is_code())
     return;
@@ -2602,7 +2602,7 @@ void llvm_convertert::convert_expression_to_code(exprt& expr)
   expr.swap(code);
 }
 
-bool llvm_convertert::search_add_type_map(
+bool clang_c_convertert::search_add_type_map(
   const clang::TagDecl &tag,
   type_mapt::iterator &type_it)
 {
@@ -2626,7 +2626,7 @@ bool llvm_convertert::search_add_type_map(
   return false;
 }
 
-const clang::Decl* llvm_convertert::get_DeclContext_from_Stmt(
+const clang::Decl* clang_c_convertert::get_DeclContext_from_Stmt(
   const clang::Stmt& stmt)
 {
   auto it = ASTContext->getParents(stmt).begin();
@@ -2645,7 +2645,7 @@ const clang::Decl* llvm_convertert::get_DeclContext_from_Stmt(
   return nullptr;
 }
 
-const clang::FunctionDecl* llvm_convertert::get_top_FunctionDecl_from_Stmt(
+const clang::FunctionDecl* clang_c_convertert::get_top_FunctionDecl_from_Stmt(
   const clang::Stmt& stmt)
 {
   const clang::Decl *decl = get_DeclContext_from_Stmt(stmt);
@@ -2655,7 +2655,7 @@ const clang::FunctionDecl* llvm_convertert::get_top_FunctionDecl_from_Stmt(
   return nullptr;
 }
 
-bool llvm_convertert::convert_this_decl(const clang::Decl& decl)
+bool clang_c_convertert::convert_this_decl(const clang::Decl& decl)
 {
   // If the flag to keep unused calls is set, we convert them all
   if(config.options.get_bool_option("keep-unused"))

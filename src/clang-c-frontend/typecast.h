@@ -5,8 +5,8 @@
  *      Author: mramalho
  */
 
-#ifndef LLVM_FRONTEND_TYPECAST_H_
-#define LLVM_FRONTEND_TYPECAST_H_
+#ifndef TYPECAST_H_
+#define TYPECAST_H_
 
 #include <std_expr.h>
 #include <namespace.h>
@@ -29,4 +29,4 @@ extern void gen_typecast_arithmetic(
   namespacet ns,
   exprt &expr);
 
-#endif /* LLVM_FRONTEND_TYPECAST_H_ */
+#endif /* TYPECAST_H_ */

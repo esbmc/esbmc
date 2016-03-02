@@ -1,5 +1,5 @@
 /*
- * llvm_main.cpp
+ * clang_main.cpp
  *
  *  Created on: Jul 29, 2015
  *      Author: mramalho
@@ -19,7 +19,7 @@
 
 #include <ansi-c/c_main.h>
 
-bool llvm_main(
+bool clang_main(
   contextt &context,
   const std::string &default_prefix __attribute__((unused)),
   const std::string &standard_main,

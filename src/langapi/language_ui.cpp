@@ -116,7 +116,7 @@ bool language_uit::parse(const std::string &filename)
     return true;
   }
 
-  if(config.options.get_bool_option("llvm-frontend"))
+  if(config.options.get_bool_option("clang-frontend"))
     mode++;
 
   // Check that it opens
