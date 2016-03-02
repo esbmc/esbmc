@@ -252,7 +252,10 @@ void goto_programt::compute_loop_numbers(unsigned int &num)
       it!=instructions.end();
       it++)
     if(it->is_backwards_goto())
-      it->loop_number=num++;
+    {
+      (*it->targets.begin())->loop_number = num;
+      it->loop_number = num++;
+    }
 }
 
 void goto_programt::get_successors(
