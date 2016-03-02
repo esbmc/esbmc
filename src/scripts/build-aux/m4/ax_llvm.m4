@@ -48,6 +48,7 @@ AC_DEFUN([AX_LLVM],
         LLVM_NDEBUG='no'
     fi
 
+    CXXFLAGS="$CXXFLAGS -I`$LLVMCONFIG --includedir`"
     LLVMLDFLAGS=`$LLVMCONFIG --ldflags`
     LLVMLIBS=`$LLVMCONFIG --libs mcparser option bitreader`
     SYSLIBS=`$LLVMCONFIG --system-libs 2>/dev/null`
