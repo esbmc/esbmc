@@ -119,16 +119,12 @@ goto_symext::symex_step(reachability_treet & art)
   break;
 
   case ASSUME:
-    if (!cur_state->guard.is_false()) {
-      symex_assume();
-    }
+    symex_assume();
     cur_state->source.pc++;
     break;
 
   case ASSERT:
-    if (!cur_state->guard.is_false()) {
-      symex_assert();
-    }
+    symex_assert();
     cur_state->source.pc++;
     break;
 
@@ -274,6 +270,9 @@ goto_symext::symex_step(reachability_treet & art)
 
 void goto_symext::symex_assume(void)
 {
+  if (cur_state->guard.is_false())
+    return;
+
   const goto_programt::instructiont &instruction=*cur_state->source.pc;
 
   expr2tc tmp = instruction.guard;
@@ -300,6 +299,9 @@ void goto_symext::symex_assume(void)
 
 void goto_symext::symex_assert(void)
 {
+  if (cur_state->guard.is_false())
+    return;
+
   if (!no_assertions || !cur_state->source.pc->location.user_provided())
   {
     std::string msg = cur_state->source.pc->location.comment().as_string();
