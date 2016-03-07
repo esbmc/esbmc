@@ -236,14 +236,14 @@ AC_DEFUN([AX_CLANG],
     if test "$succeeded" != "yes" ; then
         if test "$_version" = "0" ; then
             AC_MSG_NOTICE([[We could not detect the clang libraries (version $clang_lib_version_req or higher). If you have a staged clang library (still not installed) please specify \$CLANG_ROOT in your environment and do not give a PATH to --with-clang option.]])
+        else
+            CPPFLAGS="$CPPFLAGS_SAVED"
+            LDFLAGS="$LDFLAGS_SAVED"
+            LIBS="$LIBS_SAVED"
+
+            # execute ACTION-IF-NOT-FOUND (if present):
+            ifelse([$3], , :, [$3])
         fi
-
-        CPPFLAGS="$CPPFLAGS_SAVED"
-        LDFLAGS="$LDFLAGS_SAVED"
-        LIBS="$LIBS_SAVED"
-
-        # execute ACTION-IF-NOT-FOUND (if present):
-        ifelse([$3], , :, [$3])
     else
         AC_SUBST(clang_CPPFLAGS)
         AC_SUBST(clang_LDFLAGS)
