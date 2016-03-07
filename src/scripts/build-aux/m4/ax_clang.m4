@@ -15,19 +15,19 @@
 
 AC_DEFUN([AX_CLANG],
 [
-	AC_ARG_WITH([clang-libdir],
-	        AS_HELP_STRING([--with-clang-libdir=LIB_DIR],
-	        [Force given directory for clang libraries. Note that this will override library path detection, so use this parameter only if default library detection fails and you know exactly where your clang libraries are located.]),
-	        [
-	        if test -d "$withval"
-	        then
-	                ac_clang_lib_path="$withval"
-	        else
-	                AC_MSG_ERROR(--with-clang-libdir expected directory name)
-	        fi
-	        ],
-	        [ac_clang_lib_path=""]
-	)
+        AC_ARG_WITH([clang-libdir],
+                AS_HELP_STRING([--with-clang-libdir=LIB_DIR],
+                [Force given directory for clang libraries. Note that this will override library path detection, so use this parameter only if default library detection fails and you know exactly where your clang libraries are located.]),
+                [
+                if test -d "$withval"
+                then
+                        ac_clang_lib_path="$withval"
+                else
+                        AC_MSG_ERROR(--with-clang-libdir expected directory name)
+                fi
+                ],
+                [ac_clang_lib_path=""]
+        )
 
     clang_lib_version_req=ifelse([$1], ,3.8.0,$1)
     clang_lib_version_req_shorten=`expr $clang_lib_version_req : '\([[0-9]]*\.[[0-9]]*\)'`
@@ -78,14 +78,14 @@ AC_DEFUN([AX_CLANG],
             _version_tmp=`echo $i | sed "s#$ac_clang_lib_path/$libsubdir/##" | sed 's/libclang.so.//'`
             V_CHECK=`expr $_version_tmp \> $_version`
             if test "$V_CHECK" != "1" ; then
-            	continue
+                    continue
             fi
 
             _version=$_version_tmp
             succeeded=yes
 
             clang_libs_path=$ac_clang_lib_path/$libsubdir
-        	break;
+            break;
         done
     elif test "$cross_compiling" != yes; then
         for ac_clang_lib_path_tmp in /usr /usr/local /opt /opt/local ; do
@@ -98,7 +98,7 @@ AC_DEFUN([AX_CLANG],
                     _version_tmp=`echo $i | sed "s#$ac_clang_lib_path_tmp/$libsubdir/##" | sed 's/libclang.so.//'`
                     V_CHECK=`expr $_version_tmp \> $_version`
                     if test "$V_CHECK" != "1" ; then
-                    	continue
+                            continue
                     fi
 
                     _version=$_version_tmp
@@ -224,9 +224,9 @@ AC_DEFUN([AX_CLANG],
     LDFLAGS="$LDFLAGS $clang_LDFLAGS"
     export LDFLAGS
 
-	LIBS_SAVED="$LIBS"
-	LIBS="$LIBS $clang_LIBS"
-	export LIBS
+    LIBS_SAVED="$LIBS"
+    LIBS="$LIBS $clang_LIBS"
+    export LIBS
 
     if test "$succeeded" != "yes" ; then
         if test "$_version" = "0" ; then
