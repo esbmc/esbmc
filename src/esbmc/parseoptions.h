@@ -35,9 +35,6 @@ public:
   {
   }
 
-  virtual bool parse();
-  virtual bool parse(const std::string &filename);
-
 protected:
   virtual void get_command_line_options(optionst &options);
   virtual int do_bmc(bmct &bmc);

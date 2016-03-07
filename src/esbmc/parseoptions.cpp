@@ -1703,60 +1703,6 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
   return res;
 }
 
-bool cbmc_parseoptionst::parse()
-{
-  return language_uit::parse();
-}
-
-bool cbmc_parseoptionst::parse(const std::string &filename)
-{
-  if(!cmdline.isset("llvm-frontend"))
-    return language_uit::parse(filename);
-
-  int mode=get_mode_filename(filename);
-
-  if(mode<0)
-  {
-    error("failed to figure out type of file", filename);
-    return true;
-  }
-
-  // Check that it opens
-  std::ifstream infile(filename.c_str());
-  if(!infile)
-  {
-    error("failed to open input file", filename);
-    return true;
-  }
-
-  language_filet language_file;
-  std::pair<language_filest::filemapt::iterator, bool>
-    result=language_files.filemap.insert(
-      std::pair<std::string, language_filet>(filename, language_file));
-
-  language_filet &lf=result.first->second;
-  lf.filename=filename;
-  // 2 is the magic number that represents LLVM
-  // In the future, we shall remove this and use only the llvm frontend
-  // for c and c++ code
-  lf.language=mode_table[2].new_language();
-  languaget &language=*lf.language;
-
-  status("Parsing using clang", filename);
-
-  if(language.parse(filename, *get_message_handler()))
-  {
-    if(get_ui()==ui_message_handlert::PLAIN)
-      std::cerr << "PARSING ERROR" << std::endl;
-
-    return true;
-  }
-
-  lf.get_modules();
-
-  return false;
-}
-
 void cbmc_parseoptionst::help()
 {
   std::cout <<
