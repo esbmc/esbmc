@@ -64,6 +64,27 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     }
   }
 
+  goto_programt::const_targett goto_target =
+    instruction.targets.front();
+
+  bool forward =
+    cur_state->source.pc->location_number <
+    goto_target->location_number;
+
+  // Check if we are inside a loop, during inductive step
+  if(inductive_step && (instruction.loop_number != 0))
+  {
+    // We just entered the loop, save the loop number
+    if(forward)
+      loop_numbers.push(instruction.loop_number);
+    else
+    {
+      // We are leaving the loop, remove from stack
+      assert(instruction.loop_number == loop_numbers.top());
+      loop_numbers.pop();
+    }
+  }
+
   if (new_guard_false) {
 
     // reset unwinding counter
@@ -80,13 +101,6 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   // we only do deterministic gotos for now
   if (instruction.targets.size() != 1)
     throw "no support for non-deterministic gotos";
-
-  goto_programt::const_targett goto_target =
-    instruction.targets.front();
-
-  bool forward =
-    cur_state->source.pc->location_number <
-    goto_target->location_number;
 
   if (!forward) { // backwards?
     unsigned unwind;
