@@ -85,10 +85,12 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     }
   }
 
-  if (new_guard_false) {
-
+  statet::framet &frame=cur_state->top();
+  if (new_guard_false)
+  {
     // reset unwinding counter
-    cur_state->unwind_map[cur_state->source] = 0;
+    if(instruction.is_backwards_goto())
+      frame.loop_iterations[instruction.loop_number] = 0;
 
     // next instruction
     cur_state->source.pc++;
@@ -102,18 +104,17 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   if (instruction.targets.size() != 1)
     throw "no support for non-deterministic gotos";
 
-  if (!forward) { // backwards?
-    unsigned unwind;
-
-    unwind = cur_state->unwind_map[cur_state->source];
+  // backwards?
+  if (!forward)
+  {
+    unsigned &unwind = frame.loop_iterations[instruction.loop_number];
     unwind++;
-    cur_state->unwind_map[cur_state->source] = unwind;
 
     if (get_unwind(cur_state->source, unwind)) {
       loop_bound_exceeded(new_guard);
 
       // reset unwinding
-      cur_state->unwind_map[cur_state->source] = 0;
+      unwind = 0;
 
       // next instruction
       cur_state->source.pc++;
