@@ -302,12 +302,24 @@ void goto_symext::symex_assert(void)
   if (cur_state->guard.is_false())
     return;
 
+  if(inductive_step && loop_numbers.size())
+  {
+    statet::framet &frame = cur_state->top();
+    unsigned unwind = frame.loop_iterations[loop_numbers.top()];
+
+    if(unwind < (max_unwind - 1))
+    {
+      symex_assume();
+      return;
+    }
+  }
+
   if (!no_assertions || !cur_state->source.pc->location.user_provided())
   {
     std::string msg = cur_state->source.pc->location.comment().as_string();
     if (msg == "") msg = "assertion";
 
-    const goto_programt::instructiont &instruction=*cur_state->source.pc;
+    const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
     expr2tc tmp = instruction.guard;
     replace_nondet(tmp);
