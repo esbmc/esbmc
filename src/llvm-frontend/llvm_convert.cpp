@@ -1852,8 +1852,7 @@ bool llvm_convertert::get_expr(
       const clang::ReturnStmt &ret =
         static_cast<const clang::ReturnStmt&>(stmt);
 
-      const clang::Decl *decl = get_top_FunctionDecl_from_Stmt(ret);
-      if(!decl)
+      if(!current_functionDecl)
       {
         std::cerr << "ESBMC could not find the parent scope for "
                   << "the following return statement:" << std::endl;
@@ -1861,11 +1860,8 @@ bool llvm_convertert::get_expr(
         return true;
       }
 
-      const clang::FunctionDecl &fd =
-        static_cast<const clang::FunctionDecl&>(*decl);
-
       typet return_type;
-      if(get_type(fd.getReturnType(), return_type))
+      if(get_type(current_functionDecl->getReturnType(), return_type))
         return true;
 
       code_returnt ret_expr;
@@ -2431,9 +2427,8 @@ void llvm_convertert::get_start_location_from_stmt(
 
   std::string function_name = "";
 
-  const clang::FunctionDecl* fd = get_top_FunctionDecl_from_Stmt(stmt);
-  if(fd)
-    function_name = fd->getName().str();
+  if(current_functionDecl)
+    function_name = current_functionDecl->getName().str();
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getBegin(), PLoc);
@@ -2449,9 +2444,8 @@ void llvm_convertert::get_final_location_from_stmt(
 
   std::string function_name = "";
 
-  const clang::FunctionDecl* fd = get_top_FunctionDecl_from_Stmt(stmt);
-  if(fd)
-    function_name = fd->getName().str();
+  if(current_functionDecl)
+    function_name = current_functionDecl->getName().str();
 
   clang::PresumedLoc PLoc;
   get_presumed_location(stmt.getSourceRange().getEnd(), PLoc);
