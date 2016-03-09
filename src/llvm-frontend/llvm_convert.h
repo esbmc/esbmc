@@ -41,6 +41,8 @@ private:
 
   clang::SourceManager *sm;
 
+  const clang::FunctionDecl *current_functionDecl;
+
   typedef std::map<std::size_t, std::string> object_mapt;
   object_mapt object_map;
 

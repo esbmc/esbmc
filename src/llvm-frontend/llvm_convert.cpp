@@ -30,7 +30,8 @@ llvm_convertert::llvm_convertert(
     current_scope_var_num(1),
     anon_var_counter(0),
     anon_tag_counter(0),
-    sm(nullptr)
+    sm(nullptr),
+    current_functionDecl(nullptr)
 {
 }
 
@@ -91,6 +92,8 @@ bool llvm_convertert::convert_top_level_decl()
         return true;
     }
   }
+
+  assert(current_functionDecl == nullptr);
 
   return false;
 }
@@ -443,6 +446,10 @@ bool llvm_convertert::get_function(
   if(fd.isDefined() && !fd.isThisDeclarationADefinition())
     return false;
 
+  // Save old_functionDecl, to be restored at the end of this method
+  const clang::FunctionDecl *old_functionDecl = current_functionDecl;
+  current_functionDecl = &fd;
+
   // TODO: use fd.isMain to flag and check the flag on llvm_adjust_expr
   // to saner way to add argc/argv/envp
 
@@ -519,6 +526,9 @@ bool llvm_convertert::get_function(
 
     added_symbol.value = body_exprt;
   }
+
+  // Restore old functionDecl
+  current_functionDecl = old_functionDecl;
 
   return false;
 }
