@@ -41,6 +41,8 @@ private:
 
   clang::SourceManager *sm;
 
+  const clang::FunctionDecl *current_functionDecl;
+
   typedef std::map<std::size_t, std::string> object_mapt;
   object_mapt object_map;
 
@@ -196,7 +198,7 @@ private:
   const clang::Decl* get_DeclContext_from_Stmt(
     const clang::Stmt &stmt);
 
-  const clang::FunctionDecl* get_top_FunctionDecl_from_Stmt(
+  const clang::Decl* get_top_FunctionDecl_from_Stmt(
     const clang::Stmt &stmt);
 
   bool convert_this_decl(const clang::Decl &decl);

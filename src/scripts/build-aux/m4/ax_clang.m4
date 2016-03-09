@@ -119,7 +119,7 @@ AC_DEFUN([AX_CLANG],
         AC_MSG_RESULT(yes)
     fi
 
-    AC_MSG_CHECKING(if we can find libclangTooling in $clang_libs_path)
+    AC_MSG_CHECKING(if we can find libclangTooling)
     if ls "$clang_libs_path/libclangTooling"* >/dev/null 2>&1 ; then
          clang_LIBS="-lclangTooling"
          AC_MSG_RESULT(yes)
