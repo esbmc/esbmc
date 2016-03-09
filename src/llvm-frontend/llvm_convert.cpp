@@ -2630,7 +2630,6 @@ const clang::Decl* llvm_convertert::get_DeclContext_from_Stmt(
   const clang::Stmt& stmt)
 {
   auto it = ASTContext->getParents(stmt).begin();
-
   if(it == ASTContext->getParents(stmt).end())
     return nullptr;
 
@@ -2645,12 +2644,18 @@ const clang::Decl* llvm_convertert::get_DeclContext_from_Stmt(
   return nullptr;
 }
 
-const clang::FunctionDecl* llvm_convertert::get_top_FunctionDecl_from_Stmt(
+const clang::Decl* llvm_convertert::get_top_FunctionDecl_from_Stmt(
   const clang::Stmt& stmt)
 {
   const clang::Decl *decl = get_DeclContext_from_Stmt(stmt);
   if(decl)
-    return static_cast<const clang::FunctionDecl*>(decl->getNonClosureContext());
+  {
+    if(decl->isFunctionOrFunctionTemplate())
+      return decl;
+
+    if(decl->getNonClosureContext()->isFunctionOrFunctionTemplate())
+      return decl->getNonClosureContext();
+  }
 
   return nullptr;
 }
