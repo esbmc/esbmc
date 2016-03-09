@@ -2673,7 +2673,7 @@ bool llvm_convertert::convert_this_decl(const clang::Decl& decl)
   if(decl.isFunctionOrFunctionTemplate())
   {
     // TODO: We cannot activate this code until the language_file class
-    // be rewritten to parse/typecheck all files once, instead of a per
+    // is rewritten to parse/typecheck all files once, instead of a per
     // file approach
 #if 0
     const clang::FunctionDecl &fd =
