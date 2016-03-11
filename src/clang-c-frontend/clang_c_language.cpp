@@ -165,16 +165,7 @@ bool clang_c_languaget::typecheck(
 void clang_c_languaget::show_parse(std::ostream& out __attribute__((unused)))
 {
   for (auto &translation_unit : ASTs)
-  {
-    for (clang::ASTUnit::top_level_iterator
-      it = translation_unit->top_level_begin();
-      it != translation_unit->top_level_end();
-      it++)
-    {
-      (*it)->dump();
-      std::cout << std::endl;
-    }
-  }
+    (*translation_unit).getASTContext().getTranslationUnitDecl()->dumpColor();
 }
 
 bool clang_c_languaget::convert(
