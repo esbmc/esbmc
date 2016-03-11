@@ -41,9 +41,6 @@ clang_c_convertert::~clang_c_convertert()
 
 bool clang_c_convertert::convert()
 {
-  if(convert_builtin_types())
-    return true;
-
   if(convert_top_level_decl())
     return true;
 
@@ -75,22 +72,13 @@ bool clang_c_convertert::convert_top_level_decl()
   // symbols as we go.
   for (auto &translation_unit : ASTs)
   {
-    for (clang::ASTUnit::top_level_iterator
-      it = translation_unit->top_level_begin();
-      it != translation_unit->top_level_end();
-      it++)
-    {
-      const clang::Decl& decl = (**it);
-      if(!convert_this_decl(decl))
-        continue;
+    // Update ASTContext as it changes for each source file
+    ASTContext = &(*translation_unit).getASTContext();
 
-      // Update ASTContext as it changes for each source file
-      ASTContext = &decl.getASTContext();
-
-      exprt dummy_decl;
-      if(get_decl(decl, dummy_decl))
-        return true;
-    }
+    // This is the whole translation unit. We don't represent it internally
+    exprt dummy_decl;
+    if(get_decl(*ASTContext->getTranslationUnitDecl(), dummy_decl))
+      return true;
   }
 
   assert(current_functionDecl == nullptr);
@@ -225,6 +213,24 @@ bool clang_c_convertert::get_decl(
 
       if(get_struct_union_class(record))
         return true;
+
+      break;
+    }
+
+    case clang::Decl::TranslationUnit:
+    {
+      const clang::TranslationUnitDecl &tu =
+        static_cast<const clang::TranslationUnitDecl &>(decl);
+
+      for(auto decl : tu.decls())
+      {
+        // This is a global declaration (varible, function, struct, etc)
+        // We don't need the exprt, it will be automatically added to the
+        // context
+        exprt dummy_decl;
+        if(get_decl(*decl, dummy_decl))
+          return true;
+      }
 
       break;
     }
