@@ -1,6 +1,6 @@
-#include <llvm_language.h>
+#include "clang_c_language.h"
 
-void llvm_languaget::add_clang_headers()
+void clang_c_languaget::add_clang_headers()
 {
   clang_headers_name.push_back("stdalign.h");
   clang_headers_content.push_back(

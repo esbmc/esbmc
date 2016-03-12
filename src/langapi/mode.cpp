@@ -12,8 +12,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include "mode.h"
 
-const char *extensions_llvm  []={ "c", "i", NULL };
-
 const char *extensions_ansi_c  []={ "c", "i", NULL };
 
 #ifdef _WIN32

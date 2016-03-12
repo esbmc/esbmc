@@ -1,28 +1,29 @@
 /*
- * llvmadjust.h
+ * clang_c_adjust.h
  *
  *  Created on: Aug 30, 2015
  *      Author: mramalho
  */
 
-#ifndef LLVM_FRONTEND_LLVM_ADJUST_H_
-#define LLVM_FRONTEND_LLVM_ADJUST_H_
+
+#ifndef CLANG_C_FRONTEND_CLANG_C_ADJUST_H_
+#define CLANG_C_FRONTEND_CLANG_C_ADJUST_H_
 
 #include <context.h>
 #include <namespace.h>
 #include <std_expr.h>
 #include <std_code.h>
 
-class llvm_adjust
+class clang_c_adjust
 {
   public:
-    llvm_adjust(contextt &_context)
+    clang_c_adjust(contextt &_context)
       : context(_context),
         ns(namespacet(context))
     {
     }
 
-    ~llvm_adjust()
+    ~clang_c_adjust()
     {
     }
 
@@ -71,4 +72,4 @@ class llvm_adjust
     void do_special_functions(side_effect_expr_function_callt &expr);
 };
 
-#endif /* LLVM_FRONTEND_LLVM_ADJUST_H_ */
+#endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */

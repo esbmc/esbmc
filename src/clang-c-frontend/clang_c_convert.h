@@ -1,12 +1,12 @@
 /*
- * llvmtypecheck.h
+ * clang_c_convert.h
  *
  *  Created on: Jul 23, 2015
  *      Author: mramalho
  */
 
-#ifndef LLVM_FRONTEND_LLVM_CONVERT_H_
-#define LLVM_FRONTEND_LLVM_CONVERT_H_
+#ifndef CLANG_C_FRONTEND_CLANG_C_CONVERT_H_
+#define CLANG_C_FRONTEND_CLANG_C_CONVERT_H_
 
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -19,13 +19,13 @@
 #include <clang/AST/Type.h>
 #include <clang/AST/Expr.h>
 
-class llvm_convertert
+class clang_c_convertert
 {
 public:
-  llvm_convertert(
+  clang_c_convertert(
     contextt &_context,
     std::vector<std::unique_ptr<clang::ASTUnit> > &_ASTs);
-  virtual ~llvm_convertert();
+  virtual ~clang_c_convertert() = default;
 
   bool convert();
 
@@ -204,4 +204,4 @@ private:
   bool convert_this_decl(const clang::Decl &decl);
 };
 
-#endif /* LLVM_FRONTEND_LLVM_CONVERT_H_ */
+#endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
