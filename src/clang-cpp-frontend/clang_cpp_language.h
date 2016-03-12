@@ -71,7 +71,7 @@ public:
   { return new clang_cpp_languaget; }
 
   // constructor, destructor
-  virtual ~clang_cpp_languaget();
+  virtual ~clang_cpp_languaget() = default;
   clang_cpp_languaget();
 };
 
