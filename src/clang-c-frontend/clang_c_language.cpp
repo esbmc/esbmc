@@ -14,10 +14,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <ansi-c/cprover_library.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/c_link.h>
-#include <ansi-c/gcc_builtin_headers.h>
 
 #include <clang/Tooling/CommonOptionsParser.h>
 #include <clang/Tooling/Tooling.h>
+
 #include "clang_c_adjust.h"
 #include "clang_c_convert.h"
 #include "clang_c_main.h"
@@ -31,10 +31,6 @@ clang_c_languaget::clang_c_languaget()
 {
   add_clang_headers();
   internal_additions();
-}
-
-clang_c_languaget::~clang_c_languaget()
-{
 }
 
 void clang_c_languaget::build_compiler_string(
@@ -117,11 +113,6 @@ bool clang_c_languaget::parse(
   if(preprocess(path, o_preprocessed, message_handler))
     return true;
 
-  return parse(path);
-}
-
-bool clang_c_languaget::parse(const std::string& path)
-{
   // Finish the compiler string
   std::vector<std::string> compiler_string;
   build_compiler_string(compiler_string);

@@ -71,19 +71,11 @@ public:
   { return new clang_c_languaget; }
 
   // constructor, destructor
-  virtual ~clang_c_languaget();
+  virtual ~clang_c_languaget() = default;
   clang_c_languaget();
 
 protected:
   void internal_additions();
-
-  bool parse(const std::string &path);
-
-  virtual std::string main_symbol()
-  {
-    return "c::main";
-  }
-
   void add_clang_headers();
 
   void build_compiler_string(std::vector<std::string> &compiler_string);
