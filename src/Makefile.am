@@ -1,7 +1,7 @@
 ACLOCAL_AMFLAGS = -I scripts/build-aux/m4
 
 SUBDIRS = big-int util langapi solvers goto-symex pointer-analysis \
-          goto-programs clang-c-frontend ansi-c cpp esbmc
+          goto-programs clang-c-frontend ansi-c clang-cpp-frontend cpp esbmc
 
 licensedir = $(prefix)/license
 license_DATA = scripts/licenses/BOOLECTOR_LICENSE.txt scripts/licenses/Z3_LICENSE.txt COPYING
