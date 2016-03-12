@@ -150,20 +150,6 @@ bool clang_c_languaget::typecheck(
   const std::string& module,
   message_handlert& message_handler)
 {
-  return convert(context, module, message_handler);
-}
-
-void clang_c_languaget::show_parse(std::ostream& out __attribute__((unused)))
-{
-  for (auto &translation_unit : ASTs)
-    (*translation_unit).getASTContext().getTranslationUnitDecl()->dumpColor();
-}
-
-bool clang_c_languaget::convert(
-  contextt &context,
-  const std::string &module,
-  message_handlert &message_handler)
-{
   contextt new_context;
 
   clang_c_convertert converter(new_context, ASTs);
@@ -175,6 +161,12 @@ bool clang_c_languaget::convert(
     return true;
 
   return c_link(context, new_context, message_handler, module);
+}
+
+void clang_c_languaget::show_parse(std::ostream& out __attribute__((unused)))
+{
+  for (auto &translation_unit : ASTs)
+    (*translation_unit).getASTContext().getTranslationUnitDecl()->dumpColor();
 }
 
 bool clang_c_languaget::preprocess(

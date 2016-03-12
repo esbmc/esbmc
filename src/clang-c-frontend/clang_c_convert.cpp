@@ -23,7 +23,7 @@
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit> > &_ASTs)
-  : ASTContext(&(*(*_ASTs.begin())->top_level_begin())->getASTContext()),
+  : ASTContext(nullptr),
     context(_context),
     ns(context),
     ASTs(_ASTs),
@@ -32,10 +32,6 @@ clang_c_convertert::clang_c_convertert(
     anon_tag_counter(0),
     sm(nullptr),
     current_functionDecl(nullptr)
-{
-}
-
-clang_c_convertert::~clang_c_convertert()
 {
 }
 

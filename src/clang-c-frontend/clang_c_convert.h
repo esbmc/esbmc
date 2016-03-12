@@ -25,7 +25,7 @@ public:
   clang_c_convertert(
     contextt &_context,
     std::vector<std::unique_ptr<clang::ASTUnit> > &_ASTs);
-  virtual ~clang_c_convertert();
+  virtual ~clang_c_convertert() = default;
 
   bool convert();
 

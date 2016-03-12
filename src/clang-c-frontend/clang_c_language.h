@@ -37,11 +37,6 @@ public:
     const std::string &module,
     message_handlert &message_handler);
 
-  bool convert(
-    contextt &context,
-    const std::string &module,
-    message_handlert &message_handler);
-
   std::string id() const { return "c"; }
   std::string description() const { return "C"; }
 
