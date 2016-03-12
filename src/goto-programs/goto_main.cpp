@@ -19,14 +19,6 @@ void goto_convertt::new_name(symbolt &symbol)
   context.add(symbol);
 }
 
-const symbolt &goto_convertt::lookup(const irep_idt &identifier) const
-{
-  const symbolt *symbol;
-  if(ns.lookup(identifier, symbol))
-    throw "failed to find symbol "+id2string(identifier);
-  return *symbol;
-}
-
 void goto_convert(
   const codet &code,
   contextt &context,

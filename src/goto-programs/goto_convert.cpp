@@ -342,7 +342,7 @@ void goto_convertt::convert_block(
       const exprt &op0=code_it.op0();
       assert(op0.id()=="symbol");
       const irep_idt &identifier=op0.identifier();
-      const symbolt &symbol=lookup(identifier);
+      const symbolt &symbol=ns.lookup(identifier);
 
       if(!symbol.static_lifetime &&
          !symbol.type.is_code())
@@ -358,7 +358,7 @@ void goto_convertt::convert_block(
         const exprt &op0=it->op0();
         assert(op0.id()=="symbol");
         const irep_idt &identifier=op0.identifier();
-        const symbolt &symbol=lookup(identifier);
+        const symbolt &symbol=ns.lookup(identifier);
 
         if(!symbol.static_lifetime &&
            !symbol.type.is_code())
@@ -706,7 +706,7 @@ void goto_convertt::convert_decl(
 
   const irep_idt &identifier=op0.identifier();
 
-  const symbolt &symbol=lookup(identifier);
+  const symbolt &symbol=ns.lookup(identifier);
   if(symbol.static_lifetime ||
      symbol.type.is_code())
 	  return; // this is a SKIP!
@@ -937,7 +937,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
     if (identifier.empty())
 	  return;
 
-	const symbolt &symbol=lookup(identifier);
+    const symbolt &symbol=ns.lookup(identifier);
 
     if (!(identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
           && (symbol.static_lifetime || symbol.type.is_dynamic_set()))
@@ -967,7 +967,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   else if(rhs.id() == "symbol")
   {
 	const irep_idt &identifier=rhs.identifier();
-	const symbolt &symbol=lookup(identifier);
+	const symbolt &symbol=ns.lookup(identifier);
 	if(symbol.static_lifetime || symbol.type.is_dynamic_set())
 	{
 	  // make new assignment to temp for each global symbol
@@ -1013,7 +1013,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   else if(expr.id() == "symbol")
   {
     const irep_idt &identifier=expr.identifier();
-  	const symbolt &symbol=lookup(identifier);
+  	const symbolt &symbol=ns.lookup(identifier);
 
     if (identifier == "c::__ESBMC_alloc"
     	|| identifier == "c::__ESBMC_alloc_size")
@@ -1051,7 +1051,7 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
   else if (is_symbol2t(expr))
   {
     irep_idt identifier = to_symbol2t(expr).get_symbol_name();
-    const symbolt &symbol = lookup(identifier);
+    const symbolt &symbol = ns.lookup(identifier);
 
     if (identifier == "c::__ESBMC_alloc"
     	|| identifier == "c::__ESBMC_alloc_size")

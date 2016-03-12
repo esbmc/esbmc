@@ -24,7 +24,7 @@ public:
     const symbolt *symbol;
     if(lookup(name, symbol))
     {
-      std::cerr <<  "identifier "+id2string(name)+" not found";
+      std::cerr <<  "Failed to find symbol "+id2string(name)+" not found" << std::endl;
       abort();
     }
     return *symbol;

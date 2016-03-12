@@ -57,7 +57,6 @@ protected:
   // tools for symbols
   //
   void new_name(symbolt &symbol);
-  const symbolt &lookup(const irep_idt &identifier) const;
 
   symbolt &new_tmp_symbol(const typet &type);
   symbolt &new_cftest_symbol(const typet &type);
