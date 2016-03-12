@@ -448,6 +448,10 @@ bool clang_c_convertert::get_var(
 bool clang_c_convertert::get_function(
   const clang::FunctionDecl &fd)
 {
+  // Don't convert if clang thinks that the functions was implicitly converted
+  if(fd.isImplicit())
+    return false;
+
   // If the function is not defined but this is not the definition, skip it
   if(fd.isDefined() && !fd.isThisDeclarationADefinition())
     return false;
