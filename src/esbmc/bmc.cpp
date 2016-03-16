@@ -687,7 +687,7 @@ bool bmct::run_thread()
 
     if (!options.get_bool_option("smt-during-symex")) {
       delete runtime_solver;
-      runtime_solver = create_solver_factory("", is_cpp,
+      runtime_solver = create_solver_factory("",
                                              options.get_bool_option("int-encoding"),
                                              ns, options);
     }
@@ -742,7 +742,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_BAD" << std::endl;
   if (num_asserts != 0) {
-    solver = create_solver_factory("z3", is_cpp,
+    solver = create_solver_factory("z3",
                                    options.get_bool_option("int-encoding"),
                                    ns, options);
     ret = run_solver(*equation, solver);
@@ -781,7 +781,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_FAILING" << std::endl;
   if (num_asserts != 0) {
-    solver = create_solver_factory("z3", is_cpp,
+    solver = create_solver_factory("z3",
                                    options.get_bool_option("int-encoding"),
                                    ns, options);
     ret = run_solver(*equation, solver);
@@ -820,7 +820,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
   if (num_asserts != 0) {
-    solver = create_solver_factory("z3", is_cpp,
+    solver = create_solver_factory("z3",
                                    options.get_bool_option("int-encoding"),
                                    ns, options);
     ret = run_solver(*equation, solver);

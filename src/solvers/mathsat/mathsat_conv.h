@@ -38,7 +38,7 @@ public:
 class mathsat_convt : public smt_convt, public array_iface
 {
 public:
-  mathsat_convt(bool is_cpp, bool int_encoding, const namespacet &ns);
+  mathsat_convt(bool int_encoding, const namespacet &ns);
   ~mathsat_convt(void);
 
   virtual resultt dec_solve();

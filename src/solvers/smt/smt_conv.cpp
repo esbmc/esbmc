@@ -66,7 +66,7 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
+smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   : ctx_level(0), boolean_sort(NULL), int_encoding(intmode), ns(_ns)
 {
   tuple_api = NULL;
@@ -114,11 +114,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
   // this is the one modelling array that absolutely _has_ to be initialized
   // to false for each element, which is going to be shoved into
   // convert_identifier_pointer.
-  if (is_cpp) {
-    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic&0#1";
-  } else {
-    dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
-  }
+  dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
 
   ptr_foo_inited = false;
 }

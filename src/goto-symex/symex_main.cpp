@@ -204,12 +204,6 @@ goto_symext::symex_step(reachability_treet & art)
         std::string name = id.as_string().substr(3);
         run_intrinsic(call, art, name);
         return;
-      } else if (has_prefix(id.as_string(), "cpp::__ESBMC")) {
-        cur_state->source.pc++;
-        std::string name = id.as_string().substr(5);
-        name = name.substr(0, name.find("("));
-        run_intrinsic(call, art, name);
-        return;
       }
     }
 

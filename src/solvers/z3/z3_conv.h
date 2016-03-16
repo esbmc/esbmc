@@ -36,7 +36,7 @@ typedef unsigned int uint;
 class z3_convt: public smt_convt, public tuple_iface, public array_iface
 {
 public:
-  z3_convt(bool int_encoding, bool is_cpp, const namespacet &ns);
+  z3_convt(bool int_encoding, const namespacet &ns);
   virtual ~z3_convt();
 private:
   void intr_push_ctx(void);

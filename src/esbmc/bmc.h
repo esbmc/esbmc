@@ -40,18 +40,12 @@ public:
     interleaving_failed = 0;
     uw_loop = 0;
 
-    const symbolt *sp;
-    if (ns.lookup(irep_idt("c::__ESBMC_alloc"), sp))
-      is_cpp = true;
-    else
-      is_cpp = false;
-
     ltl_results_seen[ltl_res_bad] = 0;
     ltl_results_seen[ltl_res_failing] = 0;
     ltl_results_seen[ltl_res_succeeding] = 0;
     ltl_results_seen[ltl_res_good] = 0;
 
-    runtime_solver = create_solver_factory("", is_cpp,
+    runtime_solver = create_solver_factory("",
                                            opts.get_bool_option("int-encoding"),
                                            ns, options);
 
@@ -90,7 +84,6 @@ public:
   unsigned int interleaving_number;
   unsigned int interleaving_failed;
   unsigned int uw_loop;
-  bool is_cpp;
 
   virtual bool run(void);
   virtual ~bmct() { }

@@ -8,7 +8,7 @@
 
 #include <solvers/smt/smt_conv.h>
 
-smt_convt *create_solver_factory(const std::string &solver_name, bool is_cpp,
+smt_convt *create_solver_factory(const std::string &solver_name,
                                   bool int_encoding, const namespacet &ns,
                                   const optionst &options);
 

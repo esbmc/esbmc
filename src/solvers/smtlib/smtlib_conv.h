@@ -53,7 +53,7 @@ public:
 
 class smtlib_convt : public smt_convt, public array_iface {
 public:
-  smtlib_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
+  smtlib_convt(bool int_encoding, const namespacet &_ns,
                const optionst &_options);
   ~smtlib_convt();
 

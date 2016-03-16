@@ -54,19 +54,19 @@ void check_msat_error(msat_term r)
 }
 
 smt_convt *
-create_new_mathsat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+create_new_mathsat_solver(bool int_encoding, const namespacet &ns,
                           const optionst &opts __attribute__((unused)),
                           tuple_iface **tuple_api __attribute__((unused)),
                           array_iface **array_api)
 {
-  mathsat_convt *conv = new mathsat_convt(is_cpp, int_encoding, ns);
+  mathsat_convt *conv = new mathsat_convt(int_encoding, ns);
   *array_api = static_cast<array_iface*>(conv);
   return conv;
 }
 
-mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
+mathsat_convt::mathsat_convt(bool int_encoding,
                              const namespacet &ns)
-  : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false)
+  : smt_convt(int_encoding, ns), array_iface(false, false)
 {
 
   if (int_encoding) {
