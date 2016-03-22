@@ -104,7 +104,6 @@ void bmct::successful_trace(smt_convt &smt_conv,
 
   	  /* FIXME - currently, the goto trace construction fails in successful case */
   	  //build_goto_trace(equation, smt_conv, goto_trace);
-  	  goto_trace.metadata_filename = options.get_option("llvm-metadata");
 
   	  generate_goto_trace_in_graphml_format(
   		true,
