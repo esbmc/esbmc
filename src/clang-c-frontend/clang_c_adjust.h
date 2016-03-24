@@ -65,6 +65,7 @@ class clang_c_adjust
     void adjust_for(codet &code);
     void adjust_switch(codet &code);
     void adjust_assign(codet &code);
+    void adjust_decl(codet &code);
 
     void adjust_argc_argv(const symbolt &main_symbol);
 
