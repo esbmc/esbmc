@@ -154,10 +154,6 @@ std::string expr2ct::convert_rec(
   {
     return q+"_Bool";
   }
-  else if(src.id()=="rational")
-  {
-    return q+src.id_string();
-  }
   else if(src.id()=="empty")
   {
     return q+"void";
@@ -1387,8 +1383,6 @@ std::string expr2ct::convert_constant(
     MetaString(dest, value);
     dest+='"';
   }
-  else if(type.id()=="natural")
-    dest=value;
   else if(type.id()=="c_enum" ||
           type.id()=="incomplete_c_enum")
   {
@@ -1422,8 +1416,6 @@ std::string expr2ct::convert_constant(
 
     return dest;
   }
-  else if(type.id()=="rational")
-    return convert_norep(src, precedence);
   else if(type.id()=="bv")
     dest=value;
   else if(type.is_bool())

@@ -176,12 +176,7 @@ bool exprt::is_zero() const
     const std::string &value=get_string(a_value);
     const irep_idt &type_id=type().id_string();
 
-    if(type_id=="natural")
-    {
-      mp_integer int_value=string2integer(value);
-      if(int_value==0) return true;
-    }
-    else if(type_id=="unsignedbv" || type_id=="signedbv")
+    if(type_id=="unsignedbv" || type_id=="signedbv")
     {
       mp_integer int_value=binary2integer(value, false);
       if(int_value==0) return true;
@@ -210,12 +205,7 @@ bool exprt::is_one() const
     const std::string &value=get_string(a_value);
     const irep_idt &type_id=type().id_string();
 
-    if(type_id=="natural")
-    {
-      mp_integer int_value=string2integer(value);
-      if(int_value==1) return true;
-    }
-    else if(type_id=="unsignedbv" || type_id=="signedbv")
+    if(type_id=="unsignedbv" || type_id=="signedbv")
     {
       mp_integer int_value=binary2integer(value, false);
       if(int_value==1) return true;
@@ -240,14 +230,7 @@ bool exprt::sum(const exprt &expr)
 
   const irep_idt &type_id=type().id();
 
-  if(type_id=="natural")
-  {
-    set(a_value, integer2string(
-      string2integer(get_string(a_value))+
-      string2integer(expr.get_string(a_value))));
-    return false;
-  }
-  else if(type_id=="unsignedbv" || type_id=="signedbv")
+  if(type_id=="unsignedbv" || type_id=="signedbv")
   {
     set(a_value, integer2binary(
       binary2integer(get_string(a_value), false)+
@@ -280,14 +263,7 @@ bool exprt::mul(const exprt &expr)
 
   const irep_idt &type_id=type().id();
 
-  if(type_id=="natural")
-  {
-    set(a_value, integer2string(
-      string2integer(get_string(a_value))*
-      string2integer(expr.get_string(a_value))));
-    return false;
-  }
-  else if(type_id=="unsignedbv" || type_id=="signedbv")
+  if(type_id=="unsignedbv" || type_id=="signedbv")
   {
     set(a_value, integer2binary(
       binary2integer(get_string(a_value), false)*
@@ -321,14 +297,7 @@ bool exprt::subtract(const exprt &expr)
 
   const irep_idt &type_id=type().id();
 
-  if(type_id=="natural")
-  {
-    set(a_value, integer2string(
-      string2integer(get_string(a_value))-
-      string2integer(expr.get_string(a_value))));
-    return false;
-  }
-  else if(type_id=="unsignedbv" || type_id=="signedbv")
+  if(type_id=="unsignedbv" || type_id=="signedbv")
   {
     set(a_value, integer2binary(
       binary2integer(get_string(a_value), false)-
