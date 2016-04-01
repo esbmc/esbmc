@@ -20,16 +20,14 @@ bool is_number(const typet &type)
   const std::string &id=type.id_string();
   return id=="rational" ||
          id=="real" ||
-         id=="integer" ||
-         id=="natural" || 
+         id=="natural" ||
          id=="complex" ||
          id=="unsignedbv" ||
-         id=="signedbv" || 
+         id=="signedbv" ||
          id=="floatbv" ||
          id=="fixedbv";
 }
 
-irep_idt typet::t_integer = dstring("integer");
 irep_idt typet::t_signedbv = dstring("signedbv");
 irep_idt typet::t_unsignedbv = dstring("unsignedbv");
 irep_idt typet::t_rational = dstring("rational");

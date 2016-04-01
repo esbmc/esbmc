@@ -117,8 +117,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
 
     exprt new_expr("constant", expr.type());
 
-    if(op_type_id=="integer" ||
-       op_type_id=="natural" ||
+    if(op_type_id=="natural" ||
        op_type_id=="c_enum" ||
        op_type_id=="incomplete_c_enum")
     {
@@ -134,13 +133,6 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
       if(expr_type_id=="unsignedbv" || expr_type_id=="signedbv")
       {
         new_expr.value(integer2binary(int_value, expr_width));
-        expr.swap(new_expr);
-        return false;
-      }
-
-      if(expr_type_id=="integer")
-      {
-        new_expr.value(value);
         expr.swap(new_expr);
         return false;
       }
@@ -163,7 +155,6 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
     {
       if(expr_type_id=="unsignedbv" ||
          expr_type_id=="signedbv" ||
-         expr_type_id=="integer" ||
          expr_type_id=="natural")
       {
         if(operand.is_true())
@@ -187,13 +178,6 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
       if(expr_type_id=="bool")
       {
         new_expr.make_bool(int_value!=0);
-        expr.swap(new_expr);
-        return false;
-      }
-
-      if(expr_type_id=="integer")
-      {
-        new_expr=from_integer(int_value, expr.type());
         expr.swap(new_expr);
         return false;
       }
@@ -703,8 +687,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
 
   if(expr.type().is_signedbv() ||
      expr.type().is_unsignedbv() ||
-     expr.type().id()=="natural" ||
-     expr.type().id()=="integer")
+     expr.type().id()=="natural")
   {
     mp_integer int_value0, int_value1;
     bool ok0, ok1;
@@ -808,8 +791,7 @@ bool simplify_exprt::simplify_modulo(exprt &expr)
 
   if(expr.type().is_signedbv() ||
      expr.type().is_unsignedbv() ||
-     expr.type().id()=="natural" ||
-     expr.type().id()=="integer")
+     expr.type().id()=="natural")
   {
     if(expr.type()==expr.op0().type() &&
        expr.type()==expr.op1().type())
@@ -1233,8 +1215,7 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
       }
     }
   }
-  else if(expr.op0().type().id()=="integer" ||
-	  expr.op0().type().id()=="natural")
+  else if(expr.op0().type().id()=="natural")
   {
     if(expr.id()=="lshr")
     {
@@ -1302,7 +1283,7 @@ bool simplify_exprt::simplify_if_implies(
 	cond.op1().type() == expr.op1().type())
     {
       const irep_idt &type_id = cond.op1().type().id();
-      if(type_id=="integer" || type_id=="natural")
+      if(type_id=="natural")
       {
 	if(string2integer(cond.op1().value().as_string()) >=
 	  string2integer(expr.op1().value().as_string()))
@@ -1338,7 +1319,7 @@ bool simplify_exprt::simplify_if_implies(
 	cond.op0().type() == expr.op0().type())
     {
       const irep_idt &type_id = cond.op1().type().id();
-      if(type_id=="integer" || type_id=="natural")
+      if(type_id=="natural")
       {
 	if(string2integer(cond.op1().value().as_string()) <=
 	  string2integer(expr.op1().value().as_string()))
@@ -3081,7 +3062,6 @@ struct saj_tablet
   const char *type_id;
 } const saj_table[]=
 {
-  { "+",      "integer"    },
   { "+",      "natural"    },
   { "+",      "real"       },
   { "+",      "complex"    },
@@ -3090,7 +3070,6 @@ struct saj_tablet
   { "+",      "signedbv"   },
   { "+",      "floatbv"    },
   { "+",      "pointer"    },
-  { "*",      "integer"    },
   { "*",      "natural"    },
   { "*",      "real"       },
   { "*",      "complex"    },

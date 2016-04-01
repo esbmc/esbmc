@@ -16,7 +16,6 @@ std::string format_constantt::operator()(const exprt &expr)
   if(expr.is_constant())
   {
     if(expr.type().id()=="natural" ||
-       expr.type().id()=="integer" ||
        expr.type().id()=="unsignedbv" ||
        expr.type().id()=="signedbv")
     {

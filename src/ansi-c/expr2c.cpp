@@ -154,8 +154,7 @@ std::string expr2ct::convert_rec(
   {
     return q+"_Bool";
   }
-  else if(src.id()=="integer" ||
-          src.id()=="rational")
+  else if(src.id()=="rational")
   {
     return q+src.id_string();
   }
@@ -1388,7 +1387,7 @@ std::string expr2ct::convert_constant(
     MetaString(dest, value);
     dest+='"';
   }
-  else if(type.id()=="integer" || type.id()=="natural")
+  else if(type.id()=="natural")
     dest=value;
   else if(type.id()=="c_enum" ||
           type.id()=="incomplete_c_enum")

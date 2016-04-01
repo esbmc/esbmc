@@ -27,7 +27,6 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
 
   if(type_id=="rational" ||
      type_id=="real" ||
-     type_id=="integer" ||
      type_id=="natural" ||
      type_id=="complex")
   {
@@ -101,7 +100,6 @@ exprt gen_one(const typet &type)
   if(type_id=="bool" ||
      type_id=="rational" ||
      type_id=="real" ||
-     type_id=="integer" ||
      type_id=="natural" ||
      type_id=="complex")
   {

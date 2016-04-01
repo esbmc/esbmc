@@ -160,24 +160,6 @@ void exprt::negate()
 
   if(type_id=="bool")
     make_not();
-  else if(type_id=="integer")
-  {
-    if(is_constant())
-      set(a_value, integer2string(-string2integer(get_string(a_value))));
-    else if(id()=="unary-")
-    {
-      exprt tmp;
-      assert(operands().size()==1);
-      tmp.swap(op0());
-      swap(tmp);
-    }
-    else
-    {
-      exprt tmp("unary-", type());
-      tmp.move_to_operands(*this);
-      swap(tmp);
-    }
-  }
   else
     make_nil();
 }
@@ -194,7 +176,7 @@ bool exprt::is_zero() const
     const std::string &value=get_string(a_value);
     const irep_idt &type_id=type().id_string();
 
-    if(type_id=="integer" || type_id=="natural")
+    if(type_id=="natural")
     {
       mp_integer int_value=string2integer(value);
       if(int_value==0) return true;
@@ -228,7 +210,7 @@ bool exprt::is_one() const
     const std::string &value=get_string(a_value);
     const irep_idt &type_id=type().id_string();
 
-    if(type_id=="integer" || type_id=="natural")
+    if(type_id=="natural")
     {
       mp_integer int_value=string2integer(value);
       if(int_value==1) return true;
@@ -258,7 +240,7 @@ bool exprt::sum(const exprt &expr)
 
   const irep_idt &type_id=type().id();
 
-  if(type_id=="integer" || type_id=="natural")
+  if(type_id=="natural")
   {
     set(a_value, integer2string(
       string2integer(get_string(a_value))+
@@ -298,7 +280,7 @@ bool exprt::mul(const exprt &expr)
 
   const irep_idt &type_id=type().id();
 
-  if(type_id=="integer" || type_id=="natural")
+  if(type_id=="natural")
   {
     set(a_value, integer2string(
       string2integer(get_string(a_value))*
@@ -339,7 +321,7 @@ bool exprt::subtract(const exprt &expr)
 
   const irep_idt &type_id=type().id();
 
-  if(type_id=="integer" || type_id=="natural")
+  if(type_id=="natural")
   {
     set(a_value, integer2string(
       string2integer(get_string(a_value))-

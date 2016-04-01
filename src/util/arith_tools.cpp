@@ -26,8 +26,7 @@ bool to_integer(const exprt &expr, mp_integer &int_value)
       return false;
     }
   }
-  else if(type_id=="integer" ||
-          type_id=="natural" ||
+  else if(type_id=="natural" ||
           type_id=="c_enum"  ||
           type_id=="symbol")
   {
@@ -60,12 +59,7 @@ exprt from_integer(
 
   const irep_idt &type_id=type.id();
 
-  if(type_id=="integer")
-  {
-    expr.value(integer2string(int_value));
-    return expr;
-  }
-  else if(type_id=="natural")
+  if(type_id=="natural")
   {
     if(int_value<0) { expr.make_nil(); return expr; }
     expr.value(integer2string(int_value));

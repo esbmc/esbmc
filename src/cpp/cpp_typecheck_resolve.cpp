@@ -1050,16 +1050,6 @@ exprt cpp_typecheck_resolvet::do_builtin(
     dest.type().width(integer2string(width));
     dest.type().set("integer_bits", integer2string(integer_bits));
   }
-  else if(base_name=="integer")
-  {
-    if(arguments.size()!=0)
-    {
-      cpp_typecheck.err_location(location);
-      throw id2string(base_name)+" expects no template arguments";
-    }
-
-    dest=type_exprt(typet(base_name));
-  }
   else if(has_prefix(id2string(base_name), "constant_infinity"))
   {
     // ok, but type missing

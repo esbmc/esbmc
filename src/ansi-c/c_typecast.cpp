@@ -117,23 +117,11 @@ bool check_c_implicit_typecast(
   if(src_type_id=="natural")
   {
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="complex") return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="floatbv") return false;
-  }
-  else if(src_type_id=="integer")
-  {
-    if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="real") return false;
-    if(dest_type.id()=="complex") return false;
-    if(dest_type.id()=="unsignedbv") return false;
-    if(dest_type.id()=="signedbv") return false;
-    if(dest_type.id()=="floatbv") return false;
-    if(dest_type.id()=="fixedbv") return false;
-    if(dest_type.id()=="pointer") return false;
   }
   else if(src_type_id=="real")
   {
@@ -151,7 +139,6 @@ bool check_c_implicit_typecast(
   }
   else if(src_type_id=="bool")
   {
-    if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="signedbv") return false;
@@ -167,7 +154,6 @@ bool check_c_implicit_typecast(
   {
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="floatbv") return false;
@@ -180,7 +166,6 @@ bool check_c_implicit_typecast(
           src_type_id=="fixedbv")
   {
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="integer") return false;
     if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="unsignedbv") return false;
@@ -428,8 +413,7 @@ void c_typecastt::implicit_typecast_followed(
     if(expr.is_zero() && (
        src_type.id()=="unsignedbv" ||
        src_type.id()=="signedbv" ||
-       src_type.id()=="natural" ||
-       src_type.id()=="integer"))
+       src_type.id()=="natural"))
     {
       expr=exprt("constant", dest_type);
       expr.value("NULL");
