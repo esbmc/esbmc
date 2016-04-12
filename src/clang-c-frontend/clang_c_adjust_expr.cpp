@@ -1,11 +1,9 @@
 /*
- * llvmadjust.cpp
+ * clang_c_adjust.cpp
  *
  *  Created on: Aug 30, 2015
  *      Author: mramalho
  */
-
-#include "llvm_adjust.h"
 
 #include <arith_tools.h>
 #include <std_code.h>
@@ -16,10 +14,11 @@
 #include <c_types.h>
 
 #include <ansi-c/c_sizeof.h>
+#include "clang_c_adjust.h"
 
 #include "typecast.h"
 
-bool llvm_adjust::adjust()
+bool clang_c_adjust::adjust()
 {
   // warning! hash-table iterators are not stable
 
@@ -52,7 +51,7 @@ bool llvm_adjust::adjust()
 }
 
 
-void llvm_adjust::adjust_builtin(symbolt& symbol)
+void clang_c_adjust::adjust_builtin(symbolt& symbol)
 {
   const std::string &identifier = symbol.name.as_string();
 
@@ -72,7 +71,7 @@ void llvm_adjust::adjust_builtin(symbolt& symbol)
   }
 }
 
-void llvm_adjust::adjust_symbol(symbolt& symbol)
+void clang_c_adjust::adjust_symbol(symbolt& symbol)
 {
   adjust_expr(symbol.value);
 
@@ -80,7 +79,7 @@ void llvm_adjust::adjust_symbol(symbolt& symbol)
     adjust_argc_argv(symbol);
 }
 
-void llvm_adjust::adjust_expr(exprt& expr)
+void clang_c_adjust::adjust_expr(exprt& expr)
 {
   if(expr.id()=="sideeffect" &&
      expr.statement()=="function_call")
@@ -101,7 +100,7 @@ void llvm_adjust::adjust_expr(exprt& expr)
   adjust_expr_main(expr);
 }
 
-void llvm_adjust::adjust_expr_main(exprt& expr)
+void clang_c_adjust::adjust_expr_main(exprt& expr)
 {
   if(expr.id() == "sideeffect")
   {
@@ -216,7 +215,7 @@ void llvm_adjust::adjust_expr_main(exprt& expr)
   }
 }
 
-void llvm_adjust::adjust_symbol(exprt& expr)
+void clang_c_adjust::adjust_symbol(exprt& expr)
 {
   const irep_idt &identifier=expr.identifier();
 
@@ -263,7 +262,7 @@ void llvm_adjust::adjust_symbol(exprt& expr)
   }
 }
 
-void llvm_adjust::adjust_side_effect(side_effect_exprt& expr)
+void clang_c_adjust::adjust_side_effect(side_effect_exprt& expr)
 {
   const irep_idt &statement=expr.get_statement();
 
@@ -290,7 +289,7 @@ void llvm_adjust::adjust_side_effect(side_effect_exprt& expr)
   }
 }
 
-void llvm_adjust::adjust_member(member_exprt& expr)
+void clang_c_adjust::adjust_member(member_exprt& expr)
 {
   exprt& base = expr.struct_op();
   if(base.type().is_pointer())
@@ -302,7 +301,7 @@ void llvm_adjust::adjust_member(member_exprt& expr)
   }
 }
 
-void llvm_adjust::adjust_expr_binary_arithmetic(exprt& expr)
+void clang_c_adjust::adjust_expr_binary_arithmetic(exprt& expr)
 {
   exprt &op0=expr.op0();
   exprt &op1=expr.op1();
@@ -354,7 +353,7 @@ void llvm_adjust::adjust_expr_binary_arithmetic(exprt& expr)
   }
 }
 
-void llvm_adjust::adjust_index(index_exprt& index)
+void clang_c_adjust::adjust_index(index_exprt& index)
 {
   exprt &array_expr=index.op0();
   exprt &index_expr=index.op1();
@@ -395,7 +394,7 @@ void llvm_adjust::adjust_index(index_exprt& index)
   index.type()=final_array_type.subtype();
 }
 
-void llvm_adjust::adjust_expr_rel(exprt& expr)
+void clang_c_adjust::adjust_expr_rel(exprt& expr)
 {
   expr.type() = bool_type();
 
@@ -420,7 +419,7 @@ void llvm_adjust::adjust_expr_rel(exprt& expr)
   gen_typecast_arithmetic(ns, op0, op1);
 }
 
-void llvm_adjust::adjust_float_rel(exprt& expr)
+void clang_c_adjust::adjust_float_rel(exprt& expr)
 {
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
@@ -441,7 +440,7 @@ void llvm_adjust::adjust_float_rel(exprt& expr)
   }
 }
 
-void llvm_adjust::adjust_address_of(exprt &expr)
+void clang_c_adjust::adjust_address_of(exprt &expr)
 {
   exprt &op=expr.op0();
 
@@ -478,7 +477,7 @@ void llvm_adjust::adjust_address_of(exprt &expr)
   expr.type().subtype()=op.type();
 }
 
-void llvm_adjust::adjust_dereference(exprt& deref)
+void clang_c_adjust::adjust_dereference(exprt& deref)
 {
   exprt &op=deref.op0();
 
@@ -514,7 +513,7 @@ void llvm_adjust::adjust_dereference(exprt& deref)
   }
 }
 
-void llvm_adjust::adjust_sizeof(exprt& expr)
+void clang_c_adjust::adjust_sizeof(exprt& expr)
 {
   typet type;
 
@@ -546,7 +545,7 @@ void llvm_adjust::adjust_sizeof(exprt& expr)
   expr.cmt_c_sizeof_type(type);
 }
 
-void llvm_adjust::adjust_type(typet &type)
+void clang_c_adjust::adjust_type(typet &type)
 {
   if(type.id()=="symbol")
   {
@@ -575,7 +574,7 @@ void llvm_adjust::adjust_type(typet &type)
   }
 }
 
-void llvm_adjust::adjust_side_effect_assignment(exprt& expr)
+void clang_c_adjust::adjust_side_effect_assignment(exprt& expr)
 {
   const irep_idt &statement=expr.statement();
 
@@ -617,7 +616,7 @@ void llvm_adjust::adjust_side_effect_assignment(exprt& expr)
   }
 }
 
-void llvm_adjust::adjust_side_effect_function_call(
+void clang_c_adjust::adjust_side_effect_function_call(
   side_effect_expr_function_callt& expr)
 {
   exprt &f_op=expr.function();
@@ -644,7 +643,7 @@ void llvm_adjust::adjust_side_effect_function_call(
       assert(!res);
       (void)res; // ndebug
 
-      // LLVM will complain about this already, no need for us to do the same!
+      // clang will complain about this already, no need for us to do the same!
     }
   }
 
@@ -698,7 +697,7 @@ void llvm_adjust::adjust_side_effect_function_call(
   do_special_functions(expr);
 }
 
-void llvm_adjust::do_special_functions(side_effect_expr_function_callt& expr)
+void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 {
   const exprt &f_op = expr.function();
 
@@ -871,7 +870,7 @@ void llvm_adjust::do_special_functions(side_effect_expr_function_callt& expr)
   }
 }
 
-void llvm_adjust::adjust_side_effect_statement_expression(
+void clang_c_adjust::adjust_side_effect_statement_expression(
   side_effect_exprt& expr)
 {
   codet &code=to_code(expr.op0());
@@ -931,7 +930,7 @@ void llvm_adjust::adjust_side_effect_statement_expression(
     expr.type()=typet("empty");
 }
 
-void llvm_adjust::adjust_expr_unary_boolean(exprt& expr)
+void clang_c_adjust::adjust_expr_unary_boolean(exprt& expr)
 {
   expr.type() = bool_type();
 
@@ -939,7 +938,7 @@ void llvm_adjust::adjust_expr_unary_boolean(exprt& expr)
   gen_typecast_bool(ns, operand);
 }
 
-void llvm_adjust::adjust_expr_binary_boolean(exprt& expr)
+void clang_c_adjust::adjust_expr_binary_boolean(exprt& expr)
 {
   expr.type() = bool_type();
 
@@ -947,7 +946,7 @@ void llvm_adjust::adjust_expr_binary_boolean(exprt& expr)
   gen_typecast_bool(ns, expr.op1());
 }
 
-void llvm_adjust::adjust_argc_argv(const symbolt& main_symbol)
+void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
 {
   const code_typet::argumentst &arguments =
     to_code_type(main_symbol.type).arguments();
@@ -1018,7 +1017,7 @@ void llvm_adjust::adjust_argc_argv(const symbolt& main_symbol)
   }
 }
 
-void llvm_adjust::make_index_type(exprt& expr)
+void clang_c_adjust::make_index_type(exprt& expr)
 {
   const typet &full_type = ns.follow(expr.type());
 

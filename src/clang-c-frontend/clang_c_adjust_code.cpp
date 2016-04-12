@@ -1,11 +1,9 @@
 /*
- * llvmadjust.cpp
+ * clang_c_adjust.cpp
  *
  *  Created on: Aug 30, 2015
  *      Author: mramalho
  */
-
-#include "llvm_adjust.h"
 
 #include <std_code.h>
 #include <expr_util.h>
@@ -15,15 +13,18 @@
 #include <c_types.h>
 
 #include <ansi-c/c_sizeof.h>
+#include "clang_c_adjust.h"
 
 #include "typecast.h"
 
-void llvm_adjust::adjust_code(codet& code)
+void clang_c_adjust::adjust_code(codet& code)
 {
   const irep_idt &statement=code.statement();
 
   if(statement=="expression")
+  {
     adjust_expression(code);
+  }
   else if(statement=="label")
   {
   }
@@ -32,16 +33,26 @@ void llvm_adjust::adjust_code(codet& code)
   {
   }
   else if(statement=="ifthenelse")
+  {
     adjust_ifthenelse(code);
+  }
   else if(statement=="while" ||
           statement=="dowhile")
+  {
     adjust_while(code);
+  }
   else if(statement=="for")
+  {
     adjust_for(code);
+  }
   else if(statement=="switch")
+  {
     adjust_switch(code);
+  }
   else if(statement=="assign")
+  {
     adjust_assign(code);
+  }
   else if(statement=="return")
   {
   }
@@ -56,6 +67,7 @@ void llvm_adjust::adjust_code(codet& code)
   }
   else if(statement=="decl")
   {
+    adjust_decl(code);
   }
   else if(statement=="skip")
   {
@@ -74,7 +86,7 @@ void llvm_adjust::adjust_code(codet& code)
   }
 }
 
-void llvm_adjust::adjust_expression(codet& code)
+void clang_c_adjust::adjust_expression(codet& code)
 {
   exprt &op=code.op0();
 
@@ -119,31 +131,40 @@ void llvm_adjust::adjust_expression(codet& code)
   }
 }
 
-void llvm_adjust::adjust_ifthenelse(codet& code)
+void clang_c_adjust::adjust_decl(codet& code)
+{
+  if(code.operands().size() != 2)
+    return;
+
+  // Create typecast on assingments, if needed
+  gen_typecast(ns, code.op1(), code.op0().type());
+}
+
+void clang_c_adjust::adjust_ifthenelse(codet& code)
 {
   // If the condition is not of boolean type, it must be casted
   gen_typecast_bool(ns, code.op0());
 }
 
-void llvm_adjust::adjust_while(codet& code)
+void clang_c_adjust::adjust_while(codet& code)
 {
   // If the condition is not of boolean type, it must be casted
   gen_typecast_bool(ns, code.op0());
 }
 
-void llvm_adjust::adjust_for(codet& code)
+void clang_c_adjust::adjust_for(codet& code)
 {
   // If the condition is not of boolean type, it must be casted
   gen_typecast_bool(ns, code.op1());
 }
 
-void llvm_adjust::adjust_switch(codet& code)
+void clang_c_adjust::adjust_switch(codet& code)
 {
-  // If the condition is not of boolean type, it must be casted
+  // If the condition is not of int type, it must be casted
   gen_typecast(ns, code.op0(), int_type());
 }
 
-void llvm_adjust::adjust_assign(codet& code)
+void clang_c_adjust::adjust_assign(codet& code)
 {
   // Create typecast on assingments, if needed
   gen_typecast(ns, code.op1(), code.op0().type());

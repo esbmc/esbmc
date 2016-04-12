@@ -336,7 +336,7 @@ void goto_convertt::convert_block(
 
     if(code_it.get_statement()=="decl")
     {
-      // TODO: This should be removed when the LLVM code
+      // TODO: This should be removed when the clang frontend
       // is enable by default, as all the decl are wrapped
       // inside a decl-block
       const exprt &op0=code_it.op0();
