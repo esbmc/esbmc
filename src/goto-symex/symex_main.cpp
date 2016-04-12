@@ -302,7 +302,9 @@ void goto_symext::symex_assert(void)
   if (cur_state->guard.is_false())
     return;
 
-  if(inductive_step && loop_numbers.size())
+  if(cur_state->source.pc->location.user_provided()
+     && loop_numbers.size()
+     && inductive_step)
   {
     statet::framet &frame = cur_state->top();
     unsigned unwind = frame.loop_iterations[loop_numbers.top()];
