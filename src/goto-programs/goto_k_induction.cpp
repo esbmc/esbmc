@@ -86,7 +86,7 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   while((++loop_head)->inductive_step_instruction);
 
   // Assume the loop termination condition after the copy's exit
-  assume_neg_loop_cond_after_loop(loop_exit, loop_cond);
+//  assume_neg_loop_cond_after_loop(loop_exit, loop_cond);
 
   // Check if the loop exit needs to be updated
   // We must point to the assume that was inserted in the previous
