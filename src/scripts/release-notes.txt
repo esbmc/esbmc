@@ -1,5 +1,11 @@
 Release Notes of the ESBMC model checker
 
+*** Version 3.0.0
++ Several bugfixes
++ New clang frontend!
++ Update Z3 to v4.4.2 (commit 0870b4a5)
++ Update Boolector to v2.1.1
+
 *** Version 2.1.0
 + Several bugfixes
 + New option to fully inline a program
