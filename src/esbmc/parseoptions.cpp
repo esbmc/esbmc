@@ -1805,7 +1805,7 @@ void cbmc_parseoptionst::help()
     " --witnesspath filename       output counterexample in graphML format\n"
     " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
     "                              program for graphML generation\n"
-    " --clang-frontend              parse source files using clang (alpha)\n\n"
+    " --clang-frontend             parse source files using clang (beta)\n\n"
     "BMC options\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"
