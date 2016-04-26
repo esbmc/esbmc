@@ -12,8 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cprover_prefix.h>
 #include <expr_util.h>
 #include <std_expr.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "goto_symex.h"
 #include "dynamic_allocation.h"
@@ -21,9 +20,11 @@ Author: Daniel Kroening, kroening@kroening.com
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
 
-  Forall_operands2(it, idx, expr)
-    if (!is_nil_expr(*it))
-      default_replace_dynamic_allocation(*it);
+  expr.get()->Foreach_operand([this] (expr2tc &e) {
+    if (!is_nil_expr(e))
+      default_replace_dynamic_allocation(e);
+     }
+   );
 
   if (is_valid_object2t(expr))
   {

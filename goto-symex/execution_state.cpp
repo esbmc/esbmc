@@ -21,18 +21,20 @@
 #include <string2array.h>
 #include <std_expr.h>
 #include <expr_util.h>
-#include "../ansi-c/c_types.h"
+#include <c_types.h>
 #include <simplify_expr.h>
 #include "config.h"
 
 unsigned int execution_statet::node_count = 0;
+std::map<expr2tc, std::list<unsigned int>> vars_map;
+std::map<expr2tc, bool> is_global;
 
 execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    const namespacet &ns,
                                    reachability_treet *art,
-                                   symex_targett *_target,
+                                   std::shared_ptr<symex_targett> _target,
                                    contextt &context,
-                                   ex_state_level2t *l2init,
+                                   std::shared_ptr<ex_state_level2t> l2init,
                                    optionst &options,
                                    message_handlert &_message_handler) :
   goto_symext(ns, context, goto_functions, _target, options),
@@ -112,7 +114,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(ex.state_level2->clone()),
+  state_level2(std::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
   global_value_set(ex.global_value_set),
   message_handler(ex.message_handler)
 {
@@ -198,7 +200,6 @@ execution_statet::operator=(const execution_statet &ex)
 
 execution_statet::~execution_statet()
 {
-  delete state_level2;
 };
 
 void
@@ -469,7 +470,7 @@ execution_statet::is_cur_state_guard_false(void)
     expr2tc parent_guard = threads_state[active_thread].guard.as_expr();
 
     runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
-                                                 (target);
+                                                 (target.get());
 
     equality2tc the_question(true_expr, parent_guard);
 
@@ -630,8 +631,7 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
 
   if (is_address_of2t(expr) || is_pointer_type(expr) ||
       is_valid_object2t(expr) || is_dynamic_size2t(expr) ||
-      is_dynamic_size2t(expr) || is_zero_string2t(expr) ||
-      is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
+      is_dynamic_size2t(expr)) {
     return;
   } else if (is_symbol2t(expr)) {
     expr2tc newexpr = expr;
@@ -649,16 +649,72 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
     if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size" ||
         name == "c::__ESBMC_is_dynamic") {
       return;
-    } else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
-      globals_list.insert(expr);
+    }
+    else if ((symbol->static_lifetime || symbol->type.is_dynamic_set()))
+    {
+      std::list<unsigned int> threadId_list;
+      std::map<expr2tc, std::list<unsigned int>>::iterator it_find;
+      it_find = vars_map.find(expr);
+
+      //the expression was accessed in another interleaving
+      if (it_find != vars_map.end())
+      {
+        threadId_list = it_find->second;
+        threadId_list.push_back(get_active_state().top().level1.thread_id);
+
+        vars_map.insert(
+          std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
+
+        std::list<unsigned int>::iterator it_list;
+        for (it_list = threadId_list.begin(); it_list != threadId_list.end();
+            ++it_list)
+        {
+
+          //find if some thread access the same expression
+          if (*it_list != get_active_state().top().level1.thread_id)
+          {
+            globals_list.insert(expr);
+            is_global.insert(std::pair<expr2tc, bool>(expr, true));
+          }
+          //expression was not accessed by other thread
+          else
+          {
+            std::map<expr2tc, bool>::iterator its_global;
+            its_global = is_global.find(expr);
+            //expression was defined as global in another interleaving
+            if (its_global != is_global.end())
+            {
+              globals_list.insert(expr);
+            }
+          }
+        }
+        //first access of expression
+      }
+      else
+      {
+        std::map<expr2tc, bool>::iterator its_global;
+        its_global = is_global.find(expr);
+        if (its_global != is_global.end())
+        {
+          globals_list.insert(expr);
+        }
+        else
+        {
+          threadId_list.push_back(get_active_state().top().level1.thread_id);
+          vars_map.insert(
+            std::pair<expr2tc, std::list<unsigned int>>(expr, threadId_list));
+          globals_list.insert(expr);
+        }
+      }
     } else {
       return;
     }
   }
 
-  forall_operands2(it, op_list, expr) {
-    get_expr_globals(ns, *it, globals_list);
-  }
+  expr->foreach_operand([this, &globals_list, &ns] (const expr2tc &e) {
+    get_expr_globals(ns, e, globals_list);
+    }
+  );
 }
 
 bool
@@ -826,8 +882,10 @@ crypto_hash
 execution_statet::generate_hash(void) const
 {
 
-  state_hashing_level2t *l2 =dynamic_cast<state_hashing_level2t*>(state_level2);
-  assert(l2 != NULL);
+  auto l2 =
+    std::dynamic_pointer_cast<state_hashing_level2t>(state_level2);
+  assert(l2 != nullptr);
+
   crypto_hash state = l2->generate_l2_state_hash();
   std::string str = state.to_string();
 
@@ -963,22 +1021,24 @@ execution_statet::init_property_monitors(void)
 {
   std::map<std::string, std::string> strings;
 
-  symbolst::const_iterator it;
-  for (it = new_context.symbols.begin(); it != new_context.symbols.end(); it++){
-    if (it->first.as_string().find("__ESBMC_property_") != std::string::npos) {
-      // Munge back into the shape of an actual string
-      std::string str = "";
-      forall_operands(iter2, it->second.value) {
-        char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
-        if (c != 0)
-          str += c;
-        else
-          break;
-      }
+  new_context.foreach_operand(
+    [&strings] (const symbolt& s)
+    {
+      if (s.name.as_string().find("__ESBMC_property_") != std::string::npos) {
+        // Munge back into the shape of an actual string
+        std::string str = "";
+        forall_operands(iter2, s.value) {
+          char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
+          if (c != 0)
+            str += c;
+          else
+            break;
+        }
 
-      strings[it->first.as_string()] = str;
+        strings[s.name.as_string()] = str;
+      }
     }
-  }
+  );
 
   std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
   std::map<std::string, std::string>::const_iterator str_it;
@@ -1015,11 +1075,11 @@ execution_statet::ex_state_level2t::~ex_state_level2t(void)
 {
 }
 
-execution_statet::ex_state_level2t *
+std::shared_ptr<renaming::level2t>
 execution_statet::ex_state_level2t::clone(void) const
 {
 
-  return new ex_state_level2t(*this);
+  return std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this));
 }
 
 void
@@ -1040,22 +1100,19 @@ dfs_execution_statet::~dfs_execution_statet(void)
   // Delete target; or if we're encoding at runtime, pop a context.
   if (smt_during_symex)
     target->pop_ctx();
-  else if (target != NULL)
-    delete target;
 }
 
-dfs_execution_statet* dfs_execution_statet::clone(void) const
+std::shared_ptr<execution_statet> dfs_execution_statet::clone(void) const
 {
-  dfs_execution_statet *d;
-
-  d = new dfs_execution_statet(*this);
+  std::shared_ptr<dfs_execution_statet> d =
+    std::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
 
   // Duplicate target equation; or if we're encoding at runtime, push a context.
   if (smt_during_symex) {
-    d->target = target;
-    d->target->push_ctx();
+    d.get()->target = target;
+    d.get()->target->push_ctx();
   } else {
-    d->target = target->clone();
+    d.get()->target = target.get()->clone();
   }
 
   return d;
@@ -1071,14 +1128,13 @@ schedule_execution_statet::~schedule_execution_statet(void)
   // Don't delete equation. Schedule requires all this data.
 }
 
-schedule_execution_statet* schedule_execution_statet::clone(void) const
+std::shared_ptr<execution_statet> schedule_execution_statet::clone(void) const
 {
-  schedule_execution_statet *s;
-
-  s = new schedule_execution_statet(*this);
+  std::shared_ptr<schedule_execution_statet> s =
+    std::shared_ptr<schedule_execution_statet>(new schedule_execution_statet(*this));
 
   // Don't duplicate target equation.
-  s->target = target;
+  s.get()->target = target;
   return s;
 }
 
@@ -1117,11 +1173,11 @@ execution_statet::state_hashing_level2t::~state_hashing_level2t(void)
 {
 }
 
-execution_statet::state_hashing_level2t *
+std::shared_ptr<renaming::level2t>
 execution_statet::state_hashing_level2t::clone(void) const
 {
 
-  return new state_hashing_level2t(*this);
+  return std::shared_ptr<state_hashing_level2t>(new state_hashing_level2t(*this));
 }
 
 void

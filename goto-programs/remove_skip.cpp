@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "remove_skip.h"
 
-/*******************************************************************\
-
-Function: is_skip
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static bool is_skip(goto_programt::instructionst::iterator it)
 {
   if (it->is_skip())
@@ -47,18 +35,6 @@ static bool is_skip(goto_programt::instructionst::iterator it)
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: remove_skip
-
-  Inputs:
-
- Outputs:
-
- Purpose: remove unnecessary skip statements
-
-\*******************************************************************/
 
 void remove_skip(goto_programt &goto_program)
 {
@@ -132,18 +108,6 @@ void remove_skip(goto_programt &goto_program)
      !goto_program.instructions.back().is_target())
     goto_program.instructions.pop_back();
 }
-
-/*******************************************************************\
-
-Function: remove_skip
-
-  Inputs:
-
- Outputs:
-
- Purpose: remove unnecessary skip statements
-
-\*******************************************************************/
 
 void remove_skip(goto_functionst &goto_functions)
 {

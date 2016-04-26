@@ -1,8 +1,8 @@
 #!/bin/sh
 
-if test ! -e .git; then
-  echo "Please run from ESBMC root dir";
-    exit 1
+if test ! -e ../.git; then
+  echo "Please run from src/ dir";
+  exit 1
 fi
 
 # Remove everything installed by automake / libtool etc -- they're all symlinks

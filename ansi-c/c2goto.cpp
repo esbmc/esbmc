@@ -21,7 +21,6 @@ const struct opt_templ c2goto_options[] = {
 { 0,	"32",		switc,		"" },
 { 0,	"64",		switc,		"" },
 { 0,	"output",	string,		"" },
-{ 0,	"no-lock-check",switc,		"" },
 { 'I',	"",		string,		"" },
 { 'D',	"",		string,		"" },
 { 0,	"",		switc,		"" }
@@ -40,6 +39,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
     goto_functionst goto_functions;
 
     config.set(cmdline);
+    config.options.set_option("keep-unused", true);
 
     // Depends on command line options and config
     init_expr_constants();
@@ -75,6 +75,8 @@ int main(int argc, const char **argv)
 
 const mode_table_et mode_table[] =
 {
+  LANGAPI_HAVE_MODE_CLANG_C,
   LANGAPI_HAVE_MODE_C,
+  LANGAPI_HAVE_MODE_CLANG_CPP,
   LANGAPI_HAVE_MODE_END
 };

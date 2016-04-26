@@ -1,8 +1,7 @@
 #!/bin/sh
 
-stat .git > /dev/null 2>/dev/null
-if test $? != 0; then
-  echo "Please run gensignatures.sh in the root dir of ESBMC"
+if test ! -e ../.git; then
+  echo "Please run from src/ dir";
   exit 1
 fi
 

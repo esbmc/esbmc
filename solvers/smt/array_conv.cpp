@@ -2,8 +2,8 @@
 #include <set>
 #include <utility>
 
+#include <c_types.h>
 #include "array_conv.h"
-#include <ansi-c/c_types.h>
 
 static inline bool
 array_indexes_are_same(
@@ -136,7 +136,7 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
   return mast;
 }
 
-smt_astt 
+smt_astt
 array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
                          smt_sortt ressort)
 {
@@ -178,7 +178,7 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
   return fresh;
 }
 
-smt_astt 
+smt_astt
 array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
                                 smt_astt value, smt_sortt ressort)
 {
@@ -221,7 +221,7 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
   return mast;
 }
 
-smt_astt 
+smt_astt
 array_convt::mk_unbounded_select(const array_ast *ma,
                                    const expr2tc &real_idx,
                                    smt_sortt ressort)
@@ -276,7 +276,7 @@ array_convt::mk_unbounded_select(const array_ast *ma,
   return a;
 }
 
-smt_astt 
+smt_astt
 array_convt::mk_unbounded_store(const array_ast *ma,
                                   const expr2tc &idx, smt_astt value,
                                   smt_sortt ressort)
@@ -373,7 +373,7 @@ array_convt::unbounded_array_ite(smt_astt cond,
   return newarr;
 }
 
-smt_astt 
+smt_astt
 array_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   // Create a new array, initialized with init_val

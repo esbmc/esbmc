@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <location.h>
 #include <std_types.h>
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "cpp_type2name.h"
 #include "cpp_declarator_converter.h"
@@ -116,10 +116,9 @@ symbolt &cpp_declarator_convertert::convert(
     }
 
     // try static first
-    contextt::symbolst::iterator c_it=
-      cpp_typecheck.context.symbols.find(final_identifier);
+    symbolt* s = cpp_typecheck.context.find_symbol(final_identifier);
 
-    if(c_it==cpp_typecheck.context.symbols.end())
+    if(s == nullptr)
     {
       // adjust type if it's a non-static member function
       if(final_type.id()=="code")
@@ -129,9 +128,9 @@ symbolt &cpp_declarator_convertert::convert(
       get_final_identifier();
 
       // try again
-      c_it=cpp_typecheck.context.symbols.find(final_identifier);
+      s = cpp_typecheck.context.find_symbol(final_identifier);
 
-      if(c_it==cpp_typecheck.context.symbols.end())
+      if(s == nullptr)
       {
         cpp_typecheck.err_location(declarator.name());
         cpp_typecheck.str << "member `" << base_name
@@ -141,9 +140,9 @@ symbolt &cpp_declarator_convertert::convert(
       }
     }
 
-    assert(c_it!=cpp_typecheck.context.symbols.end());
+    assert(s != nullptr);
 
-    symbolt &symbol=c_it->second;
+    symbolt &symbol = *s;
 
     combine_types(declarator.name().location(), final_type, symbol);
     enforce_rules(symbol);
@@ -208,13 +207,12 @@ symbolt &cpp_declarator_convertert::convert(
     }
 
     // already there?
-    contextt::symbolst::iterator c_it=
-      cpp_typecheck.context.symbols.find(final_identifier);
+    symbolt* s = cpp_typecheck.context.find_symbol(final_identifier);
 
-    if(c_it==cpp_typecheck.context.symbols.end())
+    if(s == nullptr)
       return convert_new_symbol(storage_spec, member_spec, declarator);
 
-    symbolt &symbol=c_it->second;
+    symbolt &symbol = *s;
 
     if(!storage_spec.is_extern())
       symbol.is_extern = false;
@@ -511,7 +509,6 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
     if(!is_code)
     {
       // it is a variable
-      symbol.is_statevar=true;
       symbol.lvalue = !is_reference(symbol.type) &&
                       !(symbol.type.cmt_constant() &&
                       is_number(symbol.type) &&

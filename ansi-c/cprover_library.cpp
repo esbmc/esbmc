@@ -133,6 +133,9 @@ void add_cprover_library(
   contextt &context,
   message_handlert &message_handler)
 {
+  if(config.ansi_c.lib==configt::ansi_ct::libt::LIB_NONE)
+    return;
+
   contextt new_ctx, store_ctx;
   goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;
@@ -193,10 +196,13 @@ void add_cprover_library(
   DeleteFile(symname_buffer);
 #endif
 
-  forall_symbols(it, new_ctx.symbols) {
-    generate_symbol_deps(it->first, it->second.value, symbol_deps);
-    generate_symbol_deps(it->first, it->second.type, symbol_deps);
-  }
+  new_ctx.foreach_operand(
+    [&symbol_deps] (const symbolt& s)
+    {
+      generate_symbol_deps(s.name, s.value, symbol_deps);
+      generate_symbol_deps(s.name, s.type, symbol_deps);
+    }
+  );
 
   // Add two hacks; we migth use either pthread_mutex_lock or the checked
   // variety; so if one version is used, pull in the other too.
@@ -220,21 +226,27 @@ void add_cprover_library(
    * haven't pulled in, then pull them in. We finish when we've made a pass
    * that adds no new symbols. */
 
-  forall_symbols(it, new_ctx.symbols) {
-    symbolst::const_iterator used_sym = context.symbols.find(it->second.name);
-    if (used_sym != context.symbols.end() && used_sym->second.value.is_nil()){
-      store_ctx.add(it->second);
-      ingest_symbol(it->first, symbol_deps, to_include);
+  new_ctx.foreach_operand(
+    [&context, &store_ctx, &symbol_deps, &to_include] (const symbolt& s)
+    {
+      const symbolt* symbol = context.find_symbol(s.name);
+      if (symbol != nullptr && symbol->value.is_nil())
+      {
+        store_ctx.add(s);
+        ingest_symbol(s.name, symbol_deps, to_include);
+      }
     }
-  }
+  );
 
   for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
-            nameit != to_include.end(); nameit++) {
-
-    symbolst::const_iterator used_sym = new_ctx.symbols.find(*nameit);
-    if (used_sym != new_ctx.symbols.end()) {
-      store_ctx.add(used_sym->second);
-      ingest_symbol(used_sym->first, symbol_deps, to_include);
+      nameit != to_include.end();
+      nameit++)
+  {
+    symbolt* s = new_ctx.find_symbol(*nameit);
+    if (s != nullptr)
+    {
+      store_ctx.add(*s);
+      ingest_symbol(*nameit, symbol_deps, to_include);
     }
   }
 

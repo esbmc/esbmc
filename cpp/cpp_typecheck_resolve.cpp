@@ -14,8 +14,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <i2string.h>
 #include <arith_tools.h>
 #include <prefix.h>
-
-#include <ansi-c/ansi_c_expr.h>
+#include <string_constant.h>
 
 #include "cpp_typecheck.h"
 #include "cpp_typecheck_resolve.h"
@@ -1084,7 +1083,7 @@ exprt cpp_typecheck_resolvet::do_builtin(
   else if(base_name=="context")
   {
     dest=exprt("constant", typet("empty"));
-    cpp_typecheck.context.show(cpp_typecheck.str);
+    cpp_typecheck.context.dump();
     cpp_typecheck.warning();
   }
   else
@@ -1747,8 +1746,7 @@ exprt cpp_typecheck_resolvet::resolve(
     {
       // __func__ is an ANSI-C standard compliant hack to get the function name
       // __FUNCTION__ and __PRETTY_FUNCTION__ are GCC-specific
-      string_constantt s;
-      s.set_value(location.get_function());
+      string_constantt s(location.get_function());
       s.location()=location;
       return s;
     }
@@ -1996,21 +1994,20 @@ exprt cpp_typecheck_resolvet::resolve(
   // we've resolved to, as in use. This means that any error in it will still
   // be reported.
   // XXX - this isn't going to work recursively.
-  if (want == VAR && result.id() == "symbol") {
-    symbolt &sym =
-      cpp_typecheck.context.symbols.find(result.identifier())->second;
-    if (sym.value.get("#speculative_template") == "1") {
+  if (want == VAR && result.id() == "symbol")
+  {
+    symbolt &sym = *cpp_typecheck.context.find_symbol(result.identifier());
+    if (sym.value.get("#speculative_template") == "1")
       sym.value.set("#template_in_use", "1");
-    }
-  } else if (want == VAR && result.id() == "member") {
+  }
+  else if (want == VAR && result.id() == "member")
+  {
     // Is this a fake-member, i.e. a member with component_name == symbol name?
-    if (cpp_typecheck.context.symbols.find(result.component_name()) !=
-        cpp_typecheck.context.symbols.end()) {
-      symbolt &sym =
-        cpp_typecheck.context.symbols.find(result.component_name())->second;
-      if (sym.value.get("#speculative_template") == "1") {
-        sym.value.set("#template_in_use", "1");
-      }
+    symbolt* s = cpp_typecheck.context.find_symbol(result.component_name());
+    if(s != nullptr)
+    {
+      if (s->value.get("#speculative_template") == "1")
+        s->value.set("#template_in_use", "1");
     }
   }
 
@@ -2031,33 +2028,28 @@ void cpp_typecheck_resolvet::check_incomplete_template_class(exprt result, wantt
   if (t.identifier() == irep_idt())
     return;
 
-  if (cpp_typecheck.context.symbols.find(t.identifier())
-    != cpp_typecheck.context.symbols.end())
+  symbolt* s = cpp_typecheck.context.find_symbol(t.identifier());
+  if(s != nullptr)
   {
-    symbolt &sym =
-      cpp_typecheck.context.symbols.find(t.identifier())->second;
-
     // It is a template and it wasn't instantiated?
-    if (sym.type.id() == "incomplete_struct"
-      && sym.type.find("#template").is_not_nil())
+    if (s->type.id() == "incomplete_struct"
+      && s->type.find("#template").is_not_nil())
     {
-      exprt template_expr = static_cast<const exprt&>(sym.type.find(
-        "#template"));
+      exprt template_expr =
+        static_cast<const exprt&>(s->type.find("#template"));
 
-      if (cpp_typecheck.context.symbols.find(template_expr.id())
-        != cpp_typecheck.context.symbols.end())
+      symbolt* template_symbol = cpp_typecheck.context.find_symbol(template_expr.id());
+      if(template_symbol != nullptr)
       {
-        symbolt &template_sym = cpp_typecheck.context.symbols.find(
-          template_expr.id())->second;
-
         // If it is nil, it was forward declared, when it got a body,
         // we'll instantiate it
-        if (template_sym.type.type().body().is_not_nil())
+        if (template_symbol->type.type().body().is_not_nil())
         {
-          cpp_template_args_tct instantiated_args = to_cpp_template_args_tc(
-            sym.type.find("#template_arguments"));
-          cpp_typecheck.instantiate_template(location, template_sym,
-            instantiated_args, instantiated_args);
+          cpp_template_args_tct instantiated_args =
+            to_cpp_template_args_tc(s->type.find("#template_arguments"));
+
+          cpp_typecheck.instantiate_template(
+            location, *template_symbol, instantiated_args, instantiated_args);
         }
       }
     }

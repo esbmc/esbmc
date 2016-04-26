@@ -16,6 +16,7 @@ configt config;
 
 void configt::ansi_ct::set_16()
 {
+  bool_width=1*8;
   int_width=2*8;
   long_int_width=4*8;
   char_width=1*8;
@@ -34,6 +35,7 @@ void configt::ansi_ct::set_16()
 
 void configt::ansi_ct::set_32()
 {
+  bool_width=1*8;
   int_width=4*8;
   long_int_width=4*8;
   char_width=1*8;
@@ -58,6 +60,7 @@ void configt::ansi_ct::set_32()
 
 void configt::ansi_ct::set_64()
 {
+  bool_width=1*8;
   int_width=4*8;
   long_int_width=8*8;
   char_width=1*8;
@@ -172,21 +175,6 @@ bool configt::set(const cmdlinet &cmdline)
     #endif
     #endif
   }
-
-  if(cmdline.isset("string-abstraction"))
-    ansi_c.string_abstraction=true;
-  else
-    ansi_c.string_abstraction=false;
-
-  if(cmdline.isset("no-lock-check"))
-    ansi_c.lock_check=false;
-  else
-	ansi_c.lock_check=true;
-
-  if(cmdline.isset("deadlock-check"))
-    ansi_c.deadlock_check=true;
-  else
-    ansi_c.deadlock_check=false;
 
   if(cmdline.isset("no-library"))
     ansi_c.lib=configt::ansi_ct::LIB_NONE;

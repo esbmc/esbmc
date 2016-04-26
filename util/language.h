@@ -35,26 +35,22 @@ public:
   { }
 
   // final adjustments, e.g., initialization and call to main()
-#if 1
   virtual bool final(
     contextt &context __attribute__((unused)),
     message_handlert &message_handler __attribute__((unused)))
   { return false; }
-#endif
-  // type check interfaces of currently parsed file
 
+  // type check interfaces of currently parsed file
   virtual bool interfaces()
   { return false; }
 
   // type check a module in the currently parsed file
-
   virtual bool typecheck(
     contextt &context,
     const std::string &module,
     message_handlert &message_handler)=0;
 
   // language id / description
-
   virtual std::string id() const { return ""; }
   virtual std::string description() const { return ""; }
 
@@ -63,7 +59,6 @@ public:
   virtual void show_parse(std::ostream &out)=0;
 
   // conversion of expressions
-
   virtual bool from_expr(
     const exprt &expr,
     std::string &code,

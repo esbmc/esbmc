@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_convert_class.h"
 
-/*******************************************************************\
-
-Function: goto_convertt::new_name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::new_name(symbolt &symbol)
 {
   // rename it
@@ -31,18 +19,6 @@ void goto_convertt::new_name(symbolt &symbol)
   context.add(symbol);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const symbolt &goto_convertt::lookup(const irep_idt &identifier) const
 {
   const symbolt *symbol;
@@ -50,18 +26,6 @@ const symbolt &goto_convertt::lookup(const irep_idt &identifier) const
     throw "failed to find symbol "+id2string(identifier);
   return *symbol;
 }
-
-/*******************************************************************\
-
-Function: goto_convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convert(
   const codet &code,
@@ -96,18 +60,6 @@ void goto_convert(
     throw 0;
 }
 
-/*******************************************************************\
-
-Function: goto_convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convert(
   contextt &context,
   optionst &options,
@@ -115,14 +67,10 @@ void goto_convert(
   message_handlert &message_handler)
 {
   // find main symbol
-  const symbolst::const_iterator s_it=
-    context.symbols.find("main");
-
-  if(s_it==context.symbols.end())
+  const symbolt* s = context.find_symbol("main");
+  if(s == nullptr)
     throw "failed to find main symbol";
 
-  const symbolt &symbol=s_it->second;
-
   std::cout << "goto_convert : start converting symbol table to goto functions " << std::endl;
-  ::goto_convert(to_code(symbol.value), context, options, dest, message_handler);
+  ::goto_convert(to_code(s->value), context, options, dest, message_handler);
 }

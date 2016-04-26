@@ -10,8 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <arith_tools.h>
 #include <simplify_expr_class.h>
 #include <simplify_expr.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "cpp_type2name.h"
 #include "cpp_typecheck.h"
@@ -163,12 +162,12 @@ void cpp_typecheckt::mark_template_instantiated(
     const irep_idt &template_pattern_name,
     const irep_idt &instantiated_symbol_name)
 {
-  assert(context.symbols.find(template_symbol_name) != context.symbols.end());
+  symbolt* s = context.find_symbol(template_symbol_name);
+  assert(s != nullptr);
 
   // Set a flag in the template's value indicating that this has been
   // instantiated, and what the instantiated things symbol is.
-  symbolt &s=context.symbols.find(template_symbol_name)->second;
-  irept &new_instances = s.value.add("template_instances");
+  irept &new_instances = s->value.add("template_instances");
   new_instances.set(template_pattern_name, instantiated_symbol_name);
   return;
 }
@@ -224,9 +223,9 @@ cpp_typecheckt::handle_recursive_template_instance(
       // (Unless it already exists).
 
       irep_idt link_symbol = instance + "$recurse";
-      symbolst::const_iterator it = context.symbols.find(link_symbol);
-      if (it != context.symbols.end())
-        return &it->second;
+      const symbolt* s = context.find_symbol(link_symbol);
+      if(s != nullptr)
+        return s;
 
       // Nope; create it.
       symbolt symbol;
@@ -263,16 +262,14 @@ bool cpp_typecheckt::has_incomplete_args(
     _arguments.begin(); it != _arguments.end(); it++)
   {
     const typet& e = it->type();
-    if (context.symbols.find(e.identifier())
-      != context.symbols.end())
-    {
-      symbolt &arg_sym =
-        context.symbols.find(e.identifier())->second;
 
-      if (arg_sym.type.id() == "incomplete_struct")
+    symbolt* arg_sym = context.find_symbol(e.identifier());
+    if(arg_sym != nullptr)
+    {
+      if (arg_sym->type.id() == "incomplete_struct")
       {
         std::cerr << "**** WARNING: template instantiation with incomplete type "
-          << arg_sym.pretty_name << " at "<< arg_sym.location << std::endl;
+          << arg_sym->pretty_name << " at "<< arg_sym->location << std::endl;
         return true;
       }
     }
@@ -426,7 +423,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   // been instantiated using these arguments
   {
     // need non-const handle on template symbol
-    symbolt &s=context.symbols.find(template_symbol.name)->second;
+    symbolt &s = *context.find_symbol(template_symbol.name);
     irept &instantiated_with=s.value.add("instantiated_with");
     instantiated_with.get_sub().push_back(specialization_template_args);
   }
@@ -539,13 +536,10 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   if(is_template_method)
   {
-    contextt::symbolst::iterator it=
-      context.symbols.find(class_name);
+    symbolt* s = context.find_symbol(class_name);
+    assert(s != nullptr);
 
-    assert(it!=context.symbols.end());
-
-    symbolt &symb = it->second;
-
+    symbolt &symb = *s;
     assert(new_decl.declarators().size() == 1);
 
     if(new_decl.member_spec().is_virtual())
@@ -590,7 +584,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
     irep_idt sym_name = to_struct_type(symb.type).components().back().name();
     mark_template_instantiated(template_symbol.name, subscope_name, sym_name);
-    symbolt &final_sym = context.symbols.find(sym_name)->second;
+    symbolt &final_sym = *context.find_symbol(sym_name);
 
     // Propagate the '#template' attributes
     final_sym.type.set("#template", new_decl.find("#template"));

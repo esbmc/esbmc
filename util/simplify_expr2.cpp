@@ -4,7 +4,7 @@
 
 #include <boost/static_assert.hpp>
 
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 #include <base_type.h>
 #include <type_byte_size.h>
 
@@ -179,8 +179,10 @@ fetch_ops_from_this_type(std::list<expr2tc> &ops, expr2t::expr_ids id,
 {
 
   if (expr->expr_id == id) {
-    forall_operands2(it, idx, expr)
-      fetch_ops_from_this_type(ops, id, *it);
+    expr->foreach_operand([&ops, id] (const expr2tc &e) {
+      fetch_ops_from_this_type(ops, id, e);
+      }
+    );
   } else {
     ops.push_back(expr);
   }
@@ -206,11 +208,10 @@ rebalance_associative_tree(const expr2t &expr, std::list<expr2tc> &ops,
   // faster than stringly stuff.
 
   // Extract immediate operands
-  std::list<const expr2tc*> immediate_operands;
-  expr.list_operands(immediate_operands);
-  for (std::list<const expr2tc*>::const_iterator
-       it = immediate_operands.begin(); it != immediate_operands.end(); it++)
-      fetch_ops_from_this_type(ops, expr.expr_id, **it);
+  expr.foreach_operand([&ops, &expr] (const expr2tc &e) {
+      fetch_ops_from_this_type(ops, expr.expr_id, e);
+    }
+  );
 
   // Are there enough constant values in there?
   unsigned int const_values = 0;
@@ -1201,20 +1202,22 @@ typecast2t::do_simplify(bool second) const
     // and the type we're casting to isn't _supposed_ to result in a loss of
     // information, push the cast downwards.
     std::list<expr2tc> set2;
-    forall_operands2(it, idx, from) {
-      expr2tc cast = expr2tc(new typecast2t(type, *it));
+    from->foreach_operand([&set2, this] (const expr2tc &e) {
+      expr2tc cast = expr2tc(new typecast2t(type, e));
       set2.push_back(cast);
     }
+    );
 
     // Now clone the expression and update its operands.
     expr2tc newobj = expr2tc(from->clone());
     newobj.get()->type = type;
 
     std::list<expr2tc>::const_iterator it2 = set2.begin();
-    Forall_operands2(it3, idx2, newobj) {
-      *it3 = *it2;
-      it2++;
-    }
+    newobj.get()->Foreach_operand([this, &it2] (expr2tc &e) {
+        e= *it2;
+        it2++;
+      }
+    );
 
     // Caller won't simplify us further if it's called us with second=true, so
     // give simplification another shot ourselves.
@@ -1414,16 +1417,17 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
     return expr2tc();
 
   expr2tc new_operand = operand->clone();
-  Forall_operands2(it, idx, new_operand) {
-    expr2tc tmp = (**it).simplify();
-    if (!is_nil_expr(tmp)) {
-      *it= tmp;
-      simplified = true;
-    }
+  new_operand.get()->Foreach_operand([this, &simplified, &num_const] (expr2tc &e) {
+      expr2tc tmp = (*e).simplify();
+      if (!is_nil_expr(tmp)) {
+        e = tmp;
+        simplified = true;
+      }
 
-    if (is_constant_expr(*it))
-      num_const++;
-  }
+      if (is_constant_expr(e))
+        num_const++;
+    }
+  );
 
   // If we don't have two constant operands, we can't simplify this expression.
   // We also don't want the underlying addition / whatever to become

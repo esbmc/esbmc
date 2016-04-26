@@ -5,7 +5,7 @@ libgotoprograms_a_SOURCES = \
       remove_skip.cpp goto_convert_functions.cpp \
       builtin_functions.cpp show_claims.cpp destructor.cpp set_claims.cpp \
       add_race_assertions.cpp rw_set.cpp read_goto_binary.cpp \
-      static_analysis.cpp string_abstraction.cpp \
+      static_analysis.cpp \
       goto_program_serialization.cpp goto_function_serialization.cpp \
       read_bin_goto_object.cpp goto_program_irep.cpp \
       format_strings.cpp loop_numbers.cpp goto_loops.cpp \

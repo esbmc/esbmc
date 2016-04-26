@@ -52,7 +52,9 @@ AC_LANG(C++)
 
 AC_CHECK_LIB([m], [fabs])
 
-AC_CHECK_LIB([pthread], [pthread_create], [AS_VAR_APPEND(LIBS, " -lpthread ")])
+AC_CHECK_LIB([pthread], [pthread_create],
+    [AS_VAR_APPEND(LIBS, " -lpthread ")]
+)
 
 dnl Some librt's depend on pthread, so prepend it to the libs
 AC_CHECK_LIB([rt], [timer_create],
@@ -60,16 +62,24 @@ AC_CHECK_LIB([rt], [timer_create],
     [AC_MSG_ERROR([No librt found])], []
 )
 
-AC_CHECK_LIB([gomp], [omp_get_num_threads], [
-             AS_VAR_SET(LIBS, " -lgomp $LIBS ")
-             ], [AC_MSG_WARN([No libgomp found: Z3 may want this])], [])
+AC_CHECK_LIB([gomp], [omp_get_num_threads],
+    [AS_VAR_SET(LIBS, " -lgomp $LIBS")],
+    [AC_MSG_WARN([No libgomp found: Z3 may want this])], []
+)
+
+AC_CHECK_LIB([dl], [dlerror],
+    [AS_VAR_APPEND(LIBS, " -ldl")],
+    [AC_MSG_WARN([No dl found: libgomp may want this])], []
+)
 
 AC_CHECK_LIB([gmp], [__gmpz_cmp],
-             [AS_VAR_APPEND(LIBS, " -lgmp ")],
-             [AC_MSG_WARN([No libgmp found: various solvers require it])], [])
+    [AS_VAR_APPEND(LIBS, " -lgmp")],
+    [AC_MSG_WARN([No libgmp found: various solvers require it])], []
+)
 
-AS_VAR_APPEND(CPPFLAGS, " -I /usr/include/eigen3")
-AS_VAR_APPEND(CXXFLAGS, " -I /usr/include/eigen3")
+AX_CLANG(3.8.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
+
+AX_LLVM(,[AC_MSG_FAILURE(LLVM is required.)])
 
 AC_CHECK_HEADERS([boost/mpl/if.hpp], [], [AC_MSG_ERROR([No boost mpl found])])
 AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], [AC_MSG_ERROR([No boost shared ptr found])])
@@ -79,7 +89,6 @@ AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], [AC_MSG_ERROR([No boos
 AC_CHECK_HEADERS([sys/sendfile.h], [AC_DEFINE([HAVE_SENDFILE], [], [Has sendfile header])], [])
 
 AC_CHECK_HEADERS([unistd.h], [AC_DEFINE([HAVE_UNISTD], [], [Has unistd.h header])], [])
-AC_CHECK_HEADERS([eigen3/Eigen/Eigen], [AC_DEFINE([EIGEN_LIB], [], [Have Eigen library])], [])
 
 dnl We don't link directly against openssl, instead chosing to open at runtime.
 dnl However, don't try and build for it without openssl headers
@@ -148,15 +157,15 @@ dnl Unless of course you're on a mac, in which case clang will frequently
 dnl generate new warnings, and you probably want it off. This should be used
 dnl with care in that case.
 AS_IF([test "x$enable_werror" = "xno"], [
-  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x"]])
+  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++11"]])
   AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W"]])
 ], [
   dnl not disabled -> enable werror
-  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x -Werror"]])
+  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++11 -Werror"]])
   AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W -Werror"]])
 ])
 
-AC_SUBST([ESBMC_CXXFLAGS_WARNINGS],[["-Wall -Wextra -W -std=c++0x"]])
+AC_SUBST([ESBMC_CXXFLAGS_WARNINGS],[["-Wall -Wextra -W -std=c++11"]])
 
 AC_HEADER_STDC
 
@@ -410,7 +419,7 @@ AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 AC_SUBST([ESBMC_SOLVER_LIBS], "$ESBMC_SOLVER_LIBS")
 
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile cpp/library/Makefile esbmc/Makefile solvers/solver_config.h])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-cpp-frontend/Makefile esbmc/Makefile solvers/solver_config.h])
 AC_OUTPUT
 
 AS_ECHO(["----------------------------------------"])

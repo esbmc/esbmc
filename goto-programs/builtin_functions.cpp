@@ -18,22 +18,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_code.h>
 #include <std_expr.h>
 #include <type_byte_size.h>
+#include <c_types.h>
 
-#include <ansi-c/c_types.h>
 
 #include "goto_convert_class.h"
 
-/*******************************************************************\
-
-Function: get_alloc_type_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void get_alloc_type_rec(
   const exprt &src,
@@ -59,18 +48,6 @@ static void get_alloc_type_rec(
     size.copy_to_operands(src);
   }
 }
-
-/*******************************************************************\
-
-Function: get_alloc_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void get_alloc_type(
   const exprt &src,
@@ -100,18 +77,6 @@ static void get_alloc_type(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_printf
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_printf(
   const exprt &lhs,
@@ -147,18 +112,6 @@ void goto_convertt::do_printf(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_atomic_begin
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_atomic_begin(
   const exprt &lhs,
   const exprt &function,
@@ -180,18 +133,6 @@ void goto_convertt::do_atomic_begin(
   goto_programt::targett t=dest.add_instruction(ATOMIC_BEGIN);
   t->location=function.location();
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_atomic_end
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_atomic_end(
   const exprt &lhs,
@@ -339,18 +280,6 @@ void goto_convertt::do_malloc(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_cpp_new
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_cpp_new(
   const exprt &lhs,
   const exprt &rhs,
@@ -455,18 +384,6 @@ void goto_convertt::do_cpp_new(
   dest.destructive_append(tmp_initializer);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::cpp_new_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::cpp_new_initializer(
   const exprt &lhs,
   const exprt &rhs,
@@ -517,18 +434,6 @@ void goto_convertt::cpp_new_initializer(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_exit
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_exit(
   const exprt &lhs __attribute__((unused)),
   const exprt &function,
@@ -548,18 +453,6 @@ void goto_convertt::do_exit(
   t_a->location=function.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_abort
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_abort(
   const exprt &lhs __attribute__((unused)),
   const exprt &function,
@@ -578,18 +471,6 @@ void goto_convertt::do_abort(
   t_a->guard = false_expr;
   t_a->location=function.location();
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_free
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_free(
   const exprt &lhs,
@@ -618,18 +499,6 @@ void goto_convertt::do_free(
   migrate_expr(free_statement, t_f->code);
   t_f->location=function.location();
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_abs
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_abs(
   const exprt &lhs,
@@ -661,19 +530,6 @@ void goto_convertt::do_abs(
   copy(assignment, ASSIGN, dest);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_function_call_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose: add function calls to function queue for later
-          processing
-
-\*******************************************************************/
-
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -699,22 +555,32 @@ void goto_convertt::do_function_call_symbol(
     throw "error: function `"+id2string(identifier)+"' type mismatch: expected code";
   }
 
-  bool is_assume=identifier==CPROVER_PREFIX "assume";
-  bool is_assert=identifier=="c::assert";
+  std::string base_name, base_name_upper;
+  base_name = base_name_upper = symbol->base_name.as_string();
+
+  std::transform(
+    base_name_upper.begin(),
+    base_name_upper.end(),
+    base_name_upper.begin(),
+    ::toupper);
+
+  bool is_assume = ((base_name_upper == "__ESBMC_ASSUME")
+                    || (base_name_upper == "__VERIFIER_ASSUME"));
+  bool is_assert = (base_name == "assert");
 
   if(is_assume || is_assert)
   {
     if(arguments.size()!=1)
     {
       err_location(function);
-      throw "`"+id2string(identifier)+"' expected to have one argument";
+      throw "`"+id2string(base_name)+"' expected to have one argument";
     }
 
     if(options.get_bool_option("no-assertions") && !is_assume)
       return;
 
     goto_programt::targett t=dest.add_instruction(
-      is_assume?ASSUME:ASSERT);
+      is_assume ? ASSUME : ASSERT);
     migrate_expr(arguments.front(), t->guard);
 
     // The user may have re-declared the assert or assume functions to take an
@@ -736,22 +602,20 @@ void goto_convertt::do_function_call_symbol(
     if(lhs.is_not_nil())
     {
       err_location(function);
-      throw id2string(identifier)+" expected not to have LHS";
+      throw id2string(base_name)+" expected not to have LHS";
     }
   }
-  else if(identifier==CPROVER_PREFIX "assert")
+  else if(base_name_upper == "__ESBMC_ASSERT")
   {
     if(arguments.size()!=2)
     {
       err_location(function);
-      throw "`"+id2string(identifier)+"' expected to have two arguments";
+      throw "`"+id2string(base_name)+"' expected to have two arguments";
     }
 
-    const std::string &description=
-      get_string_constant(arguments[1]);
+    const std::string &description = get_string_constant(arguments[1]);
 
-    if(options.get_bool_option("no-assertions") &&
-   	   !(description.find("Deadlocked state") != std::string::npos))
+    if(options.get_bool_option("no-assertions"))
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
@@ -764,24 +628,25 @@ void goto_convertt::do_function_call_symbol(
     if(lhs.is_not_nil())
     {
       err_location(function);
-      throw id2string(identifier)+" expected not to have LHS";
+      throw id2string(base_name)+" expected not to have LHS";
     }
   }
-  else if(identifier==CPROVER_PREFIX "printf")
+  else if(base_name == "printf")
   {
     do_printf(lhs, function, arguments, dest);
   }
-  else if(identifier==CPROVER_PREFIX "atomic_begin")
+  else if((base_name_upper == "__ESBMC_ATOMIC_BEGIN")
+          || (base_name_upper == "__VERIFIER_ATOMIC_BEGIN"))
   {
     do_atomic_begin(lhs, function, arguments, dest);
   }
-  else if(identifier==CPROVER_PREFIX "atomic_end")
+  else if((base_name_upper == "__ESBMC_ATOMIC_END")
+          || (base_name_upper == "__VERIFIER_ATOMIC_END"))
   {
     do_atomic_end(lhs, function, arguments, dest);
   }
-  else if(has_prefix(id2string(identifier), "c::nondet_") ||
-          has_prefix(id2string(identifier), "c::__VERIFIER_nondet_") ||
-          has_prefix(id2string(identifier), "cpp::nondet_"))
+  else if(has_prefix(id2string(base_name_upper), "NONDET_")
+          || has_prefix(id2string(base_name_upper), "__VERIFIER_NONDET_"))
   {
     // make it a side effect if there is an LHS
     if(lhs.is_nil()) return;
@@ -793,35 +658,35 @@ void goto_convertt::do_function_call_symbol(
     assignment.location()=function.location();
     copy(assignment, ASSIGN, dest);
   }
-  else if(identifier=="c::exit")
+  else if(base_name == "exit")
   {
     do_exit(lhs, function, arguments, dest);
   }
-  else if(identifier=="c::abort")
+  else if(base_name == "abort")
   {
     do_abort(lhs, function, arguments, dest);
   }
-  else if(identifier=="c::malloc")
+  else if(base_name == "malloc")
   {
     do_malloc(lhs, function, arguments, dest);
   }
-  else if(identifier=="c::alloca" || identifier=="c::__builtin_alloca")
+  else if(base_name == "alloca" || base_name == "__builtin_alloca")
   {
     do_alloca(lhs, function, arguments, dest);
   }
-  else if(identifier=="c::free")
+  else if(base_name == "free")
   {
     do_free(lhs, function, arguments, dest);
   }
-  else if(identifier=="c::printf" ||
-          identifier=="c::fprintf" ||
-          identifier=="c::sprintf" ||
-          identifier=="c::snprintf")
+  else if(base_name == "printf" ||
+          base_name == "fprintf" ||
+          base_name == "sprintf" ||
+          base_name == "snprintf")
   {
     do_printf(lhs, function, arguments, dest);
   }
-  else if(identifier=="c::__assert_rtn" ||
-          identifier=="c::__assert_fail")
+  else if(base_name == "__assert_rtn" ||
+          base_name == "__assert_fail")
   {
     // __assert_fail is Linux
     // These take four arguments:
@@ -830,16 +695,11 @@ void goto_convertt::do_function_call_symbol(
     if(arguments.size()!=4)
     {
       err_location(function);
-      throw "`"+id2string(identifier)+"' expected to have four arguments";
+      throw "`"+id2string(base_name)+"' expected to have four arguments";
     }
 
-    std::string description = "assertion ";
-
-    //check whether the assert does not contain a member
-    if (arguments[0].id() != "address_of" &&
-    	arguments[0].op0().op0().id() != "member") {
-    	description = "assertion "+get_string_constant(arguments[0]);
-    }
+    const irep_idt description=
+      "assertion "+id2string(get_string_constant(arguments[0]));
 
     if(options.get_bool_option("no-assertions"))
       return;
@@ -852,38 +712,14 @@ void goto_convertt::do_function_call_symbol(
     t->location.comment(description);
     // we ignore any LHS
   }
-  else if(identifier=="c::__assert_rtn")
-  {
-    // __assert_rtn is MACOS
-
-    if(arguments.size()!=4)
-    {
-      err_location(function);
-      throw "`"+id2string(identifier)+"' expected to have four arguments";
-    }
-
-    const std::string description=
-      "assertion "+get_string_constant(arguments[3]);
-
-    if(options.get_bool_option("no-assertions"))
-      return;
-
-    goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard = false_expr;
-    t->location=function.location();
-    t->location.user_provided(true);
-    t->location.property("assertion");
-    t->location.comment(description);
-    // we ignore any LHS
-  }
-  else if(identifier=="c::_wassert")
+  else if(base_name == "_wassert")
   {
     // this is Windows
 
     if(arguments.size()!=3)
     {
       err_location(function);
-      throw "`"+id2string(identifier)+"' expected to have three arguments";
+      throw "`"+id2string(base_name)+"' expected to have three arguments";
     }
 
     const std::string description=
@@ -900,7 +736,7 @@ void goto_convertt::do_function_call_symbol(
     t->location.comment(description);
     // we ignore any LHS
   }
-  else if(identifier=="cpp::operatorcpp_new(unsigned_int)")
+  else if(base_name == "operatorcpp_new(unsigned_int)")
   {
     assert(arguments.size()== 1);
 
@@ -912,7 +748,7 @@ void goto_convertt::do_function_call_symbol(
     // Set return type, a allocated pointer
     // XXX jmorse, const-qual misery
     new_function.type() = pointer_typet(
-        static_cast<const typet&>(const_cast<exprt&>(arguments.front()).add("#c_sizeof_type")));
+      static_cast<const typet&>(const_cast<exprt&>(arguments.front()).add("#c_sizeof_type")));
     new_function.type().add("#location") = function.cmt_location();
 
     do_cpp_new(lhs, new_function, dest);

@@ -27,7 +27,7 @@ Function: c_typecheck_baset::to_string
 \*******************************************************************/
 
 std::string c_typecheck_baset::to_string(const exprt &expr)
-{ 
+{
   return expr2c(expr, *this);
 }
 
@@ -44,7 +44,7 @@ Function: c_typecheck_baset::to_string
 \*******************************************************************/
 
 std::string c_typecheck_baset::to_string(const typet &type)
-{ 
+{
   return type2c(type, *this);
 }
 
@@ -64,7 +64,7 @@ void c_typecheck_baset::replace_symbol(irept &symbol)
 {
   id_replace_mapt::const_iterator it=
     id_replace_map.find(symbol.identifier());
-  
+
   if(it!=id_replace_map.end())
     symbol.identifier(it->second);
 }
@@ -106,10 +106,10 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   typecheck_type(symbol.type);
 
   const typet &final_type=follow(symbol.type);
-  
+
   // set a few flags
   symbol.lvalue=!symbol.is_type && !symbol.is_macro;
-  
+
   std::string prefix="c::";
   std::string root_name=prefix+id2string(symbol.base_name);
   std::string new_name=id2string(symbol.name);
@@ -117,18 +117,17 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   // do anon-tags first
   if(symbol.is_type &&
      has_prefix(id2string(symbol.name), prefix+"tag-#anon"))
-  {    
+  {
     // used to be file local:
-    // new_name=prefix+module+"::tag-"+id2string(symbol.base_name);    
-    
+    // new_name=prefix+module+"::tag-"+id2string(symbol.base_name);
+
     // now: rename them
     std::string typestr = type2name(symbol.type);
     new_name = prefix+"tag-#anon#" + typestr;
-    
-    id_replace_map[symbol.name]=new_name;    
+    id_replace_map[symbol.name]=new_name;
 
-    symbolst::const_iterator it = context.symbols.find(new_name);
-    if(it!=context.symbols.end())
+    symbolt* s = context.find_symbol(new_name);
+    if(s != nullptr)
       return; // bail out, we have an appropriate symbol already.
 
     irep_idt newtag((std::string("#anon#") + typestr).c_str());
@@ -162,7 +161,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     id_replace_map[symbol.name]=new_name;
     symbol.name=new_name;
   }
-  
+
   // set the pretty name
   if(symbol.is_type &&
      (final_type.id()=="struct" ||
@@ -188,22 +187,21 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
     symbol.pretty_name=
       std::string(new_name, prefix.size(), std::string::npos);
   }
-  
+
   // see if we have it already
-  symbolst::iterator old_it=context.symbols.find(symbol.name);
-  
-  if(old_it==context.symbols.end())
+  symbolt *s = context.find_symbol(symbol.name);
+  if(s == nullptr)
   {
     // just put into context
     symbolt *new_symbol;
     bool res = move_symbol(symbol, new_symbol);
     assert(!res);
     (void)res; //ndebug
-    
+
     typecheck_new_symbol(*new_symbol);
-  }    
+  }
   else
-    typecheck_symbol_redefinition(old_it->second, symbol);
+    typecheck_symbol_redefinition(*s, symbol);
 }
 
 /*******************************************************************\
@@ -220,7 +218,7 @@ Function: c_typecheck_baset::typecheck_new_symbol
 
 void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
 {
-  if(symbol.is_actual)
+  if(symbol.is_parameter)
     adjust_function_argument(symbol.type);
 
   // check initializer, if needed
@@ -240,28 +238,28 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
         it->set_identifier("");
     }
   }
-  else if(symbol.type.id()=="incomplete_array" || 
+  else if(symbol.type.id()=="incomplete_array" ||
           symbol.type.is_array())
   {
     // insert a new type symbol for the array
     {
       symbolt new_symbol;
       new_symbol.name=id2string(symbol.name)+"$type";
-      new_symbol.base_name=id2string(symbol.base_name)+"$type"; 
+      new_symbol.base_name=id2string(symbol.base_name)+"$type";
       new_symbol.location=symbol.location;
       new_symbol.mode=symbol.mode;
       new_symbol.module=symbol.module;
       new_symbol.type=symbol.type;
       new_symbol.is_type=true;
       new_symbol.is_macro=true;
-    
+
       symbol.type=symbol_typet(new_symbol.name);
-    
+
       symbolt *new_sp;
       context.move(new_symbol, new_sp);
     }
 
-    do_initializer(symbol);    
+    do_initializer(symbol);
   }
   else
   {
@@ -298,7 +296,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
       err_location(new_symbol.location);
       throw "function type not allowed for K&R function argument";
     }
-    
+
     // fix up old symbol -- we now got the type
     old_symbol.type=new_symbol.type;
   }
@@ -314,7 +312,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
       {
         // overwrite location
         old_symbol.location=new_symbol.location;
-        
+
         // move body
         old_symbol.type.swap(new_symbol.type);
       }
@@ -338,7 +336,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
       {
         if("incomplete_"+old_symbol.type.id_string()==new_symbol.type.id_string())
         {
-          // just ignore silently  
+          // just ignore silently
         }
         else
         {
@@ -377,7 +375,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
          final_new.id()=="incomplete_array" &&
          final_old.subtype()==final_new.subtype())
       {
-        // this is ok        
+        // this is ok
         new_symbol.type=old_symbol.type;
       }
       else if(final_old.id()=="incomplete_array" &&
@@ -389,18 +387,16 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         {
           // fix the symbol, not just the type
           const irep_idt ident = old_symbol.type.identifier();
-          symbolst::iterator s_it=context.symbols.find(ident);
-    
-          if(s_it==context.symbols.end())
+          symbolt* s = context.find_symbol(ident);
+          if(s == nullptr)
           {
             err_location(old_symbol.location);
             str << "failed to find symbol `" << ident << "'";
             throw 0;
           }
-                    
-          symbolt &symbol=s_it->second;
-            
-          symbol.type=final_new;          
+
+          symbolt &symbol = *s;
+          symbol.type=final_new;
         }
         else
           old_symbol.type=new_symbol.type;
@@ -410,7 +406,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
       {
         code_typet &old_ct=to_code_type(old_symbol.type);
         code_typet &new_ct=to_code_type(new_symbol.type);
-        
+
         if(old_ct.has_ellipsis() && !new_ct.has_ellipsis())
           old_ct=new_ct;
         else if(!old_ct.has_ellipsis() && new_ct.has_ellipsis())
@@ -443,12 +439,12 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
       old_symbol.type.inlined(true);
       new_symbol.type.inlined(true);
     }
-    
+
     // do value
     if(old_symbol.type.is_code())
     {
       if(new_symbol.value.is_not_nil())
-      {      
+      {
         if(old_symbol.value.is_not_nil())
         {
           err_location(new_symbol.location);
@@ -459,10 +455,10 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         else
         {
           typecheck_function_body(new_symbol);
-        
+
           // overwrite location
           old_symbol.location=new_symbol.location;
-        
+
           // move body
           old_symbol.value.swap(new_symbol.value);
 
@@ -473,9 +469,9 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
     }
     else
     {
-      // initializer     
+      // initializer
       do_initializer(new_symbol);
-      
+
       if(new_symbol.value.is_not_nil())
       {
         // see if we already have one
@@ -535,7 +531,7 @@ Function: c_typecheck_baset::typecheck_function_body
 void c_typecheck_baset::typecheck_function_body(symbolt &symbol)
 {
   code_typet &code_type=to_code_type(symbol.type);
-  
+
   // adjust the function identifiers
   for(code_typet::argumentst::iterator
       a_it=code_type.arguments().begin();
@@ -549,20 +545,20 @@ void c_typecheck_baset::typecheck_function_body(symbolt &symbol)
         m_it=id_replace_map.find(identifier);
 
       if(m_it!=id_replace_map.end())
-        a_it->set_identifier(m_it->second);      
+        a_it->set_identifier(m_it->second);
     }
   }
-    
+
   assert(symbol.value.is_not_nil());
 
   // fix type
   symbol.value.type()=code_type;
-    
+
   // set return type
   return_type=code_type.return_type();
-  
+
   typecheck_code(to_code(symbol.value));
-  
+
   if(symbol.name=="c::main")
     add_argc_argv(symbol);
 }

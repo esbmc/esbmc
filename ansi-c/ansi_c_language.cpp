@@ -62,9 +62,6 @@ static void internal_additions(std::string &code)
     "void assert(_Bool assertion);\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
     "_Bool __ESBMC_same_object(const void *, const void *);\n"
-    "_Bool __ESBMC_is_zero_string(const void *);\n"
-    "unsigned __ESBMC_zero_string_length(const void *);\n"
-    "unsigned __ESBMC_buffer_size(const void *);\n"
 
     // traces
     "void CBMC_trace(int lvl, const char* event, ...);\n"
@@ -99,6 +96,11 @@ static void internal_additions(std::string &code)
     "long double __ESBMC_fabsl(long double x);\n"
     "float __ESBMC_fabsf(float x);\n"
 
+    // Digital controllers code
+    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
+    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"
+    "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);\n"
+
     // Forward decs for pthread main thread begin/end hooks. Because they're
     // pulled in from the C library, they need to be declared prior to pulling
     // them in, for type checking.
@@ -117,14 +119,6 @@ static void internal_additions(std::string &code)
     "char nondet_char();\n"
     "unsigned char nondet_uchar();\n"
     "signed char nondet_schar();\n"
-
-    // Digital filters code
-    "_Bool __ESBMC_check_stability(float den[], float num[]);\n"
-
-	// Digital controllers code
-    "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
-    "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"
-	"_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);\n"
 
     // And again, for TACAS VERIFIER versions,
     "int __VERIFIER_nondet_int();\n"

@@ -15,24 +15,12 @@ Date: June 2003
 #include <std_code.h>
 #include <std_expr.h>
 #include <type_byte_size.h>
+#include <c_types.h>
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
 #include "remove_skip.h"
 #include "i2string.h"
-#include "ansi-c/c_types.h"
-
-/*******************************************************************\
-
-Function: goto_convert_functionst::goto_convert_functionst
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,
@@ -48,45 +36,22 @@ goto_convert_functionst::goto_convert_functionst(
 	  inlining=true;
 }
 
-/*******************************************************************\
-
-Function: goto_convert_functionst::~goto_convert_functionst
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 goto_convert_functionst::~goto_convert_functionst()
 {
 }
-
-/*******************************************************************\
-
-Function: goto_convert_functionst::goto_convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convert_functionst::goto_convert()
 {
   // warning! hash-table iterators are not stable
 
   symbol_listt symbol_list;
-
-  Forall_symbols(it, context.symbols)
-  {
-    if(!it->second.is_type && it->second.type.is_code())
-      symbol_list.push_back(&it->second);
-  }
+  context.Foreach_operand_in_order(
+    [&symbol_list] (symbolt& s)
+    {
+    if(!s.is_type && s.type.is_code())
+      symbol_list.push_back(&s);
+    }
+  );
 
   for(symbol_listt::iterator
       it=symbol_list.begin();
@@ -98,18 +63,6 @@ void goto_convert_functionst::goto_convert()
 
   functions.compute_location_numbers();
 }
-
-/*******************************************************************\
-
-Function: goto_convert_functionst::hide
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool goto_convert_functionst::hide(const goto_programt &goto_program)
 {
@@ -130,18 +83,6 @@ bool goto_convert_functionst::hide(const goto_programt &goto_program)
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_convert_functionst::add_return
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convert_functionst::add_return(
   goto_functiont &f,
@@ -173,24 +114,12 @@ void goto_convert_functionst::add_return(
   t->code = code_return2tc(tmp_expr);
 }
 
-/*******************************************************************\
-
-Function: goto_convert_functionst::convert_function
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convert_functionst::convert_function(const irep_idt &identifier)
 {
-  symbolst::iterator s_it=context.symbols.find(identifier);
-  assert(s_it != context.symbols.end());
+  symbolt *s = context.find_symbol(identifier);
+  assert(s != nullptr);
 
-  convert_function(s_it->second);
+  convert_function(*s);
 }
 
 /*******************************************************************\
@@ -302,18 +231,6 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   if(hide(f.body))
     f.type.hide(true);
 }
-
-/*******************************************************************\
-
-Function: goto_convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convert(
   contextt &context,
@@ -507,8 +424,8 @@ goto_convert_functionst::wallop_type(irep_idt name,
     wallop_type(*it, typenames, sname);
 
   // And finally perform renaming.
-  symbolst::iterator it = context.symbols.find(name);
-  rename_types(it->second.type, it->second, sname);
+  symbolt* s = context.find_symbol(name);
+  rename_types(s->type, *s, sname);
   deps.clear();
   return;
 }
@@ -526,23 +443,29 @@ goto_convert_functionst::thrash_type_symbols(void)
   // thing has no types, and there's no way (in C++ converted code at least)
   // to decide what name is a type or not.
   typename_sett names;
-  forall_symbols(it, context.symbols) {
-    collect_expr(it->second.value, names);
-    collect_type(it->second.type, names);
-  }
+  context.foreach_operand(
+    [this, &names] (const symbolt& s)
+    {
+      collect_expr(s.value, names);
+      collect_type(s.type, names);
+    }
+  );
 
   // Try to compute their dependencies.
 
   typename_mapt typenames;
-
-  forall_symbols(it, context.symbols) {
-    if (names.find(it->second.name) != names.end()) {
-      typename_sett list;
-      collect_expr(it->second.value, list);
-      collect_type(it->second.type, list);
-      typenames[it->second.name] = list;
+  context.foreach_operand(
+    [this, &names, &typenames] (const symbolt& s)
+    {
+      if (names.find(s.name) != names.end())
+      {
+        typename_sett list;
+        collect_expr(s.value, list);
+        collect_type(s.type, list);
+        typenames[s.name] = list;
+      }
     }
-  }
+  );
 
   for (typename_mapt::iterator it = typenames.begin(); it != typenames.end(); it++)
     it->second.erase(it->first);
@@ -556,10 +479,13 @@ goto_convert_functionst::thrash_type_symbols(void)
     wallop_type(it->first, typenames, it->first);
 
   // And now all the types have a fixed form, rename types in all existing code.
-  Forall_symbols(it, context.symbols) {
-    rename_types(it->second.type, it->second, it->first);
-    rename_exprs(it->second.value, it->second, it->first);
-  }
+  context.Foreach_operand(
+    [this] (symbolt& s)
+    {
+      rename_types(s.type, s, s.name);
+      rename_exprs(s.value, s, s.name);
+    }
+  );
 
   return;
 }
@@ -575,10 +501,13 @@ goto_convert_functionst::fixup_unions(void)
   // them _as_ unions get converted into byte array accesses at the pointer
   // dereference layer.
 
-   Forall_symbols(it, context.symbols) {
-    fix_union_type(it->second.type, false);
-    fix_union_expr(it->second.value);
-  }
+  context.Foreach_operand(
+    [this] (symbolt& s)
+    {
+      fix_union_type(s.type, false);
+      fix_union_expr(s.value);
+    }
+  );
 }
 
 void

@@ -18,12 +18,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <simplify_expr.h>
 #include <base_type.h>
 #include <std_expr.h>
+#include <string_constant.h>
+#include <c_types.h>
 
-#include "c_types.h"
 #include "c_typecast.h"
 #include "c_typecheck_base.h"
 #include "c_sizeof.h"
-#include "ansi_c_expr.h"
 
 /*******************************************************************\
 
@@ -74,7 +74,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     typecheck_expr_side_effect(to_side_effect_expr(expr));
   else if(expr.id()=="constant")
     typecheck_expr_constant(expr);
-  else if(expr.id()=="infinit")
+  else if(expr.id()=="infinity")
   {
     // ignore
   }
@@ -230,9 +230,9 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   }
 
   const irep_idt &identifier=type.identifier();
-  symbolst::const_iterator s_it=context.symbols.find(identifier);
+  const symbolt* s = context.find_symbol(identifier);
 
-  if(s_it==context.symbols.end())
+  if(s == nullptr)
   {
     err_location(expr);
     str << "failed to find symbol `" << identifier << "'";
@@ -240,7 +240,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   }
 
   // found it
-  const symbolt &symbol=s_it->second;
+  const symbolt &symbol = *s;
   const irept &components=symbol.type.components();
   const irep_idt &member=expr.member_irep().identifier();
   bool found=false;
@@ -329,9 +329,9 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   const irep_idt &identifier=expr.identifier();
 
   // look it up
-  symbolst::const_iterator s_it=context.symbols.find(identifier);
+  symbolt* s = context.find_symbol(identifier);
 
-  if(s_it==context.symbols.end())
+  if(s == nullptr)
   {
     err_location(expr);
     str << "failed to find symbol `" << identifier << "'";
@@ -339,7 +339,7 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   }
 
   // found it
-  const symbolt &symbol=s_it->second;
+  const symbolt &symbol = *s;
 
   if(symbol.is_type)
   {
@@ -369,9 +369,9 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
   else if(identifier=="c::__func__")
   {
     // this is an ANSI-C standard compliant hack to get the function name
-    string_constantt s;
-    s.set_value(location.get_function());
+    string_constantt s(location.get_function());
     s.location()=location;
+
     expr.swap(s);
   }
   else
@@ -1423,7 +1423,8 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
   {
     replace_symbol(f_op);
 
-    if(context.symbols.find(f_op.identifier())==context.symbols.end())
+    symbolt* s = context.find_symbol(f_op.identifier());
+    if(s == nullptr)
     {
       // maybe this is an undeclared function
       // let's just add it
@@ -1530,44 +1531,6 @@ void c_typecheck_baset::do_special_functions(
       same_object_expr.operands()=expr.arguments();
       expr.swap(same_object_expr);
       //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-    }
-    else if(identifier==CPROVER_PREFIX "buffer_size")
-    {
-      if(expr.arguments().size()!=1)
-      {
-        err_location(f_op);
-        throw "buffer_size expects one operand";
-      }
-
-      exprt buffer_size_expr("buffer_size", uint_type());
-      buffer_size_expr.operands()=expr.arguments();
-      expr.swap(buffer_size_expr);
-    }
-    else if(identifier==CPROVER_PREFIX "is_zero_string")
-    {
-      if(expr.arguments().size()!=1)
-      {
-        err_location(f_op);
-        throw "is_zero_string expects one operand";
-      }
-
-      exprt is_zero_string_expr("is_zero_string", bool_typet());
-      is_zero_string_expr.operands()=expr.arguments();
-      is_zero_string_expr.cmt_lvalue(true); // make it an lvalue
-      expr.swap(is_zero_string_expr);
-    }
-    else if(identifier==CPROVER_PREFIX "zero_string_length")
-    {
-      if(expr.arguments().size()!=1)
-      {
-        err_location(f_op);
-        throw "zero_string_length expects one operand";
-      }
-
-      exprt zero_string_length_expr("zero_string_length", uint_type());
-      zero_string_length_expr.operands()=expr.arguments();
-      zero_string_length_expr.cmt_lvalue(true); // make it an lvalue
-      expr.swap(zero_string_length_expr);
     }
     else if(identifier==CPROVER_PREFIX "POINTER_OFFSET")
     {

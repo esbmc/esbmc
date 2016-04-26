@@ -8,7 +8,7 @@
 #include <simplify_expr.h>
 #include <type_byte_size.h>
 
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 // File for old irep -> new irep conversions.
 
@@ -1140,22 +1140,6 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     index2t *i = new index2t(type, source, index);
     new_expr_ref = expr2tc(i);
-  } else if (expr.id() == "is_zero_string") {
-    assert(expr.operands().size() == 1);
-
-    expr2tc string;
-    migrate_expr(expr.op0(), string);
-
-    zero_string2t *s = new zero_string2t(string);
-    new_expr_ref = expr2tc(s);
-  } else if (expr.id() == "zero_string_length") {
-    assert(expr.operands().size() == 1);
-
-    expr2tc string;
-    migrate_expr(expr.op0(), string);
-
-    zero_length_string2t *s = new zero_length_string2t(string);
-    new_expr_ref = expr2tc(s);
   } else if (expr.id() == exprt::isnan) {
     assert(expr.operands().size() == 1);
 
@@ -1382,11 +1366,6 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(new invalid_pointer2t(op0));
   } else if (expr.id() == "code" && expr.statement() == "skip") {
     new_expr_ref = expr2tc(new code_skip2t());
-  } else if (expr.id() == "buffer_size") {
-    migrate_type(expr.type(), type);
-    expr2tc op0;
-    migrate_expr(expr.op0(), op0);
-    new_expr_ref = expr2tc(new buffer_size2t(type, op0));
   } else if (expr.id() == "code" && expr.statement() == "goto") {
     new_expr_ref = expr2tc(new code_goto2t(expr.get("destination")));
   } else if (expr.id() == "comma") {
@@ -2069,22 +2048,6 @@ migrate_expr_back(const expr2tc &ref)
                                   migrate_expr_back(ref2.index));
     return index;
   }
-  case expr2t::zero_string_id:
-  {
-    const zero_string2t &ref2 = to_zero_string2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt zerostring("is_zero_string", thetype);
-    zerostring.copy_to_operands(migrate_expr_back(ref2.string));
-    return zerostring;
-  }
-  case expr2t::zero_length_string_id:
-  {
-    const zero_length_string2t &ref2 = to_zero_length_string2t(ref);
-    typet thetype = migrate_type_back(ref->type);
-    exprt zerostring("zero_string_length", thetype);
-    zerostring.copy_to_operands(migrate_expr_back(ref2.string));
-    return zerostring;
-  }
   case expr2t::isnan_id:
   {
     const isnan2t &ref2 = to_isnan2t(ref);
@@ -2380,14 +2343,6 @@ migrate_expr_back(const expr2tc &ref)
     exprt theexpr("invalid-pointer", bool_typet());
     theexpr.copy_to_operands(migrate_expr_back(ref2.ptr_obj));
     return theexpr;
-  }
-  case expr2t::buffer_size_id:
-  {
-    const buffer_size2t &ref2 = to_buffer_size2t(ref);
-    exprt codeexpr("buffer_size");
-    codeexpr.type() = migrate_type_back(ref2.type);
-    codeexpr.copy_to_operands(migrate_expr_back(ref2.value));
-    return codeexpr;
   }
   case expr2t::code_goto_id:
   {

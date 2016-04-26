@@ -263,7 +263,7 @@ namespace renaming {
 
     level2t() { };
     virtual ~level2t() { };
-    virtual level2t *clone(void) const = 0;
+    virtual std::shared_ptr<level2t> clone(void) const = 0;
 
     virtual void print(std::ostream &out) const;
     virtual void dump() const;

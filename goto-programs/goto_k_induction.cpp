@@ -5,11 +5,10 @@
  *      Author: mramalho
  */
 
-#include <util/std_expr.h>
-#include <util/expr_util.h>
-#include <ansi-c/c_types.h>
-
+#include <c_types.h>
 #include <i2string.h>
+#include <std_expr.h>
+#include <expr_util.h>
 
 #include "goto_k_induction.h"
 #include "remove_skip.h"
@@ -34,15 +33,18 @@ void add_global_vars(const exprt& expr)
 
 void get_global_vars(contextt &context)
 {
-  forall_symbols(it, context.symbols) {
-    if(it->second.static_lifetime && !it->second.type.is_pointer())
+  context.foreach_operand(
+    [] (const symbolt& s)
     {
-      exprt s = symbol_expr(it->second);
-      if(it->second.value.id()==irep_idt("array_of"))
-        s.type()=it->second.value.type();
-      add_global_vars(s);
+      if(s.static_lifetime && !s.type.is_pointer())
+      {
+        exprt sym_expr = symbol_expr(s);
+        if(s.value.id() == irep_idt("array_of"))
+          sym_expr.type() = s.value.type();
+        add_global_vars(sym_expr);
+      }
     }
-  }
+  );
 }
 
 void dump_global_vars()
@@ -85,19 +87,19 @@ void goto_k_inductiont::goto_k_induction()
     it != function_loops.rend();
     ++it)
   {
-    assert(!it->second.get_goto_program().empty());
+    assert(!it->get_goto_program().empty());
 
-    if(it->second.is_infinite_loop()
+    if(it->is_infinite_loop()
        || (options.get_bool_option("k-induction-nondet-loops")
-           && it->second.is_nondet_loop()))
+           && it->is_nondet_loop()))
     {
       // Start the loop conversion
-      convert_infinite_loop(it->second);
+      convert_infinite_loop(*it);
     }
     else
     {
       // Start the loop conversion
-      convert_finite_loop(it->second);
+      convert_finite_loop(*it);
     }
   }
 }

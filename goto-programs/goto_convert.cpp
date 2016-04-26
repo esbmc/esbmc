@@ -11,11 +11,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <i2string.h>
 #include <cprover_prefix.h>
-//#include <expr_util.h>
 #include <prefix.h>
 #include <std_expr.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "goto_convert_class.h"
 #include "remove_skip.h"
@@ -31,18 +29,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #else
 #define DEBUGLOC
 #endif
-
-/*******************************************************************\
-
-Function: goto_convertt::finish_gotos
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::finish_gotos()
 {
@@ -80,34 +66,10 @@ void goto_convertt::finish_gotos()
   targets.gotos.clear();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::goto_convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::goto_convert(const codet &code, goto_programt &dest)
 {
   goto_convert_rec(code, dest);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::goto_convert_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::goto_convert_rec(
   const codet &code,
@@ -118,18 +80,6 @@ void goto_convertt::goto_convert_rec(
   finish_gotos();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::copy
-
-  Inputs:
-
- Outputs:
-
- Purpose: Ben: copy code and make a new instruction of goto-functions
-
-\*******************************************************************/
-
 void goto_convertt::copy(
   const codet &code,
   goto_program_instruction_typet type,
@@ -139,18 +89,6 @@ void goto_convertt::copy(
   migrate_expr(code, t->code);
   t->location=code.location();
 }
-
-/*******************************************************************\
-
-Function: goto_convert::convert_label
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_label(
   const code_labelt &code,
@@ -220,18 +158,6 @@ void goto_convertt::convert_label(
     targets.set_default(target);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert(
   const codet &code,
   goto_programt &dest)
@@ -242,6 +168,8 @@ void goto_convertt::convert(
     convert_block(code, dest);
   else if(statement=="decl")
     convert_decl(code, dest);
+  else if(statement=="decl-block")
+    convert_decl_block(code, dest);
   else if(statement=="expression")
     convert_expression(code, dest);
   else if(statement=="assign")
@@ -304,18 +232,6 @@ void goto_convertt::convert(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_throw_decl_end
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_throw_decl_end(const exprt &expr, goto_programt &dest)
 {
   // add the THROW_DECL_END instruction to 'dest'
@@ -324,18 +240,6 @@ void goto_convertt::convert_throw_decl_end(const exprt &expr, goto_programt &des
   throw_decl_end_instruction->code = code_cpp_throw_decl_end2tc();
   throw_decl_end_instruction->location=expr.location();
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_throw_decl
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
 {
@@ -360,18 +264,6 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   throw_decl_instruction->location=expr.location();
   migrate_expr(c, throw_decl_instruction->code);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_catch
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_catch(
   const codet &code,
@@ -431,18 +323,6 @@ void goto_convertt::convert_catch(
   catch_push_instruction->code = code_cpp_catch2tc(exception_list);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_block
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_block(
   const codet &code,
   goto_programt &dest)
@@ -452,11 +332,14 @@ void goto_convertt::convert_block(
 
   forall_operands(it, code)
   {
-    const codet &code=to_code(*it);
+    const codet &code_it=to_code(*it);
 
-    if(code.get_statement()=="decl")
+    if(code_it.get_statement()=="decl")
     {
-      const exprt &op0=code.op0();
+      // TODO: This should be removed when the clang frontend
+      // is enable by default, as all the decl are wrapped
+      // inside a decl-block
+      const exprt &op0=code_it.op0();
       assert(op0.id()=="symbol");
       const irep_idt &identifier=op0.identifier();
       const symbolt &symbol=lookup(identifier);
@@ -465,9 +348,26 @@ void goto_convertt::convert_block(
          !symbol.type.is_code())
         locals.push_back(identifier);
     }
+    else if(code_it.get_statement()=="decl-block")
+    {
+      forall_operands(it, code_it)
+      {
+        if(it->statement() == "skip")
+          continue;
+
+        const exprt &op0=it->op0();
+        assert(op0.id()=="symbol");
+        const irep_idt &identifier=op0.identifier();
+        const symbolt &symbol=lookup(identifier);
+
+        if(!symbol.static_lifetime &&
+           !symbol.type.is_code())
+          locals.push_back(identifier);
+      }
+    }
 
     goto_programt tmp;
-    convert(code, tmp);
+    convert(code_it, tmp);
 
     // all the temp symbols are also local variables and they are gotten
     // via the convert process
@@ -515,18 +415,6 @@ void goto_convertt::convert_block(
     locals.pop_back();
   }
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_sideeffect
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_sideeffect(
   exprt &expr,
@@ -739,18 +627,6 @@ void goto_convertt::convert_sideeffect(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_expression
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_expression(
   const codet &code,
   goto_programt &dest)
@@ -785,18 +661,6 @@ void goto_convertt::convert_expression(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_decl
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_decl(
   const codet &code,
   goto_programt &dest)
@@ -830,6 +694,7 @@ void goto_convertt::convert_decl(
   else
   {
     exprt initializer;
+
     codet tmp(code);
     initializer=code.op1();
     tmp.operands().resize(1); // just resize the vector, this will get rid of op1
@@ -843,57 +708,9 @@ void goto_convertt::convert_decl(
         break_globals2assignments(initializer, dest,code.location());
     }
 
-    if(initializer.is_typecast())
-    {
-      if(initializer.get("cast")=="dynamic")
-      {
-        exprt op0 = initializer.op0();
-        initializer.swap(op0);
-
-        if(!code.op1().is_empty())
-        {
-          exprt function = code.op1();
-          // We must check if the is a exception list
-          // If there is, we must throw the exception
-          if (function.has_operands())
-          {
-            if (function.op0().has_operands())
-            {
-              const exprt& exception_list=
-                  static_cast<const exprt&>(function.op0().op0().find("exception_list"));
-
-              if(exception_list.is_not_nil())
-              {
-                // Let's create an instruction for bad_cast
-
-                // Convert current exception list to a vector of strings.
-                std::vector<irep_idt> excp_list;
-                forall_irep(it, exception_list.get_sub())
-                  excp_list.push_back(it->id());
-
-                // Add new instruction throw
-                goto_programt::targett t=dest.add_instruction(THROW);
-                t->code = code_cpp_throw2tc(expr2tc(), excp_list);
-                t->location=function.location();
-              }
-            }
-          }
-          else
-          {
-            remove_sideeffects(initializer, dest);
-          }
-
-          // break up into decl and assignment
-          copy(tmp, OTHER, dest);
-          code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
-          assign.location()=tmp.location();
-          copy(assign, ASSIGN, dest);
-          return;
-        }
-      }
-    }
     remove_sideeffects(initializer, sideeffects);
     dest.destructive_append(sideeffects);
+
     // break up into decl and assignment
     copy(tmp, OTHER, dest);
 
@@ -903,17 +720,13 @@ void goto_convertt::convert_decl(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_assign
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+void goto_convertt::convert_decl_block(
+  const codet& code,
+  goto_programt& dest)
+{
+  forall_operands(it, code)
+    convert(to_code(*it), dest);
+}
 
 void goto_convertt::convert_assign(
   const code_assignt &code,
@@ -998,18 +811,6 @@ void goto_convertt::convert_assign(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::break_globals2assignments
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rhs, goto_programt &dest, const locationt &location)
 {
 
@@ -1052,18 +853,6 @@ void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rh
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::break_globals2assignments
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::break_globals2assignments(exprt & rhs, goto_programt & dest, const locationt & location)
 {
 
@@ -1098,18 +887,6 @@ void goto_convertt::break_globals2assignments(exprt & rhs, goto_programt & dest,
     t->location.comment("atomicity violation");
   }
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::break_globals2assignments_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest, goto_programt &dest, int atomic, const locationt &location)
 {
@@ -1201,18 +978,6 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   }
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::get_expr_number_globals
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
 {
   if(!options.get_bool_option("atomicity-check"))
@@ -1281,25 +1046,13 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
 
   unsigned int globals = 0;
 
-  forall_operands2(it, idx, expr)
-    globals += get_expr_number_globals(*it);
+  expr->foreach_operand([this, &globals] (const expr2tc &e) {
+    globals += get_expr_number_globals(e);
+    }
+  );
 
   return globals;
 }
-
-
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_init
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_init(
   const codet &code,
@@ -1317,18 +1070,6 @@ void goto_convertt::convert_init(
 
   convert(to_code_assign(assignment), dest);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_cpp_delete
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_cpp_delete(
   const codet &code,
@@ -1396,18 +1137,6 @@ void goto_convertt::convert_cpp_delete(
   t_d->location=code.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_assert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_assert(
   const codet &code,
   goto_programt &dest)
@@ -1442,18 +1171,6 @@ void goto_convertt::convert_assert(
   t->location.user_provided(true);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_skip
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_skip(
   const codet &code,
   goto_programt &dest)
@@ -1464,18 +1181,6 @@ void goto_convertt::convert_skip(
   migrate_expr(code, tmp_code);
   t->code = tmp_code;;
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_assert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_assume(
   const codet &code,
@@ -1607,18 +1312,6 @@ void goto_convertt::convert_for(
   targets.restore(old_targets);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_while
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_while(
   const codet &code,
   goto_programt &dest)
@@ -1630,7 +1323,6 @@ void goto_convertt::convert_while(
   }
 
   exprt tmp=code.op0();
-
   const exprt *cond=&tmp;
   const locationt &location=code.location();
 
@@ -1681,18 +1373,6 @@ void goto_convertt::convert_while(
   // restore break/continue
   targets.restore(old_targets);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_dowhile
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_dowhile(
   const codet &code,
@@ -1763,18 +1443,6 @@ void goto_convertt::convert_dowhile(
   targets.restore(old_targets);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::case_guard
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::case_guard(
   const exprt &value,
   const exprt::operandst &case_op,
@@ -1800,18 +1468,6 @@ void goto_convertt::case_guard(
     dest.swap(tmp);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_switch
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_switch(
   const codet &code,
@@ -1908,18 +1564,6 @@ void goto_convertt::convert_switch(
   targets.restore(old_targets);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_break
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_break(
   const code_breakt &code,
   goto_programt &dest)
@@ -1934,18 +1578,6 @@ void goto_convertt::convert_break(
   t->make_goto(targets.break_target);
   t->location=code.location();
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_return
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_return(
   const code_returnt &code,
@@ -2004,18 +1636,6 @@ void goto_convertt::convert_return(
   t->location=new_code.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_continue
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_continue(
   const code_continuet &code,
   goto_programt &dest)
@@ -2031,18 +1651,6 @@ void goto_convertt::convert_continue(
   t->location=code.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_goto
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_goto(
   const codet &code,
   goto_programt &dest)
@@ -2056,36 +1664,12 @@ void goto_convertt::convert_goto(
   targets.gotos.insert(t);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_non_deterministic_goto
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_non_deterministic_goto(
   const codet &code,
   goto_programt &dest)
 {
   convert_goto(code, dest);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::convert_atomic_begin
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::convert_atomic_begin(
   const codet &code,
@@ -2101,18 +1685,6 @@ void goto_convertt::convert_atomic_begin(
   copy(code, ATOMIC_BEGIN, dest);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_atomic_end
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_atomic_end(
   const codet &code,
   goto_programt &dest)
@@ -2125,18 +1697,6 @@ void goto_convertt::convert_atomic_end(
 
   copy(code, ATOMIC_END, dest);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::generate_ifthenelse
-
-  Inputs:
-
- Outputs:
-
- Purpose: if(guard) goto target;
-
-\*******************************************************************/
 
 void goto_convertt::generate_ifthenelse(
   const exprt &guard,
@@ -2223,18 +1783,6 @@ void goto_convertt::generate_ifthenelse(
   dest.destructive_append(tmp_z);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::convert_ifthenelse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::convert_ifthenelse(
   const codet &code,
   goto_programt &dest)
@@ -2305,18 +1853,6 @@ void goto_convertt::convert_ifthenelse(
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::collect_operands
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::collect_operands(
   const exprt &expr,
   const irep_idt &id,
@@ -2333,18 +1869,6 @@ void goto_convertt::collect_operands(
       collect_operands(*it, id, dest);
   }
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::generate_conditional_branch
-
-  Inputs:
-
- Outputs:
-
- Purpose: if(guard) goto target;
-
-\*******************************************************************/
 
 void goto_convertt::generate_conditional_branch(
   const exprt &guard,
@@ -2383,18 +1907,6 @@ void goto_convertt::generate_conditional_branch(
 
   dest.destructive_append(tmp);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::generate_conditional_branch
-
-  Inputs:
-
- Outputs:
-
- Purpose: if(guard) goto target;
-
-\*******************************************************************/
 
 void goto_convertt::generate_conditional_branch(
   const exprt &guard,
@@ -2503,18 +2015,6 @@ void goto_convertt::generate_conditional_branch(
   t_false->location=guard.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::get_string_constant
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 const std::string &goto_convertt::get_string_constant(
   const exprt &expr)
 {
@@ -2522,32 +2022,19 @@ const std::string &goto_convertt::get_string_constant(
      expr.operands().size()==1)
     return get_string_constant(expr.op0());
 
-  if(!expr.is_address_of() ||
-     expr.operands().size()!=1 ||
-     expr.op0().id()!="index" ||
-     expr.op0().operands().size()!=2 ||
-     expr.op0().op0().id()!="string-constant")
+  if(!expr.is_address_of()
+     || expr.operands().size()!=1
+     || !expr.op0().is_index()
+     || expr.op0().operands().size()!=2)
   {
     err_location(expr);
     str << "expected string constant, but got: "
           << expr.pretty() << std::endl;
-    throw 0;
+    abort();
   }
 
   return expr.op0().op0().value().as_string();
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::new_tmp_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 symbolt &goto_convertt::new_tmp_symbol(const typet &type)
 {
@@ -2566,18 +2053,6 @@ symbolt &goto_convertt::new_tmp_symbol(const typet &type)
   return *symbol_ptr;
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::new_cftest_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 symbolt &goto_convertt::new_cftest_symbol(const typet &type)
 {
   static int cftest_counter=0;
@@ -2595,18 +2070,6 @@ symbolt &goto_convertt::new_cftest_symbol(const typet &type)
 
   return *symbol_ptr;
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::guard_program
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::guard_program(
   const guardt &guard,

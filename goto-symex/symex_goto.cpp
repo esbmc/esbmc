@@ -40,16 +40,17 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   new_guard_false = ((is_false(new_guard)) || cur_state->guard.is_false());
   new_guard_true = is_true(new_guard);
 
-  if (!new_guard_false && options.get_bool_option("smt-symex-guard")) {
-    runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
-                                                 (target);
+  if (!new_guard_false && options.get_bool_option("smt-symex-guard"))
+  {
+    auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
+
     equality2tc question(true_expr, new_guard);
     try {
       symex_slicet slicer;
       symex_target_equationt eq = dynamic_cast<const symex_target_equationt&>(*target);
       slicer.slice_for_symbols(eq, question);
 
-      tvt res = rte->ask_solver_question(question);
+      tvt res = rte.get()->ask_solver_question(question);
 
       if (res.is_false())
         new_guard_false = true;

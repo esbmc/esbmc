@@ -205,7 +205,9 @@ void loopst::output(std::ostream &out)
 {
   unsigned n=original_loop_head->location_number;
 
-  out << n << " is head of { ";
+  out << n << " is head of (size: ";
+  out << goto_program.instructions.size();
+  out << ") { ";
 
   for(goto_programt::instructionst::iterator l_it=
       goto_program.instructions.begin();
@@ -215,7 +217,7 @@ void loopst::output(std::ostream &out)
     if(l_it != goto_program.instructions.begin()) out << ", ";
     out << (*l_it).location_number;
   }
-  out << " }\n";
+  out << " }" << std::endl;
 
   dump_loop_vars();
 }

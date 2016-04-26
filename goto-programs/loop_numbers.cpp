@@ -12,18 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "loop_numbers.h"
 
-/*******************************************************************\
-
-Function: show_loop_numbers
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void show_loop_numbers(
   ui_message_handlert::uit ui,
   const goto_programt &goto_program)
@@ -60,18 +48,6 @@ void show_loop_numbers(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: show_loop_numbers
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void show_loop_numbers(
   ui_message_handlert::uit ui,

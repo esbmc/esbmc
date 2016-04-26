@@ -37,7 +37,6 @@ void goto_unwindt::goto_unwind()
     it != function_loops.rend();
     ++it)
   {
-    assert(!it->second.get_goto_program().empty());
     unwind_program(goto_function.body, it);
 
     // remove skips
@@ -50,31 +49,13 @@ void goto_unwindt::unwind_program(
   function_loopst::reverse_iterator loop)
 {
   // Get loop exit goto number
-  unsigned exit_number =
-    (--loop->second.get_goto_program().instructions.end())->location_number;
+  goto_programt::targett loop_exit = loop->get_original_loop_exit();
 
   // Increment pointer by 1, it will point to the first instruction
   // after the end of the loop
-  ++exit_number;
-
-  // So we can get the instruction after the exit
-  goto_programt::targett loop_exit;
-  for(goto_programt::instructionst::iterator
-      it=goto_function.body.instructions.begin();
-      it!=goto_function.body.instructions.end();
-      it++)
-  {
-    if(it->location_number == exit_number)
-    {
-      loop_exit = it;
-      break;
-    }
-  }
-
-  std::vector<goto_programt::targett> iteration_points;
+  loop_exit++;
 
   assert(unwind!=0);
-  iteration_points.resize(unwind);
 
   if(loop_exit!=goto_program.instructions.begin())
   {
@@ -100,22 +81,19 @@ void goto_unwindt::unwind_program(
   goto_programt::targett t_skip=goto_program.insert(loop_exit);
   goto_programt::targett loop_iter=t_skip;
 
-  const goto_programt::targett loop_head = loop->first;
+  const goto_programt::targett loop_head = loop->get_original_loop_head();
 
   t_skip->make_skip();
-  t_skip->location=loop_head->location;
-  t_skip->function=loop_head->function;
-
-  // record the exit point of first iteration
-  iteration_points[0]=loop_iter;
+  t_skip->location = loop_head->location;
+  t_skip->function = loop_head->function;
 
   // build a map for branch targets inside the loop
   std::map<goto_programt::targett, unsigned> target_map;
 
   {
     unsigned count=0;
-    for(goto_programt::targett t=loop_head;
-        t!=loop_exit; t++, count++)
+    for(goto_programt::targett t = loop->get_original_loop_head();
+        t != loop_exit; t++, count++)
     {
       assert(t!=goto_program.instructions.end());
       target_map[t]=count;
@@ -144,17 +122,13 @@ void goto_unwindt::unwind_program(
     std::vector<goto_programt::targett> target_vector;
     target_vector.reserve(target_map.size());
 
-    for(goto_programt::targett t=loop_head;
+    for(goto_programt::targett t = loop->get_original_loop_head();
         t!=loop_exit; t++)
     {
       assert(t!=goto_program.instructions.end());
-      goto_programt::targett copied_t=copies.add_instruction();
-      *copied_t=*t;
+      goto_programt::targett copied_t=copies.add_instruction(*t);
       target_vector.push_back(copied_t);
     }
-
-    // record exit point of this copy
-    iteration_points[i]=target_vector.back();
 
     // adjust the intra-loop branches
 

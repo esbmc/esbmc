@@ -235,18 +235,6 @@ std::ostream& goto_programt::output_instruction(
   return out;
 }
 
-/*******************************************************************\
-
-Function: operator<
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool operator<(const goto_programt::const_targett i1,
                const goto_programt::const_targett i2)
 {

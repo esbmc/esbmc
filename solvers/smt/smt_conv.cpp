@@ -4,7 +4,7 @@
 
 #include <base_type.h>
 #include <arith_tools.h>
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "smt_conv.h"
 #include <solvers/prop/literal.h>
@@ -362,9 +362,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     goto nocvt;
   special_cases = false;
 
-  // Convert /all the arguments/.
-  forall_operands2(it, idx, expr) {
-    args[i] = convert_ast(*it);
+  // Convert /all the arguments/. Via magical delegates.
+  expr->foreach_operand(
+      [this, &args, &i, &used_sorts, &seen_signed_operand, make_ints_reals]
+      (const expr2tc &e)
+    {
+    args[i] = convert_ast(e);
 
     if (make_ints_reals && args[i]->sort->id == SMT_SORT_INT) {
       args[i] = mk_func_app(mk_sort(SMT_SORT_REAL), SMT_FUNC_INT2REAL, args[i]);
@@ -372,9 +375,10 @@ smt_convt::convert_ast(const expr2tc &expr)
 
     used_sorts |= args[i]->sort->id;
     i++;
-    if (is_signedbv_type(*it) || is_fixedbv_type(*it))
+    if (is_signedbv_type(e) || is_fixedbv_type(e))
       seen_signed_operand = true;
-  }
+    }
+  );
 nocvt:
 
   sort = convert_sort(expr->type);
@@ -630,17 +634,6 @@ expr_handle_table:
   case expr2t::overflow_neg_id:
   {
     a = overflow_neg(expr);
-    break;
-  }
-  case expr2t::zero_length_string_id:
-  {
-    // Extremely unclear.
-    a = args[0]->project(this, 0);
-    break;
-  }
-  case expr2t::zero_string_id:
-  {
-    a = mk_smt_symbol("zero_string", sort);
     break;
   }
   case expr2t::byte_extract_id:
@@ -1665,8 +1658,6 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_STORE, SMT_FUNC_STORE, SMT_FUNC_STORE, 3, 0},  //with
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //member
 { SMT_FUNC_SELECT, SMT_FUNC_SELECT, SMT_FUNC_SELECT, 2, 0},  //index
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //zero_str_id
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //zero_len_str
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //isnan
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //overflow
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //overflow_cast
@@ -1693,7 +1684,6 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_func_call
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_comma
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //invalid_ptr
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //buffer_sz
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_asm
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_del_arr
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_del_id
@@ -1978,6 +1968,14 @@ array_iface::default_convert_array_of(smt_astt init_val,
   // We now an initializer, and a size of array to build. So:
   // Repeatedly store things into this.
   // XXX int mode
+
+  if (init_val->sort->id == SMT_SORT_BOOL && !supports_bools_in_arrays) {
+    smt_astt zero = ctx->mk_smt_bvint(BigInt(0), false, 1);
+    smt_astt one = ctx->mk_smt_bvint(BigInt(0), false, 1);
+    smt_sortt result_sort = ctx->mk_sort(SMT_SORT_BV, 1, false);
+    init_val = ctx->mk_func_app(result_sort, SMT_FUNC_ITE, init_val, one, zero);
+  }
+
   smt_sortt domwidth = ctx->mk_int_bv_sort(array_size);
   smt_sortt arrsort = ctx->mk_sort(SMT_SORT_ARRAY, domwidth, init_val->sort);
   smt_astt newsym_ast =

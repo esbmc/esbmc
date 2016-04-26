@@ -1,5 +1,5 @@
 #include <sstream>
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 #include <base_type.h>
 #include "smt_conv.h"
 #include "smt_tuple_flat.h"
@@ -55,7 +55,7 @@
  * slower approach works.
  */
 
-smt_astt 
+smt_astt
 tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
   // So - we need to generate an ite between true_val and false_val, that gets
@@ -90,7 +90,7 @@ tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   return ctx->convert_ast(result);
 }
 
-smt_astt 
+smt_astt
 array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
   // Similar to tuple ite's, but the leafs are arrays.
@@ -125,7 +125,7 @@ array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   return ctx->convert_ast(result);
 }
 
-smt_astt 
+smt_astt
 tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   // We have two tuple_sym_smt_asts and need to create a boolean ast representing
@@ -153,7 +153,7 @@ tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 }
 
 
-smt_astt 
+smt_astt
 array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   // We have two tuple_sym_smt_asts and need to create a boolean ast representing
@@ -184,7 +184,7 @@ array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   return ctx->make_conjunct(eqs);
 }
 
-smt_astt 
+smt_astt
 tuple_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
     expr2tc idx_expr __attribute__((unused)) /*ndebug*/) const
 {
@@ -223,7 +223,7 @@ tuple_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   return result;
 }
 
-smt_astt 
+smt_astt
 array_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
     expr2tc idx_expr) const
 {
@@ -264,7 +264,7 @@ array_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   return result;
 }
 
-smt_astt 
+smt_astt
 tuple_sym_smt_ast::select(smt_convt *ctx __attribute__((unused)),
     const expr2tc &idx __attribute__((unused))) const
 {
@@ -272,7 +272,7 @@ tuple_sym_smt_ast::select(smt_convt *ctx __attribute__((unused)),
   abort();
 }
 
-smt_astt 
+smt_astt
 array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 {
   tuple_smt_sortt ts = to_tuple_sort(sort);
@@ -300,7 +300,7 @@ array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   return result;
 }
 
-smt_astt 
+smt_astt
 tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 {
   // Create an AST representing the i'th field of the tuple a. This means we
@@ -333,7 +333,7 @@ tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   }
 }
 
-smt_astt 
+smt_astt
 array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 {
   tuple_smt_sortt ts = to_tuple_sort(sort);
@@ -448,7 +448,7 @@ smt_tuple_sym_flattener::mk_tuple_array_symbol(const expr2tc &expr)
   return new array_sym_smt_ast(ctx, sort, name);
 }
 
-smt_astt 
+smt_astt
 smt_tuple_sym_flattener::tuple_array_create(const type2tc &array_type,
                                             smt_astt *inputargs,
                                             bool const_array,
@@ -538,7 +538,7 @@ smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
   return outstruct;
 }
 
-smt_astt 
+smt_astt
 smt_tuple_sym_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 {
 

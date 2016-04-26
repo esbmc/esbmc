@@ -1,8 +1,5 @@
 /* scripts/ac_config.in.  Generated from configure.ac by autoheader.  */
 
-/* Have Eigen library */
-#undef EIGEN_LIB
-
 /* List of ESBMC headers available to us */
 #undef ESBMC_AVAILABLE_SOLVERS
 
@@ -117,9 +114,6 @@
 /* Define if you have the _dyld_func_lookup function. */
 #undef HAVE_DYLD
 
-/* Define to 1 if you have the <eigen3/Eigen/Eigen> header file. */
-#undef HAVE_EIGEN3_EIGEN_EIGEN
-
 /* Define to 1 if the system has the type `error_t'. */
 #undef HAVE_ERROR_T
 
@@ -189,6 +183,9 @@
 /* Define to 1 if you have the `m' library (-lm). */
 #undef HAVE_LIBM
 
+/* Define if there is a working LLVM library. */
+#undef HAVE_LLVM
+
 /* Define to 1 if you have the `localeconv' function. */
 #undef HAVE_LOCALECONV
 
@@ -239,6 +236,9 @@
 
 /* Define to 1 if you have the `opendir' function. */
 #undef HAVE_OPENDIR
+
+/* Define to 1 if you have the <openssl/sha.h> header file. */
+#undef HAVE_OPENSSL_SHA_H
 
 /* Define to 1 if you have the `pathconf' function. */
 #undef HAVE_PATHCONF
@@ -439,6 +439,18 @@
 /* Define to 1 if the system has the type `_Bool'. */
 #undef HAVE__BOOL
 
+/* define if the clang library is available */
+#undef HAVE_clang
+
+/* Build mode of the LLVM library. */
+#undef LLVM_BUILDMODE
+
+/* Define if LLVM was compiled with NDEBUG. */
+#undef LLVM_NDEBUG
+
+/* Version of the LLVM library. */
+#undef LLVM_VERSION
+
 /* Define to 1 if `lstat' dereferences a symlink specified with a trailing
    slash. */
 #undef LSTAT_FOLLOWS_SLASHED_SYMLINK
@@ -462,15 +474,20 @@
    module search path. */
 #undef LT_MODULE_PATH_VAR
 
-/* Define to the sub-directory in which libtool stores uninstalled libraries.
-   */
+/* Define to the sub-directory where libtool stores uninstalled libraries. */
 #undef LT_OBJDIR
 
 /* Define to the shared library suffix, say, ".dylib". */
 #undef LT_SHARED_EXT
 
+/* Define to the shared archive member specification, say "(shr.o)". */
+#undef LT_SHARED_LIB_MEMBER
+
 /* Define if dlsym() requires a leading underscore in symbol names. */
 #undef NEED_USCORE
+
+/* Have openssl headers */
+#undef OPENSSL_HEADERS
 
 /* Name of package */
 #undef PACKAGE
@@ -565,7 +582,7 @@
 /* Define so that glibc/gnulib argp.h does not typedef error_t. */
 #undef __error_t_defined
 
-/* Define to a type to use for `error_t' if it is not otherwise available. */
+/* Define to a type to use for 'error_t' if it is not otherwise available. */
 #undef error_t
 
 /* Define to `int' if <sys/types.h> doesn't define. */

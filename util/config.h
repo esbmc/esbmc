@@ -20,6 +20,7 @@ public:
     // for ANSI-C
     unsigned int_width;
     unsigned long_int_width;
+    unsigned bool_width;
     unsigned char_width;
     unsigned short_int_width;
     unsigned long_long_int_width;
@@ -54,9 +55,6 @@ public:
 
     typedef enum { LIB_NONE, LIB_FULL } libt;
     libt lib;
-    bool string_abstraction;
-    bool deadlock_check;
-    bool lock_check;
   } ansi_c;
 
   std::string main;

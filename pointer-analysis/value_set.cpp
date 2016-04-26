@@ -22,9 +22,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_code.h>
 #include <arith_tools.h>
 #include <type_byte_size.h>
+#include <c_types.h>
 
 #include <langapi/language_util.h>
-#include <ansi-c/c_types.h>
 
 #include "value_set.h"
 
@@ -41,9 +41,9 @@ void value_sett::output(std::ostream &out) const
       v_it++)
   {
     std::string identifier, display_name;
-    
+
     const entryt &e=v_it->second;
-  
+
     if(has_prefix(e.identifier, "value_set::dynamic_object"))
     {
       display_name=e.identifier + e.suffix;
@@ -65,22 +65,22 @@ void value_sett::output(std::ostream &out) const
       display_name = identifier + e.suffix;
       #endif
     }
-    
+
     out << display_name;
 
     out << " = { ";
 
     const object_map_dt &object_map=e.object_map.read();
-    
+
     unsigned width=0;
-    
+
     for(object_map_dt::const_iterator
         o_it=object_map.begin();
         o_it!=object_map.end();
         o_it++)
     {
       const expr2tc &o = object_numbering[o_it->first];
-    
+
       std::string result;
 
       // Display invalid / unknown objects as just that,
@@ -90,14 +90,14 @@ void value_sett::output(std::ostream &out) const
       {
         // Everything else, display as a triple of <object, offset, type>.
         result="<"+from_expr(ns, identifier, o)+", ";
-      
+
         if(o_it->second.offset_is_set)
           result+=integer2string(o_it->second.offset)+"";
         else
           result+="*";
-        
+
         result += ", "+from_type(ns, identifier, o->type);
-      
+
         result+=">";
       }
 
@@ -105,7 +105,7 @@ void value_sett::output(std::ostream &out) const
       out << result;
 
       width+=result.size();
-    
+
       object_map_dt::const_iterator next(o_it);
       next++;
 
@@ -124,7 +124,7 @@ expr2tc
 value_sett::to_expr(object_map_dt::const_iterator it) const
 {
   const expr2tc &object = object_numbering[it->first];
-  
+
   if (is_invalid2t(object) || is_unknown2t(object))
     return object;
 
@@ -142,7 +142,7 @@ value_sett::to_expr(object_map_dt::const_iterator it) const
 bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 {
   bool result=false;
-  
+
   // Iterate over all new values; if they're in the current value set, merge
   // them. If not, only merge it in if keepnew is true.
   for(valuest::const_iterator
@@ -169,22 +169,22 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 
       continue;
     }
-      
+
     // The variable was in this' set, merge the values.
     entryt &e=it2->second;
     const entryt &new_e=it->second;
-    
+
     if(make_union(e.object_map, new_e.object_map))
       result=true;
   }
-  
+
   return result;
 }
 
 bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
 {
   bool result=false;
-  
+
   // Merge the pointed at objects in src into dest.
   for(object_map_dt::const_iterator it=src.read().begin();
       it!=src.read().end();
@@ -193,7 +193,7 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
     if(insert(dest, it))
       result=true;
   }
-  
+
   return result;
 }
 
@@ -204,7 +204,7 @@ void value_sett::get_value_set(
   object_mapt object_map;
   // Fetch all values into object_map,
   get_value_set(expr, object_map);
-  
+
   // Convert values into expressions to return.
   for(object_map_dt::const_iterator
       it=object_map.read().begin();
@@ -251,7 +251,7 @@ void value_sett::get_value_set_rec(
     // Attach '[]' to the suffix, identifying the variable tracking all the
     // pointers in this array.
     get_value_set_rec(idx.source_value, dest, "[]"+suffix, original_type);
-    
+
     return;
   }
   else if (is_member2t(expr))
@@ -264,7 +264,7 @@ void value_sett::get_value_set_rec(
     const type2tc &source_type = memb.source_value->type;
     assert(is_struct_type(source_type) || is_union_type(source_type));
 #endif
-           
+
     // Add '.$field' to the suffix, identifying the member from the other
     // members of the struct's variable.
     get_value_set_rec(memb.source_value, dest,
@@ -294,7 +294,7 @@ void value_sett::get_value_set_rec(
     // Look up this symbol, with the given suffix to distinguish any arrays or
     // members we've picked out of it at a higher level.
     valuest::const_iterator v_it = values.find(string_wrapper(sym.get_symbol_name() + suffix));
-      
+
     // If it points at things, put those things into the destination object map.
     if(v_it!=values.end())
     {
@@ -340,7 +340,7 @@ void value_sett::get_value_set_rec(
     // Get reference set of dereference; this evaluates the dereference itself.
     get_reference_set(expr, reference_set);
     const object_map_dt &object_map=reference_set.read();
-    
+
     // Then get the value set of all the pointers we might dereference to.
     if(object_map.begin()!=object_map.end())
     {
@@ -515,8 +515,8 @@ void value_sett::get_value_set_rec(
 
       insert(dest, dynobj, mp_integer(0));
       }
-      return;          
- 
+      return;
+
     case sideeffect2t::cpp_new:
     case sideeffect2t::cpp_new_arr:
       {
@@ -575,12 +575,12 @@ void value_sett::get_value_set_rec(
   else if (is_dynamic_object2t(expr))
   {
     const dynamic_object2t &dyn = to_dynamic_object2t(expr);
-  
+
     assert(is_constant_int2t(dyn.instance));
     const constant_int2t &intref = to_constant_int2t(dyn.instance);
     std::string idnum = integer2string(intref.constant_value);
     const std::string name = "value_set::dynamic_object" + idnum + suffix;
-  
+
     // look it up
     valuest::const_iterator v_it=values.find(string_wrapper(name));
 
@@ -604,7 +604,7 @@ void value_sett::get_reference_set(
   // Fetch all the symbols expr refers to into this object map.
   object_mapt object_map;
   get_reference_set(expr, object_map);
-  
+
   // Then convert to expressions into the destination list.
   for(object_map_dt::const_iterator
       it=object_map.read().begin();
@@ -652,12 +652,12 @@ void value_sett::get_reference_set_rec(
                          type_byte_size(*index.type);
       has_const_index_offset = true;
     }
-    
+
     object_mapt array_references;
     get_reference_set(index.source_value, array_references);
-        
+
     const object_map_dt &object_map=array_references.read();
-    
+
     for(object_map_dt::const_iterator
         a_it=object_map.begin();
         a_it!=object_map.end();
@@ -697,11 +697,11 @@ void value_sett::get_reference_set_rec(
           o.offset_alignment = std::min(index_align, old_align);
           o.offset_is_set = false;
         }
-          
+
         insert(dest, object, o);
       }
     }
-    
+
     return;
   }
   else if (is_member2t(expr))
@@ -721,7 +721,7 @@ void value_sett::get_reference_set_rec(
 
     object_mapt struct_references;
     get_reference_set(memb.source_value, struct_references);
-    
+
     const object_map_dt &object_map=struct_references.read();
 
     for(object_map_dt::const_iterator
@@ -730,7 +730,7 @@ void value_sett::get_reference_set_rec(
         it++)
     {
       expr2tc object = object_numbering[it->first];
-      
+
       // An unknown or null base is /always/ unknown or null.
       if (is_unknown2t(object) || is_null_object2t(object) ||
           (is_typecast2t(object) &&
@@ -810,7 +810,7 @@ void value_sett::assign(
   // Must have concrete type.
   assert(!is_symbol_type(lhs));
   const type2tc &lhs_type = lhs->type;
-  
+
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
     // Assign the values of all members of the rhs thing to the lhs. It's
@@ -822,7 +822,7 @@ void value_sett::assign(
     const std::vector<irep_idt> &member_names = (is_struct_type(rhs->type))
       ? to_struct_type(rhs->type).member_names
       : to_union_type(rhs->type).member_names;
-    
+
     unsigned int i = 0;
     for (std::vector<type2tc>::const_iterator c_it = members.begin();
         c_it != members.end(); c_it++, i++)
@@ -833,7 +833,7 @@ void value_sett::assign(
       // ignore methods
       if (is_code_type(subtype))
         continue;
-    
+
       member2tc lhs_member(subtype, lhs, name);
 
       expr2tc rhs_member;
@@ -870,7 +870,7 @@ void value_sett::assign(
     else
     {
       assert(base_type_eq(rhs->type, lhs_type, ns));
-        
+
       if (is_constant_array_of2t(rhs))
       {
         assign(lhs_index, to_constant_array_of2t(rhs).initializer,
@@ -886,10 +886,12 @@ void value_sett::assign(
           add_to_sets=true;
         }
 #endif
-        forall_operands2(it, idx, rhs) {
-          assign(lhs_index, *it, add_to_sets);
-          add_to_sets = true;
-        }
+        rhs->foreach_operand([this, &add_to_sets, &lhs_index] (const expr2tc &e)
+          {
+            assign(lhs_index, e, add_to_sets);
+            add_to_sets = true;
+          }
+        );
       }
       else if (is_with2t(rhs))
       {
@@ -913,9 +915,9 @@ void value_sett::assign(
   {
     // basic type
     object_mapt values_rhs;
-    
+
     get_value_set(rhs, values_rhs);
-    
+
     assign_rec(lhs, values_rhs, "", add_to_sets);
   }
 }
@@ -925,15 +927,15 @@ void value_sett::do_free(const expr2tc &op)
   // op must be a pointer
   assert(is_pointer_type(op));
 
-  // find out what it points to    
+  // find out what it points to
   object_mapt value_set;
   get_value_set(op, value_set);
-  
+
   const object_map_dt &object_map=value_set.read();
-  
+
   // find out which *instances* interest us
   expr_sett to_mark;
-  
+
   for(object_map_dt::const_iterator
       it=object_map.begin();
       it!=object_map.end();
@@ -944,13 +946,13 @@ void value_sett::do_free(const expr2tc &op)
     if (is_dynamic_object2t(object))
     {
       const dynamic_object2t &dynamic_object = to_dynamic_object2t(object);
-      
+
       if (!dynamic_object.invalid) {
         to_mark.insert(dynamic_object.instance);
       }
     }
   }
-  
+
   // mark these as 'may be invalid'
   // this, unfortunately, destroys the sharing
   for(valuest::iterator v_it=values.begin();
@@ -961,9 +963,9 @@ void value_sett::do_free(const expr2tc &op)
 
     const object_map_dt &old_object_map=
       v_it->second.object_map.read();
-      
+
     bool changed=false;
-    
+
     for(object_map_dt::const_iterator
         o_it=old_object_map.begin();
         o_it!=old_object_map.end();
@@ -991,7 +993,7 @@ void value_sett::do_free(const expr2tc &op)
       else
         set(new_object_map, o_it);
     }
-    
+
     if(changed)
       v_it->second.object_map=new_object_map;
   }
@@ -1007,7 +1009,7 @@ void value_sett::assign_rec(
   if (is_symbol2t(lhs))
   {
     std::string identifier = to_symbol2t(lhs).get_symbol_name();
-    
+
     if(add_to_sets)
       make_union(get_entry(identifier, suffix).object_map, values_rhs);
     else
@@ -1016,7 +1018,7 @@ void value_sett::assign_rec(
   else if (is_dynamic_object2t(lhs))
   {
     const dynamic_object2t &dynamic_object = to_dynamic_object2t(lhs);
-  
+
     if (is_unknown2t(dynamic_object.instance))
       return; // We're assigning to something unknown. Not much we can do.
     assert(is_constant_int2t(dynamic_object.instance));
@@ -1033,7 +1035,7 @@ void value_sett::assign_rec(
 
     if(reference_set.read().size()!=1)
       add_to_sets=true;
-      
+
     for(object_map_dt::const_iterator
         it=reference_set.read().begin();
         it!=reference_set.read().end();
@@ -1069,12 +1071,11 @@ void value_sett::assign_rec(
 
     assert(is_struct_type(*ourtype) || is_union_type(*ourtype) ||
            is_dynamic_object2t(member.source_value));
-           
+
     assign_rec(to_member2t(lhs).source_value, values_rhs,
                "."+component_name+suffix, add_to_sets);
   }
-  else if (is_zero_string2t(lhs) || is_zero_length_string2t(lhs) ||
-           is_constant_string2t(lhs) || is_null_object2t(lhs) ||
+  else if (is_constant_string2t(lhs) || is_null_object2t(lhs) ||
            is_valid_object2t(lhs) || is_deallocated_obj2t(lhs) ||
            is_dynamic_size2t(lhs) || is_constant_array2t(lhs))
   {
@@ -1144,7 +1145,7 @@ void value_sett::do_function_call(
     if(identifier=="") continue;
 
     add_var(identifier, "");
-  
+
     symbol2tc v_expr(*it2, "value_set::dummy_arg_"+i2string(i));
 
     symbol2tc actual_lhs(*it2, identifier);

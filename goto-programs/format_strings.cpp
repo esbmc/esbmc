@@ -10,18 +10,6 @@ Author: CM Wintersteiger
 
 #include "format_strings.h"
 
-/*******************************************************************\
-
-Function: parse_flags
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void parse_flags(
   std::string::const_iterator &it,
   format_tokent &curtok)
@@ -42,18 +30,6 @@ void parse_flags(
   }
 }
 
-/*******************************************************************\
-
-Function: parse_field_width
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void parse_field_width(
   std::string::const_iterator &it,
   format_tokent &curtok)
@@ -68,18 +44,6 @@ void parse_field_width(
   for(;isdigit(*it); it++) tmp+=*it;
   curtok.field_width=string2integer(tmp);
 }
-
-/*******************************************************************\
-
-Function: parse_precision
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void parse_precision(
   std::string::const_iterator &it,
@@ -102,18 +66,6 @@ void parse_precision(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: parse_length_modifier
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void parse_length_modifier(
   std::string::const_iterator &it,
@@ -147,18 +99,6 @@ void parse_length_modifier(
     curtok.length_modifier = format_tokent::LEN_L;
   }
 }
-
-/*******************************************************************\
-
-Function: parse_conversion_specifier
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void parse_conversion_specifier(
   const std::string &arg_string,
@@ -209,18 +149,6 @@ void parse_conversion_specifier(
   }
   it++;
 }
-
-/*******************************************************************\
-
-Function: parse_format_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool parse_format_string(
   const exprt &format_arg,

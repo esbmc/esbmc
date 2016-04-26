@@ -1,305 +1,310 @@
 #include <string.h>
 #include <stdlib.h>
+#include <ctype.h>
 
-#include "intrinsics.h"
-
-// OSX headers,
 #undef strcpy
 #undef strncpy
 #undef strcat
 #undef strncat
-#undef memcpy
+#undef strlen
+#undef strcmp
+#undef strncmp
+#undef strchr
+#undef strrchr
+#undef strspn
+#undef strcspn
+#undef strpbrk
+#undef strstr
+#undef strtok
+#undef memchr
+#undef memcmp
 #undef memset
+#undef memcpy
 #undef memmove
+#undef memchr
 
 char *strcpy(char *dst, const char *src)
 {
   __ESBMC_HIDE:;
-  size_t i;
-  for(i=0; src[i]!=0; i++)
-    dst[i]=src[i];
-  return dst;
-}
-
-char *strcpy_strabs(char *dst, const char *src)
-{
-  __ESBMC_HIDE:;
-  __ESBMC_assert(__ESBMC_is_zero_string(src), "strcpy zero-termination of 2nd argument");
-  __ESBMC_assert(__ESBMC_buffer_size(dst)>__ESBMC_zero_string_length(src), "strcpy buffer overflow");
-  dst[__ESBMC_zero_string_length(src)]=0;
-  __ESBMC_is_zero_string(dst)=1;
-  __ESBMC_zero_string_length(dst)=__ESBMC_zero_string_length(src);
+  char *cp = dst;
+  while ((*cp++ = *src++));
   return dst;
 }
 
 char *strncpy(char *dst, const char *src, size_t n)
 {
   __ESBMC_HIDE:;
-  size_t i=0;
-  char ch;
-  _Bool end;
+  char *start = dst;
 
-  for(end=0; i<n; i++)
-  {
-    ch=end?0:src[i];
-    dst[i]=ch;
-    end=end || ch==(char)0;
-  }
-  return dst;
-}
+  while (n && (*dst++ = *src++))
+    n--;
 
-char *strncpy_strabs(char *dst, const char *src, size_t n)
-{
-  __ESBMC_HIDE:;
-  __ESBMC_assert(__ESBMC_is_zero_string(src), "strncpy zero-termination of 2nd argument");
-  __ESBMC_assert(__ESBMC_buffer_size(dst)>=n, "strncpy buffer overflow");
-  __ESBMC_is_zero_string(dst)=__ESBMC_zero_string_length(src)<n;
-  __ESBMC_zero_string_length(dst)=__ESBMC_zero_string_length(src);
-  return dst;
+  if (n)
+    while (--n)
+      *dst++ = '\0';
+
+  return start;
 }
 
 char *strcat(char *dst, const char *src)
 {
-  __ESBMC_HIDE:
-  // XXX - this has no body if string abstraction option is not enabled
-  return dst;
-}
-
-char *strcat_strabs(char *dst, const char *src)
-{
-  __ESBMC_HIDE:
-  size_t new_size;
-  __ESBMC_assert(__ESBMC_is_zero_string(dst), "strcat zero-termination of 1st argument");
-  __ESBMC_assert(__ESBMC_is_zero_string(src), "strcat zero-termination of 2nd argument");
-  new_size=__ESBMC_zero_string_length(dst)+__ESBMC_zero_string_length(src);
-  __ESBMC_assert(__ESBMC_buffer_size(dst)>=new_size,
-                   "strcat buffer overflow");
-  size_t old_size=__ESBMC_zero_string_length(dst);
-  //"  for(size_t i=0; i<__ESBMC_zero_string_length(src); i++)
-  //"    dst[old_size+i];
-  dst[new_size]=0;
-  __ESBMC_is_zero_string(dst)=1;
-  __ESBMC_zero_string_length(dst)=new_size;
+  __ESBMC_HIDE:;
+  strcpy (dst + strlen (dst), src);
   return dst;
 }
 
 char *strncat(char *dst, const char *src, size_t n)
 {
-  __ESBMC_HIDE:
-  // XXX - this has no body if string abstraction option isn't enabled
-  return dst;
-}
-
-char *strncat_strabs(char *dst, const char *src, size_t n)
-{
-  __ESBMC_HIDE:
-  size_t additional, new_size;
-  __ESBMC_assert(__ESBMC_is_zero_string(dst), "strncat zero-termination of 1st argument");
-  __ESBMC_assert(__ESBMC_is_zero_string(src) || __ESBMC_buffer_size(src)>=n, "strncat zero-termination of 2nd argument");
-  additional=(n<__ESBMC_zero_string_length(src))?n:__ESBMC_zero_string_length(src);
-  new_size=__ESBMC_is_zero_string(dst)+additional;
-  __ESBMC_assert(__ESBMC_buffer_size(dst)>new_size,
-                   "strncat buffer overflow");
-  size_t dest_len=__ESBMC_zero_string_length(dst);
-  size_t i;
-  for (i = 0 ; i < n && i<__ESBMC_zero_string_length(src) ; i++)
-    dst[dest_len + i] = src[i];
-  dst[dest_len + i] = 0;
-  __ESBMC_is_zero_string(dst)=1;
-  __ESBMC_zero_string_length(dst)=new_size;
-  return dst;
-}
-
-int strcmp(const char *s1, const char *s2)
-{
   __ESBMC_HIDE:;
-  int retval;
-  if(s1!=0 && s1==s2) return 0;
-  // XXX - this does nothing useful if string abstraction isn't defined
-  return retval;
-}
+  char *start = dst;
 
-int strcmp_strabs(const char *s1, const char *s2)
-{
-  __ESBMC_HIDE:;
-  int retval;
-  if(s1!=0 && s1==s2) return 0;
-  __ESBMC_assert(__ESBMC_is_zero_string(s1), "strcmp zero-termination of 1st argument");
-  __ESBMC_assert(__ESBMC_is_zero_string(s2), "strcmp zero-termination of 2nd argument");
-  if(__ESBMC_zero_string_length(s1) != __ESBMC_zero_string_length(s1)) __ESBMC_assume(retval!=0);
-  return retval;
-}
+  while (*dst++);
+  dst--;
 
-int strncmp(const char *s1, const char *s2, size_t n)
-{
-  __ESBMC_HIDE:
-  if(s1!=0 && s1==s2) return 0;
-  // XXX - does nothing useful if string abstraction option not on
-  return 0;
-}
+  while (n--)
+    if (!(*dst++ = *src++))
+      return start;
 
-int strncmp_strabs(const char *s1, const char *s2, size_t n)
-{
-  if(s1!=0 && s1==s2) return 0;
-  __ESBMC_assert(__ESBMC_is_zero_string(s1) || __ESBMC_buffer_size(s1)>=n, "strncmp zero-termination of 1st argument");
-  __ESBMC_assert(__ESBMC_is_zero_string(s1) || __ESBMC_buffer_size(s2)>=n, "strncmp zero-termination of 2nd argument");
-  // XXX - doesn't do anything useful /even if/ string abs is on
-  return 0;
+  *dst = '\0';
+  return start;
 }
 
 size_t strlen(const char *s)
 {
-  __ESBMC_HIDE:
-  size_t len=0;
-  while(s[len]!=0) len++;
+  __ESBMC_HIDE:;
+  size_t len = 0;
+  while (s[len] != 0)
+    len++;
   return len;
 }
 
-size_t strlen_strabs(const char *s)
+int strcmp(const char *p1, const char *p2)
 {
-  __ESBMC_HIDE:
-  //__ESBMC_assert(__ESBMC_is_zero_string(s), "strlen zero-termination");
-  return __ESBMC_zero_string_length(s);
+  __ESBMC_HIDE:;
+  const unsigned char *s1 = (const unsigned char *) p1;
+  const unsigned char *s2 = (const unsigned char *) p2;
+  unsigned char c1, c2;
+
+  do
+  {
+    c1 = (unsigned char) *s1++;
+    c2 = (unsigned char) *s2++;
+    if (c1 == '\0')
+      return c1 - c2;
+  } while (c1 == c2);
+
+  return c1 - c2;
+}
+
+int strncmp(const char *s1, const char *s2, size_t n)
+{
+  __ESBMC_HIDE:;
+  size_t i=0;
+  unsigned char ch1, ch2;
+  do
+  {
+    ch1=s1[i];
+    ch2=s2[i];
+
+    if(ch1==ch2)
+    {
+    }
+    else if(ch1<ch2)
+      return -1;
+    else
+      return 1;
+
+    i++;
+  }
+  while(ch1!=0 && ch2!=0 && i<n);
+  return 0;
+}
+
+char *strchr(const char *s, int ch)
+{
+  __ESBMC_HIDE:;
+  while (*s && *s != (char) ch)
+    s++;
+  if (*s == (char) ch)
+    return (char *) s;
+  return NULL;
+}
+
+char *strrchr(const char *s, int c)
+{
+  __ESBMC_HIDE:;
+  const char *found, *p;
+
+  c = (unsigned char) c;
+
+  /* Since strchr is fast, we use it rather than the obvious loop.  */
+
+  if (c == '\0')
+    return strchr(s, '\0');
+
+  found = NULL;
+  while ((p = strchr(s, c)) != NULL)
+  {
+    found = p;
+    s = p + 1;
+  }
+
+  return (char *) found;
+}
+
+size_t strspn(const char *s, const char *accept)
+{
+  __ESBMC_HIDE:;
+  const char *p;
+  const char *a;
+  size_t count = 0;
+
+  for (p = s; *p != '\0'; ++p)
+  {
+    for (a = accept; *a != '\0'; ++a)
+      if (*p == *a)
+        break;
+    if (*a == '\0')
+      return count;
+    else
+      ++count;
+  }
+
+  return count;
+}
+
+size_t strcspn(const char *s, const char *reject)
+{
+  __ESBMC_HIDE:;
+  size_t count = 0;
+
+  while (*s != '\0')
+    if (strchr(reject, *s++) == NULL)
+      ++count;
+    else
+      return count;
+
+  return count;
+}
+
+char *strpbrk(const char *s, const char *accept)
+{
+  __ESBMC_HIDE:;
+  while (*s != '\0')
+  {
+    const char *a = accept;
+    while (*a != '\0')
+      if (*a++ == *s)
+        return (char *) s;
+    ++s;
+  }
+
+  return NULL;
+}
+
+char *strstr(const char *str1, const char *str2)
+{
+  __ESBMC_HIDE:;
+  char *cp = (char *) str1;
+  char *s1, *s2;
+
+  if (!*str2) return (char *) str1;
+
+  while (*cp) {
+    s1 = cp;
+    s2 = (char *) str2;
+
+    while (*s1 && *s2 && !(*s1 - *s2)) s1++, s2++;
+    if (!*s2) return cp;
+    cp++;
+  }
+
+  return NULL;
+}
+
+char *strtok(char *str, const char *delim)
+{
+  static char* p = 0;
+  if (str)
+    p = str;
+  else if (!p)
+    return 0;
+  str = p + strspn(p, delim);
+  p = str + strcspn(str, delim);
+  if (p == str)
+    return p = 0;
+  p = *p ? *p = 0, p + 1 : 0;
+  return str;
 }
 
 char *strdup(const char *str)
 {
   __ESBMC_HIDE:;
   size_t bufsz;
-  bufsz=(strlen(str)+1)*sizeof(char);
-  char *cpy=malloc(bufsz);
-  if(cpy==((void *)0)) return 0;
-  cpy=strcpy(cpy, str);
-  return cpy;
-}
-
-char *strdup_strabs(const char *str)
-{
-  __ESBMC_HIDE:;
-  size_t bufsz;
-  bufsz=(strlen_strabs(str)+1)*sizeof(char);
-  char *cpy=malloc(bufsz);
-  if(cpy==((void *)0)) return 0;
-  __ESBMC_assume(__ESBMC_buffer_size(cpy)==bufsz);
-  cpy=strcpy_strabs(cpy, str);
+  bufsz = (strlen(str) + 1);
+  char *cpy = (char *) malloc(bufsz * sizeof(char));
+  if (cpy == ((void *) 0))
+    return 0;
+  strcpy(cpy, str);
   return cpy;
 }
 
 void *memcpy(void *dst, const void *src, size_t n)
 {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   char *cdst = dst;
   const char *csrc = src;
-  for(size_t i=0; i<n ; i++)
+  for (size_t i = 0; i < n; i++)
     cdst[i] = csrc[i];
-  return dst;
-}
-
-void *memcpy_strabs(void *dst, const void *src, size_t n)
-{
-  __ESBMC_HIDE:
-  //__ESBMC_assert(__ESBMC_buffer_size(src)>=n, "memcpy buffer overflow");
-  //__ESBMC_assert(__ESBMC_buffer_size(dst)>=n, "memcpy buffer overflow");
-  //  for(size_t i=0; i<n ; i++) dst[i]=src[i];
-  if(__ESBMC_is_zero_string(src) &&
-     n > __ESBMC_zero_string_length(src))
-  {
-    __ESBMC_is_zero_string(dst)=1;
-    __ESBMC_zero_string_length(dst)=__ESBMC_zero_string_length(src);
-  }
-  else if(!(__ESBMC_is_zero_string(dst) &&
-            n <= __ESBMC_zero_string_length(dst)))
-    __ESBMC_is_zero_string(dst)=0;
   return dst;
 }
 
 void *memset(void *s, int c, size_t n)
 {
-  __ESBMC_HIDE:
-  char *sp=s;
-  for(size_t i=0; i<n ; i++) sp[i]=c;
-  return s;
-}
-
-void *memset_strabs(void *s, int c, size_t n)
-{
-  __ESBMC_HIDE:
-  char *sp=s;
-  for(size_t i=0; i<n ; i++) {sp[i]=c;}
-#if 0
-  __ESBMC_assert(__ESBMC_buffer_size(s) * sizeof(s) >= n, "memset buffer overflow");
-  //for(size_t i=0; i<n ; i++) s[i]=c;
-
-  if(__ESBMC_is_zero_string(s) &&
-     n > __ESBMC_zero_string_length(s))
-  {
-    __ESBMC_is_zero_string(s)=1;
-  }
-  else if(c==0)
-  {
-    __ESBMC_is_zero_string(s)=1;
-    __ESBMC_zero_string_length(s)=0;
-  }
-  else
-    __ESBMC_is_zero_string(s)=0;
-#endif
+  __ESBMC_HIDE:;
+  char *sp = s;
+  for (size_t i = 0; i < n; i++)
+    sp[i] = c;
   return s;
 }
 
 void *memmove(void *dest, const void *src, size_t n)
 {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   char *cdest = dest;
   const char *csrc = src;
-  if (dest-src >= n)
+  if (dest - src >= n)
   {
-    for(size_t i=0; i<n ; i++)
+    for (size_t i = 0; i < n; i++)
       cdest[i] = csrc[i];
   }
   else
   {
-    for(size_t i=n; i>0 ; i--)
-      cdest[i-1] = csrc[i-1];
+    for (size_t i = n; i > 0; i--)
+      cdest[i - 1] = csrc[i - 1];
   }
-  return dest;
-}
-
-void *memmove_strabs(void *dest, const void *src, size_t n)
-{
-  __ESBMC_HIDE:
-  __ESBMC_assert(__ESBMC_buffer_size(src)>=n, "memmove buffer overflow");
-  // dst = src (with overlap allowed)
-  if(__ESBMC_is_zero_string(src) &&
-     n > __ESBMC_zero_string_length(src))
-  {
-    __ESBMC_is_zero_string(src)=1;
-    __ESBMC_zero_string_length(dest)=__ESBMC_zero_string_length(src);
-  }
-  else
-    __ESBMC_is_zero_string(dest)=0;
   return dest;
 }
 
 int memcmp(const void *s1, const void *s2, size_t n)
 {
   __ESBMC_HIDE:;
-  int res;
-  const unsigned char *sc1=s1, *sc2=s2;
-  for(; n!=0; n--)
+  int res = 0;
+  const unsigned char *sc1 = s1, *sc2 = s2;
+  for (; n != 0; n--)
   {
-    res = (sc1++) - (sc2++);
+    res = (*sc1++) - (*sc2++);
     if (res != 0)
       return res;
   }
   return res;
 }
 
-int memcmp_strabs(const void *s1, const void *s2, size_t n)
-{
-  __ESBMC_HIDE:;
-  int res;
-  __ESBMC_assert(__ESBMC_buffer_size(s1)>=n, "memcmp buffer overflow of 1st argument");
-  __ESBMC_assert(__ESBMC_buffer_size(s2)>=n, "memcmp buffer overflow of 2nd argument");
-  // XXX - memcmp doesn't do anything here when strabs is enabled
-  return res;
+void *memchr(const void *buf, int ch, size_t n) {
+  while (n && (*(unsigned char *) buf != (unsigned char) ch)) {
+    buf = (unsigned char *) buf + 1;
+    n--;
+  }
+
+  return (n ? (void *) buf : NULL);
 }

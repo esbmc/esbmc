@@ -31,13 +31,17 @@ public:
     ns(_context, _new_context),
     type_counter(0)
   {
-    Forall_symbols(it, context.symbols)
-      if (it->second.module!="")
-        known_modules.insert(it->second.module);
+    context.Foreach_operand(
+      [this] (symbolt& s)
+      {
+        if (!s.module.empty())
+          known_modules.insert(s.module);
+      }
+    );
   }
-   
+
   virtual void typecheck();
- 
+
 protected:
   void duplicate(symbolt &in_context, symbolt &new_symbol);
   void duplicate_type(symbolt &in_context, symbolt &new_symbol);
@@ -52,10 +56,10 @@ protected:
   contextt &new_context;
   std::string module;
   namespacet ns;
-  
+
   typedef hash_set_cont<irep_idt, irep_id_hash> known_modulest;
   known_modulest known_modules;
-  
+
   fix_symbolt symbol_fixer;
 
   unsigned type_counter;
@@ -74,7 +78,7 @@ Function: c_linkt::to_string
 \*******************************************************************/
 
 std::string c_linkt::to_string(const exprt &expr)
-{ 
+{
   return expr2c(expr, ns);
 }
 
@@ -91,7 +95,7 @@ Function: c_linkt::to_string
 \*******************************************************************/
 
 std::string c_linkt::to_string(const typet &type)
-{ 
+{
   return type2c(type, ns);
 }
 
@@ -174,12 +178,12 @@ void c_linkt::duplicate_type(
     {
       // rename, there are no type clashes in C
       irep_idt old_identifier=new_symbol.name;
-      
+
       do
       {
         irep_idt new_identifier=
           id2string(old_identifier)+"#link"+i2string(type_counter++);
-        
+
         new_symbol.name=new_identifier;
       }
       while(context.move(new_symbol));
@@ -246,8 +250,8 @@ void c_linkt::duplicate_symbol(
       else if(base_type_eq(in_context.type, new_symbol.type, ns))
       {
         // keep the one in in_context -- libraries come last!
-        str << "warning: function `" << in_context.name << "' in module `" << 
-          new_symbol.module << "' is shadowed by a definition in module `" << 
+        str << "warning: function `" << in_context.name << "' in module `" <<
+          new_symbol.module << "' is shadowed by a definition in module `" <<
           in_context.module << "'";
         warning();
       }
@@ -269,30 +273,42 @@ void c_linkt::duplicate_symbol(
 
     if(!base_type_eq(in_context.type, new_symbol.type, ns))
     {
-      if(ns.follow(in_context.type).id()=="incomplete_array" &&
-         ns.follow(new_symbol.type).is_array())
+      const typet &old_type = ns.follow(in_context.type);
+      const typet &new_type = ns.follow(new_symbol.type);
+
+      if(old_type.is_incomplete_array() &&
+         new_type.is_array())
       {
         // store new type
         in_context.type=new_symbol.type;
       }
-      else if(ns.follow(in_context.type).is_array() &&
-              ns.follow(new_symbol.type).id()=="incomplete_array")
-      {
-        // ignore
-      }
-      else if(in_context.type.id()=="incomplete_struct" &&
-              new_symbol.type.id()=="struct")
+      else if(old_type.is_pointer() && new_type.is_array())
       {
         // store new type
         in_context.type=new_symbol.type;
       }
-      else if(in_context.type.id()=="struct" &&
-              new_symbol.type.id()=="incomplete_struct")
+      else if(old_type.is_array() && new_type.is_pointer())
       {
         // ignore
       }
-      else if(ns.follow(in_context.type).id()=="pointer" &&
-              ns.follow(new_symbol.type).id()=="incomplete_array")
+      else if(old_type.is_array() &&
+              new_type.is_incomplete_array())
+      {
+        // ignore
+      }
+      else if(old_type.id()=="incomplete_struct" &&
+              new_type.is_struct())
+      {
+        // store new type
+        in_context.type=new_symbol.type;
+      }
+      else if(old_type.is_struct() &&
+              new_type.id()=="incomplete_struct")
+      {
+        // ignore
+      }
+      else if(old_type.is_pointer() &&
+              new_type.is_incomplete_array())
       {
         // ignore
       }
@@ -312,7 +328,7 @@ void c_linkt::duplicate_symbol(
       }
     }
 
-    // care about initializers    
+    // care about initializers
 
     if(!new_symbol.value.is_nil() &&
        !new_symbol.value.zero_initializer())
@@ -353,41 +369,48 @@ Function: c_linkt::typecheck
 \*******************************************************************/
 
 void c_linkt::typecheck()
-{  
-  Forall_symbols(it, new_context.symbols)
-  { // build module clash table
-    if(it->second.file_local && 
-       known_modules.find(it->second.module)!=known_modules.end())
-    { // we could have a clash      
-      unsigned counter=0;
-      std::string newname=id2string(it->second.name);
-      
-      while (context.symbols.find(newname)!=context.symbols.end())
-      { // there is a clash, rename!        
-        counter++;
-        newname = id2string(it->second.name) + "#-mc-" + i2string(counter);    
-      }
-      
-      if(counter>0)
+{
+  new_context.Foreach_operand(
+    [this] (symbolt& s)
+    {
+      // build module clash table
+      if(s.file_local && known_modules.find(s.module) != known_modules.end())
       {
-        exprt subst("symbol");
-        subst.identifier(newname);
-        subst.location() = it->second.location;
-        symbol_fixer.insert(it->second.name, 
-          static_cast<const typet&>(static_cast<const irept&>(subst)));
-	subst.type()=it->second.type;
-        symbol_fixer.insert(it->second.name, subst);
-      }          
-    }    
-  }
-  
+        // we could have a clash
+        unsigned counter=0;
+        std::string newname = id2string(s.name);
+
+        while(context.find_symbol(newname) != nullptr)
+        {
+          // there is a clash, rename!
+          counter++;
+          newname = id2string(s.name) + "#-mc-" + i2string(counter);
+        }
+
+        if(counter > 0)
+        {
+          exprt subst("symbol");
+          subst.identifier(newname);
+          subst.location() = s.location;
+          symbol_fixer.insert(
+            s.name,
+            static_cast<const typet&>(static_cast<const irept&>(subst)));
+          subst.type() = s.type;
+          symbol_fixer.insert(s.name, subst);
+        }
+      }
+    }
+  );
+
   symbol_fixer.fix_context(new_context);
 
-  Forall_symbols(it, new_context.symbols)
-  {        
-    symbol_fixer.fix_symbol(it->second);
-    move(it->second);
-  }
+  new_context.Foreach_operand_in_order(
+    [this] (symbolt& s)
+    {
+      symbol_fixer.fix_symbol(s);
+      move(s);
+    }
+  );
 }
 
 /*******************************************************************\

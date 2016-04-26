@@ -1,8 +1,7 @@
 #!/bin/sh
 
-stat '.git' > /dev/null 2>&1
-if test $? != 0; then
-  echo "list_globals.sh must be run from the esbmc base dir" >&2
+if test ! -e ../.git; then
+  echo "Please run from src/ dir";
   exit 1
 fi
 

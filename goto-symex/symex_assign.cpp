@@ -15,8 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cprover_prefix.h>
 #include <expr_util.h>
 #include <std_expr.h>
-
-#include <ansi-c/c_types.h>
+#include <c_types.h>
 
 #include "goto_symex.h"
 #include "dynamic_allocation.h"
@@ -24,7 +23,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
                          const goto_functionst &_goto_functions,
-                         symex_targett *_target, optionst &opts) :
+                         std::shared_ptr<symex_targett> _target, optionst &opts) :
   guard_identifier_s("goto_symex::guard"),
   total_claims(0),
   remaining_claims(0),
@@ -41,7 +40,6 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   depth_limit(atol(options.get_option("depth").c_str())),
   break_insn(atol(options.get_option("break-at").c_str())),
   memory_leak_check(options.get_bool_option("memory-leak-check")),
-  deadlock_check(options.get_bool_option("deadlock-check")),
   no_assertions(options.get_bool_option("no-assertions")),
   no_simplify(options.get_bool_option("no-simplify")),
   no_unwinding_assertions(options.get_bool_option("no-unwinding-assertions")),
@@ -115,7 +113,6 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;
   memory_leak_check = sym.memory_leak_check;
-  deadlock_check = sym.deadlock_check;
   no_assertions = sym.no_assertions;
   no_simplify = sym.no_simplify;
   no_unwinding_assertions = sym.no_unwinding_assertions;
@@ -168,9 +165,15 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
   // to/from a C++ POD class with no fields. The rest of the model checker isn't
   // rated for dealing with this concept; perform a NOP.
   try {
-    if (is_struct_type(code.target->type) &&
-        type_byte_size(*code.target->type) == 0)
-      return;
+    if (is_struct_type(code.target->type))
+    {
+      const struct_type2t &t2 =
+        static_cast<const struct_type2t&>(*code.target->type);
+
+      if(!t2.members.size())
+        return;
+    }
+
   } catch (array_type2t::dyn_sized_array_excp*foo) {
     delete foo;
   }
@@ -224,8 +227,7 @@ void goto_symext::symex_assign_rec(
   } else if (is_typecast2t(lhs)) {
     symex_assign_typecast(lhs, rhs, guard);
    } else if (is_constant_string2t(lhs) ||
-           is_null_object2t(lhs) ||
-           is_zero_string2t(lhs))
+           is_null_object2t(lhs))
   {
     // ignore
   } else if (is_byte_extract2t(lhs)) {
@@ -492,9 +494,10 @@ void goto_symext::replace_nondet(expr2tc &expr)
   }
   else
   {
-    Forall_operands2(it, idx, expr) {
-      if (!is_nil_expr(*it))
-        replace_nondet(*it);
-    }
+    expr.get()->Foreach_operand([this] (expr2tc &e) {
+        if (!is_nil_expr(e))
+          replace_nondet(e);
+      }
+    );
   }
 }

@@ -15,8 +15,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <config.h>
 #include <simplify_expr.h>
 #include <std_types.h>
+#include <c_types.h>
 
-#include <ansi-c/c_types.h>
 #include <ansi-c/c_qualifiers.h>
 #include <ansi-c/c_sizeof.h>
 
@@ -1358,12 +1358,10 @@ void cpp_typecheckt::typecheck_expr_member(
   if(expr.type().id()=="code")
   {
     // Check if the function body has to be typechecked
-    contextt::symbolst::iterator it=
-      context.symbols.find(component_name);
+    symbolt* s = context.find_symbol(component_name);
+    assert(s != nullptr);
 
-    assert(it!=context.symbols.end());
-
-    symbolt &func_symb=it->second;
+    symbolt &func_symb = *s;
 
     if(func_symb.value.id()=="cpp_not_typechecked")
       func_symb.value.set("is_used", true);
@@ -2330,7 +2328,7 @@ void cpp_typecheckt::typecheck_method_application(
   if(symbol.value.id()=="cpp_not_typechecked" &&
       !symbol.value.get_bool("is_used"))
   {
-    context.symbols[symbol.name].value.set("is_used", true);
+    context.find_symbol(symbol.name)->value.set("is_used", true);
   }
 }
 
@@ -2376,8 +2374,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
     {
       if(expr.op0().identifier()!="")
       {
-        symbolt &symbol=
-            context.symbols.find(expr.op0().identifier())->second;
+        symbolt &symbol = *context.find_symbol(expr.op0().identifier());
         if(expr.op1().has_operands())
         {
           exprt &initializer=
@@ -2404,8 +2401,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
           {
             if(!is_included) //find
             {
-              symbolt &symbol_temp=
-                  context.symbols.find(expr.op0().op0().identifier())->second;
+              symbolt &symbol_temp = *context.find_symbol(expr.op0().op0().identifier());
               symbol_temp.value.id("array");
               symbol_temp.value.operands().push_back(initializer.op0());
             }
@@ -2693,12 +2689,10 @@ void cpp_typecheckt::typecheck_expr_function_identifier(exprt &expr)
   if(expr.id()=="symbol")
   {
     // Check if the function body has to be typechecked
-    contextt::symbolst::iterator it=
-      context.symbols.find(expr.identifier());
+    symbolt* s = context.find_symbol(expr.identifier());
+    assert(s != nullptr);
 
-    assert(it != context.symbols.end());
-
-    symbolt &func_symb = it->second;
+    symbolt &func_symb = *s;
 
     if(func_symb.value.id()=="cpp_not_typechecked")
       func_symb.value.set("is_used", true);

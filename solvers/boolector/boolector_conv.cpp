@@ -2,6 +2,10 @@
 
 #include "boolector_conv.h"
 
+extern "C" {
+#include <btorcore.h>
+}
+
 smt_convt *
 create_new_boolector_solver(bool int_encoding, const namespacet &ns,
                             bool is_cpp, const optionst &options,
@@ -95,7 +99,9 @@ boolector_convt::l_get(const smt_ast *l)
 const std::string
 boolector_convt::solver_text()
 {
-  return "Boolector";
+  std::string ss = "Boolector ";
+  ss += btor_version(btor);
+  return ss;
 }
 
 void
@@ -118,8 +124,11 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   unsigned int i;
 
   assert(numargs <= 4);
-  for (i = 0; i < numargs; i++)
+  for (i = 0; i < numargs; i++) {
     asts[i] = btor_ast_downcast(args[i]);
+    // Structs should never reach the SMT solver
+    assert(asts[i]->sort->id != SMT_SORT_STRUCT);
+  }
 
   switch (k) {
   case SMT_FUNC_BVADD:

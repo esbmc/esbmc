@@ -7,8 +7,8 @@ fi
 
 VER=$1
 
-if test ! -e .git; then
-  echo "Please run from ESBMC root dir";
+if test ! -e ../.git; then
+  echo "Please run from src/ dir";
   exit 1
 fi
 

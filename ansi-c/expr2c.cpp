@@ -813,6 +813,29 @@ std::string expr2ct::convert_nondet(
 
 /*******************************************************************\
 
+Function: expr2ct::convert_statement_expression
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string expr2ct::convert_statement_expression(
+  const exprt &src,
+  unsigned &precedence)
+{
+  if(src.operands().size()!=1 ||
+     to_code(src.op0()).get_statement()!="block")
+    return convert_norep(src, precedence);
+
+  return "("+convert_code(to_code_block(to_code(src.op0())), 0)+")";
+}
+
+/*******************************************************************\
+
 Function: expr2ct::convert_function
 
   Inputs:
@@ -1054,6 +1077,12 @@ std::string expr2ct::convert_member(
   }
 
   const typet &full_type=ns.follow(src.op0().type());
+
+  // It might be an flattened union
+  // This will look very odd when printing, but it's better then
+  // the norep output
+  if(full_type.id() == "array")
+    return convert_array(src, precedence);
 
   if(full_type.id()!="struct" &&
      full_type.id()!="union")
@@ -1933,6 +1962,30 @@ std::string expr2ct::convert_code_goto(
 
 /*******************************************************************\
 
+Function: expr2ct::convert_code_gcc_goto
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string expr2ct::convert_code_gcc_goto(
+  const codet &src,
+  unsigned indent)
+{
+  std:: string dest=indent_str(indent);
+  dest+="goto ";
+  dest+=convert(src.op0(), indent);
+  dest+=";\n";
+
+  return dest;
+}
+
+/*******************************************************************\
+
 Function: expr2ct::convert_code_break
 
   Inputs:
@@ -2026,6 +2079,33 @@ std::string expr2ct::convert_code_continue(
   std::string dest=indent_str(indent);
   dest+="continue";
   dest+=";\n";
+
+  return dest;
+}
+
+/*******************************************************************\
+
+Function: expr2ct::convert_code_decl_block
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string expr2ct::convert_code_decl_block(
+  const codet &src,
+  unsigned indent)
+{
+  std::string dest=indent_str(indent);
+
+  forall_operands(it, src)
+  {
+    dest+=convert_code(to_code(*it), indent);
+    dest+="\n";
+  }
 
   return dest;
 }
@@ -2136,7 +2216,7 @@ std::string expr2ct::convert_code_block(
   unsigned indent)
 {
   std::string dest=indent_str(indent);
-  dest+="{\n";
+  dest+="\n{\n";
 
   forall_operands(it, src)
   {
@@ -2237,6 +2317,9 @@ std::string expr2ct::convert_code(
   if(statement=="goto")
     return convert_code_goto(src, indent);
 
+  if(statement=="gcc_goto")
+    return convert_code_gcc_goto(src, indent);
+
   if(statement=="printf")
     return convert_code_printf(src, indent);
 
@@ -2254,6 +2337,9 @@ std::string expr2ct::convert_code(
 
   if(statement=="decl")
     return convert_code_decl(src, indent);
+
+  if(statement=="decl-block")
+    return convert_code_decl_block(src, indent);
 
   if(statement=="assign")
     return convert_code_assign(src, indent);
@@ -2720,6 +2806,30 @@ std::string expr2ct::convert_extractbit(
 
 /*******************************************************************\
 
+Function: expr2ct::convert_sizeof
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+
+std::string expr2ct::convert_sizeof(
+  const exprt &src,
+  unsigned precedence __attribute__((unused)))
+{
+  std::string dest="sizeof(";
+  dest+=convert(static_cast<const typet&>(src.find("sizeof-type")));
+  dest+=')';
+
+  return dest;
+}
+
+/*******************************************************************\
+
 Function: expr2ct::convert
 
   Inputs:
@@ -2843,26 +2953,6 @@ std::string expr2ct::convert(
     return convert_function(src, "IS_DYNAMIC_OBJECT", precedence=15);
   }
 
-  else if(src.id()=="is_zero_string")
-  {
-    return convert_function(src, "IS_ZERO_STRING", precedence=15);
-  }
-
-  else if(src.id()=="zero_string")
-  {
-    return convert_function(src, "ZERO_STRING", precedence=15);
-  }
-
-  else if(src.id()=="zero_string_length")
-  {
-    return convert_function(src, "ZERO_STRING_LENGTH", precedence=15);
-  }
-
-  else if(src.id()=="buffer_size")
-  {
-    return convert_function(src, "BUFFER_SIZE", precedence=15);
-  }
-
   else if(src.id()=="dynamic_size")
   {
     return convert_function(src, "DYNAMIC_SIZE", precedence=15);
@@ -2898,6 +2988,11 @@ std::string expr2ct::convert(
     return convert_function(src, "isnormal", precedence=15);
   }
 
+  else if(src.id()=="builtin_va_arg")
+  {
+    return convert_function(src, "builtin_va_arg", precedence=15);
+  }
+
   else if(has_prefix(src.id_string(), "byte_extract"))
   {
     return convert_byte_extract(src, precedence=15);
@@ -2912,6 +3007,8 @@ std::string expr2ct::convert(
   {
     if(src.operands().size()!=1)
       return convert_norep(src, precedence);
+    else if(src.op0().id()=="label")
+      return "&&"+src.op0().get_string("identifier");
     else
       return convert_unary(src, "&", precedence=15);
   }
@@ -2953,13 +3050,13 @@ std::string expr2ct::convert(
       return convert_binary(src, "-=", precedence=2, true);
     else if(statement=="assign*")
       return convert_binary(src, "*=", precedence=2, true);
-    else if(statement=="assign/")
+    else if(statement=="assign_div")
       return convert_binary(src, "/=", precedence=2, true);
     else if(statement=="assign_mod")
       return convert_binary(src, "%=", precedence=2, true);
     else if(statement=="assign_shl")
       return convert_binary(src, "<<=", precedence=2, true);
-    else if(statement=="assign_shr")
+    else if(statement=="assign_ashr")
       return convert_binary(src, ">>=", precedence=2, true);
     else if(statement=="assign_bitand")
       return convert_binary(src, "&=", precedence=2, true);
@@ -2979,6 +3076,8 @@ std::string expr2ct::convert(
       return convert_function(src, "PRINTF", precedence=15);
     else if(statement=="nondet")
       return convert_nondet(src, precedence=15);
+    else if(statement=="statement_expression")
+      return convert_statement_expression(src, precedence=15);
     else
       return convert_norep(src, precedence);
   }
@@ -3136,6 +3235,9 @@ std::string expr2ct::convert(
 
   else if(src.id()=="extractbit")
     return convert_extractbit(src, precedence);
+
+  else if(src.id()=="sizeof")
+    return convert_sizeof(src, precedence);
 
   else if(src.id()=="concat")
     return convert_function(src, "CONCAT", precedence=15);

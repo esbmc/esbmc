@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "c_types.h"
 #include "unescape_string.h"
 #include "convert_string_literal.h"
-#include "ansi_c_expr.h"
+#include "string_constant.h"
 
 /*******************************************************************\
 
@@ -60,8 +60,7 @@ void convert_string_literal(const std::string &src, exprt &dest)
   std::string value;
   convert_string_literal(src, value);
 
-  string_constantt result;
-  result.set_value(value);
+  string_constantt result(value);
 
   dest.swap(result);
 }

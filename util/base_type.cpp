@@ -90,8 +90,10 @@ void base_type(expr2tc &expr, const namespacet &ns)
 {
   base_type(expr.get()->type, ns);
 
-  Forall_operands2(it, idx, expr)
-    base_type(*it, ns);
+  expr.get()->Foreach_operand([&ns] (expr2tc &e) {
+      base_type(e, ns);
+    }
+  );
 }
 
 void base_type(exprt &expr, const namespacet &ns)
@@ -108,7 +110,7 @@ bool base_type_eqt::base_type_eq_rec(
 {
   if (type1==type2)
     return true;
-    
+
   // loop avoidance
   if (is_symbol_type(type1) && is_symbol_type(type2))
   {
@@ -124,7 +126,7 @@ bool base_type_eqt::base_type_eq_rec(
 
     if(!symbol.is_type)
       throw "symbol "+id2string(symbol.name)+" is not a type";
-    
+
     type2tc tmp;
     migrate_type(symbol.type, tmp);
     return base_type_eq_rec(tmp, type2);
@@ -179,30 +181,30 @@ bool base_type_eqt::base_type_eq_rec(
       if (!base_type_eq_rec(subtype1, subtype2)) return false;
       if (data1.member_names[i] != data2.member_names[i]) return false;
     }
-    
+
     return true;
   }
   else if (is_code_type(type1))
   {
     const code_type2t &code1 = to_code_type(type1);
     const code_type2t &code2 = to_code_type(type2);
-    
+
     if (code1.arguments.size() != code2.arguments.size())
       return false;
-      
+
     for (unsigned i=0; i < code1.arguments.size(); i++)
     {
       const type2tc &subtype1 = code1.arguments[i];
       const type2tc &subtype2 = code2.arguments[i];
       if (!base_type_eq_rec(subtype1, subtype2)) return false;
     }
-    
+
     const type2tc &return_type1 = code1.ret_type;
     const type2tc &return_type2 = code2.ret_type;
-    
+
     if (!base_type_eq_rec(return_type1, return_type2))
       return false;
-    
+
     return true;
   }
   else if (is_pointer_type(type1))
@@ -215,9 +217,9 @@ bool base_type_eqt::base_type_eq_rec(
     if (!base_type_eq_rec(to_array_type(type1).subtype,
                           to_array_type(type2).subtype))
       return false;
-      
+
     // TODO: check size
-      
+
     return true;
   }
 
@@ -226,7 +228,7 @@ bool base_type_eqt::base_type_eq_rec(
   base_type(tmp1, ns);
   base_type(tmp2, ns);
 
-  return tmp1 == tmp2;  
+  return tmp1 == tmp2;
 }
 
 bool base_type_eqt::base_type_eq_rec(
@@ -235,12 +237,12 @@ bool base_type_eqt::base_type_eq_rec(
 {
   if(type1==type2)
     return true;
-    
+
   #if 0
   std::cout << "T1: " << type1.pretty() << std::endl;
   std::cout << "T2: " << type2.pretty() << std::endl;
   #endif
-  
+
   // loop avoidance
   if(type1.id()=="symbol" &&
      type2.id()=="symbol")
@@ -258,7 +260,7 @@ bool base_type_eqt::base_type_eq_rec(
 
     if(!symbol.is_type)
       throw "symbol "+id2string(symbol.name)+" is not a type";
-    
+
     return base_type_eq_rec(symbol.type, type2);
   }
 
@@ -271,22 +273,9 @@ bool base_type_eqt::base_type_eq_rec(
 
     return base_type_eq_rec(type1, symbol.type);
   }
-  
 
-  if(type1.id()!=type2.id())
-  {
-	if (type1.is_struct())
-	{
-      const struct_union_typet::componentst &components=
-	    to_struct_union_type(type1).components();
-      if (components.size()==1)
-      {
-        const typet &subtype=components[0].type().subtype();
-        if(base_type_eq_rec(subtype, type2)) return true;
-      }
-	}
+  if (type1.id() != type2.id())
     return false;
-  }
 
   if(type1.id()=="struct" ||
      type1.id()=="class" ||
@@ -297,7 +286,7 @@ bool base_type_eqt::base_type_eq_rec(
 
     const struct_union_typet::componentst &components2=
       to_struct_union_type(type2).components();
-      
+
     if(components1.size()!=components2.size())
       return false;
 
@@ -308,7 +297,7 @@ bool base_type_eqt::base_type_eq_rec(
       if(!base_type_eq_rec(subtype1, subtype2)) return false;
       if(components1[i].get_name()!=components2[i].get_name()) return false;
     }
-    
+
     return true;
   }
   else if(type1.id()=="incomplete_struct")
@@ -320,23 +309,23 @@ bool base_type_eqt::base_type_eq_rec(
     const irept::subt &arguments1=type1.arguments().get_sub();
 
     const irept::subt &arguments2=type2.arguments().get_sub();
-    
+
     if(arguments1.size()!=arguments2.size())
       return false;
-      
+
     for(unsigned i=0; i<arguments1.size(); i++)
     {
       const typet &subtype1=arguments1[i].type();
       const typet &subtype2=arguments2[i].type();
       if(!base_type_eq_rec(subtype1, subtype2)) return false;
     }
-    
+
     const typet &return_type1=(typet &)type1.return_type();
     const typet &return_type2=(typet &)type2.return_type();
-    
+
     if(!base_type_eq_rec(return_type1, return_type2))
       return false;
-    
+
     return true;
   }
   else if(type1.id()=="pointer")
@@ -347,9 +336,9 @@ bool base_type_eqt::base_type_eq_rec(
   {
     if(!base_type_eq_rec(type1.subtype(), type2.subtype()))
       return false;
-      
+
     // TODO: check size
-      
+
     return true;
   }
   else if(type1.id()=="incomplete_array")
@@ -362,7 +351,7 @@ bool base_type_eqt::base_type_eq_rec(
   base_type(tmp1, ns);
   base_type(tmp2, ns);
 
-  return tmp1==tmp2;  
+  return tmp1==tmp2;
 }
 
 bool base_type_eqt::base_type_eq_rec(
@@ -371,13 +360,13 @@ bool base_type_eqt::base_type_eq_rec(
 {
   if (expr1->expr_id != expr2->expr_id)
     return false;
-    
+
   if (!base_type_eq(expr1->type, expr2->type))
     return false;
 
   if (expr1->get_num_sub_exprs() != expr2->get_num_sub_exprs())
     return false;
-    
+
   for (unsigned int idx = 0; idx < expr1->get_num_sub_exprs(); idx++) {
     const expr2tc *e1 = expr1->get_sub_expr(idx);
     const expr2tc *e2 = expr2->get_sub_expr(idx);
@@ -391,7 +380,7 @@ bool base_type_eqt::base_type_eq_rec(
     if (!base_type_eq(*e1, *e2))
       return false;
   }
-  
+
   return true;
 }
 
@@ -401,17 +390,17 @@ bool base_type_eqt::base_type_eq_rec(
 {
   if(expr1.id()!=expr2.id())
     return false;
-    
+
   if(!base_type_eq(expr1.type(), expr2.type()))
     return false;
 
   if(expr1.operands().size()!=expr2.operands().size())
     return false;
-    
+
   for(unsigned i=0; i<expr1.operands().size(); i++)
     if(!base_type_eq(expr1.operands()[i], expr2.operands()[i]))
       return false;
-  
+
   return true;
 }
 

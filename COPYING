@@ -66,9 +66,6 @@ FOR ANY DAMAGES OR OTHER LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 --------------->8---------------
- * Eigen is linked in, under the terms of the MPL 2.0.
-   (https://www.mozilla.org/MPL/2.0/). Eigen can be found in source form here:
-       http://eigen.tuxfamily.org/index.php?title=Main_Page
  * The preprocessor of the Portable C Compiler, found in ansi-c/cpp. This is
    distributed under the following licenses:
 ---------------8<---------------

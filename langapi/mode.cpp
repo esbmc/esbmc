@@ -13,32 +13,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "mode.h"
 
 const char *extensions_ansi_c  []={ "c", "i", NULL };
-const char *extensions_intrep  []={ NULL };
-const char *extensions_pvs     []={ "pvs", NULL };
-const char *extensions_vhdl    []={ "vhdl", NULL };
-const char *extensions_smv     []={ "smv", "flat_smv", NULL };
-const char *extensions_csp     []={ "csp", NULL };
-const char *extensions_netlist []={ "ntl", NULL };
-const char *extensions_conf    []={ "conf", NULL };
-const char *extensions_specc   []={ "sc", "si", NULL };
-const char *extensions_promela []={ "promela", NULL };
-const char *extensions_xml     []={ "xmi", "xml", NULL };
-const char *extensions_pascal  []={ "pas", NULL };
 
 #ifdef _WIN32
 const char *extensions_cpp     []={ "cpp", "cc", "ipp", "cxx", NULL };
 #else
 const char *extensions_cpp     []={ "cpp", "cc", "ipp", "C", "cxx", NULL };
 #endif
-
-const char *extensions_simplify[]={ "ax", NULL };
-const char *extensions_bp      []={ "bp", NULL };
-const char *extensions_cvc     []={ "cvc", NULL };
-const char *extensions_csharp  []={ "cs", NULL };
-const char *extensions_smt     []={ "smt", NULL };
-const char *extensions_nsf     []={ "nsf", NULL };
-const char *extensions_php     []={ "php", NULL };
-const char *extensions_mdl     []={ "mdl", NULL };
 
 /*******************************************************************\
 
