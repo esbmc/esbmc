@@ -1424,6 +1424,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_type(expr.type(), plaintype);
     if (expr.statement() == "malloc")
       t = sideeffect2t::malloc;
+    else if (expr.statement() == "realloc")
+      t = sideeffect2t::realloc;
     else if (expr.statement() == "alloca")
       t = sideeffect2t::alloca;
     else if (expr.statement() == "cpp_new")
@@ -2477,6 +2479,9 @@ migrate_expr_back(const expr2tc &ref)
     switch (ref2.kind) {
     case sideeffect2t::malloc:
       theexpr.statement("malloc");
+      break;
+    case sideeffect2t::realloc:
+      theexpr.statement("realloc");
       break;
     case sideeffect2t::alloca:
       theexpr.statement("alloca");

@@ -48,6 +48,75 @@ goto_symext::symex_alloca(
   return symex_mem(false, lhs, code);
 }
 
+void
+goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
+{
+  expr2tc src_ptr = code.operand;
+  expr2tc realloc_size = code.size;
+
+  internal_deref_items.clear();
+  dereference2tc deref(get_empty_type(), src_ptr);
+  dereference(deref, false, false, true);
+  // src_ptr is now invalidated.
+
+  // Free the given pointer. This just uses the pointer object from the pointer
+  // variable that's the argument to realloc. It also leads to pointer validity
+  // checking, and checks that the offset is zero.
+  code_free2tc fr(code.operand);
+  symex_free(fr);
+
+  // We now have a list of things to work on. Recurse into them, build a result,
+  // and then switch between those results afterwards.
+  // Result list is the address of the reallocated piece of data, and the guard.
+  std::list<std::pair<expr2tc,expr2tc> > result_list;
+  for (auto &item : internal_deref_items) {
+    expr2tc guard = item.guard;
+    cur_state->rename_address(item.object);
+    cur_state->guard.guard_expr(guard);
+    target->renumber(guard, item.object, realloc_size, cur_state->source);
+    type2tc new_ptr = type2tc(new pointer_type2t(item.object->type));
+    address_of2tc addrof(new_ptr, item.object);
+    result_list.push_back(std::pair<expr2tc,expr2tc>(addrof, item.guard));
+
+    // Bump the realloc-numbering of the object. This ensures that, after
+    // renaming, the address_of we just generated compares differently to
+    // previous address_of's before the realloc.
+    unsigned int cur_num = 0;
+    if (cur_state->realloc_map.find(item.object) !=
+        cur_state->realloc_map.end()) {
+      cur_num = cur_state->realloc_map[item.object];
+    }
+
+    cur_num++;
+    std::map<expr2tc, unsigned>::value_type v(item.object, cur_num);
+    cur_state->realloc_map.insert(v);
+  }
+
+  // Rebuild a gigantic if-then-else chain from the result list.
+  expr2tc result;
+  if (result_list.size() == 0) {
+    // Nothing happened; there was nothing, or only null, to point at.
+    // In this case, just return right now and leave the pointer free. The
+    // symex_free that occurred above should trigger a dereference failure.
+    return;
+  } else {
+    result = expr2tc();
+    for (auto it = result_list.begin(); it != result_list.end(); it++) {
+      if (is_nil_expr(result))
+        result = it->first;
+      else
+        result = if2tc(result->type, it->second, it->first, result);
+    }
+  }
+
+  // Install pointer modelling data into the relevant arrays.
+  pointer_object2tc ptr_obj(pointer_type2(), result);
+  track_new_pointer(ptr_obj, type2tc(), realloc_size);
+
+  guardt guard;
+  symex_assign_rec(lhs, result, guard);
+}
+
 expr2tc
 goto_symext::symex_mem(
   const bool is_malloc,
@@ -79,7 +148,6 @@ goto_symext::symex_mem(
     size_is_one = false;
     type = char_type2();
   }
-
 
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
@@ -369,79 +437,6 @@ void goto_symext::symex_cpp_new(
 void goto_symext::symex_cpp_delete(const expr2tc &code __attribute__((unused)))
 {
   //bool do_array=code.statement()=="delete[]";
-}
-
-void
-goto_symext::intrinsic_realloc(const code_function_call2t &call,
-                               reachability_treet &arg __attribute__((unused)))
-{
-  assert(call.operands.size() == 2);
-  expr2tc src_ptr = call.operands[0];
-  expr2tc realloc_size = call.operands[1];
-
-  internal_deref_items.clear();
-  dereference2tc deref(get_empty_type(), src_ptr);
-  dereference(deref, false, false, true);
-  // src_ptr is now invalidated.
-
-  // Free the given pointer. This just uses the pointer object from the pointer
-  // variable that's the argument to realloc. It also leads to pointer validity
-  // checking, and checks that the offset is zero.
-  code_free2tc fr(call.operands[0]);
-  symex_free(fr);
-
-  // We now have a list of things to work on. Recurse into them, build a result,
-  // and then switch between those results afterwards.
-  // Result list is the address of the reallocated piece of data, and the guard.
-  std::list<std::pair<expr2tc,expr2tc> > result_list;
-  for (auto &item : internal_deref_items) {
-    expr2tc guard = item.guard;
-    cur_state->rename_address(item.object);
-    cur_state->guard.guard_expr(guard);
-    target->renumber(guard, item.object, realloc_size, cur_state->source);
-    type2tc new_ptr = type2tc(new pointer_type2t(item.object->type));
-    address_of2tc addrof(new_ptr, item.object);
-    result_list.push_back(std::pair<expr2tc,expr2tc>(addrof, item.guard));
-
-    // Bump the realloc-numbering of the object. This ensures that, after
-    // renaming, the address_of we just generated compares differently to
-    // previous address_of's before the realloc.
-    unsigned int cur_num = 0;
-    if (cur_state->realloc_map.find(item.object) !=
-        cur_state->realloc_map.end()) {
-      cur_num = cur_state->realloc_map[item.object];
-    }
-
-    cur_num++;
-    std::map<expr2tc, unsigned>::value_type v(item.object, cur_num);
-    cur_state->realloc_map.insert(v);
-  }
-
-  // Rebuild a gigantic if-then-else chain from the result list.
-  expr2tc result;
-  if (result_list.size() == 0) {
-    // Nothing happened; there was nothing, or only null, to point at.
-    // In this case, just return right now and leave the pointer free. The
-    // symex_free that occurred above should trigger a dereference failure.
-    return;
-  } else {
-    result = expr2tc();
-    for (auto it = result_list.begin(); it != result_list.end(); it++) {
-      if (is_nil_expr(result))
-        result = it->first;
-      else
-        result = if2tc(result->type, it->second, it->first, result);
-    }
-  }
-
-  // Install pointer modelling data into the relevant arrays.
-  pointer_object2tc ptr_obj(pointer_type2(), result);
-  track_new_pointer(ptr_obj, type2tc(), realloc_size);
-
-  // Assign the result to the left hand side.
-  code_assign2tc eq(call.ret, result);
-  symex_assign(eq);
-  return;
 }
 
 void

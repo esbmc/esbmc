@@ -269,6 +269,41 @@ void goto_convertt::do_malloc(
   do_mem(true, lhs, function, arguments, dest);
 }
 
+/*******************************************************************\
+
+Function: goto_convertt::do_realloc
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::do_realloc(
+  const exprt &lhs,
+  const exprt &function,
+  const exprt::operandst &arguments,
+  goto_programt &dest)
+{
+  // produce new object
+
+  exprt new_expr("sideeffect", lhs.type());
+  new_expr.statement("realloc");
+  new_expr.copy_to_operands(arguments[0]);
+  new_expr.cmt_size(arguments[1]);
+  new_expr.location()=function.location();
+
+  goto_programt::targett t_n=dest.add_instruction(ASSIGN);
+
+  exprt new_assign = code_assignt(lhs, new_expr);
+  expr2tc new_assign_expr;
+  migrate_expr(new_assign, new_assign_expr);
+  t_n->code = new_assign_expr;
+  t_n->location=function.location();
+}
+
 void goto_convertt::do_cpp_new(
   const exprt &lhs,
   const exprt &rhs,
@@ -658,6 +693,10 @@ void goto_convertt::do_function_call_symbol(
   else if(base_name == "malloc")
   {
     do_malloc(lhs, function, arguments, dest);
+  }
+  else if(base_name == "realloc")
+  {
+    do_realloc(lhs, function, arguments, dest);
   }
   else if(base_name == "alloca" || base_name == "__builtin_alloca")
   {

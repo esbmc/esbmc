@@ -184,6 +184,9 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
     case sideeffect2t::cpp_new_arr:
       symex_cpp_new(lhs, effect);
       break;
+    case sideeffect2t::realloc:
+      symex_realloc(lhs, effect);
+      break;
     case sideeffect2t::malloc:
       symex_malloc(lhs, effect);
       break;

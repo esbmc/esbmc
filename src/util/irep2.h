@@ -2661,6 +2661,7 @@ public:
    *  themselves are entirely self explanatory. */
   enum allockind {
     malloc,
+    realloc,
     alloca,
     cpp_new,
     cpp_new_arr,

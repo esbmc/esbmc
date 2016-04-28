@@ -93,9 +93,6 @@ void clang_c_languaget::build_compiler_string(
   // Ignore ctype defined by the system
   compiler_string.push_back("-D__NO_CTYPE");
 
-  // Realloc should call __ESBMC_realloc
-  compiler_string.push_back("-Drealloc=__ESBMC_realloc");
-
   // Force clang see all files as .c
   // This forces the preprocessor to be called even in preprocessed files
   // which allow us to perform transformations using -D
@@ -225,9 +222,6 @@ void clang_c_languaget::internal_additions()
     "__attribute__((used))\n"
     "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
     "unsigned long __ESBMC_alloc_size[1];\n"
-
-    "__attribute__((used))\n"
-    "void *__ESBMC_realloc(void *ptr, long unsigned int size);\n"
 
     // float stuff
     "__attribute__((used))\n"
