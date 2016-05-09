@@ -210,7 +210,8 @@ am__DIST_COMMON = $(srcdir)/Makefile.in \
 	scripts/build-aux/ar-lib scripts/build-aux/compile \
 	scripts/build-aux/config.guess scripts/build-aux/config.sub \
 	scripts/build-aux/depcomp scripts/build-aux/install-sh \
-	scripts/build-aux/ltmain.sh scripts/build-aux/missing
+	scripts/build-aux/ltmain.sh scripts/build-aux/missing \
+	scripts/build-aux/ylwrap
 DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
 distdir = $(PACKAGE)-$(VERSION)
 top_distdir = $(distdir)
