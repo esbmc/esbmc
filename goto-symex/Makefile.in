@@ -92,7 +92,9 @@ subdir = goto-symex
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps =  \
 	$(top_srcdir)/scripts/build-aux/m4/ax_boost_base.m4 \
+	$(top_srcdir)/scripts/build-aux/m4/ax_clang.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ax_cxx_compile_stdcxx_11.m4 \
+	$(top_srcdir)/scripts/build-aux/m4/ax_llvm.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/libtool.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ltargz.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ltdl.m4 \
@@ -125,8 +127,7 @@ am_libsymex_a_OBJECTS = symex_target.$(OBJEXT) \
 	slice.$(OBJEXT) symex_other.$(OBJEXT) xml_goto_trace.$(OBJEXT) \
 	symex_valid_object.$(OBJEXT) dynamic_allocation.$(OBJEXT) \
 	symex_catch.$(OBJEXT) renaming.$(OBJEXT) \
-	execution_state.$(OBJEXT) reachability_tree.$(OBJEXT) \
-	VarMap.$(OBJEXT)
+	execution_state.$(OBJEXT) reachability_tree.$(OBJEXT)
 libsymex_a_OBJECTS = $(am_libsymex_a_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -262,6 +263,7 @@ LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
+LLVMCONFIG = @LLVMCONFIG@
 LN_S = @LN_S@
 LTDLDEPS = @LTDLDEPS@
 LTDLINCL = @LTDLINCL@
@@ -318,6 +320,9 @@ build_cpu = @build_cpu@
 build_os = @build_os@
 build_vendor = @build_vendor@
 builddir = @builddir@
+clang_CPPFLAGS = @clang_CPPFLAGS@
+clang_LDFLAGS = @clang_LDFLAGS@
+clang_LIBS = @clang_LIBS@
 datadir = @datadir@
 datarootdir = @datarootdir@
 docdir = @docdir@
@@ -367,7 +372,7 @@ libsymex_a_SOURCES = \
       symex_goto.cpp builtin_functions.cpp slice.cpp symex_other.cpp \
       xml_goto_trace.cpp symex_valid_object.cpp \
       dynamic_allocation.cpp symex_catch.cpp renaming.cpp \
-      execution_state.cpp reachability_tree.cpp VarMap.cpp
+      execution_state.cpp reachability_tree.cpp
 
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 all: all-am
@@ -418,7 +423,6 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/VarMap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/build_goto_trace.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/builtin_functions.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/dynamic_allocation.Po@am__quote@

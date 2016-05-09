@@ -92,7 +92,9 @@ subdir = goto-programs
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps =  \
 	$(top_srcdir)/scripts/build-aux/m4/ax_boost_base.m4 \
+	$(top_srcdir)/scripts/build-aux/m4/ax_clang.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ax_cxx_compile_stdcxx_11.m4 \
+	$(top_srcdir)/scripts/build-aux/m4/ax_llvm.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/libtool.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ltargz.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ltdl.m4 \
@@ -125,7 +127,6 @@ am_libgotoprograms_a_OBJECTS = goto_convert.$(OBJEXT) \
 	destructor.$(OBJEXT) set_claims.$(OBJEXT) \
 	add_race_assertions.$(OBJEXT) rw_set.$(OBJEXT) \
 	read_goto_binary.$(OBJEXT) static_analysis.$(OBJEXT) \
-	string_abstraction.$(OBJEXT) \
 	goto_program_serialization.$(OBJEXT) \
 	goto_function_serialization.$(OBJEXT) \
 	read_bin_goto_object.$(OBJEXT) goto_program_irep.$(OBJEXT) \
@@ -268,6 +269,7 @@ LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
+LLVMCONFIG = @LLVMCONFIG@
 LN_S = @LN_S@
 LTDLDEPS = @LTDLDEPS@
 LTDLINCL = @LTDLINCL@
@@ -324,6 +326,9 @@ build_cpu = @build_cpu@
 build_os = @build_os@
 build_vendor = @build_vendor@
 builddir = @builddir@
+clang_CPPFLAGS = @clang_CPPFLAGS@
+clang_LDFLAGS = @clang_LDFLAGS@
+clang_LIBS = @clang_LIBS@
 datadir = @datadir@
 datarootdir = @datarootdir@
 docdir = @docdir@
@@ -372,7 +377,7 @@ libgotoprograms_a_SOURCES = \
       remove_skip.cpp goto_convert_functions.cpp \
       builtin_functions.cpp show_claims.cpp destructor.cpp set_claims.cpp \
       add_race_assertions.cpp rw_set.cpp read_goto_binary.cpp \
-      static_analysis.cpp string_abstraction.cpp \
+      static_analysis.cpp \
       goto_program_serialization.cpp goto_function_serialization.cpp \
       read_bin_goto_object.cpp goto_program_irep.cpp \
       format_strings.cpp loop_numbers.cpp goto_loops.cpp \
@@ -455,7 +460,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/set_claims.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/show_claims.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/static_analysis.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/string_abstraction.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/write_goto_binary.Po@am__quote@
 
 .cpp.o:

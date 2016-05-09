@@ -2,7 +2,7 @@
 
 set -x
 
-if test ! -e ../.git; then
+if test ! -e .git; then
   echo "Please run from src/ dir";
   exit 1
 fi

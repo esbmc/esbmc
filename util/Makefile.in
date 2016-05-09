@@ -92,7 +92,9 @@ subdir = util
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps =  \
 	$(top_srcdir)/scripts/build-aux/m4/ax_boost_base.m4 \
+	$(top_srcdir)/scripts/build-aux/m4/ax_clang.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ax_cxx_compile_stdcxx_11.m4 \
+	$(top_srcdir)/scripts/build-aux/m4/ax_llvm.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/libtool.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ltargz.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ltdl.m4 \
@@ -137,7 +139,7 @@ am_libutil_a_OBJECTS = arith_tools.$(OBJEXT) base_type.$(OBJEXT) \
 	pointer_arithmetic.$(OBJEXT) signal_catcher.$(OBJEXT) \
 	irep2.$(OBJEXT) migrate.$(OBJEXT) thread.$(OBJEXT) \
 	crypto_hash.$(OBJEXT) type_byte_size.$(OBJEXT) \
-	dcutil.$(OBJEXT)
+	dcutil.$(OBJEXT) string_constant.$(OBJEXT) c_types.$(OBJEXT)
 libutil_a_OBJECTS = $(am_libutil_a_OBJECTS)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
@@ -273,6 +275,7 @@ LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
+LLVMCONFIG = @LLVMCONFIG@
 LN_S = @LN_S@
 LTDLDEPS = @LTDLDEPS@
 LTDLINCL = @LTDLINCL@
@@ -329,6 +332,9 @@ build_cpu = @build_cpu@
 build_os = @build_os@
 build_vendor = @build_vendor@
 builddir = @builddir@
+clang_CPPFLAGS = @clang_CPPFLAGS@
+clang_LDFLAGS = @clang_LDFLAGS@
+clang_LIBS = @clang_LIBS@
 datadir = @datadir@
 datarootdir = @datarootdir@
 docdir = @docdir@
@@ -383,7 +389,8 @@ libutil_a_SOURCES = \
       xml.cpp xml_irep.cpp std_types.cpp std_code.cpp format_constant.cpp \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
       pointer_arithmetic.cpp signal_catcher.cpp irep2.cpp migrate.cpp \
-      thread.cpp crypto_hash.cpp type_byte_size.cpp dcutil.cpp
+      thread.cpp crypto_hash.cpp type_byte_size.cpp dcutil.cpp \
+      string_constant.cpp c_types.cpp
 
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils
 all: all-am
@@ -439,6 +446,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/base_type.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/bitvector.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/c_misc.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/c_types.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cmdline.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/config.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/context.Po@am__quote@
@@ -473,6 +481,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/std_code.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/std_types.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/string2array.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/string_constant.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/string_container.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/string_hash.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/symbol.Po@am__quote@

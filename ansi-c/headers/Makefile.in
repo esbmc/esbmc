@@ -92,7 +92,9 @@ subdir = ansi-c/headers
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps =  \
 	$(top_srcdir)/scripts/build-aux/m4/ax_boost_base.m4 \
+	$(top_srcdir)/scripts/build-aux/m4/ax_clang.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ax_cxx_compile_stdcxx_11.m4 \
+	$(top_srcdir)/scripts/build-aux/m4/ax_llvm.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/libtool.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ltargz.m4 \
 	$(top_srcdir)/scripts/build-aux/m4/ltdl.m4 \
@@ -228,6 +230,7 @@ LIBOBJS = @LIBOBJS@
 LIBS = @LIBS@
 LIBTOOL = @LIBTOOL@
 LIPO = @LIPO@
+LLVMCONFIG = @LLVMCONFIG@
 LN_S = @LN_S@
 LTDLDEPS = @LTDLDEPS@
 LTDLINCL = @LTDLINCL@
@@ -284,6 +287,9 @@ build_cpu = @build_cpu@
 build_os = @build_os@
 build_vendor = @build_vendor@
 builddir = @builddir@
+clang_CPPFLAGS = @clang_CPPFLAGS@
+clang_LDFLAGS = @clang_LDFLAGS@
+clang_LIBS = @clang_LIBS@
 datadir = @datadir@
 datarootdir = @datarootdir@
 docdir = @docdir@
