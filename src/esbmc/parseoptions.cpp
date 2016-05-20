@@ -471,37 +471,18 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
     }
   }
 
-  goto_functionst goto_functions;
-  optionst opts;
-
   if(process_type == PARENT && num_p != 3)
   {
     std::cerr << "Child processes were not created sucessfully." << std::endl;
     abort();
   }
 
-  get_command_line_options(opts);
+  // Get max number of iterations
+  unsigned long max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
-  if((process_type != PARENT) && (process_type != INDUCTIVE_STEP))
-  {
-    if(get_goto_program(opts, goto_functions))
-      return 6;
-
-    if(cmdline.isset("show-claims"))
-    {
-      const namespacet ns(context);
-      show_claims(ns, get_ui(), goto_functions);
-      return 0;
-    }
-
-    if(set_claims(goto_functions))
-      return 7;
-  }
-
-  // do actual BMC
-  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+  // The option unlimited-k-steps set the max number of iterations to UINTMAX_MAX
   if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = -1;
+    max_k_step = UINTMAX_MAX;
 
   // All processes were created successfully
   switch(process_type)
@@ -518,9 +499,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       while(!(bc_finished && fc_finished && is_finished))
       {
         // Perform read and interpret the number of bytes read
-        int read_size;
-        if((read_size = read(commPipe[0], &a_result, sizeof(resultt)))
-            != sizeof(resultt))
+        int read_size = read(commPipe[0], &a_result, sizeof(resultt));
+        if(read_size != sizeof(resultt))
         {
           if(read_size == 0)
           {
@@ -538,8 +518,10 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
         }
 
-        // Eventually checks on each step
-        if(!bc_finished && (bc_solution == (u_int) -1))
+        // Eventually the parent process will check if the child process is alive
+
+        // Check base case process
+        if(!bc_finished)
         {
           int status;
           pid_t result = waitpid(children_pid[0], &status, WNOHANG);
@@ -561,7 +543,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
         }
 
-        if(!fc_finished && (fc_solution == (u_int) -1))
+        // Check forward condition process
+        if(!fc_finished)
         {
           int status;
           pid_t result = waitpid(children_pid[1], &status, WNOHANG);
@@ -583,7 +566,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
         }
 
-        if(!is_finished && (is_solution == (u_int) -1))
+        // Check inductive step process
+        if(!is_finished)
         {
           int status;
           pid_t result = waitpid(children_pid[2], &status, WNOHANG);
@@ -697,14 +681,37 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
     case BASE_CASE:
     {
+      optionst opts;
+
+      // Set that we are running base case
+      opts.set_option("base-case", true);
+      opts.set_option("forward-condition", false);
+      opts.set_option("inductive-step", false);
+
+      // Get full set of options
+      get_command_line_options(opts);
+
+      // Generate goto functions
+      goto_functionst goto_functions;
+
+      if(get_goto_program(opts, goto_functions))
+        return 6;
+
+      if(cmdline.isset("show-claims"))
+      {
+        const namespacet ns(context);
+        show_claims(ns, get_ui(), goto_functions);
+        return 0;
+      }
+
+      if(set_claims(goto_functions))
+        return 7;
+
       // Start communication to the parent process
       close(commPipe[0]);
 
       // Struct to keep the result
       struct resultt r = { process_type, 0 };
-
-      // Set that we are running base case
-      opts.set_option("base-case", true);
 
       // Run bmc and only send results in two occasions:
       // 1. A bug was found, we send the step where it was found
@@ -715,10 +722,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        bool res = do_bmc(bmc);
 
         // Send information to parent if a bug was found
-        if(res)
+        if(do_bmc(bmc))
         {
           r.k = k_step;
 
@@ -729,7 +735,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
           std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
 
-          return res;
+          return 1;
         }
       }
 
@@ -754,14 +760,37 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
     case FORWARD_CONDITION:
     {
+      optionst opts;
+
+      // Set that we are running forward condition
+      opts.set_option("base-case", false);
+      opts.set_option("forward-condition", true);
+      opts.set_option("inductive-step", false);
+
+      // Get full set of options
+      get_command_line_options(opts);
+
+      // Generate goto functions
+      goto_functionst goto_functions;
+
+      if(get_goto_program(opts, goto_functions))
+        return 6;
+
+      if(cmdline.isset("show-claims"))
+      {
+        const namespacet ns(context);
+        show_claims(ns, get_ui(), goto_functions);
+        return 0;
+      }
+
+      if(set_claims(goto_functions))
+        return 7;
+
       // Start communication to the parent process
       close(commPipe[0]);
 
       // Struct to keep the result
       struct resultt r = { process_type, 0 };
-
-      // Set that we are running forward condition
-      opts.set_option("forward-condition", true);
 
       // Run bmc and only send results in two occasions:
       // 1. A proof was found, we send the step where it was found
@@ -772,10 +801,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        bool res = do_bmc(bmc);
 
         // Send information to parent if no bug was found
-        if(!res)
+        if(!do_bmc(bmc))
         {
           r.k = k_step;
 
@@ -786,7 +814,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
           std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
 
-          return res;
+          return 0;
         }
       }
 
@@ -811,11 +839,12 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
     case INDUCTIVE_STEP:
     {
-      // Start communication to the parent process
-      close(commPipe[0]);
+      optionst opts;
 
-      // Struct to keep the result
-      struct resultt r = { process_type, 0 };
+      // Set that we are running inductive step
+      opts.set_option("base-case", false);
+      opts.set_option("forward-condition", false);
+      opts.set_option("inductive-step", true);
 
       // This will be changed to true if the code contains:
       // 1. Dynamic allocated memory
@@ -823,8 +852,11 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // 3. Recursion (during inlining)
       opts.set_option("disable-inductive-step", false);
 
-      // Set that we are running inductive step
-      opts.set_option("inductive-step", true);
+      // Get full set of options
+      get_command_line_options(opts);
+
+      // Generate goto functions
+      goto_functionst goto_functions;
 
       if(get_goto_program(opts, goto_functions))
         return 6;
@@ -838,6 +870,12 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
       if(set_claims(goto_functions))
         return 7;
+
+      // Start communication to the parent process
+      close(commPipe[0]);
+
+      // Struct to keep the result
+      struct resultt r = { process_type, 0 };
 
       // Run bmc and only send results in two occasions:
       // 1. A proof was found, we send the step where it was found
