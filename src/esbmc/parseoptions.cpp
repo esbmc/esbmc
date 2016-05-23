@@ -778,6 +778,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // 2. It couldn't find a proof
       for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
       {
+        if(opts.get_bool_option("disable-forward-condition"))
+          break;
+
         bmct bmc(goto_functions, opts, context, ui_message_handler);
         set_verbosity_msg(bmc);
 
