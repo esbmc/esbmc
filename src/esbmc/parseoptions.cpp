@@ -427,7 +427,7 @@ int cbmc_parseoptionst::doit()
     set_verbosity_msg(bmc);
     res = do_bmc(bmc);
   }
-  catch(int)
+  catch(...)
   {
     status("Unable to prove or falsify the program, giving up.");
     status("VERIFICATION UNKNOWN");
@@ -724,9 +724,19 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
+        bool res = true;
 
-        // Send information to parent if a bug was found
-        if(do_bmc(bmc))
+        // If an exception was thrown, we should abort the process
+        try {
+          res = do_bmc(bmc);
+        }
+        catch(...)
+        {
+          break;
+        }
+
+        // Send information to parent if no bug was found
+        if(res)
         {
           r.k = k_step;
 
@@ -785,9 +795,19 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
+        bool res = true;
+
+        // If an exception was thrown, we should abort the process
+        try {
+          res = do_bmc(bmc);
+        }
+        catch(...)
+        {
+          break;
+        }
 
         // Send information to parent if no bug was found
-        if(!do_bmc(bmc))
+        if(!res)
         {
           r.k = k_step;
 
@@ -851,13 +871,11 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         bmc.options.set_option("unwind", i2string(k_step));
         bool res = true;
 
-        // if there is multithreaded code, an exception will be thrown
-        // this will catch it and send the message to the parent process
-        // to stop verification
+        // If an exception was thrown, we should abort the process
         try {
           res = do_bmc(bmc);
         }
-        catch(int)
+        catch(...)
         {
           break;
         }
@@ -999,7 +1017,7 @@ int cbmc_parseoptionst::doit_k_induction()
         if(!do_bmc(bmc))
           return false;
       }
-      catch(int)
+      catch(...)
       {
         // If there is a dynamic allocation during goto symex, an
         // exception will be thrown and the inductive step is disabled
@@ -1195,7 +1213,7 @@ bool cbmc_parseoptionst::get_goto_program(
     return true;
   }
 
-  catch(int)
+  catch(...)
   {
     return true;
   }
@@ -1242,7 +1260,7 @@ void cbmc_parseoptionst::preprocessing()
     std::cout << "Out of memory" << std::endl;
   }
 
-  catch(int)
+  catch(...)
   {
   }
 }
@@ -1669,14 +1687,14 @@ bool cbmc_parseoptionst::process_goto_program(
     return true;
   }
 
-  catch(int)
-  {
-    return true;
-  }
-
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
+    return true;
+  }
+
+  catch(...)
+  {
     return true;
   }
 

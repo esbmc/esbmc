@@ -474,20 +474,20 @@ bool bmct::run_thread()
   {
     message_streamt message_stream(*get_message_handler());
     message_stream.error(error_str);
-    return true;
+    abort();
   }
 
   catch(const char *error_str)
   {
     message_streamt message_stream(*get_message_handler());
     message_stream.error(error_str);
-    return true;
+    abort();
   }
 
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    return true;
+    abort();
   }
 
   fine_timet symex_stop = current_time();
@@ -590,19 +590,19 @@ bool bmct::run_thread()
   catch(std::string &error_str)
   {
     error(error_str);
-    return true;
+    abort();
   }
 
   catch(const char *error_str)
   {
     error(error_str);
-    return true;
+    abort();
   }
 
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    return true;
+    abort();
   }
 }
 
