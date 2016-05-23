@@ -50,7 +50,6 @@ bool clang_main(
       return true; // give up
     }
 
-
     if(matches.size()>=2)
     {
       messaget message(message_handler);

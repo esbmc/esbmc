@@ -477,6 +477,29 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
     abort();
   }
 
+  goto_functionst goto_functions;
+  optionst opts;
+
+  if(process_type != PARENT)
+  {
+    // Get full set of options
+    get_command_line_options(opts);
+
+    // Generate goto functions and set claims
+    if(get_goto_program(opts, goto_functions))
+      return 6;
+
+    if(cmdline.isset("show-claims"))
+    {
+      const namespacet ns(context);
+      show_claims(ns, get_ui(), goto_functions);
+      return 0;
+    }
+
+    if(set_claims(goto_functions))
+      return 7;
+  }
+
   // Get max number of iterations
   unsigned long max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
@@ -495,7 +518,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       bool bc_finished = false, fc_finished = false, is_finished = false;
       u_int bc_solution = -1, fc_solution = -1, is_solution = -1;
 
-      // Keep reading untill we find an answer
+      // Keep reading until we find an answer
       while(!(bc_finished && fc_finished && is_finished))
       {
         // Perform read and interpret the number of bytes read
@@ -681,31 +704,10 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
     case BASE_CASE:
     {
-      optionst opts;
-
       // Set that we are running base case
       opts.set_option("base-case", true);
       opts.set_option("forward-condition", false);
       opts.set_option("inductive-step", false);
-
-      // Get full set of options
-      get_command_line_options(opts);
-
-      // Generate goto functions
-      goto_functionst goto_functions;
-
-      if(get_goto_program(opts, goto_functions))
-        return 6;
-
-      if(cmdline.isset("show-claims"))
-      {
-        const namespacet ns(context);
-        show_claims(ns, get_ui(), goto_functions);
-        return 0;
-      }
-
-      if(set_claims(goto_functions))
-        return 7;
 
       // Start communication to the parent process
       close(commPipe[0]);
@@ -760,31 +762,10 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
     case FORWARD_CONDITION:
     {
-      optionst opts;
-
       // Set that we are running forward condition
       opts.set_option("base-case", false);
       opts.set_option("forward-condition", true);
       opts.set_option("inductive-step", false);
-
-      // Get full set of options
-      get_command_line_options(opts);
-
-      // Generate goto functions
-      goto_functionst goto_functions;
-
-      if(get_goto_program(opts, goto_functions))
-        return 6;
-
-      if(cmdline.isset("show-claims"))
-      {
-        const namespacet ns(context);
-        show_claims(ns, get_ui(), goto_functions);
-        return 0;
-      }
-
-      if(set_claims(goto_functions))
-        return 7;
 
       // Start communication to the parent process
       close(commPipe[0]);
@@ -839,8 +820,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
     case INDUCTIVE_STEP:
     {
-      optionst opts;
-
       // Set that we are running inductive step
       opts.set_option("base-case", false);
       opts.set_option("forward-condition", false);
@@ -851,25 +830,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // 2. Multithreaded code (during symbolic execution)
       // 3. Recursion (during inlining)
       opts.set_option("disable-inductive-step", false);
-
-      // Get full set of options
-      get_command_line_options(opts);
-
-      // Generate goto functions
-      goto_functionst goto_functions;
-
-      if(get_goto_program(opts, goto_functions))
-        return 6;
-
-      if(cmdline.isset("show-claims"))
-      {
-        const namespacet ns(context);
-        show_claims(ns, get_ui(), goto_functions);
-        return 0;
-      }
-
-      if(set_claims(goto_functions))
-        return 7;
 
       // Start communication to the parent process
       close(commPipe[0]);
