@@ -65,11 +65,7 @@ extern "C" {
 #include <signal.h>
 #include <sys/wait.h>
 
-// Pipe for communication between processes
-int commPipe[2];
-
 enum PROCESS_TYPE { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP, PARENT };
-PROCESS_TYPE process_type = PARENT;
 
 struct resultt
 {
@@ -438,7 +434,19 @@ int cbmc_parseoptionst::doit()
 
 int cbmc_parseoptionst::doit_k_induction_parallel()
 {
-  if(pipe(commPipe))
+  // Pipes for communication between processes
+  int forward_pipe[2], backward_pipe[2];
+
+  // Process type
+  PROCESS_TYPE process_type = PARENT;
+
+  if(pipe(forward_pipe))
+  {
+    status("\nPipe Creation Failed, giving up.");
+    _exit(1);
+  }
+
+  if(pipe(backward_pipe))
   {
     status("\nPipe Creation Failed, giving up.");
     _exit(1);
@@ -512,7 +520,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
   {
     case PARENT:
     {
-      close(commPipe[1]);
+      // Communication to child processes
+      close(forward_pipe[1]);
+      close(backward_pipe[0]);
 
       struct resultt a_result;
       bool bc_finished = false, fc_finished = false, is_finished = false;
@@ -522,7 +532,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       while(!(bc_finished && fc_finished && is_finished))
       {
         // Perform read and interpret the number of bytes read
-        int read_size = read(commPipe[0], &a_result, sizeof(resultt));
+        int read_size = read(forward_pipe[0], &a_result, sizeof(resultt));
         if(read_size != sizeof(resultt))
         {
           if(read_size == 0)
@@ -644,25 +654,47 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         if(bc_finished && (bc_solution != 0) && (bc_solution != (u_int) -1))
           break;
 
+        // If the either the forward condition or inductive step finds a
+        // solution, first check if base case couldn't find a bug in that code,
+        // if there is no bug, inductive step can present the result
+
         if(fc_finished && (fc_solution != 0) && (fc_solution != (u_int) -1))
-          break;
+        {
+          // If base case finished, then we can present the result
+          if(bc_finished)
+            break;
 
-        // If the inductive step finds a solution, first check if base case
-        // couldn't find a bug in that code, if there is no bug, inductive
-        // step can present the result
+          // Otherwise, ask base case for a solution
 
-        // TODO: This needs improvement as it can lead to unsound verification.
-        // The inductive step show only prove a program when the base case did
-        // not find a bug for the same k step inductive proved. Since there is
-        // no communication about the verification process of each step, there
-        // is no guarantee that base case didn't find a bug for that step. It
-        // may yet to run bmc that deep! But since usually the base is faster
-        // than inductive step, this might not be a problem. A solution for
-        // this situation is sound kind of message from the parent process to
-        // the base case, asking about it's current k step, if bigger than
-        // is_solution, we can say for sure that the program is correct
+          // Struct to keep the result
+          struct resultt r = { process_type, 0 };
+
+          r.k = is_solution;
+
+          // Write result
+          u_int len = write(backward_pipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
+          (void)len; //ndebug
+        }
+
         if(is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
-          break;
+        {
+          // If base case finished, then we can present the result
+          if(bc_finished)
+            break;
+
+          // Otherwise, ask base case for a solution
+
+          // Struct to keep the result
+          struct resultt r = { process_type, 0 };
+
+          r.k = is_solution;
+
+          // Write result
+          u_int len = write(backward_pipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
+          (void)len; //ndebug
+        }
       }
 
       for(short i = 0; i < 3; ++i)
@@ -710,7 +742,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       opts.set_option("inductive-step", false);
 
       // Start communication to the parent process
-      close(commPipe[0]);
+      close(forward_pipe[0]);
+      close(backward_pipe[1]);
 
       // Struct to keep the result
       struct resultt r = { process_type, 0 };
@@ -741,7 +774,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           r.k = k_step;
 
           // Write result
-          u_int len = write(commPipe[1], &r, sizeof(r));
+          u_int len = write(forward_pipe[1], &r, sizeof(r));
           assert(len == sizeof(r) && "short write");
           (void)len; //ndebug
 
@@ -749,12 +782,47 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
           return 1;
         }
+
+        // Check if the parent process is asking questions
+
+        // Perform read and interpret the number of bytes read
+        struct resultt a_result;
+        int read_size = read(backward_pipe[0], &a_result, sizeof(resultt));
+        if(read_size != sizeof(resultt))
+        {
+          if(read_size == 0)
+          {
+            // Client hung up; continue on, but don't interpret the result.
+            ;
+          }
+          else
+          {
+            // Invalid size read.
+            std::cerr << "Short read communicating with kinduction parent"
+                << std::endl;
+            std::cerr << "Size " << read_size << ", expected "
+                << sizeof(resultt) << std::endl;
+            abort();
+          }
+        }
+
+        // Ignore zero sized messages
+        if(read_size == 0)
+          continue;
+
+        // We only receive messages from the parent
+        assert(a_result.type == PARENT);
+
+        // If the value being asked is higher than the current step,
+        // then we can stop the base case
+        if(a_result.k > k_step)
+          break;
       }
 
       // Send information to parent that a bug was not found
       r.k = 0;
 
-      u_int len = write(commPipe[1], &r, sizeof(r));
+      u_int len = write(forward_pipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
       (void)len; //ndebug
 
@@ -778,7 +846,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       opts.set_option("inductive-step", false);
 
       // Start communication to the parent process
-      close(commPipe[0]);
+      close(forward_pipe[0]);
+      close(backward_pipe[1]);
 
       // Struct to keep the result
       struct resultt r = { process_type, 0 };
@@ -812,7 +881,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           r.k = k_step;
 
           // Write result
-          u_int len = write(commPipe[1], &r, sizeof(r));
+          u_int len = write(forward_pipe[1], &r, sizeof(r));
           assert(len == sizeof(r) && "short write");
           (void)len; //ndebug
 
@@ -825,7 +894,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent that it couldn't prove the code
       r.k = 0;
 
-      u_int len = write(commPipe[1], &r, sizeof(r));
+      u_int len = write(forward_pipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
       (void)len; //ndebug
 
@@ -855,7 +924,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       opts.set_option("disable-inductive-step", false);
 
       // Start communication to the parent process
-      close(commPipe[0]);
+      close(forward_pipe[0]);
+      close(backward_pipe[1]);
 
       // Struct to keep the result
       struct resultt r = { process_type, 0 };
@@ -886,7 +956,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           r.k = k_step;
 
           // Write result
-          u_int len = write(commPipe[1], &r, sizeof(r));
+          u_int len = write(forward_pipe[1], &r, sizeof(r));
           assert(len == sizeof(r) && "short write");
           (void)len; //ndebug
 
@@ -899,7 +969,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent that it couldn't prove the code
       r.k = 0;
 
-      u_int len = write(commPipe[1], &r, sizeof(r));
+      u_int len = write(forward_pipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
       (void)len; //ndebug
 
