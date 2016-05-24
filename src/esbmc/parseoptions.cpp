@@ -452,6 +452,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
     _exit(1);
   }
 
+  /* Set file descriptor non-blocking */
+  fcntl(backward_pipe[0], F_SETFL, fcntl(backward_pipe[0], F_GETFL) | O_NONBLOCK);
+
   pid_t children_pid[3];
   short num_p = 0;
 
@@ -622,10 +625,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
         }
 
-        // Ignore zero sized messages
-        if(read_size == 0)
-          continue;
-
         switch(a_result.type)
         {
           case BASE_CASE:
@@ -793,7 +792,12 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           if(read_size == 0)
           {
             // Client hung up; continue on, but don't interpret the result.
-            ;
+            continue;
+          }
+          else if (read_size == -1 && errno == EAGAIN)
+          {
+            // No data available yet
+            continue;
           }
           else
           {
@@ -805,10 +809,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
             abort();
           }
         }
-
-        // Ignore zero sized messages
-        if(read_size == 0)
-          continue;
 
         // We only receive messages from the parent
         assert(a_result.type == PARENT);
