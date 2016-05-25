@@ -750,15 +750,16 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Run bmc and only send results in two occasions:
       // 1. A bug was found, we send the step where it was found
       // 2. It couldn't find a bug
-      for(u_int k_step = 1; k_step <= max_k_step; ++k_step)
+      u_int k_step = 1;
+      while(k_step <= max_k_step)
       {
         bmct bmc(goto_functions, opts, context, ui_message_handler);
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        bool res = true;
 
         // If an exception was thrown, we should abort the process
+        bool res = true;
         try {
           res = do_bmc(bmc);
         }
@@ -781,6 +782,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
           return 1;
         }
+
+        // Increment k_step
+        ++k_step;
 
         // Check if the parent process is asking questions
 
@@ -813,10 +817,19 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // We only receive messages from the parent
         assert(a_result.type == PARENT);
 
-        // If the value being asked is higher than the current step,
-        // then we can stop the base case
-        if(a_result.k > k_step)
+        // If the value being asked is greater or equal the current step,
+        // then we can stop the base case. It can be equal, because we
+        // have just checked the current value of k
+
+        // We subtract 1 because k_step was incremented after the solving
+        // for the current step
+        if(a_result.k >= (k_step-1))
           break;
+        else
+        {
+          // Otherwise, we just need to check the base case for k = a_result.k
+          k_step = max_k_step = a_result.k;
+        }
       }
 
       // Send information to parent that a bug was not found
