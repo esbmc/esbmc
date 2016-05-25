@@ -668,7 +668,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           // Struct to keep the result
           struct resultt r = { process_type, 0 };
 
-          r.k = is_solution;
+          r.k = fc_solution;
 
           // Write result
           u_int len = write(backward_pipe[1], &r, sizeof(r));
