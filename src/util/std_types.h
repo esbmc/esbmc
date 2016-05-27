@@ -12,7 +12,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <assert.h>
 
 #include <type.h>
-#include <expr.h>
+#include <std_expr.h>
+#include <mp_arith.h>
 
 class bool_typet:public typet
 {
@@ -470,6 +471,12 @@ public:
     id(t_unsignedbv);
     set_width(width);
   }
+
+  mp_integer smallest() const;
+  mp_integer largest() const;
+  constant_exprt smallest_expr() const;
+  constant_exprt zero_expr() const;
+  constant_exprt largest_expr() const;
 };
 
 /*! \brief Cast a generic typet to an \ref unsignedbv_typet
@@ -510,6 +517,12 @@ public:
     id(t_signedbv);
     set_width(width);
   }
+
+  mp_integer smallest() const;
+  mp_integer largest() const;
+  constant_exprt smallest_expr() const;
+  constant_exprt zero_expr() const;
+  constant_exprt largest_expr() const;
 };
 
 

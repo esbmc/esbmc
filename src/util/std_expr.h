@@ -1029,6 +1029,31 @@ public:
 
 };
 
+/*! \brief Cast a generic exprt to a \ref constant_exprt
+ *
+ * This is an unchecked conversion. \a expr must be known to be \ref
+ * constant_exprt.
+ *
+ * \param expr Source expression
+ * \return Object of type \ref constant_exprt
+ *
+ * \ingroup gr_std_expr
+*/
+inline const constant_exprt &to_constant_expr(const exprt &expr)
+{
+  assert(expr.id()==exprt::constant);
+  return static_cast<const constant_exprt &>(expr);
+}
+
+/*! \copydoc to_constant_expr(const exprt &)
+ * \ingroup gr_std_expr
+*/
+inline constant_exprt &to_constant_expr(exprt &expr)
+{
+  assert(expr.id()==exprt::constant);
+  return static_cast<constant_exprt &>(expr);
+}
+
 class true_exprt:public constant_exprt
 {
 public:
