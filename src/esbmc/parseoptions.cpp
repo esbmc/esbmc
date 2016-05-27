@@ -512,7 +512,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
   }
 
   // Get max number of iterations
-  unsigned long max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // The option unlimited-k-steps set the max number of iterations to UINTMAX_MAX
   if(cmdline.isset("unlimited-k-steps"))
@@ -529,7 +529,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
       struct resultt a_result;
       bool bc_finished = false, fc_finished = false, is_finished = false;
-      u_int bc_solution = -1, fc_solution = -1, is_solution = -1;
+      u_int bc_solution = max_k_step, fc_solution = max_k_step, is_solution = max_k_step;
 
       // Keep reading until we find an answer
       while(!(bc_finished && fc_finished && is_finished))
@@ -650,14 +650,14 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
         // If either the base case found a bug or the forward condition
         // finds a solution, present the result
-        if(bc_finished && (bc_solution != 0) && (bc_solution != (u_int) -1))
+        if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
           break;
 
         // If the either the forward condition or inductive step finds a
         // solution, first check if base case couldn't find a bug in that code,
         // if there is no bug, inductive step can present the result
 
-        if(fc_finished && (fc_solution != 0) && (fc_solution != (u_int) -1))
+        if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
         {
           // If base case finished, then we can present the result
           if(bc_finished)
@@ -676,7 +676,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           (void)len; //ndebug
         }
 
-        if(is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
+        if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
         {
           // If base case finished, then we can present the result
           if(bc_finished)
@@ -700,7 +700,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         kill(children_pid[i], SIGKILL);
 
       // Check if a solution was found by the base case
-      if(bc_finished && (bc_solution != 0) && (bc_solution != (u_int) -1))
+      if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
       {
         std::cout << std::endl << "Solution found by the base case " << "(k = "
             << bc_solution << ")" << std::endl;
@@ -709,22 +709,31 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       }
 
       // Check if a solution was found by the forward condition
-      if(fc_finished && (fc_solution != 0) && (fc_solution != (u_int) -1))
+      if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
       {
-        std::cout << std::endl << "Solution found by the forward condition "
-            << "(k = " << fc_solution << ")" << std::endl;
-        std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
-        return false;
+        // We should only present the result if the base case finished
+        // and haven't crashed (if it crashed, bc_solution will be UINTMAX_MAX
+        if(bc_finished && (bc_solution != max_k_step))
+        {
+          std::cout << std::endl << "Solution found by the forward condition "
+              << "(k = " << fc_solution << ")" << std::endl;
+          std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          return false;
+        }
       }
 
-      // Check if a solution was found by the inductive step and
-      // the base case didn't find a bug
-      if(is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
+      // Check if a solution was found by the inductive step
+      if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
       {
-        std::cout << std::endl << "Solution found by the inductive step "
-            << "(k = " << is_solution << ")" << std::endl;
-        std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
-        return false;
+        // We should only present the result if the base case finished
+        // and haven't crashed (if it crashed, bc_solution will be UINTMAX_MAX
+        if(bc_finished && (bc_solution != max_k_step))
+        {
+          std::cout << std::endl << "Solution found by the inductive step "
+              << "(k = " << is_solution << ")" << std::endl;
+          std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          return false;
+        }
       }
 
       // Couldn't find a bug or a proof for the current deepth
@@ -1030,14 +1039,14 @@ int cbmc_parseoptionst::doit_k_induction()
     return 7;
 
   // Get max number of iterations
-  unsigned long max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // The option unlimited-k-steps set the max number of iterations to UINTMAX_MAX
   if(cmdline.isset("unlimited-k-steps"))
     max_k_step = UINTMAX_MAX;
 
   // Get the increment
-  unsigned long k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
   for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
