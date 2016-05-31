@@ -307,6 +307,14 @@ void bmct::show_program(symex_target_equationt &equation)
       std::string string_value;
       languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(" << count << ") " << string_value << std::endl;
+
+      if(!is_true(it->guard))
+      {
+        languages.from_expr(migrate_expr_back(it->guard), string_value);
+        std::cout << std::string(i2string(count).size()+3, ' ');
+        std::cout << "guard: " << string_value << "\n";
+      }
+
       count++;
     }
     else if(it->is_assert())
@@ -314,6 +322,14 @@ void bmct::show_program(symex_target_equationt &equation)
       std::string string_value;
       languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(" << count << ") " << "(assert)" << string_value << std::endl;
+
+      if(!is_true(it->guard))
+      {
+        languages.from_expr(migrate_expr_back(it->guard), string_value);
+        std::cout << std::string(i2string(count).size()+3, ' ');
+        std::cout << "guard: " << string_value << "\n";
+      }
+
       count++;
     }
     else if(it->is_assume())
@@ -321,6 +337,14 @@ void bmct::show_program(symex_target_equationt &equation)
       std::string string_value;
       languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(" << count << ") " << "(assume)" << string_value << std::endl;
+
+      if(!is_true(it->guard))
+      {
+        languages.from_expr(migrate_expr_back(it->guard), string_value);
+        std::cout << std::string(i2string(count).size()+3, ' ');
+        std::cout << "guard: " << string_value << "\n";
+      }
+
       count++;
     }
     else if (it->is_renumber())
