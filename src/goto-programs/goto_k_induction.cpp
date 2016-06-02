@@ -44,8 +44,12 @@ void goto_k_inductiont::goto_k_induction()
   {
     // Disable forward condition if there is an infinite loop
     // We'll never be able to prove that the loop was fully unwinded
-    if(it->is_infinite_loop())
-      options.set_option("disable-forward-condition", true);
+    // TODO: This is not entirely correct, e.g, our internal strcpy
+    // is considered infinite
+//    if(it->is_infinite_loop())
+//    {
+//      options.set_option("disable-forward-condition", true);
+//    }
 
     // Start the loop conversion
     convert_finite_loop(*it);
