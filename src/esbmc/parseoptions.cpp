@@ -702,7 +702,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Check if a solution was found by the base case
       if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
       {
-        std::cout << std::endl << "Solution found by the base case " << "(k = "
+        std::cout << std::endl << "Bug found by the base case (k = "
             << bc_solution << ")" << std::endl;
         std::cout << "VERIFICATION FAILED" << std::endl;
         return true;
@@ -715,8 +715,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         // and haven't crashed (if it crashed, bc_solution will be UINTMAX_MAX
         if(bc_finished && (bc_solution != max_k_step))
         {
-          std::cout << std::endl << "Solution found by the forward condition "
-              << "(k = " << fc_solution << ")" << std::endl;
+          std::cout << std::endl << "Solution found by the forward condition; "
+              << "all states are reachable (k = " << fc_solution
+              << ")" << std::endl;
           std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
           return false;
         }

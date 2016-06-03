@@ -134,7 +134,7 @@ void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
       }
       else if(old_type.is_floatbv()) // float -> signed
       {
-        std::cerr << "Floatbv not suportted yet." << std::endl;
+        std::cerr << "floatbv unsupported, sorry" << std::endl;
         abort();
       }
     }
@@ -197,7 +197,7 @@ void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
       }
       else if(old_type.is_floatbv()) // float -> unsigned
       {
-        std::cerr << "Floatbv not suportted yet." << std::endl;
+        std::cerr << "floatbv unsupported, sorry" << std::endl;
         abort();
       }
     }
