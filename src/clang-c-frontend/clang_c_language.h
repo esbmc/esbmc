@@ -14,7 +14,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-#include <clang/Frontend/ASTUnit.h>
+// Forward dec, to avoid bringing in clang headers
+namespace clang {
+  class ASTUnit;
+}
 
 class clang_c_languaget: public languaget
 {
