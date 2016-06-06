@@ -514,9 +514,9 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
   // Get max number of iterations
   u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
-  // The option unlimited-k-steps set the max number of iterations to UINTMAX_MAX
+  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
   if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = UINTMAX_MAX;
+    max_k_step = UINT_MAX;
 
   // All processes were created successfully
   switch(process_type)
@@ -712,7 +712,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
       {
         // We should only present the result if the base case finished
-        // and haven't crashed (if it crashed, bc_solution will be UINTMAX_MAX
+        // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
         if(bc_finished && (bc_solution != max_k_step))
         {
           std::cout << std::endl << "Solution found by the forward condition; "
@@ -727,7 +727,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
       {
         // We should only present the result if the base case finished
-        // and haven't crashed (if it crashed, bc_solution will be UINTMAX_MAX
+        // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
         if(bc_finished && (bc_solution != max_k_step))
         {
           std::cout << std::endl << "Solution found by the inductive step "
@@ -1042,9 +1042,9 @@ int cbmc_parseoptionst::doit_k_induction()
   // Get max number of iterations
   u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
-  // The option unlimited-k-steps set the max number of iterations to UINTMAX_MAX
+  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
   if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = UINTMAX_MAX;
+    max_k_step = UINT_MAX;
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
@@ -1892,7 +1892,7 @@ void cbmc_parseoptionst::help()
     " --constrain-all-states       remove all redundant states in the inductive step\n"
     " --k-step nr                  set k increment (default is 1)\n"
     " --max-k-step nr              set max number of iteration (default is 50)\n"
-    " --unlimited-k-steps          set max number of iteration to UINTMAX_MAX\n\n"
+    " --unlimited-k-steps          set max number of iteration to UINT_MAX\n\n"
     "Scheduling approaches\n"
     " --schedule                   use schedule recording approach \n"
     " --round-robin                use the round robin scheduling approach\n"
