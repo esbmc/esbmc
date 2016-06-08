@@ -768,6 +768,11 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
         bmc.options.set_option("unwind", i2string(k_step));
 
+        std::cout << std::endl << "*** K-Induction Loop Iteration ";
+        std::cout << i2string((unsigned long) k_step);
+        std::cout << " ***" << std::endl;
+        std::cout << "*** Checking base case" << std::endl;
+
         // If an exception was thrown, we should abort the process
         bool res = true;
         try {
@@ -887,9 +892,14 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        bool res = true;
+
+        std::cout << std::endl << "*** K-Induction Loop Iteration ";
+        std::cout << i2string((unsigned long) k_step);
+        std::cout << " ***" << std::endl;
+        std::cout << "*** Checking forward condition" << std::endl;
 
         // If an exception was thrown, we should abort the process
+        bool res = true;
         try {
           res = do_bmc(bmc);
         }
@@ -962,9 +972,14 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        bool res = true;
+
+        std::cout << std::endl << "*** K-Induction Loop Iteration ";
+        std::cout << i2string((unsigned long) k_step+1);
+        std::cout << " ***" << std::endl;
+        std::cout << "*** Checking inductive step" << std::endl;
 
         // If an exception was thrown, we should abort the process
+        bool res = true;
         try {
           res = do_bmc(bmc);
         }
