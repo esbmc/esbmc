@@ -1116,6 +1116,10 @@ int cbmc_parseoptionst::doit_k_induction()
 
     if(!opts.get_bool_option("disable-inductive-step"))
     {
+      // Don't run inductive step for k_step == 1
+      if(k_step == 1)
+        continue;
+
       opts.set_option("base-case", false);
       opts.set_option("forward-condition", false);
       opts.set_option("inductive-step", true);
@@ -1123,10 +1127,10 @@ int cbmc_parseoptionst::doit_k_induction()
       bmct bmc(goto_functions, opts, context, ui_message_handler);
       set_verbosity_msg(bmc);
 
-      bmc.options.set_option("unwind", i2string(k_step+1));
+      bmc.options.set_option("unwind", i2string(k_step));
 
       std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step+1);
+      std::cout << i2string((unsigned long) k_step);
       std::cout << " ***" << std::endl;
       std::cout << "*** Checking inductive step" << std::endl;
 
