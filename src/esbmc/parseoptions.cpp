@@ -1082,7 +1082,11 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << "*** Checking base case" << std::endl;
 
       if(do_bmc(bmc))
+      {
+        std::cout << std::endl << "Bug found by the base case (k = "
+            << k_step << ")" << std::endl;
         return true;
+      }
     }
 
     if(!opts.get_bool_option("disable-forward-condition"))
@@ -1102,7 +1106,12 @@ int cbmc_parseoptionst::doit_k_induction()
       std::cout << "*** Checking forward condition" << std::endl;
 
       if(!do_bmc(bmc))
+      {
+        std::cout << std::endl << "Solution found by the forward condition; "
+            << "all states are reachable (k = " << k_step
+            << ")" << std::endl;
         return false;
+      }
     }
 
     if(!opts.get_bool_option("disable-inductive-step"))
@@ -1123,7 +1132,11 @@ int cbmc_parseoptionst::doit_k_induction()
 
       try {
         if(!do_bmc(bmc))
+        {
+          std::cout << std::endl << "Solution found by the inductive step "
+              << "(k = " << k_step << ")" << std::endl;
           return false;
+        }
       }
       catch(...)
       {
