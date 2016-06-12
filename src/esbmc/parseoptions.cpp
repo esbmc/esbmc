@@ -1078,7 +1078,6 @@ int cbmc_parseoptionst::doit_k_induction()
 int cbmc_parseoptionst::doit_falsification()
 {
   // Generate goto functions for base case and forward condition
-  status("\n*** Generating GOTO functions ***");
   goto_functionst goto_functions;
 
   optionst opts;
@@ -1099,14 +1098,22 @@ int cbmc_parseoptionst::doit_falsification()
   if(set_claims(goto_functions))
     return 7;
 
-  bool res = 0;
-  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
-  if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = -1;
+  // Get max number of iterations
+  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
-  u_int k_step = 1;
-  do
+  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
+  if(cmdline.isset("unlimited-k-steps"))
+    max_k_step = UINT_MAX;
+
+  // Get the increment
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
+    opts.set_option("base-case", true);
+    opts.set_option("forward-condition", false);
+    opts.set_option("inductive-step", false);
+
     bmct bmc(goto_functions, opts, context, ui_message_handler);
     set_verbosity_msg(bmc);
 
@@ -1116,14 +1123,13 @@ int cbmc_parseoptionst::doit_falsification()
     std::cout << i2string((unsigned long) k_step);
     std::cout << " ***" << std::endl;
 
-    res = do_bmc(bmc);
-
-    ++k_step;
-
-    if(res)
-      return res;
-
-  } while(k_step <= max_k_step);
+    if(do_bmc(bmc))
+    {
+      std::cout << std::endl << "Bug found at k = "
+          << k_step << std::endl;
+      return true;
+    }
+  }
 
   status("Unable to prove or falsify the program, giving up.");
   status("VERIFICATION UNKNOWN");
