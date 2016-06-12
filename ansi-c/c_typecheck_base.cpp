@@ -321,7 +321,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
       else
       {
         err_location(new_symbol.location);
-        str << "error: conflicting defintion of type symbol `"
+        str << "error: conflicting definition of type symbol `"
             << new_symbol.display_name()
             << "'";
         throw 0;
@@ -342,7 +342,7 @@ void c_typecheck_baset::typecheck_symbol_redefinition(
         {
           // arg! new tag type
           err_location(new_symbol.location);
-          str << "error: conflicting defintion of tag symbol `"
+          str << "error: conflicting definition of tag symbol `"
               << new_symbol.display_name()
               << "'";
           throw 0;

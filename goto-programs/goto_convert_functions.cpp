@@ -337,7 +337,7 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
       // It should also never happen, but with C++ code it does, because methods
       // are part of the type, and methods can take a full struct/object as a
       // parameter, not just a reference/pointer. So, that's a legitimate place
-      // where we have this recursive symbol dependancy situation.
+      // where we have this recursive symbol dependency situation.
       // The workaround to this is to just ignore it, and hope that it doesn't
       // become a problem in the future.
       return;

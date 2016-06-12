@@ -759,7 +759,7 @@ BigInt::ucompare (BigInt const &b) const
     return digit_cmp (digit, b.digit, length);
 }
 
-// Comparision primitives.
+// Comparison primitives.
 
 int
 BigInt::compare (ullong_t b) const

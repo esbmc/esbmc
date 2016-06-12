@@ -1185,7 +1185,7 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
 
   // Right: any access across the boundry of the outer dimension of this array
   // is an alignment violation as that can posess extra padding.
-  // So, divide the offset by size of the inner dimention, make an index2t, and
+  // So, divide the offset by size of the inner dimension, make an index2t, and
   // construct a reference to that.
   mp_integer subtype_sz = type_byte_size(*arr_type.subtype);
   constant_int2tc subtype_sz_expr(pointer_type2(), subtype_sz);

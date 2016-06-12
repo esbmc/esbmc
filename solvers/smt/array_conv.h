@@ -14,7 +14,7 @@
 // the SMT solver in a way that is compatible with pushing/popping of
 // constraints.
 //
-// As a result, this particular class is due some serious maintenence.
+// As a result, this particular class is due some serious maintenance.
 
 #include <set>
 

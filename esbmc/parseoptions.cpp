@@ -476,7 +476,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
   if(process_type == PARENT && num_p != 3)
   {
-    std::cerr << "Child processes were not created sucessfully." << std::endl;
+    std::cerr << "Child processes were not created successfully." << std::endl;
     abort();
   }
 

@@ -239,7 +239,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
       !to_code_type(tmp_type).ellipsis) {
     std::cerr << "Function call to \"" << identifier << "\": number of "
               << "arguments doesn't match type definition; some inconsistent "
-              << "rewriting occured" << std::endl;
+              << "rewriting occurred" << std::endl;
     abort();
   }
 

@@ -97,7 +97,7 @@ const char *const sys_errlist[] = {
 
   /* 82 EHOSTNOTFOUND   */  "Host not found",
   /* 83 ETRYAGAIN       */  "Nonauthoritative host not found",
-  /* 84 ENORECOVERY     */  "A nonrecoverable error occured",
+  /* 84 ENORECOVERY     */  "A nonrecoverable error occurred",
   /* 85 ENODATA         */  "Valid name, no data record of requested type",
 
   /* 86 EPROTO          */  "Protocol error",

@@ -17,7 +17,7 @@ scripts/buildidobj.sh
 
 ~
 
-When in posession of a configure script, first decide where you want to put the
+When in possession of a configure script, first decide where you want to put the
 build tree (possibly not in the source directory), and navigate to that
 directory. Then run the configure script from the source directory. It will
 detect required libraries, solvers, and create a set of makefiles to with which

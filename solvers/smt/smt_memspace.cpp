@@ -52,7 +52,7 @@ smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
 
   expr2tc start_expr = templ_expr, offs_expr = templ_expr;
 
-  // To ensure we can do this in an operation independant way, we're going to
+  // To ensure we can do this in an operation independent way, we're going to
   // clone the original comparison expression, and replace its operands with
   // new values. Works whatever the expr is, so long as it has two operands.
   *start_expr.get()->get_sub_expr_nc(0) = obj1_start;

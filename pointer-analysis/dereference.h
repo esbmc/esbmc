@@ -61,7 +61,7 @@ Author: Daniel Kroening, kroening@kroening.com
  *      an expression that evaluates to the value in the data object, at the
  *      given offset, with the desired type of this dereference.
  *   4) Assertions: We encode assertion that the offset being accessed lies
- *      withing the data object being referred to, but also that the access has
+ *      within the data object being referred to, but also that the access has
  *      the correct alignment, and doesn't access padding bytes.
  *
  *  A particular point of interest is the byte layout of the data objects we're

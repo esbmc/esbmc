@@ -128,7 +128,7 @@ namespace std
   istream& operator>> (istream& is, char *s)
   { is._gcount=0; return is; }
 #if 0
-  // platform-dependant difference right now.
+  // platform-dependent difference right now.
   istream& operator>> (istream& is, signed char *s)
   { is._gcount=0; return is; }
   istream& operator>> (istream& is, unsigned char *s)

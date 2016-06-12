@@ -761,7 +761,7 @@ array_convt::add_new_indexes()
     re_execute.push_back(true);
     start_pos.push_back(expr_index_map[arrid].size());
 
-    // We're guarenteed that each of these indexes are _new_ to this array.
+    // We're guaranteed that each of these indexes are _new_ to this array.
     // Enumerate them, giving them a location in the expr_index_map.
     index_map_containert &idx_map = expr_index_map[arrid];
     for (auto it = pair.first; it != pair.second; it++) {

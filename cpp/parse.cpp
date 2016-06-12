@@ -18,8 +18,8 @@
    This parser is a LL(k) parser with ad hoc rules such as
    backtracking.
 
-   r<name>() is the grammer rule for a non-terminal <name>.
-   opt<name>() is the grammer fule for an optional non-terminal <name>.
+   r<name>() is the grammar rule for a non-terminal <name>.
+   opt<name>() is the grammar fule for an optional non-terminal <name>.
    is<name>() looks ahead and returns true if the next symbol is <name>.
 */
 

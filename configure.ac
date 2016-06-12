@@ -353,7 +353,7 @@ m4_define(mathsat_possible_libdirs, [lib])
 dnl Random dollars are shoehorned into these names to ensure that M4 does not
 dnl rename them as they are passed down to the point where they are actually
 dnl used -- to set additional command line options for a particular solver
-dnl candiate location
+dnl candidate location
 m4_define([$$ESBMC_NOOP_CONFIG], [])
 
 ESBMC_SOLVER_LIBS=""

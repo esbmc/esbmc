@@ -338,7 +338,7 @@ array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 {
   tuple_smt_sortt ts = to_tuple_sort(sort);
 
-  // Pull struct type out, access the relevent element, then wrap it in an
+  // Pull struct type out, access the relevant element, then wrap it in an
   // array type.
 
   const array_type2t &arr = to_array_type(ts->thetype);

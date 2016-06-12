@@ -156,7 +156,7 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
     if(it2==values.end())
     {
       // We always track these when merging value sets, as these store data
-      // that's transfered back and forth between function calls. So, the
+      // that's transferred back and forth between function calls. So, the
       // variables not existing in the state we're merging into is irrelevant.
       if(has_prefix(id2string(it->second.identifier),
            "value_set::dynamic_object") ||

@@ -204,7 +204,7 @@ public:
   //operator bool() const			{ return length != 0; }
 #endif
 
-  // All comparisions are done with these primitives.
+  // All comparisons are done with these primitives.
 
   int compare (llong_t) const _fast;
   int compare (ullong_t) const _fast;

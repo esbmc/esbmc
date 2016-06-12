@@ -327,7 +327,7 @@ Function: cpp_typecheckt::typecheck_class_template_member
 
  Outputs:
 
- Purpose: typecheck class tempalte members;
+ Purpose: typecheck class template members;
           these can be methods or static members
 
 \*******************************************************************/

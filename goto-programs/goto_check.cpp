@@ -57,7 +57,7 @@ void goto_checkt::div_by_zero_check(const exprt &expr, const guardt &guard)
   if (expr.operands().size() != 2)
     throw expr.id_string() + " takes two arguments";
 
-  // add divison by zero subgoal
+  // add division by zero subgoal
 
   exprt zero = gen_zero(expr.op1().type());
 

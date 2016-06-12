@@ -75,7 +75,7 @@ function restash () {
 # To build: make clean, make.
 make clean > /dev/null 2>/dev/null
 make > /dev/null 2>/dev/null
-# Make twice to ensure z3 objects propagate; due to ancient dependancy faults.
+# Make twice to ensure z3 objects propagate; due to ancient dependency faults.
 make > /dev/null 2>/dev/null
 
 # If the build failed, curses.

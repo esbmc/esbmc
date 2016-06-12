@@ -25,7 +25,7 @@ round_up_to_word(mp_integer &mp)
     return;
   } else if (mp < word_bytes) {
     mp = mp_integer(word_bytes);
-  // Or if it's an array of chars etc. that doesn't end on a boundry,
+  // Or if it's an array of chars etc. that doesn't end on a boundary,
   } else if (mp.to_ulong() & align_mask) {
     mp += word_bytes - (mp.to_ulong() & align_mask);
   }
@@ -43,7 +43,7 @@ round_up_to_int64(mp_integer &mp)
     return;
   } else if (mp < word_bytes) {
     mp = mp_integer(word_bytes);
-  // Or if it's an array of chars etc. that doesn't end on a boundry,
+  // Or if it's an array of chars etc. that doesn't end on a boundary,
   } else if (mp.to_ulong() & align_mask) {
     mp += word_bytes - (mp.to_ulong() & align_mask);
   }
@@ -189,7 +189,7 @@ type_byte_size(const type2t &type)
   }
   case type2t::union_id:
   {
-    // Very simple: the largest field size, rounded up to a word boundry for
+    // Very simple: the largest field size, rounded up to a word boundary for
     // array allocation alignment.
     const union_type2t &t2 = static_cast<const union_type2t&>(type);
     mp_integer max_size(0);

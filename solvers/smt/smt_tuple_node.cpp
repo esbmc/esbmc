@@ -272,7 +272,7 @@ smt_tuple_node_flattener::tuple_array_create(const type2tc &array_type,
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);
   if (arr_type.size_is_infinite) {
-    // Guarentee nothing, this is modelling only.
+    // Guarantee nothing, this is modelling only.
     return newsym;
   } else if (!is_constant_int2t(arr_type.array_size)) {
     std::cerr << "Non-constant sized array of type constant_array_of2t"

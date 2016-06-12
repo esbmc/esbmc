@@ -480,7 +480,7 @@ div2t::do_simplify(bool second __attribute__((unused))) const
     return from_fixedbv(operand1, type);
 
   // Div by zero -> not allowed. XXX - this should never reach this point, but
-  // if it does, perhaps the caller has some nondet guard that guarentees it's
+  // if it does, perhaps the caller has some nondet guard that guarantees it's
   // never evaluated. Either way, don't explode, just refuse to simplify.
   if (operand2.is_zero())
     return expr2tc();

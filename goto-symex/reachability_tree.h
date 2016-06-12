@@ -46,7 +46,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
  *      switch we picked.
  *    -# Continue symbolic execution from here. Fin.
  *
- *  There are various scheduling possiblities. The default is depth-first
+ *  There are various scheduling possibilities. The default is depth-first
  *  search, where we just follow the algorithm above and return all the traces
  *  to the caller. The "schedule" way combines all paths into one trace, which
  *  is then solved once. Round-robin switches to the next thread in the set of

@@ -90,7 +90,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   // Initial mpor tracking.
   thread_last_reads.push_back(std::set<expr2tc>());
   thread_last_writes.push_back(std::set<expr2tc>());
-  // One thread with one dependancy relation.
+  // One thread with one dependency relation.
   dependancy_chain.push_back(std::vector<int>());
   dependancy_chain.back().push_back(0);
   mpor_says_no = false;
@@ -756,9 +756,9 @@ void
 execution_statet::calculate_mpor_constraints(void)
 {
   // Primary bit of MPOR logic - to be executed at the end of a transition to
-  // update dependancy tracking and suchlike.
+  // update dependency tracking and suchlike.
 
-  // MPOR paper, page 12, create new dependancy chain record for this time step.
+  // MPOR paper, page 12, create new dependency chain record for this time step.
 
   // 2D Vector of relations, T x T, i.e. threads on each axis:
   //    -1 signifies that no relation exists.
@@ -770,7 +770,7 @@ execution_statet::calculate_mpor_constraints(void)
   //  about progress later.
   std::vector<std::vector<int> > new_dep_chain = dependancy_chain;
 
-  // Start new dependancy chain for this thread. Default to there being no
+  // Start new dependency chain for this thread. Default to there being no
   // relation.
   for (unsigned int i = 0; i < new_dep_chain.size(); i++)
     new_dep_chain[active_thread][i] = -1;
@@ -779,7 +779,7 @@ execution_statet::calculate_mpor_constraints(void)
   new_dep_chain[active_thread][active_thread] = 1;
 
   // Mark un-run threads as continuing to be un-run. Otherwise, look for a
-  // dependancy chain from each thread to the run thread.
+  // dependency chain from each thread to the run thread.
   for (unsigned int j = 0; j < new_dep_chain.size(); j++) {
     if (j == active_thread)
       continue;
@@ -790,16 +790,16 @@ execution_statet::calculate_mpor_constraints(void)
     } else {
       // This is where the beef is. If there is any other thread (including
       // the active thread) that we depend on, that depends on the active
-      // thread, then record a dependancy.
-      // A direct dependancy occurs when l = j, as DCjj always = 1, and DEPji
+      // thread, then record a dependency.
+      // A direct dependency occurs when l = j, as DCjj always = 1, and DEPji
       // is true.
       int res = 0;
 
       for (unsigned int l = 0; l < new_dep_chain.size(); l++) {
         if (dependancy_chain[j][l] != 1)
-          continue; // No dependancy relation here
+          continue; // No dependency relation here
 
-        // Now check for variable dependancy.
+        // Now check for variable dependency.
         if (!check_mpor_dependancy(active_thread, l))
           continue;
 
@@ -813,10 +813,10 @@ execution_statet::calculate_mpor_constraints(void)
     }
   }
 
-  // For /all other relations/, just propagate the dependancy it already has.
+  // For /all other relations/, just propagate the dependency it already has.
   // Achieved by initial duplication of dependancy_chain.
 
-  // Voila, new dependancy chain.
+  // Voila, new dependency chain.
 
   // Calculate whether or not the transition we just took, in active_thread,
   // was in fact schedulable. We can't tell whether or not a transition is
@@ -826,11 +826,11 @@ execution_statet::calculate_mpor_constraints(void)
   bool can_run = true;
   for (unsigned int j = active_thread + 1; j < threads_state.size(); j++) {
     if (new_dep_chain[j][active_thread] != -1)
-      // Either no higher threads have been run, or a dependancy relation in
+      // Either no higher threads have been run, or a dependency relation in
       // a higher thread justifies our out-of-order execution.
       continue;
 
-    // Search for a dependancy chain in a lower thread that links us back to
+    // Search for a dependency chain in a lower thread that links us back to
     // a higher thread, justifying this order.
     bool dep_exists = false;
     for (unsigned int l = 0; l < active_thread; l++) {

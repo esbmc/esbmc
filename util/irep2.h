@@ -1130,7 +1130,7 @@ namespace esbmct {
    *  head methods for get_sub_expr and so forth, which are
    *  specific to expression ireps. The actual implementation of these methods
    *  are provided in irep_methods to avoid un-necessary recursion but are
-   *  protected; here we provide the head methods publically to allow the
+   *  protected; here we provide the head methods publicly to allow the
    *  programmer to call in.
    *  */
   template <class derived, class baseclass, typename traits, typename enable>

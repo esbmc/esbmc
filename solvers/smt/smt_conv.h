@@ -344,7 +344,7 @@ public:
  *  into the solver context.
  *
  *  The exact lifetime of smt asts here is currently undefined, unfortunately,
- *  although smt_convt posesses a cache, so they generally have a reference
+ *  although smt_convt possesses a cache, so they generally have a reference
  *  in there. This will probably be fixed in the future.
  *
  *  In theory this class supports pushing and popping of solver contexts,

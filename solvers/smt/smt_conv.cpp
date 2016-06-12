@@ -1904,7 +1904,7 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
 
   // So: we have an array_of, that we have to convert into a bunch of stores.
   // However, it might be a nested array. If that's the case, then we're
-  // guarenteed to have another array_of in the initializer which we can flatten
+  // guaranteed to have another array_of in the initializer which we can flatten
   // to a single array of whatever's at the bottom of the array_of. Or, it's
   // a constant_array, in which case we can just copy the contents.
   if (is_array_type(arrtype.subtype)) {

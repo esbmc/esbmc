@@ -283,7 +283,7 @@ bool c_preprocess(
   int err, ret;
   char out_file_buf[288], tmpdir[256];
 
-  // For Windows, we can't fork and run the preprocessor in a seperate process.
+  // For Windows, we can't fork and run the preprocessor in a separate process.
   // Instead, just run it within the existing ESBMC process.
 
   message_streamt message_stream(message_handler);

@@ -452,7 +452,7 @@ expr2t::simplify(void) const
   }
 
   // Corner case! Don't even try to simplify address of's operands, might end up
-  // taking the address of some /completely/ arbitary pice of data, by
+  // taking the address of some /completely/ arbitrary pice of data, by
   // simplifiying an index to its data, discarding the symbol.
   if (__builtin_expect((expr_id == address_of_id), 0)) // unlikely
     return expr2tc();

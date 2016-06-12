@@ -199,7 +199,7 @@ namespace z3 {
 
         /**
            \brief Interrupt the current procedure being executed by any object managed by this context.
-           This is a soft interruption: there is no guarantee the object will actualy stop.
+           This is a soft interruption: there is no guarantee the object will actually stop.
         */
         void interrupt() { Z3_interrupt(m_ctx); }
 

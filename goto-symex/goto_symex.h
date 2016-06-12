@@ -177,7 +177,7 @@ protected:
    *  being jumps where the guards are nondeterministic, it's that we have to
    *  handle editing the unwind bound when these things occur, and set up state
    *  merges in the future to handle each path thats taken.
-   *  @param old_guard Renamed guard on this jump occuring.
+   *  @param old_guard Renamed guard on this jump occurring.
    */
   virtual void symex_goto(const expr2tc &old_guard);
 

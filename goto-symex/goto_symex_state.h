@@ -176,7 +176,7 @@ public:
      *  from. */
     goto_programt::const_targett function_ptr_call_loc;
     /** Function pointer call merge point. Instruction where the resulting
-     *  states from particular funtion calls originating from a function pointer
+     *  states from particular function calls originating from a function pointer
      *  dereference should be merged into main state. */
     goto_programt::const_targett function_ptr_combine_target;
     /** Original function pointer call code. Contains arguments to setup

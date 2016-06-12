@@ -575,7 +575,7 @@ class execution_statet : public goto_symext
   message_handlert &message_handler;
   /** Minimum number of threads to exist to consider a context switch.
    *  In certain special cases, such as LTL checking, various pieces of
-   *  code and information are bunged into seperate threads which aren't
+   *  code and information are bunged into separate threads which aren't
    *  necessarily scheduled. In these cases we don't want to consider
    *  cswitches, because even though they're not taken, they'll heavily
    *  inflate memory size.
