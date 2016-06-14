@@ -161,7 +161,7 @@ void clang_c_adjust::adjust_for(codet& code)
 void clang_c_adjust::adjust_switch(codet& code)
 {
   // If the condition is not of int type, it must be casted
-  gen_typecast(ns, code.op0(), int_type());
+  gen_typecast_arithmetic(ns, code.op0());
 }
 
 void clang_c_adjust::adjust_assign(codet& code)
