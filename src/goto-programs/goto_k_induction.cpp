@@ -42,14 +42,8 @@ void goto_k_inductiont::goto_k_induction()
     it != function_loops.end();
     ++it)
   {
-    // Disable forward condition if there is an infinite loop
-    // We'll never be able to prove that the loop was fully unwinded
-    // TODO: This is not entirely correct, e.g, our internal strcpy
-    // is considered infinite
-//    if(it->is_infinite_loop())
-//    {
-//      options.set_option("disable-forward-condition", true);
-//    }
+    // TODO: Can we check if the loop is infinite? If so, we should
+    // disable the forward condition
 
     // Start the loop conversion
     convert_finite_loop(*it);
@@ -88,9 +82,6 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   // Since we are using insert_swap to keep the targets, the
   // original loop head as shifted to after the assume cond
   while((++loop_head)->inductive_step_instruction);
-
-  // Assume the loop termination condition after the copy's exit
-//  assume_neg_loop_cond_after_loop(loop_exit, loop_cond);
 
   // Check if the loop exit needs to be updated
   // We must point to the assume that was inserted in the previous
