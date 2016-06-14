@@ -760,8 +760,8 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
       return false;
 
     case smt_convt::P_SATISFIABLE:
-      if (options.get_bool_option("inductive-step") &&
-    		  options.get_bool_option("show-counter-example"))
+      if (!options.get_bool_option("base-case") &&
+          options.get_bool_option("show-counter-example"))
       {
         error_trace(*solver, equation);
       }
