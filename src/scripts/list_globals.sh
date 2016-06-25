@@ -15,11 +15,11 @@ echo "Proper globals, minus known benign fields:"
 # exprt::*, same as the above.
 # typet::*, same as the above.
 # *::field_names, just names of irep2 fields
-objdump -t ./esbmc/esbmc | awk '{if ($2 == "g" && $3 == "O") print $6;}' | c++filt | grep -v '^irept::.*$' | grep -v '^exprt::.*$' | grep -v '^typet::.*$' | grep -v '.*::field_names$' | sort
+objdump -t $1 | awk '{if ($2 == "g" && $3 == "O") print $6;}' | c++filt | grep -v '^irept::.*$' | grep -v '^exprt::.*$' | grep -v '^typet::.*$' | grep -v '.*::field_names$' | sort
 
 echo "Local objects with data storage:"
 
 # And this: fetches a list of local symbols that are data objects, and in either
 # .data or .bss, thus editable runtime data. Strip out the following:
 # std::__ioinit, not sure what it is, but not esbmc related.
-objdump -t ./esbmc/esbmc | awk '{if ($2 == "l" && $3 == "O" && ($4 == ".bss" || $4 == ".data")) print $6;}' | c++filt | grep -v 'std::__ioinit' |  sort
+objdump -t $1 | awk '{if ($2 == "l" && $3 == "O" && ($4 == ".bss" || $4 == ".data")) print $6;}' | c++filt | grep -v 'std::__ioinit' |  sort
