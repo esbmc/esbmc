@@ -154,7 +154,17 @@ AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build f
 
 AC_ARG_ENABLE(enable-shared-lib, [AS_HELP_STRING([--enable-shared-lib], Build a shared library of ESBMCs code too)])
 AS_IF([test "${enable_shared_lib}" = "yes"], [
-  AC_SUBST([ESBMC_SHARED_LIB], "libesbmc.la")
+  dnl Check for python
+  PKG_CHECK_MODULES([LIBPYTHON], [python], [
+    dnl Add flags to build python in; enable build of libesbmc
+    AS_VAR_APPEND(CXXFLAGS, " $LIBPYTHON_CFLAGS ")
+    AS_VAR_APPEND(LIBS, " $LIBPYTHON_LIBS ")
+    AS_ECHO($LIBPYTHON_CFLAGS)
+    AS_ECHO($LIBPYTHON_LIBS)
+    AC_SUBST([ESBMC_SHARED_LIB], "libesbmc.la")
+  ], [
+    AC_MSG_ERROR("Asked for shared python lib, but pkgconfig finds no python library")
+  ])
 ], [
   AC_SUBST([ESBMC_SHARED_LIB], "")
 ])
