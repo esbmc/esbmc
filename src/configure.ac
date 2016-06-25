@@ -152,6 +152,13 @@ AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)
 
 AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build flag)])
 
+AC_ARG_ENABLE(enable-shared-lib, [AS_HELP_STRING([--enable-shared-lib], Build a shared library of ESBMCs code too)])
+AS_IF([test "${enable_shared_lib}" = "yes"], [
+  AC_SUBST([ESBMC_SHARED_LIB], "libesbmc.la")
+], [
+  AC_SUBST([ESBMC_SHARED_LIB], "")
+])
+
 dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 dnl Unless of course you're on a mac, in which case clang will frequently
 dnl generate new warnings, and you probably want it off. This should be used
