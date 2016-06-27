@@ -1847,93 +1847,10 @@ extern type_poolt type_pool;
 
 // Start of definitions for expressions. Forward decs,
 
-class constant2t;
-class constant_int2t;
-class constant_fixedbv2t;
-class constant_bool2t;
-class constant_string2t;
-class constant_datatype2t;
-class constant_struct2t;
-class constant_union2t;
-class constant_array2t;
-class constant_array_of2t;
-class symbol2t;
-class typecast2t;
-class if2t;
-class equality2t;
-class notequal2t;
-class lessthan2t;
-class greaterthan2t;
-class lessthanequal2t;
-class greaterthanequal2t;
-class not2t;
-class and2t;
-class or2t;
-class xor2t;
-class implies2t;
-class bitand2t;
-class bitor2t;
-class bitxor2t;
-class bitnand2t;
-class bitnor2t;
-class bitnxor2t;
-class lshr2t;
-class bitnot2t;
-class neg2t;
-class abs2t;
-class add2t;
-class sub2t;
-class mul2t;
-class div2t;
-class modulus2t;
-class shl2t;
-class ashr2t;
-class same_object2t;
-class pointer_offset2t;
-class pointer_object2t;
-class address_of2t;
-class byte_extract2t;
-class byte_update2t;
-class with2t;
-class member2t;
-class index2t;
-class isnan2t;
-class overflow2t;
-class overflow_cast2t;
-class overflow_neg2t;
-class unknown2t;
-class invalid2t;
-class null_object2t;
-class dynamic_object2t;
-class dereference2t;
-class valid_object2t;
-class deallocated_obj2t;
-class dynamic_size2t;
-class sideeffect2t;
-class code_block2t;
-class code_assign2t;
-class code_init2t;
-class code_decl2t;
-class code_printf2t;
-class code_expression2t;
-class code_return2t;
-class code_skip2t;
-class code_free2t;
-class code_goto2t;
-class object_descriptor2t;
-class code_function_call2t;
-class code_comma2t;
-class invalid_pointer2t;
-class code_asm2t;
-class code_cpp_del_array2t;
-class code_cpp_delete2t;
-class code_cpp_catch2t;
-class code_cpp_throw2t;
-class code_cpp_throw_decl2t;
-class code_cpp_throw_decl_end2t;
-class isinf2t;
-class isnormal2t;
-class concat2t;
+// Iterate, in the preprocessor, over all expr ids and produce a forward
+// class declaration for them
+#define _ESBMC_IREP2_FWD_DEC(r, data, elem) class BOOST_PP_CAT(elem,2t);
+BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_FWD_DEC, foo, ESBMC_LIST_OF_EXPRS)
 
 // Data definitions.
 
