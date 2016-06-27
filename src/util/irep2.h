@@ -31,6 +31,11 @@
 
 #include <boost/static_assert.hpp>
 
+#include <boost/python.hpp>
+
+#include <boost/preprocessor/list/adt.hpp>
+#include <boost/preprocessor/list/for_each.hpp>
+
 #include <config.h>
 #include <irep.h>
 #include <fixedbv.h>
@@ -38,6 +43,97 @@
 #include <dstring.h>
 
 #include <crypto_hash.h>
+
+// Ahead of time: a list of all expressions and types, in a preprocessing
+// list, for enumerating later. Should avoid manually enumerating anywhere
+// else.
+
+#define ESBMC_LIST_OF_EXPRS BOOST_PP_LIST_CONS(constant_int,\
+  BOOST_PP_LIST_CONS(constant_fixedbv,\
+  BOOST_PP_LIST_CONS(constant_bool,\
+  BOOST_PP_LIST_CONS(constant_string,\
+  BOOST_PP_LIST_CONS(constant_struct,\
+  BOOST_PP_LIST_CONS(constant_union,\
+  BOOST_PP_LIST_CONS(constant_array,\
+  BOOST_PP_LIST_CONS(constant_array_of,\
+  BOOST_PP_LIST_CONS(symbol,\
+  BOOST_PP_LIST_CONS(typecast,\
+  BOOST_PP_LIST_CONS(if,\
+  BOOST_PP_LIST_CONS(equality,\
+  BOOST_PP_LIST_CONS(notequal,\
+  BOOST_PP_LIST_CONS(lessthan,\
+  BOOST_PP_LIST_CONS(greaterthan,\
+  BOOST_PP_LIST_CONS(lessthanequal,\
+  BOOST_PP_LIST_CONS(greaterthanequal,\
+  BOOST_PP_LIST_CONS(not,\
+  BOOST_PP_LIST_CONS(and,\
+  BOOST_PP_LIST_CONS(or,\
+  BOOST_PP_LIST_CONS(xor,\
+  BOOST_PP_LIST_CONS(implies,\
+  BOOST_PP_LIST_CONS(bitand,\
+  BOOST_PP_LIST_CONS(bitor,\
+  BOOST_PP_LIST_CONS(bitxor,\
+  BOOST_PP_LIST_CONS(bitnand,\
+  BOOST_PP_LIST_CONS(bitnor,\
+  BOOST_PP_LIST_CONS(bitnxor,\
+  BOOST_PP_LIST_CONS(bitnot,\
+  BOOST_PP_LIST_CONS(lshr,\
+  BOOST_PP_LIST_CONS(neg,\
+  BOOST_PP_LIST_CONS(abs,\
+  BOOST_PP_LIST_CONS(add,\
+  BOOST_PP_LIST_CONS(sub,\
+  BOOST_PP_LIST_CONS(mul,\
+  BOOST_PP_LIST_CONS(div,\
+  BOOST_PP_LIST_CONS(modulus,\
+  BOOST_PP_LIST_CONS(shl,\
+  BOOST_PP_LIST_CONS(ashr,\
+  BOOST_PP_LIST_CONS(dynamic_object,\
+  BOOST_PP_LIST_CONS(same_object,\
+  BOOST_PP_LIST_CONS(pointer_offset,\
+  BOOST_PP_LIST_CONS(pointer_object,\
+  BOOST_PP_LIST_CONS(address_of,\
+  BOOST_PP_LIST_CONS(byte_extract,\
+  BOOST_PP_LIST_CONS(byte_update,\
+  BOOST_PP_LIST_CONS(with,\
+  BOOST_PP_LIST_CONS(member,\
+  BOOST_PP_LIST_CONS(index,\
+  BOOST_PP_LIST_CONS(isnan,\
+  BOOST_PP_LIST_CONS(overflow,\
+  BOOST_PP_LIST_CONS(overflow_cast,\
+  BOOST_PP_LIST_CONS(overflow_neg,\
+  BOOST_PP_LIST_CONS(unknown,\
+  BOOST_PP_LIST_CONS(invalid,\
+  BOOST_PP_LIST_CONS(null_object,\
+  BOOST_PP_LIST_CONS(dereference,\
+  BOOST_PP_LIST_CONS(valid_object,\
+  BOOST_PP_LIST_CONS(deallocated_obj,\
+  BOOST_PP_LIST_CONS(dynamic_size,\
+  BOOST_PP_LIST_CONS(sideeffect,\
+  BOOST_PP_LIST_CONS(code_block,\
+  BOOST_PP_LIST_CONS(code_assign,\
+  BOOST_PP_LIST_CONS(code_init,\
+  BOOST_PP_LIST_CONS(code_decl,\
+  BOOST_PP_LIST_CONS(code_printf,\
+  BOOST_PP_LIST_CONS(code_expression,\
+  BOOST_PP_LIST_CONS(code_return,\
+  BOOST_PP_LIST_CONS(code_skip,\
+  BOOST_PP_LIST_CONS(code_free,\
+  BOOST_PP_LIST_CONS(code_goto,\
+  BOOST_PP_LIST_CONS(object_descriptor,\
+  BOOST_PP_LIST_CONS(code_function_call,\
+  BOOST_PP_LIST_CONS(code_comma,\
+  BOOST_PP_LIST_CONS(invalid_pointer,\
+  BOOST_PP_LIST_CONS(code_asm,\
+  BOOST_PP_LIST_CONS(code_cpp_del_array,\
+  BOOST_PP_LIST_CONS(code_cpp_delete,\
+  BOOST_PP_LIST_CONS(code_cpp_catch,\
+  BOOST_PP_LIST_CONS(code_cpp_throw,\
+  BOOST_PP_LIST_CONS(code_cpp_throw_decl,\
+  BOOST_PP_LIST_CONS(code_cpp_throw_decl_end,\
+  BOOST_PP_LIST_CONS(isinf,\
+  BOOST_PP_LIST_CONS(isnormal,\
+  BOOST_PP_LIST_CONS(concat, BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))\
+))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 // XXXjmorse - abstract, access modifies, need consideration
 
@@ -436,91 +532,10 @@ public:
   /** Enumeration identifying each sort of expr.
    */
   enum expr_ids {
-    constant_int_id,
-    constant_fixedbv_id,
-    constant_bool_id,
-    constant_string_id,
-    constant_struct_id,
-    constant_union_id,
-    constant_array_id,
-    constant_array_of_id,
-    symbol_id,
-    typecast_id,
-    if_id,
-    equality_id,
-    notequal_id,
-    lessthan_id,
-    greaterthan_id,
-    lessthanequal_id,
-    greaterthanequal_id,
-    not_id,
-    and_id,
-    or_id,
-    xor_id,
-    implies_id,
-    bitand_id,
-    bitor_id,
-    bitxor_id,
-    bitnand_id,
-    bitnor_id,
-    bitnxor_id,
-    bitnot_id,
-    lshr_id,
-    neg_id,
-    abs_id,
-    add_id,
-    sub_id,
-    mul_id,
-    div_id,
-    modulus_id,
-    shl_id,
-    ashr_id,
-    dynamic_object_id, // Not converted in SMT, only in goto-symex
-    same_object_id,
-    pointer_offset_id,
-    pointer_object_id,
-    address_of_id,
-    byte_extract_id,
-    byte_update_id,
-    with_id,
-    member_id,
-    index_id,
-    isnan_id,
-    overflow_id,
-    overflow_cast_id,
-    overflow_neg_id,
-    unknown_id,
-    invalid_id,
-    null_object_id,
-    dereference_id,
-    valid_object_id,
-    deallocated_obj_id,
-    dynamic_size_id,
-    sideeffect_id,
-    code_block_id,
-    code_assign_id,
-    code_init_id,
-    code_decl_id,
-    code_printf_id,
-    code_expression_id,
-    code_return_id,
-    code_skip_id,
-    code_free_id,
-    code_goto_id,
-    object_descriptor_id,
-    code_function_call_id,
-    code_comma_id,
-    invalid_pointer_id,
-    code_asm_id,
-    code_cpp_del_array_id,
-    code_cpp_delete_id,
-    code_cpp_catch_id,
-    code_cpp_throw_id,
-    code_cpp_throw_decl_id,
-    code_cpp_throw_decl_end_id,
-    isinf_id,
-    isnormal_id,
-    concat_id,
+    // Boost preprocessor magic: enumerate over each expression and pump out
+    // a foo_id enum element
+#define _ESBMC_IREP2_EXPRID_ENUM(r, data, elem) BOOST_PP_CAT(elem,_id),
+BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPRID_ENUM, foo, ESBMC_LIST_OF_EXPRS)
     end_expr_id
   };
 
