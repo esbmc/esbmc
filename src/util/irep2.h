@@ -2776,6 +2776,9 @@ public:
                                > basename##2tc; \
   typedef esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits::type> basename##_expr_methods;
 
+// This can't be replaced by iterating over all expr ids in preprocessing
+// magic because the mapping between top level expr class and it's data holding
+// object isn't regular: the data class depends on /what/ the expression /is/.
 irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);
 irep_typedefs(constant_struct, constant_datatype_data);
