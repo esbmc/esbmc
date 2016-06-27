@@ -4366,91 +4366,10 @@ struct type2_hash
   inline name##2t & to_##name##2t(expr2tc &t) \
     { return dynamic_cast<name##2t &> (*t.get()); }
 
-expr_macros(constant_int);
-expr_macros(constant_fixedbv);
-expr_macros(constant_bool);
-expr_macros(constant_string);
-expr_macros(constant_struct);
-expr_macros(constant_union);
-expr_macros(constant_array);
-expr_macros(constant_array_of);
-expr_macros(symbol);
-expr_macros(typecast);
-expr_macros(if);
-expr_macros(equality);
-expr_macros(notequal);
-expr_macros(lessthan);
-expr_macros(greaterthan);
-expr_macros(lessthanequal);
-expr_macros(greaterthanequal);
-expr_macros(not);
-expr_macros(and);
-expr_macros(or);
-expr_macros(xor);
-expr_macros(implies);
-expr_macros(bitand);
-expr_macros(bitor);
-expr_macros(bitxor);
-expr_macros(bitnand);
-expr_macros(bitnor);
-expr_macros(bitnxor);
-expr_macros(bitnot);
-expr_macros(lshr);
-expr_macros(neg);
-expr_macros(abs);
-expr_macros(add);
-expr_macros(sub);
-expr_macros(mul);
-expr_macros(div);
-expr_macros(modulus);
-expr_macros(shl);
-expr_macros(ashr);
-expr_macros(same_object);
-expr_macros(pointer_offset);
-expr_macros(pointer_object);
-expr_macros(address_of);
-expr_macros(byte_extract);
-expr_macros(byte_update);
-expr_macros(with);
-expr_macros(member);
-expr_macros(index);
-expr_macros(isnan);
-expr_macros(overflow);
-expr_macros(overflow_cast);
-expr_macros(overflow_neg);
-expr_macros(unknown);
-expr_macros(invalid);
-expr_macros(null_object);
-expr_macros(dynamic_object);
-expr_macros(dereference);
-expr_macros(valid_object);
-expr_macros(deallocated_obj);
-expr_macros(dynamic_size);
-expr_macros(sideeffect);
-expr_macros(code_block);
-expr_macros(code_assign);
-expr_macros(code_init);
-expr_macros(code_decl);
-expr_macros(code_printf);
-expr_macros(code_expression);
-expr_macros(code_return);
-expr_macros(code_skip);
-expr_macros(code_free);
-expr_macros(code_goto);
-expr_macros(object_descriptor);
-expr_macros(code_function_call);
-expr_macros(code_comma);
-expr_macros(invalid_pointer);
-expr_macros(code_asm);
-expr_macros(code_cpp_del_array);
-expr_macros(code_cpp_delete);
-expr_macros(code_cpp_catch);
-expr_macros(code_cpp_throw);
-expr_macros(code_cpp_throw_decl);
-expr_macros(code_cpp_throw_decl_end);
-expr_macros(isinf);
-expr_macros(isnormal);
-expr_macros(concat);
+// Boost preprocessor magic to iterate over all exprs,
+#define _ESBMC_IREP2_MACROS_ENUM(r, data, elem) expr_macros(elem);
+BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MACROS_ENUM, foo, ESBMC_LIST_OF_EXPRS)
+
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
