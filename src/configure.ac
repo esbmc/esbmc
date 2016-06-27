@@ -157,7 +157,8 @@ AS_IF([test "${enable_shared_lib}" = "yes"], [
   dnl Check for python
   PKG_CHECK_MODULES([LIBPYTHON], [python], [
     dnl Add flags to build python in; enable build of libesbmc
-    AS_VAR_APPEND(CXXFLAGS, " $LIBPYTHON_CFLAGS ")
+    AS_VAR_APPEND(CXXFLAGS, " $LIBPYTHON_CFLAGS -DWITH_PYTHON ")
+    AS_VAR_APPEND(CFLAGS, " $LIBPYTHON_CFLAGS -DWITH_PYTHON ")
     AS_VAR_APPEND(LIBS, " $LIBPYTHON_LIBS ")
     AS_ECHO($LIBPYTHON_CFLAGS)
     AS_ECHO($LIBPYTHON_LIBS)
