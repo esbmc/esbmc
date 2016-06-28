@@ -1783,6 +1783,23 @@ esbmct::expr_methods2<derived, baseclass, traits, enable>::foreach_operand_impl(
   superclass::foreach_operand_impl_rec(f);
 }
 
+#ifdef WITH_PYTHON
+template <class derived, class baseclass, typename traits, typename enable>
+void
+esbmct::irep_methods2<derived, baseclass, traits, enable>::build_python_class(
+    const expr2t::expr_ids id)
+{
+  using namespace boost::python;
+
+  // Build python class out of the derived type (such as add2t) and with the
+  // name of the expr_id. Alas, the expr id isn't currently in the type record
+  // so can't be sucked out here.
+  class_<derived> foo(expr_names[id], derived::traits::python_init);
+  build_python_class_rec(foo, id);
+  return;
+}
+#endif /* WITH_PYTHON */
+
 // Types
 
 template <class derived, class baseclass, typename traits, typename enable>
@@ -1996,6 +2013,20 @@ esbmct::irep_methods2<derived, baseclass, traits, enable>::foreach_operand_impl_
 
   superclass::foreach_operand_impl_rec(f);
 }
+
+#ifdef WITH_PYTHON
+template <class derived, class baseclass, typename traits, typename enable>
+template <typename T>
+void
+esbmct::irep_methods2<derived, baseclass, traits, enable>::build_python_class_rec(T &obj, unsigned int idx)
+{
+  // Add this field record to the python class obj, get name from field_names
+  // field, and increment the index we're working on.
+  superclass::build_python_class_rec(
+      obj.def_readonly(derived::field_names[idx].c_str(), membr_ptr::value), idx+1);
+  return;
+}
+#endif /* WITH PYTHON */
 
 /********************** Constants and explicit instantiations *****************/
 
@@ -2244,8 +2275,8 @@ std::string concat2t::field_names [esbmct::num_type_fields]  =
 
 // Explicit template instanciations
 
-template class esbmct::irep_methods2<bool_type2t, type2t, typename esbmct::type2t_default_traits::type>;
-template class esbmct::irep_methods2<empty_type2t, type2t, typename esbmct::type2t_default_traits::type>;
+template class esbmct::irep_methods2<bool_type2t, type2t, type2t::traits::type>;
+template class esbmct::irep_methods2<empty_type2t, type2t, type2t::traits::type>;
 template class esbmct::irep_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits::type>;
 template class esbmct::irep_methods2<struct_type2t, struct_union_data, struct_union_data::traits::type>;
 template class esbmct::irep_methods2<union_type2t, struct_union_data, struct_union_data::traits::type>;

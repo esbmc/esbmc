@@ -28,10 +28,13 @@
 #include <boost/mpl/push_front.hpp>
 #include <boost/mpl/pop_front.hpp>
 #include <boost/mpl/size.hpp>
+#include <boost/mpl/transform.hpp>
 
 #include <boost/static_assert.hpp>
 
+#ifdef WITH_PYTHON
 #include <boost/python.hpp>
+#endif
 
 #include <boost/preprocessor/list/adt.hpp>
 #include <boost/preprocessor/list/for_each.hpp>
@@ -201,6 +204,8 @@
 namespace esbmct {
   template <typename ...Args> class expr2t_traits;
   typedef expr2t_traits<> expr2t_default_traits;
+  template <typename ...Args> class type2t_traits;
+  typedef type2t_traits<> type2t_default_traits;
 }
 
 class type2t;
@@ -355,6 +360,9 @@ public:
     cpp_name_id,
     end_type_id
   };
+
+  /* Define default traits */
+  typedef typename esbmct::type2t_default_traits traits;
 
   /** Symbolic type exception class.
    *  To be thrown when attempting to fetch the width of a symbolic type, such
@@ -936,10 +944,11 @@ namespace esbmct {
   public:
     typedef field_traits<type2t::type_ids, type2t, &type2t::type_id> type_id_field;
     typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_id_field>::type type;
-  };
 
-  /** Default trait types for type2t. Assumes no fields. */
-  typedef type2t_traits<>::type type2t_default_traits;
+#ifdef WITH_PYTHON
+    static boost::python::init<typename Args::result_type...> python_init;
+#endif
+  };
 
   /** Trait class for expr2t ireps.
    *  This takes a list of field traits and puts it in a vector, with the record
@@ -955,6 +964,10 @@ namespace esbmct {
     typedef typename boost::mpl::push_front<typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::type, expr_id_field>::type type;
     static constexpr bool always_construct = false;
     static constexpr unsigned int num_fields = boost::mpl::size<type>::type::value;
+
+#ifdef WITH_PYTHON
+    static boost::python::init<type2tc, typename Args::result_type...> python_init;
+#endif
   };
 
   // Hack to force something2tc to always construct the traits' type, rather
@@ -1033,6 +1046,10 @@ namespace esbmct {
     size_t do_crc(size_t seed) const;
     void hash(crypto_hash &hash) const;
 
+#ifdef WITH_PYTHON
+    static void build_python_class(const expr2t::expr_ids id);
+#endif
+
   protected:
     // Fetch the type information about the field we are concerned with out
     // of the current type trait we're working on.
@@ -1055,6 +1072,11 @@ namespace esbmct {
 
     void foreach_operand_impl_rec(expr2t::op_delegate &f);
     void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const;
+
+#ifdef WITH_PYTHON
+    template <typename T>
+    static void build_python_class_rec(T &obj, unsigned int idx);
+#endif
   };
 
   // Base instance of irep_methods2. This is a template specialization that
@@ -1138,6 +1160,15 @@ namespace esbmct {
       (void)f;
       return;
     }
+
+#ifdef WITH_PYTHON
+    template <typename T>
+    static void build_python_class_rec(T &obj, unsigned int idx)
+    {
+      (void)obj;
+      (void)idx;
+    }
+#endif
   };
 
   /** Expression methods template for expr ireps.
@@ -1426,8 +1457,8 @@ public:
 
 // Then give them a typedef name
 
-typedef esbmct::irep_methods2<bool_type2t, type2t, typename esbmct::type2t_default_traits::type> bool_type_methods;
-typedef esbmct::irep_methods2<empty_type2t, type2t, typename esbmct::type2t_default_traits::type> empty_type_methods;
+typedef esbmct::irep_methods2<bool_type2t, type2t, type2t::traits::type> bool_type_methods;
+typedef esbmct::irep_methods2<empty_type2t, type2t, type2t::traits::type> empty_type_methods;
 typedef esbmct::irep_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits::type> symbol_type_methods;
 typedef esbmct::irep_methods2<struct_type2t, struct_union_data, struct_union_data::traits::type> struct_type_methods;
 typedef esbmct::irep_methods2<union_type2t, struct_union_data, struct_union_data::traits::type> union_type_methods;
