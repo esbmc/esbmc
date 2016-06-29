@@ -42,6 +42,8 @@ AX_BOOST_BASE(1.47, [], [AC_MSG_ERROR([Cannot find boost base dir, please pass i
 AS_VAR_APPEND(CPPFLAGS, " $BOOST_CPPFLAGS")
 AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS")
 
+AS_VAR_SET(C2GOTO_LIBS, "")
+
 AM_PROG_AR
 AM_PROG_LEX
 
@@ -159,10 +161,11 @@ AS_IF([test "${enable_shared_lib}" = "yes"], [
     dnl Add flags to build python in; enable build of libesbmc
     AS_VAR_APPEND(CXXFLAGS, " $LIBPYTHON_CFLAGS -DWITH_PYTHON ")
     AS_VAR_APPEND(CFLAGS, " $LIBPYTHON_CFLAGS -DWITH_PYTHON ")
-    AS_VAR_APPEND(LIBS, " $LIBPYTHON_LIBS ")
+    AS_VAR_APPEND(LIBS, " $LIBPYTHON_LIBS -lboost_python ")
     AS_ECHO($LIBPYTHON_CFLAGS)
     AS_ECHO($LIBPYTHON_LIBS)
     AC_SUBST([ESBMC_SHARED_LIB], "libesbmc.la")
+    AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON_LIBS -lboost_python ")
   ], [
     AC_MSG_ERROR("Asked for shared python lib, but pkgconfig finds no python library")
   ])
@@ -436,6 +439,8 @@ AC_SUBST([ESBMC_AVAILABLE_SOLVERS], $esbmc_list_of_solvers)
 AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 AC_SUBST([ESBMC_SOLVER_LIBS], "$ESBMC_SOLVER_LIBS")
+
+AC_SUBST([C2GOTO_LIBS], "$C2GOTO_LIBS")
 
 AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-cpp-frontend/Makefile esbmc/Makefile solvers/solver_config.h])
 AC_OUTPUT
