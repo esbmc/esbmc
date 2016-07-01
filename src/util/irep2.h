@@ -1085,6 +1085,8 @@ namespace esbmct {
 #ifdef WITH_PYTHON
     template <typename T>
     static void build_python_class_rec(T &obj, unsigned int idx);
+
+    static typename traits::python_init_type python_init;
 #endif
   };
 
@@ -1182,6 +1184,9 @@ namespace esbmct {
     static typename traits::python_init_type python_init;
 #endif
   };
+
+  template <class derived, class baseclass, typename traits, typename fields, typename enable>
+  typename traits::python_init_type irep_methods2<derived, baseclass, traits, fields, enable>::python_init;
 
   /** Expression methods template for expr ireps.
    *  This class works on the same principle as @irep_methods2 but provides
