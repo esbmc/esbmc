@@ -1085,8 +1085,6 @@ namespace esbmct {
 #ifdef WITH_PYTHON
     template <typename T>
     static void build_python_class_rec(T &obj, unsigned int idx);
-
-    static typename traits::python_init_type python_init;
 #endif
   };
 
@@ -1180,6 +1178,8 @@ namespace esbmct {
       (void)obj;
       (void)idx;
     }
+
+    static typename traits::python_init_type python_init;
 #endif
   };
 
