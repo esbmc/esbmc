@@ -29,6 +29,9 @@
 #include <boost/mpl/pop_front.hpp>
 #include <boost/mpl/size.hpp>
 #include <boost/mpl/transform.hpp>
+#include <boost/mpl/set.hpp>
+#include <boost/mpl/insert.hpp>
+#include <boost/bind/placeholders.hpp>
 
 #include <boost/static_assert.hpp>
 
@@ -1249,6 +1252,22 @@ namespace esbmct {
     // Forward all constructors down to the contained type.
     template <typename ...Args>
     something2tc(Args... args) : expr2tc(new contained(args...)) { }
+  };
+
+  // Boost doesn't have variadic vector templates, so convert to it.
+
+  template <typename ...Args> class variadic_vector;
+
+  template <typename T, typename ...Args>
+  class variadic_vector<T, Args...>
+  {
+    typedef boost::mpl::push_back<variadic_vector<Args...>, T> type;
+  };
+
+  template <>
+  class variadic_vector<>
+  {
+    typedef boost::mpl::vector<> type;
   };
 }; // esbmct
 
@@ -4328,6 +4347,19 @@ public:
 
   static std::string field_names[esbmct::num_type_fields];
 };
+
+// Generate a boost mpl set of all the trait type used by exprs. This juggling
+// removes duplicates. Has to be below class defs apparently.
+
+#define _ESBMC_IREP2_MPL_SET(r, data, elem) BOOST_PP_CAT(elem,2t)::traits,
+typedef boost::mpl::fold<esbmct::variadic_vector<
+BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_SET, foo, ESBMC_LIST_OF_EXPRS)
+  add2t::traits>, // Need to leave a trailing type because some extra commas
+                  // will be splatted on the end
+  boost::mpl::set0<>, // Initial state, empty set
+  // Insert things into this boost set
+  boost::mpl::insert<boost::mpl::_1, boost::mpl::_2>
+>::type set_of_traits;
 
 inline bool operator==(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
 {
