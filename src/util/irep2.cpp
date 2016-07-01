@@ -2298,10 +2298,10 @@ template class esbmct::irep_methods2<cpp_name_type2t, cpp_name_data, cpp_name_da
 #undef irep_typedefs_empty
 
 #define irep_typedefs(basename, superclass) \
-  template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits, superclass::traits::fields>;
+  template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits>;
 
 #define irep_typedefs_empty(basename, superclass) \
-  template class  esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits, esbmct::expr2t_default_traits::fields>;
+  template class  esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;
 
 irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);
