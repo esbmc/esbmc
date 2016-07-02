@@ -2297,11 +2297,21 @@ template class esbmct::irep_methods2<cpp_name_type2t, cpp_name_data, cpp_name_da
 #undef irep_typedefs
 #undef irep_typedefs_empty
 
+// XXX XXX XXX
+// XXX XXX XXX
+// XXX XXX XXX
+// Certain compiler errors don't seem to be flushed out unless we explicitly
+// instantiate irep_methods2 _as_ _well_ as expr_methods2. The latter should
+// imply the former, but appears to silently not. The net result is certain
+// symbols not being built into the output with no error messages, until link
+// time.
 #define irep_typedefs(basename, superclass) \
-  template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits>;
+  template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits>;\
+  template class esbmct::irep_methods2<basename##2t, superclass, superclass::traits>;
 
 #define irep_typedefs_empty(basename, superclass) \
-  template class esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;
+  template class esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;\
+  template class esbmct::irep_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;
 
 irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);
