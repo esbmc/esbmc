@@ -1,5 +1,5 @@
-noinst_LIBRARIES = libgotoprograms.a
-libgotoprograms_a_SOURCES = \
+noinst_LTLIBRARIES = libgotoprograms.la
+libgotoprograms_la_SOURCES = \
       goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       goto_program.cpp goto_check.cpp goto_inline.cpp \
       remove_skip.cpp goto_convert_functions.cpp \

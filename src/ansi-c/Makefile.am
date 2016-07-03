@@ -29,10 +29,10 @@ BUILT_SOURCES = parser.hpp
 
 noinst_PROGRAMS = c2goto
 c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp -I$(top_srcdir)/utils
-c2goto_LDADD = libansic.la libansicscanner.la ../clang-c-frontend/libclangcfrontend.a \
-      ../clang-cpp-frontend/libclangcppfrontend.a ../big-int/libbigint.a \
-      ../goto-programs/libgotoprograms.a ../langapi/liblangapi.a \
-      ../util/libutil.a cpp/libcpp.a ./headers/libheaders.a @C2GOTO_LIBS@
+c2goto_LDADD = libansic.la libansicscanner.la ../clang-c-frontend/libclangcfrontend.la \
+      ../clang-cpp-frontend/libclangcppfrontend.la ../big-int/libbigint.la \
+      ../goto-programs/libgotoprograms.la ../langapi/liblangapi.la \
+      ../util/libutil.la cpp/libcpp.la ./headers/libheaders.la @C2GOTO_LIBS@
 
 libclib_la_SOURCES = cprover_library.cpp clib32.c clib64.c
 

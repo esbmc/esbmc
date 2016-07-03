@@ -1,5 +1,5 @@
-noinst_LIBRARIES = libsymex.a
-libsymex_a_SOURCES = \
+noinst_LTLIBRARIES = libsymex.la
+libsymex_la_SOURCES = \
       symex_target.cpp symex_target_equation.cpp symex_assign.cpp \
       symex_main.cpp goto_trace.cpp build_goto_trace.cpp \
       symex_function.cpp goto_symex_state.cpp symex_dereference.cpp \

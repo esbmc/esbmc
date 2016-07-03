@@ -1,7 +1,10 @@
-noinst_LIBRARIES = libheaders.a
-libheaders_a_SOURCES = digitalfilter.hs pthread.hs pthreadtypes.hs stdarg.hs \
-                       stdbool.hs stddef.hs limits.hs
+noinst_LTLIBRARIES = libheaders.la
+libheaders_la_SOURCES = digitalfilter.c pthread.c pthreadtypes.c stdarg.c \
+                       stdbool.c stddef.c limits.c
 SUFFIXES = .hs
 
-.hs.o:
-	$(srcdir)/flail.sh $< $< | $(CC) $(CFLAGS) -x c - -c -o $@
+.hs.c:
+	$(srcdir)/flail.sh $< $< > $@
+
+clean-local:
+	-rm -rf *.c

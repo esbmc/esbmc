@@ -1,5 +1,5 @@
-noinst_LIBRARIES = libutil.a
-libutil_a_SOURCES = \
+noinst_LTLIBRARIES = libutil.la
+libutil_la_SOURCES = \
       arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr_util.cpp i2string.cpp language.cpp location.cpp message.cpp \
       language_file.cpp mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp \
