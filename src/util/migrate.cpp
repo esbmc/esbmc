@@ -1365,7 +1365,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new invalid_pointer2t(op0));
   } else if (expr.id() == "code" && expr.statement() == "skip") {
-    new_expr_ref = expr2tc(new code_skip2t());
+    new_expr_ref = expr2tc(new code_skip2t(get_empty_type()));
   } else if (expr.id() == "code" && expr.statement() == "goto") {
     new_expr_ref = expr2tc(new code_goto2t(expr.get("destination")));
   } else if (expr.id() == "comma") {
