@@ -1265,8 +1265,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::bool_<superclass::traits::always_construct == true>, arbitary>::type* = NULL
                  ) : base2tc(init)
     {
-      auto initptr = &init;
-      assert(initptr->*idfield == expid);
+      assert(init.get()->*idfield == expid);
     }
 
     // Allow construction too when we're handed a pointer to the (correctly
