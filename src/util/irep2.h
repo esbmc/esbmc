@@ -1313,6 +1313,28 @@ namespace esbmct {
   };
 }; // esbmct
 
+// In global namespace: to get boost to recognize something2tc's as being a
+// shared pointer type, we need to define get_pointer for it:
+
+template <typename T1, typename T2, unsigned int T3, typename T4>
+T2* get_pointer(esbmct::something2tc<T1, T2, T3, T4> const& p) {
+  return const_cast<T2*>(p.get());
+}
+
+// Extra bonus point fun: if we're using boost python, then additional
+// juggling is required to extract what the pointee type is from our shared
+// pointer class
+#ifdef WITH_PYTHON
+namespace boost {
+  namespace python {
+    template <typename T1, typename T2, unsigned int T3, typename T4>
+    struct pointee<esbmct::something2tc<T1, T2, T3, T4> > {
+      typedef T2 type;
+    };
+  }
+}
+#endif
+
 // So - make some type definitions for the different types we're going to be
 // working with. This is to avoid the repeated use of template names in later
 // definitions. If you'd like to add another type - don't. Vast tracts of code
