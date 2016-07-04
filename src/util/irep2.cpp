@@ -1748,45 +1748,45 @@ call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>
 // Top level type method definition (above recursive def)
 // exprs
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 const expr2tc *
-esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::get_sub_expr(unsigned int i) const
+esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::get_sub_expr(unsigned int i) const
 {
   return superclass::get_sub_expr_rec(0, i); // Skips expr_id
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 expr2tc *
-esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::get_sub_expr_nc(unsigned int i)
+esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::get_sub_expr_nc(unsigned int i)
 {
   return superclass::get_sub_expr_nc_rec(0, i); // Skips expr_id
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 unsigned int
-esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::get_num_sub_exprs(void) const
+esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::get_num_sub_exprs(void) const
 {
   return superclass::get_num_sub_exprs_rec(); // Skips expr_id
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
-esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::foreach_operand_impl_const(expr2t::const_op_delegate &f) const
+esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::foreach_operand_impl_const(expr2t::const_op_delegate &f) const
 {
   superclass::foreach_operand_impl_const_rec(f);
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
-esbmct::expr_methods2<derived, baseclass, traits, enable, fields>::foreach_operand_impl(expr2t::op_delegate &f)
+esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::foreach_operand_impl(expr2t::op_delegate &f)
 {
   superclass::foreach_operand_impl_rec(f);
 }
 
 #ifdef WITH_PYTHON
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::build_python_class(
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::build_python_class(
     const expr2t::expr_ids id)
 {
   using namespace boost::python;
@@ -1802,18 +1802,18 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::build_python_
 
 // Types
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 auto
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::clone(void) const -> container2tc
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::clone(void) const -> base_container2tc
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
-  return container2tc(new_obj);
+  return base_container2tc(new_obj);
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 list_of_memberst
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::tostring(unsigned int indent) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::tostring(unsigned int indent) const
 {
   list_of_memberst thevector;
 
@@ -1821,23 +1821,23 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::tostring(unsi
   return thevector;
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 bool
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::cmp(const base2t &ref) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::cmp(const base2t &ref) const
 {
   return cmp_rec(ref); // _includes_ type_id / expr_id
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 int
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::lt(const base2t &ref) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::lt(const base2t &ref) const
 {
   return lt_rec(ref); // _includes_ type_id / expr_id
 }
 
-template <class derived, class baseclass, typename traits,  typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container,  typename enable, typename fields>
 size_t
-esbmct::irep_methods2<derived, baseclass, traits,  enable, fields>::do_crc(size_t seed) const
+esbmct::irep_methods2<derived, baseclass, traits, container,  enable, fields>::do_crc(size_t seed) const
 {
 
   if (this->crc_val != 0) {
@@ -1858,9 +1858,9 @@ esbmct::irep_methods2<derived, baseclass, traits,  enable, fields>::do_crc(size_
   return seed;
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::hash(crypto_hash &hash) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::hash(crypto_hash &hash) const
 {
 
   hash_rec(hash); // _includes_ type_id / expr_id
@@ -1869,9 +1869,9 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::hash(crypto_h
 
 // The, *actual* recursive defs
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::tostring_rec(unsigned int idx, list_of_memberst &vec, unsigned int indent) const
 {
   // Skip over type fields in expressions. Alas, this is a design oversight,
   // without this we would screw up the field name list.
@@ -1891,9 +1891,9 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::tostring_rec(
   superclass::tostring_rec(idx + 1, vec, indent);
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 bool
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::cmp_rec(const base2t &ref) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::cmp_rec(const base2t &ref) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
@@ -1905,9 +1905,9 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::cmp_rec(const
   return superclass::cmp_rec(ref);
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 int
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::lt_rec(const base2t &ref) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::lt_rec(const base2t &ref) const
 {
   int tmp;
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1921,9 +1921,9 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::lt_rec(const 
   return superclass::lt_rec(ref);
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::do_crc_rec() const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::do_crc_rec() const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
@@ -1934,9 +1934,9 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::do_crc_rec() 
   superclass::do_crc_rec();
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::hash_rec(crypto_hash &hash) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::hash_rec(crypto_hash &hash) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
@@ -1945,9 +1945,9 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::hash_rec(cryp
   superclass::hash_rec(hash);
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 const expr2tc *
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
 {
   const expr2tc *ptr;
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1960,9 +1960,9 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::get_sub_expr_
   return superclass::get_sub_expr_rec(cur_idx, desired);
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 expr2tc *
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
 {
   expr2tc *ptr;
   derived *derived_this = static_cast<derived*>(this);
@@ -1975,9 +1975,9 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::get_sub_expr_
   return superclass::get_sub_expr_nc_rec(cur_idx, desired);
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 unsigned int
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::get_num_sub_exprs_rec(void) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::get_num_sub_exprs_rec(void) const
 {
   unsigned int num = 0;
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1988,9 +1988,9 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::get_num_sub_e
 }
 
 // Operand iteration specialized for expr2tc: call delegate.
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   auto m_ptr = membr_ptr::value;
@@ -2001,9 +2001,9 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::foreach_opera
   superclass::foreach_operand_impl_const_rec(f);
 }
 
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::foreach_operand_impl_rec(expr2t::op_delegate &f)
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::foreach_operand_impl_rec(expr2t::op_delegate &f)
 {
   derived *derived_this = static_cast<derived*>(this);
   auto m_ptr = membr_ptr::value;
@@ -2015,10 +2015,10 @@ esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::foreach_opera
 }
 
 #ifdef WITH_PYTHON
-template <class derived, class baseclass, typename traits, typename enable, typename fields>
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 template <typename T>
 void
-esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::build_python_class_rec(T &obj, unsigned int idx)
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::build_python_class_rec(T &obj, unsigned int idx)
 {
   // Add this field record to the python class obj, get name from field_names
   // field, and increment the index we're working on.
@@ -2275,19 +2275,24 @@ std::string concat2t::field_names [esbmct::num_type_fields]  =
 
 // Explicit template instanciations
 
-template class esbmct::irep_methods2<bool_type2t, type2t, type2t::traits, type2t::traits::fields, void>;
-template class esbmct::irep_methods2<empty_type2t, type2t, type2t::traits, type2t::traits::fields, void>;
-template class esbmct::irep_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits, symbol_type_data::traits::fields, void>;
-template class esbmct::irep_methods2<struct_type2t, struct_union_data, struct_union_data::traits, struct_union_data::traits::fields, void>;
-template class esbmct::irep_methods2<union_type2t, struct_union_data, struct_union_data::traits, struct_union_data::traits::fields, void>;
-template class esbmct::irep_methods2<unsignedbv_type2t, bv_data, bv_data::traits, bv_data::traits::fields, void>;
-template class esbmct::irep_methods2<signedbv_type2t, bv_data, bv_data::traits, bv_data::traits::fields, void>;
-template class esbmct::irep_methods2<code_type2t, code_data, code_data::traits, code_data::traits::fields, void>;
-template class esbmct::irep_methods2<array_type2t, array_data, array_data::traits, array_data::traits::fields, void>;
-template class esbmct::irep_methods2<pointer_type2t, pointer_data, pointer_data::traits, pointer_data::traits::fields, void>;
-template class esbmct::irep_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits, fixedbv_data::traits::fields, void>;
-template class esbmct::irep_methods2<string_type2t, string_data, string_data::traits, string_data::traits::fields, void>;
-template class esbmct::irep_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits, cpp_name_data::traits::fields, void>;
+#undef irep_typedefs
+#define irep_typedefs(basename, superclass) \
+  template class esbmct::irep_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc>;
+
+irep_typedefs(bool, type2t)
+irep_typedefs(empty, type2t)
+irep_typedefs(symbol, symbol_type_data)
+irep_typedefs(struct, struct_union_data)
+irep_typedefs(union, struct_union_data)
+irep_typedefs(unsignedbv, bv_data)
+irep_typedefs(signedbv, bv_data)
+irep_typedefs(code, code_data)
+irep_typedefs(array, array_data)
+irep_typedefs(pointer, pointer_data)
+irep_typedefs(fixedbv, fixedbv_data)
+irep_typedefs(string, string_data)
+irep_typedefs(cpp_name, cpp_name_data)
+#undef irep_typedefs
 
 // Explicit instanciation for exprs.
 
@@ -2306,12 +2311,12 @@ template class esbmct::irep_methods2<cpp_name_type2t, cpp_name_data, cpp_name_da
 // symbols not being built into the output with no error messages, until link
 // time.
 #define irep_typedefs(basename, superclass) \
-  template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits>;\
-  template class esbmct::irep_methods2<basename##2t, superclass, superclass::traits>;
+  template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits, basename##2tc>;\
+  template class esbmct::irep_methods2<basename##2t, superclass, superclass::traits, basename##2tc>;
 
 #define irep_typedefs_empty(basename, superclass) \
-  template class esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;\
-  template class esbmct::irep_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;
+  template class esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits, basename##2tc>;\
+  template class esbmct::irep_methods2<basename##2t, superclass, esbmct::expr2t_default_traits, basename##2tc>;
 
 irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);

@@ -947,6 +947,8 @@ namespace esbmct {
   public:
     typedef field_traits<type2t::type_ids, type2t, &type2t::type_id> type_id_field;
     typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_id_field>::type fields;
+    static constexpr bool always_construct = false;
+    typedef type2t base2t;
 
 #ifdef WITH_PYTHON
     typedef boost::python::init<typename Args::result_type...> python_init_type;
@@ -967,6 +969,7 @@ namespace esbmct {
     typedef typename boost::mpl::push_front<typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::type, expr_id_field>::type fields;
     static constexpr bool always_construct = false;
     static constexpr unsigned int num_fields = boost::mpl::size<fields>::type::value;
+    typedef expr2t base2t;
 
 #ifdef WITH_PYTHON
     typedef boost::python::init<type2tc, typename Args::result_type...> python_init_type;
@@ -986,6 +989,7 @@ namespace esbmct {
     typedef typename boost::mpl::push_front<typename boost::mpl::push_front<boost::mpl::vector<Args...>, type_field>::type, expr_id_field>::type fields;
     static constexpr bool always_construct = false;
     static constexpr unsigned int num_fields = boost::mpl::size<fields>::type::value;
+    typedef expr2t base2t;
 
 #ifdef WITH_PYTHON
     typedef boost::python::init<typename Args::result_type...> python_init_type;
@@ -1002,6 +1006,7 @@ namespace esbmct {
     typedef typename boost::mpl::push_front<boost::mpl::vector<Args...>, expr_id_field>::type fields;
     static constexpr bool always_construct = true;
     static constexpr unsigned int num_fields = boost::mpl::size<fields>::type::value;
+    typedef expr2t base2t;
 
 #ifdef WITH_PYTHON
     typedef boost::python::init<typename Args::result_type...> python_init_type;
@@ -1010,9 +1015,9 @@ namespace esbmct {
   };
 
   // Declaration of irep and expr methods templates.
-  template <class derived, class baseclass, typename traits, typename fields = typename traits::fields, typename enable = void>
+  template <class derived, class baseclass, typename traits, typename container, typename fields = typename traits::fields, typename enable = void>
     class irep_methods2;
-  template <class derived, class baseclass, typename traits, typename fields = typename traits::fields, typename enable = void>
+  template <class derived, class baseclass, typename traits, typename container, typename fields = typename traits::fields, typename enable = void>
     class expr_methods2;
 
   /** Definition of irep methods template.
@@ -1046,12 +1051,13 @@ namespace esbmct {
    *  decades worth of template errors if a programmer uses the irep
    *  incorrectly.
    */
-  template <class derived, class baseclass, typename traits, typename fields, typename enable>
-    class irep_methods2 : public irep_methods2<derived, baseclass, traits, typename boost::mpl::pop_front<fields>::type>
+  template <class derived, class baseclass, typename traits, typename container, typename fields, typename enable>
+    class irep_methods2 : public irep_methods2<derived, baseclass, traits, container, typename boost::mpl::pop_front<fields>::type>
   {
   public:
-    typedef irep_methods2<derived, baseclass, traits, typename boost::mpl::pop_front<fields>::type> superclass;
-    typedef typename baseclass::container_type container2tc;
+    typedef irep_methods2<derived, baseclass, traits, container, typename boost::mpl::pop_front<fields>::type> superclass;
+    typedef container container2tc;
+    typedef typename container::base_container base_container2tc;
     typedef typename baseclass::base_type base2t;
 
     template <typename ...Args> irep_methods2(Args... args) : superclass(args...) { }
@@ -1066,7 +1072,7 @@ namespace esbmct {
     // Top level / public methods for this irep. These methods are virtual, set
     // up any relevant computation, and then call the recursive instances below
     // to perform the actual work over fields.
-    container2tc clone(void) const;
+    base_container2tc clone(void) const;
     list_of_memberst tostring(unsigned int indent) const;
     bool cmp(const base2t &ref) const;
     int lt(const base2t &ref) const;
@@ -1112,8 +1118,8 @@ namespace esbmct {
   // Base instance of irep_methods2. This is a template specialization that
   // matches (via boost::enable_if) when the list of fields to operate on is
   // now empty. Finish up the remaining computation, if any.
-  template <class derived, class baseclass, typename traits, typename fields>
-    class irep_methods2<derived, baseclass, traits,
+  template <class derived, class baseclass, typename traits, typename container, typename fields>
+    class irep_methods2<derived, baseclass, traits, container,
                         fields,
                         typename boost::enable_if<typename boost::mpl::empty<fields>::type>::type>
       : public baseclass
@@ -1204,8 +1210,8 @@ namespace esbmct {
 #endif
   };
 
-  template <class derived, class baseclass, typename traits, typename fields, typename enable>
-  typename traits::python_init_type irep_methods2<derived, baseclass, traits, fields, enable>::python_init;
+  template <class derived, class baseclass, typename traits, typename container, typename fields, typename enable>
+  typename traits::python_init_type irep_methods2<derived, baseclass, traits, container, fields, enable>::python_init;
 
   /** Expression methods template for expr ireps.
    *  This class works on the same principle as @irep_methods2 but provides
@@ -1215,11 +1221,11 @@ namespace esbmct {
    *  protected; here we provide the head methods publically to allow the
    *  programmer to call in.
    *  */
-  template <class derived, class baseclass, typename traits, typename fields, typename enable>
-    class expr_methods2 : public irep_methods2<derived, baseclass, traits, fields, enable>
+  template <class derived, class baseclass, typename traits, typename container, typename fields, typename enable>
+    class expr_methods2 : public irep_methods2<derived, baseclass, traits, container, fields, enable>
   {
   public:
-    typedef irep_methods2<derived, baseclass, traits, fields, enable> superclass;
+    typedef irep_methods2<derived, baseclass, traits, container, fields, enable> superclass;
 
     template <typename ...Args> expr_methods2(Args... args) : superclass(args...) { }
 
@@ -1240,11 +1246,12 @@ namespace esbmct {
   //
   // We need a class derived from expr2tc that takes the correct set of
   // constructor arguments, which means yet more template goo.
-  template <class contained, unsigned int expid, class superclass>
-  class something2tc : public expr2tc {
+  template <class base, class contained, unsigned int expid, class superclass>
+  class something2tc : public irep_container<base> {
     public:
+      typedef irep_container<base> base2tc;
     // Blank initialization of a container class -> store NULL
-    something2tc() : expr2tc() { }
+    something2tc() : base2tc() { }
 
     // Initialize container from a non-type-committed container. Encode an
     // assertion that the type is what we expect.
@@ -1254,37 +1261,39 @@ namespace esbmct {
     // constructing a new not2t irep. In the face of this ambiguity, pick the
     // latter, and the end user can worry about how to cast up to a not2tc.
     template <class arbitary = ::esbmct::dummy_type_tag>
-    something2tc(const expr2tc &init,
-                 typename boost::lazy_disable_if<boost::mpl::bool_<contained::traits::always_construct == true>, arbitary>::type* = NULL
-                 ) : expr2tc(init)
+    something2tc(const base2tc &init,
+                 typename boost::lazy_disable_if<boost::mpl::bool_<superclass::traits::always_construct == true>, arbitary>::type* = NULL
+                 ) : base2tc(init)
     {
       assert(init->expr_id == expid);
     }
 
     const contained &operator*() const
     {
-      return static_cast<const contained&>(*expr2tc::get());
+      return static_cast<const contained&>(*base2tc::get());
     }
 
     const contained * operator-> () const // never throws
     {
-      return static_cast<const contained*>(expr2tc::operator->());
+      return static_cast<const contained*>(base2tc::operator->());
     }
 
     const contained * get() const // never throws
     {
-      return static_cast<const contained*>(expr2tc::get());
+      return static_cast<const contained*>(base2tc::get());
     }
 
     contained * get() // never throws
     {
-      detach();
-      return static_cast<contained*>(expr2tc::get());
+      base2tc::detach();
+      return static_cast<contained*>(base2tc::get());
     }
 
     // Forward all constructors down to the contained type.
     template <typename ...Args>
-    something2tc(Args... args) : expr2tc(new contained(args...)) { }
+    something2tc(Args... args) : base2tc(new contained(args...)) { }
+
+    typedef irep_container<base> base_container;
   };
 
   // Boost doesn't have variadic vector templates, so convert to it.
@@ -1509,19 +1518,27 @@ public:
 
 // Then give them a typedef name
 
-typedef esbmct::irep_methods2<bool_type2t, type2t, type2t::traits> bool_type_methods;
-typedef esbmct::irep_methods2<empty_type2t, type2t, type2t::traits> empty_type_methods;
-typedef esbmct::irep_methods2<symbol_type2t, symbol_type_data, symbol_type_data::traits> symbol_type_methods;
-typedef esbmct::irep_methods2<struct_type2t, struct_union_data, struct_union_data::traits> struct_type_methods;
-typedef esbmct::irep_methods2<union_type2t, struct_union_data, struct_union_data::traits> union_type_methods;
-typedef esbmct::irep_methods2<unsignedbv_type2t, bv_data, bv_data::traits> unsignedbv_type_methods;
-typedef esbmct::irep_methods2<signedbv_type2t, bv_data, bv_data::traits> signedbv_type_methods;
-typedef esbmct::irep_methods2<code_type2t, code_data, code_data::traits> code_type_methods;
-typedef esbmct::irep_methods2<array_type2t, array_data, array_data::traits> array_type_methods;
-typedef esbmct::irep_methods2<pointer_type2t, pointer_data, pointer_data::traits> pointer_type_methods;
-typedef esbmct::irep_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits> fixedbv_type_methods;
-typedef esbmct::irep_methods2<string_type2t, string_data, string_data::traits> string_type_methods;
-typedef esbmct::irep_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits> cpp_name_type_methods;
+
+#define irep_typedefs(basename, superclass) \
+  typedef esbmct::something2tc<type2t, basename##_type2t, type2t::basename##_id, superclass\
+                               > basename##_type2tc; \
+  typedef esbmct::irep_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc> basename##_type_methods;\
+  extern template class esbmct::irep_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc>;
+
+irep_typedefs(bool, type2t)
+irep_typedefs(empty, type2t)
+irep_typedefs(symbol, symbol_type_data)
+irep_typedefs(struct, struct_union_data)
+irep_typedefs(union, struct_union_data)
+irep_typedefs(unsignedbv, bv_data)
+irep_typedefs(signedbv, bv_data)
+irep_typedefs(code, code_data)
+irep_typedefs(array, array_data)
+irep_typedefs(pointer, pointer_data)
+irep_typedefs(fixedbv, fixedbv_data)
+irep_typedefs(string, string_data)
+irep_typedefs(cpp_name, cpp_name_data)
+#undef irep_typedefs
 
 /** Boolean type.
  *  Identifies a boolean type. Contains no additional data.
@@ -2850,20 +2867,20 @@ public:
 // again and again, this gets macro'd.
 
 #define irep_typedefs(basename, superclass) \
-  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass\
+  typedef esbmct::something2tc<expr2t, basename##2t, expr2t::basename##_id, superclass\
                                > basename##2tc; \
-  typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits> basename##_expr_methods;\
-  extern template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits>;\
-  extern template class esbmct::irep_methods2<basename##2t, superclass, superclass::traits>;
+  typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits, basename##2tc> basename##_expr_methods;\
+  extern template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits, basename##2tc>;\
+  extern template class esbmct::irep_methods2<basename##2t, superclass, superclass::traits, basename##2tc>;
 
 // Special case for some empty ireps,
 
 #define irep_typedefs_empty(basename, superclass) \
-  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass\
+  typedef esbmct::something2tc<expr2t, basename##2t, expr2t::basename##_id, superclass\
                                > basename##2tc; \
-  typedef esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits> basename##_expr_methods;\
-  extern template class esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;\
-  extern template class esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits>;
+  typedef esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits, basename##2tc> basename##_expr_methods;\
+  extern template class esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits, basename##2tc>;\
+  extern template class esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits, basename##2tc>;
 
 // This can't be replaced by iterating over all expr ids in preprocessing
 // magic because the mapping between top level expr class and it's data holding
