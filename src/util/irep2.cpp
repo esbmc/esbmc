@@ -1794,8 +1794,11 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   // Build python class out of the derived type (such as add2t) and with the
   // name of the expr_id. Alas, the expr id isn't currently in the type record
   // so can't be sucked out here.
-  class_<derived> foo(expr_names[id], derived::python_init);
+  // container.
+  class_<derived, bases<>, container >
+    foo(expr_names[id], derived::python_init);
   build_python_class_rec(foo, id);
+
   return;
 }
 #endif /* WITH_PYTHON */
