@@ -9,7 +9,7 @@ libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la ../langapi/liblanga
                   ../pointer-analysis/libpointeranalysis.la ../util/libutil.la \
                   ../big-int/libbigint.la ../solvers/libsolvers.la
 libesbmc_la_LIBADD = $(libs_to_link_in) $(ESBMC_SOLVER_LIBS) #./libmain.la
-libesbmc_la_SOURCES = python.cpp
+libesbmc_la_SOURCES = python.cpp ltbuildidstring.c
 libmain_la_SOURCES = parseoptions.cpp bmc.cpp \
                 document_subgoals.cpp  show_vcc.cpp options.cpp
 esbmc_SOURCES = main.cpp buildidstring.c
@@ -20,4 +20,8 @@ AM_LDFLAGS = @ESBMC_LDFLAGS@
 
 buildidstring.c: $(libs_to_link_in) $(esbmc_SOURCES) $(libmain_la_SOURCES)
 	$(top_srcdir)/scripts/buildidobj.sh .
-	$(top_srcdir)/ansi-c/headers/flail.sh buildidstring .//buildidobj.txt > buildidstring.c
+	$(top_srcdir)/ansi-c/headers/flail.sh buildidstring .//buildidobj.txt > $@
+
+# Second instance of buildidstring to appease libtool
+ltbuildidstring.c: $(libs_to_link_in) $(esbmc_SOURCES) $(libmain_la_SOURCES)
+	$(top_srcdir)/ansi-c/headers/flail.sh buildidstring .//buildidobj.txt > $@
