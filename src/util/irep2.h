@@ -1246,7 +1246,7 @@ namespace esbmct {
   //
   // We need a class derived from expr2tc that takes the correct set of
   // constructor arguments, which means yet more template goo.
-  template <class base, class contained, unsigned int expid, class superclass>
+  template <class base, class contained, unsigned int expid, typename idtype, idtype base::*idfield, class superclass>
   class something2tc : public irep_container<base> {
     public:
       typedef irep_container<base> base2tc;
@@ -1265,7 +1265,16 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::bool_<superclass::traits::always_construct == true>, arbitary>::type* = NULL
                  ) : base2tc(init)
     {
-      assert(init->expr_id == expid);
+      assert(init->*idfield == expid);
+    }
+
+    // Allow construction too when we're handed a pointer to the (correctly
+    // typed) base2t ptr. This is used by boost::python, and various bits of
+    // code that create new ptrs and fling them into type2tcs.
+    something2tc(contained *init) : base2tc(init)
+    {
+      assert(init != NULL); // Would already have fired right?
+      assert(init->*idfield == expid);
     }
 
     const contained &operator*() const
@@ -1316,8 +1325,8 @@ namespace esbmct {
 // In global namespace: to get boost to recognize something2tc's as being a
 // shared pointer type, we need to define get_pointer for it:
 
-template <typename T1, typename T2, unsigned int T3, typename T4>
-T2* get_pointer(esbmct::something2tc<T1, T2, T3, T4> const& p) {
+template <typename T1, typename T2, unsigned int T3, typename T4, T4 T1::*T5, typename T6>
+T2* get_pointer(esbmct::something2tc<T1, T2, T3, T4, T5, T6> const& p) {
   return const_cast<T2*>(p.get());
 }
 
@@ -1327,8 +1336,8 @@ T2* get_pointer(esbmct::something2tc<T1, T2, T3, T4> const& p) {
 #ifdef WITH_PYTHON
 namespace boost {
   namespace python {
-    template <typename T1, typename T2, unsigned int T3, typename T4>
-    struct pointee<esbmct::something2tc<T1, T2, T3, T4> > {
+    template <typename T1, typename T2, unsigned int T3, typename T4, T4 T1::*T5, typename T6>
+    struct pointee<esbmct::something2tc<T1, T2, T3, T4, T5, T6> > {
       typedef T2 type;
     };
   }
@@ -1542,8 +1551,9 @@ public:
 
 
 #define irep_typedefs(basename, superclass) \
-  typedef esbmct::something2tc<type2t, basename##_type2t, type2t::basename##_id, superclass\
-                               > basename##_type2tc; \
+  typedef esbmct::something2tc<type2t, basename##_type2t,\
+                              type2t::basename##_id, const type2t::type_ids,\
+                              &type2t::type_id, superclass> basename##_type2tc;\
   typedef esbmct::irep_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc> basename##_type_methods;\
   extern template class esbmct::irep_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc>;
 
@@ -2889,8 +2899,9 @@ public:
 // again and again, this gets macro'd.
 
 #define irep_typedefs(basename, superclass) \
-  typedef esbmct::something2tc<expr2t, basename##2t, expr2t::basename##_id, superclass\
-                               > basename##2tc; \
+  typedef esbmct::something2tc<expr2t, basename##2t, expr2t::basename##_id,\
+                               const expr2t::expr_ids, &expr2t::expr_id,\
+                               superclass> basename##2tc; \
   typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits, basename##2tc> basename##_expr_methods;\
   extern template class esbmct::expr_methods2<basename##2t, superclass, superclass::traits, basename##2tc>;\
   extern template class esbmct::irep_methods2<basename##2t, superclass, superclass::traits, basename##2tc>;
@@ -2898,8 +2909,9 @@ public:
 // Special case for some empty ireps,
 
 #define irep_typedefs_empty(basename, superclass) \
-  typedef esbmct::something2tc<expr2t, basename##2t, expr2t::basename##_id, superclass\
-                               > basename##2tc; \
+  typedef esbmct::something2tc<expr2t, basename##2t, expr2t::basename##_id,\
+                               const expr2t::expr_ids, &expr2t::expr_id,\
+                               superclass> basename##2tc; \
   typedef esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits, basename##2tc> basename##_expr_methods;\
   extern template class esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits, basename##2tc>;\
   extern template class esbmct::expr_methods2<basename##2t, superclass, esbmct::expr2t_default_traits, basename##2tc>;
