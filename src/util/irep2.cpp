@@ -624,6 +624,22 @@ expr2t::dump(void) const
   return;
 }
 
+// Map a base type to it's list of names
+template <typename T>
+class base_to_names;
+
+template<>
+class base_to_names<type2t> {
+public:
+  static constexpr const char **names = type_names;
+};
+
+template<>
+class base_to_names<expr2t> {
+public:
+  static constexpr const char **names = expr_names;
+};
+
 /**************************** Expression constructors *************************/
 
 unsigned long
@@ -1796,7 +1812,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   // so can't be sucked out here.
   // container.
   class_<derived, bases<>, container >
-    foo(expr_names[id], derived::python_init);
+    foo(base_to_names<typename traits::base2t>::names[id], derived::python_init);
   build_python_class_rec(foo, id);
 
   return;
