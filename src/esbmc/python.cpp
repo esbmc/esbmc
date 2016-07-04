@@ -6,18 +6,6 @@
 #include <boost/python.hpp>
 using namespace boost::python;
 
-char const* greet()
-{
-     return "hello, world";
-}
-
-
-BOOST_PYTHON_MODULE(hello_ext)
-{
-      using namespace boost::python;
-          def("greet", greet);
-}
-
 BOOST_PYTHON_MODULE(esbmc)
 {
   // Use boost preprocessing iteration to enumerate all irep classes and
