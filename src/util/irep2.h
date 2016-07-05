@@ -141,6 +141,20 @@
   BOOST_PP_LIST_CONS(concat, BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))\
 ))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
+#define ESBMC_LIST_OF_TYPES BOOST_PP_LIST_CONS(bool,\
+BOOST_PP_LIST_CONS(empty,\
+BOOST_PP_LIST_CONS(symbol,\
+BOOST_PP_LIST_CONS(struct,\
+BOOST_PP_LIST_CONS(union,\
+BOOST_PP_LIST_CONS(code,\
+BOOST_PP_LIST_CONS(array,\
+BOOST_PP_LIST_CONS(pointer,\
+BOOST_PP_LIST_CONS(unsignedbv,\
+BOOST_PP_LIST_CONS(signedbv,\
+BOOST_PP_LIST_CONS(fixedbv,\
+BOOST_PP_LIST_CONS(string,\
+BOOST_PP_LIST_CONS(cpp_name, BOOST_PP_LIST_NIL)))))))))))))
+
 // XXXjmorse - abstract, access modifies, need consideration
 
 /** Iterate over all expr2tc's in a vector.
