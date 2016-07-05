@@ -1281,3 +1281,18 @@ BigInt::operator%= (BigInt const &y)
     positive = true;
   return *this;
 }
+
+#ifdef WITH_PYTHON
+#undef error
+#include <boost/python.hpp>
+// Build simplest BigInt wrapper: can construct, can get value. Nothing more.
+using namespace boost::python;
+void
+build_bigint_python_class()
+{
+  init<long signed int> init;
+  class_<BigInt>("BigInt", init)
+    .def("to_long", &BigInt::to_long);
+  return;
+}
+#endif

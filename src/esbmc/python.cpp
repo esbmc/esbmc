@@ -6,6 +6,8 @@
 #include <boost/python.hpp>
 using namespace boost::python;
 
+void build_bigint_python_class();
+
 class dummy_expr_class { };
 class dummy_type_class { };
 
@@ -31,6 +33,9 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
 #define _ESBMC_EXPR2_MPL_EXPR_SET(r, data, elem) BOOST_PP_CAT(elem,2t)::build_python_class(expr2t::BOOST_PP_CAT(elem,_id));
 BOOST_PP_LIST_FOR_EACH(_ESBMC_EXPR2_MPL_EXPR_SET, foo, ESBMC_LIST_OF_EXPRS)
   }
+
+  // Register BigInt globally
+  build_bigint_python_class();
 }
 
 // Include these other things that are special to the esbmc binary:
