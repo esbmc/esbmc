@@ -39,7 +39,7 @@ pretty_print_func(unsigned int indent, std::string ident, T obj)
 static const char *type_names[] = {
   "bool",
   "empty",
-  "symbol_type",
+  "symbol",
   "struct",
   "union",
   "code",
