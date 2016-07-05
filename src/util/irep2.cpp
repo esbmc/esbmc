@@ -1803,7 +1803,7 @@ esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::fo
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
 esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::build_python_class(
-    const expr2t::expr_ids id)
+    const typename container::id_field_type id)
 {
   using namespace boost::python;
 

@@ -1080,7 +1080,7 @@ namespace esbmct {
     void hash(crypto_hash &hash) const;
 
 #ifdef WITH_PYTHON
-    static void build_python_class(const expr2t::expr_ids id);
+    static void build_python_class(const typename container::id_field_type id);
 #endif
 
 
@@ -1303,6 +1303,7 @@ namespace esbmct {
     something2tc(Args... args) : base2tc(new contained(args...)) { }
 
     typedef irep_container<base> base_container;
+    typedef idtype id_field_type;
   };
 
   // Boost doesn't have variadic vector templates, so convert to it.
