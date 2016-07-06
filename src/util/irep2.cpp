@@ -1,6 +1,7 @@
 #include "irep2.h"
 #include <stdarg.h>
 #include <string.h>
+#include <sstream>
 
 #include "std_types.h"
 #include "migrate.h"
@@ -325,6 +326,14 @@ public:
   }
 };
 
+namespace esbmct {
+template <typename ...Args>
+template <typename Container>
+Container
+type2t_traits<Args...>::make_contained(typename Args::result_type... args) {
+  return Container(args...);
+}
+}
 
 /*************************** Base expr2t definitions **************************/
 
@@ -690,6 +699,31 @@ public:
     return;
   }
 };
+
+// Undoubtedly a better way of doing this...
+namespace esbmct {
+template <typename ...Args>
+template <typename Container>
+Container
+expr2t_traits<Args...>::make_contained(const type2tc &t, typename Args::result_type... args) {
+  return Container(t, args...);
+}
+
+template <typename ...Args>
+template <typename Container>
+Container
+expr2t_traits_notype<Args...>::make_contained(typename Args::result_type... args) {
+    return Container(args...);
+}
+
+template <typename ...Args>
+template <typename Container>
+Container
+expr2t_traits_always_construct<Args...>::make_contained(typename Args::result_type... args) {
+    return Container(args...);
+}
+}
+
 
 /**************************** Expression constructors *************************/
 
@@ -1862,8 +1896,14 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   // name of the expr_id. Alas, the expr id isn't currently in the type record
   // so can't be sucked out here.
   // container.
-  class_<derived, bases<>, container >
-    foo(base_to_names<typename traits::base2t>::names[id], derived::python_init);
+  const char *basename = base_to_names<typename traits::base2t>::names[id];
+  class_<derived, bases<base2t>, container >
+    foo(basename, no_init);
+
+  std::stringstream ss;
+  ss << "make_" << basename;
+  foo.def(ss.str().c_str(), &traits::template make_contained<container>);
+
   build_python_class_rec(foo, id);
   
   register_irep_methods<base2t> bar;

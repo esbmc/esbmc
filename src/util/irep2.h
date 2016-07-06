@@ -966,6 +966,7 @@ namespace esbmct {
 
 #ifdef WITH_PYTHON
     typedef boost::python::init<typename Args::result_type...> python_init_type;
+    template <typename Container> static Container make_contained(typename Args::result_type...);
 #endif
   };
 
@@ -987,6 +988,8 @@ namespace esbmct {
 
 #ifdef WITH_PYTHON
     typedef boost::python::init<type2tc, typename Args::result_type...> python_init_type;
+    // Note addition of type2tc...
+    template <typename Container> static Container make_contained(const type2tc &, typename Args::result_type...);
 #endif
   };
 
@@ -1007,6 +1010,7 @@ namespace esbmct {
 
 #ifdef WITH_PYTHON
     typedef boost::python::init<typename Args::result_type...> python_init_type;
+    template <typename Container> static Container make_contained(typename Args::result_type...);
 #endif
   };
 
@@ -1024,6 +1028,7 @@ namespace esbmct {
 
 #ifdef WITH_PYTHON
     typedef boost::python::init<typename Args::result_type...> python_init_type;
+    template <typename Container> static Container make_contained(typename Args::result_type...);
 #endif
 
   };
