@@ -10,6 +10,8 @@
 #include <boost/static_assert.hpp>
 #include <boost/functional/hash.hpp>
 
+template <typename T> class register_irep_methods;
+
 std::string
 indent_str(unsigned int indent)
 {
@@ -300,6 +302,29 @@ struct_union_data::get_component_number(const irep_idt &name) const
             << "\" in struct/union \"" << name << "\"" << std::endl;
   abort();
 }
+
+void
+build_base_type2t_python_class(void)
+{
+  using namespace boost::python;
+  class_<type2t, boost::noncopyable, irep_container<type2t> >("type2t", no_init);
+}
+
+template<>
+class register_irep_methods<type2t>
+{
+public:
+  template <typename O>
+  void operator()(O &o)
+  {
+
+    // Define standard methods
+    o.def("pretty", &type2t::pretty);
+    o.def("crc", &type2t::crc);
+    o.def("clone", &type2t::clone);
+  }
+};
+
 
 /*************************** Base expr2t definitions **************************/
 
@@ -638,6 +663,32 @@ template<>
 class base_to_names<expr2t> {
 public:
   static constexpr const char **names = expr_names;
+};
+
+void
+build_base_expr2t_python_class(void)
+{
+  using namespace boost::python;
+  class_<expr2t, boost::noncopyable, irep_container<expr2t> >("expr2t", no_init);
+}
+
+
+template<>
+class register_irep_methods<expr2t>
+{
+public:
+  template <typename O>
+  void operator()(O &o)
+  {
+    // Define standard methods
+    o.def("clone", &expr2t::clone);
+    o.def("pretty", &expr2t::pretty);
+    o.def("num_nodes", &expr2t::num_nodes);
+    o.def("depth", &expr2t::depth);
+    o.def("crc", &expr2t::crc);
+    o.def("simplify", &expr2t::simplify);
+    return;
+  }
 };
 
 /**************************** Expression constructors *************************/
@@ -1814,7 +1865,9 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   class_<derived, bases<>, container >
     foo(base_to_names<typename traits::base2t>::names[id], derived::python_init);
   build_python_class_rec(foo, id);
-
+  
+  register_irep_methods<base2t> bar;
+  bar(foo);
   return;
 }
 #endif /* WITH_PYTHON */
