@@ -328,10 +328,10 @@ public:
 
 namespace esbmct {
 template <typename ...Args>
-template <typename Container>
-Container
-type2t_traits<Args...>::make_contained(typename Args::result_type... args) {
-  return Container(args...);
+template <typename derived>
+auto
+type2t_traits<Args...>::make_contained(typename Args::result_type... args) -> irep_container<base2t> {
+  return irep_container<base2t>(new derived(args...));
 }
 }
 
@@ -703,24 +703,24 @@ public:
 // Undoubtedly a better way of doing this...
 namespace esbmct {
 template <typename ...Args>
-template <typename Container>
-Container
-expr2t_traits<Args...>::make_contained(const type2tc &t, typename Args::result_type... args) {
-  return Container(t, args...);
+template <typename derived>
+auto
+expr2t_traits<Args...>::make_contained(const type2tc &type, typename Args::result_type... args) -> irep_container<base2t> {
+  return irep_container<base2t>(new derived(type, args...));
 }
 
 template <typename ...Args>
-template <typename Container>
-Container
-expr2t_traits_notype<Args...>::make_contained(typename Args::result_type... args) {
-    return Container(args...);
+template <typename derived>
+auto
+expr2t_traits_notype<Args...>::make_contained(typename Args::result_type... args) -> irep_container<base2t> {
+  return irep_container<base2t>(new derived(args...));
 }
 
 template <typename ...Args>
-template <typename Container>
-Container
-expr2t_traits_always_construct<Args...>::make_contained(typename Args::result_type... args) {
-    return Container(args...);
+template <typename derived>
+auto
+expr2t_traits_always_construct<Args...>::make_contained(typename Args::result_type... args) -> irep_container<base2t> {
+  return irep_container<base2t>(new derived(args...));
 }
 }
 
@@ -1900,9 +1900,8 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   class_<derived, bases<base2t>, container >
     foo(basename, no_init);
 
-  std::stringstream ss;
-  ss << "make_" << basename;
-  foo.def(ss.str().c_str(), &traits::template make_contained<container>);
+  foo.def("make", &traits::template make_contained<derived>);
+  foo.staticmethod("make");
 
   build_python_class_rec(foo, id);
   
