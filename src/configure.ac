@@ -173,16 +173,20 @@ AS_IF([test "${enable_shared_lib}" = "yes"], [
   AC_SUBST([ESBMC_SHARED_LIB], "")
 ])
 
+AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 ")
+dnl A necessary evil due to the presence of rubbish in boost::python's headers
+AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations ")
+
 dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 dnl Unless of course you're on a mac, in which case clang will frequently
 dnl generate new warnings, and you probably want it off. This should be used
 dnl with care in that case.
 AS_IF([test "x$enable_werror" = "xno"], [
-  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++11"]])
+  AC_SUBST([ESBMC_CXXFLAGS],[["$BASE_CXXFLAGS"]])
   AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W"]])
 ], [
   dnl not disabled -> enable werror
-  AC_SUBST([ESBMC_CXXFLAGS],[["-Wall -Wextra -W -std=c++11 -Werror"]])
+  AC_SUBST([ESBMC_CXXFLAGS],[["$BASE_CXXFLAGS -Werror"]])
   AC_SUBST([ESBMC_CFLAGS],[["-Wall -Wextra -W -Werror"]])
 ])
 

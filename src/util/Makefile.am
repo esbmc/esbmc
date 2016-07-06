@@ -13,6 +13,4 @@ libutil_la_SOURCES = \
       pointer_arithmetic.cpp signal_catcher.cpp irep2.cpp migrate.cpp \
       thread.cpp crypto_hash.cpp type_byte_size.cpp dcutil.cpp \
       string_constant.cpp c_types.cpp
-# Annoying: disable unused-local-typedefs and deprecated-declarations warnings
-# because boost-python triggers them, alas.
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils -Wno-unused-local-typedefs -Wno-deprecated-declarations
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils
