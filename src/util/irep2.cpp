@@ -2126,11 +2126,45 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::fo
 }
 
 #ifdef WITH_PYTHON
+
+// Misery: the field we work with at a particular point in the inheretance
+// chain may be an expr_id, type_id, or expr2t::type, all of which have their
+// own special cases elsewhere. More importantly, the field_names array only
+// starts _after_ those fields. So we can't generically add them to the python
+// class via this method.
+// Rather than re-juggling all of these things, just specialize for those right
+// now. This is not tidy, but never mind.
+// Better: we can't pass field_traits::value into this, because the compiler
+// requires that the direct syntax &X::Y is passed in, not a value equivalent
+// to it. Bah.
+
+template <typename R, typename T>
+class field_to_be_skipped
+{
+  public:
+  static bool value(R T::*foo __attribute__((unused))) { return false; }
+};
+
+// Specialise for those fields we skip.
+template<> class field_to_be_skipped<type2t::type_ids, type2t>
+{public: static bool value(type2t::type_ids type2t::*foo) { if (foo == &type2t::type_id) return true; else return false; } };
+template<> class field_to_be_skipped<const expr2t::expr_ids, expr2t>
+{public: static bool value(const expr2t::expr_ids expr2t::*foo) { if (foo == &expr2t::expr_id) return true; else return false; } };
+template<> class field_to_be_skipped<type2tc, expr2t>
+{public: static bool value(type2tc expr2t::*foo) { if (foo == &expr2t::type) return true; else return false; } };
+
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 template <typename T>
 void
 esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::build_python_class_rec(T &obj, unsigned int idx)
 {
+  // Optionally skip this field if it's generic to types / exprs.
+  if (field_to_be_skipped<cur_type, base_class>::value(membr_ptr::value)) {
+    assert(idx == 0);
+    superclass::build_python_class_rec(obj, idx);
+    return;
+  }
+
   // Add this field record to the python class obj, get name from field_names
   // field, and increment the index we're working on.
   superclass::build_python_class_rec(
