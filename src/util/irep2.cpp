@@ -2421,7 +2421,7 @@ std::string code_cpp_throw2t::field_names [esbmct::num_type_fields]  =
 std::string code_cpp_throw_decl2t::field_names [esbmct::num_type_fields]  =
 { "exception_list", "", "", "", ""};
 std::string code_cpp_throw_decl_end2t::field_names [esbmct::num_type_fields]  =
-{ "", "", "", "", ""};
+{ "exception_list", "", "", "", ""};
 std::string isinf2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string isnormal2t::field_names [esbmct::num_type_fields]  =
