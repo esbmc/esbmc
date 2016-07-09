@@ -305,13 +305,6 @@ struct_union_data::get_component_number(const irep_idt &name) const
   abort();
 }
 
-void
-build_base_type2t_python_class(void)
-{
-  using namespace boost::python;
-  class_<type2t, boost::noncopyable, irep_container<type2t> >("type2t", no_init);
-}
-
 template<>
 class register_irep_methods<type2t>
 {
@@ -330,6 +323,15 @@ public:
     o.def_readonly("type_id", &type2t::type_id);
   }
 };
+
+void
+build_base_type2t_python_class(void)
+{
+  using namespace boost::python;
+  class_<type2t, boost::noncopyable, irep_container<type2t> > foo("type2t", no_init);
+  register_irep_methods<type2t> bar;
+  bar(foo);
+}
 
 namespace esbmct {
 template <typename ...Args>
@@ -679,14 +681,6 @@ public:
   static constexpr const char **names = expr_names;
 };
 
-void
-build_base_expr2t_python_class(void)
-{
-  using namespace boost::python;
-  class_<expr2t, boost::noncopyable, irep_container<expr2t> >("expr2t", no_init);
-}
-
-
 template<>
 class register_irep_methods<expr2t>
 {
@@ -711,6 +705,15 @@ public:
   }
 };
 
+void
+build_base_expr2t_python_class(void)
+{
+  using namespace boost::python;
+  class_<expr2t, boost::noncopyable, irep_container<expr2t> > foo("expr2t", no_init);
+  register_irep_methods<expr2t> bar;
+  bar(foo);
+}
+
 // Undoubtedly a better way of doing this...
 namespace esbmct {
 template <typename ...Args>
@@ -734,7 +737,6 @@ expr2t_traits_always_construct<Args...>::make_contained(typename Args::result_ty
   return irep_container<base2t>(new derived(args...));
 }
 }
-
 
 /**************************** Expression constructors *************************/
 
@@ -2182,6 +2184,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
       obj.def_readonly(derived::field_names[idx].c_str(), membr_ptr::value), idx+1);
   return;
 }
+
 #endif /* WITH PYTHON */
 
 /********************** Constants and explicit instantiations *****************/
