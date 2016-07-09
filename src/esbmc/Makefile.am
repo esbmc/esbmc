@@ -4,8 +4,8 @@ lib_LTLIBRARIES = libmain.la libesbmc.la #@ESBMC_SHARED_LIB@
 ESBMC_SOLVER_LIBS = @ESBMC_SOLVER_LIBS@
 libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la ../langapi/liblangapi.la \
                   ../ansi-c/libansic.la ../ansi-c/libclib.la ../ansi-c/cpp/libcpp.la \
-                  ../clang-c-frontend/libclangcfrontend.la ../ansi-c/headers/libheaders.la \
-                  ../clang-cpp-frontend/libclangcppfrontend.la ../goto-programs/libgotoprograms.la \
+                  ../ansi-c/headers/libheaders.la ../goto-programs/libgotoprograms.la \
+                  @ESBMC_CLANG_ARCHIVES@ \
                   ../pointer-analysis/libpointeranalysis.la ../util/libutil.la \
                   ../big-int/libbigint.la ../solvers/libsolvers.la
 libesbmc_la_LIBADD = $(libs_to_link_in) $(ESBMC_SOLVER_LIBS) #./libmain.la

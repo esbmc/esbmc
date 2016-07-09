@@ -79,9 +79,30 @@ AC_CHECK_LIB([gmp], [__gmpz_cmp],
     [AC_MSG_WARN([No libgmp found: various solvers require it])], []
 )
 
-AX_CLANG(3.8.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
+# Define what to do when clang is enabled
+m4_define(ESBMC_ENABLE_CLANG, [
+  AX_CLANG(3.8.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
+  AX_LLVM(,[AC_MSG_FAILURE(LLVM is required.)])
+  AC_SUBST([ESBMC_CLANG_SUBDIRS], " clang-c-frontend clang-cpp-frontend ")
+  AC_SUBST([ESBMC_CLANG_ARCHIVES], "  ../clang-c-frontend/libclangcfrontend.a ../clang-cpp-frontend/libclangcppfrontend.a ")
+  ])
 
-AX_LLVM(,[AC_MSG_FAILURE(LLVM is required.)])
+AC_ARG_ENABLE(clang, [AS_HELP_STRING([--disable-clang], Build ESBMC without clang. (On by default))],
+[
+  dnl If specified, enable clang if asked for, otherwise user asked it to be
+  dnl disabled.
+  AS_IF([test "${enable_clang}" = "yes"], [
+    ESBMC_ENABLE_CLANG
+  ], [
+    AS_VAR_SET(ESBMC_CLANG_CXXFLAGS, " -DWITHOUT_CLANG ")
+    AS_VAR_SET(ESBMC_CLANG_CFLAGS, " -DWITHOUT_CLANG ")
+  ]
+)
+], [
+  # If unspecified, enable clang anyway
+  ESBMC_ENABLE_CLANG
+]
+)
 
 AC_CHECK_HEADERS([boost/mpl/if.hpp], [], [AC_MSG_ERROR([No boost mpl found])])
 AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], [AC_MSG_ERROR([No boost shared ptr found])])
@@ -173,9 +194,9 @@ AS_IF([test "${enable_shared_lib}" = "yes"], [
   AC_SUBST([ESBMC_SHARED_LIB], "")
 ])
 
-AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 ")
+AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 $ESBMC_CLANG_CXXFLAGS ")
 dnl A necessary evil due to the presence of rubbish in boost::python's headers
-AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations ")
+AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations $ESBMC_CLANG_CFLAGS ")
 
 dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 dnl Unless of course you're on a mac, in which case clang will frequently
