@@ -11,6 +11,46 @@
 #include <boost/static_assert.hpp>
 #include <boost/functional/hash.hpp>
 #include <boost/python/operators.hpp>
+#include <boost/python/object/find_instance.hpp>
+
+namespace boost { namespace python { namespace converter {
+
+template <>
+struct shared_ptr_from_python<type2t>
+{
+    shared_ptr_from_python()
+    {
+        converter::registry::insert(&convertible, type_id<type2t>()
+                      , &converter::expected_from_python_type_direct<type2t>::get_pytype
+                      );
+    }
+
+ private:
+    static void* convertible(PyObject* p)
+    {
+        typedef boost::python::objects::pointer_holder<type2tc *,type2tc> *
+          ptr_holder;
+        typedef boost::python::instance_holder * pinst_holder;
+
+        if (p == Py_None)
+            return p;
+
+        boost::python::objects::instance<> *inst =
+          reinterpret_cast<boost::python::objects::instance<>*>(p);
+        (void)inst; // For debug / inspection
+
+        type2tc* foo =
+          reinterpret_cast<type2tc*>(
+              boost::python::objects::find_instance_impl(p, boost::python::type_id<type2tc>()));
+
+        // Slightly dirtily extricate the m_p field. Don't call pointer_holder
+        // holds because that's private. Ugh.
+        return foo->get();
+    }
+};
+
+}}} // namespace boost::python::converter
+
 
 template <typename T> class register_irep_methods;
 
@@ -331,6 +371,9 @@ build_base_type2t_python_class(void)
   class_<type2t, boost::noncopyable, irep_container<type2t> > foo("type2t", no_init);
   register_irep_methods<type2t> bar;
   bar(foo);
+
+  // Register our manual type2tc -> type2t converter.
+  boost::python::converter::shared_ptr_from_python<type2t>();
 }
 
 namespace esbmct {
@@ -1910,7 +1953,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   // so can't be sucked out here.
   // container.
   const char *basename = base_to_names<typename traits::base2t>::names[id];
-  class_<derived, bases<base2t>, container >
+  class_<derived, bases<base2t>, container, boost::noncopyable>
     foo(basename, no_init);
 
   foo.def("make", &traits::template make_contained<derived>);
