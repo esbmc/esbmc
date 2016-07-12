@@ -13,6 +13,45 @@
 #include <boost/python/operators.hpp>
 #include <boost/python/object/find_instance.hpp>
 
+// Additional python infrastructure: our irep containers don't quite match
+// the pointer ownership model that boost.python expects. Specifically: it
+// either stores values by value, or by _boost_ shared ptrs. The former isn't
+// compatible with our irep model (everything must be held by one of our own
+// std::shared_ptrs), and the latter requires a large number of hoops to be
+// jumped through which will only really work with boost::shared_ptr's. To
+// get around this, we hack it, in what's actually a safe way.
+//
+// To elaborate: the boost shared ptr activity boost.python performs is to
+// register a deleter method with the shared_ptr, that gets called when the
+// reference count hits zero. As far as I can tell, boost.python then stores
+// objects by value, but will export a boost shared_ptr to the value when
+// asked. This creates a scenario where the value may be referred to by:
+//  * The Python object
+//  * Shared ptr's stored in some C++ code somewhere.
+// Which is naturally messy.
+//
+// With the deleter, a python reference is kept to the python object, keeping
+// it in memory, so long as shared_ptr's point at it from C++. That ensures
+// that, so long as _either_ python or C++ have a ref to the object, it's kept
+// alive. As a side-effect, this also means that the python object can be
+// kept alive long after any python code stops running. (It might be that
+// boost.python actually only stores a shared_ptr, and the object still lives
+// on the heap, dunno why the deleter dance is performed in that case. Or
+// perhaps it stores both).
+//
+// For ESBMC, we can definitively say that only containers are ever built by
+// boost.python, because none of the irep constructors are exposed to it, so
+// it never stores an irep by value. Because objects are always in containers,
+// there's no need to worry about the lifetime of a python instance: it'll just
+// decrement the shared_ptr ref count when it gets destroyed.
+//
+// To impose this policy upon boost.python, we register a to irep2t converter
+// that sucks the corresponding container out of the python instance, and then
+// just returns the irep2t pointer. There's no opportunity to enforce const
+// correctness: we just shouldn't register any mutable methods.
+//
+// Some boost.python storage model documentation would not be amiss :/
+
 namespace boost { namespace python { namespace converter {
 
 template <>
