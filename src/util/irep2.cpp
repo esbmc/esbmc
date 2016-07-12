@@ -415,6 +415,12 @@ build_base_type2t_python_class(void)
 
   // Register our manual type2tc -> type2t converter.
   shared_ptr_from_python<type2t, type2tc>();
+
+  enum_<type2t::type_ids>("type_ids")
+#define hahatemporary(r, data, elem) .value(BOOST_PP_STRINGIZE(elem), type2t::BOOST_PP_CAT(elem,_id))
+BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_TYPES)
+#undef hahatemporary
+  ;
 }
 
 void
@@ -810,6 +816,12 @@ build_base_expr2t_python_class(void)
 
   // Register our manual expr2tc -> expr2t converter.
   shared_ptr_from_python<expr2t, expr2tc>();
+
+  enum_<expr2t::expr_ids>("expr_ids")
+#define hahatemporary(r, data, elem) .value(BOOST_PP_STRINGIZE(elem), expr2t::BOOST_PP_CAT(elem,_id))
+BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_EXPRS)
+#undef hahatemporary
+  ;
 }
 
 void
