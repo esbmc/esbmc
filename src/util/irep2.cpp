@@ -10,8 +10,12 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/static_assert.hpp>
 #include <boost/functional/hash.hpp>
+
+#ifdef WITH_PYTHON
 #include <boost/python/operators.hpp>
 #include <boost/python/object/find_instance.hpp>
+#include <boost/python/suite/indexing/vector_indexing_suite.hpp>
+#endif
 
 // Additional python infrastructure: our irep containers don't quite match
 // the pointer ownership model that boost.python expects. Specifically: it
@@ -421,6 +425,10 @@ build_base_type2t_python_class(void)
 BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_TYPES)
 #undef hahatemporary
   ;
+
+  // Should really be at top level
+  class_<std::vector<type2tc> >("type_vec")
+    .def(vector_indexing_suite<std::vector<type2tc> >());
 }
 
 void
@@ -822,6 +830,29 @@ build_base_expr2t_python_class(void)
 BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_EXPRS)
 #undef hahatemporary
   ;
+
+  // Register some additional enumerations. These should be inside the relevant
+  // expr classes... but I don't think we can get a handle on the class_
+  // object for that.
+  enum_<symbol_data::renaming_level>("symbol_renaming")
+    .value("level0", symbol_data::renaming_level::level0)
+    .value("level1", symbol_data::renaming_level::level1)
+    .value("level2", symbol_data::renaming_level::level2)
+    .value("level1_global", symbol_data::renaming_level::level1_global)
+    .value("level2_global", symbol_data::renaming_level::level2_global);
+
+  enum_<sideeffect_data::allockind>("sideeffect_allockind")
+    .value("malloc", sideeffect_data::allockind::malloc)
+    .value("alloca", sideeffect_data::allockind::alloca)
+    .value("cpp_new", sideeffect_data::allockind::cpp_new)
+    .value("cpp_new_arr", sideeffect_data::allockind::cpp_new_arr)
+    .value("nondet", sideeffect_data::allockind::nondet)
+    .value("function_call", sideeffect_data::allockind::function_call);
+
+  // We can use boost magic to define what a vector looks like!
+  // Should really be at top level
+  class_<std::vector<expr2tc> >("expr_vec")
+    .def(vector_indexing_suite<std::vector<expr2tc> >());
 }
 
 void
