@@ -173,7 +173,7 @@ AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)
 
 AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build flag)])
 
-AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 ")
+AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 $ESBMC_CLANG_CXXFLAGS ")
 dnl A necessary evil due to the presence of rubbish in boost::python's headers
 AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations ")
 
