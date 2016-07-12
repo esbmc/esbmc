@@ -52,44 +52,46 @@
 //
 // Some boost.python storage model documentation would not be amiss :/
 
-namespace boost { namespace python { namespace converter {
+// shared_ptr_from_python exists in the boost::python::objects:: namespace,
+// but inserting our own specialization doesn't get resolved, instead the
+// important part is that the converter is registered in the ::insert method.
 
-template <>
-struct shared_ptr_from_python<type2t>
+template <typename T, typename container>
+struct shared_ptr_from_python
 {
     shared_ptr_from_python()
     {
-        converter::registry::insert(&convertible, type_id<type2t>()
-                      , &converter::expected_from_python_type_direct<type2t>::get_pytype
-                      );
+      using namespace boost::python;
+      converter::registry::insert(&convertible, type_id<T>(),
+                  &converter::expected_from_python_type_direct<T>::get_pytype
+                  );
     }
 
  private:
     static void* convertible(PyObject* p)
     {
-        typedef boost::python::objects::pointer_holder<type2tc *,type2tc> *
+      using namespace boost::python;
+
+        typedef objects::pointer_holder<container *,container> *
           ptr_holder;
-        typedef boost::python::instance_holder * pinst_holder;
+        typedef instance_holder * pinst_holder;
 
         if (p == Py_None)
             return p;
 
-        boost::python::objects::instance<> *inst =
-          reinterpret_cast<boost::python::objects::instance<>*>(p);
+        objects::instance<> *inst =
+          reinterpret_cast<objects::instance<>*>(p);
         (void)inst; // For debug / inspection
 
-        type2tc* foo =
-          reinterpret_cast<type2tc*>(
-              boost::python::objects::find_instance_impl(p, boost::python::type_id<type2tc>()));
+        container* foo =
+          reinterpret_cast<container*>(
+              objects::find_instance_impl(p, boost::python::type_id<container>()));
 
         // Slightly dirtily extricate the m_p field. Don't call pointer_holder
         // holds because that's private. Ugh.
         return foo->get();
     }
 };
-
-}}} // namespace boost::python::converter
-
 
 template <typename T> class register_irep_methods;
 
@@ -412,7 +414,7 @@ build_base_type2t_python_class(void)
   bar(foo);
 
   // Register our manual type2tc -> type2t converter.
-  boost::python::converter::shared_ptr_from_python<type2t>();
+  shared_ptr_from_python<type2t, type2tc>();
 }
 
 namespace esbmct {
