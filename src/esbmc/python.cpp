@@ -48,6 +48,12 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_EXPR2_MPL_EXPR_SET, foo, ESBMC_LIST_OF_EXPRS)
   // Register BigInt globally
   build_bigint_python_class();
   build_dstring_python_class();
+
+  // Alas, we need to pass handles to optionst around, and namespace. User
+  // should be able to extract them from whatever execution context they
+  // generate.
+  opaque<optionst>();
+  opaque<namespacet>();
 }
 
 // Include these other things that are special to the esbmc binary:
