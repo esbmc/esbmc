@@ -195,8 +195,12 @@ AS_IF([test "${enable_shared_lib}" = "yes"], [
 ])
 
 AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 $ESBMC_CLANG_CXXFLAGS ")
-dnl A necessary evil due to the presence of rubbish in boost::python's headers
-AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations $ESBMC_CLANG_CFLAGS ")
+dnl A necessary evil due to the presence of rubbish in boost::python's headers.
+dnl local typedefs because that's hwo boost python works
+dnl deprecated decls because it uses auto ptrs
+dnl field initializers due to a, uh, totally legitimate initializer mismatch
+dnl       with later versions of python headers
+AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations -Wno-missing-field-initializers $ESBMC_CLANG_CFLAGS ")
 
 dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 dnl Unless of course you're on a mac, in which case clang will frequently
