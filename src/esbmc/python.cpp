@@ -11,6 +11,7 @@ void build_base_expr2t_python_class();
 void build_base_type2t_python_class();
 void build_type2t_container_converters();
 void build_expr2t_container_converters();
+void build_dstring_python_class();
 
 class dummy_expr_class { };
 class dummy_type_class { };
@@ -46,6 +47,7 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_EXPR2_MPL_EXPR_SET, foo, ESBMC_LIST_OF_EXPRS)
 
   // Register BigInt globally
   build_bigint_python_class();
+  build_dstring_python_class();
 }
 
 // Include these other things that are special to the esbmc binary:
