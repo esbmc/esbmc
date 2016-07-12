@@ -9,6 +9,8 @@ using namespace boost::python;
 void build_bigint_python_class();
 void build_base_expr2t_python_class();
 void build_base_type2t_python_class();
+void build_type2t_container_converters();
+void build_expr2t_container_converters();
 
 class dummy_expr_class { };
 class dummy_type_class { };
@@ -28,6 +30,8 @@ BOOST_PYTHON_MODULE(esbmc)
     build_base_type2t_python_class();
 #define _ESBMC_IREP2_MPL_TYPE_SET(r, data, elem) BOOST_PP_CAT(elem,_type2t)::build_python_class(type2t::BOOST_PP_CAT(elem,_id));
 BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
+
+    build_type2t_container_converters();
   }
 
   {
@@ -36,6 +40,8 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
     build_base_expr2t_python_class();
 #define _ESBMC_EXPR2_MPL_EXPR_SET(r, data, elem) BOOST_PP_CAT(elem,2t)::build_python_class(expr2t::BOOST_PP_CAT(elem,_id));
 BOOST_PP_LIST_FOR_EACH(_ESBMC_EXPR2_MPL_EXPR_SET, foo, ESBMC_LIST_OF_EXPRS)
+
+    build_expr2t_container_converters();
   }
 
   // Register BigInt globally

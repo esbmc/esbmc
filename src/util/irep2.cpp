@@ -417,6 +417,17 @@ build_base_type2t_python_class(void)
   shared_ptr_from_python<type2t, type2tc>();
 }
 
+void
+build_type2t_container_converters(void)
+{
+  // Needs to be called _after_ the type types are registered.
+#define hahatemporary(r, data, elem) shared_ptr_from_python<BOOST_PP_CAT(elem,_type2t), BOOST_PP_CAT(elem,_type2tc)>();
+BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_TYPES)
+#undef hahatemporary
+
+  return;
+}
+
 namespace esbmct {
 template <typename ...Args>
 template <typename derived>
@@ -796,6 +807,20 @@ build_base_expr2t_python_class(void)
   class_<expr2t, boost::noncopyable, irep_container<expr2t> > foo("expr2t", no_init);
   register_irep_methods<expr2t> bar;
   bar(foo);
+
+  // Register our manual expr2tc -> expr2t converter.
+  shared_ptr_from_python<expr2t, expr2tc>();
+}
+
+void
+build_expr2t_container_converters(void)
+{
+  // Needs to be called _after_ the expr types are registered.
+#define hahatemporary(r, data, elem) shared_ptr_from_python<BOOST_PP_CAT(elem,2t), BOOST_PP_CAT(elem,2tc)>();
+BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_EXPRS)
+#undef hahatemporary
+
+  return;
 }
 
 // Undoubtedly a better way of doing this...
