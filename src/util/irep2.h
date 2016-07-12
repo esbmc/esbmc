@@ -952,6 +952,9 @@ namespace esbmct {
     static constexpr membr_ptr value = v;
   };
 
+  template <typename R, typename C, R C::* v>
+  constexpr typename field_traits<R, C, v>::membr_ptr field_traits<R, C, v>::value;
+
   /** Trait class for type2t ireps.
    *  This takes a list of field traits and puts it in a vector, with the record
    *  for the type_id field (common to all type2t's) put that the front. */
