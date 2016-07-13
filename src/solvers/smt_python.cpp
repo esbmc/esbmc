@@ -13,6 +13,8 @@ BOOST_PYTHON_OPAQUE_SPECIALIZED_TYPE_ID(smt_ast)
 BOOST_PYTHON_OPAQUE_SPECIALIZED_TYPE_ID(smt_sort)
 
 class dummy_solver_class { };
+class dummy_solver_class2 { };
+class dummy_solver_class3 { };
 
 static smt_convt *
 bounce_solver_factory(bool is_cpp, bool int_encoding, const namespacet &ns,
@@ -77,12 +79,22 @@ build_smt_conv_python_class(void)
   // which means when the python object expires the solver is deleted. As a
   // result, it probably shouldn't be embedded into any C++ objects except
   // with great care.
-  scope solve2 = class_<dummy_solver_class>("solvers");
+  scope solve2 = class_<dummy_solver_class2>("solvers");
+  type_info dummy_class_id = type_id<dummy_solver_class3>();
   for (unsigned int i = 0; i < esbmc_num_solvers; i++) {
     std::stringstream ss;
     const std::string &solver_name = esbmc_solvers[i].name;
 
-    scope solve = class_<dummy_solver_class>(solver_name.c_str());
+    // Here, we iteratively declare classes to boost.python as we discover
+    // new C++ solver classes. But there's a problem -- boost is aware of the
+    // runtime type_id of each class that's registered, notices that we're
+    // registering the same thing more than once, and complains on stderr.
+    // To get around this, call the base object constructor that registers the
+    // new class (class_base), but not the higher level class_ object that
+    // tries to register converters and causes the errors on stderr.
+    // Or as I like to call it, "duckrolling in a duckroll thread without being
+    // duckrolled".
+    scope solve = objects::class_base(solver_name.c_str(), 1, &dummy_class_id);
 
     // Trolpocolypse: we don't have a static function to create each solver,
     // or at least not one that doesn't involve mangling tuple_apis and the
