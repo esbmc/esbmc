@@ -12,6 +12,7 @@ void build_base_type2t_python_class();
 void build_type2t_container_converters();
 void build_expr2t_container_converters();
 void build_dstring_python_class();
+void build_smt_conv_python_class();
 
 class dummy_expr_class { };
 class dummy_type_class { };
@@ -54,6 +55,9 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_EXPR2_MPL_EXPR_SET, foo, ESBMC_LIST_OF_EXPRS)
   // generate.
   opaque<optionst>();
   opaque<namespacet>();
+
+  // Build smt solver related stuff
+  build_smt_conv_python_class();
 }
 
 // Include these other things that are special to the esbmc binary:

@@ -1,14 +1,26 @@
 #ifdef WITH_PYTHON
 // Don't compile... anything, otherwise.
 
+#include <functional>
+
 #include <solvers/smt/smt_conv.h>
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
+
+#include "solve.h"
 
 BOOST_PYTHON_OPAQUE_SPECIALIZED_TYPE_ID(smt_ast)
 BOOST_PYTHON_OPAQUE_SPECIALIZED_TYPE_ID(smt_sort)
 
 class dummy_solver_class { };
+
+static smt_convt *
+bounce_solver_factory(bool is_cpp, bool int_encoding, const namespacet &ns,
+    const optionst &options, const char *name = "bees")
+{
+  std::string foo(name);
+  return create_solver_factory(name, is_cpp, int_encoding, ns, options);
+}
 
 void
 build_smt_conv_python_class(void)
@@ -57,5 +69,30 @@ build_smt_conv_python_class(void)
   // ast_vec registration, as a vector
   class_<smt_convt::ast_vec>("smt_ast_vec")
     .def(vector_indexing_suite<smt_convt::ast_vec>());
+
+  // Now register factories for the set of solvers that have been built in.
+  // These are going to return raw smt_convt pointers, and we can't have boost.
+  // python store them by value without defining (and copy constructing) all
+  // converter classes. Thus we're left to the manage_new_object return policy,
+  // which means when the python object expires the solver is deleted. As a
+  // result, it probably shouldn't be embedded into any C++ objects except
+  // with great care.
+  scope solve2 = class_<dummy_solver_class>("solvers");
+  for (unsigned int i = 0; i < esbmc_num_solvers; i++) {
+    std::stringstream ss;
+    const std::string &solver_name = esbmc_solvers[i].name;
+
+    scope solve = class_<dummy_solver_class>(solver_name.c_str());
+
+    // Trolpocolypse: we don't have a static function to create each solver,
+    // or at least not one that doesn't involve mangling tuple_apis and the
+    // like. So: use one function and tell python it has a default argument.
+    // Use that to work out what solver to create. A possible alternative would
+    // be to store a python object holding the solver name, and define a method
+    // to construct it or something.
+    def("make", &bounce_solver_factory,
+        (arg("is_cpp"), arg("int_encoding"), arg("ns"), arg("options"), arg("name")=solver_name),
+        return_value_policy<manage_new_object>());
+  }
 }
 #endif
