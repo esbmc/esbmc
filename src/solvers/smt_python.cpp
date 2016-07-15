@@ -94,7 +94,14 @@ build_smt_conv_python_class(void)
     // tries to register converters and causes the errors on stderr.
     // Or as I like to call it, "duckrolling in a duckroll thread without being
     // duckrolled".
-    scope solve = objects::class_base(solver_name.c_str(), 1, &dummy_class_id);
+    auto solve = objects::class_base(solver_name.c_str(), 1, &dummy_class_id);
+    scope _solve = solve; // This should (?) ensure the def below gets scoped?
+
+    // Interpret our class_base as a class_. The only actual difference is
+    // what constructors get called, there's no change in storage.
+    // This is liable to break horribly with future versions of boost.python.
+    class_<dummy_solver_class3> *cp =
+      reinterpret_cast<class_<dummy_solver_class3> *>(&solve);
 
     // Trolpocolypse: we don't have a static function to create each solver,
     // or at least not one that doesn't involve mangling tuple_apis and the
@@ -102,9 +109,11 @@ build_smt_conv_python_class(void)
     // Use that to work out what solver to create. A possible alternative would
     // be to store a python object holding the solver name, and define a method
     // to construct it or something.
-    def("make", &bounce_solver_factory,
+    cp->def("make", &bounce_solver_factory,
         (arg("is_cpp"), arg("int_encoding"), arg("ns"), arg("options"), arg("name")=solver_name),
         return_value_policy<manage_new_object>());
+
+    cp->staticmethod("make");
   }
 }
 #endif
