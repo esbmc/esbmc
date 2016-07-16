@@ -67,6 +67,11 @@ build_goto_func_class()
     .def_readwrite("location_number", &insnt::location_number)
     .def_readwrite("loop_number", &insnt::loop_number)
     .def_readwrite("target_number", &insnt::target_number);
+
+  // Missing from these definitions: incoming edges (which I might nix), and
+  // the branch target field. The latter is the most difficult, because it's
+  // not going to be possible to move an iterator into python. Getter and
+  // setter that work around this perhaps?
 }
 
 #endif
