@@ -23,6 +23,8 @@ static bool python_module_engaged = false;
 // Parseoptions instance representing an esbmc process
 static cbmc_parseoptionst *po = NULL;
 static namespacet *ns = NULL;
+// Type pool needs to live as long as the process.
+static type_poolt *tp = NULL;
 
 static boost::python::object
 init_esbmc_process(boost::python::object o)
@@ -59,7 +61,12 @@ init_esbmc_process(boost::python::object o)
   // out of parseoptions at the point where we would usually start BMC.
   argv[i++] = "--skip-bmc";
 
-  // Init esbmc Stuff
+  // Init esbmc Stuff. First the static order initialization fiasco.
+  tp = new type_poolt(true);
+  type_pool = *tp;
+  init_expr_constants();
+  dereference_handlers_init();
+
   python_module_engaged = true;
   po = new cbmc_parseoptionst(argc, argv);
   free(argv);
@@ -71,6 +78,7 @@ init_esbmc_process(boost::python::object o)
   // construct a tuple of useful handles.
   if (result != 0) {
     delete po;
+    delete tp;
     python_module_engaged = false;
     return object();
   }
@@ -92,7 +100,7 @@ kill_esbmc_process(void)
     // Nope
     return;
 
-  assert(po != NULL && ns != NULL);
+  assert(po != NULL && ns != NULL && tp != NULL);
 
   // It's the users problem if they haven't actually cleaned up their python
   // references.
@@ -100,6 +108,8 @@ kill_esbmc_process(void)
   ns = NULL;
   delete po;
   po = NULL;
+  delete tp;
+  tp = NULL;
   python_module_engaged = false;
 
   return;
@@ -107,13 +117,9 @@ kill_esbmc_process(void)
 
 BOOST_PYTHON_MODULE(esbmc)
 {
-  // This is essentially the entry point for the esbmc shared object -- so
-  // perform the existing workaround for the static order initialization
-  // fiasco.
-  type_poolt bees(true);
-  type_pool = bees;
-  init_expr_constants();
-  dereference_handlers_init();
+  // This is essentially the entry point for the esbmc shared object.
+  // Workarounds for the static order initialization are in init_esbmc_process
+  // due to some annoyance with object lifetime.
 
   // Register process init and sort-of deconstruction.
   def("init_esbmc_process", &init_esbmc_process);
