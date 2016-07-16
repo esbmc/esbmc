@@ -6,6 +6,7 @@
 #include <boost/python.hpp>
 using namespace boost::python;
 
+void dereference_handlers_init(void);
 void build_bigint_python_class();
 void build_base_expr2t_python_class();
 void build_base_type2t_python_class();
@@ -106,6 +107,14 @@ kill_esbmc_process(void)
 
 BOOST_PYTHON_MODULE(esbmc)
 {
+  // This is essentially the entry point for the esbmc shared object -- so
+  // perform the existing workaround for the static order initialization
+  // fiasco.
+  type_poolt bees(true);
+  type_pool = bees;
+  init_expr_constants();
+  dereference_handlers_init();
+
   // Register process init and sort-of deconstruction.
   def("init_esbmc_process", &init_esbmc_process);
   def("kill_esbmc_process", &kill_esbmc_process);
