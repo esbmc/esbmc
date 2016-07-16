@@ -48,6 +48,25 @@ build_goto_func_class()
     .value("CATCH", goto_program_instruction_typet::CATCH)
     .value("THROW_DECL", goto_program_instruction_typet::THROW_DECL)
     .value("THROW_DECL_END", goto_program_instruction_typet::THROW_DECL_END);
+
+  class_<goto_programt>("goto_programt")
+    // XXX: list accessor currently nonexistant
+    .def_readwrite("instructions", &goto_programt::instructions);
+
+  typedef goto_programt::instructiont insnt;
+  class_<insnt>("instructiont")
+    .def_readwrite("code", &insnt::code)
+    .def_readwrite("function", &insnt::function)
+    .def_readwrite("location", &insnt::location)
+    .def_readwrite("type", &insnt::type)
+    .def_readwrite("guard", &insnt::guard)
+    // No list wrapper right now
+    .def_readwrite("labels", &insnt::labels)
+    // Skip k-inductoin stuff for the moment
+    // Also skipped incoming_edges and targets
+    .def_readwrite("location_number", &insnt::location_number)
+    .def_readwrite("loop_number", &insnt::loop_number)
+    .def_readwrite("target_number", &insnt::target_number);
 }
 
 #endif
