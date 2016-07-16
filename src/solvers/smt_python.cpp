@@ -40,8 +40,8 @@ build_smt_conv_python_class(void)
   //
   // That rather ignores the matter of push/popping scopes. User is on their
   // own there.
-  opaque<smt_ast>();
-  opaque<smt_sort>();
+  opaque<smt_astt>();
+  opaque<smt_sortt>();
 
   // Register generic smt_convt facilities: only allow the python user to do
   // expression conversion. Any new smt_convt implementation should be done
