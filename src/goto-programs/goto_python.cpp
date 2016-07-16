@@ -138,6 +138,23 @@ prog_to_string(const goto_programt &prog)
   return ss.str();
 }
 
+std::string
+insn_to_string(const goto_programt::instructiont &insn,
+    bool show_location = true, bool show_variables = false)
+{
+  // Stuff this insn in a list and feed it to output_instruction.
+  goto_programt::instructionst list;
+  std::stringstream ss;
+  contextt ctx;
+
+  list.push_back(insn);
+  ss << goto_programt::output_instruction(namespacet(ctx), "", ss,
+                                          list.begin(), show_location,
+                                          show_variables);
+
+  return ss.str();
+}
+
 void
 build_goto_func_class()
 {
@@ -192,8 +209,10 @@ build_goto_func_class()
     // Skip k-inductoin stuff
     .def_readwrite("location_number", &insnt::location_number)
     .def_readwrite("loop_number", &insnt::loop_number)
-    .def_readwrite("target_number", &insnt::target_number);
+    .def_readwrite("target_number", &insnt::target_number)
   // No access here to the 'targets' field, see below.
+    .def("to_string", &insn_to_string, (arg("this"), arg("show_location")=false,
+                                        arg("show_variables")=false));
 
   // Trickyness: the 'targets' field of an instruction is very well suited,
   // containing an iterator to the instructiont that the current instruction
