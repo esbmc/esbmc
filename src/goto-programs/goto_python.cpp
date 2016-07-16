@@ -7,13 +7,64 @@
 
 class dummy_goto_class { };
 
-static boost::python::object
+static boost::python::list
 get_instructions(const goto_programt &prog)
 {
-  (void)prog;
-  abort();
-}
+  using namespace boost::python;
 
+  list pylist;
+  std::vector<object> py_obj_vec;
+  std::set<goto_programt::const_targett> targets;
+  std::map<goto_programt::const_targett, unsigned int> target_map;
+
+  // Convert instructions into python objects -- store in python list, as well
+  // as in an stl vector, for easy access by index. Collect a set of all the
+  // target iterators that are used in this function as well.
+  for (const goto_programt::instructiont &insn : prog.instructions) {
+    object o(insn);
+    pylist.append(o);
+    py_obj_vec.push_back(o);
+
+    if (!insn.targets.empty()) {
+      assert(insn.targets.size() == 1 && "Insn with multiple targets");
+      targets.insert(*insn.targets.begin());
+    }
+  }
+
+  // Map target iterators to index positions in the instruction list. Their
+  // positions is the structure that we'll map over to python.
+  unsigned int i = 0;
+  for (auto it = prog.instructions.begin();
+       it != prog.instructions.end();
+       it++, i++) {
+    if (targets.find(it) != targets.end())
+      target_map.insert(std::make_pair(it, i));
+  }
+
+  // Iterate back over all the instructions again, this time filling out the
+  // target attribute for each corresponding python object. If there's no
+  // target, set it to None, otherwise set it to a reference to the
+  // corresponding other python object.
+  i = 0;
+  for (const goto_programt::instructiont &insn : prog.instructions) {
+    if (insn.targets.empty()) {
+      // If there's no target, set the target attribute to None
+      py_obj_vec[i].attr("target") = object();
+    } else {
+      assert(insn.targets.size() == 1 && "Insn with multiple targets");
+      auto it = *insn.targets.begin();
+      auto target_it = target_map.find(it);
+      assert(target_it != target_map.end());
+
+      // Set target attr to be reference to the correspondingly indexed python
+      // object.
+      py_obj_vec[i].attr("target") = py_obj_vec[target_it->second];
+    }
+    i++;
+  }
+
+  return pylist;
+}
 
 static void
 set_instructions(const goto_programt &prog)
