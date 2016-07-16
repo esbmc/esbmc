@@ -8,7 +8,7 @@ libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la ../langapi/liblanga
                   @ESBMC_CLANG_ARCHIVES@ \
                   ../pointer-analysis/libpointeranalysis.la ../util/libutil.la \
                   ../big-int/libbigint.la ../solvers/libsolvers.la
-libesbmc_la_LIBADD = $(libs_to_link_in) $(ESBMC_SOLVER_LIBS) #./libmain.la
+libesbmc_la_LIBADD = $(libs_to_link_in) $(ESBMC_SOLVER_LIBS) ./libmain.la
 libesbmc_la_SOURCES = python.cpp ltbuildidstring.c
 libmain_la_SOURCES = parseoptions.cpp bmc.cpp \
                 document_subgoals.cpp  show_vcc.cpp options.cpp
