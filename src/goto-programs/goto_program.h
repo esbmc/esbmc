@@ -123,8 +123,6 @@ public:
 
     bool inductive_step_instruction;
 
-    std::set<targett> incoming_edges;
-
     //! is this node a branch target?
     inline bool is_target() const
     { return target_number!=unsigned(-1); }
@@ -307,8 +305,6 @@ public:
   void get_successors(
     const_targett target,
     const_targetst &successors) const;
-
-  void compute_incoming_edges();
 
   //! Insertion that preserves jumps to "target".
   //! The instruction is destroyed.
