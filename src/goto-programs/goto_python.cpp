@@ -148,7 +148,7 @@ insn_to_string(const goto_programt::instructiont &insn,
   contextt ctx;
 
   list.push_back(insn);
-  ss << goto_programt::output_instruction(namespacet(ctx), "", ss,
+  goto_programt::output_instruction(namespacet(ctx), "", ss,
                                           list.begin(), show_location,
                                           show_variables);
 
