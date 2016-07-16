@@ -7,6 +7,8 @@
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 
+#include <util/bp_opaque_ptr.h>
+
 #include "solve.h"
 
 BOOST_PYTHON_OPAQUE_SPECIALIZED_TYPE_ID(smt_ast)
@@ -40,8 +42,11 @@ build_smt_conv_python_class(void)
   //
   // That rather ignores the matter of push/popping scopes. User is on their
   // own there.
-  opaque<smt_astt>();
-  opaque<smt_sortt>();
+
+  // Use vendor'd opaque as opaque_const, because the 'extract' method in
+  // boost.python's version catches fire when handed a const qualification.
+  opaque_const<const smt_ast>();
+  opaque_const<const smt_sort>();
 
   // Register generic smt_convt facilities: only allow the python user to do
   // expression conversion. Any new smt_convt implementation should be done
