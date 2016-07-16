@@ -7,6 +7,21 @@
 
 class dummy_goto_class { };
 
+static boost::python::object
+get_instructions(const goto_programt &prog)
+{
+  (void)prog;
+  abort();
+}
+
+
+static void
+set_instructions(const goto_programt &prog)
+{
+  (void)prog;
+}
+
+
 void
 build_goto_func_class()
 {
@@ -49,10 +64,6 @@ build_goto_func_class()
     .value("THROW_DECL", goto_program_instruction_typet::THROW_DECL)
     .value("THROW_DECL_END", goto_program_instruction_typet::THROW_DECL_END);
 
-  class_<goto_programt>("goto_programt")
-    // XXX: list accessor currently nonexistant
-    .def_readwrite("instructions", &goto_programt::instructions);
-
   typedef goto_programt::instructiont insnt;
   class_<insnt>("instructiont")
     .def_readwrite("code", &insnt::code)
@@ -62,16 +73,30 @@ build_goto_func_class()
     .def_readwrite("guard", &insnt::guard)
     // No list wrapper right now
     .def_readwrite("labels", &insnt::labels)
-    // Skip k-inductoin stuff for the moment
-    // Also skipped incoming_edges and targets
+    // Skip k-inductoin stuff
     .def_readwrite("location_number", &insnt::location_number)
     .def_readwrite("loop_number", &insnt::loop_number)
     .def_readwrite("target_number", &insnt::target_number);
+  // No access here to the 'targets' field, see below.
 
-  // Missing from these definitions: incoming edges (which I might nix), and
-  // the branch target field. The latter is the most difficult, because it's
-  // not going to be possible to move an iterator into python. Getter and
-  // setter that work around this perhaps?
+  // Trickyness: the 'targets' field of an instruction is very well suited,
+  // containing an iterator to the instructiont that the current instruction
+  // branches to. This doesn't translate to python in any way though. So: I
+  // reckon we can construct a parallel representation in python, which doesn't
+  // involve converting iterators to or from anything. We convert the
+  // instructiont without the 'targets' field in to a python list, and then
+  // for each non-empty targets entry, add to that the object instance
+  // dictionary as a reference to the _python_ instructiont instance. The same
+  // relationship is built, but with python objs.
+  // Build this situation with an explicit getter and setter methods for the
+  // goto_programt class: this is to remind the operator that they're
+  // duplicating the instruciton list out of esbmc, and have to set it back in
+  // for it to have an effect.
+  class_<goto_programt>("goto_programt")
+    // NB: these are not member methods, but pythons name resolution treats
+    // them as if they were.
+    .def("get_instructions", &get_instructions)
+    .def("set_instructions", &set_instructions);
 }
 
 #endif
