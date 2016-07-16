@@ -19,7 +19,7 @@ std::ostream& goto_programt::output_instruction(
   std::ostream& out,
   instructionst::const_iterator it,
   bool show_location,
-  bool show_variables) const
+  bool show_variables)
 {
   if (show_location) {
   out << "        // " << it->location_number << " ";

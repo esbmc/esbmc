@@ -452,13 +452,13 @@ public:
   //! Does the goto program have an assertion?
   bool has_assertion() const;
 
-  std::ostream &output_instruction(
+  static std::ostream &output_instruction(
     const class namespacet &ns,
     const irep_idt &identifier,
     std::ostream &out,
     instructionst::const_iterator it,
     bool show_location=true,
-    bool show_variables=false) const;
+    bool show_variables=false);
 
 };
 
