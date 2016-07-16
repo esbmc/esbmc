@@ -212,7 +212,24 @@ build_goto_func_class()
     .def_readwrite("target_number", &insnt::target_number)
   // No access here to the 'targets' field, see below.
     .def("to_string", &insn_to_string, (arg("this"), arg("show_location")=false,
-                                        arg("show_variables")=false));
+                                        arg("show_variables")=false))
+    .def("clear", &insnt::clear, (arg("this"),
+                            arg("type")=goto_program_instruction_typet::SKIP))
+    .def("is_goto", &insnt::is_goto)
+    .def("is_return", &insnt::is_return)
+    .def("is_assign", &insnt::is_assign)
+    .def("is_function_call", &insnt::is_function_call)
+    .def("is_throw", &insnt::is_throw)
+    .def("is_catch", &insnt::is_catch)
+    .def("is_skip", &insnt::is_skip)
+    .def("is_location", &insnt::is_location)
+    .def("is_other", &insnt::is_other)
+    .def("is_assume", &insnt::is_other)
+    .def("is_assert", &insnt::is_assert)
+    .def("is_atomic_begin", &insnt::is_atomic_begin)
+    .def("is_atomic_end", &insnt::is_atomic_end)
+    .def("is_end_function", &insnt::is_end_function);
+  // Can't publish "is backwards goto" because it touches targets
 
   // Trickyness: the 'targets' field of an instruction is very well suited,
   // containing an iterator to the instructiont that the current instruction
