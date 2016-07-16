@@ -85,10 +85,17 @@ init_esbmc_process(boost::python::object o)
 
   ns = new namespacet(po->context);
 
-  // Convert return values to python objects (TM).
-  object nso(ns);
+  // Convert return values to python objects (TM). Wrap into a PyObject, stuff
+  // in handle, transfer to object. Unclear if there's a supported way of
+  // doing this with opaque pointers in the API: I get the impression that
+  // they're only supposed to be single return values.
+  auto converter1 = converter::registry::lookup(type_id<namespacet*>());
+  handle<> nsh(converter1.to_python(ns));
+  object nso(nsh);
   // Config options are global. Woo.
-  object opts(&config.options);
+  auto converter2 = converter::registry::lookup(type_id<optionst*>());
+  handle<> optsh(converter2.to_python(ns));
+  object opts(optsh);
 
   return make_tuple(nso, opts);
 }
