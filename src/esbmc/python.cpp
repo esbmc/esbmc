@@ -98,10 +98,12 @@ init_esbmc_process(boost::python::object o)
   auto opt_ptr = &config.options;
   handle<> optsh(converter2.to_python(&opt_ptr));
   object opts(optsh);
-  // Goto functions handle comes from inside the parseoptions object.
-  auto converter3 = converter::registry::lookup(type_id<goto_functionst*>());
-  auto func_ptr = &po->goto_functions;
-  handle<> funch(converter3.to_python(&func_ptr));
+  // Goto functions handle comes from inside the parseoptions object. Pass it
+  // through the ref-existing-ptr process, as we need to access it's internals.
+  // Don't want to copy by value as it can be massive.
+  reference_existing_object::apply<goto_functionst*>::type gf_cvt;
+  PyObject *gfp = gf_cvt(&po->goto_functions);
+  handle<> funch(gfp);
   object funcs(funch);
 
   return make_tuple(nso, opts, funcs);
