@@ -134,6 +134,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"yices",		switc,		""	},
 { 0,	"force-malloc-success",	switc,		""	},
 { 0,	"list-solvers",	switc,		""	},
+{ 0,	"skip-bmc",	switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},
