@@ -90,11 +90,12 @@ init_esbmc_process(boost::python::object o)
   // doing this with opaque pointers in the API: I get the impression that
   // they're only supposed to be single return values.
   auto converter1 = converter::registry::lookup(type_id<namespacet*>());
-  handle<> nsh(converter1.to_python(ns));
+  handle<> nsh(converter1.to_python(&ns));
   object nso(nsh);
   // Config options are global. Woo.
   auto converter2 = converter::registry::lookup(type_id<optionst*>());
-  handle<> optsh(converter2.to_python(ns));
+  auto opt_ptr = &config.options;
+  handle<> optsh(converter2.to_python(&opt_ptr));
   object opts(optsh);
 
   return make_tuple(nso, opts);
