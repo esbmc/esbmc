@@ -10,5 +10,5 @@ libgotoprograms_la_SOURCES = \
       read_bin_goto_object.cpp goto_program_irep.cpp \
       format_strings.cpp loop_numbers.cpp goto_loops.cpp \
       write_goto_binary.cpp goto_unwind.cpp goto_k_induction.cpp \
-      loopst.cpp
+      loopst.cpp goto_python.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util -Wno-unused-private-field
