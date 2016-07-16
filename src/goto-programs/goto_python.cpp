@@ -234,7 +234,9 @@ build_goto_func_class()
     .def("set_instructions", &set_instructions)
     // Most of the instruction manipulation methods of this class are subsumed
     // by the ability to treat it as a list of instructions in python.
-    .def("to_string", &prog_to_string);
+    .def("to_string", &prog_to_string)
+    .def("update", &goto_programt::update)
+    .def("empty", &goto_programt::empty);
 }
 
 #endif
