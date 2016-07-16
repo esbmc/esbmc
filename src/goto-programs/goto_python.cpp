@@ -67,9 +67,65 @@ get_instructions(const goto_programt &prog)
 }
 
 static void
-set_instructions(const goto_programt &prog)
+set_instructions(goto_programt &prog, boost::python::object o)
 {
-  (void)prog;
+  using namespace boost::python;
+  // Reverse the get_instructions function: generate a list of instructiont's
+  // that preserve the 'target' attribute relation.
+
+  list pylist = extract<list>(o);
+  std::vector<object> py_obj_vec;
+  std::vector<goto_programt::targett> obj_it_vec;
+  std::map<object, unsigned int> target_map;
+//  std::set<goto_programt::const_targett> targets;
+
+  prog.instructions.clear();
+
+  // Extract list into vector we can easily index, pushing the extracted C++
+  // object into the goto_programt's instruction list. Later store a vector of
+  // iterators into that list: we need the instructiont storage and it's
+  // iterators to stay stable, while mapping the 'target' relation back from
+  // python into C++.
+  for (unsigned int i = 0; i < len(pylist); i++) {
+    object item = pylist[i];
+    py_obj_vec.push_back(item);
+    prog.instructions.push_back(extract<goto_programt::instructiont>(item));
+
+    // XXX -- the performance of the following may be absolutely terrible,
+    // it's not clear whether there's an operator< for std::map to infer
+    // anywhere here. Based on assumption that a POD comparison is done against
+    // the contained python ptr.
+    target_map.insert(std::make_pair(item, i));
+  }
+
+  for (auto it = prog.instructions.begin(); it != prog.instructions.end(); it++)
+    obj_it_vec.push_back(it);
+
+  // Now iterate over each pair of python/c++ instructiont objs looking at the
+  // 'target' attribute. Update the corresponding 'target' field of the C++
+  // object accordingly
+  for (unsigned int i = 0; i < py_obj_vec.size(); i++) {
+    object target = py_obj_vec[i].attr("target");
+    auto it = obj_it_vec[i];
+
+    if (target.is_none()) {
+      it->targets.clear();
+    } else {
+      // Record a target -- map object to index, and from there to a list iter
+      auto map_it = target_map.find(target);
+      // Python user is entirely entitled to plug an arbitary object in here,
+      // in which case we explode. Could raise an exception, but I prefer to
+      // fail fast & fail hard. This isn't something the user should handle
+      // anyway, and it's difficult for us to clean up afterwards.
+      assert(map_it != target_map.end() && "Target PyObject of instruction is not in list");
+
+      auto target_list_it = obj_it_vec[map_it->second];
+      it->targets.clear();
+      it->targets.push_back(target_list_it);
+    }
+  }
+
+  return;
 }
 
 
