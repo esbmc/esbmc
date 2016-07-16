@@ -2,6 +2,7 @@
 #include <irep2.h>
 #include <solvers/smt/smt_conv.h>
 #include <langapi/mode.h>
+#include <goto-programs/goto_functions.h>
 
 #include <boost/python.hpp>
 using namespace boost::python;
@@ -97,8 +98,13 @@ init_esbmc_process(boost::python::object o)
   auto opt_ptr = &config.options;
   handle<> optsh(converter2.to_python(&opt_ptr));
   object opts(optsh);
+  // Goto functions handle comes from inside the parseoptions object.
+  auto converter3 = converter::registry::lookup(type_id<goto_functionst*>());
+  auto func_ptr = &po->goto_functions;
+  handle<> funch(converter3.to_python(&func_ptr));
+  object funcs(funch);
 
-  return make_tuple(nso, opts);
+  return make_tuple(nso, opts, funcs);
 }
 
 static void
@@ -164,11 +170,12 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_EXPR2_MPL_EXPR_SET, foo, ESBMC_LIST_OF_EXPRS)
   build_bigint_python_class();
   build_dstring_python_class();
 
-  // Alas, we need to pass handles to optionst around, and namespace. User
-  // should be able to extract them from whatever execution context they
+  // Alas, we need to pass handles to optionst, namespace, goto funcs around.
+  // User should be able to extract them from whatever execution context they
   // generate.
   opaque<optionst>();
   opaque<namespacet>();
+  opaque<goto_functionst>();
 
   // Build smt solver related stuff
   build_smt_conv_python_class();

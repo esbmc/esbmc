@@ -70,6 +70,7 @@ protected:
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
 
+public:
   goto_functionst goto_functions;
 };
 
