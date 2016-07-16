@@ -1,5 +1,7 @@
 #ifdef WITH_PYTHON
 
+#include <sstream>
+
 #include "goto_functions.h"
 
 #include <boost/python/class.hpp>
@@ -128,6 +130,13 @@ set_instructions(goto_programt &prog, boost::python::object o)
   return;
 }
 
+std::string
+insn_to_string(const goto_programt &prog)
+{
+  std::stringstream ss;
+  ss << prog.output(ss);
+  return ss.str();
+}
 
 void
 build_goto_func_class()
@@ -203,7 +212,10 @@ build_goto_func_class()
     // NB: these are not member methods, but pythons name resolution treats
     // them as if they were.
     .def("get_instructions", &get_instructions)
-    .def("set_instructions", &set_instructions);
+    .def("set_instructions", &set_instructions)
+    // Most of the instruction manipulation methods of this class are subsumed
+    // by the ability to treat it as a list of instructions in python.
+    .def("to_string", &insn_to_string);
 }
 
 #endif
