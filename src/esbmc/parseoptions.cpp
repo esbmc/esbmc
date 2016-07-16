@@ -402,8 +402,6 @@ int cbmc_parseoptionst::doit()
   if(cmdline.isset("falsification"))
     return doit_falsification();
 
-  goto_functionst goto_functions;
-
   optionst opts;
   get_command_line_options(opts);
 
@@ -474,7 +472,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
     }
   }
 
-  goto_functionst goto_functions;
   optionst opts;
 
   if(process_type == PARENT && num_p != 3)
@@ -913,7 +910,6 @@ int cbmc_parseoptionst::doit_k_induction()
 
   // Generate goto functions for base case and forward condition
   status("\n*** Generating Base Case and Forward Condition ***");
-  goto_functionst goto_functions;
 
   optionst opts;
   get_command_line_options(opts);
@@ -1081,7 +1077,6 @@ int cbmc_parseoptionst::doit_k_induction()
 int cbmc_parseoptionst::doit_falsification()
 {
   // Generate goto functions for base case and forward condition
-  goto_functionst goto_functions;
 
   optionst opts;
   get_command_line_options(opts);
