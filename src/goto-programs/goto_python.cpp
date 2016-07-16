@@ -131,7 +131,7 @@ set_instructions(goto_programt &prog, boost::python::object o)
 }
 
 std::string
-insn_to_string(const goto_programt &prog)
+prog_to_string(const goto_programt &prog)
 {
   std::stringstream ss;
   ss << prog.output(ss);
@@ -215,7 +215,7 @@ build_goto_func_class()
     .def("set_instructions", &set_instructions)
     // Most of the instruction manipulation methods of this class are subsumed
     // by the ability to treat it as a list of instructions in python.
-    .def("to_string", &insn_to_string);
+    .def("to_string", &prog_to_string);
 }
 
 #endif
