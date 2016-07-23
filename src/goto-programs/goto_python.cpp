@@ -79,7 +79,6 @@ set_instructions(goto_programt &prog, boost::python::object o)
   std::vector<object> py_obj_vec;
   std::vector<goto_programt::targett> obj_it_vec;
   std::map<object, unsigned int> target_map;
-//  std::set<goto_programt::const_targett> targets;
 
   prog.instructions.clear();
 
