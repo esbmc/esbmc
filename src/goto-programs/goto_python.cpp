@@ -9,13 +9,13 @@
 
 class dummy_goto_class { };
 
-static boost::python::list
-get_instructions(const goto_programt &prog)
+template <typename OutList, typename ListAppender, typename OutElem,
+         typename SetAttrObj, typename SetAttrNil>
+void
+get_instructions_templ(const goto_programt &prog, OutList &list,
+    ListAppender listappend, SetAttrObj setattrobj, SetAttrNil setattrnil)
 {
-  using namespace boost::python;
-
-  list pylist;
-  std::vector<object> py_obj_vec;
+  std::vector<OutElem> py_obj_vec;
   std::set<goto_programt::const_targett> targets;
   std::map<goto_programt::const_targett, unsigned int> target_map;
 
@@ -23,8 +23,8 @@ get_instructions(const goto_programt &prog)
   // as in an stl vector, for easy access by index. Collect a set of all the
   // target iterators that are used in this function as well.
   for (const goto_programt::instructiont &insn : prog.instructions) {
-    object o(insn);
-    pylist.append(o);
+    OutElem o(insn);
+    listappend(list, o);
     py_obj_vec.push_back(o);
 
     if (!insn.targets.empty()) {
@@ -51,7 +51,7 @@ get_instructions(const goto_programt &prog)
   for (const goto_programt::instructiont &insn : prog.instructions) {
     if (insn.targets.empty()) {
       // If there's no target, set the target attribute to None
-      py_obj_vec[i].attr("target") = object();
+      setattrnil(py_obj_vec[i]);
     } else {
       assert(insn.targets.size() == 1 && "Insn with multiple targets");
       auto it = *insn.targets.begin();
@@ -60,12 +60,35 @@ get_instructions(const goto_programt &prog)
 
       // Set target attr to be reference to the correspondingly indexed python
       // object.
-      py_obj_vec[i].attr("target") = py_obj_vec[target_it->second];
+      setattrobj(py_obj_vec[i], py_obj_vec[target_it->second]);
     }
     i++;
   }
 
-  return pylist;
+  return;
+}
+
+void
+get_instructions(const goto_programt &prog)
+{
+  using namespace boost::python;
+
+  list l;
+
+  auto listappend = [](list &li, object &o) {
+    li.append(o);
+  };
+
+  auto setattr = [](object &o, object &target) {
+    o.attr("target") = target;
+  };
+
+  auto setnone = [](object &o) {
+    o.attr("target") = object();
+  };
+
+  get_instructions_templ<list, decltype(listappend), object, decltype(setattr), decltype(setnone)>(prog, l, listappend, setattr, setnone);
+  return;
 }
 
 static void
