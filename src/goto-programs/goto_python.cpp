@@ -133,7 +133,7 @@ std::string
 prog_to_string(const goto_programt &prog)
 {
   std::stringstream ss;
-  ss << prog.output(ss);
+  prog.output(ss);
   return ss.str();
 }
 
