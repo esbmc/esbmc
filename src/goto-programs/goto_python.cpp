@@ -91,17 +91,18 @@ get_instructions(const goto_programt &prog)
   return;
 }
 
-static void
-set_instructions(goto_programt &prog, boost::python::object o)
+template <typename InList, typename InElem, typename FetchElem,
+         typename ElemToInsn, typename GetAttr, typename IsAttrNil>
+void
+set_instructions_templ(goto_programt &prog, InList list, unsigned int len, FetchElem fetchelem, ElemToInsn elemtoinsn, GetAttr getattr, IsAttrNil isattrnil)
 {
   using namespace boost::python;
   // Reverse the get_instructions function: generate a list of instructiont's
   // that preserve the 'target' attribute relation.
 
-  list pylist = extract<list>(o);
-  std::vector<object> py_obj_vec;
+  std::vector<InElem> py_obj_vec;
   std::vector<goto_programt::targett> obj_it_vec;
-  std::map<object, unsigned int> target_map;
+  std::map<InElem, unsigned int> target_map;
 
   prog.instructions.clear();
 
@@ -110,10 +111,10 @@ set_instructions(goto_programt &prog, boost::python::object o)
   // iterators into that list: we need the instructiont storage and it's
   // iterators to stay stable, while mapping the 'target' relation back from
   // python into C++.
-  for (unsigned int i = 0; i < len(pylist); i++) {
-    object item = pylist[i];
+  for (unsigned int i = 0; i < len; i++) {
+    InElem item = fetchelem(list, i);
     py_obj_vec.push_back(item);
-    prog.instructions.push_back(extract<goto_programt::instructiont>(item));
+    prog.instructions.push_back(elemtoinsn(item));
 
     // XXX -- the performance of the following may be absolutely terrible,
     // it's not clear whether there's an operator< for std::map to infer
@@ -129,10 +130,10 @@ set_instructions(goto_programt &prog, boost::python::object o)
   // 'target' attribute. Update the corresponding 'target' field of the C++
   // object accordingly
   for (unsigned int i = 0; i < py_obj_vec.size(); i++) {
-    object target = py_obj_vec[i].attr("target");
+    auto target = getattr(py_obj_vec[i]);
     auto it = obj_it_vec[i];
 
-    if (target.is_none()) {
+    if (isattrnil(target)) {
       it->targets.clear();
     } else {
       // Record a target -- map object to index, and from there to a list iter
@@ -141,7 +142,7 @@ set_instructions(goto_programt &prog, boost::python::object o)
       // in which case we explode. Could raise an exception, but I prefer to
       // fail fast & fail hard. This isn't something the user should handle
       // anyway, and it's difficult for us to clean up afterwards.
-      assert(map_it != target_map.end() && "Target PyObject of instruction is not in list");
+      assert(map_it != target_map.end() && "Target of instruction is not in list");
 
       auto target_list_it = obj_it_vec[map_it->second];
       it->targets.clear();
@@ -149,6 +150,36 @@ set_instructions(goto_programt &prog, boost::python::object o)
     }
   }
 
+  return;
+}
+
+void
+set_instructions(goto_programt &prog, boost::python::object o)
+{
+  using namespace boost::python;
+
+  list pylist = extract<list>(o);
+
+  auto fetchelem = [](list &li, unsigned int idx) {
+    return li[idx];
+  };
+
+  auto elemtoinsn = [](object &o) {
+    goto_programt::instructiont insn = extract<goto_programt::instructiont>(o);
+    return insn;
+  };
+
+  auto getattr = [](object &o) {
+    return o.attr("target");
+  };
+
+  auto isattrnil = [](object &&o) {
+    return o.is_none();
+  };
+
+  set_instructions_templ
+    <list, object, decltype(fetchelem), decltype(elemtoinsn), decltype(getattr), decltype(isattrnil)>
+    (prog, pylist, len(pylist), fetchelem, elemtoinsn, getattr, isattrnil);
   return;
 }
 
