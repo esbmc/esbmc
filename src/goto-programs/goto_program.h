@@ -62,24 +62,26 @@ class goto_programt
 public:
   /*! \brief copy constructor
       \param[in] src an empty goto program
-      \remark Use copy_from to copy non-empty goto-programs
   */
-  inline goto_programt(const goto_programt &src __attribute__((unused)))
+  inline goto_programt(const goto_programt &src)
   {
-    // DO NOT COPY ME! I HAVE POINTERS IN ME!
-    assert(src.instructions.empty());
+    // CBMC didn't permit copy-construction, instead requiring calling
+    // copy_from instead. While explicit is better than implicit though,
+    // the only implication of allowing this is the occasional performance
+    // loss, which is best identified by a profiler.
+    copy_from(src);
+    update();
   }
 
   /*! \brief assignment operator
       \param[in] src an empty goto program
-      \remark Use copy_from to copy non-empty goto-programs
   */
-  inline goto_programt &operator=(const goto_programt &src
-                                  __attribute__((unused)))
+  inline goto_programt &operator=(const goto_programt &src)
+                                  
   {
     // DO NOT COPY ME! I HAVE POINTERS IN ME!
-    assert(src.instructions.empty());
     instructions.clear();
+    copy_from(src);
     update();
     return *this;
   }
