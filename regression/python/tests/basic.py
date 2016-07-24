@@ -42,3 +42,10 @@ class Basic(unittest.TestCase):
                 'valid_object', 'with', 'xor']
         for x in base_exprs:
             self.assertTrue(x in dir(esbmc.expr), "Missing expr {}".format(x))
+
+    def test_setup(self):
+        import esbmc
+        # Assumes cwd = python test dir
+        ns, opts, funcs = esbmc.init_esbmc_process(['./test_data/00_big_endian_01/main.c'])
+        esbmc.kill_esbmc_process()
+
