@@ -49,3 +49,14 @@ class Basic(unittest.TestCase):
         ns, opts, funcs = esbmc.init_esbmc_process(['./test_data/00_big_endian_01/main.c'])
         esbmc.kill_esbmc_process()
 
+    def test_bigint(self):
+        import esbmc
+        from esbmc import BigInt
+        zero = BigInt(0)
+        self.assertTrue(zero != None, "Can't create BigInts")
+        self.assertTrue(zero.to_long() == 0, "BigInt returned wrong value")
+        one = BigInt(1)
+        self.assertTrue(one.to_long() == 1, "BigInt didn't store 1")
+        minusone = BigInt(-1)
+        self.assertTrue(minusone.to_long() == -1, "BigInt didn't store -1")
+
