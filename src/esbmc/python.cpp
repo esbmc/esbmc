@@ -53,9 +53,10 @@ init_esbmc_process(boost::python::object o)
 
   // Convert the list of C++ lists to C argc / argv.
   argc = str_list.size();
-  argc += 1; // Extra option we add.
+  argc += 2; // Extra options we add.
   argv = (const char**)malloc(sizeof(const char *) * argc);
   i = 0;
+  argv[i++] = "esbmc"; // ESBMC expects program path to be first arg
   for (const std::string &s : str_list)
     argv[i++] = s.data();
 
