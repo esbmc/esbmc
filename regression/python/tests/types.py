@@ -43,3 +43,10 @@ class Types(unittest.TestCase):
         u16 = self.make_unsigned(16)
         self.assertTrue(u32 == u32, "Type comparison fails")
         self.assertTrue(u32 != u16, "Type comparison fails")
+
+    def test_bv_clone(self):
+        import esbmc
+        u32 = self.make_unsigned()
+        u32_c = u32.clone()
+        self.assertTrue(u32 == u32_c, "Couldn't clone unsigned32")
+        self.assertFalse(u32 is u32_c, "Clone returned same reference")
