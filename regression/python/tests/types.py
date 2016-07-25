@@ -50,3 +50,10 @@ class Types(unittest.TestCase):
         u32_c = u32.clone()
         self.assertTrue(u32 == u32_c, "Couldn't clone unsigned32")
         self.assertFalse(u32 is u32_c, "Clone returned same reference")
+
+    def test_nested(self):
+        import esbmc
+        u32 = self.make_unsigned()
+        ptr = esbmc.type.pointer.make(u32)
+        self.assertTrue(ptr != None, "Couldn't create ptr type")
+        self.assertTrue(ptr.subtype == u32, "Ptr type subtype wrong")
