@@ -28,6 +28,9 @@ static namespacet *ns = NULL;
 // Type pool needs to live as long as the process.
 static type_poolt *tp = NULL;
 
+dict type_to_downcast;
+dict expr_to_downcast;
+
 static boost::python::object
 init_esbmc_process(boost::python::object o)
 {
@@ -133,6 +136,19 @@ kill_esbmc_process(void)
   return;
 }
 
+// For numerous reasons we want facilities to downcast a type2tc or expr2tc
+// to the corresponding something2tc class, allowing python to access the
+// contents. However, to_##thetype##_type etc are a) overloaded, and b) don't
+// return something2tc's. And we can't register the something2tc constructor
+// as a simple function. So we get this:
+template <typename Result, typename Source>
+Result
+downcast_vehicle(const Source &contained)
+{
+  // Just construct a new container around this.
+  return Result(contained);
+}
+
 BOOST_PYTHON_MODULE(esbmc)
 {
   // This is essentially the entry point for the esbmc shared object.
@@ -158,6 +174,13 @@ BOOST_PYTHON_MODULE(esbmc)
 BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
 
     build_type2t_container_converters();
+
+    // Build downcasting infrastructure
+    type_to_downcast = dict();
+#define _ESBMC_IREP2_TYPE_DOWNCASTING(r, data, elem) \
+    type_to_downcast[type2t::BOOST_PP_CAT(elem,_id)] = \
+        make_function(downcast_vehicle<BOOST_PP_CAT(elem,_type2tc), type2tc>);
+BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_TYPE_DOWNCASTING, foo, ESBMC_LIST_OF_TYPES)
   }
 
   {
@@ -168,6 +191,14 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
 BOOST_PP_LIST_FOR_EACH(_ESBMC_EXPR2_MPL_EXPR_SET, foo, ESBMC_LIST_OF_EXPRS)
 
     build_expr2t_container_converters();
+
+    // Build downcasting infrastructure
+    expr_to_downcast = dict();
+#define _ESBMC_IREP2_EXPR_DOWNCASTING(r, data, elem) \
+    expr_to_downcast[expr2t::BOOST_PP_CAT(elem,_id)] = \
+        make_function(downcast_vehicle<BOOST_PP_CAT(elem,2tc), expr2tc>);
+BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
+
   }
 
   // Register BigInt globally
