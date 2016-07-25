@@ -91,6 +91,10 @@ struct shared_ptr_from_python
           reinterpret_cast<container*>(
               objects::find_instance_impl(p, boost::python::type_id<container>()));
 
+        // Find object instance may fail
+        if (!foo)
+          return foo;
+
         // Slightly dirtily extricate the m_p field. Don't call pointer_holder
         // holds because that's private. Ugh.
         return foo->get();
