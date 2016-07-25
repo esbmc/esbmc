@@ -149,6 +149,22 @@ downcast_vehicle(const Source &contained)
   return Result(contained);
 }
 
+object
+downcast_type(const type2tc &type)
+{
+  assert(type->type_id < type2t::end_type_id);
+  object o = type_to_downcast[type->type_id];
+  return o(type);
+}
+
+object
+downcast_expr(const expr2tc &expr)
+{
+  assert(expr->expr_id < expr2t::end_expr_id);
+  object o = expr_to_downcast[expr->expr_id];
+  return o(expr);
+}
+
 BOOST_PYTHON_MODULE(esbmc)
 {
   // This is essentially the entry point for the esbmc shared object.
@@ -216,6 +232,9 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
 
   // Build goto function class representions.
   build_goto_func_class();
+
+  def("downcast_type", &downcast_type);
+  def("downcast_expr", &downcast_expr);
 }
 
 // Include these other things that are special to the esbmc binary:
