@@ -4500,7 +4500,10 @@ inline bool operator<(const type2tc &a, const type2tc &b)
 
 inline bool operator>(const type2tc &a, const type2tc &b)
 {
-  return (*b.get() < *a.get());
+  // We're greater if we neither less than or equal.
+  // This costs more: but that's ok, because all conventional software uses
+  // less-than comparisons for ordering
+  return !(a < b) && (a != b);
 }
 
 inline bool operator==(const expr2tc& a, const expr2tc& b)
@@ -4530,7 +4533,10 @@ inline bool operator<(const expr2tc& a, const expr2tc& b)
 
 inline bool operator>(const expr2tc& a, const expr2tc& b)
 {
-  return (*b.get() < *a.get());
+  // We're greater if we neither less than or equal.
+  // This costs more: but that's ok, because all conventional software uses
+  // less-than comparisons for ordering
+  return !(a < b) && (a != b);
 }
 
 inline std::ostream& operator<<(std::ostream &out, const expr2tc& a)
