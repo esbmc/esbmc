@@ -66,9 +66,14 @@ struct shared_ptr_from_python
     shared_ptr_from_python()
     {
       using namespace boost::python;
+      // Lvalue converter
       converter::registry::insert(&convertible, type_id<T>(),
                   &converter::expected_from_python_type_direct<T>::get_pytype
                   );
+      // We appear to need an rvalue converter for transmografying None to
+      // containers.
+      converter::registry::insert(&convertible, &cons, type_id<container>(),
+          &converter::expected_from_python_type_direct<T>::get_pytype);
     }
 
  private:
@@ -98,6 +103,28 @@ struct shared_ptr_from_python
         // Slightly dirtily extricate the m_p field. Don't call pointer_holder
         // holds because that's private. Ugh.
         return foo->get();
+    }
+
+    static void cons(PyObject *src, boost::python::converter::rvalue_from_python_stage1_data *stage1)
+    {
+      using namespace boost::python;
+      // We're a non-reference non-ptr piece of data; therefore we get created
+      // as part of arg_rvalue_from_python, and get an associated bit of
+      // storage.
+      converter::rvalue_from_python_data<container> *store =
+        reinterpret_cast<converter::rvalue_from_python_data<container>*>(stage1);
+
+      type2tc *obj_store = reinterpret_cast<type2tc *>(&store->storage.bytes);
+
+      // Create an rvalue. Uuuhhhh. This is the point I admit I'm not really
+      // sure where it comes in; I only care about NoneType right now.
+      assert(src == Py_None && "Expected Py_None in container rvalue cons");
+
+      *obj_store = type2tc();
+
+      // Let rvalue holder know that needs deconstructing please
+      store->stage1.convertible = obj_store;
+      return;
     }
 };
 
