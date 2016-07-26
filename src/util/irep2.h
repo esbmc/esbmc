@@ -4490,7 +4490,12 @@ inline bool operator!=(const type2tc &a, const type2tc &b)
 
 inline bool operator<(const type2tc &a, const type2tc &b)
 {
-  return (*a.get() < *b.get());
+  if (is_nil_type(a)) // nil is lower than non-nil
+    return !is_nil_type(b); // true if b is non-nil, so a is lower
+  else if (is_nil_type(b))
+    return false; // If b is nil, nothing can be lower
+  else
+    return (*a.get() < *b.get());
 }
 
 inline bool operator>(const type2tc &a, const type2tc &b)
@@ -4515,7 +4520,12 @@ inline bool operator!=(const expr2tc& a, const expr2tc& b)
 
 inline bool operator<(const expr2tc& a, const expr2tc& b)
 {
-  return (*a.get() < *b.get());
+  if (is_nil_expr(a)) // nil is lower than non-nil
+    return !is_nil_expr(b); // true if b is non-nil, so a is lower
+  else if (is_nil_expr(b))
+    return false; // If b is nil, nothing can be lower
+  else
+    return (*a.get() < *b.get());
 }
 
 inline bool operator>(const expr2tc& a, const expr2tc& b)
