@@ -66,3 +66,8 @@ class Types(unittest.TestCase):
         self.assertTrue(type(ptr.subtype) == esbmc.type.type2t, "Pointer subtype field should be type2t")
         foo = esbmc.downcast_type(ptr.subtype)
         self.assertTrue(type(foo) == esbmc.type.unsignedbv, "Pointer subtype field should _contain_ unsignedbv")
+
+    def test_array(self):
+        import esbmc
+        u32 = self.make_unsigned()
+        esbmc.type.array.make(u32, esbmc.type.nil_type(), True)
