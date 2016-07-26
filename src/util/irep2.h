@@ -4472,22 +4472,22 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_SET, foo, ESBMC_LIST_OF_EXPRS)
   boost::mpl::insert<boost::mpl::_1, boost::mpl::_2>
 >::type set_of_traits;
 
-inline bool operator==(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
+inline bool operator==(const type2tc &a, const type2tc &b)
 {
   return (*a.get() == *b.get());
 }
 
-inline bool operator!=(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
+inline bool operator!=(const type2tc &a, const type2tc &b)
 {
   return !(a == b);
 }
 
-inline bool operator<(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
+inline bool operator<(const type2tc &a, const type2tc &b)
 {
   return (*a.get() < *b.get());
 }
 
-inline bool operator>(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
+inline bool operator>(const type2tc &a, const type2tc &b)
 {
   return (*b.get() < *a.get());
 }
