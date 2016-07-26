@@ -1082,7 +1082,7 @@ namespace esbmct {
     typedef typename container::base_container base_container2tc;
     typedef typename baseclass::base_type base2t;
 
-    template <typename ...Args> irep_methods2(Args... args) : superclass(args...) { }
+    template <typename ...Args> irep_methods2(const Args& ... args) : superclass(args...) { }
 
     // Copy constructor. Construct from derived ref rather than just
     // irep_methods2, because the template above will be able to directly
@@ -1249,7 +1249,7 @@ namespace esbmct {
   public:
     typedef irep_methods2<derived, baseclass, traits, container, fields, enable> superclass;
 
-    template <typename ...Args> expr_methods2(Args... args) : superclass(args...) { }
+    template <typename ...Args> expr_methods2(const Args&... args) : superclass(args...) { }
 
     // See notes on irep_methods2 copy constructor
     expr_methods2(const derived &ref) : superclass(ref) { }
