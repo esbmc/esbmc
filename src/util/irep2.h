@@ -1632,7 +1632,7 @@ class symbol_type2t : public symbol_type_methods
 {
 public:
   /** Primary constructor. @param sym_name Name of symbolic type. */
-  symbol_type2t(const dstring sym_name) :
+  symbol_type2t(const dstring &sym_name) :
     symbol_type_methods(symbol_id, sym_name) { }
   symbol_type2t(const symbol_type2t &ref) :
     symbol_type_methods(ref) { }
@@ -1657,7 +1657,7 @@ public:
    */
   struct_type2t(const std::vector<type2tc> &members,
                 const std::vector<irep_idt> &memb_names,
-                irep_idt name)
+                const irep_idt &name)
     : struct_type_methods(struct_id, members, memb_names, name) {}
   struct_type2t(const struct_type2t &ref) : struct_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
@@ -1681,7 +1681,7 @@ public:
    */
   union_type2t(const std::vector<type2tc> &members,
                const std::vector<irep_idt> &memb_names,
-               irep_idt name)
+               const irep_idt &name)
     : union_type_methods(union_id, members, memb_names, name) {}
   union_type2t(const union_type2t &ref) : union_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
@@ -1753,8 +1753,8 @@ public:
    *  @param size Size of this array.
    *  @param inf Whether or not this array is infinitely sized
    */
-  array_type2t(const type2tc subtype, const expr2tc size, bool inf)
-    : array_type_methods (array_id, subtype, size, inf) {
+  array_type2t(const type2tc &_subtype, const expr2tc &size, bool inf)
+    : array_type_methods (array_id, _subtype, size, inf) {
       // If we can simplify the array size, do so
       // XXX, this is probably massively inefficient. Some kind of boundry in
       // the checking process should exist to eliminate this requirement.
@@ -1794,7 +1794,7 @@ class pointer_type2t : public pointer_type_methods
 {
 public:
   /** Primary constructor. @param subtype Subtype of this pointer */
-  pointer_type2t(const type2tc subtype)
+  pointer_type2t(const type2tc &subtype)
     : pointer_type_methods(pointer_id, subtype) { }
   pointer_type2t(const pointer_type2t &ref)
     : pointer_type_methods(ref) { }
