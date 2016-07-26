@@ -12,7 +12,7 @@ AC_INIT([ESBMC], [esbmcversion], [esbmc-users@googlegroups.com])
 AC_DEFINE([ESBMC_VERSION], ["AC_PACKAGE_VERSION"], [ESBMC version number])
 dnl Numerous things croak unless we do this immediately:
 AC_CONFIG_AUX_DIR([scripts/build-aux])
-AC_CONFIG_MACRO_DIR([scripts/build-aux/m4])
+AC_CONFIG_MACRO_DIRS([scripts/build-aux/m4 /usr/share/aclocal])
 
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADER(ac_config.h:scripts/ac_config.in)
