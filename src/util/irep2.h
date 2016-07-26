@@ -4474,7 +4474,13 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_SET, foo, ESBMC_LIST_OF_EXPRS)
 
 inline bool operator==(const type2tc &a, const type2tc &b)
 {
-  return (*a.get() == *b.get());
+  // Handle nil ireps
+  if (is_nil_type(a) && is_nil_type(b))
+    return true;
+  else if (is_nil_type(a) || is_nil_type(b))
+    return false;
+  else
+    return (*a.get() == *b.get());
 }
 
 inline bool operator!=(const type2tc &a, const type2tc &b)
@@ -4494,7 +4500,12 @@ inline bool operator>(const type2tc &a, const type2tc &b)
 
 inline bool operator==(const expr2tc& a, const expr2tc& b)
 {
-  return (*a.get() == *b.get());
+  if (is_nil_expr(a) && is_nil_expr(b))
+    return true;
+  else if (is_nil_expr(a) || is_nil_expr(b))
+    return false;
+  else
+    return (*a.get() == *b.get());
 }
 
 inline bool operator!=(const expr2tc& a, const expr2tc& b)
