@@ -165,6 +165,13 @@ downcast_expr(const expr2tc &expr)
   return o(expr);
 }
 
+// Mess
+static type2tc
+make_an_empty_type2tc()
+{
+    return type2tc();
+}
+
 BOOST_PYTHON_MODULE(esbmc)
 {
   // This is essentially the entry point for the esbmc shared object.
@@ -183,9 +190,15 @@ BOOST_PYTHON_MODULE(esbmc)
 
   // Namespace into types and exprs.
   {
-    scope types = class_<dummy_type_class>("type");
+    auto types = class_<dummy_type_class>("type");
+    scope quux = types;
 
     build_base_type2t_python_class();
+
+    // Register a function for making empty types
+    types.def("nil_type", &make_an_empty_type2tc);
+    types.staticmethod("nil_type");
+
 #define _ESBMC_IREP2_MPL_TYPE_SET(r, data, elem) BOOST_PP_CAT(elem,_type2t)::build_python_class(type2t::BOOST_PP_CAT(elem,_id));
 BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
 
