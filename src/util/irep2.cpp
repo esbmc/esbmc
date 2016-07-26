@@ -120,7 +120,7 @@ struct shared_ptr_from_python
       // sure where it comes in; I only care about NoneType right now.
       assert(src == Py_None && "Expected Py_None in container rvalue cons");
 
-      new (obj_store) type2tc();
+      new (obj_store) container();
 
       // Let rvalue holder know that needs deconstructing please
       store->stage1.convertible = obj_store;
