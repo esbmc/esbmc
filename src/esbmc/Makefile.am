@@ -14,7 +14,7 @@ libesbmc_la_SOURCES = python.cpp ltbuildidstring.c
 libmain_la_SOURCES = parseoptions.cpp bmc.cpp \
                 document_subgoals.cpp  show_vcc.cpp options.cpp
 esbmc_SOURCES = main.cpp buildidstring.c
-libesbmc_la_LDFLAGS = -module -shared # Makes this shared
+libesbmc_la_LDFLAGS = -module -shared -rpath ${libdir} # Makes this shared
 esbmc_LDADD = ./libmain.la $(libs_to_link_in) $(ESBMC_SOLVER_LIBS)
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 AM_LDFLAGS = @ESBMC_LDFLAGS@
