@@ -1,6 +1,6 @@
 bin_PROGRAMS = esbmc
-#EXTRA_LTLIBRARIES = libesbmc.la
-lib_LTLIBRARIES = libmain.la libesbmc.la #@ESBMC_SHARED_LIB@
+EXTRA_LTLIBRARIES = libesbmc.la
+lib_LTLIBRARIES = libmain.la @ESBMC_SHARED_LIB@
 ESBMC_SOLVER_LIBS = @ESBMC_SOLVER_LIBS@
 libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la ../langapi/liblangapi.la \
                   ../ansi-c/libansic.la ../ansi-c/libclib.la ../ansi-c/cpp/libcpp.la \
