@@ -175,6 +175,12 @@ AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)
 
 AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build flag)])
 
+dnl on by default...
+AC_ARG_ENABLE(enable-esbmc, [AS_HELP_STRING([--enable-esbmc], Build main ESBMC binary)])
+AS_IF([test "${enable_esbmc}" = "yes"], [
+  AC_SUBST([ESBMC_BINARY], "esbmc")
+])
+
 AC_ARG_ENABLE(enable-shared-lib, [AS_HELP_STRING([--enable-shared-lib], Build a shared library of ESBMCs code too)])
 AS_IF([test "${enable_shared_lib}" = "yes"], [
   dnl Check for python
@@ -201,6 +207,23 @@ dnl deprecated decls because it uses auto ptrs
 dnl field initializers due to a, uh, totally legitimate initializer mismatch
 dnl       with later versions of python headers
 AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations -Wno-missing-field-initializers $ESBMC_CLANG_CFLAGS ")
+
+dnl Set flags depending on whether we're building the normal binary, the shared
+dnl object, or both. Flag setting is purely a matter of performance: left to
+dnl it's own devices, libtool and all his works will set about building every
+dnl object twice, with and without -fPIC. Unless we're actually building both
+dnl outputs, that's pointless.
+AS_IF([test "${enable_shared_lib}${enable_esbmc}" = "yesno"], [
+  dnl -shared will be interpreted by libtool rather than CXX
+  AS_VAR_APPEND(BASE_CXXFLAGS, " -shared ")
+  ])
+AS_IF([test "${enable_shared_lib}${enable_esbmc}" = "noyes"], [
+  dnl -static will be interpreted by libtool rather than CXX
+  AS_VAR_APPEND(BASE_CXXFLAGS, " -static ")
+  ])
+AS_IF([test "${enable_shared_lib}${enable_esbmc}" = "nono"], [
+  AC_MSG_ERROR(["You must enable either libesbmc.so or the esbmc binary"])
+])
 
 dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 dnl Unless of course you're on a mac, in which case clang will frequently
