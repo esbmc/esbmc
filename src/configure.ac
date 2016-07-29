@@ -182,7 +182,7 @@ AS_IF([test "${enable_esbmc}" = "yes"], [
 ], [
   dnl If we turn esbmc off, disable creation of any statc objects
   AS_IF([test "${enable_esbmc}" = "no"], [
-    AS_VAR_SET(enable-static, "no")
+    AS_VAR_SET(enable_static, "no")
   ])
 ])
 
@@ -197,7 +197,7 @@ AS_IF([test "${enable_shared_lib}" = "yes"], [
     AS_ECHO($LIBPYTHON_CFLAGS)
     AS_ECHO($LIBPYTHON_LIBS)
     dnl enable shared library
-    AS_VAR_SET(enable-shared, "yes")
+    AS_VAR_SET(enable_shared, "yes")
     AC_SUBST([ESBMC_SHARED_LIB], "libesbmc.la")
     AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON_LIBS -lboost_python ")
   ], [
