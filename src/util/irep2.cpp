@@ -92,17 +92,19 @@ struct shared_ptr_from_python
           reinterpret_cast<objects::instance<>*>(p);
         (void)inst; // For debug / inspection
 
-        container* foo =
+        // Scatter consts around to ensure that the get() below doesn't trigger
+        // detachment.
+        const container *foo =
           reinterpret_cast<container*>(
               objects::find_instance_impl(p, boost::python::type_id<container>()));
 
         // Find object instance may fail
         if (!foo)
-          return foo;
+          return NULL;
 
         // Slightly dirtily extricate the m_p field. Don't call pointer_holder
         // holds because that's private. Ugh.
-        return foo->get();
+        return const_cast<void*>(reinterpret_cast<const void *>(foo->get()));
     }
 
     static void cons(PyObject *src, boost::python::converter::rvalue_from_python_stage1_data *stage1)
