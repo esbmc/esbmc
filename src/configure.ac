@@ -47,7 +47,7 @@ AS_VAR_SET(C2GOTO_LIBS, "")
 AM_PROG_AR
 AM_PROG_LEX
 
-LT_INIT(static)
+LT_INIT(static disable-shared)
 LTDL_INIT
 
 AC_LANG(C++)
@@ -179,6 +179,11 @@ dnl on by default...
 AC_ARG_ENABLE(enable-esbmc, [AS_HELP_STRING([--enable-esbmc], Build main ESBMC binary)])
 AS_IF([test "${enable_esbmc}" = "yes"], [
   AC_SUBST([ESBMC_BINARY], "esbmc")
+], [
+  dnl If we turn esbmc off, disable creation of any statc objects
+  AS_IF([test "${enable_esbmc}" = "no"], [
+    AS_VAR_SET(enable-static, "no")
+  ])
 ])
 
 AC_ARG_ENABLE(enable-shared-lib, [AS_HELP_STRING([--enable-shared-lib], Build a shared library of ESBMCs code too)])
@@ -191,6 +196,8 @@ AS_IF([test "${enable_shared_lib}" = "yes"], [
     AS_VAR_APPEND(LIBS, " $LIBPYTHON_LIBS -lboost_python ")
     AS_ECHO($LIBPYTHON_CFLAGS)
     AS_ECHO($LIBPYTHON_LIBS)
+    dnl enable shared library
+    AS_VAR_SET(enable-shared, "yes")
     AC_SUBST([ESBMC_SHARED_LIB], "libesbmc.la")
     AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON_LIBS -lboost_python ")
   ], [
@@ -207,23 +214,6 @@ dnl deprecated decls because it uses auto ptrs
 dnl field initializers due to a, uh, totally legitimate initializer mismatch
 dnl       with later versions of python headers
 AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations -Wno-missing-field-initializers $ESBMC_CLANG_CFLAGS ")
-
-dnl Set flags depending on whether we're building the normal binary, the shared
-dnl object, or both. Flag setting is purely a matter of performance: left to
-dnl it's own devices, libtool and all his works will set about building every
-dnl object twice, with and without -fPIC. Unless we're actually building both
-dnl outputs, that's pointless.
-AS_IF([test "${enable_shared_lib}${enable_esbmc}" = "yesno"], [
-  dnl -shared will be interpreted by libtool rather than CXX
-  AS_VAR_APPEND(BASE_CXXFLAGS, " -shared ")
-  ])
-AS_IF([test "${enable_shared_lib}${enable_esbmc}" = "noyes"], [
-  dnl -static will be interpreted by libtool rather than CXX
-  AS_VAR_APPEND(BASE_CXXFLAGS, " -static ")
-  ])
-AS_IF([test "${enable_shared_lib}${enable_esbmc}" = "nono"], [
-  AC_MSG_ERROR(["You must enable either libesbmc.so or the esbmc binary"])
-])
 
 dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 dnl Unless of course you're on a mac, in which case clang will frequently
