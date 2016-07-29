@@ -549,7 +549,6 @@ goto_programt::inject_instructions(InList list,
     unsigned int len, FetchElem fetchelem, ElemToInsn elemtoinsn,
     GetAttr getattr, IsAttrNil isattrnil)
 {
-  using namespace boost::python;
   // Reverse the get_instructions function: generate a list of instructiont's
   // that preserve the 'target' attribute relation.
 

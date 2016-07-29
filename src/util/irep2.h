@@ -968,7 +968,6 @@ namespace esbmct {
     typedef type2t base2t;
 
 #ifdef WITH_PYTHON
-    typedef boost::python::init<typename Args::result_type...> python_init_type;
     template <typename derived> static irep_container<base2t> make_contained(typename Args::result_type...);
 #endif
   };
@@ -990,7 +989,6 @@ namespace esbmct {
     typedef expr2t base2t;
 
 #ifdef WITH_PYTHON
-    typedef boost::python::init<type2tc, typename Args::result_type...> python_init_type;
     // Note addition of type2tc...
     template <typename derived> static irep_container<base2t> make_contained(const type2tc &, typename Args::result_type...);
 #endif
@@ -1012,7 +1010,6 @@ namespace esbmct {
     typedef expr2t base2t;
 
 #ifdef WITH_PYTHON
-    typedef boost::python::init<typename Args::result_type...> python_init_type;
     template <typename derived> static irep_container<base2t> make_contained(typename Args::result_type...);
 #endif
   };
@@ -1030,7 +1027,6 @@ namespace esbmct {
     typedef expr2t base2t;
 
 #ifdef WITH_PYTHON
-    typedef boost::python::init<typename Args::result_type...> python_init_type;
     template <typename derived> static irep_container<base2t> make_contained(typename Args::result_type...);
 #endif
 
@@ -1132,8 +1128,6 @@ namespace esbmct {
 #ifdef WITH_PYTHON
     template <typename T>
     static void build_python_class_rec(T &obj, unsigned int idx);
-
-    static typename traits::python_init_type python_init;
 #endif
   };
 
@@ -1227,13 +1221,8 @@ namespace esbmct {
       (void)obj;
       (void)idx;
     }
-
-    static typename traits::python_init_type python_init;
 #endif
   };
-
-  template <class derived, class baseclass, typename traits, typename container, typename fields, typename enable>
-  typename traits::python_init_type irep_methods2<derived, baseclass, traits, container, fields, enable>::python_init;
 
   /** Expression methods template for expr ireps.
    *  This class works on the same principle as @irep_methods2 but provides

@@ -15,7 +15,6 @@
 #include <boost/python/operators.hpp>
 #include <boost/python/object/find_instance.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
-#endif
 
 // Additional python infrastructure: our irep containers don't quite match
 // the pointer ownership model that boost.python expects. Specifically: it
@@ -129,6 +128,7 @@ struct shared_ptr_from_python
       return;
     }
 };
+#endif
 
 template <typename T> class register_irep_methods;
 
@@ -423,6 +423,7 @@ struct_union_data::get_component_number(const irep_idt &name) const
   abort();
 }
 
+#ifdef WITH_PYTHON
 template<>
 class register_irep_methods<type2t>
 {
@@ -483,6 +484,7 @@ type2t_traits<Args...>::make_contained(typename Args::result_type... args) -> ir
   return irep_container<base2t>(new derived(args...));
 }
 }
+#endif
 
 /*************************** Base expr2t definitions **************************/
 
@@ -823,6 +825,7 @@ public:
   static constexpr const char **names = expr_names;
 };
 
+#ifdef WITH_PYTHON
 template<>
 class register_irep_methods<expr2t>
 {
@@ -922,6 +925,7 @@ expr2t_traits_always_construct<Args...>::make_contained(typename Args::result_ty
   return irep_container<base2t>(new derived(args...));
 }
 }
+#endif
 
 /**************************** Expression constructors *************************/
 
