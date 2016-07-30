@@ -121,3 +121,16 @@ class Exprs(unittest.TestCase):
         self.assertTrue(len(se.arguments) == 0, "Sideeffect has argument values")
         self.assertTrue(se.alloctype == val.type, "Sideeffect allockind has wrong value")
         self.assertTrue(se.kind == esbmc.expr.sideeffect_allockind.malloc, "Sideeffect should have malloc kind")
+
+    def test_symbol(self):
+        import esbmc
+        u32 = self.make_unsigned()
+        name = esbmc.irep_idt("fgasdf")
+        sym = esbmc.expr.symbol.make(u32, name, esbmc.expr.symbol_renaming.level2, 1, 2, 3, 4)
+        self.assertTrue(sym.type == u32, "Symbol has wrong type")
+        self.assertTrue(sym.name == name, "Symbol has wrong name")
+        self.assertTrue(sym.renamelev == esbmc.expr.symbol_renaming.level2, "Symbol has wrong renaming level")
+        self.assertTrue(sym.level1_num == 1, "Symbol has wrong level1 num")
+        self.assertTrue(sym.level2_num == 2, "Symbol has wrong level2 num")
+        self.assertTrue(sym.thread_num == 3, "Symbol has wrong thread num")
+        self.assertTrue(sym.node_num == 4, "Symbol has wrong node num")
