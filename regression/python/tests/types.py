@@ -141,3 +141,14 @@ class Types(unittest.TestCase):
         # Just ensure there's something in there and it's not nil
         struct = self.struct_maker()
         self.assertTrue(struct.pretty(0) != "", "Structure creation failed")
+
+    def test_struct_contents(self):
+        struct = self.struct_maker()
+        for x in range(1, 5):
+            self.assertTrue(struct.members[x-1] == self.make_unsigned(x), "Structure contents mismatch")
+
+        namelist = ["a", "b", "c", "d"]
+        for x in range(0, 4):
+            self.assertTrue(struct.member_names[x].as_string() == namelist[x], "Structure contents mismatch")
+
+        self.assertTrue(struct.typename.as_string() == "fgasdf", "Structure contents mismatch")
