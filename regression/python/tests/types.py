@@ -124,7 +124,7 @@ class Types(unittest.TestCase):
         for x in range(0, 4):
             self.assertTrue(tlist[x] == alist[x], "type_vec contents differ")
 
-    def test_struct_creation(self):
+    def struct_maker(self):
         import esbmc
         alist = [esbmc.type.unsignedbv.make(x) for x in range(1, 5)]
         namelist = [esbmc.irep_idt(x) for x in ["a", "b", "c", "d"]]
@@ -135,5 +135,9 @@ class Types(unittest.TestCase):
         ilist.extend(namelist)
 
         struct = esbmc.type.struct.make(tlist, ilist, esbmc.irep_idt("fgasdf"))
+        return struct
+
+    def test_struct_creation(self):
         # Just ensure there's something in there and it's not nil
+        struct = self.struct_maker()
         self.assertTrue(struct.pretty(0) != "", "Structure creation failed")
