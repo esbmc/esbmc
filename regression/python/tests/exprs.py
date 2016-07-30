@@ -85,3 +85,12 @@ class Exprs(unittest.TestCase):
         self.assertTrue(type(downcasted) == esbmc.expr.constant_int, "Downcast failed")
         # Should be brought into python as a different object
         self.assertFalse(downcasted is val, "downcasted object should be new pyref")
+
+    def test_none(self):
+        import esbmc
+        val = self.make_int()
+        # Technically an illegal irep, might break if we get more stringent
+        add = esbmc.expr.add.make(val.type, val, None)
+        self.assertTrue(val != None, "cmp with none failed")
+        self.assertTrue(add.side_2 == None, "cmp with referenced none failed")
+        self.assertTrue(esbmc.expr.is_nil_expr(add.side_2), "is-nil comparison failed")
