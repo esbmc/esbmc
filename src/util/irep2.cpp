@@ -431,15 +431,21 @@ public:
   template <typename O>
   void operator()(O &o)
   {
-    using boost::python::self_ns::self;
-
     // Define standard methods
     o.def("pretty", &type2t::pretty);
     o.def("crc", &type2t::crc);
     o.def("clone", &type2t::clone);
-    o.def(self == self);
-    o.def(self < self);
     o.def_readonly("type_id", &type2t::type_id);
+
+    // Operators. Can't use built-in boost.python way because it only
+    // compares the base object, not the container. So, define our equality
+    // operator to work on the containers. First resolve overload:
+    bool (*eqptr)(const type2tc &a, const type2tc &b) = &operator==;
+    o.def("__eq__", eqptr);
+
+    bool (*ltptr)(const type2tc &a, const type2tc &b) = &operator<;
+    o.def("__lt__", ltptr);
+    return;
   }
 };
 
@@ -833,8 +839,6 @@ public:
   template <typename O>
   void operator()(O &o)
   {
-    using boost::python::self_ns::self;
-
     // Define standard methods
     o.def("clone", &expr2t::clone);
     o.def("pretty", &expr2t::pretty);
@@ -842,10 +846,17 @@ public:
     o.def("depth", &expr2t::depth);
     o.def("crc", &expr2t::crc);
     o.def("simplify", &expr2t::simplify);
-    o.def(self == self);
-    o.def(self < self);
     o.def_readonly("type", &expr2t::type);
     o.def_readonly("expr_id", &expr2t::expr_id);
+
+    // Operators. Can't use built-in boost.python way because it only
+    // compares the base object, not the container. So, define our equality
+    // operator to work on the containers. First resolve overload:
+    bool (*eqptr)(const expr2tc &a, const expr2tc &b) = &operator==;
+    o.def("__eq__", eqptr);
+
+    bool (*ltptr)(const expr2tc &a, const expr2tc &b) = &operator<;
+    o.def("__lt__", ltptr);
     return;
   }
 };
