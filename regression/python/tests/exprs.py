@@ -46,3 +46,9 @@ class Exprs(unittest.TestCase):
         self.assertFalse(val0 == val1, "Different comparision shouldn't be equal")
         self.assertTrue(val0 < val1, "constints should compare less than")
         self.assertFalse(val1 < val0, "reversed constints should not compare less than")
+
+    def test_pretty(self):
+        import esbmc
+        val = self.make_int()
+        reftext = "constant_int\n* constant_value : 0\n* type : unsignedbv\n  * width : 32"
+        self.assertTrue(val.pretty(0) == reftext, "Expr pretty should work")
