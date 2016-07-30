@@ -134,3 +134,35 @@ class Exprs(unittest.TestCase):
         self.assertTrue(sym.level2_num == 2, "Symbol has wrong level2 num")
         self.assertTrue(sym.thread_num == 3, "Symbol has wrong thread num")
         self.assertTrue(sym.node_num == 4, "Symbol has wrong node num")
+
+    def test_crc(self):
+        import esbmc
+        val = self.make_int()
+        # In rare occasions if alg changes, might actually be 0.
+        self.assertTrue(val.crc() != 0, "expr crc failed")
+
+    def test_depth(self):
+        import esbmc
+        val = self.make_int(1)
+        val1 = self.make_int(2)
+        add = esbmc.expr.add.make(val.type, val, val1)
+        self.assertTrue(add.depth() == 2, "Incorrect irep depth")
+
+    def test_num_nodes(self):
+        import esbmc
+        val = self.make_int(1)
+        val1 = self.make_int(2)
+        add = esbmc.expr.add.make(val.type, val, val1)
+        self.assertTrue(add.num_nodes() == 3, "Incorrect irep node num")
+
+    def test_simplify(self):
+        import esbmc
+        val = self.make_int(1)
+        val1 = self.make_int(2)
+        add = esbmc.expr.add.make(val.type, val, val1)
+        simp = add.simplify()
+        self.assertTrue(simp != None, "Could not simplify an add")
+        self.assertTrue(simp.expr_id == esbmc.expr.expr_ids.constant_int, "Simplified add should be a constant int")
+        # As it's a new irep it's copied by container value, so gets
+        # downcasted automagically by boost.python?
+        self.assertTrue(simp.constant_value.to_long() == 3, "Simplified add has wrong value")
