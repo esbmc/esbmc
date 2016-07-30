@@ -91,6 +91,14 @@ class Types(unittest.TestCase):
         import esbmc
         self.assertTrue(esbmc.type.is_nil_type(None), "None should convert to type2tc")
 
+    def test_cmp(self):
+        import esbmc
+        u16 = esbmc.type.unsignedbv.make(16)
+        u32 = esbmc.type.unsignedbv.make(32)
+        self.assertTrue(u16 != u32, "type inequality should be true")
+        self.assertFalse(u16 == u32, "type equality should be false")
+        self.assertTrue(u16 < u32, "type less-than should be true")
+
     def test_type_check(self):
         import esbmc
         u32 = self.make_unsigned()
