@@ -1,9 +1,6 @@
 import unittest
 
 class Exprs(unittest.TestCase):
-    # cmps, the right exceptions thrown from failures, vectors
-    # and the likes, composite kinds and their conents
-
     def make_unsigned(self, width=32):
         import esbmc
         return esbmc.type.unsignedbv.make(width)
