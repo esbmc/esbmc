@@ -124,7 +124,8 @@ class Types(unittest.TestCase):
         for x in range(0, 4):
             self.assertTrue(tlist[x] == alist[x], "type_vec contents differ")
 
-    def struct_maker(self):
+    @staticmethod
+    def struct_maker():
         import esbmc
         alist = [esbmc.type.unsignedbv.make(x) for x in range(1, 5)]
         namelist = [esbmc.irep_idt(x) for x in ["a", "b", "c", "d"]]
