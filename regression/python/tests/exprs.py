@@ -187,3 +187,15 @@ class Exprs(unittest.TestCase):
             self.assertTrue(x == vec_of_ints[i], "Struct contents mistmatch")
             i = i + 1
         self.assertTrue(struct.type == struct_type, "Struct type mismatch")
+
+    def test_fixedbv(self):
+        import esbmc
+        fbv = esbmc.fixedbv()
+        fbv_spec = esbmc.fixedbv_spec(32, 32)
+        fbv.spec = fbv_spec
+        fbv.from_integer(esbmc.BigInt(0))
+
+        fbvt = esbmc.type.fixedbv.make(32, 32)
+        const_fbv = esbmc.expr.constant_fixedbv.make(fbvt, fbv)
+        reftext = "constant_fixedbv\n* value : 0\n* type : fixedbv\n  * width : 32\n  * integer_bits : 32"
+        self.assertTrue(const_fbv.pretty(0) == reftext, "Created fixedbv has wrong form")
