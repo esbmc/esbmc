@@ -110,3 +110,16 @@ class Types(unittest.TestCase):
             self.assertTrue(True)
         else:
             self.assertTrue(False, "Badly typed comparison should have thrown")
+
+    def test_type_vec(self):
+        import esbmc
+        alist = []
+        for x in range(1, 5):
+            alist.append(esbmc.type.unsignedbv.make(x))
+        tlist = esbmc.type.type_vec()
+        tlist.extend(alist)
+        self.assertTrue(tlist != None, "should be able to construct type list")
+
+        # Check contents
+        for x in range(0, 4):
+            self.assertTrue(tlist[x] == alist[x], "type_vec contents differ")
