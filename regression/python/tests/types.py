@@ -126,12 +126,8 @@ class Types(unittest.TestCase):
 
     def test_struct_creation(self):
         import esbmc
-        alist = []
-        for x in range(1, 5):
-            alist.append(esbmc.type.unsignedbv.make(x))
-        namelist = []
-        for x in ["a", "b", "c", "d"]:
-            namelist.append(esbmc.irep_idt(x))
+        alist = [esbmc.type.unsignedbv.make(x) for x in range(1, 5)]
+        namelist = [esbmc.irep_idt(x) for x in ["a", "b", "c", "d"]]
 
         tlist = esbmc.type.type_vec()
         tlist.extend(alist)
