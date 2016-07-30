@@ -107,3 +107,17 @@ class Exprs(unittest.TestCase):
         letrue = esbmc.expr.constant_bool.make(True)
         self.assertTrue(letrue.constant_value, "constant bool has wrong value")
         self.assertTrue(type(letrue.constant_value) is bool, "constant bool has wrong type")
+
+    def test_sideeffect(self):
+        # Test one of the rarer enums
+        import esbmc
+        val = self.make_int()
+        val1 = self.make_int(1)
+        se = esbmc.expr.sideeffect.make(val.type, val, val1, esbmc.expr.expr_vec(), val.type, esbmc.expr.sideeffect_allockind.malloc)
+        self.assertTrue(se != None, "Couldn't create side-effect")
+        self.assertTrue(se.type == val.type, "Sideeffect has wrong type")
+        self.assertTrue(se.operand == val, "Sideeffect has wrong operand")
+        self.assertTrue(se.size == val1, "Sideeffect has wrong size value")
+        self.assertTrue(len(se.arguments) == 0, "Sideeffect has argument values")
+        self.assertTrue(se.alloctype == val.type, "Sideeffect allockind has wrong value")
+        self.assertTrue(se.kind == esbmc.expr.sideeffect_allockind.malloc, "Sideeffect should have malloc kind")
