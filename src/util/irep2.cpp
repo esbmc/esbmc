@@ -80,10 +80,6 @@ struct shared_ptr_from_python
     {
       using namespace boost::python;
 
-        typedef objects::pointer_holder<container *,container> *
-          ptr_holder;
-        typedef instance_holder * pinst_holder;
-
         if (p == Py_None)
             return p;
 
