@@ -16,6 +16,7 @@ void build_expr2t_container_converters();
 void build_dstring_python_class();
 void build_smt_conv_python_class();
 void build_goto_func_class();
+void build_fixedbv_python_class();
 
 class dummy_expr_class { };
 class dummy_type_class { };
@@ -241,6 +242,9 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
 
   // Build goto function class representions.
   build_goto_func_class();
+
+  // Build fixedbvt class
+  build_fixedbv_python_class();
 
   def("downcast_type", &downcast_type);
   def("downcast_expr", &downcast_expr);
