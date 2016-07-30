@@ -172,6 +172,12 @@ make_an_empty_type2tc()
     return type2tc();
 }
 
+static expr2tc
+make_an_empty_expr2tc()
+{
+    return expr2tc();
+}
+
 BOOST_PYTHON_MODULE(esbmc)
 {
   // This is essentially the entry point for the esbmc shared object.
@@ -198,6 +204,8 @@ BOOST_PYTHON_MODULE(esbmc)
     // Register a function for making empty types
     types.def("nil_type", &make_an_empty_type2tc);
     types.staticmethod("nil_type");
+    types.def("is_nil_type", &is_nil_type);
+    types.staticmethod("is_nil_type");
 
 #define _ESBMC_IREP2_MPL_TYPE_SET(r, data, elem) BOOST_PP_CAT(elem,_type2t)::build_python_class(type2t::BOOST_PP_CAT(elem,_id));
 BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
@@ -213,7 +221,13 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_TYPE_DOWNCASTING, foo, ESBMC_LIST_OF_TYPES)
   }
 
   {
-    scope types = class_<dummy_expr_class>("expr");
+    auto exprs = class_<dummy_expr_class>("expr");
+    scope quux = exprs;
+
+    exprs.def("nil_expr", &make_an_empty_expr2tc);
+    exprs.staticmethod("nil_expr");
+    exprs.def("is_nil_expr", &is_nil_expr);
+    exprs.staticmethod("is_nil_expr");
 
     build_base_expr2t_python_class();
 #define _ESBMC_EXPR2_MPL_EXPR_SET(r, data, elem) BOOST_PP_CAT(elem,2t)::build_python_class(expr2t::BOOST_PP_CAT(elem,_id));
