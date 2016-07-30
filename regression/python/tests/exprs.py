@@ -73,3 +73,15 @@ class Exprs(unittest.TestCase):
         # Accessing struct field should different python objects
         self.assertFalse(add.side_1 is val, "Incorrect python object comparison")
         self.assertFalse(add.side_2 is val1, "Incorrect python object comparison")
+
+    def test_downcast(self):
+        import esbmc
+        val = self.make_int(1)
+        val1 = self.make_int(2)
+        add = esbmc.expr.add.make(val.type, val, val1)
+        # Fields should all have type expr2t
+        self.assertTrue(type(add.side_1) == esbmc.expr.expr2t, "Wrong field type in expr")
+        downcasted = esbmc.downcast_expr(add.side_1)
+        self.assertTrue(type(downcasted) == esbmc.expr.constant_int, "Downcast failed")
+        # Should be brought into python as a different object
+        self.assertFalse(downcasted is val, "downcasted object should be new pyref")
