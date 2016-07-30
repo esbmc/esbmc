@@ -12,7 +12,7 @@ class Exprs(unittest.TestCase):
         import esbmc
         return esbmc.BigInt(value)
 
-    def make_int(self, width=32, value=0):
+    def make_int(self, value=0, width=32):
         import esbmc
         u = self.make_unsigned(width)
         val = self.make_bigint(value)
