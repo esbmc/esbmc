@@ -166,3 +166,27 @@ class Exprs(unittest.TestCase):
         # As it's a new irep it's copied by container value, so gets
         # downcasted automagically by boost.python?
         self.assertTrue(simp.constant_value.to_long() == 3, "Simplified add has wrong value")
+
+    def test_struct(self):
+        import esbmc
+        from types import Types
+        # Type where we have four fields (a, b, c, d) of integer sizes one
+        # to four.
+        struct_type = Types.struct_maker()
+
+        # Create integers that'll fit into those types
+        values = [(0, 1), (1, 2), (2, 3), (3, 4)]
+        vec_of_ints = [self.make_int(x, y) for x, y in values]
+        # Pump those into an expr vector
+        expr_vec = esbmc.expr.expr_vec()
+        self.assertTrue(expr_vec != None, "Couldn't create expr_vec")
+        expr_vec.extend(vec_of_ints)
+
+        # Aaannnddd, create a struct
+        struct = esbmc.expr.constant_struct.make(struct_type, expr_vec)
+        self.assertTrue(struct != None, "Couldn't create constant struct")
+        i = 0
+        for x in struct.members:
+            self.assertTrue(x == vec_of_ints[i], "Struct contents mistmatch")
+            i = i + 1
+        self.assertTrue(struct.type == struct_type, "Struct type mismatch")
