@@ -91,3 +91,13 @@ class Exprs(unittest.TestCase):
         self.assertTrue(val != None, "cmp with none failed")
         self.assertTrue(add.side_2 == None, "cmp with referenced none failed")
         self.assertTrue(esbmc.expr.is_nil_expr(add.side_2), "is-nil comparison failed")
+
+    def test_except(self):
+        import esbmc
+        u32 = self.make_unsigned()
+        try:
+            arr = esbmc.expr.add.make(u32, u32, u32)
+        except TypeError:
+            pass
+        else:
+            self.assertTrue(False, "add irep construction should have thrown")
