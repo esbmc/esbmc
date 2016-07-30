@@ -153,3 +153,14 @@ class Types(unittest.TestCase):
             self.assertTrue(struct.member_names[x].as_string() == namelist[x], "Structure contents mismatch")
 
         self.assertTrue(struct.typename.as_string() == "fgasdf", "Structure contents mismatch")
+
+    def test_call_none(self):
+        import esbmc
+        ptr = esbmc.type.pointer.make(None)
+        try:
+            # Should fail lvalue conversion, can't make lvalue out of null
+            ptr.subtype.pretty(0)
+        except TypeError:
+            pass # good
+        else:
+            self.assertTrue(False, "Lvalue conversion of null type should have thrown")

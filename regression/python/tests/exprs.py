@@ -199,3 +199,15 @@ class Exprs(unittest.TestCase):
         const_fbv = esbmc.expr.constant_fixedbv.make(fbvt, fbv)
         reftext = "constant_fixedbv\n* value : 0\n* type : fixedbv\n  * width : 32\n  * integer_bits : 32"
         self.assertTrue(const_fbv.pretty(0) == reftext, "Created fixedbv has wrong form")
+
+    def test_call_none(self):
+        import esbmc
+        # Create what is, admitedly, an invalid irep
+        add = esbmc.expr.add.make(None, None, None)
+        try:
+            # This should fail lvalue conversion: can't make an lvalue out of NULL
+            add.side_1.pretty(0)
+        except TypeError:
+            pass
+        else:
+            self.assertTrue(False, "Null-to-expr conversion should have failed")
