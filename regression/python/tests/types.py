@@ -75,3 +75,30 @@ class Types(unittest.TestCase):
         self.assertTrue(arr.subtype == u32, "Array subtype has wrong value")
         self.assertTrue(arr.array_size == None, "Array size should be None")
         self.assertTrue(arr.size_is_infinite, "Array inf field has wrong value")
+
+    def test_internal_ref(self):
+        import esbmc
+        u32 = self.make_unsigned()
+        arr = esbmc.type.array.make(u32, None, True)
+        # Important: when accessing sub-fields of ireps, boost.python generates
+        # internal references to it, which is *not* None, even if the contained
+        # thing is an empty irep. But comparisons work.
+        self.assertFalse(arr.array_size is None, "irep field should be non-None")
+        self.assertTrue(arr.array_size == None, "irep field should _compare_ to be None")
+        self.assertTrue(esbmc.expr.is_nil_expr(arr.array_size), "irep field should be nil")
+
+    def test_none(self):
+        import esbmc
+        self.assertTrue(esbmc.type.is_nil_type(None), "None should convert to type2tc")
+
+    def test_type_check(self):
+        import esbmc
+        u32 = self.make_unsigned()
+        arr = esbmc.type.array.make(u32, None, True)
+        # Ensure that we can't pass an expr into is_nil_type
+        try:
+            esbmc.type.is_nil_type(arr.array_size)
+        except TypeError:
+            self.assertTrue(True)
+        else:
+            self.assertTrue(False, "Badly typed comparison should have thrown")
