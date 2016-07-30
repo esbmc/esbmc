@@ -59,3 +59,17 @@ class Exprs(unittest.TestCase):
         val1 = val.clone()
         self.assertTrue(val == val1, "Cloned expr should be identical")
         self.assertFalse(val is val1, "Cloned expr should not be same object")
+
+    def test_add(self):
+        import esbmc
+        val = self.make_int(1)
+        val1 = self.make_int(2)
+        add = esbmc.expr.add.make(val.type, val, val1)
+        self.assertTrue(add.expr_id == esbmc.expr.expr_ids.add, "Add expr should have add id")
+        self.assertTrue(add.side_1 == val, "Incorrect add2t field")
+        self.assertTrue(add.side_2 == val1, "Incorrect add2t field")
+        self.assertFalse(add.side_1 == val1, "add2t field shouldn't compare true")
+        self.assertFalse(add.side_2 == val, "add2t field shouldn't compare true")
+        # Accessing struct field should different python objects
+        self.assertFalse(add.side_1 is val, "Incorrect python object comparison")
+        self.assertFalse(add.side_2 is val1, "Incorrect python object comparison")
