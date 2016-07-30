@@ -70,7 +70,7 @@ class Types(unittest.TestCase):
     def test_array(self):
         import esbmc
         u32 = self.make_unsigned()
-        arr = esbmc.type.array.make(u32, esbmc.type.nil_type(), True)
+        arr = esbmc.type.array.make(u32, None, True)
         self.assertTrue(arr != None, "Failed to construct array type")
         self.assertTrue(arr.subtype == u32, "Array subtype has wrong value")
         self.assertTrue(arr.array_size == None, "Array size should be None")
