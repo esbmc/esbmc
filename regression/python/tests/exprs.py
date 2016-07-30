@@ -35,3 +35,14 @@ class Exprs(unittest.TestCase):
         self.assertTrue(val.type == self.make_unsigned(), "Can't get expr type field")
         self.assertTrue(val.constant_value == self.make_bigint(), "Can't get expr value field")
         self.assertTrue(val.expr_id == esbmc.expr.expr_ids.constant_int, "Can't get expr value field")
+
+    def test_cmps(self):
+        import esbmc
+        val0 = self.make_int(0)
+        val1 = self.make_int(1)
+        self.assertTrue(val0 == val0, "Same comparison should be true")
+        self.assertFalse(val0 != val0, "Same comparison should still be true")
+        self.assertTrue(val0 != val1, "Different comparision should be unequal")
+        self.assertFalse(val0 == val1, "Different comparision shouldn't be equal")
+        self.assertTrue(val0 < val1, "constints should compare less than")
+        self.assertFalse(val1 < val0, "reversed constints should not compare less than")
