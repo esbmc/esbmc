@@ -101,3 +101,9 @@ class Exprs(unittest.TestCase):
             pass
         else:
             self.assertTrue(False, "add irep construction should have thrown")
+
+    def test_bools(self):
+        import esbmc
+        letrue = esbmc.expr.constant_bool.make(True)
+        self.assertTrue(letrue.constant_value, "constant bool has wrong value")
+        self.assertTrue(type(letrue.constant_value) is bool, "constant bool has wrong type")
