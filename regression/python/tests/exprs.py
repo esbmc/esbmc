@@ -52,3 +52,10 @@ class Exprs(unittest.TestCase):
         val = self.make_int()
         reftext = "constant_int\n* constant_value : 0\n* type : unsignedbv\n  * width : 32"
         self.assertTrue(val.pretty(0) == reftext, "Expr pretty should work")
+
+    def test_clone(self):
+        import esbmc
+        val = self.make_int()
+        val1 = val.clone()
+        self.assertTrue(val == val1, "Cloned expr should be identical")
+        self.assertFalse(val is val1, "Cloned expr should not be same object")
