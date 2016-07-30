@@ -5,6 +5,7 @@
 #include <goto-programs/goto_functions.h>
 
 #include <boost/python.hpp>
+#include <boost/python/object/find_instance.hpp>
 using namespace boost::python;
 
 void dereference_handlers_init(void);
@@ -31,6 +32,69 @@ static type_poolt *tp = NULL;
 
 dict type_to_downcast;
 dict expr_to_downcast;
+
+struct typet_to_type2t
+{
+    typet_to_type2t()
+    {
+      using namespace boost::python;
+      // Rvalue converter
+      converter::registry::insert(&convertible, &cons, type_id<type2tc>(),
+                          &converter::expected_from_python_type_direct<type2tc>::get_pytype);
+    }
+
+ private:
+    static void* convertible(PyObject* p)
+    {
+      using namespace boost::python;
+
+      if (p == Py_None)
+          return p;
+
+      objects::instance<> *inst =
+        reinterpret_cast<objects::instance<>*>(p);
+      (void)inst; // For debug / inspection
+
+      // Scatter consts around to ensure that the get() below doesn't trigger
+      // detachment.
+      const typet *foo =
+        reinterpret_cast<typet*>(
+            objects::find_instance_impl(p, boost::python::type_id<typet>()));
+
+      // Find object instance may fail
+      if (!foo)
+        return NULL;
+
+      // Can't actually create an lvalue because there's no storage, but we
+      // can convert to an rvalue. This function will be called to work out
+      // if it can be converted, so return non-null to indicate that.
+      return const_cast<void*>(reinterpret_cast<const void*>(foo));
+    }
+
+    static void cons(PyObject *src __attribute__((unused)), boost::python::converter::rvalue_from_python_stage1_data *stage1)
+    {
+      using namespace boost::python;
+      converter::rvalue_from_python_data<type2tc> *store =
+        reinterpret_cast<converter::rvalue_from_python_data<type2tc>*>(stage1);
+
+      type2tc *obj_store = reinterpret_cast<type2tc *>(&store->storage.bytes);
+
+      // Create an rvalue from the ptr stored by convertible.
+      const typet *oldptr = reinterpret_cast<const typet *>(stage1->convertible);
+
+      // Construct container so it isn't uninitialized memory...
+      new (obj_store) type2tc();
+
+      migrate_type(*oldptr, *obj_store);
+
+      // Let rvalue holder know that needs deconstructing please
+      store->stage1.convertible = obj_store;
+
+      // fini
+      return;
+    }
+};
+
 
 static boost::python::object
 init_esbmc_process(boost::python::object o)
