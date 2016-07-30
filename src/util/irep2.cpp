@@ -111,7 +111,7 @@ struct shared_ptr_from_python
       converter::rvalue_from_python_data<container> *store =
         reinterpret_cast<converter::rvalue_from_python_data<container>*>(stage1);
 
-      type2tc *obj_store = reinterpret_cast<type2tc *>(&store->storage.bytes);
+      container *obj_store = reinterpret_cast<container *>(&store->storage.bytes);
 
       // Create an rvalue. Uuuhhhh. This is the point I admit I'm not really
       // sure where it comes in; I only care about NoneType right now.
