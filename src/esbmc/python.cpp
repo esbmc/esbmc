@@ -389,7 +389,7 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   // Locationt objects now...
   class_<locationt>("locationt", no_init);
   init<irep_idt, unsigned int, unsigned int, irep_idt> location2t_init;
-  class_<location>("location2t", location2t_init)
+  class_<location>("location", location2t_init)
     .def_readwrite("file", &location::file)
     .def_readwrite("line", &location::line)
     .def_readwrite("column", &location::column)

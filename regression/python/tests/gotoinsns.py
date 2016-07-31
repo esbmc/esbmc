@@ -31,3 +31,9 @@ class Gotoinsns(unittest.TestCase):
         self.assertTrue(code.expr_id == esbmc.expr.expr_ids.code_decl, "decl insn has wrong expr type")
         self.assertTrue(code.value.as_string() == "c::main::main::1::i", "decl insn has wrong expr value")
         self.assertTrue(theinsn.function.as_string() == "c::main", "decl insn has wrong function name")
+
+    def test_insn_locations(self):
+        import esbmc
+        theinsn = self.insns[0]
+        loc = esbmc.location.from_locationt(theinsn.location)
+        self.assertTrue(theinsn.type == esbmc.goto_programs.goto_program_instruction_type.OTHER, "Wrong insn type")
