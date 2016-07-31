@@ -6,6 +6,10 @@ class Gotoprogs(unittest.TestCase):
         # cwd = regression/python
         self.ns, self.opts, self.funcs = esbmc.init_esbmc_process(['test_data/00_big_endian_01/main.c', '--big-endian', '--bv'])
 
+    def get_main(self):
+        import esbmc
+        return self.funcs.function_map[esbmc.irep_idt('c::main')]
+
     def test_setup(self):
         self.assertTrue(self.ns != None, "No namespace object generated")
         self.assertTrue(self.opts != None, "No options object generated")
@@ -23,3 +27,6 @@ class Gotoprogs(unittest.TestCase):
         funcs = [x.data() for x in self.funcs.function_map]
         for x in funcs:
             self.assertTrue(type(x) == esbmc.goto_programs.goto_functiont, "Non-function in function map")
+
+    def test_func_type(self):
+        print self.get_main().type
