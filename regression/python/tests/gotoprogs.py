@@ -29,4 +29,15 @@ class Gotoprogs(unittest.TestCase):
             self.assertTrue(type(x) == esbmc.goto_programs.goto_functiont, "Non-function in function map")
 
     def test_func_type(self):
-        print self.get_main().type
+        import esbmc
+        # Access type field
+        thetype = self.get_main().type
+        # The function type is of code type, i.e. registers the args
+        # and the return type
+        self.assertTrue(type(thetype) == esbmc.type.code_typet, "goto prog field's type should be old code_typet")
+        # Can't explicitly construct a type2tc from this, but we can
+        # pass it through the downconverter which will achieve the same thing
+        newtype = esbmc.downcast_type(self.get_main().type)
+        self.assertTrue(newtype.type_id == esbmc.type.type_ids.code, "Function type should have code type")
+        # Other elements of that code type are unrelated to the matter of
+        # testing this module
