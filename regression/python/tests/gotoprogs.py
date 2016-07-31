@@ -25,3 +25,11 @@ class Gotoprogs(unittest.TestCase):
     def test_print(self):
         string = self.main.to_string()
         self.assertTrue("i=258f;" in string, "Main function printed string should contain certain constant")
+
+    def test_empty(self):
+        self.assertTrue(not self.main.empty(), "Main function shouldn't be empty")
+
+    def test_empty2(self):
+        import esbmc
+        other_func = self.funcs.function_map[esbmc.irep_idt('c::__ESBMC_atomic_begin')].body
+        self.assertTrue(other_func.empty(), "Atomic begin should be empty")
