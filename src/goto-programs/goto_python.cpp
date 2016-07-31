@@ -9,7 +9,7 @@
 
 class dummy_goto_class { };
 
-void
+boost::python::object
 get_instructions(const goto_programt &prog)
 {
   using namespace boost::python;
@@ -31,7 +31,8 @@ get_instructions(const goto_programt &prog)
   prog.extract_instructions
     <list, decltype(listappend), object, decltype(setattr), decltype(setnone)>
     (l, listappend, setattr, setnone);
-  return;
+
+  return l;
 }
 
 void
