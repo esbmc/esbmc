@@ -43,3 +43,8 @@ class Gotoprogs(unittest.TestCase):
 
         insns = self.main.get_instructions()
         self.assertTrue(insns[1].location_number != 0, "main 2nd insn should not be number zero after reset")
+
+    def test_insns_clear(self):
+        import esbmc
+        self.main.clear()
+        self.assertTrue(len(self.main.get_instructions()) == 0, "Cleared program should have no insns")

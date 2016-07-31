@@ -190,6 +190,7 @@ build_goto_func_class()
     // by the ability to treat it as a list of instructions in python.
     .def("to_string", &prog_to_string)
     .def("update", &goto_programt::update)
+    .def("clear", &goto_programt::clear)
     .def("empty", &goto_programt::empty);
 }
 #endif

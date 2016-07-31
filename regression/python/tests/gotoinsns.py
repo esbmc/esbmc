@@ -59,3 +59,9 @@ class Gotoinsns(unittest.TestCase):
         self.assertTrue(norm != wloc and norm != wvars and wloc != wvars, "var changing flags should change to_string output")
 
         self.assertTrue(theinsn.is_other(), "is_other method of insn should work")
+
+    def test_insn_clear(self):
+        import esbmc
+        self.insns[0].clear(esbmc.goto_programs.goto_program_instruction_type.ASSIGN)
+        self.assertTrue(self.insns[0].type == esbmc.goto_programs.goto_program_instruction_type.ASSIGN, "Cleared insn should be assign")
+        self.assertTrue(self.insns[0].code == None, "Cleared insn should have nil irep")
