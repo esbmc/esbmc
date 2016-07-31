@@ -6,6 +6,11 @@ class Gotofuncs(unittest.TestCase):
         # cwd = regression/python
         self.ns, self.opts, self.funcs = esbmc.init_esbmc_process(['test_data/00_big_endian_01/main.c', '--big-endian', '--bv'])
 
+    def tearDown(self):
+        import esbmc
+        esbmc.kill_esbmc_process()
+        self.ns, self.opts, self.funcs = None, None, None
+
     def get_main(self):
         import esbmc
         return self.funcs.function_map[esbmc.irep_idt('c::main')]
