@@ -17,3 +17,9 @@ class Gotoprogs(unittest.TestCase):
         refnames = ['main', 'c::__ESBMC_assume', 'c::assert', 'c::__ESBMC_assert', 'c::main']
         for name in refnames:
             self.assertTrue(name in funcnames, "func '{}' should be in function map".format(name))
+
+    def test_func_data(self):
+        import esbmc
+        funcs = [x.data() for x in self.funcs.function_map]
+        for x in funcs:
+            self.assertTrue(type(x) == esbmc.goto_programs.goto_functiont, "Non-function in function map")
