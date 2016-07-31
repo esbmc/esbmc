@@ -33,3 +33,13 @@ class Gotoprogs(unittest.TestCase):
         import esbmc
         other_func = self.funcs.function_map[esbmc.irep_idt('c::__ESBMC_atomic_begin')].body
         self.assertTrue(other_func.empty(), "Atomic begin should be empty")
+
+    def test_update(self):
+        insns = self.main.get_instructions()
+        self.assertTrue(insns[1].location_number != 0, "main 2nd insn should not be number zero")
+        insns[1].location_number = 0
+        self.main.set_instructions(insns)
+        self.main.update()
+
+        insns = self.main.get_instructions()
+        self.assertTrue(insns[1].location_number != 0, "main 2nd insn should not be number zero after reset")
