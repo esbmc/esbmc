@@ -292,6 +292,10 @@ BOOST_PYTHON_MODULE(esbmc)
     types.def("is_nil_type", &is_nil_type);
     types.staticmethod("is_nil_type");
 
+    // In this scope, define the old irep types to
+    class_<typet>("typet", no_init);
+    class_<code_typet, bases<typet> >("code_typet", no_init);
+
 #define _ESBMC_IREP2_MPL_TYPE_SET(r, data, elem) BOOST_PP_CAT(elem,_type2t)::build_python_class(type2t::BOOST_PP_CAT(elem,_id));
 BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
 
@@ -311,6 +315,9 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_TYPE_DOWNCASTING, foo, ESBMC_LIST_OF_TYPES)
 
     exprs.def("is_nil_expr", &is_nil_expr);
     exprs.staticmethod("is_nil_expr");
+
+    // Define old expr class too
+    class_<exprt>("exprt", no_init);
 
     build_base_expr2t_python_class();
 #define _ESBMC_EXPR2_MPL_EXPR_SET(r, data, elem) BOOST_PP_CAT(elem,2t)::build_python_class(expr2t::BOOST_PP_CAT(elem,_id));
@@ -353,11 +360,6 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   // And backwards
   oldirep_to_newirep<type2tc, typet>();
   oldirep_to_newirep<expr2tc, exprt>();
-
-  // Some super/subclasses,
-  class_<typet>("typet", no_init);
-  class_<typet>("exprt", no_init);
-  class_<code_typet, bases<typet> >("code_typet", no_init);
 
   def("downcast_type", &downcast_type);
   def("downcast_expr", &downcast_expr);
