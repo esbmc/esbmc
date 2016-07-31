@@ -54,7 +54,6 @@ class Gotofuncs(unittest.TestCase):
     def test_add_function(self):
         import esbmc
         main = self.get_main()
-        # This does get witnessed as a sideeffect of this test
         self.funcs.function_map[esbmc.irep_idt('coveredinbees_add_funcion_test')] = main
         # Correctness of this is that it doesn't throw
 
