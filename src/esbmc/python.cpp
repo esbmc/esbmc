@@ -41,16 +41,29 @@ template<>
 class migrate_func<type2tc>
 {
 public:
-  static constexpr const auto converter= &migrate_type;
+  static void converter(const typet *type, type2tc *out) { migrate_type(*type, *out); }
 };
 
 template<>
 class migrate_func<expr2tc>
 {
 public:
-  static constexpr const auto converter= &migrate_expr;
+  static void converter(const exprt *expr, expr2tc *out) { migrate_expr(*expr, *out); }
 };
 
+template<>
+class migrate_func<typet>
+{
+public:
+  static void converter(const type2tc *type, typet *out) { *out = migrate_type_back(*type); }
+};
+
+template<>
+class migrate_func<exprt>
+{
+public:
+  static void converter(const expr2tc *expr, exprt *out) { *out = migrate_expr_back(*expr); }
+};
 
 template <typename Old, typename New>
 struct oldirep_to_newirep
@@ -107,7 +120,7 @@ public:
       // Construct container so it isn't uninitialized memory...
       new (obj_store) New();
 
-      (*migrate_func<New>::converter)(*oldptr, *obj_store);
+      (*migrate_func<New>::converter)(oldptr, obj_store);
 
       // Let rvalue holder know that needs deconstructing please
       store->stage1.convertible = obj_store;
@@ -334,6 +347,10 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   // Register old-irep to new-irep converters
   oldirep_to_newirep<typet, type2tc>();
   oldirep_to_newirep<exprt, expr2tc>();
+
+  // And backwards
+  oldirep_to_newirep<type2tc, typet>();
+  oldirep_to_newirep<expr2tc, exprt>();
 
   def("downcast_type", &downcast_type);
   def("downcast_expr", &downcast_expr);
