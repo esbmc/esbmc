@@ -65,7 +65,7 @@ public:
   static void converter(const expr2tc *expr, exprt *out) { *out = migrate_expr_back(*expr); }
 };
 
-template <typename Old, typename New>
+template <typename From, typename To>
 struct oldirep_to_newirep
 {
 public:
@@ -74,8 +74,8 @@ public:
       // Store a (global) converter pointer
       using namespace boost::python;
       // Rvalue converter
-      converter::registry::insert(&convertible, &cons, type_id<New>(),
-                          &converter::expected_from_python_type_direct<New>::get_pytype);
+      converter::registry::insert(&convertible, &cons, type_id<To>(),
+                          &converter::expected_from_python_type_direct<To>::get_pytype);
     }
 
  private:
@@ -92,9 +92,9 @@ public:
 
       // Scatter consts around to ensure that the get() below doesn't trigger
       // detachment.
-      const Old *foo =
-        reinterpret_cast<Old*>(
-            objects::find_instance_impl(p, boost::python::type_id<Old>()));
+      const From *foo =
+        reinterpret_cast<From*>(
+            objects::find_instance_impl(p, boost::python::type_id<From>()));
 
       // Find object instance may fail
       if (!foo)
@@ -109,18 +109,18 @@ public:
     static void cons(PyObject *src __attribute__((unused)), boost::python::converter::rvalue_from_python_stage1_data *stage1)
     {
       using namespace boost::python;
-      converter::rvalue_from_python_data<New> *store =
-        reinterpret_cast<converter::rvalue_from_python_data<New>*>(stage1);
+      converter::rvalue_from_python_data<To> *store =
+        reinterpret_cast<converter::rvalue_from_python_data<To>*>(stage1);
 
-      New *obj_store = reinterpret_cast<New *>(&store->storage.bytes);
+      To *obj_store = reinterpret_cast<To *>(&store->storage.bytes);
 
       // Create an rvalue from the ptr stored by convertible.
-      const Old *oldptr = reinterpret_cast<const Old *>(stage1->convertible);
+      const From *oldptr = reinterpret_cast<const From *>(stage1->convertible);
 
       // Construct container so it isn't uninitialized memory...
-      new (obj_store) New();
+      new (obj_store) To();
 
-      (*migrate_func<New>::converter)(oldptr, obj_store);
+      (*migrate_func<To>::converter)(oldptr, obj_store);
 
       // Let rvalue holder know that needs deconstructing please
       store->stage1.convertible = obj_store;
