@@ -354,6 +354,11 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   oldirep_to_newirep<type2tc, typet>();
   oldirep_to_newirep<expr2tc, exprt>();
 
+  // Some super/subclasses,
+  class_<typet>("typet", no_init);
+  class_<typet>("exprt", no_init);
+  class_<code_typet, bases<typet> >("code_typet", no_init);
+
   def("downcast_type", &downcast_type);
   def("downcast_expr", &downcast_expr);
 }
