@@ -20,6 +20,10 @@ public:
     function = loc.get_function();
   }
 
+  location(const irep_idt &_f, unsigned int l, unsigned int c,
+      const irep_idt &_func) : file(_f), line(l), column(c), function(_func)
+  { }
+
   static location from_locationt(const locationt &loc) {
     return location(loc);
   }
@@ -381,6 +385,17 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   // And backwards
   oldirep_to_newirep<type2tc, typet>();
   oldirep_to_newirep<expr2tc, exprt>();
+
+  // Locationt objects now...
+  class_<locationt>("locationt", no_init);
+  init<irep_idt, unsigned int, unsigned int, irep_idt> location2t_init;
+  class_<location>("location2t", location2t_init)
+    .def_readwrite("file", &location::file)
+    .def_readwrite("line", &location::line)
+    .def_readwrite("column", &location::column)
+    .def_readwrite("function", &location::function)
+    .def("from_locationt", &location::from_locationt)
+    .staticmethod("from_locationt");
 
   def("downcast_type", &downcast_type);
   def("downcast_expr", &downcast_expr);
