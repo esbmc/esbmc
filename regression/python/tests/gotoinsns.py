@@ -22,3 +22,12 @@ class Gotoinsns(unittest.TestCase):
         # At least one insn should have a non-nil target. For our example.
         targets = [x.target for x in self.insns if x.target != None]
         self.assertTrue(len(targets) != 0, "At least one insn in main should have branch")
+
+    def test_first_insn(self):
+        import esbmc
+        theinsn = self.insns[0]
+        self.assertTrue(theinsn.type == esbmc.goto_programs.goto_program_instruction_type.OTHER, "Wrong insn type")
+        code = esbmc.downcast_expr(theinsn.code)
+        self.assertTrue(code.expr_id == esbmc.expr.expr_ids.code_decl, "decl insn has wrong expr type")
+        self.assertTrue(code.value.as_string() == "c::main::main::1::i", "decl insn has wrong expr value")
+        self.assertTrue(theinsn.function.as_string() == "c::main", "decl insn has wrong function name")
