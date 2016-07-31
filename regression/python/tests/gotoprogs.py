@@ -41,3 +41,28 @@ class Gotoprogs(unittest.TestCase):
         self.assertTrue(newtype.type_id == esbmc.type.type_ids.code, "Function type should have code type")
         # Other elements of that code type are unrelated to the matter of
         # testing this module
+
+    def test_func_body_present(self):
+        main = self.get_main()
+        self.assertTrue(main.body_available, "Body of main should be present")
+
+    def test_add_function(self):
+        import esbmc
+        main = self.get_main()
+        # This does get witnessed as a sideeffect of this test
+        self.funcs.function_map[esbmc.irep_idt('coveredinbees_add_funcion_test')] = main
+        # Correctness of this is that it doesn't throw
+
+    def test_update_funcs(self):
+        main = self.get_main()
+        insns = main.body.get_instructions()
+        self.assertTrue(insns[1].location_number != 0, "Second insn of main should not be zero")
+        insns[1].location_number = 0
+        self.assertTrue(insns[1].location_number == 0, "Second insn of main should have been set to zero")
+        main.body.set_instructions(insns)
+
+        self.funcs.update()
+
+        # That should have reset the location number
+        insns = main.body.get_instructions()
+        self.assertTrue(insns[1].location_number != 0, "Second insn of main should not be zero after update")
