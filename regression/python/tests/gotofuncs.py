@@ -1,6 +1,6 @@
 import unittest
 
-class Gotoprogs(unittest.TestCase):
+class Gotofuncs(unittest.TestCase):
     def setUp(self):
         import esbmc
         # cwd = regression/python
