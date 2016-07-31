@@ -9,6 +9,27 @@
 #include <boost/python/object/find_instance.hpp>
 using namespace boost::python;
 
+class location
+{
+public:
+  location(const locationt &loc)
+  {
+    file = loc.get_file();
+    line = string2integer(loc.get_line().as_string()).to_ulong();
+    column = string2integer(loc.get_column().as_string()).to_ulong();
+    function = loc.get_function();
+  }
+
+  static location from_locationt(const locationt &loc) {
+    return location(loc);
+  }
+
+  irep_idt file;
+  unsigned int line;
+  unsigned int column;
+  irep_idt function;
+};
+
 void dereference_handlers_init(void);
 void build_bigint_python_class();
 void build_base_expr2t_python_class();
