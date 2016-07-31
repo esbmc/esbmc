@@ -3,3 +3,4 @@ from types import Types
 from exprs import Exprs
 from gotofuncs import Gotofuncs
 from gotoprogs import Gotoprogs
+from gotoinsns import Gotoinsns
