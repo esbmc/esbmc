@@ -594,7 +594,8 @@ goto_programt::inject_instructions(InList list,
       // in which case we explode. Could raise an exception, but I prefer to
       // fail fast & fail hard. This isn't something the user should handle
       // anyway, and it's difficult for us to clean up afterwards.
-      assert(map_it != target_map.end() && "Target of instruction is not in list");
+      if (map_it == target_map.end())
+        throw "Target of instruction is not in list";
 
       auto target_list_it = obj_it_vec[map_it->second];
       it->targets.clear();
