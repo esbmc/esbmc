@@ -36,4 +36,7 @@ class Gotoinsns(unittest.TestCase):
         import esbmc
         theinsn = self.insns[0]
         loc = esbmc.location.from_locationt(theinsn.location)
-        self.assertTrue(theinsn.type == esbmc.goto_programs.goto_program_instruction_type.OTHER, "Wrong insn type")
+        self.assertTrue(loc.file.as_string() == 'test_data/00_big_endian_01/main.c', "File string is wrong")
+        self.assertTrue(loc.function.as_string() == "main", "Func name in location is wrong")
+        self.assertTrue(loc.line == 5, "Line number in test file is wrong")
+        self.assertTrue(loc.column == 0, "Column number in test file is wrong")
