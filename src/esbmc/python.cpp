@@ -83,8 +83,10 @@ public:
     {
       using namespace boost::python;
 
+      // For this set of converters, refuse to produce nil ireps. There are
+      // other (similar) converters for that.
       if (p == Py_None)
-          return p;
+          return NULL;
 
       objects::instance<> *inst =
         reinterpret_cast<objects::instance<>*>(p);
