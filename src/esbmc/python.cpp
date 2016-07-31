@@ -1,5 +1,6 @@
 #include "parseoptions.h"
 #include <irep2.h>
+#include <migrate.h>
 #include <solvers/smt/smt_conv.h>
 #include <langapi/mode.h>
 #include <goto-programs/goto_functions.h>
@@ -33,14 +34,35 @@ static type_poolt *tp = NULL;
 dict type_to_downcast;
 dict expr_to_downcast;
 
-struct typet_to_type2t
+template <typename T>
+class migrate_func;
+
+template<>
+class migrate_func<type2tc>
 {
-    typet_to_type2t()
+public:
+  static constexpr const auto converter= &migrate_type;
+};
+
+template<>
+class migrate_func<expr2tc>
+{
+public:
+  static constexpr const auto converter= &migrate_expr;
+};
+
+
+template <typename Old, typename New>
+struct oldirep_to_newirep
+{
+public:
+    oldirep_to_newirep()
     {
+      // Store a (global) converter pointer
       using namespace boost::python;
       // Rvalue converter
-      converter::registry::insert(&convertible, &cons, type_id<type2tc>(),
-                          &converter::expected_from_python_type_direct<type2tc>::get_pytype);
+      converter::registry::insert(&convertible, &cons, type_id<New>(),
+                          &converter::expected_from_python_type_direct<New>::get_pytype);
     }
 
  private:
@@ -57,9 +79,9 @@ struct typet_to_type2t
 
       // Scatter consts around to ensure that the get() below doesn't trigger
       // detachment.
-      const typet *foo =
-        reinterpret_cast<typet*>(
-            objects::find_instance_impl(p, boost::python::type_id<typet>()));
+      const Old *foo =
+        reinterpret_cast<Old*>(
+            objects::find_instance_impl(p, boost::python::type_id<Old>()));
 
       // Find object instance may fail
       if (!foo)
@@ -74,18 +96,18 @@ struct typet_to_type2t
     static void cons(PyObject *src __attribute__((unused)), boost::python::converter::rvalue_from_python_stage1_data *stage1)
     {
       using namespace boost::python;
-      converter::rvalue_from_python_data<type2tc> *store =
-        reinterpret_cast<converter::rvalue_from_python_data<type2tc>*>(stage1);
+      converter::rvalue_from_python_data<New> *store =
+        reinterpret_cast<converter::rvalue_from_python_data<New>*>(stage1);
 
-      type2tc *obj_store = reinterpret_cast<type2tc *>(&store->storage.bytes);
+      New *obj_store = reinterpret_cast<New *>(&store->storage.bytes);
 
       // Create an rvalue from the ptr stored by convertible.
-      const typet *oldptr = reinterpret_cast<const typet *>(stage1->convertible);
+      const Old *oldptr = reinterpret_cast<const Old *>(stage1->convertible);
 
       // Construct container so it isn't uninitialized memory...
-      new (obj_store) type2tc();
+      new (obj_store) New();
 
-      migrate_type(*oldptr, *obj_store);
+      (*migrate_func<New>::converter)(*oldptr, *obj_store);
 
       // Let rvalue holder know that needs deconstructing please
       store->stage1.convertible = obj_store;
@@ -94,7 +116,6 @@ struct typet_to_type2t
       return;
     }
 };
-
 
 static boost::python::object
 init_esbmc_process(boost::python::object o)
@@ -309,6 +330,10 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
 
   // Build fixedbvt class
   build_fixedbv_python_class();
+
+  // Register old-irep to new-irep converters
+  oldirep_to_newirep<typet, type2tc>();
+  oldirep_to_newirep<exprt, expr2tc>();
 
   def("downcast_type", &downcast_type);
   def("downcast_expr", &downcast_expr);
