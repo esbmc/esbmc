@@ -103,7 +103,7 @@ build_goto_func_class()
     .def(map_indexing_suite<goto_functionst::function_mapt>());
   class_<goto_functionst>("goto_functionst")
     .def_readwrite("function_map", &goto_functionst::function_map)
-    .def("update", &goto_programt::update);
+    .def("update", &goto_functionst::update);
 
   class_<goto_functiont>("goto_functiont")
     .def_readwrite("body", &goto_functiont::body)
