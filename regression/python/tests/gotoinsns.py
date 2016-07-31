@@ -40,3 +40,22 @@ class Gotoinsns(unittest.TestCase):
         self.assertTrue(loc.function.as_string() == "main", "Func name in location is wrong")
         self.assertTrue(loc.line == 5, "Line number in test file is wrong")
         self.assertTrue(loc.column == 0, "Column number in test file is wrong")
+
+    def test_more_fields(self):
+        import esbmc
+        theinsn = self.insns[0]
+        self.assertTrue(esbmc.downcast_expr(theinsn.guard).constant_value == True, "insn guard should be true")
+        # No access to labels field right no
+        # This has the value 99 right now, but we can't really assert that
+        # because it'll change when we edit... anything
+        self.assertTrue(theinsn.location_number > 0, "Wrong insn number")
+        self.assertTrue(theinsn.loop_number == 0, "Loop number doesn't exist?")
+        # This seems to be a useless field
+        self.assertTrue(theinsn.target_number == 4294967295, "Target number doesn't exist?")
+
+        norm = theinsn.to_string()
+        wloc = theinsn.to_string(True)
+        wvars = theinsn.to_string(True, True)
+        self.assertTrue(norm != wloc and norm != wvars and wloc != wvars, "var changing flags should change to_string output")
+
+        self.assertTrue(theinsn.is_other(), "is_other method of insn should work")
