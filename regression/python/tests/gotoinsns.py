@@ -76,3 +76,14 @@ class Gotoinsns(unittest.TestCase):
         self.assertTrue(self.insns[6].target != None, "7th insn in main should be branch")
         self.assertTrue(type(self.insns[6].target) == esbmc.goto_programs.instructiont, "Branch target should be insn")
         self.assertTrue(self.insns[6].target in self.insns, "Branch target should be in same program!")
+
+    def test_insn_target_munging(self):
+        # Check that if we change the target of a brnach that it's reflected
+        # after a to/from goto program conversion
+        import esbmc
+        self.assertTrue(self.insns[0].target == None, "First main insn should not be a branch")
+        # Self loop, slightly illegitmate as this isn't a branch insn
+        self.insns[0].target = self.insns[0]
+        self.main.set_instructions(self.insns)
+        insns2 = self.main.get_instructions()
+        self.assertTrue(insns2[0].target is insns2[0], "Branch target not mirrored after get/set insns")
