@@ -44,9 +44,12 @@ void build_dstring_python_class();
 void build_smt_conv_python_class();
 void build_goto_func_class();
 void build_fixedbv_python_class();
+void build_symex_class();
+void build_equation_class();
 
 class dummy_expr_class { };
 class dummy_type_class { };
+class dummy_symex_class { };
 
 // Prevent more than one instance per process
 static bool python_module_engaged = false;
@@ -396,6 +399,14 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
     .def_readwrite("function", &location::function)
     .def("from_locationt", &location::from_locationt)
     .staticmethod("from_locationt");
+
+  {
+    auto symex = class_<dummy_symex_class>("symex");
+    scope quux = symex;
+
+    build_symex_class();
+    build_equation_class();
+  }
 
   def("downcast_type", &downcast_type);
   def("downcast_expr", &downcast_expr);
