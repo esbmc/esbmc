@@ -513,3 +513,25 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
 
   return final_res;
 }
+
+#ifdef WITH_PYTHON
+#include <boost/python/class.hpp>
+#include <boost/python/suite/indexing/map_indexing_suite.hpp>
+
+void
+build_equation_class()
+{
+  using namespace boost::python;
+  class_<symex_target_equationt::SSA_stept>("equation")
+    .def("assignment", &symex_target_equationt::assignment)
+    .def("assumption", &symex_target_equationt::assumption)
+    .def("assertion", &symex_target_equationt::assertion)
+    .def("renumber", &symex_target_equationt::renumber)
+    .def("convert", &symex_target_equationt::convert)
+    .def("clear", &symex_target_equationt::clear)
+    .def("check_for_dups", &symex_target_equationt::check_for_duplicate_assigns)
+    .def("clone", &symex_target_equationt::clone)
+    .def("clear_assertions", &symex_target_equationt::clear_assertions);
+  return;
+}
+#endif

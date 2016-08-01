@@ -820,3 +820,15 @@ void reachability_treet::save_checkpoint(const std::string fname __attribute__((
 
   return;
 }
+
+#ifdef WITH_PYTHON
+#include <boost/python/class.hpp>
+#include <boost/python/suite/indexing/map_indexing_suite.hpp>
+
+void
+build_goto_symex_classes()
+{
+  return;
+}
+#endif
+
