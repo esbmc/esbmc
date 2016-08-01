@@ -65,3 +65,7 @@ class Gotoinsns(unittest.TestCase):
         self.insns[0].clear(esbmc.goto_programs.goto_program_instruction_type.ASSIGN)
         self.assertTrue(self.insns[0].type == esbmc.goto_programs.goto_program_instruction_type.ASSIGN, "Cleared insn should be assign")
         self.assertTrue(self.insns[0].code == None, "Cleared insn should have nil irep")
+
+    def test_insn_printing(self):
+        self.assertTrue("float i;" in self.insns[0].to_string(), "Printed insn has wrong contents")
+        self.assertTrue("i=258f;" in self.insns[1].to_string(), "Printed insn has wrong contents")
