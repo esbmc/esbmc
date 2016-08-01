@@ -69,3 +69,10 @@ class Gotoinsns(unittest.TestCase):
     def test_insn_printing(self):
         self.assertTrue("float i;" in self.insns[0].to_string(), "Printed insn has wrong contents")
         self.assertTrue("i=258f;" in self.insns[1].to_string(), "Printed insn has wrong contents")
+
+    def test_insn_targets(self):
+        import esbmc
+        # First branch insn...
+        self.assertTrue(self.insns[6].target != None, "7th insn in main should be branch")
+        self.assertTrue(type(self.insns[6].target) == esbmc.goto_programs.instructiont, "Branch target should be insn")
+        self.assertTrue(self.insns[6].target in self.insns, "Branch target should be in same program!")
