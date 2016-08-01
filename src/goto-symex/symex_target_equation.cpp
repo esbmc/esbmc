@@ -518,11 +518,52 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
 
+#include <util/bp_opaque_ptr.h>
+
+BOOST_PYTHON_OPAQUE_SPECIALIZED_TYPE_ID(smt_ast)
+
+static void
+set_guard_ast(symex_target_equationt::SSA_stept &step, const smt_ast *ast)
+{
+  step.guard_ast = ast;
+  return;
+}
+
+static void
+set_cond_ast(symex_target_equationt::SSA_stept &step, const smt_ast *ast)
+{
+  step.cond_ast = ast;
+  return;
+}
+
 void
 build_equation_class()
 {
   using namespace boost::python;
-  class_<symex_target_equationt::SSA_stept>("equation")
+
+  // In theory, we could filter these depending on the respective types of
+  // different ssa steps being converted to python, but it seems pointless
+  // to expose that to python without also replicating it in C++.
+  typedef symex_target_equationt::SSA_stept step;
+  class_<step>("ssa_step")
+    .def_readwrite("source", &step::source)
+    .def_readwrite("type", &step::type)
+    .def_readwrite("stack_trace", &step::stack_trace)
+    .def_readwrite("guard", &step::guard)
+    .def_readwrite("lhs", &step::lhs)
+    .def_readwrite("rhs", &step::rhs)
+    .def_readwrite("original_lhs", &step::original_lhs)
+    .def_readwrite("assignment_type", &step::assignment_type)
+    .def_readwrite("cond", &step::cond)
+    .def_readwrite("comment", &step::comment)
+    // For some reason, def_readwrite can't synthesize it's own setter
+    // due to const perhaps, or smt_astt being opaque
+    .add_property("guard_ast", make_getter(&step::guard_ast), make_function(&set_guard_ast))
+    .add_property("cond_ast", make_getter(&step::cond_ast), make_function(&set_cond_ast))
+    .def_readwrite("ignore", &step::ignore);
+
+  init<const namespacet &> eq_init;
+  class_<symex_target_equationt>("equation", eq_init)
     .def("assignment", &symex_target_equationt::assignment)
     .def("assumption", &symex_target_equationt::assumption)
     .def("assertion", &symex_target_equationt::assertion)
