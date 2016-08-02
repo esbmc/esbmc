@@ -15,6 +15,7 @@
 #include <boost/python/operators.hpp>
 #include <boost/python/object/find_instance.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
+#include <bp_converter.h>
 
 // Additional python infrastructure: our irep containers don't quite match
 // the pointer ownership model that boost.python expects. Specifically: it
@@ -59,71 +60,43 @@
 // but inserting our own specialization doesn't get resolved, instead the
 // important part is that the converter is registered in the ::insert method.
 
-template <typename T, typename container>
-struct shared_ptr_from_python
+template <typename Container, typename Base>
+class irep2tc_to_irep2t
 {
-    shared_ptr_from_python()
-    {
-      using namespace boost::python;
-      // Lvalue converter
-      converter::registry::insert(&convertible, type_id<T>(),
-                  &converter::expected_from_python_type_direct<T>::get_pytype
-                  );
-      // We appear to need an rvalue converter for transmografying None to
-      // containers.
-      converter::registry::insert(&convertible, &cons, type_id<container>(),
-          &converter::expected_from_python_type_direct<T>::get_pytype);
-    }
+public:
+  static void rvalue_cvt(const Container *type, Base *out)
+  {
+    // Everything here should have become an lvalue over an rvalue. Only thing
+    // that should pass through this far is None. 
+    (void) type; (void) out;
+    assert("rvalue of irep2tc_to_irep2t should never be called");
+  }
 
- private:
-    static void* convertible(PyObject* p)
-    {
-      using namespace boost::python;
-
-      if (p == Py_None)
-          return p;
-
-      objects::instance<> *inst =
-        reinterpret_cast<objects::instance<>*>(p);
-      (void)inst; // For debug / inspection
-
-      // Scatter consts around to ensure that the get() below doesn't trigger
-      // detachment.
-      const container *foo =
-        reinterpret_cast<container*>(
-            objects::find_instance_impl(p, boost::python::type_id<container>()));
-
-      // Find object instance may fail
-      if (!foo)
-        return NULL;
-
-      // Slightly dirtily extricate the m_p field. Don't call pointer_holder
-      // holds because that's private. Ugh.
-      return const_cast<void*>(reinterpret_cast<const void *>(foo->get()));
-    }
-
-    static void cons(PyObject *src, boost::python::converter::rvalue_from_python_stage1_data *stage1)
-    {
-      using namespace boost::python;
-      // We're a non-reference non-ptr piece of data; therefore we get created
-      // as part of arg_rvalue_from_python, and get an associated bit of
-      // storage.
-      converter::rvalue_from_python_data<container> *store =
-        reinterpret_cast<converter::rvalue_from_python_data<container>*>(stage1);
-
-      container *obj_store = reinterpret_cast<container *>(&store->storage.bytes);
-
-      // Create an rvalue. Uuuhhhh. This is the point I admit I'm not really
-      // sure where it comes in; I only care about NoneType right now.
-      assert(src == Py_None && "Expected Py_None in container rvalue cons");
-
-      new (obj_store) container();
-
-      // Let rvalue holder know that needs deconstructing please
-      store->stage1.convertible = obj_store;
-      return;
-    }
+  static void *lvalue_cvt(const Container *foo)
+  {
+    return const_cast<void *>(reinterpret_cast<const void*>((foo)->get()));
+  }
 };
+
+template<typename Container>
+class none_to_irep2tc
+{
+public:
+  static void rvalue_cvt(const char *src, Container *type)
+  {
+    // Everything here should have become an lvalue over an rvalue. Only thing
+    // that should pass through this far is None
+    assert(reinterpret_cast<const PyObject*>(src) == Py_None);
+    new (type) Container(); // Empty
+    (void)src; // unused
+  }
+
+  static void *lvalue_cvt(const char *foo)
+  {
+    return const_cast<void *>(reinterpret_cast<const void*>((foo)));
+  }
+};
+
 #endif
 
 template <typename T> class register_irep_methods;
@@ -457,7 +430,9 @@ build_base_type2t_python_class(void)
   bar(foo);
 
   // Register our manual type2tc -> type2t converter.
-  shared_ptr_from_python<type2t, type2tc>();
+  esbmc_python_cvt<type2t, type2tc, true, true, true, irep2tc_to_irep2t<type2tc, type2t> >();
+  // None converter
+  esbmc_python_cvt<type2tc, char, true, true, false, none_to_irep2tc<type2tc> >();
 
   enum_<type2t::type_ids>("type_ids")
 #define hahatemporary(r, data, elem) .value(BOOST_PP_STRINGIZE(elem), type2t::BOOST_PP_CAT(elem,_id))
@@ -474,7 +449,8 @@ void
 build_type2t_container_converters(void)
 {
   // Needs to be called _after_ the type types are registered.
-#define hahatemporary(r, data, elem) shared_ptr_from_python<BOOST_PP_CAT(elem,_type2t), BOOST_PP_CAT(elem,_type2tc)>();
+#define hahatemporary(r, data, elem) \
+  esbmc_python_cvt<BOOST_PP_CAT(elem,_type2t), BOOST_PP_CAT(elem,_type2tc), true, true, true, irep2tc_to_irep2t<BOOST_PP_CAT(elem,_type2tc), BOOST_PP_CAT(elem,_type2t)> >();
 BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_TYPES)
 #undef hahatemporary
 
@@ -872,7 +848,9 @@ build_base_expr2t_python_class(void)
   bar(foo);
 
   // Register our manual expr2tc -> expr2t converter.
-  shared_ptr_from_python<expr2t, expr2tc>();
+  esbmc_python_cvt<expr2t, expr2tc, true, true, true, irep2tc_to_irep2t<expr2tc, expr2t> >();
+  // None converter
+  esbmc_python_cvt<expr2tc, char, true, true, false, none_to_irep2tc<expr2tc> >();
 
   enum_<expr2t::expr_ids>("expr_ids")
 #define hahatemporary(r, data, elem) .value(BOOST_PP_STRINGIZE(elem), expr2t::BOOST_PP_CAT(elem,_id))
@@ -908,7 +886,8 @@ void
 build_expr2t_container_converters(void)
 {
   // Needs to be called _after_ the expr types are registered.
-#define hahatemporary(r, data, elem) shared_ptr_from_python<BOOST_PP_CAT(elem,2t), BOOST_PP_CAT(elem,2tc)>();
+#define hahatemporary(r, data, elem) \
+  esbmc_python_cvt<BOOST_PP_CAT(elem,2t), BOOST_PP_CAT(elem,2tc), true, true, true, irep2tc_to_irep2t<BOOST_PP_CAT(elem,2tc), BOOST_PP_CAT(elem,2t)> >();
 BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_EXPRS)
 #undef hahatemporary
 
