@@ -823,11 +823,19 @@ void reachability_treet::save_checkpoint(const std::string fname __attribute__((
 
 #ifdef WITH_PYTHON
 #include <boost/python/class.hpp>
+#include <boost/python/init.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
 
 void
 build_goto_symex_classes()
 {
+  using namespace boost::python;
+
+  // 1st 2 const
+  class_<reachability_treet>("reachability_tree",
+    init<goto_functionst &, namespacet &, optionst &,
+      boost::shared_ptr<symex_targett>, contextt &, message_handlert &>());
+
   return;
 }
 #endif
