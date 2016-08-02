@@ -19,6 +19,8 @@ extern "C" {
 #include <map>
 #include <vector>
 
+#include <boost/shared_ptr.hpp>
+
 #include <namespace.h>
 
 #include <config.h>
@@ -173,11 +175,11 @@ public:
 
   unsigned int clear_assertions();
 
-  virtual std::shared_ptr<symex_targett> clone(void) const
+  virtual boost::shared_ptr<symex_targett> clone(void) const
   {
     // No pointers or anything that requires ownership modification, can just
     // duplicate self.
-    return std::shared_ptr<symex_targett>(new symex_target_equationt(*this));
+    return boost::shared_ptr<symex_targett>(new symex_target_equationt(*this));
   }
 
   virtual void push_ctx(void);
@@ -198,7 +200,7 @@ public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
 
-  virtual std::shared_ptr<symex_targett> clone(void) const;
+  virtual boost::shared_ptr<symex_targett> clone(void) const;
 
   virtual void convert(smt_convt &smt_conv);
   void flush_latest_instructions(void);

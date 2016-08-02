@@ -6,6 +6,8 @@
 
 \*******************************************************************/
 
+#include <boost/shared_ptr.hpp>
+
 #include <irep2.h>
 #include <migrate.h>
 #include <langapi/mode.h>
@@ -32,9 +34,9 @@ std::map<expr2tc, bool> is_global;
 execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    const namespacet &ns,
                                    reachability_treet *art,
-                                   std::shared_ptr<symex_targett> _target,
+                                   boost::shared_ptr<symex_targett> _target,
                                    contextt &context,
-                                   std::shared_ptr<ex_state_level2t> l2init,
+                                   boost::shared_ptr<ex_state_level2t> l2init,
                                    optionst &options,
                                    message_handlert &_message_handler) :
   goto_symext(ns, context, goto_functions, _target, options),
@@ -114,7 +116,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(std::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
+  state_level2(boost::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
   global_value_set(ex.global_value_set),
   message_handler(ex.message_handler)
 {
@@ -883,7 +885,7 @@ execution_statet::generate_hash(void) const
 {
 
   auto l2 =
-    std::dynamic_pointer_cast<state_hashing_level2t>(state_level2);
+    boost::dynamic_pointer_cast<state_hashing_level2t>(state_level2);
   assert(l2 != nullptr);
 
   crypto_hash state = l2->generate_l2_state_hash();
@@ -1075,11 +1077,11 @@ execution_statet::ex_state_level2t::~ex_state_level2t(void)
 {
 }
 
-std::shared_ptr<renaming::level2t>
+boost::shared_ptr<renaming::level2t>
 execution_statet::ex_state_level2t::clone(void) const
 {
 
-  return std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this));
+  return boost::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this));
 }
 
 void
@@ -1102,10 +1104,10 @@ dfs_execution_statet::~dfs_execution_statet(void)
     target->pop_ctx();
 }
 
-std::shared_ptr<execution_statet> dfs_execution_statet::clone(void) const
+boost::shared_ptr<execution_statet> dfs_execution_statet::clone(void) const
 {
-  std::shared_ptr<dfs_execution_statet> d =
-    std::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
+  boost::shared_ptr<dfs_execution_statet> d =
+    boost::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
 
   // Duplicate target equation; or if we're encoding at runtime, push a context.
   if (smt_during_symex) {
@@ -1128,10 +1130,10 @@ schedule_execution_statet::~schedule_execution_statet(void)
   // Don't delete equation. Schedule requires all this data.
 }
 
-std::shared_ptr<execution_statet> schedule_execution_statet::clone(void) const
+boost::shared_ptr<execution_statet> schedule_execution_statet::clone(void) const
 {
-  std::shared_ptr<schedule_execution_statet> s =
-    std::shared_ptr<schedule_execution_statet>(new schedule_execution_statet(*this));
+  boost::shared_ptr<schedule_execution_statet> s =
+    boost::shared_ptr<schedule_execution_statet>(new schedule_execution_statet(*this));
 
   // Don't duplicate target equation.
   s.get()->target = target;
@@ -1173,11 +1175,11 @@ execution_statet::state_hashing_level2t::~state_hashing_level2t(void)
 {
 }
 
-std::shared_ptr<renaming::level2t>
+boost::shared_ptr<renaming::level2t>
 execution_statet::state_hashing_level2t::clone(void) const
 {
 
-  return std::shared_ptr<state_hashing_level2t>(new state_hashing_level2t(*this));
+  return boost::shared_ptr<state_hashing_level2t>(new state_hashing_level2t(*this));
 }
 
 void

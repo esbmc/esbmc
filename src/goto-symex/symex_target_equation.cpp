@@ -438,7 +438,7 @@ runtime_encoded_equationt::convert(smt_convt &smt_conv)
   return;
 }
 
-std::shared_ptr<symex_targett>
+boost::shared_ptr<symex_targett>
 runtime_encoded_equationt::clone(void) const
 {
   // Only permit cloning at the start of a run - there should never be any data
@@ -448,7 +448,7 @@ runtime_encoded_equationt::clone(void) const
   assert(SSA_steps.size() == 0 && "runtime_encoded_equationt shouldn't be "
          "cloned when it contains data");
   auto nthis =
-    std::shared_ptr<runtime_encoded_equationt>(new runtime_encoded_equationt(*this));
+    boost::shared_ptr<runtime_encoded_equationt>(new runtime_encoded_equationt(*this));
   nthis.get()->cvt_progress = nthis.get()->SSA_steps.end();
   return nthis;
 }
@@ -519,6 +519,7 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
 
 #include <util/bp_opaque_ptr.h>
+#include <util/bp_converter.h>
 
 BOOST_PYTHON_OPAQUE_SPECIALIZED_TYPE_ID(smt_ast)
 
@@ -563,7 +564,7 @@ build_equation_class()
     .def_readwrite("ignore", &step::ignore);
 
   init<const namespacet &> eq_init;
-  class_<symex_target_equationt>("equation", eq_init)
+  class_<symex_target_equationt, boost::shared_ptr<symex_target_equationt> >("equation", eq_init)
     .def("assignment", &symex_target_equationt::assignment)
     .def("assumption", &symex_target_equationt::assumption)
     .def("assertion", &symex_target_equationt::assertion)

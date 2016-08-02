@@ -25,6 +25,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/symex_target_equation.h>
 #include <goto-symex/reachability_tree.h>
 
+#include <boost/shared_ptr.hpp>
+
 class bmct:public messaget
 {
 public:
@@ -61,7 +63,7 @@ public:
           funcs,
           ns,
           options,
-          std::shared_ptr<runtime_encoded_equationt>(
+          boost::shared_ptr<runtime_encoded_equationt>(
             new runtime_encoded_equationt(ns, *runtime_solver)),
           _context,
           _message_handler);
@@ -71,7 +73,7 @@ public:
           funcs,
           ns,
           options,
-          std::shared_ptr<symex_target_equationt>(
+          boost::shared_ptr<symex_target_equationt>(
             new symex_target_equationt(ns)),
           _context,
           _message_handler);

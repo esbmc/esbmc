@@ -13,6 +13,8 @@
 #include <iostream>
 #include <vector>
 
+#include <boost/shared_ptr.hpp>
+
 #include <prefix.h>
 #include <std_expr.h>
 #include <expr_util.h>
@@ -67,11 +69,11 @@ goto_symext::assume(const expr2tc &assumption)
   return;
 }
 
-std::shared_ptr<goto_symext::symex_resultt>
+boost::shared_ptr<goto_symext::symex_resultt>
 goto_symext::get_symex_result(void)
 {
 
-  return std::shared_ptr<goto_symext::symex_resultt>(
+  return boost::shared_ptr<goto_symext::symex_resultt>(
     new goto_symext::symex_resultt(target, total_claims, remaining_claims));
 }
 

@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_SYMEX_TARGET_H
 #define CPROVER_GOTO_SYMEX_SYMEX_TARGET_H
 
+#include <boost/shared_ptr.hpp>
+
 #include <irep2.h>
 #include <vector>
 #include <expr.h>
@@ -85,7 +87,7 @@ public:
 
   // Abstract method, with the purpose of duplicating a symex_targett from the
   // subclass.
-  virtual std::shared_ptr<symex_targett> clone(void) const = 0;
+  virtual boost::shared_ptr<symex_targett> clone(void) const = 0;
 
   virtual void push_ctx(void) = 0;
   virtual void pop_ctx(void) = 0;

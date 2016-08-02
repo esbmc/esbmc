@@ -10,6 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <migrate.h>
 #include <assert.h>
 
+#include <boost/shared_ptr.hpp>
+
 #include <simplify_expr.h>
 #include <i2string.h>
 #include <cprover_prefix.h>
@@ -23,7 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
                          const goto_functionst &_goto_functions,
-                         std::shared_ptr<symex_targett> _target, optionst &opts) :
+                         boost::shared_ptr<symex_targett> _target, optionst &opts) :
   guard_identifier_s("goto_symex::guard"),
   total_claims(0),
   remaining_claims(0),

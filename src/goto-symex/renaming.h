@@ -12,6 +12,7 @@
 #include <set>
 
 #include <boost/functional/hash.hpp>
+#include <boost/shared_ptr.hpp>
 
 #include <guard.h>
 #include <expr_util.h>
@@ -263,7 +264,7 @@ namespace renaming {
 
     level2t() { };
     virtual ~level2t() { };
-    virtual std::shared_ptr<level2t> clone(void) const = 0;
+    virtual boost::shared_ptr<level2t> clone(void) const = 0;
 
     virtual void print(std::ostream &out) const;
     virtual void dump() const;
