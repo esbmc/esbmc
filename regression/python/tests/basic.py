@@ -46,7 +46,7 @@ class Basic(unittest.TestCase):
     def test_setup(self):
         import esbmc
         # Assumes cwd = python test dir
-        ns, opts, funcs = esbmc.init_esbmc_process(['./test_data/00_big_endian_01/main.c'])
+        ns, opts, po = esbmc.init_esbmc_process(['./test_data/00_big_endian_01/main.c'])
         esbmc.kill_esbmc_process()
 
     def test_bigint(self):

@@ -212,15 +212,15 @@ init_esbmc_process(boost::python::object o)
   auto opt_ptr = &config.options;
   handle<> optsh(converter2.to_python(&opt_ptr));
   object opts(optsh);
-  // Goto functions handle comes from inside the parseoptions object. Pass it
-  // through the ref-existing-ptr process, as we need to access it's internals.
-  // Don't want to copy by value as it can be massive.
-  reference_existing_object::apply<goto_functionst*>::type gf_cvt;
-  PyObject *gfp = gf_cvt(&po->goto_functions);
-  handle<> funch(gfp);
-  object funcs(funch);
+  // Emit internal reference to parseoptions object. It's the python users
+  // problem if it calls kill_esbmc_process and then touches references to
+  // this.
+  reference_existing_object::apply<cbmc_parseoptionst*>::type po_cvt;
+  PyObject *pop = po_cvt(po);
+  handle<> poh(pop);
+  object po_obj(poh);
 
-  return make_tuple(nso, opts, funcs);
+  return make_tuple(nso, opts, po_obj);
 }
 
 static void
@@ -390,6 +390,12 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
 
   def("downcast_type", &downcast_type);
   def("downcast_expr", &downcast_expr);
+
+  // Ugh.
+  class_<language_uit>("language_uit", no_init)
+    .def_readonly("context", &language_uit::context);
+  class_<cbmc_parseoptionst, bases<language_uit> >("parseoptions", no_init)
+    .def_readwrite("goto_functions", &cbmc_parseoptionst::goto_functions);
 }
 
 // Include these other things that are special to the esbmc binary:
