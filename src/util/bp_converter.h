@@ -14,21 +14,14 @@
 // AllowNone: Should this allow PyNone to be constructed as an Output?
 // Rvalue: Enable rvalue converter
 // Lvalue: Enable lvalue converter
-// RvalueCvt: Converter to make an Rvalue of Output in temporary storage
-// LvalueCvt: Conversion from InPython to Output pointer. Necessary for
-//            _both_ rvalue and lvalue conversion.
+// ValueCvt: Converter functions to make rvalue / lvalue
 template <typename Output, typename InPython, bool AllowNone, bool Rvalue,
-         bool Lvalue, typename RvalueCvt, typename LvalueCvt>
+         bool Lvalue, typename ValueCvt>
 struct esbmc_python_cvt
 {
-  static RvalueCvt rvalue_cvt;
-  static LvalueCvt lvalue_cvt;
-
-    esbmc_python_cvt(RvalueCvt _rvalue_cvt, LvalueCvt _lvalue_cvt)
+    esbmc_python_cvt()
     {
       using namespace boost::python;
-      rvalue_cvt(_rvalue_cvt);
-      lvalue_cvt(_lvalue_cvt);
 
       // Lvalue converter
       if (Lvalue) {
@@ -71,17 +64,10 @@ struct esbmc_python_cvt
       if (!foo)
         return NULL;
 
-      // InPython needs to be a pointer so that it's held in a pointer_holder.
-      static_assert(boost::is_pointer<InPython>::value, "InPython must be considered a pointer");
-
-      // Slightly dirtily extricate the m_p field. Don't call pointer_holder
-      // holds because that's private. Ugh.
-      void *in_python = const_cast<void*>(reinterpret_cast<const void *>(foo->get()));
-
       // Allow lvalue conversion to perhaps mush this around, perhaps it
       // changes the pointer to point inside something? Either way: it's not
       // permitted to create new storage.
-      return lvalue_cvt(in_python);
+      return ValueCvt::lvalue_cvt(foo);
     }
 
     static void cons(PyObject *src, boost::python::converter::rvalue_from_python_stage1_data *stage1)
@@ -99,7 +85,8 @@ struct esbmc_python_cvt
 
       // Pass storage and from-ptr to rvalue converter, which should in-place
       // initialize the storage.
-      rvalue_cvt(stage1->convertible, obj_store);
+      const InPython *foo = reinterpret_cast<const InPython*>(stage1->convertible);
+      ValueCvt::rvalue_cvt(foo, obj_store);
 
       // Let rvalue holder know that needs deconstructing please
       store->stage1.convertible = obj_store;

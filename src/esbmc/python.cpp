@@ -7,6 +7,9 @@
 
 #include <boost/python.hpp>
 #include <boost/python/object/find_instance.hpp>
+
+#include <bp_converter.h>
+
 using namespace boost::python;
 
 class location
@@ -69,96 +72,73 @@ template<>
 class migrate_func<type2tc>
 {
 public:
-  static void converter(const typet *type, type2tc *out) { migrate_type(*type, *out); }
+  static void rvalue_cvt(const typet *type, type2tc *out)
+  {
+    new (out) type2tc();
+    migrate_type(*type, *out);
+  }
+
+  static void *lvalue_cvt(const typet *foo)
+  {
+    return const_cast<void *>(reinterpret_cast<const void*>(foo));
+  }
 };
 
 template<>
 class migrate_func<expr2tc>
 {
 public:
-  static void converter(const exprt *expr, expr2tc *out) { migrate_expr(*expr, *out); }
+  static void rvalue_cvt(const exprt *expr, expr2tc *out)
+  {
+    new (out) expr2tc();
+    migrate_expr(*expr, *out);
+  }
+
+  static void *lvalue_cvt(const exprt *foo)
+  {
+    return const_cast<void *>(reinterpret_cast<const void*>(foo));
+  }
 };
 
 template<>
 class migrate_func<typet>
 {
 public:
-  static void converter(const type2tc *type, typet *out) { *out = migrate_type_back(*type); }
+  static void rvalue_cvt(const type2tc *type, typet *out)
+  {
+    new (out) typet();
+    *out = migrate_type_back(*type);
+  }
+
+  static void *lvalue_cvt(const type2tc *foo)
+  {
+    return const_cast<void *>(reinterpret_cast<const void*>(foo));
+  }
 };
 
 template<>
 class migrate_func<exprt>
 {
 public:
-  static void converter(const expr2tc *expr, exprt *out) { *out = migrate_expr_back(*expr); }
+  static void rvalue_cvt(const expr2tc *expr, exprt *out)
+  {
+    new (out) exprt();
+    *out = migrate_expr_back(*expr);
+  }
+
+  static void *lvalue_cvt(const expr2tc *foo)
+  {
+    return const_cast<void *>(reinterpret_cast<const void*>(foo));
+  }
+
 };
 
-template <typename From, typename To>
-struct oldirep_to_newirep
+void
+register_oldrep_to_newrep()
 {
-public:
-    oldirep_to_newirep()
-    {
-      // Store a (global) converter pointer
-      using namespace boost::python;
-      // Rvalue converter
-      converter::registry::insert(&convertible, &cons, type_id<To>(),
-                          &converter::expected_from_python_type_direct<To>::get_pytype);
-    }
-
- private:
-    static void* convertible(PyObject* p)
-    {
-      using namespace boost::python;
-
-      // For this set of converters, refuse to produce nil ireps. There are
-      // other (similar) converters for that.
-      if (p == Py_None)
-          return NULL;
-
-      objects::instance<> *inst =
-        reinterpret_cast<objects::instance<>*>(p);
-      (void)inst; // For debug / inspection
-
-      // Scatter consts around to ensure that the get() below doesn't trigger
-      // detachment.
-      const From *foo =
-        reinterpret_cast<From*>(
-            objects::find_instance_impl(p, boost::python::type_id<From>()));
-
-      // Find object instance may fail
-      if (!foo)
-        return NULL;
-
-      // Can't actually create an lvalue because there's no storage, but we
-      // can convert to an rvalue. This function will be called to work out
-      // if it can be converted, so return non-null to indicate that.
-      return const_cast<void*>(reinterpret_cast<const void*>(foo));
-    }
-
-    static void cons(PyObject *src __attribute__((unused)), boost::python::converter::rvalue_from_python_stage1_data *stage1)
-    {
-      using namespace boost::python;
-      converter::rvalue_from_python_data<To> *store =
-        reinterpret_cast<converter::rvalue_from_python_data<To>*>(stage1);
-
-      To *obj_store = reinterpret_cast<To *>(&store->storage.bytes);
-
-      // Create an rvalue from the ptr stored by convertible.
-      const From *oldptr = reinterpret_cast<const From *>(stage1->convertible);
-
-      // Construct container so it isn't uninitialized memory...
-      new (obj_store) To();
-
-      (*migrate_func<To>::converter)(oldptr, obj_store);
-
-      // Let rvalue holder know that needs deconstructing please
-      store->stage1.convertible = obj_store;
-
-      // fini
-      return;
-    }
-};
+  esbmc_python_cvt<type2tc, typet, false, true, false, migrate_func<type2tc> >();
+  return;
+}
 
 static boost::python::object
 init_esbmc_process(boost::python::object o)
@@ -382,12 +362,12 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   build_fixedbv_python_class();
 
   // Register old-irep to new-irep converters
-  oldirep_to_newirep<typet, type2tc>();
-  oldirep_to_newirep<exprt, expr2tc>();
+  esbmc_python_cvt<type2tc, typet, false, true, false, migrate_func<type2tc> >();
+  esbmc_python_cvt<expr2tc, exprt, false, true, false, migrate_func<expr2tc> >();
 
   // And backwards
-  oldirep_to_newirep<type2tc, typet>();
-  oldirep_to_newirep<expr2tc, exprt>();
+  esbmc_python_cvt<typet, type2tc, false, true, false, migrate_func<typet> >();
+  esbmc_python_cvt<exprt, expr2tc, false, true, false, migrate_func<exprt> >();
 
   // Locationt objects now...
   class_<locationt>("locationt", no_init);
