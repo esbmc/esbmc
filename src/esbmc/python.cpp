@@ -44,7 +44,7 @@ void build_dstring_python_class();
 void build_smt_conv_python_class();
 void build_goto_func_class();
 void build_fixedbv_python_class();
-void build_symex_class();
+void build_goto_symex_classes();
 void build_equation_class();
 
 class dummy_expr_class { };
@@ -404,7 +404,7 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
     auto symex = class_<dummy_symex_class>("symex");
     scope quux = symex;
 
-    build_symex_class();
+    build_goto_symex_classes();
     build_equation_class();
   }
 
