@@ -377,6 +377,7 @@ protected:
   bool schedule;
 
   friend class execution_statet;
+  friend void build_goto_symex_classes();
 };
 
 #endif /* REACHABILITY_TREE_H_ */

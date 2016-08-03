@@ -825,16 +825,46 @@ void reachability_treet::save_checkpoint(const std::string fname __attribute__((
 #include <boost/python/class.hpp>
 #include <boost/python/init.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
+#include <boost/python/return_internal_reference.hpp>
 
 void
 build_goto_symex_classes()
 {
   using namespace boost::python;
 
-  // 1st 2 const
+  // Resolve some overloads
+  execution_statet & (reachability_treet::*get_cur_state)() = &reachability_treet::get_cur_state;
   class_<reachability_treet>("reachability_tree",
     init<goto_functionst &, namespacet &, optionst &,
-      boost::shared_ptr<symex_targett>, contextt &, message_handlert &>());
+      boost::shared_ptr<symex_targett>, contextt &, message_handlert &>())
+    .def("get_cur_state", get_cur_state, return_internal_reference<>())
+    .def("reset_to_unexplored_state", &reachability_treet::reset_to_unexplored_state)
+    .def("get_CS_bound", &reachability_treet::get_CS_bound)
+    .def("get_ileave_direction_from_scheduling", &reachability_treet::get_ileave_direction_from_scheduling)
+    .def("check_thread_viable", &reachability_treet::check_thread_viable)
+    .def("create_next_state", &reachability_treet::create_next_state)
+    .def("step_next_state", &reachability_treet::step_next_state)
+    .def("decide_ileave_direction", &reachability_treet::decide_ileave_direction)
+    .def("print_ileave_trace", &reachability_treet::print_ileave_trace)
+    .def("is_has_complete_formula", &reachability_treet::is_has_complete_formula)
+    .def("go_next_state", &reachability_treet::go_next_state)
+    .def("switch_to_next_execution_state", &reachability_treet::switch_to_next_execution_state)
+    .def("get_next_formula", &reachability_treet::get_next_formula)
+    .def("generate_schedule_formula", &reachability_treet::generate_schedule_formula)
+    .def("setup_next_formula", &reachability_treet::setup_next_formula)
+    .def_readwrite("has_complete_formula", &reachability_treet::has_complete_formula)
+    .def_readwrite("execution_states", &reachability_treet::execution_states)
+    .def_readwrite("cur_state_it", &reachability_treet::cur_state_it)
+    .def_readwrite("schedule_target", &reachability_treet::schedule_target)
+    .def_readwrite("target_template", &reachability_treet::target_template)
+    .def_readwrite("CS_bound", &reachability_treet::CS_bound)
+    .def_readwrite("TS_slice", &reachability_treet::TS_slice)
+    .def_readwrite("schedule_total_claims", &reachability_treet::schedule_total_claims)
+    .def_readwrite("schedule_remaining_claims", &reachability_treet::schedule_remaining_claims)
+    .def_readwrite("next_thread_id", &reachability_treet::next_thread_id)
+    .def_readwrite("por", &reachability_treet::por)
+    .def_readwrite("round_robin", &reachability_treet::round_robin)
+    .def_readwrite("schedule", &reachability_treet::schedule);
 
   return;
 }
