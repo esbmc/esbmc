@@ -2,8 +2,8 @@
 
 set -x
 
-if test ! -e ../.git; then
-  echo "Please run from src/ dir";
+if test ! -e esbmc; then
+  echo "Please run1 from src/ dir";
   exit 1
 fi
 
