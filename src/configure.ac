@@ -213,7 +213,9 @@ dnl local typedefs because that's hwo boost python works
 dnl deprecated decls because it uses auto ptrs
 dnl field initializers due to a, uh, totally legitimate initializer mismatch
 dnl       with later versions of python headers
-AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations -Wno-missing-field-initializers $ESBMC_CLANG_CFLAGS ")
+dnl String aliasing... the following knackers that:
+dnl       return (*(void**)m_result.bytes == Py_None)
+AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations -Wno-missing-field-initializers -Wno-strict-aliasing $ESBMC_CLANG_CFLAGS ")
 
 dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 dnl Unless of course you're on a mac, in which case clang will frequently

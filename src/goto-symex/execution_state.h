@@ -619,6 +619,8 @@ class execution_statet : public goto_symext
 
   public:
   static unsigned int node_count;
+
+  friend void build_goto_symex_classes(void);
 };
 
 /**
