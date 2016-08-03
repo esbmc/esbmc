@@ -1174,7 +1174,14 @@ bool clang_c_convertert::get_expr(
 
       // Use clang to calculate offsetof
       llvm::APSInt val;
-      assert(offset.EvaluateAsInt(val, *ASTContext));
+      bool res = offset.EvaluateAsInt(val, *ASTContext);
+      if(!res)
+      {
+        std::cerr << "Clang could not calculate offset"
+                  << std::endl;
+        offset.dumpColor();
+        return true;
+      }
 
       new_expr =
         constant_exprt(
