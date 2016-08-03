@@ -1097,6 +1097,8 @@ namespace esbmct {
     {
       // No result, so desired must exceed the number of idx's
       assert(cur_idx >= desired);
+      (void)cur_idx;
+      (void)desired;
       return NULL;
     }
 
@@ -1104,6 +1106,8 @@ namespace esbmct {
     {
       // See above
       assert(cur_idx >= desired);
+      (void)cur_idx;
+      (void)desired;
       return NULL;
     }
 
