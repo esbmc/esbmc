@@ -1,5 +1,12 @@
 Release Notes of the ESBMC model checker
 
+*** Version 3.0.1
++ Fix falsification crash
++ Fix switch condition typecast
++ Fix float literal generation
++ Back to Z3 v4.4.1 (stable API)
++ Update to Boolector v2.2.0
+
 *** Version 3.0.0
 + Several bugfixes
 + New clang frontend!
