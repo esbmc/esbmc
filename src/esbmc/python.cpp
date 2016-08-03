@@ -386,12 +386,13 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   def("downcast_expr", &downcast_expr);
 
   // Ugh.
-  class_<message_handlert, boost::noncopyable>("message_handlert", no_init); // basically opaque
   class_<contextt, boost::noncopyable>("contextt", no_init); // basically opaque
-  class_<language_uit, bases<message_handlert> >("language_uit", no_init)
+  class_<message_handlert, boost::noncopyable>("message_handler", no_init); // basically opaque
+  class_<ui_message_handlert, boost::noncopyable, bases<message_handlert> >("ui_message_handler", no_init); // basically opaque
+  class_<cbmc_parseoptionst, boost::noncopyable>("parseoptions", no_init)
+    .def_readwrite("goto_functions", &cbmc_parseoptionst::goto_functions)
+    .def_readonly("message_handler", &language_uit::ui_message_handler)
     .def_readonly("context", &language_uit::context);
-  class_<cbmc_parseoptionst, bases<language_uit> >("parseoptions", no_init)
-    .def_readwrite("goto_functions", &cbmc_parseoptionst::goto_functions);
 }
 
 // Include these other things that are special to the esbmc binary:

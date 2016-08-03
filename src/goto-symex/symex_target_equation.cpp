@@ -563,8 +563,10 @@ build_equation_class()
     .add_property("cond_ast", make_getter(&step::cond_ast), make_function(&set_cond_ast))
     .def_readwrite("ignore", &step::ignore);
 
+  class_<symex_targett, boost::noncopyable>("symex_targett", no_init);
+
   init<const namespacet &> eq_init;
-  class_<symex_target_equationt, boost::shared_ptr<symex_target_equationt> >("equation", eq_init)
+  class_<symex_target_equationt, boost::shared_ptr<symex_target_equationt>, bases<symex_targett> >("equation", eq_init)
     .def("assignment", &symex_target_equationt::assignment)
     .def("assumption", &symex_target_equationt::assumption)
     .def("assertion", &symex_target_equationt::assertion)
