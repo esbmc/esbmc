@@ -20,6 +20,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_symex_state.h"
 #include "symex_target_equation.h"
+#include "goto_symex.h"
 
 void symex_target_equationt::assignment(
   const expr2tc &guard,
@@ -563,7 +564,13 @@ build_equation_class()
     .add_property("cond_ast", make_getter(&step::cond_ast), make_function(&set_cond_ast))
     .def_readwrite("ignore", &step::ignore);
 
-  class_<symex_targett, boost::noncopyable>("symex_targett", no_init);
+  class_<symex_targett, boost::shared_ptr<symex_targett>, boost::noncopyable>("symex_targett", no_init);
+
+  class_<goto_symext::symex_resultt, boost::shared_ptr<goto_symext::symex_resultt> >("symex_resultt",
+      init<boost::shared_ptr<symex_targett>, unsigned, unsigned>())
+    .def_readwrite("target", &goto_symext::symex_resultt::target)
+    .def_readwrite("total_claims", &goto_symext::symex_resultt::total_claims)
+    .def_readwrite("remaining_claims", &goto_symext::symex_resultt::remaining_claims);
 
   init<const namespacet &> eq_init;
   class_<symex_target_equationt, boost::shared_ptr<symex_target_equationt>, bases<symex_targett> >("equation", eq_init)
