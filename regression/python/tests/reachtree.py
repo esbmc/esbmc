@@ -21,3 +21,14 @@ class Reachtree(unittest.TestCase):
     def test_setup(self):
         # Simply check that the call to create a reach-tree worked
         pass
+
+    def test_full(self):
+        import esbmc
+        # Run a full model checking process (:O)
+        self.art.setup_for_new_explore()
+        result = self.art.get_next_formula()
+        btor = esbmc.solve.solvers.boolector.make(False, False, self.ns, self.opts)
+        result.target.convert(btor)
+        issat = btor.dec_solve()
+        # This test case should have a counterexample
+        self.assertTrue(issat == esbmc.solve.smt_result.sat, "Full BMC result should be SAT")

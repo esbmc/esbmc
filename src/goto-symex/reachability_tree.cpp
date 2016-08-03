@@ -944,6 +944,7 @@ build_goto_symex_classes()
   class_<reachability_treet>("reachability_tree",
     init<goto_functionst &, namespacet &, optionst &,
       boost::shared_ptr<symex_targett>, contextt &, message_handlert &>())
+    .def("setup_for_new_explore", &reachability_treet::setup_for_new_explore)
     .def("get_cur_state", get_cur_state, return_internal_reference<>())
     .def("reset_to_unexplored_state", &reachability_treet::reset_to_unexplored_state)
     .def("get_CS_bound", &reachability_treet::get_CS_bound)
