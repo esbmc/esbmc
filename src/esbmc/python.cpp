@@ -201,17 +201,11 @@ init_esbmc_process(boost::python::object o)
   ns = new namespacet(po->context);
 
   // Convert return values to python objects (TM). Wrap into a PyObject, stuff
-  // in handle, transfer to object. Unclear if there's a supported way of
-  // doing this with opaque pointers in the API: I get the impression that
-  // they're only supposed to be single return values.
-  auto converter1 = converter::registry::lookup(type_id<namespacet*>());
-  handle<> nsh(converter1.to_python(&ns));
-  object nso(nsh);
+  // in handle, transfer to object.
+  object nso(ns);
   // Config options are global. Woo.
-  auto converter2 = converter::registry::lookup(type_id<optionst*>());
   auto opt_ptr = &config.options;
-  handle<> optsh(converter2.to_python(&opt_ptr));
-  object opts(optsh);
+  object opts(opt_ptr);
   // Emit internal reference to parseoptions object. It's the python users
   // problem if it calls kill_esbmc_process and then touches references to
   // this.
@@ -349,8 +343,8 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   // Alas, we need to pass handles to optionst, namespace, goto funcs around.
   // User should be able to extract them from whatever execution context they
   // generate.
-  opaque<optionst>();
-  opaque<namespacet>();
+  class_<optionst>("optionst", no_init); // basically opaque
+  class_<namespacet>("namespacet", no_init); // basically opaque
 
   // Build smt solver related stuff
   build_smt_conv_python_class();
