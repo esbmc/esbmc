@@ -33,8 +33,11 @@ namespace renaming {
     virtual void get_ident_name(expr2tc &symbol) const=0;
 
     virtual ~renaming_levelt() { }
-  protected:
+//  protected:
+//  XXX: should leave protected enabled, but g++ 5.4 on ubuntu 16.04 does not
+//  appear to honour the following friend directive?
     void get_original_name(expr2tc &expr, symbol2t::renaming_level lev) const;
+    friend void build_goto_symex_classes();
   };
 
   // level 1 -- function frames
@@ -46,6 +49,9 @@ namespace renaming {
     struct name_rec_hash;
     class name_record {
     public:
+      // Appease boost.python error path
+      name_record() : base_name("") { }
+
       name_record(const symbol2t &sym) : base_name(sym.thename) { }
 
       name_record(const irep_idt &name) : base_name(name) { }

@@ -3,6 +3,8 @@
 #include <boost/python/init.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
 #include <boost/python/return_internal_reference.hpp>
+#include <boost/python/operators.hpp>
+
 
 #include <util/bp_opaque_ptr.h>
 #include <util/bp_converter.h>
@@ -11,10 +13,65 @@
 #include "execution_state.h"
 #include "goto_symex.h"
 
+class dummy_renaming_class {};
+
+const value_sett &
+get_value_set(const goto_symex_statet &ss)
+{
+  return ss.value_set;
+}
+
+const renaming::level2t &
+get_level2(const goto_symex_statet &ss)
+{
+  return ss.level2;
+}
+
+const renaming::level2t &
+get_state_level2(const goto_symex_statet::goto_statet &state)
+{
+  return state.level2;
+}
+
 void
 build_goto_symex_classes()
 {
   using namespace boost::python;
+
+  {
+    using namespace renaming;
+    scope foo = class_<dummy_renaming_class>("renaming");
+
+    void (renaming_levelt::*get_original_name)(expr2tc &expr) const = &renaming_levelt::get_original_name;
+    void (renaming_levelt::*get_original_name_lev)(expr2tc &expr, symbol2t::renaming_level lev) const = &renaming_levelt::get_original_name;
+    class_<renaming_levelt, boost::noncopyable>("renaming_levelt", no_init)
+      .def("get_original_name", get_original_name)
+      .def("rename", &renaming_levelt::rename)
+      .def("remove", &renaming_levelt::remove)
+      .def("get_ident_name", &renaming_levelt::get_ident_name)
+      .def("get_original_name_lev", get_original_name_lev);
+
+    void (level1t::*rename)(expr2tc &) = &level1t::rename;
+    void (level1t::*rename_frame)(const expr2tc &, unsigned int) = &level1t::rename;
+    class_<level1t, bases<renaming_levelt> >("level1t")
+      .def("current_number", &level1t::current_number)
+      .def("get_original_name", &level1t::get_original_name)
+      .def("rename", rename)
+      .def("remove", &level1t::remove)
+      .def("get_ident_name", &level1t::get_ident_name)
+      .def("rename_frame", rename_frame)
+      .def_readwrite("thread_id", &level1t::thread_id)
+      .def_readwrite("current_names", &level1t::current_names);
+
+    class_<level1t::current_namest>("level1_current_names")
+      .def(map_indexing_suite<level1t::current_namest, true>());
+
+    using boost::python::self_ns::self;
+    class_<level1t::name_record>("level1_name_record", init<irep_idt &>())
+      .def_readwrite("base_name", &level1t::name_record::base_name)
+      .def(self < self)
+      .def(self == self);
+  }
 
   // Overload resolve...
   void (goto_symext::*do_simplify)(expr2tc &) = &goto_symext::do_simplify;
@@ -115,6 +172,65 @@ build_goto_symex_classes()
     .def_readwrite("partial_loops", &goto_symext::no_unwinding_assertions)
     .def_readwrite("body_warnings", &goto_symext::body_warnings)
     .def_readwrite("internal_deref_items", &goto_symext::internal_deref_items);
+
+  class_<goto_symex_statet::goto_statet>("goto_statet", init<goto_symex_statet>())
+    .def_readwrite("depth", &goto_symex_statet::goto_statet::depth)
+    .def_readwrite("value_set", &goto_symex_statet::goto_statet::value_set)
+    .def_readwrite("guard", &goto_symex_statet::goto_statet::guard)
+    .def_readwrite("thread_id", &goto_symex_statet::goto_statet::thread_id)
+    .add_property("level2", make_function(get_state_level2, return_internal_reference<>()));
+
+  class_<goto_symex_statet::framet>("framet", init<unsigned int>())
+    .def_readwrite("function_identifier", &goto_symex_statet::framet::function_identifier)
+    .def_readwrite("goto_state_map", &goto_symex_statet::framet::goto_state_map)
+    .def_readwrite("level1", &goto_symex_statet::framet::level1)
+    .def_readwrite("calling_location", &goto_symex_statet::framet::calling_location)
+    .def_readwrite("end_of_function", &goto_symex_statet::framet::end_of_function)
+    .def_readwrite("return_value", &goto_symex_statet::framet::return_value)
+    .def_readwrite("local_variables", &goto_symex_statet::framet::local_variables)
+    .def_readwrite("cur_function_ptr_targets", &goto_symex_statet::framet::cur_function_ptr_targets)
+    .def_readwrite("function_ptr_call_loc", &goto_symex_statet::framet::function_ptr_call_loc)
+    .def_readwrite("function_ptr_combine_target", &goto_symex_statet::framet::function_ptr_combine_target)
+    .def_readwrite("orig_func_ptr_call", &goto_symex_statet::framet::orig_func_ptr_call)
+    .def_readwrite("declaration_history", &goto_symex_statet::framet::declaration_history);
+
+  void (goto_symex_statet::*current_name_expr)(expr2tc &) const = &goto_symex_statet::current_name;
+  void (goto_symex_statet::*current_name_level)(const renaming::level2t &, expr2tc &) const = &goto_symex_statet::current_name;
+  void (goto_symex_statet::*current_name_state)(const goto_symex_statet::goto_statet &, expr2tc &) const = &goto_symex_statet::current_name;
+  goto_symex_statet::framet &(goto_symex_statet::*top)(void) = &goto_symex_statet::top;
+
+  class_<goto_symex_statet, boost::noncopyable>("goto_symex_statet",
+      init<renaming::level2t &, value_sett &, namespacet&>())
+    .def("current_name_expr", current_name_expr)
+    .def("current_name_level", current_name_level)
+    .def("current_name_state", current_name_state)
+    .def("top", top, return_internal_reference<>())
+    .def("new_frame", &goto_symex_statet::new_frame, return_internal_reference<>())
+    .def("pop_frame", &goto_symex_statet::pop_frame)
+    .def("previous_frame", &goto_symex_statet::previous_frame, return_internal_reference<>())
+    .def("initialize", &goto_symex_statet::initialize)
+    .def("rename", &goto_symex_statet::rename)
+    .def("rename_address", &goto_symex_statet::rename_address)
+    .def("assignment", &goto_symex_statet::assignment)
+    .def("constant_propagation", &goto_symex_statet::constant_propagation)
+    .def("constant_propagation_reference", &goto_symex_statet::constant_propagation_reference)
+    .def("get_original_name", &goto_symex_statet::get_original_name)
+    .def("print_stack_trace", &goto_symex_statet::print_stack_trace)
+    .def("gen_stack_trace", &goto_symex_statet::gen_stack_trace)
+    .def("fixup_renamed_type", &goto_symex_statet::fixup_renamed_type)
+    .def_readwrite("depth", &goto_symex_statet::depth)
+    .def_readwrite("thread_ended", &goto_symex_statet::thread_ended)
+    .def_readwrite("guard", &goto_symex_statet::guard)
+    .def_readwrite("global_guard", &goto_symex_statet::global_guard)
+    .def_readwrite("source", &goto_symex_statet::source)
+    .def_readwrite("variable_instance_nums", &goto_symex_statet::variable_instance_nums)
+    .def_readwrite("unwind_map", &goto_symex_statet::unwind_map)
+    .def_readwrite("function_unwind", &goto_symex_statet::function_unwind)
+    .def_readwrite("use_value_set", &goto_symex_statet::use_value_set)
+    .add_property("level2", make_function(get_level2, return_internal_reference<>()))
+    .add_property("value_set", make_function(get_value_set, return_internal_reference<>()))
+    .def_readwrite("call_stack", &goto_symex_statet::call_stack)
+    .def_readwrite("realloc_map", &goto_symex_statet::realloc_map);
 
  {
 
