@@ -927,12 +927,12 @@ build_goto_symex_classes()
     .def_readwrite("owner", &execution_statet::ex_state_level2t::owner);
 
   // Classes we can actually construct...
-  class_<dfs_execution_statet>("dfs_execution_state", 
+  class_<dfs_execution_statet, bases<execution_statet> >("dfs_execution_state", 
       init<const goto_functionst &, const namespacet &, reachability_treet *,
       boost::shared_ptr<symex_targett>, contextt &,
       optionst &, message_handlert &>());
 
-  class_<schedule_execution_statet>("schedule_execution_state", 
+  class_<schedule_execution_statet, bases<execution_statet> >("schedule_execution_state", 
       init<const goto_functionst &, const namespacet &, reachability_treet *,
       boost::shared_ptr<symex_targett>, contextt &,
       optionst &, unsigned int *, unsigned int *, message_handlert &>());
