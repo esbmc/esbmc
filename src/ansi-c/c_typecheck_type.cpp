@@ -331,7 +331,7 @@ void c_typecheck_baset::typecheck_c_bit_field_type(typet &type)
     throw "bit field size too large";
   }
 
-  width=integer2long(i);
+  width=i.to_ulong();
 
   typet tmp(base_type);
   type.swap(tmp);

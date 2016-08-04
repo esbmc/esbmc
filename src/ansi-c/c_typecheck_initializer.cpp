@@ -379,7 +379,7 @@ exprt c_typecheck_baset::do_initializer_array(
     throw 0;
   }
 
-  unsigned long size=integer2long(mp_size);
+  unsigned long size=mp_size.to_ulong();
 
   // build array constant
   exprt result("constant", type);

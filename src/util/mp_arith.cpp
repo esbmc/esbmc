@@ -6,31 +6,37 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <stdlib.h>
-#include <ctype.h>
+#include <cstdlib>
+#include <cctype>
+#include <cassert>
 
 #include <sstream>
+#include <limits>
 
 #include "mp_arith.h"
+#include "arith_tools.h"
 
-mp_integer operator>>(const mp_integer &a, unsigned int b)
+mp_integer operator>>(const mp_integer &a, const mp_integer &b)
 {
-  mp_integer result=a;
+  mp_integer power=::power(2, b);
+  
+  if(a>=0)
+    return a/power;
+  else
+  {
+    // arithmetic shift right isn't division for negative numbers!
+    // http://en.wikipedia.org/wiki/Arithmetic_shift 
 
-  for(unsigned i=0; i<b; i++)
-    result/=2;
-
-  return result;
+    if((a%power)==0)
+      return a/power;
+    else
+      return a/power-1;
+  }
 }
 
-mp_integer operator<<(const mp_integer &a, unsigned int b)
+mp_integer operator<<(const mp_integer &a, const mp_integer &b)
 {
-  mp_integer result=a;
-
-  for(unsigned i=0; i<b; i++)
-    result*=2;
-
-  return result;
+  return a*power(2, b);
 }
 
 std::ostream& operator<<(std::ostream& out, const mp_integer &n)
@@ -48,7 +54,7 @@ const mp_integer string2integer(const std::string &n, unsigned base)
   return mp_integer(n.c_str(), base);
 }
 
-const std::string integer2binary(const mp_integer &n, unsigned width)
+const std::string integer2binary(const mp_integer &n, std::size_t width)
 {
   mp_integer a(n);
 
@@ -62,7 +68,7 @@ const std::string integer2binary(const mp_integer &n, unsigned width)
     a=a-1;
   }
 
-  unsigned len = a.digits(2) + 2;
+  std::size_t len = a.digits(2) + 2;
   char *buffer=(char *)malloc(len);
   char *s = a.as_string(buffer, len, 2);
 
@@ -80,7 +86,7 @@ const std::string integer2binary(const mp_integer &n, unsigned width)
     result=result.substr(result.size()-width, width);
 
   if(neg)
-    for(unsigned i=0; i<result.size(); i++)
+    for(std::size_t i=0; i<result.size(); i++)
       result[i]=(result[i]=='0')?'1':'0';
 
   return result;
@@ -131,36 +137,18 @@ const mp_integer binary2integer(const std::string &n, bool is_signed)
   return result;
 }
 
-const mp_integer extract_fraction(const std::string &n, bool is_signed, u_int from, u_int to)
+std::size_t integer2size_t(const mp_integer &n)
 {
-  if(n.size()==0) return 0;
-
-  mp_integer result=0;
-  mp_integer mask=1;
-  mask=mask << (to-1);
-
-  for(unsigned i=from; i<to; i++)
-  {
-    if(n[i]=='0')
-    {
-    }
-    else if(n[i]=='1')
-    {
-      if(is_signed && i==0)
-        result=-mask;
-      else
-        result=result+mask;
-    }
-    else
-      return 0;
-
-    mask=mask>>1;
-  }
-
-  return result;
+  assert(n>=0);
+  mp_integer::ullong_t ull=n.to_ulong();
+  assert(ull <= std::numeric_limits<std::size_t>::max());
+  return (std::size_t)ull;
 }
 
-unsigned long integer2long(const mp_integer &n)
+unsigned integer2unsigned(const mp_integer &n)
 {
-  return n.to_ulong();
+  assert(n>=0);
+  mp_integer::ullong_t ull=n.to_ulong();
+  assert(ull <= std::numeric_limits<unsigned>::max());
+  return (unsigned)ull;
 }
