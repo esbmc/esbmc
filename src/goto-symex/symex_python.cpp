@@ -51,6 +51,7 @@ build_goto_symex_classes()
       .def("get_ident_name", &renaming_levelt::get_ident_name)
       .def("get_original_name_lev", get_original_name_lev);
 
+    {
     void (level1t::*rename)(expr2tc &) = &level1t::rename;
     void (level1t::*rename_frame)(const expr2tc &, unsigned int) = &level1t::rename;
     class_<level1t, bases<renaming_levelt> >("level1t")
@@ -62,6 +63,7 @@ build_goto_symex_classes()
       .def("rename_frame", rename_frame)
       .def_readwrite("thread_id", &level1t::thread_id)
       .def_readwrite("current_names", &level1t::current_names);
+    }
 
     class_<level1t::current_namest>("level1_current_names")
       .def(map_indexing_suite<level1t::current_namest, true>());
@@ -71,6 +73,40 @@ build_goto_symex_classes()
       .def_readwrite("base_name", &level1t::name_record::base_name)
       .def(self < self)
       .def(self == self);
+
+    class_<level2t::valuet>("level2_value")
+      .def_readwrite("count", &level2t::valuet::count)
+      .def_readwrite("constant", &level2t::valuet::constant)
+      .def_readwrite("node_id", &level2t::valuet::node_id);
+
+    unsigned (level2t::*current_number)(const expr2tc &sym) const = &level2t::current_number;
+    unsigned (level2t::*current_number_rec)(const level2t::name_record &rec) const = &level2t::current_number;
+    void (level2t::*rename)(expr2tc &) = &level2t::rename;
+    void (level2t::*rename_num)(expr2tc &, unsigned) = &level2t::rename;
+    void (level2t::*remove)(const expr2tc &) = &level2t::remove;
+    void (level2t::*remove_rec)(const level2t::name_record &) = &level2t::remove;
+    class_<level2t, bases<renaming_levelt>, boost::noncopyable >("level2t", no_init)
+      .def("dump", &level2t::dump)
+      .def("clone", &level2t::clone)
+      .def("current_number", current_number)
+      .def("current_number_record", current_number_rec)
+      .def("get_original_name", &level2t::get_original_name)
+      .def("make_assignment", &level2t::make_assignment)
+      .def("rename", rename)
+      .def("rename_num", rename_num)
+      .def("remove", remove)
+      .def("remove_record", remove_rec)
+      .def_readwrite("current_names", &level2t::current_names);
+
+   class_<level2t::name_record>("level2_name_record", init<symbol2t&>())
+     .def_readwrite("base_name", &level2t::name_record::base_name)
+     .def_readwrite("lev", &level2t::name_record::lev)
+     .def_readwrite("l1_num", &level2t::name_record::l1_num)
+     .def_readwrite("t_num", &level2t::name_record::t_num)
+     .def_readwrite("hash", &level2t::name_record::hash);
+
+    class_<level2t::current_namest>("level2_current_names")
+      .def(map_indexing_suite<level1t::current_namest, true>());
   }
 
   // Overload resolve...

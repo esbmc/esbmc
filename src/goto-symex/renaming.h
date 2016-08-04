@@ -139,6 +139,9 @@ namespace renaming {
   public:
     class name_record {
     public:
+      // Appease boost python error paths
+      name_record() {}
+
       name_record(const symbol2t &sym)
         : base_name(sym.thename), lev(sym.rlevel), l1_num(sym.level1_num),
           t_num(sym.thread_num)
@@ -275,7 +278,9 @@ namespace renaming {
     virtual void print(std::ostream &out) const;
     virtual void dump() const;
 
-  protected:
+    friend void build_goto_symex_classes();
+    // Repeat of the above ignored friend directive.
+//  protected:
     typedef std::map<const name_record, valuet, name_rec_hash> current_namest;
     current_namest current_names;
     typedef std::map<const expr2tc, crypto_hash> current_state_hashest;
