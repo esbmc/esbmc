@@ -210,7 +210,7 @@ bool exprt::is_zero() const
     }
     else if(type_id=="floatbv")
     {
-      if(ieee_floatt(*this)==0) return true;
+      if(ieee_floatt(to_constant_expr(*this))==0) return true;
     }
     else if(type_id=="pointer")
     {
@@ -244,7 +244,7 @@ bool exprt::is_one() const
     }
     else if(type_id=="floatbv")
     {
-      if(ieee_floatt(*this)==1) return true;
+      if(ieee_floatt(to_constant_expr(*this))==1) return true;
     }
   }
 
@@ -283,8 +283,8 @@ bool exprt::sum(const exprt &expr)
   }
   else if(type_id=="floatbv")
   {
-    ieee_floatt f(*this);
-    f+=ieee_floatt(expr);
+    ieee_floatt f(to_constant_expr(*this));
+    f+=ieee_floatt(to_constant_expr(expr));
     *this=f.to_expr();
     return false;
   }
@@ -323,8 +323,8 @@ bool exprt::mul(const exprt &expr)
   }
   else if(type_id=="floatbv")
   {
-    ieee_floatt f(*this);
-    f*=ieee_floatt(expr);
+    ieee_floatt f(to_constant_expr(*this));
+    f*=ieee_floatt(to_constant_expr(expr));
     *this=f.to_expr();
     return false;
   }

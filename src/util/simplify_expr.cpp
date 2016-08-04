@@ -289,14 +289,14 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
           expr_type_id=="signedbv")
       {
         // cast from float to int
-        ieee_floatt f(expr.op0());
+        ieee_floatt f(to_constant_expr(expr.op0()));
         expr=from_integer(f.to_integer(), expr.type());
         return false;
       }
       else if(expr_type_id=="floatbv")
       {
         // float to double or double to float
-        ieee_floatt f(expr.op0());
+        ieee_floatt f(to_constant_expr(expr.op0()));
         f.change_spec(to_floatbv_type(expr.type()));
         expr=f.to_expr();
         return false;
@@ -801,8 +801,8 @@ bool simplify_exprt::simplify_division(exprt &expr)
 
     if(expr.op0().is_constant() && expr.op1().is_constant())
     {
-      ieee_floatt f0(expr.op0());
-      ieee_floatt f1(expr.op1());
+      ieee_floatt f0(to_constant_expr(expr.op0()));
+      ieee_floatt f1(to_constant_expr(expr.op1()));
 
       if(!f1.is_zero())
       {
@@ -2099,8 +2099,8 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
     }
     else if(expr.op0().type().id()=="floatbv")
     {
-      ieee_floatt f0(expr.op0());
-      ieee_floatt f1(expr.op1());
+      ieee_floatt f0(to_constant_expr(expr.op0()));
+      ieee_floatt f1(to_constant_expr(expr.op1()));
 
       if(expr.id()=="notequal")
         expr.make_bool(f0!=f1);
@@ -2553,8 +2553,8 @@ bool simplify_exprt::simplify_ieee_float_relation(exprt &expr)
 
   if(expr.op0().is_constant() && expr.op1().is_constant())
   {
-    ieee_floatt f0(expr.op0());
-    ieee_floatt f1(expr.op1());
+    ieee_floatt f0(to_constant_expr(expr.op0()));
+    ieee_floatt f1(to_constant_expr(expr.op1()));
 
     if(expr.id()=="ieee_float_notequal")
       expr.make_bool(ieee_not_equal(f0, f1));
@@ -2652,7 +2652,7 @@ bool simplify_exprt::simplify_with(exprt &expr)
         if(!expr.op2().is_constant())
           break;
 
-        expr.op0().operands()[integer2long(i)].swap(expr.op2());
+        expr.op0().operands()[i.to_ulong()].swap(expr.op2());
 
         expr.operands().erase(++expr.operands().begin());
         expr.operands().erase(++expr.operands().begin());
@@ -2752,7 +2752,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       {
         // ok
         exprt tmp;
-        tmp.swap(expr.op0().operands()[integer2long(i)]);
+        tmp.swap(expr.op0().operands()[i.to_ulong()]);
         expr.swap(tmp);
         return false;
       }
@@ -2776,7 +2776,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       else
       {
         // terminating zero?
-        char v=(i==value.size())?0:value[integer2long(i)];
+        char v=(i==value.size())?0:value[i.to_ulong()];
         exprt tmp=from_integer(v, expr.type());
         expr.swap(tmp);
         return false;
@@ -3307,7 +3307,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
     }
     else if(type_id=="floatbv")
     {
-      ieee_floatt f(expr.op0());
+      ieee_floatt f(to_constant_expr(expr.op0()));
       f.negate();
       expr=f.to_expr();
       return false;
