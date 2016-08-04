@@ -1408,8 +1408,15 @@ std::string expr2ct::convert_constant(
   }
   else if(type.id()=="floatbv")
   {
-    std::cerr << "floatbv unsupported, sorry" << std::endl;
-    abort();
+    dest=ieee_floatt(src).to_ansi_c_string();
+
+    if(dest!="" && isdigit(dest[dest.size()-1]))
+    {
+      if(src.type()==float_type())
+        dest+="f";
+      else if(src.type()==double_type())
+        dest+="l";
+    }
   }
   else if(type.id()=="fixedbv")
   {

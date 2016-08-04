@@ -77,7 +77,11 @@ void convert_float_literal(
   }
   else
   {
-    std::cerr << "floatbv unsupported, sorry" << std::endl;
-    abort();
+    ieee_floatt a;
+
+    a.spec=to_floatbv_type(dest.type());
+    a.from_base10(significand, exponent);
+
+    dest.value(integer2binary(a.pack(), a.spec.width()));
   }
 }

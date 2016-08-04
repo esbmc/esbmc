@@ -22,6 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "expr_util.h"
 #include "std_expr.h"
 #include "fixedbv.h"
+#include "ieee_float.h"
 
 //#define USE_CACHE
 
@@ -252,8 +253,15 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
 
       if(expr_type_id=="floatbv")
       {
-        std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-        abort();
+        // int to float
+        const floatbv_typet &f_expr_type = to_floatbv_type(expr.type());
+
+        ieee_floatt f;
+        f.spec=f_expr_type;
+        f.from_integer(int_value);
+        expr=f.to_expr();
+
+        return false;
       }
     }
     else if(op_type_id=="fixedbv")
@@ -277,8 +285,22 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
     }
     else if(op_type_id=="floatbv")
     {
-      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-      abort();
+      if(expr_type_id=="unsignedbv" ||
+          expr_type_id=="signedbv")
+      {
+        // cast from float to int
+        ieee_floatt f(expr.op0());
+        expr=from_integer(f.to_integer(), expr.type());
+        return false;
+      }
+      else if(expr_type_id=="floatbv")
+      {
+        // float to double or double to float
+        ieee_floatt f(expr.op0());
+        f.change_spec(to_floatbv_type(expr.type()));
+        expr=f.to_expr();
+        return false;
+      }
     }
     else if(op_type_id=="bv")
     {
@@ -768,10 +790,28 @@ bool simplify_exprt::simplify_division(exprt &expr)
   }
   else if(expr.type().id()=="floatbv")
   {
-      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-      abort();
-  }
+    // division by one?
+    if(expr.op1().is_constant() && expr.op1().is_one())
+    {
+      exprt tmp;
+      tmp.swap(expr.op0());
+      expr.swap(tmp);
+      return false;
+    }
 
+    if(expr.op0().is_constant() && expr.op1().is_constant())
+    {
+      ieee_floatt f0(expr.op0());
+      ieee_floatt f1(expr.op1());
+
+      if(!f1.is_zero())
+      {
+        f0/=f1;
+        expr=f0.to_expr();
+        return false;
+      }
+    }
+  }
   return true;
 }
 
@@ -2059,8 +2099,25 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
     }
     else if(expr.op0().type().id()=="floatbv")
     {
-      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-      abort();
+      ieee_floatt f0(expr.op0());
+      ieee_floatt f1(expr.op1());
+
+      if(expr.id()=="notequal")
+        expr.make_bool(f0!=f1);
+      else if(expr.id()=="=")
+        expr.make_bool(f0==f1);
+      else if(expr.id()==">=")
+        expr.make_bool(f0>=f1);
+      else if(expr.id()=="<=")
+        expr.make_bool(f0<=f1);
+      else if(expr.id()==">")
+        expr.make_bool(f0>f1);
+      else if(expr.id()=="<")
+        expr.make_bool(f0<f1);
+      else
+        assert(false);
+
+      return false;
     }
     else
     {
@@ -2477,10 +2534,57 @@ Function: simplify_exprt::simplify_ieee_float_relation
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_ieee_float_relation(exprt &expr __attribute__((unused)))
+bool simplify_exprt::simplify_ieee_float_relation(exprt &expr)
 {
-  std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-  abort();
+  exprt::operandst &operands=expr.operands();
+
+  if(!expr.type().is_bool()) return true;
+
+  if(operands.size()!=2) return true;
+
+  // types must match
+  if(expr.op0().type()!=expr.op1().type())
+    return true;
+
+  if(expr.op0().type().id()!="floatbv")
+    return true;
+
+  // first see if we compare to a constant
+
+  if(expr.op0().is_constant() && expr.op1().is_constant())
+  {
+    ieee_floatt f0(expr.op0());
+    ieee_floatt f1(expr.op1());
+
+    if(expr.id()=="ieee_float_notequal")
+      expr.make_bool(ieee_not_equal(f0, f1));
+    else if(expr.id()=="ieee_float_equal")
+      expr.make_bool(ieee_equal(f0, f1));
+    else
+      assert(false);
+
+    return false;
+  }
+
+  if(expr.op0()==expr.op1())
+  {
+    // x!=x is the same as saying isnan(op)
+    exprt isnan("isnan", bool_typet());
+    isnan.copy_to_operands(expr.op0());
+
+    if(expr.id()=="ieee_float_notequal")
+    {
+    }
+    else if(expr.id()=="ieee_float_equal")
+      isnan.make_not();
+    else
+      assert(false);
+
+    expr.swap(isnan);
+    return false;
+  }
+
+  return true;
 }
 
 /*******************************************************************\
@@ -3128,7 +3232,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
 {
 
   if (config.options.get_bool_option("int-encoding") &&
-      expr.type().id() != "fixedbv" && expr.type().id() != "signedbv")
+      !expr.type().is_fixedbv() && !expr.type().is_signedbv())
     // Never simplify a unary minus if we're using integer encoding. The SMT
     // solver is going to have its own negative representation, and this
     // conflicts with the current irep representation of binary-in-a-string.
@@ -3203,8 +3307,10 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
     }
     else if(type_id=="floatbv")
     {
-      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-      abort();
+      ieee_floatt f(expr.op0());
+      f.negate();
+      expr=f.to_expr();
+      return false;
     }
   }
 
