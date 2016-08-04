@@ -1281,3 +1281,46 @@ BigInt::operator%= (BigInt const &y)
     positive = true;
   return *this;
 }
+
+// Not part of original BigInt.
+unsigned
+BigInt::floorPow2 () const
+{
+  int i = length - 1;    // Start on the last value
+  while (i >= 0 && digit[i] == 0) {
+    --i;               // Skip zeros
+  }
+  if (i < 0) {
+    return 0;          // Special case
+  }
+
+  twodig_t power = 1;
+  int count = 0;
+
+  while ((power << 1) <= (twodig_t)digit[i]) {
+    ++count, power <<= 1;
+  }
+  
+  return (single_bits * i) + count;
+}
+
+// Not part of original BigInt.
+void 
+BigInt::setPower2 (unsigned exponent) {
+  unsigned digitOffset = exponent / single_bits;
+  unsigned bitOffset = exponent % single_bits;
+  unsigned digitsNeeded = 1 + digitOffset;
+
+  reallocate(digitsNeeded);
+  this->length = digitsNeeded; 
+  this->positive = true;
+
+  unsigned i;
+  for (i = 0; i < digitOffset; ++i) {
+    digit[i] = 0;
+  }
+  digit[i] = 1;
+  digit[i] <<= bitOffset;
+
+  return;
+}
