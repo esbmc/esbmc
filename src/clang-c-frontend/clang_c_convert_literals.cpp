@@ -84,7 +84,7 @@ bool clang_c_convertert::convert_float_literal(
   if(!config.ansi_c.use_fixed_for_float)
   {
     std::cerr << "floatbv unsupported, sorry" << std::endl;
-    return false;
+    abort();
   }
 
   typet type;
