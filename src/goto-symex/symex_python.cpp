@@ -472,5 +472,11 @@ build_equation_class()
     .def("clone", &symex_target_equationt::clone)
     .def("clear_assertions", &symex_target_equationt::clear_assertions);
   return;
+
+  // Some global functions
+  def("slice", &::slice);
+  def("simple_slice", &::simple_slice);
+
+
 }
 #endif
