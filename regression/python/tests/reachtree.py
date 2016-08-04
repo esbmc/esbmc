@@ -50,7 +50,7 @@ class Reachtree(unittest.TestCase):
 
         self.art.get_cur_state().finish_formula()
         self.art.has_complete_formula = False;
-        result = get_cur_state().get_symex_result();
+        result = self.art.get_cur_state().get_symex_result();
 
         btor = esbmc.solve.solvers.boolector.make(False, False, self.ns, self.opts)
         result.target.convert(btor)
