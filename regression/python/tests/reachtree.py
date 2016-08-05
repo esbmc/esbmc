@@ -68,3 +68,8 @@ class Reachtree(unittest.TestCase):
         foo.pop()
         foo = self.art.execution_states
         self.assertTrue(len(foo) == 1, "Ex states should have one element")
+
+    def test_target_template(self):
+        import esbmc
+        foo = self.art.target_template
+        self.assertTrue(type(foo) == esbmc.symex.equation, "Should have extracted equation from reach tree")
