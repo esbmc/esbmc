@@ -12,6 +12,7 @@
 #include "reachability_tree.h"
 #include "execution_state.h"
 #include "goto_symex.h"
+#include "slice.h"
 
 class dummy_renaming_class {};
 
@@ -476,7 +477,5 @@ build_equation_class()
   // Some global functions
   def("slice", &::slice);
   def("simple_slice", &::simple_slice);
-
-
 }
 #endif
