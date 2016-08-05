@@ -12,6 +12,7 @@ class Exstate(unittest.TestCase):
         # Step that art once...
         self.art.setup_for_new_explore()
         self.art.get_cur_state().symex_step(self.art)
+        self.curstate = self.art.get_cur_state()
 
     def tearDown(self):
         import esbmc
@@ -24,3 +25,9 @@ class Exstate(unittest.TestCase):
     def test_setup(self):
         # Does any of the above throw?
         pass
+
+    def test_state_access(self):
+        import esbmc
+        self.assertTrue(len(self.curstate.threads_state) > 0, "Should have at least one thread")
+        foo = self.curstate.threads_state[0]
+        self.assertTrue(type(foo) == esbmc.symex.goto_symex_statet, "Thread state has incorrect type?")
