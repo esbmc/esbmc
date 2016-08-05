@@ -312,7 +312,7 @@ build_goto_symex_classes()
     &execution_statet::get_active_state;
 
   scope fgasdf =
-  class_<execution_statet, boost::noncopyable, bases<goto_symext> >("execution_state", no_init) // is abstract
+  class_<execution_statet, boost::noncopyable, bases<goto_symext>, boost::shared_ptr<execution_statet> >("execution_state", no_init) // is abstract
     .def("increment_context_switch", &execution_statet::increment_context_switch)
     .def("increment_time_slice", &execution_statet::increment_time_slice)
     .def("reset_time_slice", &execution_statet::reset_time_slice)
@@ -397,12 +397,12 @@ build_goto_symex_classes()
     .def_readwrite("owner", &execution_statet::ex_state_level2t::owner);
 
   // Classes we can actually construct...
-  class_<dfs_execution_statet, bases<execution_statet> >("dfs_execution_state", 
+  class_<dfs_execution_statet, bases<execution_statet>, boost::shared_ptr<dfs_execution_statet> >("dfs_execution_state", 
       init<const goto_functionst &, const namespacet &, reachability_treet *,
       boost::shared_ptr<symex_targett>, contextt &,
       optionst &, message_handlert &>());
 
-  class_<schedule_execution_statet, bases<execution_statet> >("schedule_execution_state", 
+  class_<schedule_execution_statet, bases<execution_statet>, boost::shared_ptr<schedule_execution_statet> >("schedule_execution_state", 
       init<const goto_functionst &, const namespacet &, reachability_treet *,
       boost::shared_ptr<symex_targett>, contextt &,
       optionst &, unsigned int *, unsigned int *, message_handlert &>());
@@ -431,7 +431,9 @@ build_goto_symex_classes()
     .def("generate_schedule_formula", &reachability_treet::generate_schedule_formula)
     .def("setup_next_formula", &reachability_treet::setup_next_formula)
     .def_readwrite("has_complete_formula", &reachability_treet::has_complete_formula)
-    .def_readwrite("execution_states", &reachability_treet::execution_states)
+    .add_property("execution_states",
+        make_function(&python_rt_mangler::get_execution_states),
+        make_function(&python_rt_mangler::set_execution_states))
     .def_readwrite("cur_state_it", &reachability_treet::cur_state_it)
     .def_readwrite("schedule_target", &reachability_treet::schedule_target)
     .def_readwrite("target_template", &reachability_treet::target_template)
