@@ -405,7 +405,7 @@ build_goto_symex_classes()
   // NB: this requires an operator== to be defined for goto_symex_statet,
   // see above.
   class_<std::vector<goto_symex_statet> >("goto_symex_statet_vec")
-    .def(vector_indexing_suite<std::vector<goto_symex_statet>, true>());
+    .def(vector_indexing_suite<std::vector<goto_symex_statet> >());
   class_<std::vector<unsigned int> >("atomic_nums_vec")
     .def(vector_indexing_suite<std::vector<unsigned> >());
   class_<std::vector<bool> >("dfs_state_vec")
