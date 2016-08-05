@@ -69,6 +69,20 @@ class Reachtree(unittest.TestCase):
         foo = self.art.execution_states
         self.assertTrue(len(foo) == 1, "Ex states should have one element")
 
+    def test_set_ex_states(self):
+        import esbmc
+        self.art.setup_for_new_explore()
+        self.art.get_cur_state().symex_step(self.art)
+
+        foo = self.art.execution_states
+        self.assertTrue(len(foo) == 1, "Ex states should have one element")
+        foo.append(foo[0])
+        self.art.execution_states = foo
+
+        bar = self.art.execution_states
+        self.assertTrue(len(foo) == 2, "Ex states should now have two elements")
+        # Can't do execution state equality. Never mind.
+
     def test_target_template(self):
         import esbmc
         foo = self.art.target_template
