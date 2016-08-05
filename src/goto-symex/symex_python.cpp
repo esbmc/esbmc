@@ -17,6 +17,24 @@
 
 class dummy_renaming_class {};
 
+// To fully implement all it's desired methods, boost's vector indexing suite
+// provides a contains() method that it doesn't (appear to) use itself.
+// This means that you can use the 'in' operator on the vector from python.
+// However that doesn't semantically make sense (why would you search for a
+// goto_symex_statet...), so I don't see a point in implementing it. Therefore
+// abort if someone tries to do that from python.
+// One could throw, but I think abort gets the nuances of the point across
+// better.
+bool
+operator==(const goto_symex_statet &a, const goto_symex_statet &b)
+{
+  (void)a;
+  (void)b;
+  std::cerr << "Something called contains() or similar on a boost python "
+    "vector of goto_symex_statet's: don't do that." << std::endl;
+  abort();
+}
+
 class python_rt_mangler {
 public:
 static boost::python::object
@@ -384,8 +402,14 @@ build_goto_symex_classes()
     .def_readwrite("smt_thread_guard", &execution_statet::smt_thread_guard)
     .def_readwrite("node_count", &execution_statet::node_count);
 
+  // NB: this requires an operator== to be defined for goto_symex_statet,
+  // see above.
   class_<std::vector<goto_symex_statet> >("goto_symex_statet_vec")
-    .def(vector_indexing_suite<goto_symex_statet>());
+    .def(vector_indexing_suite<std::vector<goto_symex_statet>, true>());
+  class_<std::vector<unsigned int> >("atomic_nums_vec")
+    .def(vector_indexing_suite<std::vector<unsigned> >());
+  class_<std::vector<bool> >("dfs_state_vec")
+    .def(vector_indexing_suite<std::vector<bool> >());
 
   // Resolve overload...
   void (execution_statet::ex_state_level2t::*rename_to)(expr2tc &lhs_symbol, unsigned count)
