@@ -16,6 +16,42 @@
 
 class dummy_renaming_class {};
 
+class python_rt_mangler {
+public:
+static boost::python::object
+get_execution_states(reachability_treet &art)
+{
+  using namespace boost::python;
+
+  list l;
+  for (auto &ex : art.execution_states)
+    l.append(object(ex));
+
+  return l;
+}
+
+static void
+set_execution_states(reachability_treet &art, boost::python::object &o)
+{
+  using namespace boost::python;
+
+  list pylist = extract<list>(o);
+  std::list<boost::shared_ptr<execution_statet>> replacement_list;
+
+  unsigned int i;
+  for (i = 0; i < len(pylist); i++) {
+    object elem = pylist[i];
+    boost::shared_ptr<execution_statet> ex = extract<boost::shared_ptr<execution_statet>>(elem);
+    replacement_list.push_back(ex);
+  }
+
+  art.execution_states.clear();
+  art.execution_states = replacement_list;
+  return;
+}
+};
+
+
 const value_sett &
 get_value_set(const goto_symex_statet &ss)
 {

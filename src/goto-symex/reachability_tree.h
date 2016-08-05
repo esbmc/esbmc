@@ -378,6 +378,7 @@ protected:
 
   friend class execution_statet;
   friend void build_goto_symex_classes();
+  friend class python_rt_mangler;
 };
 
 #endif /* REACHABILITY_TREE_H_ */
