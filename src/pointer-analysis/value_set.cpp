@@ -1285,3 +1285,87 @@ value_sett::dump(void) const
 {
   output(std::cout);
 }
+
+#ifdef WITH_PYTHON
+#include <boost/python/class.hpp>
+#include <boost/python/init.hpp>
+#include <boost/python/suite/indexing/map_indexing_suite.hpp>
+#include <boost/python/return_internal_reference.hpp>
+#include <boost/python/operators.hpp>
+
+void
+build_value_set_classes()
+{
+  using namespace boost::python;
+  {
+  bool (value_sett::*insert)(value_sett::object_mapt &, unsigned, const value_sett::objectt &) const =
+    &value_sett::insert;
+  bool (value_sett::*insert_expr)(value_sett::object_mapt &, const expr2tc &, const mp_integer &) const =
+    &value_sett::insert;
+  void (value_sett::*get_value_set)(const expr2tc &, value_setst::valuest &) const =
+    &value_sett::get_value_set;
+  value_sett::entryt &(value_sett::*get_entry)(const value_sett::entryt &) =
+    &value_sett::get_entry;
+  value_sett::entryt &(value_sett::*get_entry_named)(const std::string &, const std::string &) =
+    &value_sett::get_entry;
+  bool (value_sett::*make_union_objs)(value_sett::object_mapt &, const value_sett::object_mapt &) const =
+    &value_sett::make_union;
+  bool (value_sett::*make_union_values)(const value_sett::valuest &, bool) =
+    &value_sett::make_union;
+  bool (value_sett::*make_union_value_set)(const value_sett &, bool keepnew) =
+    &value_sett::make_union;
+  void (value_sett::*get_reference_set)(const expr2tc &, value_setst::valuest &) const =
+    &value_sett::get_reference_set;
+
+
+  scope foo = class_<value_sett>("value_set", init<namespacet>())
+    .def("get_natural_alignment", &value_sett::get_natural_alignment)
+    .def("offset2align", &value_sett::offset2align)
+    .def("to_expr", &value_sett::to_expr)
+    .def("set", &value_sett::set)
+    .def("insert", insert)
+    .def("insert_expr", insert_expr)
+    .def("erase", &value_sett::erase)
+    .def("get_value_set", get_value_set)
+    .def("clear", &value_sett::clear)
+    .def("del_var", &value_sett::del_var)
+    .def("get_entry", get_entry)
+    .def("get_entry_named", get_entry_named)
+    .def("dump", &value_sett::dump)
+    .def("make_union_objs", make_union_objs)
+    .def("make_union_values", make_union_values)
+    .def("make_union_value_set", make_union_value_set)
+    .def("apply_code", &value_sett::apply_code)
+    .def("assign", &value_sett::assign)
+    .def("do_function_call", &value_sett::do_function_call)
+    .def("do_end_function", &value_sett::do_end_function)
+    .def("get_reference_set", get_reference_set)
+    .def_readwrite("object_numbering", &value_sett::object_numbering)
+    .def_readwrite("values", &value_sett::values);
+  // XXX object numberingt?
+  
+  class_<value_sett::valuest>("valuest")
+    .def(map_indexing_suite<value_sett::valuest>());
+
+  class_<value_sett::objectt>("objectt", init<bool, unsigned int>())
+    .def(init<bool, BigInt>())
+    .def("offset_is_zero", &value_sett::objectt::offset_is_zero)
+    .def_readwrite("offset", &value_sett::objectt::offset)
+    .def_readwrite("offset_is_set", &value_sett::objectt::offset_is_set)
+    .def_readwrite("offset_alignment", &value_sett::objectt::offset_alignment);
+
+  // Hurrrrr, extending an std::map
+  class_<value_sett::object_map_dt>("object_map_dt")
+    .def(map_indexing_suite<value_sett::object_map_dt>())
+    .def_readwrite("empty", &value_sett::object_map_dt::empty); // is static
+
+  class_<value_sett::entryt>("entryt")
+    .def(init<std::string, std::string>())
+    .def_readwrite("identifier", &value_sett::entryt::identifier)
+    .def_readwrite("suffix", &value_sett::entryt::suffix)
+    // XXX getter setter?
+    .def_readwrite("object_map", &value_sett::entryt::object_map);
+
+  }
+}
+#endif
