@@ -1290,8 +1290,21 @@ value_sett::dump(void) const
 #include <boost/python/class.hpp>
 #include <boost/python/init.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
+#include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 #include <boost/python/return_internal_reference.hpp>
 #include <boost/python/operators.hpp>
+
+const value_sett::object_map_dt &
+read_object_map(const value_sett::object_mapt &map)
+{
+  return map.read();
+}
+
+void
+write_object_map(value_sett::object_mapt &map, const value_sett::object_map_dt &value)
+{
+  map.write() = value;
+}
 
 void
 build_value_set_classes()
@@ -1363,8 +1376,15 @@ build_value_set_classes()
     .def(init<std::string, std::string>())
     .def_readwrite("identifier", &value_sett::entryt::identifier)
     .def_readwrite("suffix", &value_sett::entryt::suffix)
-    // XXX getter setter?
     .def_readwrite("object_map", &value_sett::entryt::object_map);
+
+  class_<value_sett::object_mapt>("object_mapt")
+    .def("get", make_function(read_object_map, return_internal_reference<>()))
+    .def("set", make_function(write_object_map));
+
+  class_<object_numberingt>("object_numberingt")
+    .def(vector_indexing_suite<object_numberingt>())
+    .def("number", &object_numberingt::get_number);
 
   }
 }
