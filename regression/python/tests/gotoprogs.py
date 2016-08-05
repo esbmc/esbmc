@@ -1,4 +1,5 @@
 import unittest
+import functools
 
 class Gotoprogs(unittest.TestCase):
     def setUp(self):
@@ -49,3 +50,17 @@ class Gotoprogs(unittest.TestCase):
         import esbmc
         self.main.clear()
         self.assertTrue(len(self.main.get_instructions()) == 0, "Cleared program should have no insns")
+
+    def test_throw(self):
+        import esbmc
+        insns = self.main.get_instructions()
+        # At least one of these should have a target
+        insn_w_target = functools.reduce(lambda x, y: y if y.target != None else x, insns, None)
+        self.assertTrue(insn_w_target != None, "Should have insn with target somewhere")
+        insn_w_target.target = esbmc # Obviously non-insn target
+        try:
+            self.main.set_instructions(insns)
+        except RuntimeError:
+            pass
+        else:
+            self.assertTrue(False, "set_instructions should throw on bad target")
