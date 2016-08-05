@@ -1356,8 +1356,8 @@ build_value_set_classes()
 
   // Hurrrrr, extending an std::map
   class_<value_sett::object_map_dt>("object_map_dt")
-    .def(map_indexing_suite<value_sett::object_map_dt>())
-    .def_readwrite("empty", &value_sett::object_map_dt::empty); // is static
+    .def(map_indexing_suite<value_sett::object_map_dt>());
+//    .def_readwrite("empty", &value_sett::object_map_dt::empty); // is static
 
   class_<value_sett::entryt>("entryt")
     .def(init<std::string, std::string>())
