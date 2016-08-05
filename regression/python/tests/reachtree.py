@@ -57,3 +57,14 @@ class Reachtree(unittest.TestCase):
         issat = btor.dec_solve()
         # This test case should have a counterexample
         self.assertTrue(issat == esbmc.solve.smt_result.sat, "Full BMC result should be SAT")
+
+    def test_get_ex_states(self):
+        import esbmc
+        self.art.setup_for_new_explore()
+        self.art.get_cur_state().symex_step(self.art)
+
+        foo = self.art.execution_states
+        self.assertTrue(type(foo) == list, "Ex states should be a list")
+        foo.pop()
+        foo = self.art.execution_states
+        self.assertTrue(len(foo) == 1, "Ex states should have one element")
