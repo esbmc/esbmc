@@ -2,6 +2,7 @@
 #include <boost/python/class.hpp>
 #include <boost/python/init.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
+#include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 #include <boost/python/return_internal_reference.hpp>
 #include <boost/python/operators.hpp>
 
@@ -382,6 +383,9 @@ build_goto_symex_classes()
     .def_readwrite("smt_during_symex", &execution_statet::smt_during_symex)
     .def_readwrite("smt_thread_guard", &execution_statet::smt_thread_guard)
     .def_readwrite("node_count", &execution_statet::node_count);
+
+  class_<std::vector<goto_symex_statet> >("goto_symex_statet_vec")
+    .def(vector_indexing_suite<goto_symex_statet>());
 
   // Resolve overload...
   void (execution_statet::ex_state_level2t::*rename_to)(expr2tc &lhs_symbol, unsigned count)
