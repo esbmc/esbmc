@@ -49,6 +49,7 @@ void build_goto_func_class();
 void build_fixedbv_python_class();
 void build_goto_symex_classes();
 void build_equation_class();
+void build_value_set_classes();
 
 class dummy_expr_class { };
 class dummy_type_class { };
@@ -393,6 +394,8 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
     .def_readwrite("goto_functions", &cbmc_parseoptionst::goto_functions)
     .def_readonly("message_handler", &language_uit::ui_message_handler)
     .def_readonly("context", &language_uit::context);
+
+  build_value_set_classes();
 }
 
 // Include these other things that are special to the esbmc binary:
