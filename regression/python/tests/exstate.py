@@ -49,3 +49,8 @@ class Exstate(unittest.TestCase):
         import esbmc
         foo = self.curstate.state_level2
         self.assertTrue(type(foo) == esbmc.symex.execution_state.ex_state_level2t, "Can't acces level2 state")
+
+    def test_value_set_access(self):
+        import esbmc
+        foo = self.curstate.global_value_set
+        self.assertTrue(type(foo) == esbmc.value_set, "Can't acces global value_set")
