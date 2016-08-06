@@ -38,3 +38,9 @@ class Exstate(unittest.TestCase):
         foo = self.curstate.threads_state[0]
         self.curstate.threads_state.append(foo) # Is just a boost shared ptr reference
         self.assertTrue(len(self.curstate.threads_state) == 2, "Should have two g_s_s's after appending")
+
+    def test_atomic_access(self):
+        import esbmc
+        self.assertTrue(len(self.curstate.atomic_numbers) > 0, "Should have at least one atomic number")
+        foo = self.curstate.atomic_numbers[0]
+        self.assertTrue(type(foo) == int, "Atomic numbers should contain ints")
