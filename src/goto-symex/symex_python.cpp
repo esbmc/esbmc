@@ -392,8 +392,13 @@ build_goto_symex_classes()
     .def_readwrite("interleaving_unviable", &execution_statet::interleaving_unviable)
     .def_readwrite("pre_goto_guard", &execution_statet::pre_goto_guard)
     .def_readwrite("CS_number", &execution_statet::CS_number)
+    // These two fields can't currently be accessed as it's a set, _inside_ a
+    // vector. Converting the internal sets to python means we can't use the
+    // vector indexing suite and vice versa. No good solution right now, and
+    // it's too much investment for too little return.
     .def_readwrite("thread_last_reads", &execution_statet::thread_last_reads)
     .def_readwrite("thread_last_writes", &execution_statet::thread_last_writes)
+
     .def_readwrite("dependancy_chain", &execution_statet::dependancy_chain)
     .def_readwrite("mpor_says_no", &execution_statet::mpor_says_no)
     .def_readwrite("cswitch_forced", &execution_statet::cswitch_forced)
