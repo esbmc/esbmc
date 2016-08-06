@@ -31,3 +31,10 @@ class Exstate(unittest.TestCase):
         self.assertTrue(len(self.curstate.threads_state) > 0, "Should have at least one thread")
         foo = self.curstate.threads_state[0]
         self.assertTrue(type(foo) == esbmc.symex.goto_symex_statet, "Thread state has incorrect type?")
+
+    def test_state_append(self):
+        import esbmc
+        self.assertTrue(len(self.curstate.threads_state) > 0, "Should have at least one thread")
+        foo = self.curstate.threads_state[0]
+        self.curstate.threads_state.append(foo) # Is just a boost shared ptr reference
+        self.assertTrue(len(self.curstate.threads_state) == 2, "Should have two g_s_s's after appending")
