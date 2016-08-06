@@ -417,7 +417,7 @@ build_goto_symex_classes()
   void (execution_statet::ex_state_level2t::*rename)(expr2tc &ident) = &execution_statet::ex_state_level2t::rename;
 
   // xxx base
-  class_<execution_statet::ex_state_level2t>("ex_state_level2t",
+  class_<execution_statet::ex_state_level2t, boost::shared_ptr<execution_statet::ex_state_level2t> >("ex_state_level2t",
       init<execution_statet&>())
     .def("clone", &execution_statet::ex_state_level2t::clone)
     .def("rename_to", rename_to)

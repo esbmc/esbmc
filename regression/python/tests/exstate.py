@@ -44,3 +44,8 @@ class Exstate(unittest.TestCase):
         self.assertTrue(len(self.curstate.atomic_numbers) > 0, "Should have at least one atomic number")
         foo = self.curstate.atomic_numbers[0]
         self.assertTrue(type(foo) == int, "Atomic numbers should contain ints")
+
+    def test_l2_access(self):
+        import esbmc
+        foo = self.curstate.state_level2
+        self.assertTrue(type(foo) == esbmc.symex.execution_state.ex_state_level2t, "Can't acces level2 state")
