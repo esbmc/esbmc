@@ -80,6 +80,11 @@ class Exprs(unittest.TestCase):
         # Should be brought into python as a different object
         self.assertFalse(downcasted is val, "downcasted object should be new pyref")
 
+    def test_downcast_none(self):
+        import esbmc
+        downcasted = esbmc.downcast_expr(None)
+        self.assertTrue(downcasted == None, "Downcast of none should be none")
+
     def test_none(self):
         import esbmc
         val = self.make_int()
