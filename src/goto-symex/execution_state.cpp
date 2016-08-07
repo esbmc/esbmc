@@ -216,12 +216,18 @@ execution_statet::symex_step(reachability_treet &art)
   merge_gotos();
 
   if (break_insn != 0 && break_insn == instruction.location_number) {
-#ifndef _WIN32
+    // This twisty turny passage of ifdefs traps to python if esbmc has been
+    // built with python support; otherwise it executes a trap instruction.
+#ifdef WITH_PYTHON
+    std::cerr << "Trapping to python; call esbmc.trap() to break if you have gdb attached, then walk back up to symex frames" << std::endl;
     trap_to_python(owning_rt);
-//    __asm__("int $3");
+#else
+#ifndef _WIN32
+    __asm__("int $3");
 #else
     std::cerr << "Can't trap on windows, sorry" << std::endl;
     abort();
+#endif
 #endif
   }
 
