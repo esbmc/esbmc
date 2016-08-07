@@ -409,13 +409,18 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
 
 // A function for trapping to python. Assumptions: it's in the context of
 // symbolic execution, because that's the primary purpose / function of esbmc,
-// and thus an RT object must be provided. This function assumes (for the
-// moment) that a python interpreter is already running, and enters the
-// interative interpreter with art and other objects ready to be accessed.
+// and thus an RT object must be provided. Enters the interative interpreter
+// with art and other objects ready to be accessed.
 void
 trap_to_python(reachability_treet *art)
 {
   using namespace boost::python;
+
+  // Check if python is initialized, set if up if not. Never de-initialize.
+  if (!Py_IsInitialized()) {
+    Py_InitializeEx(0);
+  }
+
   object code = import("code");
   if (code.is_none()) {
     std::cerr << "Couldn't import code module when trapping to python"
