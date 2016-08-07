@@ -54,3 +54,12 @@ class Exstate(unittest.TestCase):
         import esbmc
         foo = self.curstate.global_value_set
         self.assertTrue(type(foo) == esbmc.value_set, "Can't acces global value_set")
+
+    # XXX testing: there are no other complex types that we want to actually
+    # test in execution_statet (vector of sets is too tricky; vector of vectors
+    # is part of mpor which I don't want to expose).
+    # I also don't really want to test the functionality of ex_state too much,
+    # we know we can call through to it, and what we're testing here is the
+    # python interface not the actual mechanics of esbmc.
+    # Thus, the final thing to test is our ability to override virtual functions
+    # and install our own python functions on top.
