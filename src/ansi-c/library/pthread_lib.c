@@ -75,6 +75,10 @@ pthread_trampoline(void)
   __ESBMC_pthread_end_values[threadid] = exit_val;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   num_threads_running--;
+  // A thread terminating during a search for a deadlock means there's no
+  // deadlock or it can be found down a different path. Proof left as exercise
+  // to the reader.
+  __ESBMC_assume(blocked_threads_count == 0);
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end(); // Never reached; doesn't matter.
   return;
@@ -117,6 +121,10 @@ pthread_exit(void *retval)
   __ESBMC_pthread_end_values[threadid] = retval;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   num_threads_running--;
+  // A thread terminating during a search for a deadlock means there's no
+  // deadlock or it can be found down a different path. Proof left as exercise
+  // to the reader.
+  __ESBMC_assume(blocked_threads_count == 0);
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
 }
