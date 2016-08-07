@@ -10,9 +10,13 @@ libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la ../langapi/liblanga
                   ../pointer-analysis/libpointeranalysis.la ../util/libutil.la \
                   ../big-int/libbigint.la ../solvers/libsolvers.la
 libesbmc_la_LIBADD = $(libs_to_link_in) $(ESBMC_SOLVER_LIBS) ./libmain.la
-libesbmc_la_SOURCES = python.cpp ltbuildidstring.c
+libesbmc_la_SOURCES = ltbuildidstring.c
 libmain_la_SOURCES = parseoptions.cpp bmc.cpp \
                 document_subgoals.cpp  show_vcc.cpp options.cpp
+EXTRA_libmain_la_SOURCES = python.cpp
+# python.lo will *not* be built unless it's specified in the dependencies
+EXTRA_libmain_la_DEPENDENCIES = @ESBMC_PYTHON_OBJ@
+libmain_la_LIBADD = @ESBMC_PYTHON_OBJ@
 esbmc_SOURCES = main.cpp buildidstring.c
 libesbmc_la_LDFLAGS = -module -shared -rpath ${libdir} # Makes this shared
 esbmc_LDADD = ./libmain.la $(libs_to_link_in) $(ESBMC_SOLVER_LIBS)

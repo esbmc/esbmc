@@ -186,8 +186,8 @@ AS_IF([test "${enable_esbmc}" = "yes"], [
   ])
 ])
 
-AC_ARG_ENABLE(enable-shared-lib, [AS_HELP_STRING([--enable-shared-lib], Build a shared library of ESBMCs code too)])
-AS_IF([test "${enable_shared_lib}" = "yes"], [
+AC_ARG_ENABLE(enable-python, [AS_HELP_STRING([--enable-python], Build python support into ESBMC)])
+AS_IF([test "${enable_python}" = "yes"], [
   dnl Check for python
   PKG_CHECK_MODULES([LIBPYTHON], [python], [
     dnl Add flags to build python in; enable build of libesbmc
@@ -196,13 +196,18 @@ AS_IF([test "${enable_shared_lib}" = "yes"], [
     AS_VAR_APPEND(LIBS, " $LIBPYTHON_LIBS -lboost_python ")
     AS_ECHO($LIBPYTHON_CFLAGS)
     AS_ECHO($LIBPYTHON_LIBS)
-    dnl enable shared library
-    AS_VAR_SET(enable_shared, "yes")
-    AC_SUBST([ESBMC_SHARED_LIB], "libesbmc.la")
     AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON_LIBS -lboost_python ")
+    AC_SUBST([ESBMC_PYTHON_OBJ], "python.lo")
   ], [
-    AC_MSG_ERROR("Asked for shared python lib, but pkgconfig finds no python library")
+    AC_MSG_ERROR("Asked for python support, but pkgconfig finds no python library. You need to install python development packages.")
   ])
+], [
+    AC_SUBST([ESBMC_PYTHON_OBJ], "")
+])
+
+dnl If --enable-shared was supplied, then enable building of libesbmc.
+AS_IF([test "${enable_shared}" = "yes"], [
+  AC_SUBST([ESBMC_SHARED_LIB], "libesbmc.la")
 ], [
   AC_SUBST([ESBMC_SHARED_LIB], "")
 ])
