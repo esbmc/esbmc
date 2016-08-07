@@ -541,6 +541,50 @@ pop_insn(symex_target_equationt *eq)
   return;
 }
 
+static unsigned int
+get_pc(const symex_targett::sourcet &src)
+{
+  return src.pc->location_number;
+}
+
+static void
+set_pc(symex_targett::sourcet &src, unsigned int loc)
+{
+  if (!src.prog)
+    throw "No program in sourcet";
+
+  if (src.prog->instructions.size() == 0)
+    throw "Empty program";
+
+  auto &insns = src.prog->instructions;
+  if (loc < insns.begin()->location_number ||
+      insns.begin()->location_number + insns.size() < loc)
+    throw "Location number not in range";
+
+  unsigned int dist = loc - insns.begin()->location_number;
+  auto it = insns.begin();
+  while (dist-- > 0)
+    it++;
+
+  src.pc = it;
+  return;
+}
+
+static goto_programt &
+get_prog(const symex_targett::sourcet &src)
+{
+  // Ditching const qualification because I'm not certain b.p is going to cope
+  // with that, and it won't honour it anyway.
+  return const_cast<goto_programt &>(*src.prog);
+}
+
+static void
+set_prog(symex_targett::sourcet &src, goto_programt &prog)
+{
+  src.prog = &prog;
+  return;
+}
+
 void
 build_equation_class()
 {
@@ -567,7 +611,24 @@ build_equation_class()
     .add_property("cond_ast", make_getter(&step::cond_ast), make_function(&set_cond_ast))
     .def_readwrite("ignore", &step::ignore);
 
-  class_<symex_targett, boost::shared_ptr<symex_targett>, boost::noncopyable>("symex_targett", no_init);
+  {
+    scope bar = class_<symex_targett, boost::shared_ptr<symex_targett>, boost::noncopyable>("symex_targett", no_init);
+
+    class_<symex_targett::sourcet>("targett")
+      .def_readwrite("is_set", &symex_targett::sourcet::is_set)
+      .def_readwrite("thread_nr", &symex_targett::sourcet::thread_nr)
+      // Access to the program is sketchy, but permissable. The program _should_
+      // be one loaded into the goto_functionst function map to ensure that it
+      // lives long enough.
+      .add_property("prog", make_function(get_prog, return_internal_reference<>()), make_function(set_prog))
+      // Accessing the program counter is sketchy too as it's actually an
+      // iterator. So, operate only on the integer identifier (i.e. the
+      // location number), which is a) easily validatable and b) accessible
+      // and c) can be used trivially by the python user to access the relevant
+      // instruction. This means you can't fiddle with insns while symex is on
+      // the fly, but that's a feature.
+      .add_property("pc", make_function(get_pc), make_function(set_pc));
+  }
 
   class_<goto_symext::symex_resultt, boost::shared_ptr<goto_symext::symex_resultt> >("symex_resultt",
       init<boost::shared_ptr<symex_targett>, unsigned, unsigned>())
