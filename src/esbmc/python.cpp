@@ -263,6 +263,9 @@ downcast_vehicle(const Source &contained)
 object
 downcast_type(const type2tc &type)
 {
+  if (is_nil_type(type))
+    return object();
+
   assert(type->type_id < type2t::end_type_id);
   object o = type_to_downcast[type->type_id];
   return o(type);
@@ -271,6 +274,9 @@ downcast_type(const type2tc &type)
 object
 downcast_expr(const expr2tc &expr)
 {
+  if (is_nil_expr(expr))
+    return object();
+
   assert(expr->expr_id < expr2t::end_expr_id);
   object o = expr_to_downcast[expr->expr_id];
   return o(expr);
