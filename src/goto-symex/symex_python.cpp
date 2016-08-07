@@ -80,6 +80,25 @@ set_execution_states(reachability_treet &art, boost::python::object &o)
   art.execution_states = replacement_list;
   return;
 }
+
+static void
+set_cur_state(reachability_treet &art, execution_statet *ex_state)
+{
+  // Something in the list of ex_states should have that ptr.
+
+  decltype(art.cur_state_it) foo; // iterator on ex states
+  for (foo = art.execution_states.begin();
+      foo != art.execution_states.end(); foo++) {
+    if (foo->get() == ex_state)
+      break;
+  }
+
+  if (foo == art.execution_states.end())
+    throw "That execution state wasn't in the list";
+
+  art.cur_state_it = foo;
+  return;
+}
 };
 
 template <typename Base>
@@ -489,6 +508,7 @@ build_goto_symex_classes()
       boost::shared_ptr<symex_targett>, contextt &, message_handlert &>())
     .def("setup_for_new_explore", &reachability_treet::setup_for_new_explore)
     .def("get_cur_state", get_cur_state, return_internal_reference<>())
+    .def("set_cur_state", &python_rt_mangler::set_cur_state)
     .def("reset_to_unexplored_state", &reachability_treet::reset_to_unexplored_state)
     .def("get_CS_bound", &reachability_treet::get_CS_bound)
     .def("get_ileave_direction_from_scheduling", &reachability_treet::get_ileave_direction_from_scheduling)
