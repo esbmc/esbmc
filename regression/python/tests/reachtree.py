@@ -87,3 +87,9 @@ class Reachtree(unittest.TestCase):
         import esbmc
         foo = self.art.target_template
         self.assertTrue(type(foo) == esbmc.symex.equation, "Should have extracted equation from reach tree")
+
+    def test_set_cur_state(self):
+        import esbmc
+        self.art.setup_for_new_explore()
+        self.art.get_cur_state().symex_step(self.art)
+        self.art.set_cur_state(self.art.get_cur_state())
