@@ -1,8 +1,10 @@
+# What we're building
 EXTRA_PROGRAMS = esbmc
 bin_PROGRAMS = @ESBMC_BINARY@
 EXTRA_LTLIBRARIES = libesbmc.la
 lib_LTLIBRARIES = libmain.la @ESBMC_SHARED_LIB@
 
+# Work out what gets linked in.
 ESBMC_SOLVER_LIBS = @ESBMC_SOLVER_LIBS@
 libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la ../langapi/liblangapi.la \
                   ../ansi-c/libansic.la ../ansi-c/libclib.la ../ansi-c/cpp/libcpp.la \
@@ -11,9 +13,16 @@ libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la ../langapi/liblanga
                   ../pointer-analysis/libpointeranalysis.la ../util/libutil.la \
                   ../big-int/libbigint.la ../solvers/libsolvers.la
 
+# An aside about python: linking it in is sketchy, but supported by libtool
+# extra sources and dependencies. The real issue is that the symex convenience
+# library depends on init_module_esbmc, but that depends on symex symbols,
+# which is circular. By sticking python.lo at the end of each link command line
+# we ensure that init_module_esbmc is pulled in by symex, but we rely on
+# various symex library symbols being pulled in by the rest of esbmc, which
+# isn't ideal.
+
 # Libmain: a library of all the functional stuff in the esbmc directory,
-# aside from functions like main and the build id string. All the complexity
-# comes from optionally building python into it.
+# aside from functions like main and the build id string.
 libmain_la_SOURCES = parseoptions.cpp bmc.cpp globals.cpp \
                 document_subgoals.cpp  show_vcc.cpp options.cpp
 EXTRA_libmain_la_SOURCES = python.cpp
