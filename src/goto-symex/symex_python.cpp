@@ -593,7 +593,7 @@ trap_to_python(reachability_treet *art)
 
   object interact = code.attr("interact");
   // Call interact
-  interact(locals);
+  interact(object(), object(), locals);
 
   return;
 }
