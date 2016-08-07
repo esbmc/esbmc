@@ -409,6 +409,7 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
 
 // Include these other things that are special to the esbmc binary:
 
+#if 0
 const mode_table_et mode_table[] =
 {
   LANGAPI_HAVE_MODE_C,
@@ -424,3 +425,4 @@ const mode_table_et mode_table[] =
 
 extern "C" uint8_t buildidstring_buf[1];
 uint8_t *version_string = buildidstring_buf;
+#endif

@@ -204,6 +204,8 @@ execution_statet::~execution_statet()
 {
 };
 
+void trap_to_python(reachability_treet *art);
+
 void
 execution_statet::symex_step(reachability_treet &art)
 {
@@ -215,7 +217,8 @@ execution_statet::symex_step(reachability_treet &art)
 
   if (break_insn != 0 && break_insn == instruction.location_number) {
 #ifndef _WIN32
-    __asm__("int $3");
+    trap_to_python(owning_rt);
+//    __asm__("int $3");
 #else
     std::cerr << "Can't trap on windows, sorry" << std::endl;
     abort();

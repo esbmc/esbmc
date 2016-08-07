@@ -19,7 +19,7 @@ libmain_la_SOURCES = parseoptions.cpp bmc.cpp \
 EXTRA_libmain_la_SOURCES = python.cpp
 # python.lo will *not* be built unless it's specified in the dependencies
 EXTRA_libmain_la_DEPENDENCIES = @ESBMC_PYTHON_OBJ@
-libmain_la_LIBADD = @ESBMC_PYTHON_OBJ@
+#libmain_la_LIBADD = @ESBMC_PYTHON_OBJ@
 
 # libesbmc -> shared object of all of ESBMCs Stuff (TM)
 libesbmc_la_LDFLAGS = -module -shared -rpath ${libdir} # Makes this shared
@@ -27,7 +27,7 @@ libesbmc_la_LIBADD = $(libs_to_link_in) $(ESBMC_SOLVER_LIBS) ./libmain.la
 libesbmc_la_SOURCES = ltbuildidstring.c
 
 # ESBMC binary: fairly self explanatory
-esbmc_LDADD = ./libmain.la $(libs_to_link_in) $(ESBMC_SOLVER_LIBS)
+esbmc_LDADD = ./libmain.la $(libs_to_link_in) $(ESBMC_SOLVER_LIBS) python.lo
 esbmc_SOURCES = main.cpp buildidstring.c
 
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util

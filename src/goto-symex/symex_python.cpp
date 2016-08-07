@@ -554,6 +554,8 @@ build_equation_class()
 // symbolic execution, because that's the primary purpose / function of esbmc,
 // and thus an RT object must be provided. Enters the interative interpreter
 // with art and other objects ready to be accessed.
+extern "C" void initesbmc();
+extern "C" void PyInit_esbmc();
 void
 trap_to_python(reachability_treet *art)
 {
@@ -562,11 +564,23 @@ trap_to_python(reachability_treet *art)
   // Check if python is initialized, set if up if not. Never de-initialize.
   if (!Py_IsInitialized()) {
     Py_InitializeEx(0);
+#  if PY_VERSION_HEX >= 0x03000000
+    PyInit_esbmc();
+#else
+    initesbmc();
+#endif
   }
 
   object code = import("code");
   if (code.is_none()) {
     std::cerr << "Couldn't import code module when trapping to python"
+      << std::endl;
+    return;
+  }
+
+  object esbmc = import("esbmc");
+  if (esbmc.is_none()) {
+    std::cerr << "Couldn't import esbmc module when trapping to python"
       << std::endl;
     return;
   }
