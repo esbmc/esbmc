@@ -63,3 +63,36 @@ class Exstate(unittest.TestCase):
     # python interface not the actual mechanics of esbmc.
     # Thus, the final thing to test is our ability to override virtual functions
     # and install our own python functions on top.
+
+    def test_override_class(self):
+        import esbmc
+        class ExState2(esbmc.symex.execution_state.dfs_execution_state):
+            def __init__(self, *posargs):
+                # Stash a reference to our callers object
+                self.owner = posargs[0]
+                # Call superclass constructor
+                super(ExState2, self).__init__(*posargs[1:])
+
+            def symex_step(self, art):
+                # Flag up that we've run
+                self.owner.has_run_symex_step = True
+                # Run the default implementation of symex_step.
+                super(ExState2, self).symex_step(art)
+
+        # Create wrapped execution state object
+        self.has_run_symex_step = False
+        newobj = ExState2(self, self.funcs, self.ns, self.art, self.eq, self.po.context, self.opts, self.po.message_handler)
+
+        # Now install it into the RT -- it's been stepped once, but that's OK
+        # so long as we clear the equation.
+        self.eq.clear()
+        self.art.execution_states = [newobj]
+        self.art.set_cur_state(newobj)
+
+        # In theory installed; now run forrest!
+        result = self.art.get_next_formula()
+        btor = esbmc.solve.solvers.boolector.make(False, False, self.ns, self.opts)
+        result.target.convert(btor)
+        issat = btor.dec_solve()
+        self.assertTrue(issat == esbmc.solve.smt_result.sat, "Overriden ex_state didn't produce a viable trace")
+        self.assertTrue(self.has_run_symex_step, "Overriden ex_state should have had symex_step called")
