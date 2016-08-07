@@ -66,6 +66,13 @@ static type_poolt *tp = NULL;
 dict type_to_downcast;
 dict expr_to_downcast;
 
+static void
+its_a_trap()
+{
+  __asm__("int $3");
+  __asm__("int $3"); // Repeat for gdb to latch onto a line number
+}
+
 template <typename T>
 class migrate_func;
 
@@ -396,6 +403,8 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
     .def_readonly("context", &language_uit::context);
 
   build_value_set_classes();
+
+  def("trap", &its_a_trap);
 }
 
 // A function for trapping to python. Assumptions: it's in the context of
