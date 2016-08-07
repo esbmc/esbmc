@@ -398,6 +398,34 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   build_value_set_classes();
 }
 
+// A function for trapping to python. Assumptions: it's in the context of
+// symbolic execution, because that's the primary purpose / function of esbmc,
+// and thus an RT object must be provided. This function assumes (for the
+// moment) that a python interpreter is already running, and enters the
+// interative interpreter with art and other objects ready to be accessed.
+void
+trap_to_python(reachability_treet *art)
+{
+  using namespace boost::python;
+  object code = import("code");
+  if (code.is_none()) {
+    std::cerr << "Couldn't import code module when trapping to python"
+      << std::endl;
+    return;
+  }
+
+  dict locals;
+  locals["art"] = object(art);
+  locals["ns"] = object(ns);
+  locals["funcs"] = object(po->goto_functions);
+
+  object interact = code.attr("interact");
+  // Call interact
+  interact(locals);
+
+  return;
+}
+
 // Include these other things that are special to the esbmc binary:
 
 const mode_table_et mode_table[] =
