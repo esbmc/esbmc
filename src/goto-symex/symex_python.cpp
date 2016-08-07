@@ -498,6 +498,34 @@ set_cond_ast(symex_target_equationt::SSA_stept &step, const smt_ast *ast)
   return;
 }
 
+static boost::python::object
+get_insns(symex_target_equationt *eq)
+{
+  using namespace boost::python;
+
+  list l;
+
+  for (auto &step : eq->SSA_steps)
+    l.append(object(&step));
+
+  return l;
+}
+
+static void
+append_insn(symex_target_equationt *eq, symex_target_equationt::SSA_stept &step)
+{
+  eq->SSA_steps.push_back(step);
+  return;
+}
+
+static void
+pop_insn(symex_target_equationt *eq)
+{
+  // Don't return anything, has no storage
+  eq->SSA_steps.pop_back();
+  return;
+}
+
 void
 build_equation_class()
 {
@@ -542,7 +570,17 @@ build_equation_class()
     .def("clear", &symex_target_equationt::clear)
     .def("check_for_dups", &symex_target_equationt::check_for_duplicate_assigns)
     .def("clone", &symex_target_equationt::clone)
-    .def("clear_assertions", &symex_target_equationt::clear_assertions);
+    .def("clear_assertions", &symex_target_equationt::clear_assertions)
+    // It's way too sketchy to give python direct access to SSA_steps: we're not
+    // going to convert all steps by value to python objects, and
+    // self-assignment is likely to be a trainwreck. So: return a list of
+    // internal references that can be messed with, and supply a facility for
+    // copy-appending a step into the list or popping an insn. If you need to
+    // really delicately manipulate the equation, you need to construct a new
+    // one and filter insns from the old to the new.
+    .def("get_insns", &get_insns)
+    .def("append_insn", &append_insn)
+    .def("pop_back", &pop_insn);
   return;
 
   // Some global functions
