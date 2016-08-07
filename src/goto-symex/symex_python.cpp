@@ -5,7 +5,7 @@
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 #include <boost/python/return_internal_reference.hpp>
 #include <boost/python/operators.hpp>
-
+#include <boost/python/override.hpp>
 
 #include <util/bp_opaque_ptr.h>
 #include <util/bp_converter.h>
@@ -82,6 +82,28 @@ set_execution_states(reachability_treet &art, boost::python::object &o)
 }
 };
 
+template <typename Base>
+class ex_state_wrapper : public Base, public boost::python::wrapper<Base>
+{
+public:
+  // Template forwarding constructor.
+  template <typename ...Args>
+  ex_state_wrapper(Args &...args) : Base(args...) { }
+
+  void symex_step(reachability_treet &art)
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("symex_step"))
+      f(art);
+    else
+      Base::symex_step(art);
+  }
+
+  void default_symex_step(reachability_treet &art)
+  {
+    Base::symex_step(art);
+  }
+};
 
 const value_sett &
 get_value_set(const goto_symex_statet &ss)
@@ -446,15 +468,17 @@ build_goto_symex_classes()
     .def_readwrite("owner", &execution_statet::ex_state_level2t::owner);
 
   // Classes we can actually construct...
-  class_<dfs_execution_statet, bases<execution_statet>, boost::shared_ptr<dfs_execution_statet> >("dfs_execution_state", 
+  class_<ex_state_wrapper<dfs_execution_statet>, bases<execution_statet>, boost::shared_ptr<ex_state_wrapper<dfs_execution_statet> > >("dfs_execution_state",
       init<const goto_functionst &, const namespacet &, reachability_treet *,
       boost::shared_ptr<symex_targett>, contextt &,
-      optionst &, message_handlert &>());
+      optionst &, message_handlert &>())
+    .def("symex_step", &goto_symext::symex_step, &ex_state_wrapper<dfs_execution_statet>::default_symex_step);
 
-  class_<schedule_execution_statet, bases<execution_statet>, boost::shared_ptr<schedule_execution_statet> >("schedule_execution_state", 
+  class_<ex_state_wrapper<schedule_execution_statet>, bases<execution_statet>, boost::shared_ptr<ex_state_wrapper<schedule_execution_statet> > >("schedule_execution_state",
       init<const goto_functionst &, const namespacet &, reachability_treet *,
       boost::shared_ptr<symex_targett>, contextt &,
-      optionst &, unsigned int *, unsigned int *, message_handlert &>());
+      optionst &, unsigned int *, unsigned int *, message_handlert &>())
+    .def("symex_step", &goto_symext::symex_step, &ex_state_wrapper<schedule_execution_statet>::default_symex_step);
 
   } // ex_state scope
 
