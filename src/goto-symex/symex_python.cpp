@@ -286,6 +286,7 @@ build_goto_symex_classes()
 
   class_<goto_symex_statet::framet>("framet", init<unsigned int>())
     .def_readwrite("function_identifier", &goto_symex_statet::framet::function_identifier)
+    // XXX -- exporting this is going to require serious hijinx.
     .def_readwrite("goto_state_map", &goto_symex_statet::framet::goto_state_map)
     .def_readwrite("level1", &goto_symex_statet::framet::level1)
     .def_readwrite("calling_location", &goto_symex_statet::framet::calling_location)
