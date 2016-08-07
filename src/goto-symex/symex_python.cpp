@@ -35,6 +35,18 @@ operator==(const goto_symex_statet &a, const goto_symex_statet &b)
   abort();
 }
 
+// Also: framet.
+bool
+operator==(const goto_symex_statet::framet &a, const goto_symex_statet::framet &b)
+{
+  (void)a;
+  (void)b;
+  std::cerr << "Something called contains() or similar on a boost python "
+    "vector of goto_symex_statet::framet's: don't do that." << std::endl;
+  abort();
+}
+
+
 class python_rt_mangler {
 public:
 static boost::python::object
@@ -323,6 +335,9 @@ build_goto_symex_classes()
     .add_property("value_set", make_function(get_value_set, return_internal_reference<>()))
     .def_readwrite("call_stack", &goto_symex_statet::call_stack)
     .def_readwrite("realloc_map", &goto_symex_statet::realloc_map);
+
+  class_<std::vector<goto_symex_statet::framet> >("frame_vec")
+    .def(vector_indexing_suite<std::vector<goto_symex_statet::framet> >());
 
  {
 
