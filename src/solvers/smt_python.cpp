@@ -86,7 +86,13 @@ public:
       abort();
     }
 
-    return this->get_override("mk_sort")(tuple(args));
+    return mk_sort_remangled(tuple(args));
+  }
+
+  smt_sortt
+  mk_sort_remangled(boost::python::object o)
+  {
+    return this->get_override("mk_sort")(o);
   }
 
   smt_astt
@@ -322,15 +328,26 @@ build_smt_conv_python_class(void)
     .def_readwrite("data_width", &smt_sort::data_width)
     .def_readwrite("domain_width", &smt_sort::domain_width);
 
-  class_<smt_ast>("smt_ast", init<smt_convt*, smt_sortt>())
-    .def_readwrite("sort", &smt_ast::sort);
+  // Declare smt_ast class, wrapped, with overrides available. Note that these
+  // are all declared to return internal references: by default is's the solvers
+  // problem to memory manage. If overridden, then it's the overriders problem
+  // to keep a python reference to all smt_ast's that C++ might point at.
+  typedef return_internal_reference<> rte;
+  class_<smt_ast_wrapper>("smt_ast", init<smt_convt*, smt_sortt>())
+    .def_readwrite("sort", &smt_ast::sort)
+    .def("ite", &smt_ast_wrapper::ite, &smt_ast_wrapper::default_ite, rte())
+    .def("eq", &smt_ast_wrapper::eq, &smt_ast_wrapper::default_eq, rte())
+    .def("assign", &smt_ast_wrapper::assign, &smt_ast_wrapper::default_assign)
+    .def("update", &smt_ast_wrapper::update, &smt_ast_wrapper::default_update, rte())
+    .def("select", &smt_ast_wrapper::select, &smt_ast_wrapper::default_select, rte())
+    .def("project", &smt_ast_wrapper::project, &smt_ast_wrapper::default_project, rte());
 
   // Register generic smt_convt facilities: only allow the python user to do
   // expression conversion. Any new smt_convt implementation should be done
   // in C++ for example.
   // Refrain from registering enums too: basic implementation pls.
   typedef return_value_policy<return_opaque_pointer> ropaque;
-  class_<smt_convt, boost::noncopyable>("smt_convt", no_init)
+  class_<smt_convt_wrapper, boost::noncopyable>("smt_convt", no_init)
     .def("push_ctx", &smt_convt::push_ctx)
     .def("pop_ctx", &smt_convt::pop_ctx)
     .def("convert_ast", &smt_convt::convert_ast, ropaque())
@@ -341,7 +358,19 @@ build_smt_conv_python_class(void)
     .def("imply_ast", &smt_convt::imply_ast, ropaque())
     .def("assert_ast", &smt_convt::assert_ast)
     .def("dec_solve", &smt_convt::dec_solve)
-    .def("get", &smt_convt::get);
+    .def("get", &smt_convt::get)
+    // Funcs to be overridden by an extender. Same ptr ownership rules apply
+    .def("assert_ast", pure_virtual(&smt_convt::assert_ast))
+    .def("dec_solve", pure_virtual(&smt_convt::dec_solve))
+    .def("l_get", pure_virtual(&smt_convt::l_get))
+    // Boost.python can't cope with variardic funcs, so work around it
+    .def("mk_sort", pure_virtual(&smt_convt_wrapper::mk_sort_remangled), rte())
+    .def("mk_smt_int", pure_virtual(&smt_convt::mk_smt_int), rte())
+    .def("mk_smt_bool", pure_virtual(&smt_convt::mk_smt_bool), rte())
+    .def("mk_smt_symbol", pure_virtual(&smt_convt::mk_smt_symbol), rte())
+    .def("get_bool", pure_virtual(&smt_convt::get_bool))
+    .def("get_bv", pure_virtual(&smt_convt::get_bv))
+    .def("mk_extract", pure_virtual(&smt_convt::mk_extract), rte());
 
   // Result enum for solving
   enum_<smt_convt::resultt>("smt_result")
