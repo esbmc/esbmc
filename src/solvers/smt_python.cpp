@@ -18,6 +18,104 @@ class dummy_solver_class { };
 class dummy_solver_class2 { };
 class dummy_solver_class3 { };
 
+class smt_convt_wrapper : public smt_convt,  boost::python::wrapper<smt_convt>
+{
+  void
+  assert_ast(smt_astt a)
+  {
+    this->get_override("assert_ast")(a);
+  }
+
+  resultt
+  dec_solve()
+  {
+    return this->get_override("dec_solve")();
+  }
+
+  const std::string
+  solver_text()
+  {
+    return this->get_override("solver_text")();
+  }
+
+  tvt
+  l_get(smt_astt a)
+  {
+    return this->get_override("l_get")(a);
+  }
+
+  smt_sortt
+  mk_sort(const smt_sort_kind k, ...)
+  {
+    using namespace boost::python;
+    // Because this function is variadic (haha poor design choices) we can't
+    // just funnel it to python. Extract actual args, then call an overrider.
+    va_list ap;
+    unsigned long uint;
+
+    std::vector<object> args;
+    args.push_back(object(k));
+
+    va_start(ap, k);
+    switch (k) {
+    case SMT_SORT_INT:
+    case SMT_SORT_REAL:
+    case SMT_SORT_BOOL:
+      break;
+    case SMT_SORT_BV:
+      uint = va_arg(ap, unsigned long);
+      args.push_back(object(uint));
+      break;
+    case SMT_SORT_ARRAY:
+    {
+      smt_sort *dom = va_arg(ap, smt_sort *); // Consider constness?
+      smt_sort *range = va_arg(ap, smt_sort *);
+      assert(int_encoding || dom->data_width != 0);
+
+      // XXX: setting data_width to 1 if non-bv type?
+      args.push_back(object(dom));
+      args.push_back(object(range));
+      // XXX: how are those types going to be convertged to python references eh
+    }
+    default:
+      std::cerr << "Unexpected sort kind " << k << " in smt_convt_wrapper mk_sort" << std::endl;
+      abort();
+    }
+
+    return this->get_override("mk_sort")(tuple(args));
+  }
+
+  smt_astt
+  mk_smt_int(const mp_integer &theint, bool sign)
+  {
+    return this->get_override("mk_smt_int")(theint, sign);
+  }
+
+  smt_astt
+  mk_smt_bool(bool val)
+  {
+    return this->get_override("mk_smt_bool")(val);
+  }
+
+  smt_astt
+  mk_smt_symbol(const std::string &name, smt_sortt s)
+  {
+    return this->get_override("mk_smt_symbol")(name, s);
+  }
+
+  expr2tc
+  get_bool(smt_astt a)
+  {
+    return this->get_override("get_bool")(a);
+  }
+
+  expr2tc
+  get_bv(const type2tc &t, smt_astt a)
+  {
+    return this->get_override("get_bv")(t, a);
+  }
+};
+
 static smt_convt *
 bounce_solver_factory(bool is_cpp, bool int_encoding, const namespacet &ns,
     const optionst &options, const char *name = "bees")
