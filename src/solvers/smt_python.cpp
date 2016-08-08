@@ -122,6 +122,69 @@ class smt_convt_wrapper : public smt_convt,  boost::python::wrapper<smt_convt>
   }
 };
 
+class smt_ast_wrapper : public smt_ast,  boost::python::wrapper<smt_ast>
+{
+  smt_astt
+  ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("ite"))
+      return f(ctx, cond, falseop);
+    else
+      return smt_ast::ite(ctx, cond, falseop);
+  }
+
+  smt_astt
+  eq(smt_convt *ctx, smt_astt other) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("eq"))
+      return f(ctx, other);
+    else
+      return smt_ast::eq(ctx, other);
+  }
+
+  void
+  assign(smt_convt *ctx, smt_astt sym) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("assign"))
+      f(ctx, sym);
+    else
+      smt_ast::assign(ctx, sym);
+  }
+
+  smt_astt
+  update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr = expr2tc()) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("update"))
+      return f(ctx, value, idx, idx_expr);
+    else
+      return smt_ast::update(ctx, value, idx, idx_expr);
+  }
+
+  smt_astt
+  select(smt_convt *ctx, const expr2tc &idx) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("select"))
+      return f(ctx, idx);
+    else
+      return smt_ast::select(ctx, idx);
+  }
+
+  smt_astt
+  project(smt_convt *ctx, unsigned int elem) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("project"))
+      return f(ctx, elem);
+    else
+      return smt_ast::project(ctx, elem);
+  }
+};
+
 static smt_convt *
 bounce_solver_factory(bool is_cpp, bool int_encoding, const namespacet &ns,
     const optionst &options, const char *name = "bees")
