@@ -209,10 +209,15 @@ build_smt_conv_python_class(void)
     .value("real2int", SMT_FUNC_REAL2INT)
     .value("isint", SMT_FUNC_IS_INT);
 
-  // Use vendor'd opaque as opaque_const, because the 'extract' method in
-  // boost.python's version catches fire when handed a const qualification.
-  opaque_const<const smt_ast>();
-  opaque_const<const smt_sort>();
+  class_<smt_sort>("smt_sort", init<smt_sort_kind>())
+    .def(init<smt_sort_kind, unsigned long>())
+    .def(init<smt_sort_kind, unsigned long, unsigned long>())
+    .def_readwrite("id", &smt_sort::id)
+    .def_readwrite("data_width", &smt_sort::data_width)
+    .def_readwrite("domain_width", &smt_sort::domain_width);
+
+  class_<smt_ast>("smt_ast", init<smt_convt*, smt_sortt>())
+    .def_readwrite("sort", &smt_ast::sort);
 
   // Register generic smt_convt facilities: only allow the python user to do
   // expression conversion. Any new smt_convt implementation should be done
