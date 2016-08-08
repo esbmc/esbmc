@@ -20,6 +20,7 @@ class dummy_solver_class3 { };
 
 class smt_convt_wrapper : public smt_convt, public boost::python::wrapper<smt_convt>
 {
+public:
   template <typename ...Args>
   smt_convt_wrapper(Args ...args) : smt_convt(args...) { }
 
@@ -127,6 +128,7 @@ class smt_convt_wrapper : public smt_convt, public boost::python::wrapper<smt_co
 
 class smt_ast_wrapper : public smt_ast, public boost::python::wrapper<smt_ast>
 {
+public:
   template <typename ...Args>
   smt_ast_wrapper(Args ...args) : smt_ast(args...) { }
 
