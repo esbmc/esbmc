@@ -137,15 +137,77 @@ build_smt_conv_python_class(void)
 
   scope solve = class_<dummy_solver_class>("solve");
 
-  // There are no circumstances where python users should be inspecting the
-  // internals of SMT handles. They're handles. In terms of lifetime, the smt
-  // handles get destroyed when the smt_convt gets destroyed. Now, it would
-  // be illegal to pass a handle from one smt_convt to another smt_convt; in
-  // the same way, if your smt_convt has gone out of scope and been destroyed,
-  // you don't have anywhere to legally pass these opqaue pointers.
-  //
-  // That rather ignores the matter of push/popping scopes. User is on their
-  // own there.
+  // It would appear people _do_ want to write sovlers from python.
+
+  enum_<smt_sort_kind>("smt_sort_kind")
+    .value("int", SMT_SORT_INT)
+    .value("real", SMT_SORT_REAL)
+    .value("bv", SMT_SORT_BV)
+    .value("array", SMT_SORT_ARRAY)
+    .value("bool", SMT_SORT_BOOL)
+    .value("struct", SMT_SORT_STRUCT)
+    .value("union", SMT_SORT_UNION);
+
+  enum_<smt_func_kind>("smt_func_kind")
+    .value("hacks", SMT_FUNC_HACKS) // Not really to be used
+    .value("invalid", SMT_FUNC_INVALID) // see above
+    .value("int", SMT_FUNC_INT)
+    .value("bool", SMT_FUNC_BOOL)
+    .value("bvint", SMT_FUNC_BVINT)
+    .value("real", SMT_FUNC_REAL)
+    .value("symbol", SMT_FUNC_SYMBOL)
+    .value("add", SMT_FUNC_ADD)
+    .value("bvadd", SMT_FUNC_BVADD)
+    .value("sub", SMT_FUNC_SUB)
+    .value("bvsub", SMT_FUNC_BVSUB)
+    .value("mul", SMT_FUNC_MUL)
+    .value("bvmul", SMT_FUNC_BVMUL)
+    .value("div", SMT_FUNC_DIV)
+    .value("bvudiv", SMT_FUNC_BVUDIV)
+    .value("bvsdiv", SMT_FUNC_BVSDIV)
+    .value("mod", SMT_FUNC_MOD)
+    .value("bvsmod", SMT_FUNC_BVSMOD)
+    .value("bvumod", SMT_FUNC_BVUMOD)
+    .value("shl", SMT_FUNC_SHL)
+    .value("bvshl", SMT_FUNC_BVSHL)
+    .value("bvashr", SMT_FUNC_BVASHR)
+    .value("neg", SMT_FUNC_NEG)
+    .value("bvneg", SMT_FUNC_BVNEG)
+    .value("bvlshr", SMT_FUNC_BVLSHR)
+    .value("bvnot", SMT_FUNC_BVNOT)
+    .value("bvnxor", SMT_FUNC_BVNXOR)
+    .value("bvnor", SMT_FUNC_BVNOR)
+    .value("bvnand", SMT_FUNC_BVNAND)
+    .value("bvxor", SMT_FUNC_BVXOR)
+    .value("bvor", SMT_FUNC_BVOR)
+    .value("bvand", SMT_FUNC_BVAND)
+    .value("implies", SMT_FUNC_IMPLIES)
+    .value("xor", SMT_FUNC_XOR)
+    .value("or", SMT_FUNC_OR)
+    .value("and", SMT_FUNC_AND)
+    .value("not", SMT_FUNC_NOT)
+    .value("lt", SMT_FUNC_LT)
+    .value("bvslt", SMT_FUNC_BVSLT)
+    .value("bvult", SMT_FUNC_BVULT)
+    .value("gt", SMT_FUNC_GT)
+    .value("bvsgt", SMT_FUNC_BVSGT)
+    .value("bvugt", SMT_FUNC_BVUGT)
+    .value("lte", SMT_FUNC_LTE)
+    .value("bvslte", SMT_FUNC_BVSLTE)
+    .value("bvulte", SMT_FUNC_BVULTE)
+    .value("gte", SMT_FUNC_GTE)
+    .value("bvsgte", SMT_FUNC_BVSGTE)
+    .value("bvugte", SMT_FUNC_BVUGTE)
+    .value("eq", SMT_FUNC_EQ)
+    .value("noteq", SMT_FUNC_NOTEQ)
+    .value("ite", SMT_FUNC_ITE)
+    .value("store", SMT_FUNC_STORE)
+    .value("select", SMT_FUNC_SELECT)
+    .value("concat", SMT_FUNC_CONCAT)
+    .value("extract", SMT_FUNC_EXTRACT)
+    .value("int2real", SMT_FUNC_INT2REAL)
+    .value("real2int", SMT_FUNC_REAL2INT)
+    .value("isint", SMT_FUNC_IS_INT);
 
   // Use vendor'd opaque as opaque_const, because the 'extract' method in
   // boost.python's version catches fire when handed a const qualification.
