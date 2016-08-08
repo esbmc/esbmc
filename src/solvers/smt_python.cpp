@@ -114,6 +114,12 @@ class smt_convt_wrapper : public smt_convt,  boost::python::wrapper<smt_convt>
   {
     return this->get_override("get_bv")(t, a);
   }
+
+  smt_astt
+  mk_extract(smt_astt a, unsigned int high, unsigned int low, smt_sortt s)
+  {
+    return this->get_override("mk_extract")(a, high, low, s);
+  }
 };
 
 static smt_convt *
