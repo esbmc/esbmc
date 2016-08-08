@@ -18,8 +18,11 @@ class dummy_solver_class { };
 class dummy_solver_class2 { };
 class dummy_solver_class3 { };
 
-class smt_convt_wrapper : public smt_convt,  boost::python::wrapper<smt_convt>
+class smt_convt_wrapper : public smt_convt, public boost::python::wrapper<smt_convt>
 {
+  template <typename ...Args>
+  smt_convt_wrapper(Args ...args) : smt_convt(args...) { }
+
   void
   assert_ast(smt_astt a)
   {
@@ -122,8 +125,11 @@ class smt_convt_wrapper : public smt_convt,  boost::python::wrapper<smt_convt>
   }
 };
 
-class smt_ast_wrapper : public smt_ast,  boost::python::wrapper<smt_ast>
+class smt_ast_wrapper : public smt_ast, public boost::python::wrapper<smt_ast>
 {
+  template <typename ...Args>
+  smt_ast_wrapper(Args ...args) : smt_ast(args...) { }
+
   smt_astt
   ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   {
