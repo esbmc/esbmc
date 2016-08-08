@@ -134,6 +134,11 @@ class smt_ast_wrapper : public smt_ast,  boost::python::wrapper<smt_ast>
       return smt_ast::ite(ctx, cond, falseop);
   }
 
+  smt_astt default_ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+  {
+    return smt_ast::ite(ctx, cond, falseop);
+  }
+
   smt_astt
   eq(smt_convt *ctx, smt_astt other) const
   {
@@ -144,6 +149,12 @@ class smt_ast_wrapper : public smt_ast,  boost::python::wrapper<smt_ast>
       return smt_ast::eq(ctx, other);
   }
 
+  smt_astt
+  default_eq(smt_convt *ctx, smt_astt other) const
+  {
+    return smt_ast::eq(ctx, other);
+  }
+
   void
   assign(smt_convt *ctx, smt_astt sym) const
   {
@@ -152,6 +163,12 @@ class smt_ast_wrapper : public smt_ast,  boost::python::wrapper<smt_ast>
       f(ctx, sym);
     else
       smt_ast::assign(ctx, sym);
+  }
+
+  void
+  default_assign(smt_convt *ctx, smt_astt sym) const
+  {
+    smt_ast::assign(ctx, sym);
   }
 
   smt_astt
@@ -165,6 +182,12 @@ class smt_ast_wrapper : public smt_ast,  boost::python::wrapper<smt_ast>
   }
 
   smt_astt
+  default_update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr = expr2tc()) const
+  {
+    return smt_ast::update(ctx, value, idx, idx_expr);
+  }
+
+  smt_astt
   select(smt_convt *ctx, const expr2tc &idx) const
   {
     using namespace boost::python;
@@ -175,6 +198,12 @@ class smt_ast_wrapper : public smt_ast,  boost::python::wrapper<smt_ast>
   }
 
   smt_astt
+  default_select(smt_convt *ctx, const expr2tc &idx) const
+  {
+    return smt_ast::select(ctx, idx);
+  }
+
+  smt_astt
   project(smt_convt *ctx, unsigned int elem) const
   {
     using namespace boost::python;
@@ -182,6 +211,12 @@ class smt_ast_wrapper : public smt_ast,  boost::python::wrapper<smt_ast>
       return f(ctx, elem);
     else
       return smt_ast::project(ctx, elem);
+  }
+
+  smt_astt
+  default_project(smt_convt *ctx, unsigned int elem) const
+  {
+    return smt_ast::project(ctx, elem);
   }
 };
 
