@@ -7,20 +7,22 @@ import esbmc
 import z3
 
 class Z3sort(esbmc.solve.smt_sort):
-    def __init__(self, kind, width=None, domain_width=None):
+    def __init__(self, z3sort, kind, width=None, domain_width=None):
         if domain_width != None:
             super(Z3sort, self).__init__(kind, width, domain_width)
         elif width != None:
             super(Z3sort, self).__init__(kind, width)
         else:
             super(Z3sort, self).__init__(kind)
+        self.sort = z3sort
 
   # Has no other methods, only provides id / data_width / dom_width in base
   # class, so that the rest of smt_convt can decide the right path.
 
 class Z3ast(esbmc.solve.smt_ast):
-    def __init__(self, convobj, sort):
+    def __init__(self, ast, convobj, sort):
         super(Z3ast, self).__init__(convobj, sort)
+        self.ast = ast
 
     def ite(self, conv, cond, falseop):
         assert False
@@ -46,6 +48,7 @@ class Z3python(esbmc.solve.smt_convt):
         self.ctx = z3.Context()
         self.ast_list = []
         self.sort_list = []
+        self.bool_sort = self.mk_sort((esbmc.solve.smt_sort_kind.bool,))
 
     # Decorator function: return a function that appends the return value to
     # the list of asts. This is vital: the python object returned from various
@@ -74,14 +77,18 @@ class Z3python(esbmc.solve.smt_convt):
         assert False
 
     def mk_sort(self, args):
-        assert False
+        kind = args[0]
+        if kind == esbmc.solve.smt_sort_kind.bool:
+            return Z3sort(z3.BoolSort(self.ctx), kind)
+        else:
+            assert False
 
     def mk_smt_int(self, theint, sign):
         assert False
 
     @stash_ast
     def mk_smt_bool(self, value):
-        return z3.BoolVal(value, self.ctx)
+        return Z3ast(z3.BoolVal(value, self.ctx), self, self.bool_sort)
 
     def mk_smt_symbol(self, name, sort):
         assert False
