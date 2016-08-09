@@ -44,7 +44,7 @@ class Z3ast(esbmc.solve.smt_ast):
 
 class Z3python(esbmc.solve.smt_convt):
     def __init__(self, ns):
-        super(Z3python, self).__init__(False, ns, False)
+        super(Z3python, self).__init__(False, ns, False, True, True)
         self.ctx = z3.Context()
         self.ast_list = []
         self.sort_list = []
