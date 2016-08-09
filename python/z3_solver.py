@@ -1,6 +1,10 @@
 #!/usr/bin/python
 
+# PYTHONPATH needs to include the path to $Z3DIR/python.
+# And on debian jessie for some reason I need to LD_PRELOAD librt.so?
+
 import esbmc
+import z3
 
 class Z3sort(esbmc.solve.smt_sort):
     def __init__(self, kind, width=None, domain_width=None):
