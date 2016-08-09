@@ -11,9 +11,6 @@
 
 #include "solve.h"
 
-BOOST_PYTHON_OPAQUE_SPECIALIZED_TYPE_ID(smt_ast)
-BOOST_PYTHON_OPAQUE_SPECIALIZED_TYPE_ID(smt_sort)
-
 class dummy_solver_class { };
 class dummy_solver_class2 { };
 class dummy_solver_class3 { };

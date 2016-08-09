@@ -542,8 +542,6 @@ build_goto_symex_classes()
   return;
 }
 
-BOOST_PYTHON_OPAQUE_SPECIALIZED_TYPE_ID(smt_ast)
-
 static void
 set_guard_ast(symex_target_equationt::SSA_stept &step, const smt_ast *ast)
 {
