@@ -50,7 +50,7 @@ class Z3python(esbmc.solve.smt_convt):
 
 # Cruft for running below
 
-ns, opts, po = esbmc.init_esbmc_process(['/home/jmorse/phd/esbmc/regression/python/test_data/00_big_endian_01/main.c', '--big-endian', '--bv'])
+ns, opts, po = esbmc.init_esbmc_process(['../regression/python/test_data/00_big_endian_01/main.c', '--big-endian', '--bv'])
 funcs = po.goto_functions
 main = funcs.function_map[esbmc.irep_idt('c::main')].body
 eq = esbmc.symex.equation(ns)
