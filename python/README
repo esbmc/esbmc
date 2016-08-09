@@ -4,3 +4,5 @@ EXPERIMENTAL Stuff. Things that should ideally turn up here:
  * Runtime support for people who want to write things in python and use
    facilities that don't make sense in C++
  * A monument to boost.python and the slightly sketchy way it works
+
+Requires esbmc.so to be linked into cwd
