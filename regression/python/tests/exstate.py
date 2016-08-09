@@ -96,3 +96,11 @@ class Exstate(unittest.TestCase):
         issat = btor.dec_solve()
         self.assertTrue(issat == esbmc.solve.smt_result.sat, "Overriden ex_state didn't produce a viable trace")
         self.assertTrue(self.has_run_symex_step, "Overriden ex_state should have had symex_step called")
+
+
+    # XXX XXX XXX XXX
+    # XXX XXX XXX XXX
+    # XXX XXX XXX XXX
+    # XXX XXX XXX XXX
+    # clone method of ex_state needs to be overridden (and work) to actually
+    # make the above procedure _stick_.
