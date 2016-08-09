@@ -43,6 +43,7 @@ class Z3ast(esbmc.solve.smt_ast):
 class Z3python(esbmc.solve.smt_convt):
     def __init__(self, ns):
         super(Z3python, self).__init__(False, ns, False)
+        self.ctx = z3.Context()
 
     def mk_func_app(self, sort, k, args):
         assert False
