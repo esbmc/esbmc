@@ -72,18 +72,18 @@ public:
     va_list ap;
     unsigned long uint;
 
-    std::vector<object> args;
-    args.push_back(object(k));
+    boost::python::object o;
 
     va_start(ap, k);
     switch (k) {
     case SMT_SORT_INT:
     case SMT_SORT_REAL:
     case SMT_SORT_BOOL:
+      o = make_tuple(object(k));
       break;
     case SMT_SORT_BV:
       uint = va_arg(ap, unsigned long);
-      args.push_back(object(uint));
+      o = make_tuple(object(k), object(uint));
       break;
     case SMT_SORT_ARRAY:
     {
@@ -92,16 +92,15 @@ public:
       assert(int_encoding || dom->data_width != 0);
 
       // XXX: setting data_width to 1 if non-bv type?
-      args.push_back(object(dom));
-      args.push_back(object(range));
       // XXX: how are those types going to be convertged to python references eh
+      o = make_tuple(object(k), object(dom), object(range));
     }
     default:
       std::cerr << "Unexpected sort kind " << k << " in smt_convt_wrapper mk_sort" << std::endl;
       abort();
     }
 
-    return mk_sort_remangled(tuple(args));
+    return mk_sort_remangled(o);
   }
 
   smt_sortt
