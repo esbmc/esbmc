@@ -58,9 +58,8 @@ art = esbmc.symex.reachability_tree(po.goto_functions, ns, opts, eq, po.context,
 
 art.setup_for_new_explore()
 result = art.get_next_formula()
-btor = esbmc.solve.solvers.boolector.make(False, False, ns, opts)
 lolsolve = Z3python(ns)
-result.target.convert(btor)
+result.target.convert(lolsolve)
 issat = btor.dec_solve()
 
 # This test case should have a counterexample
