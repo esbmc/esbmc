@@ -67,7 +67,7 @@ class Z3python(esbmc.solve.smt_convt):
         assert False
 
     def mk_smt_bool(self, value):
-        assert False
+        return z3.BoolVal(value, self.ctx)
 
     def mk_smt_symbol(self, name, sort):
         assert False
