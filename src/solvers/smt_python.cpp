@@ -24,6 +24,24 @@ public:
   template <typename ...Args>
   smt_convt_wrapper(Args ...args) : smt_convt(args...) { }
 
+  smt_astt
+  mk_func_app(smt_sortt s, smt_func_kind k, smt_astt const *args, unsigned int numargs)
+  {
+    // Python is not going to enjoy variable length argument array in any way
+    using namespace boost::python;
+    std::vector<smt_astt> args_vec;
+    for (unsigned int i = 0 ;i < numargs; i++)
+      args_vec.push_back(args[i]);
+
+    return mk_func_app_remangled(s, k, tuple(args_vec));
+  }
+
+  smt_astt
+  mk_func_app_remangled(smt_sortt s, smt_func_kind k, boost::python::object o)
+  {
+    return this->get_override("mk_func_app")(s, k, o);
+  }
+
   void
   assert_ast(smt_astt a)
   {
@@ -360,6 +378,7 @@ build_smt_conv_python_class(void)
     .def("dec_solve", &smt_convt::dec_solve)
     .def("get", &smt_convt::get)
     // Funcs to be overridden by an extender. Same ptr ownership rules apply
+    .def("mk_func_app", pure_virtual(&smt_convt_wrapper::mk_func_app_remangled), rte())
     .def("assert_ast", pure_virtual(&smt_convt::assert_ast))
     .def("dec_solve", pure_virtual(&smt_convt::dec_solve))
     .def("l_get", pure_virtual(&smt_convt::l_get))
