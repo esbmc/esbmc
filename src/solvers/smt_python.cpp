@@ -4,6 +4,8 @@
 #include <functional>
 
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple.h>
+#include <solvers/smt/smt_array.h>
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 
@@ -15,11 +17,13 @@ class dummy_solver_class { };
 class dummy_solver_class2 { };
 class dummy_solver_class3 { };
 
-class smt_convt_wrapper : public smt_convt, public boost::python::wrapper<smt_convt>
+class smt_convt_wrapper : public smt_convt, public array_iface, public tuple_iface, public boost::python::wrapper<smt_convt>
 {
 public:
-  template <typename ...Args>
-  smt_convt_wrapper(Args ...args) : smt_convt(args...) { }
+  smt_convt_wrapper(bool int_encoding, const namespacet &_ns, bool is_cpp, bool bools_in_arrays, bool can_init_inf_arrays)
+    : smt_convt(int_encoding, _ns, is_cpp),
+       array_iface(bools_in_arrays, can_init_inf_arrays),
+       tuple_iface() { }
 
   smt_astt
   mk_func_app(smt_sortt s, smt_func_kind k, smt_astt const *args, unsigned int numargs)
@@ -155,6 +159,119 @@ public:
   mk_extract(smt_astt a, unsigned int high, unsigned int low, smt_sortt s)
   {
     return this->get_override("mk_extract")(a, high, low, s);
+  }
+
+  /*************************** Array API ***********************************/
+  smt_astt
+  mk_array_symbol(const std::string &name, smt_sortt sort, smt_sortt subtype)
+  {
+    return this->get_override("mk_array_symbol")(name, sort, subtype);
+  }
+
+  expr2tc
+  get_array_elem(smt_astt a, uint64_t idx, const type2tc &subtype)
+  {
+    return this->get_override("get_array_elem")(a, idx, subtype);
+  }
+
+  const smt_ast *
+  convert_array_of(smt_astt init_val, unsigned long domain_width)
+  {
+    // XXX a default is provided by array_iface.
+    using namespace boost::python;
+    if (override f = this->get_override("convert_array_of"))
+      return f(init_val, domain_width);
+    else
+      return default_convert_array_of(init_val, domain_width, this);
+  }
+
+  void
+  add_array_constraints_for_solving()
+  {
+    this->get_override("add_array_constraints_for_solving")();
+  }
+
+  void
+  push_array_ctx(void)
+  {
+    std::cerr << "Push/pop using python-extended solver isn't supported right now" << std::endl;
+    abort();
+  }
+
+  void
+  pop_array_ctx(void)
+  {
+    std::cerr << "Push/pop using python-extended solver isn't supported right now" << std::endl;
+    abort();
+  }
+
+  /*************************** Tuple API ***********************************/
+  smt_sortt
+  mk_struct_sort(const type2tc &type)
+  {
+    return this->get_override("mk_struct_sort")(type);
+  }
+
+  smt_astt
+  tuple_create(const expr2tc &structdef)
+  {
+    return this->get_override("tuple_create")(structdef);
+  }
+
+  smt_astt
+  tuple_fresh(smt_sortt s, std::string name = "")
+  {
+    return this->get_override("tuple_fresh")(s, name);
+  }
+
+  smt_astt
+  tuple_array_create(const type2tc &array_type, smt_astt *inputargs, bool const_array, smt_sortt domain)
+  {
+    return this->get_override("tuple_array_creaet")(array_type, inputargs, const_array, domain);
+  }
+
+  smt_astt
+  tuple_array_of(const expr2tc &init_value, unsigned long domain_width)
+  {
+    return this->get_override("tuple_array_of")(init_value, domain_width);
+  }
+
+  smt_astt
+  mk_tuple_symbol(const std::string &name, smt_sortt s)
+  {
+    return this->get_override("mk_tuple_symbol")(name, s);
+  }
+
+  smt_astt
+  mk_tuple_array_symbol(const expr2tc &expr)
+  {
+    return this->get_override("mk_tuple_array_symbol")(expr);
+  }
+
+  expr2tc
+  tuple_get(const expr2tc &expr)
+  {
+    return this->get_override("tuple_get")(expr);
+  }
+
+  void
+  add_tuple_constraints_for_solving()
+  {
+    this->get_override("add_tuple_constraints_for_solving")();
+  }
+
+  void
+  push_tuple_ctx()
+  {
+    std::cerr << "Push/pop using python-extended solver isn't supported right now" << std::endl;
+    abort();
+  }
+
+  void
+  pop_tuple_ctx()
+  {
+    std::cerr << "Push/pop using python-extended solver isn't supported right now" << std::endl;
+    abort();
   }
 };
 
@@ -373,7 +490,7 @@ build_smt_conv_python_class(void)
   // in C++ for example.
   // Refrain from registering enums too: basic implementation pls.
   typedef return_value_policy<return_opaque_pointer> ropaque;
-  class_<smt_convt_wrapper, boost::noncopyable>("smt_convt", init<bool,const namespacet &, bool>())
+  class_<smt_convt_wrapper, boost::noncopyable>("smt_convt", init<bool,const namespacet &, bool, bool, bool>())
     .def("push_ctx", &smt_convt::push_ctx)
     .def("pop_ctx", &smt_convt::pop_ctx)
     .def("convert_ast", &smt_convt::convert_ast, ropaque())
