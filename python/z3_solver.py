@@ -3,84 +3,84 @@
 import esbmc
 
 class Z3sort(esbmc.solve.smt_sort):
-  def __init__(self, kind, width=None, domain_width=None):
-    if domain_width != None:
-        super(Z3sort, self).__init__(kind, width, domain_width)
-    elif width != None:
-        super(Z3sort, self).__init__(kind, width)
-    else:
-        super(Z3sort, self).__init__(kind)
+    def __init__(self, kind, width=None, domain_width=None):
+        if domain_width != None:
+            super(Z3sort, self).__init__(kind, width, domain_width)
+        elif width != None:
+            super(Z3sort, self).__init__(kind, width)
+        else:
+            super(Z3sort, self).__init__(kind)
 
   # Has no other methods, only provides id / data_width / dom_width in base
   # class, so that the rest of smt_convt can decide the right path.
 
 class Z3ast(esbmc.solve.smt_ast):
-  def __init__(self, convobj, sort):
-    super(Z3ast, self).__init__(convobj, sort)
+    def __init__(self, convobj, sort):
+        super(Z3ast, self).__init__(convobj, sort)
 
-  def ite(self, conv, cond, falseop):
-      assert False
+    def ite(self, conv, cond, falseop):
+        assert False
 
-  def eq(self, conv, other):
-      assert False
+    def eq(self, conv, other):
+        assert False
 
-  def assign(self, conv, sym):
-      assert False
+    def assign(self, conv, sym):
+        assert False
 
-  def update(self, conv, sym):
-      assert False
+    def update(self, conv, sym):
+        assert False
 
-  def select(self, conv, idx):
-      assert False
+    def select(self, conv, idx):
+        assert False
 
-  def project(self, conv, elem):
-      assert False
+    def project(self, conv, elem):
+        assert False
 
 class Z3python(esbmc.solve.smt_convt):
-  def __init__(self, ns):
-    super(Z3python, self).__init__(False, ns, False)
+    def __init__(self, ns):
+        super(Z3python, self).__init__(False, ns, False)
 
-  def mk_func_app(self, sort, k, args):
-    assert False
+    def mk_func_app(self, sort, k, args):
+        assert False
 
-  def assert_ast(self, ast):
-    assert False
+    def assert_ast(self, ast):
+        assert False
 
-  def dec_solve(self):
-    assert False
+    def dec_solve(self):
+        assert False
 
-  def solve_text(self):
-    assert False
+    def solve_text(self):
+        assert False
 
-  def l_get(self, ast):
-    assert False
+    def l_get(self, ast):
+        assert False
 
-  def mk_sort(self, args):
-    assert False
+    def mk_sort(self, args):
+        assert False
 
-  def mk_smt_int(self, theint, sign):
-    assert False
+    def mk_smt_int(self, theint, sign):
+        assert False
 
-  def mk_smt_bool(self, value):
-    assert False
+    def mk_smt_bool(self, value):
+        assert False
 
-  def mk_smt_symbol(self, name, sort):
-    assert False
+    def mk_smt_symbol(self, name, sort):
+        assert False
 
-  def mk_smt_real(self, str):
-    assert False
+    def mk_smt_real(self, str):
+        assert False
 
-  def mk_smt_bvint(self, theint, sign, w):
-    assert False
+    def mk_smt_bvint(self, theint, sign, w):
+        assert False
 
-  def get_bool(self, ast):
-    assert False
+    def get_bool(self, ast):
+        assert False
 
-  def get_bv(self, thetype, ast):
-    assert False
+    def get_bv(self, thetype, ast):
+        assert False
 
-  def mk_extract(self, a, high, low, s):
-    assert False
+    def mk_extract(self, a, high, low, s):
+        assert False
 
 # Cruft for running below
 
