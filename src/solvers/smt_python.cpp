@@ -17,6 +17,122 @@ class dummy_solver_class { };
 class dummy_solver_class2 { };
 class dummy_solver_class3 { };
 
+class smt_ast_wrapper : public smt_ast, public boost::python::wrapper<smt_ast>
+{
+public:
+  template <typename ...Args>
+  smt_ast_wrapper(Args ...args) : smt_ast(args...) { }
+
+  smt_astt
+  ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("ite"))
+      return f(ctx, cond, falseop);
+    else
+      return smt_ast::ite(ctx, cond, falseop);
+  }
+
+  smt_astt default_ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+  {
+    return smt_ast::ite(ctx, cond, falseop);
+  }
+
+  smt_astt
+  eq(smt_convt *ctx, smt_astt other) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("eq"))
+      return f(ctx, other);
+    else
+      return smt_ast::eq(ctx, other);
+  }
+
+  smt_astt
+  default_eq(smt_convt *ctx, smt_astt other) const
+  {
+    return smt_ast::eq(ctx, other);
+  }
+
+  void
+  assign(smt_convt *ctx, smt_astt sym) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("assign"))
+      f(ctx, sym);
+    else
+      smt_ast::assign(ctx, sym);
+  }
+
+  void
+  default_assign(smt_convt *ctx, smt_astt sym) const
+  {
+    smt_ast::assign(ctx, sym);
+  }
+
+  smt_astt
+  update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr = expr2tc()) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("update"))
+      return f(ctx, value, idx, idx_expr);
+    else
+      return smt_ast::update(ctx, value, idx, idx_expr);
+  }
+
+  smt_astt
+  default_update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr = expr2tc()) const
+  {
+    return smt_ast::update(ctx, value, idx, idx_expr);
+  }
+
+  smt_astt
+  select(smt_convt *ctx, const expr2tc &idx) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("select"))
+      return f(ctx, idx);
+    else
+      return smt_ast::select(ctx, idx);
+  }
+
+  smt_astt
+  default_select(smt_convt *ctx, const expr2tc &idx) const
+  {
+    return smt_ast::select(ctx, idx);
+  }
+
+  smt_astt
+  project(smt_convt *ctx, unsigned int elem) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("project"))
+      return f(ctx, elem);
+    else
+      return smt_ast::project(ctx, elem);
+  }
+
+  smt_astt
+  default_project(smt_convt *ctx, unsigned int elem) const
+  {
+    return smt_ast::project(ctx, elem);
+  }
+};
+
+class smt_sort_wrapper : public smt_sort, public boost::python::wrapper<smt_sort>
+{
+public:
+  template <typename ...Args>
+  smt_sort_wrapper(Args ...args) : smt_sort(args...) { }
+
+  virtual ~smt_sort_wrapper() {}
+};
+
+static_assert(std::is_polymorphic<smt_sort_wrapper>::value, "lolwat");
+
+#define ast_down(x) (dynamic_cast<const smt_ast_wrapper *>((x)))
+#define sort_down(x) (dynamic_cast<const smt_ast_wrapper *>((x)))
+
 class smt_convt_wrapper : public smt_convt, public array_iface, public tuple_iface, public boost::python::wrapper<smt_convt>
 {
 public:
@@ -45,13 +161,13 @@ public:
   smt_astt
   mk_func_app_remangled(smt_sortt s, smt_func_kind k, boost::python::object o)
   {
-    return this->get_override("mk_func_app")(s, k, o);
+    return this->get_override("mk_func_app")(sort_down(s), k, o);
   }
 
   void
   assert_ast(smt_astt a)
   {
-    this->get_override("assert_ast")(a);
+    this->get_override("assert_ast")(ast_down(a));
   }
 
   resultt
@@ -69,7 +185,7 @@ public:
   tvt
   l_get(smt_astt a)
   {
-    return this->get_override("l_get")(a);
+    return this->get_override("l_get")(ast_down(a));
   }
 
   smt_sortt
@@ -102,7 +218,7 @@ public:
 
       // XXX: setting data_width to 1 if non-bv type?
       // XXX: how are those types going to be convertged to python references eh
-      o = make_tuple(object(k), object(dom), object(range));
+      o = make_tuple(object(k), object(sort_down(dom)), object(sort_down(range)));
       break;
     }
     default:
@@ -134,7 +250,7 @@ public:
   smt_astt
   mk_smt_symbol(const std::string &name, smt_sortt s)
   {
-    return this->get_override("mk_smt_symbol")(name, s);
+    return this->get_override("mk_smt_symbol")(name, sort_down(s));
   }
 
   smt_astt
@@ -281,108 +397,6 @@ public:
   }
 };
 
-class smt_ast_wrapper : public smt_ast, public boost::python::wrapper<smt_ast>
-{
-public:
-  template <typename ...Args>
-  smt_ast_wrapper(Args ...args) : smt_ast(args...) { }
-
-  smt_astt
-  ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
-  {
-    using namespace boost::python;
-    if (override f = this->get_override("ite"))
-      return f(ctx, cond, falseop);
-    else
-      return smt_ast::ite(ctx, cond, falseop);
-  }
-
-  smt_astt default_ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
-  {
-    return smt_ast::ite(ctx, cond, falseop);
-  }
-
-  smt_astt
-  eq(smt_convt *ctx, smt_astt other) const
-  {
-    using namespace boost::python;
-    if (override f = this->get_override("eq"))
-      return f(ctx, other);
-    else
-      return smt_ast::eq(ctx, other);
-  }
-
-  smt_astt
-  default_eq(smt_convt *ctx, smt_astt other) const
-  {
-    return smt_ast::eq(ctx, other);
-  }
-
-  void
-  assign(smt_convt *ctx, smt_astt sym) const
-  {
-    using namespace boost::python;
-    if (override f = this->get_override("assign"))
-      f(ctx, sym);
-    else
-      smt_ast::assign(ctx, sym);
-  }
-
-  void
-  default_assign(smt_convt *ctx, smt_astt sym) const
-  {
-    smt_ast::assign(ctx, sym);
-  }
-
-  smt_astt
-  update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr = expr2tc()) const
-  {
-    using namespace boost::python;
-    if (override f = this->get_override("update"))
-      return f(ctx, value, idx, idx_expr);
-    else
-      return smt_ast::update(ctx, value, idx, idx_expr);
-  }
-
-  smt_astt
-  default_update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr = expr2tc()) const
-  {
-    return smt_ast::update(ctx, value, idx, idx_expr);
-  }
-
-  smt_astt
-  select(smt_convt *ctx, const expr2tc &idx) const
-  {
-    using namespace boost::python;
-    if (override f = this->get_override("select"))
-      return f(ctx, idx);
-    else
-      return smt_ast::select(ctx, idx);
-  }
-
-  smt_astt
-  default_select(smt_convt *ctx, const expr2tc &idx) const
-  {
-    return smt_ast::select(ctx, idx);
-  }
-
-  smt_astt
-  project(smt_convt *ctx, unsigned int elem) const
-  {
-    using namespace boost::python;
-    if (override f = this->get_override("project"))
-      return f(ctx, elem);
-    else
-      return smt_ast::project(ctx, elem);
-  }
-
-  smt_astt
-  default_project(smt_convt *ctx, unsigned int elem) const
-  {
-    return smt_ast::project(ctx, elem);
-  }
-};
-
 static smt_convt *
 bounce_solver_factory(bool is_cpp, bool int_encoding, const namespacet &ns,
     const optionst &options, const char *name = "bees")
@@ -470,7 +484,7 @@ build_smt_conv_python_class(void)
     .value("real2int", SMT_FUNC_REAL2INT)
     .value("isint", SMT_FUNC_IS_INT);
 
-  class_<smt_sort>("smt_sort", init<smt_sort_kind>())
+  class_<smt_sort_wrapper>("smt_sort", init<smt_sort_kind>())
     .def(init<smt_sort_kind, unsigned long>())
     .def(init<smt_sort_kind, unsigned long, unsigned long>())
     .def_readwrite("id", &smt_sort::id)
