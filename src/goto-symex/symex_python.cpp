@@ -215,7 +215,7 @@ build_goto_symex_classes()
      .def_readwrite("hash", &level2t::name_record::hash);
 
     class_<level2t::current_namest>("level2_current_names")
-      .def(map_indexing_suite<level1t::current_namest, true>());
+      .def(map_indexing_suite<level2t::current_namest, true>());
   }
 
   // Overload resolve...
