@@ -100,6 +100,12 @@ class Z3python(esbmc.solve.smt_convt):
             width = args[1]
             z3sort = z3.BitVecSort(width, self.ctx)
             return Z3sort(z3sort, kind, args[1])
+        elif kind == esbmc.solve.smt_sort_kind.array:
+            domain = args[1]
+            range_ = args[2]
+            print domain
+            print range_
+            assert False
         else:
             print kind
             assert False
@@ -112,6 +118,8 @@ class Z3python(esbmc.solve.smt_convt):
         return Z3ast(z3.BoolVal(value, self.ctx), self, self.bool_sort)
 
     def mk_smt_symbol(self, name, sort):
+        print dir(sort)
+        print type(sort)
         assert False
 
     def mk_smt_real(self, str):
