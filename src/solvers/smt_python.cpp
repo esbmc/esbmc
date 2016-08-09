@@ -103,6 +103,7 @@ public:
       // XXX: setting data_width to 1 if non-bv type?
       // XXX: how are those types going to be convertged to python references eh
       o = make_tuple(object(k), object(dom), object(range));
+      break;
     }
     default:
       std::cerr << "Unexpected sort kind " << k << " in smt_convt_wrapper mk_sort" << std::endl;
