@@ -23,7 +23,12 @@ public:
   smt_convt_wrapper(bool int_encoding, const namespacet &_ns, bool is_cpp, bool bools_in_arrays, bool can_init_inf_arrays)
     : smt_convt(int_encoding, _ns, is_cpp),
        array_iface(bools_in_arrays, can_init_inf_arrays),
-       tuple_iface() { }
+       tuple_iface()
+  {
+    // Overriding solver in python needs to implement these ifaces
+    set_tuple_iface(this);
+    set_array_iface(this);
+  }
 
   smt_astt
   mk_func_app(smt_sortt s, smt_func_kind k, smt_astt const *args, unsigned int numargs)
