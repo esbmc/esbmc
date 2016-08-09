@@ -2,6 +2,40 @@
 
 import esbmc
 
+class Z3sort(esbmc.solve.smt_sort):
+  def __init__(self, kind, width=None, domain_width=None):
+    if domain_width != None:
+        super(Z3sort, self).__init__(kind, width, domain_width)
+    elif width != None:
+        super(Z3sort, self).__init__(kind, width)
+    else:
+        super(Z3sort, self).__init__(kind)
+
+  # Has no other methods, only provides id / data_width / dom_width in base
+  # class, so that the rest of smt_convt can decide the right path.
+
+class Z3ast(esbmc.solve.smt_ast):
+  def __init__(self, convobj, sort):
+    super(Z3ast, self).__init__(convobj, sort)
+
+  def ite(self, conv, cond, falseop):
+      assert False
+
+  def eq(self, conv, other):
+      assert False
+
+  def assign(self, conv, sym):
+      assert False
+
+  def update(self, conv, sym):
+      assert False
+
+  def select(self, conv, idx):
+      assert False
+
+  def project(self, conv, elem):
+      assert False
+
 class Z3python(esbmc.solve.smt_convt):
   def __init__(self, ns):
     super(Z3python, self).__init__(False, ns, False)
