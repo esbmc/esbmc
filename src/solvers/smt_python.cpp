@@ -131,6 +131,18 @@ public:
     return this->get_override("mk_smt_symbol")(name, s);
   }
 
+  smt_astt
+  mk_smt_real(const std::string &str)
+  {
+    return this->get_override("mk_smt_real")(str);
+  }
+
+  smt_astt
+  mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
+  {
+    return this->get_override("mk_smt_bvint")(theint, sign, w);
+  }
+
   expr2tc
   get_bool(smt_astt a)
   {
@@ -365,7 +377,7 @@ build_smt_conv_python_class(void)
   // in C++ for example.
   // Refrain from registering enums too: basic implementation pls.
   typedef return_value_policy<return_opaque_pointer> ropaque;
-  class_<smt_convt_wrapper, boost::noncopyable>("smt_convt", no_init)
+  class_<smt_convt_wrapper, boost::noncopyable>("smt_convt", init<bool,const namespacet &, bool>())
     .def("push_ctx", &smt_convt::push_ctx)
     .def("pop_ctx", &smt_convt::pop_ctx)
     .def("convert_ast", &smt_convt::convert_ast, ropaque())
@@ -387,6 +399,8 @@ build_smt_conv_python_class(void)
     .def("mk_smt_int", pure_virtual(&smt_convt::mk_smt_int), rte())
     .def("mk_smt_bool", pure_virtual(&smt_convt::mk_smt_bool), rte())
     .def("mk_smt_symbol", pure_virtual(&smt_convt::mk_smt_symbol), rte())
+    .def("mk_smt_real", pure_virtual(&smt_convt::mk_smt_real), rte())
+    .def("mk_smt_bvint", pure_virtual(&smt_convt::mk_smt_bvint), rte())
     .def("get_bool", pure_virtual(&smt_convt::get_bool))
     .def("get_bv", pure_virtual(&smt_convt::get_bv))
     .def("mk_extract", pure_virtual(&smt_convt::mk_extract), rte());
