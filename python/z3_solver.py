@@ -44,6 +44,19 @@ class Z3python(esbmc.solve.smt_convt):
     def __init__(self, ns):
         super(Z3python, self).__init__(False, ns, False)
         self.ctx = z3.Context()
+        self.ast_list = []
+        self.sort_list = []
+
+    # Decorator function: return a function that appends the return value to
+    # the list of asts. This is vital: the python object returned from various
+    # functions needs to live as long as the convt object, so we need to keep
+    # a reference to it
+    def stash_ast(func):
+        def tmp(self, *args, **kwargs):
+            ast = func(self, *args, **kwargs)
+            self.ast_list.append(ast)
+            return ast
+        return tmp
 
     def mk_func_app(self, sort, k, args):
         assert False
@@ -66,6 +79,7 @@ class Z3python(esbmc.solve.smt_convt):
     def mk_smt_int(self, theint, sign):
         assert False
 
+    @stash_ast
     def mk_smt_bool(self, value):
         return z3.BoolVal(value, self.ctx)
 
