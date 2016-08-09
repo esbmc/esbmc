@@ -61,6 +61,13 @@ class Z3python(esbmc.solve.smt_convt):
             return ast
         return tmp
 
+    def stash_sort(func):
+        def tmp(self, *args, **kwargs):
+            sort = func(self, *args, **kwargs)
+            self.sort_list.append(sort)
+            return sort
+        return tmp
+
     def mk_func_app(self, sort, k, args):
         assert False
 
@@ -76,11 +83,17 @@ class Z3python(esbmc.solve.smt_convt):
     def l_get(self, ast):
         assert False
 
+    @stash_sort
     def mk_sort(self, args):
         kind = args[0]
         if kind == esbmc.solve.smt_sort_kind.bool:
             return Z3sort(z3.BoolSort(self.ctx), kind)
+        elif kind == esbmc.solve.smt_sort_kind.bv:
+            width = args[1]
+            z3sort = z3.BitVecSort(width, self.ctx)
+            return Z3sort(z3sort, kind, args[1])
         else:
+            print kind
             assert False
 
     def mk_smt_int(self, theint, sign):
