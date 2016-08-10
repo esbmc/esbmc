@@ -117,10 +117,10 @@ class Z3python(esbmc.solve.smt_convt):
     def mk_smt_bool(self, value):
         return Z3ast(z3.BoolVal(value, self.ctx), self, self.bool_sort)
 
+    @stash_ast
     def mk_smt_symbol(self, name, sort):
-        print dir(sort)
-        print type(sort)
-        assert False
+        z3var = z3.Const(name, sort.sort)
+        return Z3ast(z3var, self, sort)
 
     def mk_smt_real(self, str):
         assert False
