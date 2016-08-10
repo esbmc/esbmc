@@ -276,32 +276,32 @@ public:
   expr2tc
   get_bool(smt_astt a)
   {
-    return this->get_override("get_bool")(a);
+    return this->get_override("get_bool")(ast_down(a));
   }
 
   expr2tc
   get_bv(const type2tc &t, smt_astt a)
   {
-    return this->get_override("get_bv")(t, a);
+    return this->get_override("get_bv")(t, ast_down(a));
   }
 
   smt_astt
   mk_extract(smt_astt a, unsigned int high, unsigned int low, smt_sortt s)
   {
-    return this->get_override("mk_extract")(a, high, low, s);
+    return this->get_override("mk_extract")(ast_down(a), high, low, sort_down(s));
   }
 
   /*************************** Array API ***********************************/
   smt_astt
   mk_array_symbol(const std::string &name, smt_sortt sort, smt_sortt subtype)
   {
-    return this->get_override("mk_array_symbol")(name, sort, subtype);
+    return this->get_override("mk_array_symbol")(name, sort_down(sort), sort_down(subtype));
   }
 
   expr2tc
   get_array_elem(smt_astt a, uint64_t idx, const type2tc &subtype)
   {
-    return this->get_override("get_array_elem")(a, idx, subtype);
+    return this->get_override("get_array_elem")(ast_down(a), idx, subtype);
   }
 
   const smt_ast *
@@ -310,7 +310,7 @@ public:
     // XXX a default is provided by array_iface.
     using namespace boost::python;
     if (override f = this->get_override("convert_array_of"))
-      return f(init_val, domain_width);
+      return f(ast_down(init_val), domain_width);
     else
       return default_convert_array_of(init_val, domain_width, this);
   }
@@ -351,12 +351,13 @@ public:
   smt_astt
   tuple_fresh(smt_sortt s, std::string name = "")
   {
-    return this->get_override("tuple_fresh")(s, name);
+    return this->get_override("tuple_fresh")(sort_down(s), name);
   }
 
   smt_astt
   tuple_array_create(const type2tc &array_type, smt_astt *inputargs, bool const_array, smt_sortt domain)
   {
+    // XXX XXX XXX this needs to be remangled, array ptr
     return this->get_override("tuple_array_creaet")(array_type, inputargs, const_array, domain);
   }
 
@@ -369,7 +370,7 @@ public:
   smt_astt
   mk_tuple_symbol(const std::string &name, smt_sortt s)
   {
-    return this->get_override("mk_tuple_symbol")(name, s);
+    return this->get_override("mk_tuple_symbol")(name, sort_down(s));
   }
 
   smt_astt
