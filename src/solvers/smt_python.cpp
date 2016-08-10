@@ -159,11 +159,11 @@ public:
   {
     // Python is not going to enjoy variable length argument array in any way
     using namespace boost::python;
-    std::vector<smt_astt> args_vec;
+    list l;
     for (unsigned int i = 0 ;i < numargs; i++)
-      args_vec.push_back(args[i]);
+      l.append(ast_down(args[i]));
 
-    return mk_func_app_remangled(s, k, tuple(args_vec));
+    return mk_func_app_remangled(s, k, l);
   }
 
   smt_astt
