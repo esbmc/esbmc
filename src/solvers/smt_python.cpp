@@ -518,7 +518,7 @@ build_smt_conv_python_class(void)
   // Refrain from registering enums too: basic implementation pls.
   typedef return_value_policy<return_opaque_pointer> ropaque;
   class_<smt_convt_wrapper, boost::noncopyable>("smt_convt", init<bool,const namespacet &, bool, bool, bool>())
-    .def("init_addr_space_array", &smt_convt::init_addr_space_array)
+    .def("smt_post_init", &smt_convt::smt_post_init)
     .def("push_ctx", &smt_convt::push_ctx)
     .def("pop_ctx", &smt_convt::pop_ctx)
     .def("convert_ast", &smt_convt::convert_ast, ropaque())

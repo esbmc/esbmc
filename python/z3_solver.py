@@ -56,7 +56,7 @@ class Z3python(esbmc.solve.smt_convt):
         # Various accounting structures for the address space modeling need to
         # be set up, but that needs to happen after the solver is online. Thus,
         # we have to call this once the object is ready to create asts.
-        self.init_addr_space_array()
+        self.smt_post_init()
 
     # Decorator function: return a function that appends the return value to
     # the list of asts. This is vital: the python object returned from various
