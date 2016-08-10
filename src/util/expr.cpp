@@ -275,10 +275,9 @@ bool exprt::sum(const exprt &expr)
   }
   else if(type_id=="fixedbv")
   {
-    set(a_value, integer2binary(
-      binary2integer(get_string(a_value), false)+
-      binary2integer(expr.get_string(a_value), false),
-      atoi(type().width().c_str())));
+    fixedbvt f(*this);
+    f+=fixedbvt(expr);
+    *this=f.to_expr();
     return false;
   }
   else if(type_id=="floatbv")
@@ -354,11 +353,19 @@ bool exprt::subtract(const exprt &expr)
       binary2integer(expr.get_string(a_value), false),
       atoi(type().width().c_str())));
     return false;
-  } else if(type_id=="fixedbv") {
-    set("value", integer2binary(
-      binary2integer(get_string("value"), false)-
-      binary2integer(expr.get_string("value"), false),
-      atoi(type().get("width").c_str())));
+  }
+  else if(type_id=="fixedbv")
+  {
+    fixedbvt f(*this);
+    f-=fixedbvt(expr);
+    *this=f.to_expr();
+    return false;
+  }
+  else if(type_id=="floatbv")
+  {
+    ieee_floatt f(to_constant_expr(*this));
+    f-=ieee_floatt(to_constant_expr(expr));
+    *this=f.to_expr();
     return false;
   }
 

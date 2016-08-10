@@ -240,8 +240,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
       if(expr_type_id=="fixedbv")
       {
         // int to float
-        const fixedbv_typet &f_expr_type=
-          to_fixedbv_type(expr.type());
+        const fixedbv_typet &f_expr_type = to_fixedbv_type(expr.type());
 
         fixedbvt f;
         f.spec=f_expr_type;
@@ -766,8 +765,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
   else if(expr.type().id()=="fixedbv")
   {
     // division by one?
-    if(expr.op1().is_constant() &&
-       expr.op1().is_one())
+    if(expr.op1().is_constant() && expr.op1().is_one())
     {
       exprt tmp;
       tmp.swap(expr.op0());
@@ -775,8 +773,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
       return false;
     }
 
-    if(expr.op0().is_constant() &&
-       expr.op1().is_constant())
+    if(expr.op0().is_constant() && expr.op1().is_constant())
     {
       fixedbvt f0(expr.op0());
       fixedbvt f1(expr.op1());
@@ -3231,8 +3228,10 @@ Function:
 bool simplify_exprt::simplify_unary_minus(exprt &expr)
 {
 
-  if (config.options.get_bool_option("int-encoding") &&
-      !expr.type().is_fixedbv() && !expr.type().is_signedbv())
+  if (config.options.get_bool_option("int-encoding")
+      && !expr.type().is_fixedbv()
+      && !expr.type().is_floatbv()
+      && !expr.type().is_signedbv())
     // Never simplify a unary minus if we're using integer encoding. The SMT
     // solver is going to have its own negative representation, and this
     // conflicts with the current irep representation of binary-in-a-string.

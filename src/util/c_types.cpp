@@ -22,7 +22,7 @@ typet build_float_type(unsigned width)
   }
   else
   {
-    floatbv_typet result=floatbv_typet();
+    floatbv_typet result;
     result.set_width(width);
 
     switch(width)
