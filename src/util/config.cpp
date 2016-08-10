@@ -117,6 +117,12 @@ bool configt::set(const cmdlinet &cmdline)
   if(cmdline.isset('I'))
     ansi_c.include_paths=cmdline.get_values('I');
 
+  if(cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
+  {
+    std::cerr << "Can't set both floatbv and fixedbv modes" << std::endl;
+    return true;
+  }
+
   if(cmdline.isset("floatbv"))
     ansi_c.use_fixed_for_float=false;
 
