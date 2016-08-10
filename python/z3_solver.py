@@ -53,6 +53,12 @@ class Z3python(esbmc.solve.smt_convt):
         self.ast_list = []
         self.sort_list = []
         self.bool_sort = self.mk_sort((esbmc.solve.smt_sort_kind.bool,))
+
+        self.func_map = {
+            esbmc.solve.smt_func_kind.eq :
+                lambda self, args: args[0] == args[1]
+        }
+
         # Various accounting structures for the address space modeling need to
         # be set up, but that needs to happen after the solver is online. Thus,
         # we have to call this once the object is ready to create asts.
@@ -76,7 +82,12 @@ class Z3python(esbmc.solve.smt_convt):
             return sort
         return tmp
 
+    @stash_ast
     def mk_func_app(self, sort, k, args):
+        if k in self.func_map:
+            z3ast = self.func_map[k](self, args)
+            return Z3ast(z3ast, self, sort)
+        print "Unimplemented SMT function {}".format(k)
         assert False
 
     def assert_ast(self, ast):
