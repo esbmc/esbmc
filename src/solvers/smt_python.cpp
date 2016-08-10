@@ -130,8 +130,16 @@ public:
 
 static_assert(std::is_polymorphic<smt_sort_wrapper>::value, "lolwat");
 
-#define ast_down(x) (dynamic_cast<const smt_ast_wrapper *>((x)))
-#define sort_down(x) (dynamic_cast<const smt_ast_wrapper *>((x)))
+// Convert an incoming ast / sort into a handle for a python object, extracted
+// out of the wrapper class each inherits from. I was kind of expecting b.p
+// to be doing this itself, but apparently not, seeing how it unwraps many
+// things before manipulating them.
+// This conversion entirely fits with the smt_convt model of doing things:
+// asts and sorts merrily get passed around, but only become their derived type
+// when the derived smt_convt representing the solver gets a hold of it. It's
+// just a coincidence that that derived smt_convt is in a managed environment.
+#define ast_down(x) boost::python::object(boost::python::handle<>(boost::python::detail::wrapper_base_::get_owner(*(dynamic_cast<const smt_ast_wrapper *>((x))))))
+#define sort_down(x) boost::python::object(boost::python::handle<>(boost::python::detail::wrapper_base_::get_owner(*(dynamic_cast<const smt_sort_wrapper *>((x))))))
 
 class smt_convt_wrapper : public smt_convt, public array_iface, public tuple_iface, public boost::python::wrapper<smt_convt>
 {
