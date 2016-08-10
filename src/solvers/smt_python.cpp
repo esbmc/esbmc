@@ -17,6 +17,26 @@ class dummy_solver_class { };
 class dummy_solver_class2 { };
 class dummy_solver_class3 { };
 
+// Convert an incoming ast / sort into a handle for a python object, extracted
+// out of the wrapper class each inherits from. I was kind of expecting b.p
+// to be doing this itself, but apparently not, seeing how it unwraps many
+// things before manipulating them.
+// This conversion entirely fits with the smt_convt model of doing things:
+// asts and sorts merrily get passed around, but only become their derived type
+// when the derived smt_convt representing the solver gets a hold of it. It's
+// just a coincidence that that derived smt_convt is in a managed environment.
+#define ast_down(x) boost::python::object(boost::python::handle<>(boost::python::detail::wrapper_base_::get_owner(*(dynamic_cast<const smt_ast_wrapper *>((x))))))
+#define sort_down(x) boost::python::object(boost::python::handle<>(boost::python::detail::wrapper_base_::get_owner(*(dynamic_cast<const smt_sort_wrapper *>((x))))))
+
+class smt_sort_wrapper : public smt_sort, public boost::python::wrapper<smt_sort>
+{
+public:
+  template <typename ...Args>
+  smt_sort_wrapper(Args ...args) : smt_sort(args...) { }
+
+  virtual ~smt_sort_wrapper() {}
+};
+
 class smt_ast_wrapper : public smt_ast, public boost::python::wrapper<smt_ast>
 {
 public:
@@ -28,7 +48,7 @@ public:
   {
     using namespace boost::python;
     if (override f = this->get_override("ite"))
-      return f(ctx, cond, falseop);
+      return f(ctx, ast_down(cond), ast_down(falseop));
     else
       return smt_ast::ite(ctx, cond, falseop);
   }
@@ -43,7 +63,7 @@ public:
   {
     using namespace boost::python;
     if (override f = this->get_override("eq"))
-      return f(ctx, other);
+      return f(ctx, ast_down(other));
     else
       return smt_ast::eq(ctx, other);
   }
@@ -59,7 +79,7 @@ public:
   {
     using namespace boost::python;
     if (override f = this->get_override("assign"))
-      f(ctx, sym);
+      f(ctx, ast_down(sym));
     else
       smt_ast::assign(ctx, sym);
   }
@@ -75,7 +95,7 @@ public:
   {
     using namespace boost::python;
     if (override f = this->get_override("update"))
-      return f(ctx, value, idx, idx_expr);
+      return f(ctx, ast_down(value), idx, idx_expr);
     else
       return smt_ast::update(ctx, value, idx, idx_expr);
   }
@@ -118,28 +138,6 @@ public:
     return smt_ast::project(ctx, elem);
   }
 };
-
-class smt_sort_wrapper : public smt_sort, public boost::python::wrapper<smt_sort>
-{
-public:
-  template <typename ...Args>
-  smt_sort_wrapper(Args ...args) : smt_sort(args...) { }
-
-  virtual ~smt_sort_wrapper() {}
-};
-
-static_assert(std::is_polymorphic<smt_sort_wrapper>::value, "lolwat");
-
-// Convert an incoming ast / sort into a handle for a python object, extracted
-// out of the wrapper class each inherits from. I was kind of expecting b.p
-// to be doing this itself, but apparently not, seeing how it unwraps many
-// things before manipulating them.
-// This conversion entirely fits with the smt_convt model of doing things:
-// asts and sorts merrily get passed around, but only become their derived type
-// when the derived smt_convt representing the solver gets a hold of it. It's
-// just a coincidence that that derived smt_convt is in a managed environment.
-#define ast_down(x) boost::python::object(boost::python::handle<>(boost::python::detail::wrapper_base_::get_owner(*(dynamic_cast<const smt_ast_wrapper *>((x))))))
-#define sort_down(x) boost::python::object(boost::python::handle<>(boost::python::detail::wrapper_base_::get_owner(*(dynamic_cast<const smt_sort_wrapper *>((x))))))
 
 class smt_convt_wrapper : public smt_convt, public array_iface, public tuple_iface, public boost::python::wrapper<smt_convt>
 {
