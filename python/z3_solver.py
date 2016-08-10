@@ -125,8 +125,11 @@ class Z3python(esbmc.solve.smt_convt):
     def mk_smt_real(self, str):
         assert False
 
+    @stash_ast
     def mk_smt_bvint(self, theint, sign, w):
-        assert False
+        bvsort = self.mk_sort([esbmc.solve.smt_sort_kind.bv, w])
+        z3ast = z3.BitVecVal(theint.to_long(), w, self.ctx)
+        return Z3ast(z3ast, self, bvsort)
 
     def get_bool(self, ast):
         assert False
