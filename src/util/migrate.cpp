@@ -174,15 +174,16 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     union_type2t *u = new union_type2t(members, names, name);
     new_type_ref = type2tc(u);
   } else if (type.id() == typet::t_fixedbv) {
-    std::string fract = type.get_string(typet::a_width);
-    assert(fract != "");
-    unsigned int frac_bits = strtol(fract.c_str(), NULL, 10);
+    unsigned int width_bits = to_fixedbv_type(type).get_width();
+    unsigned int int_bits =  to_fixedbv_type(type).get_integer_bits();
 
-    std::string ints = type.get_string(typet::a_integer_bits);
-    assert(ints != "");
-    unsigned int int_bits = strtol(ints.c_str(), NULL, 10);
+    fixedbv_type2t *f = new fixedbv_type2t(width_bits, int_bits);
+    new_type_ref = type2tc(f);
+  } else if (type.id() == typet::t_floatbv) {
+    unsigned int frac_bits = to_floatbv_type(type).get_f();
+    unsigned int expo_bits = to_floatbv_type(type).get_e();
 
-    fixedbv_type2t *f = new fixedbv_type2t(frac_bits, int_bits);
+    floatbv_type2t *f = new floatbv_type2t(frac_bits, expo_bits);
     new_type_ref = type2tc(f);
   } else if (type.id() == typet::t_code) {
     const code_typet &ref = static_cast<const code_typet &>(type);
@@ -305,6 +306,8 @@ migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns,
     new_type_ref = type_pool.get_union(type);
   } else if (type.id() == typet::t_fixedbv) {
     new_type_ref = type_pool.get_fixedbv(type);
+  } else if (type.id() == typet::t_floatbv) {
+    new_type_ref = type_pool.get_floatbv(type);
   } else if (type.id() == typet::t_code) {
     new_type_ref = type_pool.get_code(type);
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
@@ -343,10 +346,10 @@ decide_on_expr_type(const exprt &side1, const exprt &side2)
   else if (side2.type().id() == typet::t_pointer)
     return side2.type();
 
-  // Then, fixedbv's take precedence.
-  if (side1.type().id() == typet::t_fixedbv)
+  // Then, fixedbv's/floatbv's take precedence.
+  if ((side1.type().id() == typet::t_fixedbv) || side1.type().id() == typet::t_floatbv)
     return side1.type();
-  if (side2.type().id() == typet::t_fixedbv)
+  if ((side2.type().id() == typet::t_fixedbv) || side2.type().id() == typet::t_floatbv)
     return side2.type();
 
   // If one operand is bool, return the other, as that's either bool or will
@@ -640,9 +643,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == "nondet_symbol") {
     migrate_type(expr.type(), type);
     new_expr_ref = symbol2tc(type, "nondet$" + expr.identifier().as_string());
-  } else if (expr.id() == irept::id_constant && expr.type().id() != typet::t_pointer &&
-             expr.type().id() != typet::t_bool && expr.type().id() != "c_enum" &&
-             expr.type().id() != typet::t_fixedbv && expr.type().id() != typet::t_array) {
+  } else if (expr.id() == irept::id_constant
+             && expr.type().id() != typet::t_pointer
+             && expr.type().id() != typet::t_bool
+             && expr.type().id() != "c_enum"
+             && expr.type().id() != typet::t_fixedbv
+             && expr.type().id() != typet::t_floatbv
+             && expr.type().id() != typet::t_array) {
     migrate_type(expr.type(), type);
 
     bool is_signed = false;
@@ -679,6 +686,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     fixedbvt bv(expr);
 
     expr2t *new_expr = new constant_fixedbv2t(type, bv);
+    new_expr_ref = expr2tc(new_expr);
+  } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_floatbv) {
+    migrate_type(expr.type(), type);
+
+    ieee_floatt bv(to_constant_expr(expr));
+
+    expr2t *new_expr = new constant_floatbv2t(type, bv);
     new_expr_ref = expr2tc(new_expr);
   } else if (expr.id() == exprt::typecast) {
     assert(expr.op0().id_string() != "");
@@ -1551,9 +1565,18 @@ migrate_type_back(const type2tc &ref)
 
     fixedbv_typet thetype;
     thetype.set_integer_bits(ref2.integer_bits);
-    thetype.set("width", ref2.width);
+    thetype.set_width(ref2.width);
     return thetype;
     }
+  case type2t::floatbv_id:
+  {
+    const floatbv_type2t &ref2 = to_floatbv_type(ref);
+
+    floatbv_typet thetype;
+    thetype.set_f(ref2.fraction);
+    thetype.set_width(ref2.get_width());
+    return thetype;
+  }
   case type2t::string_id:
     return string_typet();
   case type2t::cpp_name_id:
@@ -1616,6 +1639,15 @@ migrate_expr_back(const expr2tc &ref)
       tmp.round(fixedbv_spect(32, 16));
     }
 
+    return tmp.to_expr();
+  }
+  case expr2t::constant_floatbv_id:
+  {
+    const constant_floatbv2t &ref2 = to_constant_floatbv2t(ref);
+
+    // TODO: should we try to round the number like it's done for
+    // the fixedbv?
+    ieee_floatt tmp = ref2.value;
     return tmp.to_expr();
   }
   case expr2t::constant_bool_id:
