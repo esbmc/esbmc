@@ -114,6 +114,7 @@ type_byte_size(const type2t &type)
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
+  case type2t::floatbv_id:
     return mp_integer(type.get_width() / 8);
   case type2t::pointer_id:
     return mp_integer(config.ansi_c.pointer_width / 8);
