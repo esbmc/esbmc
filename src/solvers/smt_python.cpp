@@ -25,7 +25,7 @@ class dummy_solver_class3 { };
 // asts and sorts merrily get passed around, but only become their derived type
 // when the derived smt_convt representing the solver gets a hold of it. It's
 // just a coincidence that that derived smt_convt is in a managed environment.
-#define ast_down(x) boost::python::object(boost::python::handle<>(boost::python::detail::wrapper_base_::get_owner(*(dynamic_cast<const smt_ast_wrapper *>((x))))))
+#define ast_down(x) smt_ast_wrapper::cast_ast_down((x))
 #define sort_down(x) boost::python::object(boost::python::handle<>(boost::python::detail::wrapper_base_::get_owner(*(dynamic_cast<const smt_sort_wrapper *>((x))))))
 
 class smt_sort_wrapper : public smt_sort, public boost::python::wrapper<smt_sort>
@@ -42,6 +42,20 @@ class smt_ast_wrapper : public smt_ast, public boost::python::wrapper<smt_ast>
 public:
   template <typename ...Args>
   smt_ast_wrapper(Args ...args) : smt_ast(args...) { }
+
+  static
+  inline boost::python::object
+  cast_ast_down(smt_astt a)
+  {
+    using namespace boost::python;
+    const smt_ast_wrapper *ast = dynamic_cast<const smt_ast_wrapper *>(a);
+    assert(ast != NULL && "All asts reaching smt_convt wrapper should be ast wrappers");
+    PyObject *obj = boost::python::detail::wrapper_base_::get_owner(*ast);
+    assert(obj != NULL && "Wrapped SMT AST doesn't have a wrapped PyObject?");
+    handle<> h(obj);
+    object o(h);
+    return o;
+  }
 
   smt_astt
   ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
