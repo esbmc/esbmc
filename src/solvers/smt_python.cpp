@@ -226,7 +226,7 @@ public:
 
       // XXX: setting data_width to 1 if non-bv type?
       // XXX: how are those types going to be convertged to python references eh
-      o = make_tuple(object(k), object(sort_down(dom)), object(sort_down(range)));
+      o = make_tuple(object(k), sort_down(dom), sort_down(range));
       break;
     }
     default:
