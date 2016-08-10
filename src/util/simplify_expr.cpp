@@ -40,12 +40,11 @@ public:
     exprt, exprt, irep_hash> containert;
   #endif
 
-  containert container_normal, container_address_of;
+  containert container_normal;
 
-  containert &container(simplify_exprt::modet mode)
+  containert &container()
   {
-    return mode==simplify_exprt::NORMAL?
-      container_normal:container_address_of;
+    return container_normal;
   }
 };
 
@@ -64,7 +63,7 @@ Function: simplify_exprt::simplify_typecast
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
+bool simplify_exprt::simplify_typecast(exprt &expr)
 {
   if(expr.operands().size()!=1) return true;
 
@@ -84,9 +83,9 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
     equality.location()=expr.location();
     equality.lhs()=expr.op0();
     equality.rhs()=gen_zero(expr.op0().type());
-    simplify_node(equality, mode);
+    simplify_node(equality);
     equality.make_not();
-    simplify_node(equality, mode);
+    simplify_node(equality);
     expr.swap(equality);
     return false;
   }
@@ -112,7 +111,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
     tmp.swap(expr.op0().op0());
     expr.op0().swap(tmp);
     // recursive call
-    simplify_node(expr, mode);
+    simplify_node(expr);
     return false;
   }
 
@@ -344,7 +343,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
     Forall_operands(it, new_expr)
     {
       it->make_typecast(expr.type());
-      simplify_rec(*it, mode); // recursive call
+      simplify_rec(*it); // recursive call
     }
 
     expr.swap(new_expr);
@@ -480,7 +479,7 @@ exprt simplify_exprt::pointer_offset(
     if(result.type()!=type)
     {
       result.make_typecast(type);
-      simplify_typecast(result, NORMAL);
+      simplify_typecast(result);
     }
 
     return result;
@@ -530,7 +529,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
     // first see if that is zero
     exprt ptr_off("pointer_offset", expr.type());
     ptr_off.copy_to_operands(ptr.op0());
-    simplify_node(ptr_off, NORMAL);
+    simplify_node(ptr_off);
 
     if(ptr_off.is_zero())
     {
@@ -555,7 +554,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
     {
       exprt ptr_off("pointer_offset", expr.type());
       ptr_off.copy_to_operands(ptr_expr.front());
-      simplify_node(ptr_off, NORMAL);
+      simplify_node(ptr_off);
 
       if(int_expr.empty())
         expr=ptr_off;
@@ -574,11 +573,11 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
           if(it->type()!=expr.type())
           {
             expr.operands().back().make_typecast(expr.type());
-            simplify_node(expr.operands().back(), NORMAL);
+            simplify_node(expr.operands().back());
           }
         }
 
-        simplify_node(expr, NORMAL);
+        simplify_node(expr);
       }
       return false;
     }
@@ -738,20 +737,6 @@ bool simplify_exprt::simplify_division(exprt &expr)
 
     if(ok0 && ok1)
     {
-      #if 0
-      if(int_value0==int_value1)
-      {
-        expr.make_one();
-        return false;
-      }
-      else if(int_value0>=0 && int_value1>=0 &&
-              int_value0<int_value1)
-      {
-        expr=gen_zero(expr.type());
-        return false;
-      }
-      #endif
-
       mp_integer result=int_value0/int_value1;
       exprt tmp=from_integer(result, expr.type());
 
@@ -886,7 +871,7 @@ Function: simplify_exprt::simplify_addition_substraction
 \*******************************************************************/
 
 bool simplify_exprt::simplify_addition_substraction(
-  exprt &expr, modet mode)
+  exprt &expr)
 {
   if(!is_number(expr.type()) &&
      expr.type().id()!="pointer")
@@ -984,7 +969,7 @@ bool simplify_exprt::simplify_addition_substraction(
 
     exprt an_add("+", expr.type());
     an_add.operands() = subtrahends;
-    simplify_rec(an_add, mode);
+    simplify_rec(an_add);
 
     // We should now have a list of operands, one of which might be constant. If
     // the minuend is constant, and a subtracting operand is constant, perform
@@ -1524,8 +1509,7 @@ Function: simplify_exprt::simplify_if_branch
 bool simplify_exprt::simplify_if_branch(
   exprt &trueexpr,
   exprt &falseexpr,
-  const exprt &cond,
-  modet mode)
+  const exprt &cond)
 {
   bool tresult = true;
   bool fresult = true;
@@ -1546,8 +1530,8 @@ bool simplify_exprt::simplify_if_branch(
     fresult = simplify_if_recursive(falseexpr, cond, false) && fresult;
   }
 
-  if(!tresult) simplify_rec(trueexpr, mode);
-  if(!fresult) simplify_rec(falseexpr, mode);
+  if(!tresult) simplify_rec(trueexpr);
+  if(!fresult) simplify_rec(falseexpr);
 
   return tresult && fresult;
 }
@@ -1564,7 +1548,7 @@ Function: simplify_exprt::simplify_if_cond
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_if_cond(exprt &expr, modet mode)
+bool simplify_exprt::simplify_if_cond(exprt &expr)
 {
   bool result = true;
   bool tmp = false;
@@ -1591,7 +1575,7 @@ bool simplify_exprt::simplify_if_cond(exprt &expr, modet mode)
       }
     }
 
-    if(!tmp) simplify_rec(expr, mode);
+    if(!tmp) simplify_rec(expr);
 
     result = tmp && result;
   }
@@ -1709,7 +1693,7 @@ Function: simplify_exprt::simplify_boolean
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_not(exprt &expr, modet mode)
+bool simplify_exprt::simplify_not(exprt &expr)
 {
   if(expr.operands().size()!=1) return true;
 
@@ -1748,7 +1732,7 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
     Forall_operands(it, expr)
     {
       it->make_not();
-      simplify_node(*it, mode);
+      simplify_node(*it);
     }
 
     expr.id(expr.is_and()?"or":"and");
@@ -1771,7 +1755,7 @@ Function: simplify_exprt::simplify_boolean
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
+bool simplify_exprt::simplify_boolean(exprt &expr)
 {
   if(!expr.has_operands()) return true;
 
@@ -1790,8 +1774,8 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
 
     expr.id("or");
     expr.op0().make_not();
-    simplify_node(expr.op0(), mode);
-    simplify_node(expr, mode);
+    simplify_node(expr.op0());
+    simplify_node(expr);
     return false;
   }
   else if(expr.id()=="<=>")
@@ -2037,7 +2021,7 @@ Function: simplify_exprt::simplify_inequality
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
+bool simplify_exprt::simplify_inequality(exprt &expr)
 {
   exprt::operandst &operands=expr.operands();
 
@@ -2159,15 +2143,15 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
 
     expr.op0().swap(expr.op1());
 
-    simplify_inequality_constant(expr, mode);
+    simplify_inequality_constant(expr);
     return false;
   }
   else if(op1_is_const)
   {
-    return simplify_inequality_constant(expr, mode);
+    return simplify_inequality_constant(expr);
   }
   else
-    return simplify_inequality_not_constant(expr, mode);
+    return simplify_inequality_not_constant(expr);
 
   assert(false);
   return false;
@@ -2236,7 +2220,7 @@ Function: simplify_exprt::simplify_inequality_not_constant
 \*******************************************************************/
 
 bool simplify_exprt::simplify_inequality_not_constant(
-  exprt &expr, modet mode)
+  exprt &expr)
 {
   exprt::operandst &operands=expr.operands();
 
@@ -2244,9 +2228,9 @@ bool simplify_exprt::simplify_inequality_not_constant(
   if(expr.id()=="notequal")
   {
     expr.id("=");
-    simplify_inequality_not_constant(expr, mode);
+    simplify_inequality_not_constant(expr);
     expr.make_not();
-    simplify_not(expr, mode);
+    simplify_not(expr);
     return false;
   }
   else if(expr.id()==">")
@@ -2254,17 +2238,17 @@ bool simplify_exprt::simplify_inequality_not_constant(
     expr.id(">=");
     // swap operands
     expr.op0().swap(expr.op1());
-    simplify_inequality_not_constant(expr, mode);
+    simplify_inequality_not_constant(expr);
     expr.make_not();
-    simplify_not(expr, mode);
+    simplify_not(expr);
     return false;
   }
   else if(expr.id()=="<")
   {
     expr.id(">=");
-    simplify_inequality_not_constant(expr, mode);
+    simplify_inequality_not_constant(expr);
     expr.make_not();
-    simplify_not(expr, mode);
+    simplify_not(expr);
     return false;
   }
   else if(expr.id()=="<=")
@@ -2272,7 +2256,7 @@ bool simplify_exprt::simplify_inequality_not_constant(
     expr.id(">=");
     // swap operands
     expr.op0().swap(expr.op1());
-    simplify_inequality_not_constant(expr, mode);
+    simplify_inequality_not_constant(expr);
     return false;
   }
 
@@ -2342,9 +2326,9 @@ bool simplify_exprt::simplify_inequality_not_constant(
     if(!eliminate_common_addends(expr.op0(), expr.op1()))
     {
       // remove zeros
-      simplify_node(expr.op0(), mode);
-      simplify_node(expr.op1(), mode);
-      simplify_inequality(expr, mode);
+      simplify_node(expr.op0());
+      simplify_node(expr.op1());
+      simplify_inequality(expr);
       return false;
     }
 
@@ -2364,8 +2348,7 @@ Function: simplify_exprt::simplify_inequality_constant
 \*******************************************************************/
 
 bool simplify_exprt::simplify_inequality_constant(
-  exprt &expr,
-  modet mode)
+  exprt &expr)
 {
   assert(expr.op1().is_constant());
 
@@ -2405,8 +2388,8 @@ bool simplify_exprt::simplify_inequality_constant(
         i-=constant;
         expr.op1()=from_integer(i, expr.op1().type());
 
-        simplify_addition_substraction(expr.op0(), mode);
-        simplify_inequality(expr, mode);
+        simplify_addition_substraction(expr.op0());
+        simplify_inequality(expr);
         return false;
       }
     }
@@ -2478,7 +2461,7 @@ Function: simplify_exprt::simplify_relation
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
+bool simplify_exprt::simplify_relation(exprt &expr)
 {
   bool result=true;
 
@@ -2514,7 +2497,7 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
   if(expr.id()=="="  || expr.id()=="notequal" ||
      expr.id()==">=" || expr.id()=="<=" ||
      expr.id()==">"  || expr.id()=="<")
-    result=simplify_inequality(expr, mode) && result;
+    result=simplify_inequality(expr) && result;
 
   return result;
 }
@@ -2682,7 +2665,7 @@ Function: simplify_exprt::simplify_index
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
+bool simplify_exprt::simplify_index(index_exprt &expr)
 {
   if(expr.operands().size()!=2) return true;
 
@@ -2709,14 +2692,14 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       if(equality_expr.lhs().type()!=equality_expr.rhs().type())
         equality_expr.rhs().make_typecast(equality_expr.lhs().type());
 
-      simplify_relation(equality_expr, mode);
+      simplify_relation(equality_expr);
 
       index_exprt new_index_expr;
       new_index_expr.type()=expr.type();
       new_index_expr.array()=with_expr.op0();
       new_index_expr.index()=expr.op1();
 
-      simplify_index(new_index_expr, mode); // recursive call
+      simplify_index(new_index_expr); // recursive call
 
       exprt if_expr("if", expr.type());
       if_expr.reserve_operands(3);
@@ -2734,50 +2717,44 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
   else if(expr.op0().id()=="constant" ||
           expr.op0().is_array())
   {
-    if(mode==NORMAL)
-    {
-      mp_integer i;
+    mp_integer i;
 
-      if(to_integer(expr.op1(), i))
-      {
-      }
-      else if(i<0 || i>=expr.op0().operands().size())
-      {
-        // out of bounds
-      }
-      else
-      {
-        // ok
-        exprt tmp;
-        tmp.swap(expr.op0().operands()[i.to_ulong()]);
-        expr.swap(tmp);
-        return false;
-      }
+    if(to_integer(expr.op1(), i))
+    {
+    }
+    else if(i<0 || i>=expr.op0().operands().size())
+    {
+      // out of bounds
+    }
+    else
+    {
+      // ok
+      exprt tmp;
+      tmp.swap(expr.op0().operands()[i.to_ulong()]);
+      expr.swap(tmp);
+      return false;
     }
   }
   else if(expr.op0().id()=="string-constant")
   {
-    if(mode==NORMAL)
+    mp_integer i;
+
+    const irep_idt &value=expr.op0().value();
+
+    if(to_integer(expr.op1(), i))
     {
-      mp_integer i;
-
-      const irep_idt &value=expr.op0().value();
-
-      if(to_integer(expr.op1(), i))
-      {
-      }
-      else if(i<0 || i>value.size())
-      {
-        // out of bounds
-      }
-      else
-      {
-        // terminating zero?
-        char v=(i==value.size())?0:value[i.to_ulong()];
-        exprt tmp=from_integer(v, expr.type());
-        expr.swap(tmp);
-        return false;
-      }
+    }
+    else if(i<0 || i>value.size())
+    {
+      // out of bounds
+    }
+    else
+    {
+      // terminating zero?
+      char v=(i==value.size())?0:value[i.to_ulong()];
+      exprt tmp=from_integer(v, expr.type());
+      expr.swap(tmp);
+      return false;
     }
   }
   else if(expr.op0().id()=="array_of")
@@ -3328,7 +3305,7 @@ Function: simplify_exprt::simplify_node
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_node(exprt &expr, modet mode)
+bool simplify_exprt::simplify_node(exprt &expr)
 {
   if(!expr.has_operands()) return true;
 
@@ -3337,17 +3314,17 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   result=sort_and_join(expr) && result;
 
   if(expr.id()=="typecast")
-    result=simplify_typecast(expr, mode) && result;
+    result=simplify_typecast(expr) && result;
   else if(expr.id()=="=" || expr.id()=="notequal" ||
           expr.id()==">" || expr.id()=="<" ||
           expr.id()==">=" || expr.id()=="<=")
-    result=simplify_relation(expr, mode) && result;
+    result=simplify_relation(expr) && result;
   else if(expr.id()=="if")
     result=simplify_if(expr) && result;
   else if(expr.id()=="with")
     result=simplify_with(expr) && result;
   else if(expr.id()=="index")
-    result=simplify_index(to_index_expr(expr), mode) && result;
+    result=simplify_index(to_index_expr(expr)) && result;
   else if(expr.id()=="member")
     result=simplify_member(to_member_expr(expr)) && result;
   else if(expr.id()=="pointer_object")
@@ -3379,17 +3356,17 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   else if(expr.id()=="ashr" || expr.id()=="lshr" || expr.id()=="shl")
     result=simplify_shifts(expr) && result;
   else if(expr.id()=="+" || expr.id()=="-")
-    result=simplify_addition_substraction(expr, mode) && result;
+    result=simplify_addition_substraction(expr) && result;
   else if(expr.id()=="*")
     result=simplify_multiplication(expr) && result;
   else if(expr.id()=="unary-")
     result=simplify_unary_minus(expr) && result;
   else if(expr.id()=="not")
-    result=simplify_not(expr, mode) && result;
+    result=simplify_not(expr) && result;
   else if(expr.id()=="=>"  || expr.id()=="<=>" ||
           expr.id()=="or"  || expr.id()=="xor" ||
           expr.is_and())
-    result=simplify_boolean(expr, mode) && result;
+    result=simplify_boolean(expr) && result;
   else if(expr.id()=="comma")
   {
     if(expr.operands().size()!=0)
@@ -3427,13 +3404,13 @@ Function: simplify_exprt::simplify
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_rec(exprt &expr, modet mode)
+bool simplify_exprt::simplify_rec(exprt &expr)
 {
   // look up in cache
 
   #ifdef USE_CACHE
   std::pair<simplify_expr_cachet::containert::iterator, bool>
-    cache_result=simplify_expr_cache.container(mode).
+    cache_result=simplify_expr_cache.container().
       insert(std::pair<exprt, exprt>(expr, exprt()));
 
   if(!cache_result.second) // found!
@@ -3449,17 +3426,14 @@ bool simplify_exprt::simplify_rec(exprt &expr, modet mode)
   #endif
 
   bool result=true;
-  modet sub_mode=mode;
 
-  if(expr.is_address_of())
-    sub_mode=ADDRESS_OF;
 
   if(expr.has_operands())
     Forall_operands(it, expr)
-      if(!simplify_rec(*it, sub_mode)) // recursive call
+      if(!simplify_rec(*it)) // recursive call
         result=false;
 
-  if(!simplify_node(expr, mode)) result=false;
+  if(!simplify_node(expr)) result=false;
 
   #ifdef USE_CACHE
   // save in cache
