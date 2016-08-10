@@ -49,7 +49,6 @@ floatbv_typet ieee_float_spect::to_type() const
   floatbv_typet result;
   result.set_f(f);
   result.set_width(width());
-  if(x86_extended) result.set("x86_extended", true);
   return result;
 }
 
@@ -106,8 +105,6 @@ void ieee_float_spect::from_type(const floatbv_typet &type)
   assert(f!=0);
   assert(f<width);
   e=width-f-1;
-  x86_extended=type.get_bool("x86_extended");
-  if(x86_extended) e=e-1; // no hidden bit
 }
 
 /*******************************************************************\

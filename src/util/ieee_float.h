@@ -17,8 +17,7 @@ class ieee_float_spect
 {
 public:
   unsigned f, e;
-  
-  bool x86_extended;
+
   mp_integer bias() const;
   
   ieee_float_spect(const class floatbv_typet &type)
@@ -28,18 +27,18 @@ public:
   
   void from_type(const class floatbv_typet &type);
 
-  ieee_float_spect():f(0), e(0), x86_extended(false)
+  ieee_float_spect():f(0), e(0)
   {
   }
 
-  ieee_float_spect(unsigned _f, unsigned _e):f(_f), e(_e), x86_extended(false)
+  ieee_float_spect(unsigned _f, unsigned _e):f(_f), e(_e)
   {
   }
 
   inline unsigned width() const
   {
-    return f+e+1+(x86_extended?1:0);
-  }  
+    return f+e+1;
+  }
 
   mp_integer max_exponent() const;
   mp_integer max_fraction() const;
@@ -61,28 +60,12 @@ public:
   {
     // IEEE 754 binary128
     return ieee_float_spect(112, 15);
-  }  
-  
-  inline static ieee_float_spect x86_80()
-  {
-    // Intel, not IEEE
-    ieee_float_spect result(63, 15);
-    result.x86_extended=true;
-    return result;
-  }  
-  
-  inline static ieee_float_spect x86_96()
-  {
-    // Intel, not IEEE
-    ieee_float_spect result(63, 15);
-    result.x86_extended=true;
-    return result;
-  }  
-  
+  }
+
   inline friend bool operator == (
     const ieee_float_spect &a, const ieee_float_spect &b)
   {
-    return a.f==b.f && a.e==b.e && a.x86_extended==b.x86_extended;
+    return a.f==b.f && a.e==b.e;
   }
 
   inline friend bool operator != (
