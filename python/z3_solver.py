@@ -53,6 +53,7 @@ class Z3python(esbmc.solve.smt_convt):
         self.ast_list = []
         self.sort_list = []
         self.bool_sort = self.mk_sort((esbmc.solve.smt_sort_kind.bool,))
+        self.solver = z3.Solver(solver=None, ctx=self.ctx)
 
         self.func_map = {
             esbmc.solve.smt_func_kind.eq :
@@ -91,7 +92,7 @@ class Z3python(esbmc.solve.smt_convt):
         assert False
 
     def assert_ast(self, ast):
-        assert False
+        self.solver.add(ast.ast)
 
     def dec_solve(self):
         assert False
