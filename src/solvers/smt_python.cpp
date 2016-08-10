@@ -26,13 +26,27 @@ class dummy_solver_class3 { };
 // when the derived smt_convt representing the solver gets a hold of it. It's
 // just a coincidence that that derived smt_convt is in a managed environment.
 #define ast_down(x) smt_ast_wrapper::cast_ast_down((x))
-#define sort_down(x) boost::python::object(boost::python::handle<>(boost::python::detail::wrapper_base_::get_owner(*(dynamic_cast<const smt_sort_wrapper *>((x))))))
+#define sort_down(x) smt_sort_wrapper::cast_sort_down((x))
 
 class smt_sort_wrapper : public smt_sort, public boost::python::wrapper<smt_sort>
 {
 public:
   template <typename ...Args>
   smt_sort_wrapper(Args ...args) : smt_sort(args...) { }
+
+  static
+  inline boost::python::object
+  cast_sort_down(smt_sortt s)
+  {
+    using namespace boost::python;
+    const smt_sort_wrapper *sort = dynamic_cast<const smt_sort_wrapper *>(s);
+    assert(sort != NULL && "All sorts reaching smt_convt wrapper should be sort wrappers");
+    PyObject *obj = boost::python::detail::wrapper_base_::get_owner(*sort);
+    assert(obj != NULL && "Wrapped SMT Sort doesn't have a wrapped PyObject?");
+    handle<> h(borrowed(obj));
+    object o(h);
+    return o;
+  }
 
   virtual ~smt_sort_wrapper() {}
 };
