@@ -48,6 +48,7 @@ static const char *type_names[] = {
   "unsignedbv",
   "signedbv",
   "fixedbv",
+  "floatbv",
   "string",
   "cpp_name"
 };
@@ -253,6 +254,12 @@ unsigned int
 fixedbv_type2t::get_width(void) const
 {
   return width;
+}
+
+unsigned int
+floatbv_type2t::get_width(void) const
+{
+  return fraction + exponent + 1;
 }
 
 unsigned int
@@ -509,6 +516,7 @@ expr2t::simplify(void) const
 static const char *expr_names[] = {
   "constant_int",
   "constant_fixedbv",
+  "constant_floatbv",
   "constant_bool",
   "constant_string",
   "constant_struct",
@@ -829,6 +837,12 @@ type_poolt::get_fixedbv(const typet &val)
 }
 
 const type2tc &
+type_poolt::get_floatbv(const typet &val)
+{
+  return get_type_from_pool(val, floatbv_map);
+}
+
+const type2tc &
 type_poolt::get_string(const typet &val)
 {
   return get_type_from_pool(val, string_map);
@@ -947,6 +961,12 @@ type_to_string(const BigInt &theint, int indent __attribute__((unused)))
 
 static inline __attribute__((always_inline)) std::string
 type_to_string(const fixedbvt &theval, int indent __attribute__((unused)))
+{
+  return theval.to_ansi_c_string();
+}
+
+static inline __attribute__((always_inline)) std::string
+type_to_string(const ieee_floatt &theval, int indent __attribute__((unused)))
 {
   return theval.to_ansi_c_string();
 }
@@ -1071,6 +1091,12 @@ do_type_cmp(const fixedbvt &side1, const fixedbvt &side2)
 }
 
 static inline __attribute__((always_inline)) bool
+do_type_cmp(const ieee_floatt &side1, const ieee_floatt &side2)
+{
+  return (side1 == side2) ? true : false;
+}
+
+static inline __attribute__((always_inline)) bool
 do_type_cmp(const std::vector<expr2tc> &side1,
             const std::vector<expr2tc> &side2)
 {
@@ -1187,6 +1213,16 @@ do_type_lt(const BigInt &side1, const BigInt &side2)
 
 static inline __attribute__((always_inline)) int
 do_type_lt(const fixedbvt &side1, const fixedbvt &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side1 > side2)
+    return 1;
+  return 0;
+}
+
+static inline __attribute__((always_inline)) int
+do_type_lt(const ieee_floatt &side1, const ieee_floatt &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1418,6 +1454,21 @@ do_type_crc(const fixedbvt &theval, size_t seed)
 
 static inline __attribute__((always_inline)) void
 do_type_hash(const fixedbvt &theval, crypto_hash &hash)
+{
+
+  do_type_hash(theval.to_integer(), hash);
+  return;
+}
+
+static inline __attribute__((always_inline)) size_t
+do_type_crc(const ieee_floatt &theval, size_t seed)
+{
+  // TODO: Check if this is correct
+  return do_type_crc(theval.to_integer(), seed);
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const ieee_floatt &theval, crypto_hash &hash)
 {
 
   do_type_hash(theval.to_integer(), hash);
@@ -2064,6 +2115,8 @@ std::string pointer_type2t::field_names [esbmct::num_type_fields]  =
 { "subtype", "", "", "", ""};
 std::string fixedbv_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "integer_bits", "", "", ""};
+std::string floatbv_type2t::field_names [esbmct::num_type_fields]  =
+{ "fraction", "exponent", "", "", ""};
 std::string string_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "", "", "", ""};
 std::string cpp_name_type2t::field_names [esbmct::num_type_fields]  =
@@ -2074,6 +2127,8 @@ std::string cpp_name_type2t::field_names [esbmct::num_type_fields]  =
 std::string constant_int2t::field_names [esbmct::num_type_fields]  =
 { "constant_value", "", "", "", ""};
 std::string constant_fixedbv2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", "", ""};
+std::string constant_floatbv2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string constant_struct2t::field_names [esbmct::num_type_fields]  =
 { "members", "", "", "", ""};
@@ -2255,6 +2310,7 @@ template class esbmct::irep_methods2<code_type2t, code_data, code_data::traits::
 template class esbmct::irep_methods2<array_type2t, array_data, array_data::traits::type>;
 template class esbmct::irep_methods2<pointer_type2t, pointer_data, pointer_data::traits::type>;
 template class esbmct::irep_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits::type>;
+template class esbmct::irep_methods2<floatbv_type2t, floatbv_data, floatbv_data::traits::type>;
 template class esbmct::irep_methods2<string_type2t, string_data, string_data::traits::type>;
 template class esbmct::irep_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits::type>;
 
@@ -2274,6 +2330,7 @@ template class esbmct::irep_methods2<cpp_name_type2t, cpp_name_data, cpp_name_da
 
 irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);
+irep_typedefs(constant_floatbv, constant_floatbv_data);
 irep_typedefs(constant_struct, constant_datatype_data);
 irep_typedefs(constant_union, constant_datatype_data);
 irep_typedefs(constant_array, constant_datatype_data);

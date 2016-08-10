@@ -255,6 +255,7 @@ public:
     unsignedbv_id,
     signedbv_id,
     fixedbv_id,
+    floatbv_id,
     string_id,
     cpp_name_id,
     end_type_id
@@ -438,6 +439,7 @@ public:
   enum expr_ids {
     constant_int_id,
     constant_fixedbv_id,
+    constant_floatbv_id,
     constant_bool_id,
     constant_string_id,
     constant_struct_id,
@@ -1229,6 +1231,7 @@ class code_type2t;
 class array_type2t;
 class pointer_type2t;
 class fixedbv_type2t;
+class floatbv_type2t;
 class string_type2t;
 class cpp_name_type2t;
 
@@ -1380,6 +1383,23 @@ public:
   typedef esbmct::type2t_traits<width_field, integer_bits_field> traits;
 };
 
+class floatbv_data : public type2t
+{
+public:
+  floatbv_data(type2t::type_ids id, unsigned int f, unsigned int e)
+    : type2t(id), fraction(f), exponent(e) { }
+  floatbv_data(const floatbv_data &ref)
+    : type2t(ref), fraction(ref.fraction), exponent(ref.exponent) { }
+
+  unsigned int fraction;
+  unsigned int exponent;
+
+// Type mangling:
+  typedef esbmct::field_traits<unsigned int, floatbv_data, &floatbv_data::exponent> exponent_field;
+  typedef esbmct::field_traits<unsigned int, floatbv_data, &floatbv_data::fraction> fraction_field;
+  typedef esbmct::type2t_traits<exponent_field, fraction_field> traits;
+};
+
 class string_data : public type2t
 {
 public:
@@ -1426,6 +1446,7 @@ typedef esbmct::irep_methods2<code_type2t, code_data, code_data::traits::type> c
 typedef esbmct::irep_methods2<array_type2t, array_data, array_data::traits::type> array_type_methods;
 typedef esbmct::irep_methods2<pointer_type2t, pointer_data, pointer_data::traits::type> pointer_type_methods;
 typedef esbmct::irep_methods2<fixedbv_type2t, fixedbv_data, fixedbv_data::traits::type> fixedbv_type_methods;
+typedef esbmct::irep_methods2<floatbv_type2t, floatbv_data, floatbv_data::traits::type> floatbv_type_methods;
 typedef esbmct::irep_methods2<string_type2t, string_data, string_data::traits::type> string_type_methods;
 typedef esbmct::irep_methods2<cpp_name_type2t, cpp_name_data, cpp_name_data::traits::type> cpp_name_type_methods;
 
@@ -1657,6 +1678,28 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Floating-point bitvector type.
+ *  Contains a spec for a floating point number -- this is the equivalent of a
+ *  ieee_float_spect in the old irep situation. Stores how bits are distributed
+ *  over fraction bits and exponent bits.
+ *  @extend floatbv_type_methods
+ */
+class floatbv_type2t : public floatbv_type_methods
+{
+public:
+  /** Primary constructor.
+   *  @param fraction Number of fraction bits in this type of floatbv
+   *  @param exponent Number of exponent bits in this type of floatbv
+   */
+  floatbv_type2t(unsigned int fraction, unsigned int exponent)
+    : floatbv_type_methods(floatbv_id, fraction, exponent) { }
+  floatbv_type2t(const floatbv_type2t &ref)
+    : floatbv_type_methods(ref) { }
+  virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 /** String type class.
  *  Slightly artificial as original irep had no type for this; Represents the
  *  type of a string constant. Because it needs a bit width, we also store the
@@ -1724,6 +1767,7 @@ type_macros(pointer);
 type_macros(unsignedbv);
 type_macros(signedbv);
 type_macros(fixedbv);
+type_macros(floatbv);
 type_macros(string);
 type_macros(cpp_name);
 #undef type_macros
@@ -1738,11 +1782,12 @@ inline bool is_bv_type(const type2tc &t) \
 inline bool is_bv_type(const expr2tc &e)
 { return is_bv_type(e->type); }
 
-/** Test whether type is a number type - bv or fixedbv. */
+/** Test whether type is a number type - bv, fixedbv or floatbv. */
 inline bool is_number_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id ||
-          t->type_id == type2t::fixedbv_id); }
+          t->type_id == type2t::fixedbv_id ||
+          t->type_id == type2t::floatbv_id); }
 inline bool is_number_type(const expr2tc &e)
 { return is_number_type(e->type); }
 
@@ -1793,6 +1838,7 @@ public:
   std::map<typet, type2tc> unsignedbv_map;
   std::map<typet, type2tc> signedbv_map;
   std::map<typet, type2tc> fixedbv_map;
+  std::map<typet, type2tc> floatbv_map;
   std::map<typet, type2tc> string_map;
   std::map<typet, type2tc> symbol_map;
   std::map<typet, type2tc> code_map;
@@ -1815,6 +1861,7 @@ public:
   const type2tc &get_unsignedbv(const typet &val);
   const type2tc &get_signedbv(const typet &val);
   const type2tc &get_fixedbv(const typet &val);
+  const type2tc &get_floatbv(const typet &val);
   const type2tc &get_string(const typet &val);
   const type2tc &get_symbol(const typet &val);
   const type2tc &get_code(const typet &val);
@@ -1839,6 +1886,7 @@ extern type_poolt type_pool;
 class constant2t;
 class constant_int2t;
 class constant_fixedbv2t;
+class constant_floatbv2t;
 class constant_bool2t;
 class constant_string2t;
 class constant_datatype2t;
@@ -1961,6 +2009,22 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value> value_field;
+  typedef esbmct::expr2t_traits<value_field> traits;
+};
+
+class constant_floatbv_data : public constant2t
+{
+public:
+  constant_floatbv_data(const type2tc &t, expr2t::expr_ids id,
+                        const ieee_floatt &ieeebv)
+    : constant2t(t, id), value(ieeebv) { }
+  constant_floatbv_data(const constant_floatbv_data &ref)
+    : constant2t(ref), value(ref.value) { }
+
+  ieee_floatt value;
+
+// Type mangling:
+  typedef esbmct::field_traits<ieee_floatt, constant_floatbv_data, &constant_floatbv_data::value> value_field;
   typedef esbmct::expr2t_traits<value_field> traits;
 };
 
@@ -2850,6 +2914,7 @@ public:
 
 irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);
+irep_typedefs(constant_floatbv, constant_floatbv_data);
 irep_typedefs(constant_struct, constant_datatype_data);
 irep_typedefs(constant_union, constant_datatype_data);
 irep_typedefs(constant_array, constant_datatype_data);
@@ -2976,6 +3041,25 @@ public:
     : constant_fixedbv_expr_methods(type, constant_fixedbv_id, value) { }
   constant_fixedbv2t(const constant_fixedbv2t &ref)
     : constant_fixedbv_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Constant floatbv class. Records a floating-point number,
+ *  Stored in a ieee_floatt.
+ *  @extends constant_floatbv_data
+ */
+class constant_floatbv2t : public constant_floatbv_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expression.
+   *  @param value ieee_floatt object containing number we'll be operating on
+   */
+  constant_floatbv2t(const type2tc &type, const ieee_floatt &value)
+    : constant_floatbv_expr_methods(type, constant_floatbv_id, value) { }
+  constant_floatbv2t(const constant_floatbv2t &ref)
+    : constant_floatbv_expr_methods(ref) { }
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4437,6 +4521,7 @@ struct type2_hash
 
 expr_macros(constant_int);
 expr_macros(constant_fixedbv);
+expr_macros(constant_floatbv);
 expr_macros(constant_bool);
 expr_macros(constant_string);
 expr_macros(constant_struct);
@@ -4529,6 +4614,7 @@ inline bool is_constant_expr(const expr2tc &t)
 {
   return t->expr_id == expr2t::constant_int_id ||
          t->expr_id == expr2t::constant_fixedbv_id ||
+         t->expr_id == expr2t::constant_floatbv_id ||
          t->expr_id == expr2t::constant_bool_id ||
          t->expr_id == expr2t::constant_string_id ||
          t->expr_id == expr2t::constant_struct_id ||
