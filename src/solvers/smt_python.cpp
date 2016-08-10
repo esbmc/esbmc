@@ -52,7 +52,7 @@ public:
     assert(ast != NULL && "All asts reaching smt_convt wrapper should be ast wrappers");
     PyObject *obj = boost::python::detail::wrapper_base_::get_owner(*ast);
     assert(obj != NULL && "Wrapped SMT AST doesn't have a wrapped PyObject?");
-    handle<> h(obj);
+    handle<> h(borrowed(obj));
     object o(h);
     return o;
   }
