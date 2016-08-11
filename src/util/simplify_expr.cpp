@@ -712,8 +712,8 @@ bool simplify_exprt::simplify_division(exprt &expr)
      expr.type()!=expr.op1().type())
     return true;
 
-  if(expr.type().id()=="signedbv" ||
-     expr.type().id()=="unsignedbv" ||
+  if(expr.type().is_signedbv() ||
+     expr.type().is_unsignedbv() ||
      expr.type().id()=="natural" ||
      expr.type().id()=="integer")
   {
@@ -747,7 +747,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
       }
     }
   }
-  else if(expr.type().id()=="fixedbv")
+  else if(expr.type().is_fixedbv())
   {
     // division by one?
     if(expr.op1().is_constant() && expr.op1().is_one())
@@ -770,7 +770,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
       }
     }
   }
-  else if(expr.type().id()=="floatbv")
+  else if(expr.type().is_floatbv())
   {
     // division by one?
     if(expr.op1().is_constant() && expr.op1().is_one())
