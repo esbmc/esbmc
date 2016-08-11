@@ -153,9 +153,28 @@ class Z3python(esbmc.solve.smt_convt):
         sort_ref = z3.Z3_mk_tuple_sort(self.ctx.ctx, z3_sym, num_fields, ast_vec, sort_vec, ret_decl, proj_decl)
 
         # Reference management: output operands start with zero references IIRC,
-        # and they can merrily evaporate. We want to keep a handle on the
-        # returned sort_ref.
-        return Z3sort(z3.BoolSortRef(sort_ref, self.ctx), esbmc.solve.smt_sort_kind.struct)
+        # We want to keep a handle on the returned sort_ref, and the FuncDecl
+        # typed ast, for creation of new tuples. The projection decls can
+        # merrily evaporate.
+        finsort = Z3sort(z3.BoolSortRef(sort_ref, self.ctx), esbmc.solve.smt_sort_kind.struct)
+        finsort.decl_ref = z3.FuncDeclRef(ret_decl[0])
+        return finsort
+
+    @stash_ast
+    def tuple_create(self, expr):
+        # This is another facility we have to implement with z3's ctypes
+        # interface.
+        # First convert all expr fields to being z3 asts
+        asts = [self.convert_ast(x) for x in expr.members]
+        ast_array = (z3.Ast * len(asts))()
+        for x in range(len(asts)):
+            ast_array[x] = asts[x].ast.ast #really
+
+        # Create the corresponding type
+        tsort = self.convert_sort(expr.type)
+
+        tup = z3.Z3_mk_app(self.ctx.ctx, tsort.decl_ref.ast, len(asts), ast_array)
+        return Z3ast(tup, self, tsort)
 
     def mk_smt_int(self, theint, sign):
         assert False
