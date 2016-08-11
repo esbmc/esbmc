@@ -122,6 +122,17 @@ class Z3python(esbmc.solve.smt_convt):
             print kind
             assert False
 
+    @stash_sort
+    def mk_struct_sort(self, t):
+        ast_vec = (z3.Symbol * 1)()
+        ast_vec[0] = z3.Symbol("fgasdf")
+        sort_vec = (z3.Sort * 1)()
+        sort_vec[0] = z3.BoolSort(self.ctx).ast
+        ret_decl = (z3.FuncDecl * 1)()
+        proj_decl = (z3.FuncDecl * 1)()
+        z3.Z3_mk_tuple_sort(self.ctx.ctx, z3.Symbol("fgasdf"), 1, ast_vec, sort_vec, ret_decl, proj_decl)
+        assert False
+
     def mk_smt_int(self, theint, sign):
         assert False
 
