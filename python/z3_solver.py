@@ -44,8 +44,18 @@ class Z3ast(esbmc.solve.smt_ast):
     def assign(self, conv, sym):
         assert False
 
-    def update(self, conv, sym):
-        assert False
+    def update(self, conv, value, idx, idx_expr):
+        # Either a tuple update or an array update. Alas, all the exprs baked
+        # into ESBMC make no distinguishment.
+        if self.sort.id == esbmc.type.type_ids.array:
+            res = z3.Update(self.ast, idx.ast, value.ast)
+        else:
+            assert self.sort.id == esbmc.type.type_ids.struct
+            assert False
+        result = Z3ast(res, self.conv, self.sort)
+        # Also manually stash this ast
+        self.conv.ast_list.append(new_ast)
+        return result
 
     def select(self, conv, idx):
         assert False
