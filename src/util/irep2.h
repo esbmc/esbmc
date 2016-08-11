@@ -1783,11 +1783,12 @@ inline bool is_bv_type(const expr2tc &e)
 { return is_bv_type(e->type); }
 
 /** Test whether type is a number type - bv, fixedbv or floatbv. */
-inline bool is_number_type(const type2tc &t) \
+inline bool is_number_type(const type2tc &t)
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id ||
           t->type_id == type2t::fixedbv_id ||
           t->type_id == type2t::floatbv_id); }
+
 inline bool is_number_type(const expr2tc &e)
 { return is_number_type(e->type); }
 
@@ -4631,6 +4632,17 @@ inline bool is_structure_type(const type2tc &t)
 inline bool is_structure_type(const expr2tc &e)
 {
   return is_structure_type(e->type);
+}
+
+inline bool is_arith_type(const expr2tc &t)
+{
+  return t->expr_id == expr2t::neg_id ||
+         t->expr_id == expr2t::abs_id ||
+         t->expr_id == expr2t::add_id ||
+         t->expr_id == expr2t::sub_id ||
+         t->expr_id == expr2t::mul_id ||
+         t->expr_id == expr2t::modulus_id ||
+         t->expr_id == expr2t::div_id;
 }
 
 /** Test if expr is true. First checks whether the expr is a constant bool, and
