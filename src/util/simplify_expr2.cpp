@@ -4,8 +4,10 @@
 
 #include <boost/static_assert.hpp>
 
+#include <arith_tools.h>
 #include <c_types.h>
 #include <base_type.h>
+#include <expr_util.h>
 #include <type_byte_size.h>
 
 expr2tc
@@ -42,69 +44,6 @@ to_fixedbv(const expr2tc &op, fixedbvt &bv)
   }
 }
 
-static expr2tc
-from_fixedbv(const fixedbvt &bv, const type2tc &type)
-{
-
-  switch (type->type_id) {
-  case type2t::bool_id:
-    {
-    bool theval = bv.is_zero() ? false : true;
-    return expr2tc(new constant_bool2t(theval));
-    }
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-    {
-    // To integer truncates non-integer bits, it turns out.
-    BigInt tmp = bv.to_integer();
-
-    // Round away upper bits, just in case we're decreasing accuracy here.
-    unsigned int bits = type->get_width();
-    fixedbvt tmp_bv;
-    tmp_bv.spec = bv.spec;
-    tmp_bv.from_integer(tmp);
-    tmp_bv.round(fixedbv_spect(bits*2, bits));
-
-    // If we're converting to a signedbv, the top bit being set means negative.
-    if (is_signedbv_type(type) && !tmp.is_negative()) {
-      assert(type->get_width() <= 64);
-      uint64_t top_bit = 1ULL << (type->get_width()-1);
-      uint64_t cur_val = tmp_bv.to_integer().to_uint64();
-      if (cur_val >= top_bit) {
-        // Construct some bit mask gumpf as a sign extension
-        int64_t large_int = -1;
-        large_int <<= (type->get_width() - 1);
-        large_int |= cur_val;
-        tmp_bv.from_integer(large_int);
-      }
-    } else if (is_signedbv_type(type)) {
-      int64_t theval = tmp.to_int64();
-      tmp_bv.from_integer(theval);
-    } else if (is_unsignedbv_type(type) && tmp_bv.to_integer().is_negative()) {
-      // Need to switch this number to being an unsigned representation of the
-      // same bit vector.
-      int64_t the_num = tmp_bv.to_integer().to_int64();
-
-      unsigned int width = type->get_width();
-      uint64_t mask = (1ULL << width) - 1ULL;
-      if (width == 64)
-        mask = 0xFFFFFFFFFFFFFFFF;
-
-      uint64_t output = the_num & mask;
-      tmp_bv.from_integer(BigInt(output));
-    }
-
-    // And done.
-    return expr2tc(new constant_int2t(type, tmp_bv.to_integer()));
-    }
-  case type2t::fixedbv_id:
-    return expr2tc(new constant_fixedbv2t(type, bv));
-  default:
-    std::cerr << "Unexpected typed argument to from_fixedbv" << std::endl;
-    abort();
-  }
-}
-
 void
 make_fixedbv_types_match(fixedbvt &bv1, fixedbvt &bv2)
 {
@@ -127,6 +66,7 @@ make_fixedbv_types_match(fixedbvt &bv1, fixedbvt &bv2)
 expr2tc
 add2t::do_simplify(bool __attribute__((unused))) const
 {
+
   if(!is_number_type(type))
     return expr2tc();
 
@@ -1265,29 +1205,138 @@ typecast2t::do_simplify(bool second) const
 {
 
   // Follow approach of old irep, i.e., copy it
-  if (type == from->type) {
+  if (type == from->type)
+  {
     // Typecast to same type means this can be eliminated entirely
     return from;
-  } else if (is_bool_type(type)) {
-    // Bool type -> turn into equality with zero
-    expr2tc zero;
-    if (is_pointer_type(from)) {
-      zero = expr2tc(new symbol2t(from->type, irep_idt("NULL")));
-    } else {
-      fixedbvt bv;
-      bv.from_integer(BigInt(0));
-      zero = from_fixedbv(bv, from->type);
+  }
+  else if (is_constant_expr(from))
+  {
+    // Casts from constant operands can be done here.
+    if (is_constant_bool2t(from) && is_bv_type(type))
+    {
+      // int/float/double to bool
+      if (to_constant_bool2t(from).constant_value)
+        return expr2tc(new constant_int2t(type, BigInt(1)));
+      else
+        return expr2tc(new constant_int2t(type, BigInt(0)));
     }
-    expr2tc eq = expr2tc(new equality2t(from, zero));
+    else if (is_number_type(from) && is_bool_type(type))
+    {
+      // bool to int/float/double
+      if(is_bv_type(from))
+      {
+        const constant_int2t &theint = to_constant_int2t(from);
+        if(theint.constant_value.is_zero())
+          return false_expr;
+        else
+          return true_expr;
+      }
+      else if(is_fixedbv_type(from))
+      {
+        const constant_fixedbv2t &fbv = to_constant_fixedbv2t(from);
+        if(fbv.value.is_zero())
+          return false_expr;
+        else
+          return true_expr;
+      }
+      else if(is_floatbv_type(from))
+      {
+        const constant_floatbv2t &fbv = to_constant_floatbv2t(from);
+        if(fbv.value.is_zero())
+          return false_expr;
+        else
+          return true_expr;
+      }
+    }
+    else if (is_bv_type(from) && is_number_type(type))
+    {
+      // int to int/float/double
+      const constant_int2t &theint = to_constant_int2t(from);
+
+      if(is_bv_type(type))
+      {
+        constant_int2tc new_int = expr2tc(theint.clone());
+
+        // If we are typecasting from integer to a smaller integer,
+        // this will return the number with the smaller size
+        exprt number =
+          from_integer(new_int.get()->constant_value, migrate_type_back(type));
+
+        if(to_integer(number, new_int.get()->constant_value))
+          return expr2tc();
+
+        return expr2tc(new_int);
+      }
+      else if(is_fixedbv_type(type))
+      {
+        fixedbvt fbv;
+        fbv.spec = to_fixedbv_type(migrate_type_back(type));
+        fbv.from_integer(theint.constant_value);
+        return expr2tc(new constant_fixedbv2t(type, fbv));
+      }
+      else if(is_floatbv_type(type))
+      {
+        ieee_floatt fbv;
+        fbv.spec = to_floatbv_type(migrate_type_back(type));
+        fbv.from_integer(theint.constant_value);
+        return expr2tc(new constant_floatbv2t(type, fbv));
+      }
+    }
+    else if (is_fixedbv_type(from) && is_number_type(type))
+    {
+      // float/double to int/float/double
+      fixedbvt fbv(to_constant_fixedbv2t(from).value);
+
+      if(is_bv_type(type))
+      {
+        return expr2tc(new constant_int2t(type, fbv.to_integer()));
+      }
+      else if(is_fixedbv_type(type))
+      {
+        fbv.round(to_fixedbv_type(migrate_type_back(type)));
+        return expr2tc(new constant_fixedbv2t(type, fbv));
+      }
+    }
+    else if (is_floatbv_type(from) && is_number_type(type))
+    {
+      // float/double to int/float/double
+      ieee_floatt fbv(to_constant_floatbv2t(from).value);
+
+      if(is_bv_type(type))
+      {
+        return expr2tc(new constant_int2t(type, fbv.to_integer()));
+      }
+      else if(is_floatbv_type(type))
+      {
+        fbv.change_spec(to_floatbv_type(migrate_type_back(type)));
+        return expr2tc(new constant_floatbv2t(type, fbv));
+      }
+    }
+  }
+  else if (is_bool_type(type))
+  {
+    // Bool type -> turn into equality with zero
+    exprt zero = gen_zero(migrate_type_back(from->type));
+
+    expr2tc zero2;
+    migrate_expr(zero, zero2);
+
+    expr2tc eq = expr2tc(new equality2t(from, zero2));
     expr2tc noteq = expr2tc(new not2t(eq));
     return noteq;
-  } else if (is_symbol2t(from) && to_symbol2t(from).thename == "NULL"
-             && is_pointer_type(type)){
+  }
+  else if (is_symbol2t(from)
+           && to_symbol2t(from).thename == "NULL"
+           && is_pointer_type(type))
+  {
     // Casts of null can operate on null directly. So long as we're casting it
     // to a pointer. Code like 32_floppy casts it to an int though; were we to
     // simplify that away, we end up with type errors.
     return from;
-  } else if (is_pointer_type(type) && is_pointer_type(from)) {
+  }
+  else if (is_pointer_type(type) && is_pointer_type(from))
+  {
     // Casting from one pointer to another is meaningless... except when there's
     // pointer arithmetic about to be applied to it. So, only remove typecasts
     // that don't change the subtype width.
@@ -1321,62 +1370,28 @@ typecast2t::do_simplify(bool second) const
       // simplify.
       return expr2tc();
     }
-  } else if (is_constant_expr(from)) {
-    // Casts from constant operands can be done here.
-    if (is_constant_bool2t(from) && is_bv_type(type)) {
-      if (to_constant_bool2t(from).constant_value) {
-        return expr2tc(new constant_int2t(type, BigInt(1)));
-      } else {
-        return expr2tc(new constant_int2t(type, BigInt(0)));
-      }
-    } else if (is_bool_type(type) && (is_constant_int2t(from) ||
-                                      is_constant_fixedbv2t(from))) {
-      fixedbvt bv;
-      to_fixedbv(from, bv);
-      if (bv.get_value().is_zero()) {
-        return false_expr;
-      } else {
-        return true_expr;
-      }
-    } else if (is_bv_type(from) && is_fixedbv_type(type)) {
-      fixedbvt f;
-      f.spec = to_fixedbv_type(migrate_type_back(type)); // Dodgy.
-      f.from_integer(to_constant_int2t(from).constant_value);
-      exprt ref = f.to_expr();
-      expr2tc cvt;
-      migrate_expr(ref, cvt);
-      return cvt;
-    } else if (is_fixedbv_type(from) && is_fixedbv_type(type)) {
-      fixedbvt f(to_constant_fixedbv2t(from).value);
-      f.round(to_fixedbv_type(migrate_type_back(type)));
-      exprt ref = f.to_expr();
-      expr2tc cvt;
-      migrate_expr(ref, cvt);
-      return cvt;
-    } else if ((is_bv_type(type) || is_fixedbv_type(type)) &&
-                (is_bv_type(from) || is_fixedbv_type(from))) {
-      fixedbvt bv;
-      to_fixedbv(from, bv);
-      return from_fixedbv(bv, type);
-    } else {
-      return expr2tc();
-    }
-  } else if (is_typecast2t(from) && type == from->type) {
+  }
+  else if (is_typecast2t(from) && type == from->type)
+  {
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
     return expr2tc(new typecast2t(type, to_typecast2t(from).from));
-  } else if (second && is_bv_type(type) && is_bv_type(from) &&
-             (is_add2t(from) || is_sub2t(from) || is_mul2t(from) ||
-              is_neg2t(from)) && from->type->get_width() <= type->get_width()) {
+  }
+  else if (second
+           && is_bv_type(type)
+           && is_bv_type(from)
+           && is_arith_type(from)
+           && (from->type->get_width() <= type->get_width()))
+  {
     // So, if this is an integer type, performing an integer arith operation,
     // and the type we're casting to isn't _supposed_ to result in a loss of
     // information, push the cast downwards.
     std::list<expr2tc> set2;
-    from->foreach_operand([&set2, this] (const expr2tc &e) {
+    from->foreach_operand([&set2, this] (const expr2tc &e)
+    {
       expr2tc cast = expr2tc(new typecast2t(type, e));
       set2.push_back(cast);
-    }
-    );
+    });
 
     // Now clone the expression and update its operands.
     expr2tc newobj = expr2tc(from->clone());
@@ -1396,11 +1411,9 @@ typecast2t::do_simplify(bool second) const
       return newobj;
     else
       return tmp;
-  } else {
-    return expr2tc();
   }
 
-  assert(0 && "Fell through typecast2t::do_simplify");
+  return expr2tc();
 }
 
 expr2tc
