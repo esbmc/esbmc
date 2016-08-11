@@ -100,9 +100,6 @@ class Z3python(esbmc.solve.smt_convt):
     def solve_text(self):
         assert False
 
-    def l_get(self, ast):
-        assert False
-
     @stash_sort
     def mk_sort(self, args):
         kind = args[0]
@@ -191,6 +188,9 @@ class Z3python(esbmc.solve.smt_convt):
         assert False
 
     def get_bv(self, thetype, ast):
+        assert False
+
+    def l_get(self, ast):
         assert False
 
     def mk_extract(self, a, high, low, s):
