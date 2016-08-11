@@ -507,6 +507,18 @@ bounce_convert_ast(smt_convt *conv, const expr2tc &expr)
   return const_cast<smt_ast*>(conv->convert_ast(expr));
 }
 
+class
+const_smt_sort_to_python
+{
+public:
+  static PyObject *convert(smt_sortt s)
+  {
+    using namespace boost::python;
+    smt_sort *ss = const_cast<smt_sort *>(s);
+    return object(ss).ptr();
+  }
+};
+
 void
 build_smt_conv_python_class(void)
 {
@@ -697,5 +709,13 @@ build_smt_conv_python_class(void)
 
     cp->staticmethod("make");
   }
+
+  // Set right up step right up to see the boost.python conversion circus, in
+  // town today only. Our const-correctness model means that we need to have
+  // various smt_sort * fields const-qualified. But boost.python won't convert
+  // that into a python object because... it's const qualified! Which is safe,
+  // but irritating. Therefore we need to write/use a converter for converting
+  // const smt_sort*'s to smt_sort* objects.
+  to_python_converter<smt_sortt, const_smt_sort_to_python>();
 }
 #endif
