@@ -105,7 +105,7 @@ add2t::do_simplify(bool __attribute__((unused))) const
   if (!is_constant_expr(to_simplify_side_1) && !is_constant_expr(to_simplify_side_2))
     return expr2tc();
 
-  if(is_signedbv_type(type) || is_unsignedbv_type(type))
+  if(is_bv_type(type))
   {
     if(is_constant_int2t(to_simplify_side_1))
     {
@@ -243,7 +243,7 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
   if (!is_constant_expr(to_simplify_side_1) && !is_constant_expr(to_simplify_side_2))
     return expr2tc();
 
-  if(is_signedbv_type(type) || is_unsignedbv_type(type))
+  if(is_bv_type(type))
   {
     if(is_constant_int2t(to_simplify_side_1))
     {
@@ -394,7 +394,7 @@ div2t::do_simplify(bool second __attribute__((unused))) const
   if (!is_constant_expr(to_simplify_side_1) && !is_constant_expr(to_simplify_side_2))
     return expr2tc();
 
-  if(is_signedbv_type(type) || is_unsignedbv_type(type))
+  if(is_bv_type(type))
   {
     if(is_constant_int2t(to_simplify_side_1))
     {
@@ -518,7 +518,7 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
   if (!is_constant_expr(to_simplify_side_1) || !is_constant_expr(to_simplify_side_2))
     return expr2tc();
 
-  if(is_signedbv_type(type) || is_unsignedbv_type(type))
+  if(is_bv_type(type))
   {
     const constant_int2t &numerator = to_constant_int2t(to_simplify_side_1);
     const constant_int2t &denominator = to_constant_int2t(to_simplify_side_2);
@@ -557,7 +557,7 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
 
   if(is_constant_expr(to_simplify))
   {
-    if(is_signedbv_type(to_simplify) || is_unsignedbv_type(to_simplify))
+    if(is_bv_type(to_simplify))
     {
       const constant_int2t &theint = to_constant_int2t(to_simplify);
 
@@ -618,7 +618,7 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
 
   if(is_constant_expr(to_simplify))
   {
-    if(is_signedbv_type(to_simplify) || is_unsignedbv_type(to_simplify))
+    if(is_bv_type(to_simplify))
     {
       const constant_int2t &theint = to_constant_int2t(to_simplify);
 
