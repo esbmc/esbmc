@@ -471,6 +471,16 @@ bounce_solver_factory(bool is_cpp, bool int_encoding, const namespacet &ns,
   return create_solver_factory(name, is_cpp, int_encoding, ns, options);
 }
 
+static
+smt_ast *
+bounce_convert_ast(smt_convt *conv, const expr2tc &expr)
+{
+  // It's funny because b.p tends to not work with anything 'const' :/.
+  // A certain amount of protection is lost byh this; however so long as b.p
+  // needs access to the return of convert_ast, that's always going to be lost.
+  return const_cast<smt_ast*>(conv->convert_ast(expr));
+}
+
 void
 build_smt_conv_python_class(void)
 {
@@ -579,10 +589,9 @@ build_smt_conv_python_class(void)
   class_<smt_convt_wrapper, boost::noncopyable>("smt_convt", init<bool,const namespacet &, bool, bool, bool>())
     .def("smt_post_init", &smt_convt::smt_post_init)
     .def("convert_sort", &smt_convt::convert_sort, rte())
-    .def("convert_ast", &smt_convt::convert_ast, rte())
+    .def("convert_ast", &bounce_convert_ast, rte())
     .def("push_ctx", &smt_convt::push_ctx)
     .def("pop_ctx", &smt_convt::pop_ctx)
-    .def("convert_ast", &smt_convt::convert_ast, ropaque())
     .def("convert_assign", &smt_convt::convert_assign, ropaque())
     .def("make_disjunct", &smt_convt::make_disjunct, ropaque())
     .def("make_conjunct", &smt_convt::make_conjunct, ropaque())
