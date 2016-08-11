@@ -242,28 +242,29 @@ expr2tc
 sub2t::do_simplify(bool second __attribute__((unused))) const
 {
 
+  if(!is_number_type(type))
+    return expr2tc();
+
+  if(type != side_1.get()->type)
+    return expr2tc();
+
+  if(type != side_2.get()->type)
+    return expr2tc();
+
   if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
     return expr2tc();
 
-  assert((is_constant_int2t(side_1) || is_constant_bool2t(side_1) ||
-          is_constant_fixedbv2t(side_1)) &&
-         (is_constant_int2t(side_2) || is_constant_bool2t(side_2) ||
-          is_constant_fixedbv2t(side_2)) &&
-          "Operands to simplified sub must be int, bool or fixedbv");
+  // rewrite "a-b" to "a+(-b)" and call simplify add
+  expr2tc neg = expr2tc(new neg2t(type, side_2->clone()));
+  expr2tc new_add = expr2tc(new add2t(type, side_1->clone(), neg));
 
-  fixedbvt operand1, operand2;
-  to_fixedbv(side_1, operand1);
-  to_fixedbv(side_2, operand2);
-
-  make_fixedbv_types_match(operand1, operand2);
-  operand1 -= operand2;
-
-  return from_fixedbv(operand1, type);
+  return new_add->do_simplify();
 }
 
 expr2tc
 mul2t::do_simplify(bool second __attribute__((unused))) const
 {
+
   if(!is_number_type(type))
     return expr2tc();
 
