@@ -55,6 +55,17 @@ get_override_checked(const T *x, const char *name)
 // just a coincidence that that derived smt_convt is in a managed environment.
 #define ast_down(x) smt_ast_wrapper::cast_ast_down((x))
 #define sort_down(x) smt_sort_wrapper::cast_sort_down((x))
+#define conv_down(x) smt_convt_wrapper_cvt::cast_conv_down((x))
+
+// Dependency misery: need a definition of a class to extract a PyObject from
+// it's wrapper, but smt_ast and smt_convt are mutually dependent. Thus we
+// have to make a declaration and put a definition further down the file.
+class smt_convt;
+class smt_convt_wrapper_cvt
+{
+public:
+  static boost::python::object cast_conv_down(smt_convt *conv);
+};
 
 class smt_sort_wrapper : public smt_sort, public boost::python::wrapper<smt_sort>
 {
@@ -121,7 +132,7 @@ public:
   {
     using namespace boost::python;
     if (override f = get_override_checked(this, "eq"))
-      return f(ctx, ast_down(other));
+      return f(conv_down(ctx), ast_down(other));
     else
       return smt_ast::eq(ctx, other);
   }
@@ -137,7 +148,7 @@ public:
   {
     using namespace boost::python;
     if (override f = get_override_checked(this, "assign"))
-      f(ctx, ast_down(sym));
+      f(conv_down(ctx), ast_down(sym));
     else
       smt_ast::assign(ctx, sym);
   }
@@ -153,7 +164,7 @@ public:
   {
     using namespace boost::python;
     if (override f = get_override_checked(this, "update"))
-      return f(ctx, ast_down(value), idx, idx_expr);
+      return f(conv_down(ctx), ast_down(value), idx, idx_expr);
     else
       return smt_ast::update(ctx, value, idx, idx_expr);
   }
@@ -169,7 +180,7 @@ public:
   {
     using namespace boost::python;
     if (override f = get_override_checked(this, "select"))
-      return f(ctx, idx);
+      return f(conv_down(ctx), idx);
     else
       return smt_ast::select(ctx, idx);
   }
@@ -185,7 +196,7 @@ public:
   {
     using namespace boost::python;
     if (override f = get_override_checked(this, "project"))
-      return f(ctx, elem);
+      return f(conv_down(ctx), elem);
     else
       return smt_ast::project(ctx, elem);
   }
@@ -201,6 +212,7 @@ class smt_convt_wrapper : public smt_convt, public array_iface, public tuple_ifa
 {
 public:
   friend class get_override_checked_class;
+  friend class smt_convt_wrapper_cvt;
   smt_convt_wrapper(bool int_encoding, const namespacet &_ns, bool is_cpp, bool bools_in_arrays, bool can_init_inf_arrays)
     : smt_convt(int_encoding, _ns, is_cpp),
        array_iface(bools_in_arrays, can_init_inf_arrays),
@@ -462,6 +474,20 @@ public:
     abort();
   }
 };
+
+// Method for casting an smt_convt down to the wrapped type.
+boost::python::object
+smt_convt_wrapper_cvt::cast_conv_down(smt_convt *c)
+{
+  using namespace boost::python;
+  smt_convt_wrapper *conv = dynamic_cast<smt_convt_wrapper *>(c);
+  assert(conv != NULL && "smt_convt handed to ast is not python wrapped?");
+  PyObject *obj = boost::python::detail::wrapper_base_::get_owner(*conv);
+  assert(obj != NULL && "Wrapped SMT convt doesn't have a wrapped PyObject?");
+  handle<> h(borrowed(obj));
+  object o(h);
+  return o;
+}
 
 static smt_convt *
 bounce_solver_factory(bool is_cpp, bool int_encoding, const namespacet &ns,
