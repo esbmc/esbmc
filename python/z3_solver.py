@@ -215,6 +215,14 @@ class Z3python(esbmc.solve.smt_convt):
         z3var = z3.Const(name, sort.sort)
         return Z3ast(z3var, self, sort)
 
+    @stash_ast
+    def mk_tuple_array_symbol(self, expr):
+        # Same for tuple arrays
+        assert type(expr) == esbmc.expr.symbol
+        sort = self.convert_sort(expr.type)
+        z3var = z3.Const(expr.name.as_string(), sort.sort)
+        return Z3ast(z3var, self, sort)
+
     def mk_smt_real(self, str):
         assert False
 
