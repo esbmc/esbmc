@@ -3616,6 +3616,8 @@ public:
   abs2t(const abs2t &ref)
     : abs_expr_methods(ref) {}
 
+  virtual expr2tc do_simplify(bool second) const;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 

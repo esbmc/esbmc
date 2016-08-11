@@ -593,6 +593,67 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 expr2tc
+abs2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  if(!is_number_type(type))
+    return expr2tc();
+
+  if(type != value.get()->type)
+    return expr2tc();
+
+  // Try to recursively simplify nested operations, if any
+  expr2tc to_simplify = expr2tc(value->clone());
+  if(is_arith_type(to_simplify))
+  {
+    expr2tc res = to_simplify->do_simplify();
+
+    // If we can't simplify the nested operation, don't try any further
+    if (is_nil_expr(res))
+      return expr2tc();
+
+    to_simplify = expr2tc(res->clone());
+  }
+
+  if(is_constant_expr(to_simplify))
+  {
+    if(is_signedbv_type(to_simplify) || is_unsignedbv_type(to_simplify))
+    {
+      const constant_int2t &theint = to_constant_int2t(to_simplify);
+
+      constant_int2tc new_int = expr2tc(theint.clone());
+      if(new_int.get()->constant_value < 0)
+        new_int.get()->constant_value.negate();
+
+      return expr2tc(new_int);
+    }
+    else if(is_constant_fixedbv2t(to_simplify))
+    {
+      const constant_fixedbv2t &fbv = to_constant_fixedbv2t(to_simplify);
+
+      constant_fixedbv2tc new_fbv = expr2tc(fbv.clone());
+
+      // By default, fixedbvt is initialized to zero
+      if(new_fbv.get()->value < fixedbvt())
+        new_fbv.get()->value.negate();
+
+      return expr2tc(new_fbv);
+    }
+    else if(is_constant_floatbv2t(to_simplify))
+    {
+      const constant_floatbv2t &fbv = to_constant_floatbv2t(to_simplify);
+
+      constant_floatbv2tc new_fbv = expr2tc(fbv.clone());
+      new_fbv.get()->value.set_sign(false);
+
+      return expr2tc(new_fbv);
+    }
+  }
+
+  return expr2tc();
+}
+
+expr2tc
 neg2t::do_simplify(bool second __attribute__((unused))) const
 {
 
