@@ -523,21 +523,50 @@ expr2tc
 neg2t::do_simplify(bool second __attribute__((unused))) const
 {
 
-  if (!is_constant_expr(value))
+  if(!is_number_type(type))
     return expr2tc();
 
-  assert((is_constant_int2t(value) || is_constant_bool2t(value) ||
-          is_constant_fixedbv2t(value)) &&
-          "Operands to simplified neg2t must be int, bool or fixedbv");
+  if(type != value.get()->type)
+    return expr2tc();
 
-  // The plan: convert everything to a fixedbv, operate, and convert back to
-  // whatever form we need. Fixedbv appears to be a wrapper around BigInt.
-  fixedbvt operand;
-  to_fixedbv(value, operand);
+  if(is_neg2t(value))
+  {
+    // cancel out "-(-x)" to "x"
+    const neg2tc &neg = to_neg2t(value);
+    return expr2tc(neg.get()->value);
+  }
+  else if(is_constant_expr(value))
+  {
+    if(is_signedbv_type(value) || is_unsignedbv_type(value))
+    {
+      const constant_int2t &theint = to_constant_int2t(value);
 
-  operand.negate();
+      constant_int2tc new_int = expr2tc(theint.clone());
+      new_int.get()->constant_value.negate();
 
-  return from_fixedbv(operand, type);
+      return expr2tc(new_int);
+    }
+    else if(is_constant_fixedbv2t(value))
+    {
+      const constant_fixedbv2t &fbv = to_constant_fixedbv2t(value);
+
+      constant_fixedbv2tc new_fbv = expr2tc(fbv.clone());
+      new_fbv.get()->value.negate();
+
+      return expr2tc(new_fbv);
+    }
+    else if(is_constant_floatbv2t(value))
+    {
+      const constant_floatbv2t &fbv = to_constant_floatbv2t(value);
+
+      constant_floatbv2tc new_fbv = expr2tc(fbv.clone());
+      new_fbv.get()->value.negate();
+
+      return expr2tc(new_fbv);
+    }
+  }
+
+  return expr2tc();
 }
 
 expr2tc
