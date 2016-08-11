@@ -27,12 +27,17 @@ class Z3ast(esbmc.solve.smt_ast):
     def __init__(self, ast, convobj, sort):
         super(Z3ast, self).__init__(convobj, sort)
         self.ast = ast
+        self.conv = convobj
 
     def ite(self, conv, cond, falseop):
         assert False
 
     def eq(self, conv, other):
-        assert False
+        new_ast_ref = self.ast == other.ast
+        new_ast = Z3ast(new_ast_ref, self.conv, self.conv.bool_sort)
+        # Also manually stash this ast
+        self.conv.ast_list.append(new_ast)
+        return new_ast
 
     def assign(self, conv, sym):
         assert False
