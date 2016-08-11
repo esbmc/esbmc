@@ -17,6 +17,34 @@ class dummy_solver_class { };
 class dummy_solver_class2 { };
 class dummy_solver_class3 { };
 
+// Template for checking whether the return value from get_override is none
+// or not. Placed in class to make it a friend of the wrappers.
+class get_override_checked_class {
+public:
+
+template <typename T>
+static inline boost::python::override
+get_override_checked(const T *x, const char *name)
+{
+  using namespace boost::python;
+  override f = x->get_override(name);
+  if (f.is_none()) {
+    std::cerr << "Pure virtual method \"" << name << "\" called during solving"
+      "; you need to override it from python" << std::endl;
+    abort();
+  }
+
+  return f;
+}
+};
+
+template <typename T>
+inline boost::python::override
+get_override_checked(const T *x, const char *name)
+{
+  return get_override_checked_class::get_override_checked(x, name);
+}
+
 // Convert an incoming ast / sort into a handle for a python object, extracted
 // out of the wrapper class each inherits from. I was kind of expecting b.p
 // to be doing this itself, but apparently not, seeing how it unwraps many
@@ -31,6 +59,7 @@ class dummy_solver_class3 { };
 class smt_sort_wrapper : public smt_sort, public boost::python::wrapper<smt_sort>
 {
 public:
+  friend class get_override_checked_class;
   template <typename ...Args>
   smt_sort_wrapper(Args ...args) : smt_sort(args...) { }
 
@@ -54,6 +83,7 @@ public:
 class smt_ast_wrapper : public smt_ast, public boost::python::wrapper<smt_ast>
 {
 public:
+  friend class get_override_checked_class;
   template <typename ...Args>
   smt_ast_wrapper(Args ...args) : smt_ast(args...) { }
 
@@ -75,7 +105,7 @@ public:
   ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   {
     using namespace boost::python;
-    if (override f = this->get_override("ite"))
+    if (override f = get_override_checked(this, "ite"))
       return f(ctx, ast_down(cond), ast_down(falseop));
     else
       return smt_ast::ite(ctx, cond, falseop);
@@ -90,7 +120,7 @@ public:
   eq(smt_convt *ctx, smt_astt other) const
   {
     using namespace boost::python;
-    if (override f = this->get_override("eq"))
+    if (override f = get_override_checked(this, "eq"))
       return f(ctx, ast_down(other));
     else
       return smt_ast::eq(ctx, other);
@@ -106,7 +136,7 @@ public:
   assign(smt_convt *ctx, smt_astt sym) const
   {
     using namespace boost::python;
-    if (override f = this->get_override("assign"))
+    if (override f = get_override_checked(this, "assign"))
       f(ctx, ast_down(sym));
     else
       smt_ast::assign(ctx, sym);
@@ -122,7 +152,7 @@ public:
   update(smt_convt *ctx, smt_astt value, unsigned int idx, expr2tc idx_expr = expr2tc()) const
   {
     using namespace boost::python;
-    if (override f = this->get_override("update"))
+    if (override f = get_override_checked(this, "update"))
       return f(ctx, ast_down(value), idx, idx_expr);
     else
       return smt_ast::update(ctx, value, idx, idx_expr);
@@ -138,7 +168,7 @@ public:
   select(smt_convt *ctx, const expr2tc &idx) const
   {
     using namespace boost::python;
-    if (override f = this->get_override("select"))
+    if (override f = get_override_checked(this, "select"))
       return f(ctx, idx);
     else
       return smt_ast::select(ctx, idx);
@@ -154,7 +184,7 @@ public:
   project(smt_convt *ctx, unsigned int elem) const
   {
     using namespace boost::python;
-    if (override f = this->get_override("project"))
+    if (override f = get_override_checked(this, "project"))
       return f(ctx, elem);
     else
       return smt_ast::project(ctx, elem);
@@ -170,6 +200,7 @@ public:
 class smt_convt_wrapper : public smt_convt, public array_iface, public tuple_iface, public boost::python::wrapper<smt_convt>
 {
 public:
+  friend class get_override_checked_class;
   smt_convt_wrapper(bool int_encoding, const namespacet &_ns, bool is_cpp, bool bools_in_arrays, bool can_init_inf_arrays)
     : smt_convt(int_encoding, _ns, is_cpp),
        array_iface(bools_in_arrays, can_init_inf_arrays),
@@ -195,31 +226,31 @@ public:
   smt_astt
   mk_func_app_remangled(smt_sortt s, smt_func_kind k, boost::python::object o)
   {
-    return this->get_override("mk_func_app")(sort_down(s), k, o);
+    return get_override_checked(this, "mk_func_app")(sort_down(s), k, o);
   }
 
   void
   assert_ast(smt_astt a)
   {
-    this->get_override("assert_ast")(ast_down(a));
+    get_override_checked(this, "assert_ast")(ast_down(a));
   }
 
   resultt
   dec_solve()
   {
-    return this->get_override("dec_solve")();
+    return get_override_checked(this, "dec_solve")();
   }
 
   const std::string
   solver_text()
   {
-    return this->get_override("solver_text")();
+    return get_override_checked(this, "solver_text")();
   }
 
   tvt
   l_get(smt_astt a)
   {
-    return this->get_override("l_get")(ast_down(a));
+    return get_override_checked(this, "l_get")(ast_down(a));
   }
 
   smt_sortt
@@ -266,68 +297,68 @@ public:
   smt_sortt
   mk_sort_remangled(boost::python::object o)
   {
-    return this->get_override("mk_sort")(o);
+    return get_override_checked(this, "mk_sort")(o);
   }
 
   smt_astt
   mk_smt_int(const mp_integer &theint, bool sign)
   {
-    return this->get_override("mk_smt_int")(theint, sign);
+    return get_override_checked(this, "mk_smt_int")(theint, sign);
   }
 
   smt_astt
   mk_smt_bool(bool val)
   {
-    return this->get_override("mk_smt_bool")(val);
+    return get_override_checked(this, "mk_smt_bool")(val);
   }
 
   smt_astt
   mk_smt_symbol(const std::string &name, smt_sortt s)
   {
-    return this->get_override("mk_smt_symbol")(name, sort_down(s));
+    return get_override_checked(this, "mk_smt_symbol")(name, sort_down(s));
   }
 
   smt_astt
   mk_smt_real(const std::string &str)
   {
-    return this->get_override("mk_smt_real")(str);
+    return get_override_checked(this, "mk_smt_real")(str);
   }
 
   smt_astt
   mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
   {
-    return this->get_override("mk_smt_bvint")(theint, sign, w);
+    return get_override_checked(this, "mk_smt_bvint")(theint, sign, w);
   }
 
   expr2tc
   get_bool(smt_astt a)
   {
-    return this->get_override("get_bool")(ast_down(a));
+    return get_override_checked(this, "get_bool")(ast_down(a));
   }
 
   expr2tc
   get_bv(const type2tc &t, smt_astt a)
   {
-    return this->get_override("get_bv")(t, ast_down(a));
+    return get_override_checked(this, "get_bv")(t, ast_down(a));
   }
 
   smt_astt
   mk_extract(smt_astt a, unsigned int high, unsigned int low, smt_sortt s)
   {
-    return this->get_override("mk_extract")(ast_down(a), high, low, sort_down(s));
+    return get_override_checked(this, "mk_extract")(ast_down(a), high, low, sort_down(s));
   }
 
   /*************************** Array API ***********************************/
   smt_astt
   mk_array_symbol(const std::string &name, smt_sortt sort, smt_sortt subtype)
   {
-    return this->get_override("mk_array_symbol")(name, sort_down(sort), sort_down(subtype));
+    return get_override_checked(this, "mk_array_symbol")(name, sort_down(sort), sort_down(subtype));
   }
 
   expr2tc
   get_array_elem(smt_astt a, uint64_t idx, const type2tc &subtype)
   {
-    return this->get_override("get_array_elem")(ast_down(a), idx, subtype);
+    return get_override_checked(this, "get_array_elem")(ast_down(a), idx, subtype);
   }
 
   const smt_ast *
@@ -344,7 +375,7 @@ public:
   void
   add_array_constraints_for_solving()
   {
-    this->get_override("add_array_constraints_for_solving")();
+    get_override_checked(this, "add_array_constraints_for_solving")();
   }
 
   void
@@ -365,56 +396,56 @@ public:
   smt_sortt
   mk_struct_sort(const type2tc &type)
   {
-    return this->get_override("mk_struct_sort")(type);
+    return get_override_checked(this, "mk_struct_sort")(type);
   }
 
   smt_astt
   tuple_create(const expr2tc &structdef)
   {
-    return this->get_override("tuple_create")(structdef);
+    return get_override_checked(this, "tuple_create")(structdef);
   }
 
   smt_astt
   tuple_fresh(smt_sortt s, std::string name = "")
   {
-    return this->get_override("tuple_fresh")(sort_down(s), name);
+    return get_override_checked(this, "tuple_fresh")(sort_down(s), name);
   }
 
   smt_astt
   tuple_array_create(const type2tc &array_type, smt_astt *inputargs, bool const_array, smt_sortt domain)
   {
     // XXX XXX XXX this needs to be remangled, array ptr
-    return this->get_override("tuple_array_creaet")(array_type, inputargs, const_array, domain);
+    return get_override_checked(this, "tuple_array_creaet")(array_type, inputargs, const_array, domain);
   }
 
   smt_astt
   tuple_array_of(const expr2tc &init_value, unsigned long domain_width)
   {
-    return this->get_override("tuple_array_of")(init_value, domain_width);
+    return get_override_checked(this, "tuple_array_of")(init_value, domain_width);
   }
 
   smt_astt
   mk_tuple_symbol(const std::string &name, smt_sortt s)
   {
-    return this->get_override("mk_tuple_symbol")(name, sort_down(s));
+    return get_override_checked(this, "mk_tuple_symbol")(name, sort_down(s));
   }
 
   smt_astt
   mk_tuple_array_symbol(const expr2tc &expr)
   {
-    return this->get_override("mk_tuple_array_symbol")(expr);
+    return get_override_checked(this, "mk_tuple_array_symbol")(expr);
   }
 
   expr2tc
   tuple_get(const expr2tc &expr)
   {
-    return this->get_override("tuple_get")(expr);
+    return get_override_checked(this, "tuple_get")(expr);
   }
 
   void
   add_tuple_constraints_for_solving()
   {
-    this->get_override("add_tuple_constraints_for_solving")();
+    get_override_checked(this, "add_tuple_constraints_for_solving")();
   }
 
   void
