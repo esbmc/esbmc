@@ -173,8 +173,9 @@ class Z3python(esbmc.solve.smt_convt):
         # Create the corresponding type
         tsort = self.convert_sort(expr.type)
 
-        tup = z3.Z3_mk_app(self.ctx.ctx, tsort.decl_ref.ast, len(asts), ast_array)
-        return Z3ast(tup, self, tsort)
+        tast = z3.Z3_mk_app(self.ctx.ctx, tsort.decl_ref.ast, len(asts), ast_array)
+        tref = z3.AstRef(tast)
+        return Z3ast(tref, self, tsort)
 
     def mk_smt_int(self, theint, sign):
         assert False
