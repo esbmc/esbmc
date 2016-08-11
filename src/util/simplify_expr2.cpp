@@ -15,55 +15,6 @@ expr2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-static const type2tc &
-decide_on_expr_type(const expr2tc &side1, const expr2tc &side2)
-{
-
-  // For some arithmetic expr, decide on the result of operating on them.
-  if (is_pointer_type(side1))
-    return side1->type;
-  if (is_pointer_type(side2))
-    return side2->type;
-
-  // Fixedbv's take precedence.
-  if (is_fixedbv_type(side1))
-    return side1->type;
-  if (is_fixedbv_type(side2))
-    return side2->type;
-
-  // If one operand is bool, return the other, as that's either bool or will
-  // have a higher rank.
-  if (is_bool_type(side1))
-    return side2->type;
-  else if (is_bool_type(side2))
-    return side1->type;
-
-  assert(is_bv_type(side1) && is_bv_type(side2));
-
-  unsigned int side1_width = side1->type->get_width();
-  unsigned int side2_width = side2->type->get_width();
-
-  if (side1->type == side2->type) {
-    if (side1_width > side2_width)
-      return side1->type;
-    else
-      return side2->type;
-  }
-
-  // Differing between signed/unsigned bv type. Take unsigned if greatest.
-  if (is_unsignedbv_type(side1) && side1_width >= side2_width)
-    return side1->type;
-
-  if (is_unsignedbv_type(side2) && side2_width >= side1_width)
-    return side2->type;
-
-  // Otherwise return the signed one;
-  if (is_signedbv_type(side1))
-    return side1->type;
-  else
-    return side2->type;
-}
-
 static void
 to_fixedbv(const expr2tc &op, fixedbvt &bv)
 {
@@ -173,189 +124,118 @@ make_fixedbv_types_match(fixedbvt &bv1, fixedbvt &bv2)
   return;
 }
 
-static void
-fetch_ops_from_this_type(std::list<expr2tc> &ops, expr2t::expr_ids id,
-                         const expr2tc &expr)
-{
-
-  if (expr->expr_id == id) {
-    expr->foreach_operand([&ops, id] (const expr2tc &e) {
-      fetch_ops_from_this_type(ops, id, e);
-      }
-    );
-  } else {
-    ops.push_back(expr);
-  }
-}
-
-static bool
-rebalance_associative_tree(const expr2t &expr, std::list<expr2tc> &ops,
-        expr2tc (*create_obj_wrapper)(const expr2tc &arg1, const expr2tc &arg2))
-{
-
-  // So the purpose of this is to take a tree of all-the-same-operation and
-  // re-arrange it so that there are some operations that we can simplify.
-  // In old irep things like addition or subtraction or whatever could take
-  // a whole set of operands (however many you shoved in the vector) and those
-  // could all be simplified with each other. However, now that we've moved to
-  // binary-only ireps, this isn't possible (and it's causing high
-  // inefficiencies).
-  // So instead, reconstruct a tree of all-the-same ireps into a vector and
-  // try to simplify all of their contents, then try to reconfigure into another
-  // set of operations.
-  // There's great scope for making this /much/ more efficient via passing modes
-  // and vectors downwards, but lets not prematurely optimise. All this is
-  // faster than stringly stuff.
-
-  // Extract immediate operands
-  expr.foreach_operand([&ops, &expr] (const expr2tc &e) {
-      fetch_ops_from_this_type(ops, expr.expr_id, e);
-    }
-  );
-
-  // Are there enough constant values in there?
-  unsigned int const_values = 0;
-  unsigned int orig_size = ops.size();
-  for (std::list<expr2tc>::const_iterator it = ops.begin();
-       it != ops.end(); it++)
-    if (is_constant_expr(*it))
-      const_values++;
-
-  // Nothing for us to simplify.
-  if (const_values <= 1)
-    return false;
-
-  // Otherwise, we can go through simplifying operands.
-  expr2tc accuml;
-  for (std::list<expr2tc>::iterator it = ops.begin();
-       it != ops.end(); it++) {
-    if (!is_constant_expr(*it))
-      continue;
-
-    // We have a constant; do we have another constant to simplify with?
-    if (is_nil_expr(accuml)) {
-      // Juggle iterators, our iterator becomes invalid when we erase it.
-      std::list<expr2tc>::iterator back = it;
-      back--;
-      accuml = *it;
-      ops.erase(it);
-      it = back;
-      continue;
-    }
-
-    // Now attempt to simplify that. Create a new associative object and
-    // give it a shot.
-    expr2tc tmp = create_obj_wrapper(accuml, *it);
-    if (is_nil_expr(tmp))
-      continue; // Creating wrapper rejected it.
-
-    tmp = tmp->simplify();
-    if (is_nil_expr(tmp))
-      // For whatever reason we're unable to simplify these two constants.
-      continue;
-
-    // It's good; remove that object from the list.
-    accuml = tmp;
-    std::list<expr2tc>::iterator back = it;
-    back--;
-    ops.erase(it);
-    it = back;
-  }
-
-  // So, we've attempted to remove some things. There are three cases.
-  // First, nothing was pulled out of the list. Shouldn't happen, but just
-  // in case...
-  if (ops.size() == orig_size)
-    return false;
-
-  // If only one constant value was removed from the list, then we attempted to
-  // simplify two constants and it failed. No simplification.
-  if (ops.size() == orig_size - 1)
-    return false;
-
-  // Finally; we've succeeded and simplified something. Push the simplified
-  // constant back at the end of the list.
-  ops.push_back(accuml);
-  return true;
-}
-
 expr2tc
-attempt_associative_simplify(const expr2t &expr,
-        expr2tc (*create_obj_wrapper)(const expr2tc &arg1, const expr2tc &arg2))
+add2t::do_simplify(bool __attribute__((unused))) const
 {
-
-  std::list<expr2tc> operands;
-  if (rebalance_associative_tree(expr, operands, create_obj_wrapper)) {
-    // Horray, we simplified. Recreate.
-    assert(operands.size() >= 2);
-    std::list<expr2tc>::const_iterator it = operands.begin();
-    expr2tc accuml = *it;
-    it++;
-    for ( ; it != operands.end(); it++) {
-      expr2tc tmp;
-      accuml = create_obj_wrapper(accuml, *it);
-      if (is_nil_expr(accuml))
-        return expr2tc(); // wrapper rejected new obj :O
-    }
-
-    return accuml;
-  } else {
+  if(!is_number_type(type))
     return expr2tc();
-  }
-}
 
-static expr2tc
-create_add_wrapper(const expr2tc &arg1, const expr2tc &arg2)
-{
+  if(type != side_1.get()->type)
+    return expr2tc();
 
-  const type2tc &type = decide_on_expr_type(arg1, arg2);
-  return expr2tc(new add2t(type, arg1, arg2));
-}
+  if(type != side_2.get()->type)
+    return expr2tc();
 
-expr2tc
-add2t::do_simplify(bool second) const
-{
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_1 = expr2tc(side_1->clone());
+  if(is_arith_type(to_simplify_side_1))
+  {
+    expr2tc res = to_simplify_side_1->do_simplify();
 
-  if (!is_constant_expr(side_1) || !is_constant_expr(side_2)) {
-    if (!second)
-      // Wait until operands are simplified
+    // If we can't simplify the nested operation, don't try any further
+    if (is_nil_expr(res))
       return expr2tc();
 
-    // If one is zero, return the other.
-    if (is_constant_expr(side_1)) {
-      fixedbvt op;
-      to_fixedbv(side_1, op);
-      if (op.is_zero())
-        return side_2;
-    }
-
-    if (is_constant_expr(side_2)) {
-      fixedbvt op;
-      to_fixedbv(side_2, op);
-      if (op.is_zero())
-        return side_1;
-    }
-
-    // Attempt to simplify associative tree.
-    return attempt_associative_simplify(*this, create_add_wrapper);
+    to_simplify_side_1 = expr2tc(res->clone());
   }
 
-  assert((is_constant_int2t(side_1) || is_constant_bool2t(side_1) ||
-          is_constant_fixedbv2t(side_1)) &&
-         (is_constant_int2t(side_2) || is_constant_bool2t(side_2) ||
-          is_constant_fixedbv2t(side_2)) &&
-          "Operands to simplified add must be int, bool or fixedbv");
+  // Try to recursively simplify nested operations on side 2, if any
+  expr2tc to_simplify_side_2 = expr2tc(side_2->clone());
+  if(is_arith_type(to_simplify_side_2))
+  {
+    expr2tc res = to_simplify_side_2->do_simplify();
 
-  // The plan: convert everything to a fixedbv, operate, and convert back to
-  // whatever form we need. Fixedbv appears to be a wrapper around BigInt.
-  fixedbvt operand1, operand2;
-  to_fixedbv(side_1, operand1);
-  to_fixedbv(side_2, operand2);
+    // If we can't simplify the nested operation, don't try any further
+    if (is_nil_expr(res))
+      return expr2tc();
 
-  make_fixedbv_types_match(operand1, operand2);
-  operand1 += operand2;
+    to_simplify_side_2 = expr2tc(res->clone());
+  }
 
-  return from_fixedbv(operand1, type);
+  if (!is_constant_expr(to_simplify_side_1) && !is_constant_expr(to_simplify_side_2))
+    return expr2tc();
+
+  if(is_signedbv_type(type) || is_unsignedbv_type(type))
+  {
+    if(is_constant_int2t(to_simplify_side_1))
+    {
+      const constant_int2t &new_side_1 = to_constant_int2t(to_simplify_side_1);
+
+      // Found a zero? Simplify to side_2
+      if(new_side_1.constant_value.is_zero())
+        return expr2tc(to_simplify_side_2);
+    }
+
+    if(is_constant_int2t(to_simplify_side_2))
+    {
+      const constant_int2t &new_side_2 = to_constant_int2t(to_simplify_side_2);
+
+      // Found a zero? Simplify to side_1
+      if(new_side_2.constant_value.is_zero())
+        return expr2tc(to_simplify_side_1);
+    }
+
+    // Two constants? Simplify to result of the multiplication
+    if (is_constant_int2t(to_simplify_side_1) && is_constant_int2t(to_simplify_side_2))
+    {
+      const constant_int2t &new_side_1 = to_constant_int2t(to_simplify_side_1);
+      const constant_int2t &new_side_2 = to_constant_int2t(to_simplify_side_2);
+
+      constant_int2tc new_number = expr2tc(new_side_1.clone());
+      new_number.get()->constant_value += new_side_2.constant_value;
+
+      return expr2tc(new_number);
+    }
+  }
+  else if(is_fixedbv_type(type))
+  {
+    if(is_constant_fixedbv2t(to_simplify_side_1))
+    {
+      const constant_fixedbv2t &new_side_1 = to_constant_fixedbv2t(to_simplify_side_1);
+
+      // Found a zero? Simplify to side_2
+      if(new_side_1.value.is_zero())
+        return expr2tc(to_simplify_side_2);
+    }
+
+    if(is_constant_fixedbv2t(to_simplify_side_2))
+    {
+      const constant_fixedbv2t &new_side_2 = to_constant_fixedbv2t(to_simplify_side_2);
+
+      // Found a zero? Simplify to side_1
+      if(new_side_2.value.is_zero())
+        return expr2tc(to_simplify_side_1);
+    }
+
+    // Two constants? Simplify to result of the division
+    if (is_constant_fixedbv2t(to_simplify_side_1) && is_constant_fixedbv2t(to_simplify_side_2))
+    {
+      const constant_fixedbv2t &new_side_1 = to_constant_fixedbv2t(to_simplify_side_1);
+      const constant_fixedbv2t &new_side_2 = to_constant_fixedbv2t(to_simplify_side_2);
+
+      constant_fixedbv2tc new_number = expr2tc(new_side_1.clone());
+      new_number.get()->value += new_side_2.value;
+
+      return expr2tc(new_number);
+    }
+  }
+  else if(is_floatbv_type(type))
+  {
+    // TODO: Consider rounding mode on the operation
+    std::cerr << "TODO: simplify addition of floatbvs\n";
+  }
+
+  return expr2tc();
 }
 
 expr2tc
