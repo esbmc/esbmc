@@ -381,71 +381,154 @@ sub2t::do_simplify(bool second __attribute__((unused))) const
   return from_fixedbv(operand1, type);
 }
 
-static expr2tc
-mul_check_for_zero_or_one(const expr2tc &checking, const expr2tc &other_op,
-                          const type2tc &ourtype)
-{
-
-  fixedbvt operand;
-  to_fixedbv(checking, operand);
-
-  if (operand.is_zero())
-    return from_fixedbv(operand, ourtype); // Mul by zero -> return zero
-
-  fixedbvt one = operand;
-  one.from_integer(BigInt(1));
-  if (operand == one) { // Mul by one -> return other operand.
-    if (other_op->type == ourtype)
-      return other_op;
-    else
-      return expr2tc(new typecast2t(ourtype, other_op));
-  }
-
-  // Return nothing, nothing to simplify.
-  return expr2tc();
-}
-
 expr2tc
 mul2t::do_simplify(bool second __attribute__((unused))) const
 {
-
-  // If we don't have two constant operands, check for one being zero.
-  if (!is_constant_expr(side_1) || !is_constant_expr(side_2)) {
-    if (is_constant_expr(side_1)) {
-      expr2tc tmp = mul_check_for_zero_or_one(side_1, side_2, type);
-      if (!is_nil_expr(tmp))
-        return tmp;
-    }
-
-    if (is_constant_expr(side_2)) {
-      expr2tc tmp = mul_check_for_zero_or_one(side_2, side_1, type);
-      if (!is_nil_expr(tmp))
-        return tmp;
-    }
-
+  if(!is_number_type(type))
     return expr2tc();
+
+  if(type != side_1.get()->type)
+    return expr2tc();
+
+  if(type != side_2.get()->type)
+    return expr2tc();
+
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_1 = expr2tc(side_1->clone());
+  if(is_arith_type(to_simplify_side_1))
+  {
+    expr2tc res = to_simplify_side_1->do_simplify();
+
+    // If we can't simplify the nested operation, don't try any further
+    if (is_nil_expr(res))
+      return expr2tc();
+
+    to_simplify_side_1 = expr2tc(res->clone());
   }
 
-  assert((is_constant_int2t(side_1) || is_constant_bool2t(side_1) ||
-          is_constant_fixedbv2t(side_1)) &&
-         (is_constant_int2t(side_2) || is_constant_bool2t(side_2) ||
-          is_constant_fixedbv2t(side_2)) &&
-          "Operands to simplified mul must be int, bool or fixedbv");
+  // Try to recursively simplify nested operations on side 2, if any
+  expr2tc to_simplify_side_2 = expr2tc(side_2->clone());
+  if(is_arith_type(to_simplify_side_2))
+  {
+    expr2tc res = to_simplify_side_2->do_simplify();
 
-  fixedbvt operand1, operand2;
-  to_fixedbv(side_1, operand1);
-  to_fixedbv(side_2, operand2);
+    // If we can't simplify the nested operation, don't try any further
+    if (is_nil_expr(res))
+      return expr2tc();
 
-  // Multiplication by any zero operand -> zero
-  if (operand1.is_zero())
-    return from_fixedbv(operand1, type);
-  if (operand2.is_zero())
-    return from_fixedbv(operand2, type);
+    to_simplify_side_2 = expr2tc(res->clone());
+  }
 
-  make_fixedbv_types_match(operand1, operand2);
-  operand1 *= operand2;
+  if (!is_constant_expr(to_simplify_side_1) && !is_constant_expr(to_simplify_side_2))
+    return expr2tc();
 
-  return from_fixedbv(operand1, type);
+  if(is_signedbv_type(type) || is_unsignedbv_type(type))
+  {
+    if(is_constant_int2t(to_simplify_side_1))
+    {
+      const constant_int2t &new_side_1 = to_constant_int2t(to_simplify_side_1);
+
+      // Found a zero? Simplify to zero
+      if(new_side_1.constant_value.is_zero())
+      {
+        constant_int2tc new_num = expr2tc(new_side_1.clone());
+        new_num.get()->constant_value = 0;
+
+        return expr2tc(new_num);
+      }
+
+      // Found an one? Simplify to side_2
+      if(new_side_1.constant_value == 1)
+        return expr2tc(to_simplify_side_2);
+    }
+
+    if(is_constant_int2t(to_simplify_side_2))
+    {
+      const constant_int2t &new_side_2 = to_constant_int2t(to_simplify_side_2);
+
+      // Found a zero? Simplify to zero
+      if(new_side_2.constant_value.is_zero())
+      {
+        constant_int2tc new_num = expr2tc(new_side_2.clone());
+        new_num.get()->constant_value = 0;
+
+        return expr2tc(new_num);
+      }
+
+      // Found an one? Simplify to side_1
+      if(new_side_2.constant_value == 1)
+        return expr2tc(to_simplify_side_1);
+    }
+
+    // Two constants? Simplify to result of the multiplication
+    if (is_constant_int2t(to_simplify_side_1) && is_constant_int2t(to_simplify_side_2))
+    {
+      const constant_int2t &new_side_1 = to_constant_int2t(to_simplify_side_1);
+      const constant_int2t &new_side_2 = to_constant_int2t(to_simplify_side_2);
+
+      constant_int2tc new_number = expr2tc(new_side_1.clone());
+      new_number.get()->constant_value *= new_side_2.constant_value;
+
+      return expr2tc(new_number);
+    }
+  }
+  else if(is_fixedbv_type(type))
+  {
+    if(is_constant_fixedbv2t(to_simplify_side_1))
+    {
+      const constant_fixedbv2t &new_side_1 = to_constant_fixedbv2t(to_simplify_side_1);
+
+      // Found a zero? Simplify to zero
+      if(new_side_1.value.is_zero())
+      {
+        constant_int2tc new_num = expr2tc(new_side_1.clone());
+        new_num.get()->constant_value = 0;
+
+        return expr2tc(new_num);
+      }
+
+      // Found an one? Simplify to side_2
+      if(new_side_1.value == 1)
+        return expr2tc(to_simplify_side_2);
+    }
+
+    if(is_constant_fixedbv2t(to_simplify_side_2))
+    {
+      const constant_fixedbv2t &new_side_2 = to_constant_fixedbv2t(to_simplify_side_2);
+
+      // Found a zero? Simplify to zero
+      if(new_side_2.value.is_zero())
+      {
+        constant_int2tc new_num = expr2tc(new_side_2.clone());
+        new_num.get()->constant_value = 0;
+
+        return expr2tc(new_num);
+      }
+
+      // Found an one? Simplify to side_1
+      if(new_side_2.value == 1)
+        return expr2tc(to_simplify_side_1);
+    }
+
+    // Two constants? Simplify to result of the division
+    if (is_constant_fixedbv2t(to_simplify_side_1) && is_constant_fixedbv2t(to_simplify_side_2))
+    {
+      const constant_fixedbv2t &new_side_1 = to_constant_fixedbv2t(to_simplify_side_1);
+      const constant_fixedbv2t &new_side_2 = to_constant_fixedbv2t(to_simplify_side_2);
+
+      constant_fixedbv2tc new_number = expr2tc(new_side_1.clone());
+      new_number.get()->value *= new_side_2.value;
+
+      return expr2tc(new_number);
+    }
+  }
+  else if(is_floatbv_type(type))
+  {
+    // TODO: Consider rounding mode on the operation
+    std::cerr << "TODO: simplify multiplication of floatbvs\n";
+  }
+
+  return expr2tc();
 }
 
 expr2tc
