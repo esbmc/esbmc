@@ -126,6 +126,19 @@ class Z3python(esbmc.solve.smt_convt):
 
     @stash_sort
     def mk_struct_sort(self, t):
+        # Due to the sins of the fathers, struct arrays get passed through this
+        # api too. Essentially, it's ``anything that contains a struct''.
+        if t.type_id == esbmc.type.type_ids.struct:
+            return self.mk_struct_sort2(t)
+        else:
+            subtype = esbmc.downcast_type(t.subtype)
+            struct_sort = self.mk_struct_sort2(subtype)
+            dom_width = self.calculate_array_domain_width(t)
+            width_sort = z3.BitVecSort(dom_width, self.ctx)
+            arr_sort = z3.ArraySort(width_sort, struct_sort.sort)
+            return Z3sort(arr_sort, esbmc.solve.smt_sort_kind.array, 1, dom_width)
+
+    def mk_struct_sort2(self, t):
         # Z3 tuples don't _appear_ to be exported to python. Therefore we have
         # to funnel some pointers into it manually, via ctypes.
         num_fields = len(t.member_names)

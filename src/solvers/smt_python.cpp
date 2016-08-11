@@ -626,6 +626,7 @@ build_smt_conv_python_class(void)
     .def("assert_ast", &smt_convt::assert_ast)
     .def("dec_solve", &smt_convt::dec_solve)
     .def("get", &smt_convt::get)
+    .def("calculate_array_domain_width", &smt_convt::calculate_array_domain_width)
     // Funcs to be overridden by an extender. Same ptr ownership rules apply
     .def("mk_func_app", pure_virtual(&smt_convt_wrapper::mk_func_app_remangled), rte())
     .def("assert_ast", pure_virtual(&smt_convt::assert_ast))
