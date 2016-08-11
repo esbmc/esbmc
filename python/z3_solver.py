@@ -172,6 +172,12 @@ class Z3python(esbmc.solve.smt_convt):
         z3var = z3.Const(name, sort.sort)
         return Z3ast(z3var, self, sort)
 
+    @stash_ast
+    def mk_tuple_symbol(self, name, sort):
+        # In z3, tuple symbols are the same as normal symbols
+        z3var = z3.Const(name, sort.sort)
+        return Z3ast(z3var, self, sort)
+
     def mk_smt_real(self, str):
         assert False
 
