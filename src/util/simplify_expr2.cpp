@@ -17,52 +17,6 @@ expr2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-static void
-to_fixedbv(const expr2tc &op, fixedbvt &bv)
-{
-
-  // XXX XXX XXX -- this would appear to be broken in a couple of cases.
-  // Take a look at the typecast cvt code -- where we're taking the target
-  // type, fetching the fixedbv spec from that, and constructing from there.
-  // Which turns out not to break test cases like 01_cbmc_Fixedbv8
-
-  switch (op->expr_id) {
-  case expr2t::constant_int_id:
-    bv.spec = fixedbv_spect(128, 64); // XXX
-    bv.from_integer(to_constant_int2t(op).constant_value);
-    break;
-  case expr2t::constant_bool_id:
-    bv.spec = fixedbv_spect(32, 16); // XXX
-    bv.from_integer((to_constant_bool2t(op).constant_value)
-                     ? BigInt(1) : BigInt(0));
-    break;
-  case expr2t::constant_fixedbv_id:
-    bv = to_constant_fixedbv2t(op).value;
-    break;
-  default:
-    assert(0 && "Unexpectedly typed argument to to_fixedbv");
-  }
-}
-
-void
-make_fixedbv_types_match(fixedbvt &bv1, fixedbvt &bv2)
-{
-
-  // First, simple case,
-  if (bv1.spec.width == bv2.spec.width &&
-      bv1.spec.integer_bits == bv2.spec.integer_bits)
-    return;
-
-  // Otherwise, pick the large one, assuming we're always keeping the int/frac
-  // division at the middle,
-  if (bv1.spec.width > bv2.spec.width)
-    bv2.round(bv1.spec);
-  else
-    bv1.round(bv2.spec);
-
-  return;
-}
-
 expr2tc
 add2t::do_simplify(bool __attribute__((unused))) const
 {
@@ -1447,115 +1401,292 @@ address_of2t::do_simplify(bool second __attribute__((unused))) const
   }
 }
 
-static expr2tc
-do_rel_simplify(const expr2tc &side1, const expr2tc &side2,
-                bool (*do_rel)(const fixedbvt &bv1, const fixedbvt &bv2))
-{
-  fixedbvt bv1, bv2;
-
-  to_fixedbv(side1, bv1);
-  to_fixedbv(side2, bv2);
-
-  make_fixedbv_types_match(bv1, bv2);
-  bool res = do_rel(bv1, bv2);
-
-  return expr2tc(new constant_bool2t(res));
-}
-
-bool
-do_fixedbv_eq(const fixedbvt &bv1, const fixedbvt &bv2)
-{
-  return bv1 == bv2;
-}
-
 expr2tc
 equality2t::do_simplify(bool second __attribute__((unused))) const
 {
 
-  if (is_constant_expr(side_1) && is_constant_expr(side_2))
-    return do_rel_simplify(side_1, side_2, do_fixedbv_eq);
-  else
-    return expr2tc();
-}
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_1 = side_1->do_simplify();
+  if (is_nil_expr(to_simplify_side_1))
+    to_simplify_side_1 = expr2tc(side_1->clone());
 
-bool
-do_fixedbv_ineq(const fixedbvt &bv1, const fixedbvt &bv2)
-{
-  return bv1 != bv2;
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_2 = side_2->do_simplify();
+  if (is_nil_expr(to_simplify_side_2))
+    to_simplify_side_2 = expr2tc(side_2->clone());
+
+  if (!is_constant_expr(to_simplify_side_1) || !is_constant_expr(to_simplify_side_2))
+    return expr2tc();
+
+  if(is_bv_type(to_simplify_side_1->type)
+     && is_bv_type(to_simplify_side_2->type))
+  {
+    const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
+    const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
+
+    bool res = (side_1.constant_value == side_2.constant_value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_fixedbv_type(to_simplify_side_1->type)
+     && is_fixedbv_type(to_simplify_side_2->type))
+  {
+    const constant_fixedbv2t &side_1 = to_constant_fixedbv2t(to_simplify_side_1);
+    const constant_fixedbv2t &side_2 = to_constant_fixedbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value == side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_floatbv_type(to_simplify_side_1->type)
+     && is_floatbv_type(to_simplify_side_2->type))
+  {
+    const constant_floatbv2t &side_1 = to_constant_floatbv2t(to_simplify_side_1);
+    const constant_floatbv2t &side_2 = to_constant_floatbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value == side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+
+  return expr2tc();
 }
 
 expr2tc
 notequal2t::do_simplify(bool second __attribute__((unused))) const
 {
 
-  if (is_constant_expr(side_1) && is_constant_expr(side_2))
-    return do_rel_simplify(side_1, side_2, do_fixedbv_ineq);
-  else
-    return expr2tc();
-}
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_1 = side_1->do_simplify();
+  if (is_nil_expr(to_simplify_side_1))
+    to_simplify_side_1 = expr2tc(side_1->clone());
 
-bool
-do_fixedbv_lt(const fixedbvt &bv1, const fixedbvt &bv2)
-{
-  return bv1 < bv2;
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_2 = side_2->do_simplify();
+  if (is_nil_expr(to_simplify_side_2))
+    to_simplify_side_2 = expr2tc(side_2->clone());
+
+  if (!is_constant_expr(to_simplify_side_1) || !is_constant_expr(to_simplify_side_2))
+    return expr2tc();
+
+  if(is_bv_type(to_simplify_side_1->type)
+     && is_bv_type(to_simplify_side_2->type))
+  {
+    const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
+    const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
+
+    bool res = (side_1.constant_value != side_2.constant_value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_fixedbv_type(to_simplify_side_1->type)
+     && is_fixedbv_type(to_simplify_side_2->type))
+  {
+    const constant_fixedbv2t &side_1 = to_constant_fixedbv2t(to_simplify_side_1);
+    const constant_fixedbv2t &side_2 = to_constant_fixedbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value != side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_floatbv_type(to_simplify_side_1->type)
+     && is_floatbv_type(to_simplify_side_2->type))
+  {
+    const constant_floatbv2t &side_1 = to_constant_floatbv2t(to_simplify_side_1);
+    const constant_floatbv2t &side_2 = to_constant_floatbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value != side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+
+  return expr2tc();
 }
 
 expr2tc
 lessthan2t::do_simplify(bool second __attribute__((unused))) const
 {
 
-  if (is_constant_expr(side_1) && is_constant_expr(side_2))
-    return do_rel_simplify(side_1, side_2, do_fixedbv_lt);
-  else
-    return expr2tc();
-}
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_1 = side_1->do_simplify();
+  if (is_nil_expr(to_simplify_side_1))
+    to_simplify_side_1 = expr2tc(side_1->clone());
 
-bool
-do_fixedbv_gt(const fixedbvt &bv1, const fixedbvt &bv2)
-{
-  return bv1 > bv2;
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_2 = side_2->do_simplify();
+  if (is_nil_expr(to_simplify_side_2))
+    to_simplify_side_2 = expr2tc(side_2->clone());
+
+  if (!is_constant_expr(to_simplify_side_1) || !is_constant_expr(to_simplify_side_2))
+    return expr2tc();
+
+  if(is_bv_type(to_simplify_side_1->type)
+     && is_bv_type(to_simplify_side_2->type))
+  {
+    const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
+    const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
+
+    bool res = (side_1.constant_value < side_2.constant_value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_fixedbv_type(to_simplify_side_1->type)
+     && is_fixedbv_type(to_simplify_side_2->type))
+  {
+    const constant_fixedbv2t &side_1 = to_constant_fixedbv2t(to_simplify_side_1);
+    const constant_fixedbv2t &side_2 = to_constant_fixedbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value < side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_floatbv_type(to_simplify_side_1->type)
+     && is_floatbv_type(to_simplify_side_2->type))
+  {
+    const constant_floatbv2t &side_1 = to_constant_floatbv2t(to_simplify_side_1);
+    const constant_floatbv2t &side_2 = to_constant_floatbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value < side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+
+  return expr2tc();
 }
 
 expr2tc
 greaterthan2t::do_simplify(bool second __attribute__((unused))) const
 {
 
-  if (is_constant_expr(side_1) && is_constant_expr(side_2))
-    return do_rel_simplify(side_1, side_2, do_fixedbv_gt);
-  else
-    return expr2tc();
-}
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_1 = side_1->do_simplify();
+  if (is_nil_expr(to_simplify_side_1))
+    to_simplify_side_1 = expr2tc(side_1->clone());
 
-bool
-do_fixedbv_le(const fixedbvt &bv1, const fixedbvt &bv2)
-{
-  return bv1 <= bv2;
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_2 = side_2->do_simplify();
+  if (is_nil_expr(to_simplify_side_2))
+    to_simplify_side_2 = expr2tc(side_2->clone());
+
+  if (!is_constant_expr(to_simplify_side_1) || !is_constant_expr(to_simplify_side_2))
+    return expr2tc();
+
+  if(is_bv_type(to_simplify_side_1->type)
+     && is_bv_type(to_simplify_side_2->type))
+  {
+    const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
+    const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
+
+    bool res = (side_1.constant_value > side_2.constant_value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_fixedbv_type(to_simplify_side_1->type)
+     && is_fixedbv_type(to_simplify_side_2->type))
+  {
+    const constant_fixedbv2t &side_1 = to_constant_fixedbv2t(to_simplify_side_1);
+    const constant_fixedbv2t &side_2 = to_constant_fixedbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value > side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_floatbv_type(to_simplify_side_1->type)
+     && is_floatbv_type(to_simplify_side_2->type))
+  {
+    const constant_floatbv2t &side_1 = to_constant_floatbv2t(to_simplify_side_1);
+    const constant_floatbv2t &side_2 = to_constant_floatbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value > side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+
+  return expr2tc();
 }
 
 expr2tc
 lessthanequal2t::do_simplify(bool second __attribute__((unused))) const
 {
 
-  if (is_constant_expr(side_1) && is_constant_expr(side_2))
-    return do_rel_simplify(side_1, side_2, do_fixedbv_le);
-  else
-    return expr2tc();
-}
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_1 = side_1->do_simplify();
+  if (is_nil_expr(to_simplify_side_1))
+    to_simplify_side_1 = expr2tc(side_1->clone());
 
-bool
-do_fixedbv_ge(const fixedbvt &bv1, const fixedbvt &bv2)
-{
-  return bv1 >= bv2;
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_2 = side_2->do_simplify();
+  if (is_nil_expr(to_simplify_side_2))
+    to_simplify_side_2 = expr2tc(side_2->clone());
+
+  if (!is_constant_expr(to_simplify_side_1) || !is_constant_expr(to_simplify_side_2))
+    return expr2tc();
+
+  if(is_bv_type(to_simplify_side_1->type)
+     && is_bv_type(to_simplify_side_2->type))
+  {
+    const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
+    const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
+
+    bool res = (side_1.constant_value <= side_2.constant_value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_fixedbv_type(to_simplify_side_1->type)
+     && is_fixedbv_type(to_simplify_side_2->type))
+  {
+    const constant_fixedbv2t &side_1 = to_constant_fixedbv2t(to_simplify_side_1);
+    const constant_fixedbv2t &side_2 = to_constant_fixedbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value <= side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_floatbv_type(to_simplify_side_1->type)
+     && is_floatbv_type(to_simplify_side_2->type))
+  {
+    const constant_floatbv2t &side_1 = to_constant_floatbv2t(to_simplify_side_1);
+    const constant_floatbv2t &side_2 = to_constant_floatbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value <= side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+
+  return expr2tc();
 }
 
 expr2tc
 greaterthanequal2t::do_simplify(bool second __attribute__((unused))) const
 {
 
-  if (is_constant_expr(side_1) && is_constant_expr(side_2))
-    return do_rel_simplify(side_1, side_2, do_fixedbv_ge);
-  else
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_1 = side_1->do_simplify();
+  if (is_nil_expr(to_simplify_side_1))
+    to_simplify_side_1 = expr2tc(side_1->clone());
+
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_2 = side_2->do_simplify();
+  if (is_nil_expr(to_simplify_side_2))
+    to_simplify_side_2 = expr2tc(side_2->clone());
+
+  if (!is_constant_expr(to_simplify_side_1) || !is_constant_expr(to_simplify_side_2))
     return expr2tc();
+
+  if(is_bv_type(to_simplify_side_1->type)
+     && is_bv_type(to_simplify_side_2->type))
+  {
+    const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
+    const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
+
+    bool res = (side_1.constant_value >= side_2.constant_value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_fixedbv_type(to_simplify_side_1->type)
+     && is_fixedbv_type(to_simplify_side_2->type))
+  {
+    const constant_fixedbv2t &side_1 = to_constant_fixedbv2t(to_simplify_side_1);
+    const constant_fixedbv2t &side_2 = to_constant_fixedbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value >= side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+  if(is_floatbv_type(to_simplify_side_1->type)
+     && is_floatbv_type(to_simplify_side_2->type))
+  {
+    const constant_floatbv2t &side_1 = to_constant_floatbv2t(to_simplify_side_1);
+    const constant_floatbv2t &side_2 = to_constant_floatbv2t(to_simplify_side_2);
+
+    bool res = (side_1.value >= side_2.value);
+    return expr2tc(new constant_bool2t(res));
+  }
+
+  return expr2tc();
 }
 
 expr2tc
