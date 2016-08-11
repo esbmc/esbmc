@@ -817,8 +817,8 @@ bool simplify_exprt::simplify_modulo(exprt &expr)
   if(expr.operands().size()!=2)
     return true;
 
-  if(expr.type().id()=="signedbv" ||
-     expr.type().id()=="unsignedbv" ||
+  if(expr.type().is_signedbv() ||
+     expr.type().is_unsignedbv() ||
      expr.type().id()=="natural" ||
      expr.type().id()=="integer")
   {
