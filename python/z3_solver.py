@@ -124,14 +124,41 @@ class Z3python(esbmc.solve.smt_convt):
 
     @stash_sort
     def mk_struct_sort(self, t):
-        ast_vec = (z3.Symbol * 1)()
-        ast_vec[0] = z3.Symbol("fgasdf")
-        sort_vec = (z3.Sort * 1)()
-        sort_vec[0] = z3.BoolSort(self.ctx).ast
+        # Z3 tuples don't _appear_ to be exported to python. Therefore we have
+        # to funnel some pointers into it manually, via ctypes.
+        num_fields = len(t.member_names)
+
+        # Create names for fields. The multiplication syntax is ctypes way to
+        # allocate an array.
+        ast_vec = (z3.Symbol * num_fields)()
+        i = 0
+        for x in t.member_names:
+            ast_vec[i] = z3.Symbol(x.as_string())
+            i += 1
+
+        # Create types. These are Z3sorts, that contain a z3.SortRef, which
+        # in turn contains a z3.Sort. The latter is what we need to funnel
+        # into ctype function call.
+        sort_vec = (z3.Sort * num_fields)()
+        i = 0
+        for x in t.members:
+            s = self.convert_sort(x)
+            sort_vec[i] = s.sort.ast
+            i += 1
+
+        # Name for this type
+        z3_sym = z3.Symbol(t.typename.as_string())
+
+        # Allocate output ptrs -- function for creating the object, and for
+        # projecting fields.
         ret_decl = (z3.FuncDecl * 1)()
         proj_decl = (z3.FuncDecl * 1)()
-        z3.Z3_mk_tuple_sort(self.ctx.ctx, z3.Symbol("fgasdf"), 1, ast_vec, sort_vec, ret_decl, proj_decl)
-        assert False
+        sort_ref = z3.Z3_mk_tuple_sort(self.ctx.ctx, z3_sym, num_fields, ast_vec, sort_vec, ret_decl, proj_decl)
+
+        # Reference management: output operands start with zero references IIRC,
+        # and they can merrily evaporate. We want to keep a handle on the
+        # returned sort_ref.
+        return Z3sort(z3.BoolSortRef(sort_ref, self.ctx), esbmc.solve.smt_sort_kind.struct)
 
     def mk_smt_int(self, theint, sign):
         assert False
