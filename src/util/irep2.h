@@ -1779,7 +1779,16 @@ type_macros(cpp_name);
 inline bool is_bv_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id); }
+
 inline bool is_bv_type(const expr2tc &e)
+{ return is_bv_type(e->type); }
+
+/** Test whether type is a float/double. */
+inline bool is_fractional_type(const type2tc &t) \
+{ return (t->type_id == type2t::fixedbv_id ||
+          t->type_id == type2t::floatbv_id); }
+
+inline bool is_fractional_type(const expr2tc &e)
 { return is_bv_type(e->type); }
 
 /** Test whether type is a number type - bv, fixedbv or floatbv. */
