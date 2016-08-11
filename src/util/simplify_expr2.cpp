@@ -586,35 +586,42 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
   if(type != value.get()->type)
     return expr2tc();
 
-  if(is_neg2t(value))
+  // Try to recursively simplify nested operations, if any
+  expr2tc to_simplify = expr2tc(value->clone());
+  if(is_arith_type(to_simplify))
   {
-    // cancel out "-(-x)" to "x"
-    const neg2tc &neg = to_neg2t(value);
-    return expr2tc(neg.get()->value);
+    expr2tc res = to_simplify->do_simplify();
+
+    // If we can't simplify the nested operation, don't try any further
+    if (is_nil_expr(res))
+      return expr2tc();
+
+    to_simplify = expr2tc(res->clone());
   }
-  else if(is_constant_expr(value))
+
+  if(is_constant_expr(to_simplify))
   {
-    if(is_signedbv_type(value) || is_unsignedbv_type(value))
+    if(is_signedbv_type(to_simplify) || is_unsignedbv_type(to_simplify))
     {
-      const constant_int2t &theint = to_constant_int2t(value);
+      const constant_int2t &theint = to_constant_int2t(to_simplify);
 
       constant_int2tc new_int = expr2tc(theint.clone());
       new_int.get()->constant_value.negate();
 
       return expr2tc(new_int);
     }
-    else if(is_constant_fixedbv2t(value))
+    else if(is_constant_fixedbv2t(to_simplify))
     {
-      const constant_fixedbv2t &fbv = to_constant_fixedbv2t(value);
+      const constant_fixedbv2t &fbv = to_constant_fixedbv2t(to_simplify);
 
       constant_fixedbv2tc new_fbv = expr2tc(fbv.clone());
       new_fbv.get()->value.negate();
 
       return expr2tc(new_fbv);
     }
-    else if(is_constant_floatbv2t(value))
+    else if(is_constant_floatbv2t(to_simplify))
     {
-      const constant_floatbv2t &fbv = to_constant_floatbv2t(value);
+      const constant_floatbv2t &fbv = to_constant_floatbv2t(to_simplify);
 
       constant_floatbv2tc new_fbv = expr2tc(fbv.clone());
       new_fbv.get()->value.negate();
