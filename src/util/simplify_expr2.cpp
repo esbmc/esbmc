@@ -451,44 +451,108 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
 expr2tc
 div2t::do_simplify(bool second __attribute__((unused))) const
 {
-
-  if (!is_constant_expr(side_1) || !is_constant_expr(side_2)) {
-    // If side_1 is zero, result is zero.
-    if (is_constant_expr(side_1)) {
-      fixedbvt operand1;
-      to_fixedbv(side_1, operand1);
-      if (operand1.is_zero())
-        return from_fixedbv(operand1, type);
-      else
-        return expr2tc();
-    } else {
-      return expr2tc();
-    }
-  }
-
-  assert((is_constant_int2t(side_1) || is_constant_bool2t(side_1) ||
-          is_constant_fixedbv2t(side_1)) &&
-         (is_constant_int2t(side_2) || is_constant_bool2t(side_2) ||
-          is_constant_fixedbv2t(side_2)) &&
-          "Operands to simplified div must be int, bool or fixedbv");
-
-  fixedbvt operand1, operand2;
-  to_fixedbv(side_1, operand1);
-  to_fixedbv(side_2, operand2);
-
-  if (operand1.is_zero())
-    return from_fixedbv(operand1, type);
-
-  // Div by zero -> not allowed. XXX - this should never reach this point, but
-  // if it does, perhaps the caller has some nondet guard that guarentees it's
-  // never evaluated. Either way, don't explode, just refuse to simplify.
-  if (operand2.is_zero())
+  if(!is_number_type(type))
     return expr2tc();
 
-  make_fixedbv_types_match(operand1, operand2);
-  operand1 /= operand2;
+  if (!is_constant_expr(side_1) && !is_constant_expr(side_2))
+    return expr2tc();
 
-  return from_fixedbv(operand1, type);
+  if(type != side_1.get()->type)
+    return expr2tc();
+
+  if(type != side_2.get()->type)
+    return expr2tc();
+
+  if(is_signedbv_type(type) || is_unsignedbv_type(type))
+  {
+    if(is_constant_int2t(side_1))
+    {
+      const constant_int2t &numerator = to_constant_int2t(side_1);
+
+      // Numerator is zero? Simplify to zero
+      if(numerator.constant_value.is_zero())
+      {
+        constant_int2tc new_num = expr2tc(numerator.clone());
+        new_num.get()->constant_value = 0;
+
+        return expr2tc(new_num);
+      }
+    }
+
+    if(is_constant_int2t(side_2))
+    {
+      const constant_int2t &denominator = to_constant_int2t(side_2);
+
+      // Denominator is zero? Don't simplify
+      if(denominator.constant_value.is_zero())
+        return expr2tc();
+
+      // Denominator is one? Simplify to numerator
+      if(denominator.constant_value == 1)
+        return expr2tc(side_1);
+    }
+
+    // Two constants? Simplify to result of the division
+    if (is_constant_int2t(side_1) && is_constant_int2t(side_2))
+    {
+      const constant_int2t &numerator = to_constant_int2t(side_1);
+      const constant_int2t &denominator = to_constant_int2t(side_2);
+
+      constant_int2tc new_number = expr2tc(numerator.clone());
+      new_number.get()->constant_value /= denominator.constant_value;
+
+      return expr2tc(new_number);
+    }
+  }
+  else if(is_fixedbv_type(type))
+  {
+    if(is_constant_fixedbv2t(side_1))
+    {
+      const constant_fixedbv2t &numerator = to_constant_fixedbv2t(side_1);
+
+      // Numerator is zero? Simplify to zero
+      if(numerator.value.is_zero())
+      {
+        constant_fixedbv2tc new_num = expr2tc(numerator.clone());
+        new_num.get()->value.set_value(0);
+
+        return expr2tc(new_num);
+      }
+    }
+
+    if(is_constant_fixedbv2t(side_2))
+    {
+      const constant_fixedbv2t &denominator = to_constant_fixedbv2t(side_2);
+
+      // Denominator is zero? Don't simplify
+      if(denominator.value.is_zero())
+        return expr2tc();
+
+      // Denominator is one? Simplify to numerator
+      if(denominator.value == 1)
+        return expr2tc(side_1);
+    }
+
+    // Two constants? Simplify to result of the division
+    if (is_constant_fixedbv2t(side_1) && is_constant_fixedbv2t(side_2))
+    {
+      const constant_fixedbv2t &numerator = to_constant_fixedbv2t(side_1);
+      const constant_fixedbv2t &denominator = to_constant_fixedbv2t(side_2);
+
+      constant_fixedbv2tc new_number = expr2tc(numerator.clone());
+      new_number.get()->value /= denominator.value;
+      new_number.get()->dump();
+
+      return expr2tc(new_number);
+    }
+  }
+  else if(is_floatbv_type(type))
+  {
+    // TODO: Consider rounding mode on the operation
+    std::cerr << "TODO: simplify division of floatbvs\n";
+  }
+
+  return expr2tc();
 }
 
 expr2tc
