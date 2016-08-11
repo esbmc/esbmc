@@ -562,25 +562,18 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
   if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
     return expr2tc();
 
-  assert((is_constant_int2t(side_1) || is_constant_bool2t(side_1) ||
-          is_constant_fixedbv2t(side_1)) &&
-         (is_constant_int2t(side_2) || is_constant_bool2t(side_2) ||
-          is_constant_fixedbv2t(side_2)) &&
-          "Operands to simplified div must be int, bool or fixedbv");
+  if(is_signedbv_type(type) || is_unsignedbv_type(type))
+  {
+    const constant_int2t &numerator = to_constant_int2t(side_1);
+    const constant_int2t &denominator = to_constant_int2t(side_2);
 
-  fixedbvt operand1, operand2;
-  to_fixedbv(side_1, operand1);
-  to_fixedbv(side_2, operand2);
+    constant_int2tc new_number = expr2tc(numerator.clone());
+    new_number.get()->constant_value %= denominator.constant_value;
 
-  make_fixedbv_types_match(operand1, operand2);
-  fixedbvt quotient = operand1;
-  quotient /= operand2; // calculate quotient.
-  // Truncate fraction bits.
-  quotient.from_integer(quotient.to_integer());
-  quotient *= operand2; // to subtract.
-  operand1 -= quotient; // And finally, the remainder.
+    return expr2tc(new_number);
+  }
 
-  return from_fixedbv(operand1, type);
+  return expr2tc();
 }
 
 expr2tc
