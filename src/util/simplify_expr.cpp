@@ -3242,6 +3242,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
 
   if(operand.id()=="unary-")
   {
+    // cancel out "-(-x)" to "x"
     if(operand.operands().size()!=1)
       return true;
 
@@ -3253,12 +3254,9 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
     expr.swap(tmp);
     return false;
   }
-  else if(operand.id()=="constant")
+  else if(operand.is_constant())
   {
-    const irep_idt &type_id=expr.type().id();
-    if(type_id=="integer" ||
-       type_id=="signedbv" ||
-       type_id=="unsignedbv")
+    if(expr.type().is_signedbv() || expr.type().is_unsignedbv())
     {
       mp_integer int_value;
 
@@ -3274,14 +3272,14 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
 
       return false;
     }
-    else if(type_id=="fixedbv")
+    else if(expr.type().is_fixedbv())
     {
       fixedbvt f(expr.op0());
       f.negate();
       expr=f.to_expr();
       return false;
     }
-    else if(type_id=="floatbv")
+    else if(expr.type().is_floatbv())
     {
       ieee_floatt f(to_constant_expr(expr.op0()));
       f.negate();
