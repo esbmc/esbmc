@@ -451,10 +451,8 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
 expr2tc
 div2t::do_simplify(bool second __attribute__((unused))) const
 {
-  if(!is_number_type(type))
-    return expr2tc();
 
-  if (!is_constant_expr(side_1) && !is_constant_expr(side_2))
+  if(!is_number_type(type))
     return expr2tc();
 
   if(type != side_1.get()->type)
@@ -463,11 +461,40 @@ div2t::do_simplify(bool second __attribute__((unused))) const
   if(type != side_2.get()->type)
     return expr2tc();
 
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_1 = expr2tc(side_1->clone());
+  if(is_arith_type(to_simplify_side_1))
+  {
+    expr2tc res = to_simplify_side_1->do_simplify();
+
+    // If we can't simplify the nested operation, don't try any further
+    if (is_nil_expr(res))
+      return expr2tc();
+
+    to_simplify_side_1 = expr2tc(res->clone());
+  }
+
+  // Try to recursively simplify nested operations on side 2, if any
+  expr2tc to_simplify_side_2 = expr2tc(side_2->clone());
+  if(is_arith_type(to_simplify_side_2))
+  {
+    expr2tc res = to_simplify_side_2->do_simplify();
+
+    // If we can't simplify the nested operation, don't try any further
+    if (is_nil_expr(res))
+      return expr2tc();
+
+    to_simplify_side_2 = expr2tc(res->clone());
+  }
+
+  if (!is_constant_expr(to_simplify_side_1) && !is_constant_expr(to_simplify_side_2))
+    return expr2tc();
+
   if(is_signedbv_type(type) || is_unsignedbv_type(type))
   {
-    if(is_constant_int2t(side_1))
+    if(is_constant_int2t(to_simplify_side_1))
     {
-      const constant_int2t &numerator = to_constant_int2t(side_1);
+      const constant_int2t &numerator = to_constant_int2t(to_simplify_side_1);
 
       // Numerator is zero? Simplify to zero
       if(numerator.constant_value.is_zero())
@@ -479,9 +506,9 @@ div2t::do_simplify(bool second __attribute__((unused))) const
       }
     }
 
-    if(is_constant_int2t(side_2))
+    if(is_constant_int2t(to_simplify_side_2))
     {
-      const constant_int2t &denominator = to_constant_int2t(side_2);
+      const constant_int2t &denominator = to_constant_int2t(to_simplify_side_2);
 
       // Denominator is zero? Don't simplify
       if(denominator.constant_value.is_zero())
@@ -489,14 +516,14 @@ div2t::do_simplify(bool second __attribute__((unused))) const
 
       // Denominator is one? Simplify to numerator
       if(denominator.constant_value == 1)
-        return expr2tc(side_1);
+        return expr2tc(to_simplify_side_1);
     }
 
     // Two constants? Simplify to result of the division
-    if (is_constant_int2t(side_1) && is_constant_int2t(side_2))
+    if (is_constant_int2t(to_simplify_side_1) && is_constant_int2t(to_simplify_side_2))
     {
-      const constant_int2t &numerator = to_constant_int2t(side_1);
-      const constant_int2t &denominator = to_constant_int2t(side_2);
+      const constant_int2t &numerator = to_constant_int2t(to_simplify_side_1);
+      const constant_int2t &denominator = to_constant_int2t(to_simplify_side_2);
 
       constant_int2tc new_number = expr2tc(numerator.clone());
       new_number.get()->constant_value /= denominator.constant_value;
@@ -506,9 +533,9 @@ div2t::do_simplify(bool second __attribute__((unused))) const
   }
   else if(is_fixedbv_type(type))
   {
-    if(is_constant_fixedbv2t(side_1))
+    if(is_constant_fixedbv2t(to_simplify_side_1))
     {
-      const constant_fixedbv2t &numerator = to_constant_fixedbv2t(side_1);
+      const constant_fixedbv2t &numerator = to_constant_fixedbv2t(to_simplify_side_1);
 
       // Numerator is zero? Simplify to zero
       if(numerator.value.is_zero())
@@ -520,9 +547,9 @@ div2t::do_simplify(bool second __attribute__((unused))) const
       }
     }
 
-    if(is_constant_fixedbv2t(side_2))
+    if(is_constant_fixedbv2t(to_simplify_side_2))
     {
-      const constant_fixedbv2t &denominator = to_constant_fixedbv2t(side_2);
+      const constant_fixedbv2t &denominator = to_constant_fixedbv2t(to_simplify_side_2);
 
       // Denominator is zero? Don't simplify
       if(denominator.value.is_zero())
@@ -530,18 +557,17 @@ div2t::do_simplify(bool second __attribute__((unused))) const
 
       // Denominator is one? Simplify to numerator
       if(denominator.value == 1)
-        return expr2tc(side_1);
+        return expr2tc(to_simplify_side_1);
     }
 
     // Two constants? Simplify to result of the division
-    if (is_constant_fixedbv2t(side_1) && is_constant_fixedbv2t(side_2))
+    if (is_constant_fixedbv2t(to_simplify_side_1) && is_constant_fixedbv2t(to_simplify_side_2))
     {
-      const constant_fixedbv2t &numerator = to_constant_fixedbv2t(side_1);
-      const constant_fixedbv2t &denominator = to_constant_fixedbv2t(side_2);
+      const constant_fixedbv2t &numerator = to_constant_fixedbv2t(to_simplify_side_1);
+      const constant_fixedbv2t &denominator = to_constant_fixedbv2t(to_simplify_side_2);
 
       constant_fixedbv2tc new_number = expr2tc(numerator.clone());
       new_number.get()->value /= denominator.value;
-      new_number.get()->dump();
 
       return expr2tc(new_number);
     }
