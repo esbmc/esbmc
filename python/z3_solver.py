@@ -7,6 +7,8 @@
 # SMT. These are available to C++, but currently too sketchy for python right
 # now.
 
+# XXX -- can't print sort.sort because it has a gratuitous const in it?
+
 import esbmc
 import z3
 
