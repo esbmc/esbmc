@@ -99,7 +99,7 @@ class Z3ast(esbmc.solve.smt_ast):
         inp_array[0] = self.ast.ast
         projected_ast = z3.Z3_mk_app(conv.ctx.ctx, proj_decl.ast, 1, inp_array)
 
-        result = Z3ast(projected_ast, self.conv, self.sub_sorts[idx])
+        result = Z3ast(projected_ast, self.conv, self.z3sort.sub_sorts[idx])
         # Also manually stash this ast
         self.conv.ast_list.append(result)
         return result
