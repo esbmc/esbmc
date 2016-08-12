@@ -515,7 +515,7 @@ public:
   {
     using namespace boost::python;
     smt_sort *ss = const_cast<smt_sort *>(s);
-    return object(ss).ptr();
+    return incref(object(ss).ptr());
   }
 };
 
