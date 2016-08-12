@@ -16,7 +16,9 @@ lolsolve = Z3python(ns)
 result.target.convert(lolsolve)
 issat = lolsolve.dec_solve()
 
-# This test case should have a counterexample
-assert (issat == esbmc.solve.smt_result.sat)
-
-print "succeeded?"
+if issat == esbmc.solve.smt_result.sat:
+    print "VERIFICATION SUCCESSFUL"
+elif issat == esbmc.solve.smt_result.unsat:
+    print "VERIFICATION FAILED"
+else:
+    print "haha error"
