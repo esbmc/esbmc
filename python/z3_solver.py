@@ -115,6 +115,8 @@ class Z3python(esbmc.solve.smt_convt):
         self.solver = z3.Solver(solver=None, ctx=self.ctx)
 
         self.func_map = {
+            esbmc.solve.smt_func_kind.ite :
+                lambda self, args, asts: z3.If(asts[0], asts[1], asts[2]),
             esbmc.solve.smt_func_kind.eq :
                 lambda self, args, asts: asts[0] == asts[1],
             esbmc.solve.smt_func_kind._or : # or is a keyword in python
