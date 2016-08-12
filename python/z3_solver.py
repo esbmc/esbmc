@@ -154,7 +154,7 @@ class Z3python(esbmc.solve.smt_convt):
             arr_sort.dom_sort = domain
             arr_sort.range_sort = range_
             range_width = range_.data_width if range_.data_width != 0 else 1
-            return Z3sort(arr_sort, kind, 1, domain.domain_width)
+            return Z3sort(arr_sort, kind, range_width, domain.domain_width)
         else:
             print kind
             assert False
