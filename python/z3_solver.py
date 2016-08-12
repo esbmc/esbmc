@@ -48,14 +48,20 @@ class Z3ast(esbmc.solve.smt_ast):
     def update(self, conv, value, idx, idx_expr):
         # Either a tuple update or an array update. Alas, all the exprs baked
         # into ESBMC make no distinguishment.
-        if self.sort.id == esbmc.type.type_ids.array:
+        if self.sort.id == esbmc.solve.smt_sort_kind.array:
+            domain_sort = self.z3sort.dom_sort
+            int_val = esbmc.BigInt(idx)
+            idx = conv.mk_smt_bvint(int_val, False, domain_sort.data_width)
             res = z3.Update(self.ast, idx.ast, value.ast)
         else:
-            assert self.sort.id == esbmc.type.type_ids.struct
+            assert self.sort.id == esbmc.solve.smt_sort_kind.struct
+            # Hurrrr. Project all fields out except this one; update; create
+            # new tuple.
+            assert idx_expr.expr_id == esbmc.expr.expr_ids.constant_int
             assert False
         result = Z3ast(res, self.conv, self.sort)
         # Also manually stash this ast
-        self.conv.ast_list.append(new_ast)
+        self.conv.ast_list.append(result)
         return result
 
     def select(self, conv, idx):
