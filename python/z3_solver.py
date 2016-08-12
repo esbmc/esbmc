@@ -30,6 +30,7 @@ class Z3ast(esbmc.solve.smt_ast):
         super(Z3ast, self).__init__(convobj, sort)
         self.ast = ast
         self.conv = convobj
+        self.z3sort = sort # self.sort loses type info? Needs investigation
 
     def ite(self, conv, cond, falseop):
         assert False
