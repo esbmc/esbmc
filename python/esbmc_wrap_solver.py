@@ -17,8 +17,8 @@ result.target.convert(lolsolve)
 issat = lolsolve.dec_solve()
 
 if issat == esbmc.solve.smt_result.sat:
-    print "VERIFICATION SUCCESSFUL"
-elif issat == esbmc.solve.smt_result.unsat:
     print "VERIFICATION FAILED"
+elif issat == esbmc.solve.smt_result.unsat:
+    print "VERIFICATION SUCCESSFUL"
 else:
     print "haha error"
