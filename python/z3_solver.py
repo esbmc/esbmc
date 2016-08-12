@@ -61,11 +61,10 @@ class Z3ast(esbmc.solve.smt_ast):
             inp_array = (z3.Ast * 1)()
             inp_array[0] = self.ast.ast
 
-            # Now apply projection functions to the tuple ast
-            projected = [z3.Z3_mk_app(conv.ctx.ctx, x.ast, 1, inp_array) for x in decls]
+            # Now apply projection functions to the tuple ast. Need to apply
+            # ExprRef immediately, or z3 will immediately gc it.
+            projected = [z3.ExprRef(z3.Z3_mk_app(conv.ctx.ctx, x.ast, 1, inp_array), conv.ctx) for x in decls]
 
-            # Wrap those asts in SHORT TERM Z3ast's
-            projected = [z3.ExprRef(x) for x in projected]
             # Zip with their sorts
             asts_and_sorts = zip(projected, self.z3sort.sub_sorts)
             # Put Z3ast around the outside
@@ -268,7 +267,7 @@ class Z3python(esbmc.solve.smt_convt):
             ast_array[x] = asts[x].ast.ast
 
         tast = z3.Z3_mk_app(self.ctx.ctx, sort.decl_ref.ast, len(asts), ast_array)
-        tref = z3.ExprRef(tast)
+        tref = z3.ExprRef(tast, self.ctx)
         return Z3ast(tref, self, sort)
 
     def mk_smt_int(self, theint, sign):
