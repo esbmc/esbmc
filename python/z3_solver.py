@@ -77,7 +77,7 @@ class Z3ast(esbmc.solve.smt_ast):
             ast = z3.Select(self.ast, idx.ast)
             result = Z3ast(ast, self.conv, self.sort)
         else:
-            assert False
+            assert False # XXX is only arrays anyway?
         # Also manually stash this ast
         self.conv.ast_list.append(result)
         return result
