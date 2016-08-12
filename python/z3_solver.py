@@ -204,11 +204,10 @@ class Z3python(esbmc.solve.smt_convt):
         # in turn contains a z3.Sort. The latter is what we need to funnel
         # into ctype function call.
         sort_vec = (z3.Sort * num_fields)()
+        sub_sorts = [self.convert_sort(x) for x in t.members]
         i = 0
-        for x in t.members:
-            s = self.convert_sort(x)
-            sort_vec[i] = s.sort.ast
-            i += 1
+        for i in range(len(sub_sorts)):
+            sort_vec[i] = sub_sorts[i].sort.ast
 
         # Name for this type
         z3_sym = z3.Symbol(t.typename.as_string())
@@ -227,6 +226,7 @@ class Z3python(esbmc.solve.smt_convt):
         proj_decls = [z3.FuncDeclRef(x) for x in proj_decl]
         finsort.decl_ref = z3.FuncDeclRef(ret_decl[0])
         finsort.proj_decls = proj_decls
+        finsort.sub_sorts = sub_sorts
         return finsort
 
     @stash_ast
