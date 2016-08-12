@@ -283,21 +283,23 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-template <typename constant,
-          typename constant_value_type,
-          typename div_type>
+template <typename constant_value_type>
 static expr2tc
-simplify_divide(const expr2tc &numerator,
-       const expr2tc &denominator,
-       const div_type &type,
-       std::function<bool(const expr2tc&)> is_constant,
-       std::function<constant_value_type(const expr2tc&)> get_value)
+simplify_division(
+  expr2tc &numerator,
+  expr2tc &denominator,
+  std::function<bool(const expr2tc&)> is_constant,
+  std::function<constant_value_type(expr2tc&)> get_value)
 {
   if(is_constant(numerator))
   {
     // Numerator is zero? Simplify to zero
     if(get_value(numerator).is_zero())
-      return expr2tc(new constant(type, get_value(numerator)));
+    {
+      auto c = expr2tc(numerator->clone());
+      get_value(c) = constant_value_type();
+      return expr2tc(c);
+    }
   }
 
   if(is_constant(denominator))
@@ -308,15 +310,15 @@ simplify_divide(const expr2tc &numerator,
 
     // Denominator is one? Simplify to numerator's constant
     if(get_value(denominator) == 1)
-      return expr2tc(new constant(type, get_value(numerator)));
+      return expr2tc(numerator->clone());
   }
 
   // Two constants? Simplify to result of the division
   if (is_constant(numerator) && is_constant(denominator))
   {
-    auto c = get_value(numerator);
-    c /= get_value(denominator);
-    return expr2tc(new constant(type, c));
+    auto c = expr2tc(numerator->clone());
+    get_value(c) /= get_value(denominator);
+    return expr2tc(c);
   }
 
   return expr2tc();
@@ -340,41 +342,56 @@ div2t::do_simplify(bool second __attribute__((unused))) const
     to_simplify_side_2 = expr2tc(side_2->clone());
 
   if (!is_constant_expr(to_simplify_side_1)
-      || !is_constant_expr(to_simplify_side_2))
+      && !is_constant_expr(to_simplify_side_2))
+  {
+    // Were we able to simplify the sides?
+    if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
+      return typecast_check_return(
+        type,
+        expr2tc(new div2t(type, to_simplify_side_1, to_simplify_side_2)));
+
     return expr2tc();
+  }
 
   if(is_bv_type(type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_int2t;
 
-    std::function<BigInt(const expr2tc&)> get_value =
-      [](const expr2tc& c) -> BigInt { return to_constant_int2t(c).constant_value; };
+    std::function<BigInt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> BigInt&
+        { return to_constant_int2t(c).constant_value; };
 
-    return simplify_divide<constant_int2t, BigInt, decltype(type)>(
-      to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
+    expr2tc simpl_res = simplify_division<BigInt>(
+      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
+
+    return typecast_check_return(type, simpl_res);
   }
   else if(is_fixedbv_type(type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
 
-    std::function<fixedbvt(const expr2tc&)> get_value =
-      [](const expr2tc& c) -> fixedbvt { return to_constant_fixedbv2t(c).value; };
+    std::function<fixedbvt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> fixedbvt& { return to_constant_fixedbv2t(c).value; };
 
-    return simplify_divide<constant_fixedbv2t, fixedbvt, decltype(type)>(
-      to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
+    expr2tc simpl_res = simplify_division<fixedbvt>(
+      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
+
+    return typecast_check_return(type, simpl_res);
   }
   else if(is_floatbv_type(type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
 
-    std::function<ieee_floatt(const expr2tc&)> get_value =
-      [](const expr2tc& c) -> ieee_floatt { return to_constant_floatbv2t(c).value; };
+    std::function<ieee_floatt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> ieee_floatt& { return to_constant_floatbv2t(c).value; };
 
-    return simplify_divide<constant_floatbv2t, ieee_floatt, decltype(type)>(
-      to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
+    expr2tc simpl_res = simplify_division<ieee_floatt>(
+      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
+
+    return typecast_check_return(type, simpl_res);
   }
 
   return expr2tc();
