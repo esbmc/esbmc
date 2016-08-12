@@ -65,7 +65,6 @@ class Z3ast(esbmc.solve.smt_ast):
             # We now have a list of all current tuple values. We need to update
             # the identified one with the designated value
             projected[idx] = value.ast.ast
-            print idx
             assert False
         result = Z3ast(res, self.conv, self.sort)
         # Also manually stash this ast
@@ -217,7 +216,7 @@ class Z3python(esbmc.solve.smt_convt):
         # Allocate output ptrs -- function for creating the object, and for
         # projecting fields.
         ret_decl = (z3.FuncDecl * 1)()
-        proj_decl = (z3.FuncDecl * 1)()
+        proj_decl = (z3.FuncDecl * num_fields)()
         sort_ref = z3.Z3_mk_tuple_sort(self.ctx.ctx, z3_sym, num_fields, ast_vec, sort_vec, ret_decl, proj_decl)
 
         # Reference management: output operands start with zero references IIRC,
