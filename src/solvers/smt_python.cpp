@@ -427,7 +427,7 @@ public:
   tuple_array_create(const type2tc &array_type, smt_astt *inputargs, bool const_array, smt_sortt domain)
   {
     // XXX XXX XXX this needs to be remangled, array ptr
-    return get_override_checked(this, "tuple_array_creaet")(array_type, inputargs, const_array, domain);
+    return get_override_checked(this, "tuple_array_create")(array_type, inputargs, const_array, domain);
   }
 
   smt_astt
