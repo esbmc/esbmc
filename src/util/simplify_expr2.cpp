@@ -153,10 +153,8 @@ expr2tc
 sub2t::do_simplify(bool second __attribute__((unused))) const
 {
 
-  if(!is_number_type(type))
-    return expr2tc();
-
-  if (!is_constant_expr(side_1) || !is_constant_expr(side_2))
+  // We must also check for pointer arithmetic
+  if(!is_number_type(type) && !is_pointer_type(type))
     return expr2tc();
 
   // rewrite "a-b" to "a+(-b)" and call simplify add
