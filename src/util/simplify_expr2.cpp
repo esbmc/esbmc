@@ -440,26 +440,23 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-template <typename constant,
-          typename constant_value_type,
-          typename div_type>
+template <typename constant_value_type>
 static expr2tc
-simplify_abs(const expr2tc &number,
-       const div_type &type,
-       std::function<bool(const expr2tc&)> is_constant,
-       std::function<constant_value_type(const expr2tc&)> get_value)
+simplify_abs(expr2tc &number,
+  std::function<bool(const expr2tc&)> is_constant,
+  std::function<constant_value_type(expr2tc&)> get_value)
 {
   // Negate if it's a constant
   if (is_constant(number))
   {
-    auto c = get_value(number);
+    auto c = expr2tc(number->clone());
 
     // TODO: How about floatbvs and -0?
-    if(c > constant_value_type())
+    if(get_value(c) > constant_value_type())
       return expr2tc();
 
-    c.negate();
-    return expr2tc(new constant(type, c));
+    get_value(c).negate();
+    return expr2tc(c);
   }
 
   return expr2tc();
@@ -488,61 +485,62 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
     return expr2tc();
   }
 
-  if(is_constant_expr(to_simplify))
+  if(is_bv_type(type))
   {
-    if(is_bv_type(to_simplify))
-    {
-      std::function<bool(const expr2tc&)> is_constant =
-        (bool(*)(const expr2tc&)) &is_constant_int2t;
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_int2t;
 
-      std::function<BigInt(const expr2tc&)> get_value =
-        [](const expr2tc& c) -> BigInt { return to_constant_int2t(c).constant_value; };
+    std::function<BigInt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> BigInt&
+        { return to_constant_int2t(c).constant_value; };
 
-      return simplify_abs<constant_int2t, BigInt, decltype(type)>(
-        to_simplify, type, is_constant, get_value);
-    }
-    else if(is_fixedbv_type(type))
-    {
-      std::function<bool(const expr2tc&)> is_constant =
-        (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
+    expr2tc simpl_res =
+      simplify_abs<BigInt>(to_simplify, is_constant, get_value);
 
-      std::function<fixedbvt(const expr2tc&)> get_value =
-        [](const expr2tc& c) -> fixedbvt { return to_constant_fixedbv2t(c).value; };
+    return typecast_check_return(type, simpl_res);
+  }
+  else if(is_fixedbv_type(type))
+  {
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
 
-      return simplify_abs<constant_fixedbv2t, fixedbvt, decltype(type)>(
-        to_simplify, type, is_constant, get_value);
-    }
-    else if(is_floatbv_type(type))
-    {
-      std::function<bool(const expr2tc&)> is_constant =
-        (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+    std::function<fixedbvt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> fixedbvt& { return to_constant_fixedbv2t(c).value; };
 
-      std::function<ieee_floatt(const expr2tc&)> get_value =
-        [](const expr2tc& c) -> ieee_floatt { return to_constant_floatbv2t(c).value; };
+    expr2tc simpl_res =
+      simplify_abs<fixedbvt>(to_simplify, is_constant, get_value);
 
-      return simplify_abs<constant_floatbv2t, ieee_floatt, decltype(type)>(
-        to_simplify, type, is_constant, get_value);
-    }
+    return typecast_check_return(type, simpl_res);
+  }
+  else if(is_floatbv_type(type))
+  {
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+
+    std::function<ieee_floatt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> ieee_floatt& { return to_constant_floatbv2t(c).value; };
+
+    expr2tc simpl_res =
+      simplify_abs<ieee_floatt>(to_simplify, is_constant, get_value);
+
+    return typecast_check_return(type, simpl_res);
   }
 
   return expr2tc();
 }
 
-template <typename constant,
-          typename constant_value_type,
-          typename div_type>
+template <typename constant_value_type>
 static expr2tc
-simplify_negate(const expr2tc &number,
-       const div_type &type,
-       std::function<bool(const expr2tc&)> is_constant,
-       std::function<constant_value_type(const expr2tc&)> get_value)
+simplify_negate(expr2tc &number,
+  std::function<bool(const expr2tc&)> is_constant,
+  std::function<constant_value_type(expr2tc&)> get_value)
 {
   // Negate if it's a constant
   if (is_constant(number))
   {
-    auto c = get_value(number);
-    c.negate();
-    return expr2tc(new constant(type, c));
+    auto c = expr2tc(number->clone());
+    get_value(c).negate();
+    return expr2tc(c);
   }
 
   return expr2tc();
@@ -571,41 +569,45 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
     return expr2tc();
   }
 
-  if(is_constant_expr(to_simplify))
+  if(is_bv_type(type))
   {
-    if(is_bv_type(to_simplify))
-    {
-      std::function<bool(const expr2tc&)> is_constant =
-        (bool(*)(const expr2tc&)) &is_constant_int2t;
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_int2t;
 
-      std::function<BigInt(const expr2tc&)> get_value =
-        [](const expr2tc& c) -> BigInt { return to_constant_int2t(c).constant_value; };
+    std::function<BigInt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> BigInt&
+        { return to_constant_int2t(c).constant_value; };
 
-      return simplify_negate<constant_int2t, BigInt, decltype(type)>(
-        to_simplify, type, is_constant, get_value);
-    }
-    else if(is_fixedbv_type(type))
-    {
-      std::function<bool(const expr2tc&)> is_constant =
-        (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
+    expr2tc simpl_res =
+      simplify_negate<BigInt>(to_simplify, is_constant, get_value);
 
-      std::function<fixedbvt(const expr2tc&)> get_value =
-        [](const expr2tc& c) -> fixedbvt { return to_constant_fixedbv2t(c).value; };
+    return typecast_check_return(type, simpl_res);
+  }
+  else if(is_fixedbv_type(type))
+  {
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
 
-      return simplify_negate<constant_fixedbv2t, fixedbvt, decltype(type)>(
-        to_simplify, type, is_constant, get_value);
-    }
-    else if(is_floatbv_type(type))
-    {
-      std::function<bool(const expr2tc&)> is_constant =
-        (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+    std::function<fixedbvt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> fixedbvt& { return to_constant_fixedbv2t(c).value; };
 
-      std::function<ieee_floatt(const expr2tc&)> get_value =
-        [](const expr2tc& c) -> ieee_floatt { return to_constant_floatbv2t(c).value; };
+    expr2tc simpl_res =
+      simplify_negate<fixedbvt>(to_simplify, is_constant, get_value);
 
-      return simplify_negate<constant_floatbv2t, ieee_floatt, decltype(type)>(
-        to_simplify, type, is_constant, get_value);
-    }
+    return typecast_check_return(type, simpl_res);
+  }
+  else if(is_floatbv_type(type))
+  {
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+
+    std::function<ieee_floatt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> ieee_floatt& { return to_constant_floatbv2t(c).value; };
+
+    expr2tc simpl_res =
+      simplify_negate<ieee_floatt>(to_simplify, is_constant, get_value);
+
+    return typecast_check_return(type, simpl_res);
   }
 
   return expr2tc();
