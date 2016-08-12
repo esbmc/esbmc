@@ -113,6 +113,7 @@ class Z3python(esbmc.solve.smt_convt):
         self.sort_list = []
         self.bool_sort = self.mk_sort((esbmc.solve.smt_sort_kind.bool,))
         self.solver = z3.Solver(solver=None, ctx=self.ctx)
+        self.fresh_arr_idx = 0
 
         self.func_map = {
             esbmc.solve.smt_func_kind.ite :
@@ -295,6 +296,30 @@ class Z3python(esbmc.solve.smt_convt):
         tast = z3.Z3_mk_app(self.ctx.ctx, sort.decl_ref.ast, len(asts), ast_array)
         tref = z3.ExprRef(tast, self.ctx)
         return Z3ast(tref, self, sort)
+
+    @stash_ast
+    def tuple_array_create(self, arr_type, fields, const_array, domain):
+        # Two things this can be: a constant array where each element has the
+        # provided value, or just an array of values. As it happens, this is
+        # trivial to implement in Z3.
+        arr_sort = self.convert_sort(arr_type)
+        if const_array:
+            return z3.K(arr_sort.dom_sort, fields[0].ast)
+        else:
+            # Generate a fresh array
+            arr_name = "fresh_tuple_array_create_{}".format(self.fresh_arr_idx)
+            self.fresh_arr_idx += 1
+            arr = z3.Const(arr_name, arr_sort.sort)
+            arr_ast = Z3ast(arr, self, arr_sort)
+
+            # Store at increasing indexes, the values from fields. Alas, there
+            # isn't a python utility for easy constant int creation like C++.
+            for x in range(len(fields)):
+                intval = esbmc.BigInt(x)
+                intexpr = esbmc.expr.constant_int(arr_sort.dom_sort, intval)
+                arr_ast = arr_ast.update(self, fields[x], x, intexpr)
+
+            return arr_ast
 
     def mk_smt_int(self, theint, sign):
         assert False
