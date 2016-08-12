@@ -235,16 +235,20 @@ class Z3python(esbmc.solve.smt_convt):
         # interface.
         # First convert all expr fields to being z3 asts
         asts = [self.convert_ast(x) for x in expr.members]
-        ast_array = (z3.Ast * len(asts))()
-        for x in range(len(asts)):
-            ast_array[x] = asts[x].ast.ast #really
 
         # Create the corresponding type
         tsort = self.convert_sort(expr.type)
 
-        tast = z3.Z3_mk_app(self.ctx.ctx, tsort.decl_ref.ast, len(asts), ast_array)
+        return self._tuple_create(asts, tsort)
+
+    def _tuple_create(self, asts, sort):
+        ast_array = (z3.Ast * len(asts))()
+        for x in range(len(asts)):
+            ast_array[x] = asts[x].ast.ast
+
+        tast = z3.Z3_mk_app(self.ctx.ctx, sort.decl_ref.ast, len(asts), ast_array)
         tref = z3.ExprRef(tast)
-        return Z3ast(tref, self, tsort)
+        return Z3ast(tref, self, sort)
 
     def mk_smt_int(self, theint, sign):
         assert False
