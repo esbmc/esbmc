@@ -97,7 +97,7 @@ class Z3ast(esbmc.solve.smt_ast):
         # We need to manually apply this function to project the elem out
         inp_array = (z3.Ast * 1)()
         inp_array[0] = self.ast.ast
-        projected_ast = z3.Z3_mk_app(conv.ctx.ctx, proj_decl, 1, inp_array)
+        projected_ast = z3.Z3_mk_app(conv.ctx.ctx, proj_decl.ast, 1, inp_array)
 
         result = Z3ast(projected_ast, self.conv, self.sub_sorts[idx])
         # Also manually stash this ast
