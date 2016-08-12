@@ -85,6 +85,8 @@ class Z3python(esbmc.solve.smt_convt):
                 lambda self, args, asts: asts[0] + asts[1],
             esbmc.solve.smt_func_kind.bvugt :
                 lambda self, args, asts: z3.UGT(asts[0], asts[1]),
+            esbmc.solve.smt_func_kind.bvult :
+                lambda self, args, asts: z3.ULT(asts[0], asts[1]),
         }
 
         # Various accounting structures for the address space modeling need to
