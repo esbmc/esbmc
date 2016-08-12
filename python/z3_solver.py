@@ -125,6 +125,8 @@ class Z3python(esbmc.solve.smt_convt):
                 lambda ctx, args, asts: z3.Or(asts[0], asts[1]),
             esbmc.solve.smt_func_kind._not :
                 lambda ctx, args, asts: z3.Not(asts[0]),
+            esbmc.solve.smt_func_kind._and :
+                lambda ctx, args, asts: z3.And(asts[0], asts[1]),
             esbmc.solve.smt_func_kind.implies :
                 lambda ctx, args, asts: z3.Implies(asts[0], asts[1], ctx),
             esbmc.solve.smt_func_kind.bvadd :
@@ -133,6 +135,8 @@ class Z3python(esbmc.solve.smt_convt):
                 lambda ctx, args, asts: z3.UGT(asts[0], asts[1]),
             esbmc.solve.smt_func_kind.bvult :
                 lambda ctx, args, asts: z3.ULT(asts[0], asts[1]),
+            esbmc.solve.smt_func_kind.bvumod :
+                lambda ctx, args, asts: z3.URem(asts[0], asts[1]),
             esbmc.solve.smt_func_kind.concat :
                 lambda ctx, args, asts: z3.Concat(asts[0], asts[1]),
             esbmc.solve.smt_func_kind.bvlshr :
