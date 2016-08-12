@@ -10,6 +10,27 @@
 #include <expr_util.h>
 #include <type_byte_size.h>
 
+static expr2tc
+typecast_check_return(const type2tc &type, expr2tc expr)
+{
+  // If the expr is already nil, do nothing
+  if(is_nil_expr(expr))
+    return expr2tc();
+
+  // Create a typecast of the result
+  expr2tc typecast = expr2tc(new typecast2t(type, expr));
+
+  // Try to simplify the typecast
+  expr2tc simpl_typecast_res = typecast->do_simplify();
+
+  // If we were able to simplify the typecast, return it
+  if(!is_nil_expr(simpl_typecast_res))
+    return simpl_typecast_res;
+
+  // Otherwise, return the explicit typecast
+  return typecast;
+}
+
 expr2tc
 expr2t::do_simplify(bool second __attribute__((unused))) const
 {
