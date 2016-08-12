@@ -118,6 +118,8 @@ class Z3python(esbmc.solve.smt_convt):
                 lambda ctx, args, asts: z3.If(asts[0], asts[1], asts[2], ctx),
             esbmc.solve.smt_func_kind.eq :
                 lambda ctx, args, asts: asts[0] == asts[1],
+            esbmc.solve.smt_func_kind.noteq :
+                lambda ctx, args, asts: asts[0] != asts[1],
             esbmc.solve.smt_func_kind._or : # or is a keyword in python
                 lambda ctx, args, asts: z3.Or(asts[0], asts[1]),
             esbmc.solve.smt_func_kind._not :
@@ -132,6 +134,10 @@ class Z3python(esbmc.solve.smt_convt):
                 lambda ctx, args, asts: z3.ULT(asts[0], asts[1]),
             esbmc.solve.smt_func_kind.concat :
                 lambda ctx, args, asts: z3.Concat(asts[0], asts[1]),
+            esbmc.solve.smt_func_kind.bvlshr :
+                lambda ctx, args, asts: z3.LShR(asts[0], asts[1]),
+            esbmc.solve.smt_func_kind.bvashr :
+                lambda ctx, args, asts: asts[0] >> asts[1],
         }
 
         # Various accounting structures for the address space modeling need to
