@@ -306,6 +306,45 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
+template <typename constant,
+          typename constant_value_type,
+          typename div_type>
+static expr2tc
+divide(const expr2tc &numerator,
+       const expr2tc &denominator,
+       const div_type &type,
+       std::function<bool(const expr2tc&)> is_constant,
+       std::function<constant_value_type(const expr2tc&)> get_value)
+{
+  if(is_constant(numerator))
+  {
+    // Numerator is zero? Simplify to zero
+    if(get_value(numerator).is_zero())
+      return expr2tc(new constant(type, get_value(numerator)));
+  }
+
+  if(is_constant(denominator))
+  {
+    // Denominator is zero? Don't simplify
+    if(get_value(denominator).is_zero())
+      return expr2tc();
+
+    // Denominator is one? Simplify to numerator's constant
+    if(get_value(denominator) == 1)
+      return expr2tc(new constant(type, get_value(numerator)));
+  }
+
+  // Two constants? Simplify to result of the division
+  if (is_constant(numerator) && is_constant(denominator))
+  {
+    auto c = get_value(numerator);
+    c /= get_value(denominator);
+    return expr2tc(new constant(type, c));
+  }
+
+  return expr2tc();
+}
+
 expr2tc
 div2t::do_simplify(bool second __attribute__((unused))) const
 {
@@ -313,127 +352,52 @@ div2t::do_simplify(bool second __attribute__((unused))) const
   if(!is_number_type(type))
     return expr2tc();
 
-  if(type != side_1.get()->type)
-    return expr2tc();
-
-  if(type != side_2.get()->type)
-    return expr2tc();
+  // Try to recursively simplify nested operations on side 1, if any
+  expr2tc to_simplify_side_1 = side_1->do_simplify();
+  if (is_nil_expr(to_simplify_side_1))
+    to_simplify_side_1 = expr2tc(side_1->clone());
 
   // Try to recursively simplify nested operations on side 1, if any
-  expr2tc to_simplify_side_1 = expr2tc(side_1->clone());
-  if(is_arith_type(to_simplify_side_1))
-  {
-    expr2tc res = to_simplify_side_1->do_simplify();
+  expr2tc to_simplify_side_2 = side_2->do_simplify();
+  if (is_nil_expr(to_simplify_side_2))
+    to_simplify_side_2 = expr2tc(side_2->clone());
 
-    // If we can't simplify the nested operation, don't try any further
-    if (is_nil_expr(res))
-      return expr2tc();
-
-    to_simplify_side_1 = expr2tc(res->clone());
-  }
-
-  // Try to recursively simplify nested operations on side 2, if any
-  expr2tc to_simplify_side_2 = expr2tc(side_2->clone());
-  if(is_arith_type(to_simplify_side_2))
-  {
-    expr2tc res = to_simplify_side_2->do_simplify();
-
-    // If we can't simplify the nested operation, don't try any further
-    if (is_nil_expr(res))
-      return expr2tc();
-
-    to_simplify_side_2 = expr2tc(res->clone());
-  }
-
-  if (!is_constant_expr(to_simplify_side_1) && !is_constant_expr(to_simplify_side_2))
+  if (!is_constant_expr(to_simplify_side_1)
+      || !is_constant_expr(to_simplify_side_2))
     return expr2tc();
 
   if(is_bv_type(type))
   {
-    if(is_constant_int2t(to_simplify_side_1))
-    {
-      const constant_int2t &numerator = to_constant_int2t(to_simplify_side_1);
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_int2t;
 
-      // Numerator is zero? Simplify to zero
-      if(numerator.constant_value.is_zero())
-      {
-        constant_int2tc new_num = expr2tc(numerator.clone());
-        new_num.get()->constant_value = 0;
+    std::function<BigInt(const expr2tc&)> get_value =
+      [](const expr2tc& c) -> BigInt { return to_constant_int2t(c).constant_value; };
 
-        return expr2tc(new_num);
-      }
-    }
-
-    if(is_constant_int2t(to_simplify_side_2))
-    {
-      const constant_int2t &denominator = to_constant_int2t(to_simplify_side_2);
-
-      // Denominator is zero? Don't simplify
-      if(denominator.constant_value.is_zero())
-        return expr2tc();
-
-      // Denominator is one? Simplify to numerator
-      if(denominator.constant_value == 1)
-        return expr2tc(to_simplify_side_1);
-    }
-
-    // Two constants? Simplify to result of the division
-    if (is_constant_int2t(to_simplify_side_1) && is_constant_int2t(to_simplify_side_2))
-    {
-      const constant_int2t &numerator = to_constant_int2t(to_simplify_side_1);
-      const constant_int2t &denominator = to_constant_int2t(to_simplify_side_2);
-
-      constant_int2tc new_number = expr2tc(numerator.clone());
-      new_number.get()->constant_value /= denominator.constant_value;
-
-      return expr2tc(new_number);
-    }
+    return divide<constant_int2t, BigInt, decltype(type)>(
+      to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
   }
   else if(is_fixedbv_type(type))
   {
-    if(is_constant_fixedbv2t(to_simplify_side_1))
-    {
-      const constant_fixedbv2t &numerator = to_constant_fixedbv2t(to_simplify_side_1);
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
 
-      // Numerator is zero? Simplify to zero
-      if(numerator.value.is_zero())
-      {
-        constant_fixedbv2tc new_num = expr2tc(numerator.clone());
-        new_num.get()->value.set_value(0);
+    std::function<fixedbvt(const expr2tc&)> get_value =
+      [](const expr2tc& c) -> fixedbvt { return to_constant_fixedbv2t(c).value; };
 
-        return expr2tc(new_num);
-      }
-    }
-
-    if(is_constant_fixedbv2t(to_simplify_side_2))
-    {
-      const constant_fixedbv2t &denominator = to_constant_fixedbv2t(to_simplify_side_2);
-
-      // Denominator is zero? Don't simplify
-      if(denominator.value.is_zero())
-        return expr2tc();
-
-      // Denominator is one? Simplify to numerator
-      if(denominator.value == 1)
-        return expr2tc(to_simplify_side_1);
-    }
-
-    // Two constants? Simplify to result of the division
-    if (is_constant_fixedbv2t(to_simplify_side_1) && is_constant_fixedbv2t(to_simplify_side_2))
-    {
-      const constant_fixedbv2t &numerator = to_constant_fixedbv2t(to_simplify_side_1);
-      const constant_fixedbv2t &denominator = to_constant_fixedbv2t(to_simplify_side_2);
-
-      constant_fixedbv2tc new_number = expr2tc(numerator.clone());
-      new_number.get()->value /= denominator.value;
-
-      return expr2tc(new_number);
-    }
+    return divide<constant_fixedbv2t, fixedbvt, decltype(type)>(
+      to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
   }
   else if(is_floatbv_type(type))
   {
-    // TODO: Consider rounding mode on the operation
-    std::cerr << "TODO: simplify division of floatbvs\n";
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+
+    std::function<ieee_floatt(const expr2tc&)> get_value =
+      [](const expr2tc& c) -> ieee_floatt { return to_constant_floatbv2t(c).value; };
+
+    return divide<constant_floatbv2t, ieee_floatt, decltype(type)>(
+      to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
   }
 
   return expr2tc();
