@@ -83,7 +83,7 @@ class Z3ast(esbmc.solve.smt_ast):
         if self.sort.id == esbmc.solve.smt_sort_kind.array:
             idx = conv.convert_ast(idx)
             ast = z3.Select(self.ast, idx.ast)
-            result = Z3ast(ast, self.conv, self.sort)
+            result = Z3ast(ast, self.conv, self.z3sort.range_sort)
         else:
             assert False # XXX is only arrays anyway?
         # Also manually stash this ast
