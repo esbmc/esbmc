@@ -882,8 +882,8 @@ smt_convt::convert_sort(const type2tc &type)
       // Create a delegate that recurses over all subtypes, replacing pointers
       // as we go. Extra scaffolding is to work around the fact we can't refer
       // to replace_w_ptr until after it's been defined, ho hum.
-      type2t::subtype_delegate *delegate;
-      auto replace_w_ptr = [this, delegate](type2tc &e) {
+      type2t::subtype_delegate *delegate = NULL;
+      auto replace_w_ptr = [this, &delegate](type2tc &e) {
         if (is_pointer_type(e)) {
           // Replace this field of the expr with a pointer struct :O:O:O:O
           e = pointer_struct;
