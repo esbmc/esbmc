@@ -18,7 +18,7 @@ expr2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 static expr2tc
-typecast_check_return(const type2tc &type, expr2tc expr)
+typecast_check_return(const type2tc &type, expr2tc &expr)
 {
   // If the expr is already nil, do nothing
   if(is_nil_expr(expr))
@@ -28,23 +28,23 @@ typecast_check_return(const type2tc &type, expr2tc expr)
   expr2tc typecast = expr2tc(new typecast2t(type, expr));
 
   // Try to simplify the typecast
-  expr2tc simpl_typecast_res = typecast->do_simplify();
+  expr2tc simpl_typecast_res = expr2tc(typecast->do_simplify());
 
   // If we were able to simplify the typecast, return it
   if(!is_nil_expr(simpl_typecast_res))
-    return simpl_typecast_res;
+    return expr2tc(simpl_typecast_res->clone());
 
   // Otherwise, return the explicit typecast
-  return typecast;
+  return expr2tc(typecast->clone());
 }
 
 static expr2tc
 try_simplification(const expr2tc& expr)
 {
-  expr2tc to_simplify = expr->do_simplify();
+  expr2tc to_simplify = expr2tc(expr->do_simplify());
   if (is_nil_expr(to_simplify))
     to_simplify = expr2tc(expr->clone());
-  return expr2tc(expr);
+  return expr2tc(to_simplify->clone());
 }
 
 template <typename constant_value_type>
@@ -97,9 +97,12 @@ add2t::do_simplify(bool __attribute__((unused))) const
   {
     // Were we able to simplify the sides?
     if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
-      return typecast_check_return(
-        type,
-        expr2tc(new add2t(type, to_simplify_side_1, to_simplify_side_2)));
+    {
+      expr2tc new_add =
+        expr2tc(new add2t(type, to_simplify_side_1, to_simplify_side_2));
+
+      return typecast_check_return(type, new_add);
+    }
 
     return expr2tc();
   }
@@ -159,9 +162,9 @@ sub2t::do_simplify(bool second __attribute__((unused))) const
 
   // rewrite "a-b" to "a+(-b)" and call simplify add
   expr2tc neg = expr2tc(new neg2t(type, side_2->clone()));
-  expr2tc new_add = expr2tc(new add2t(type, side_1->clone(), neg));
+  expr2tc new_add = expr2tc(new add2t(type, side_1->clone(), neg->clone()));
 
-  return new_add->do_simplify();
+  return expr2tc(new_add->do_simplify());
 }
 
 template <typename constant_value_type>
@@ -229,9 +232,12 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
   {
     // Were we able to simplify the sides?
     if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
-      return typecast_check_return(
-        type,
-        expr2tc(new mul2t(type, to_simplify_side_1, to_simplify_side_2)));
+    {
+      expr2tc new_mul =
+        expr2tc(new mul2t(type, to_simplify_side_1, to_simplify_side_2));
+
+      return typecast_check_return(type, new_mul);
+    }
 
     return expr2tc();
   }
@@ -337,9 +343,12 @@ div2t::do_simplify(bool second __attribute__((unused))) const
   {
     // Were we able to simplify the sides?
     if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
-      return typecast_check_return(
-        type,
-        expr2tc(new div2t(type, to_simplify_side_1, to_simplify_side_2)));
+    {
+      expr2tc new_div =
+        expr2tc(new div2t(type, to_simplify_side_1, to_simplify_side_2));
+
+      return typecast_check_return(type, new_div);
+    }
 
     return expr2tc();
   }
@@ -404,9 +413,12 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
   {
     // Were we able to simplify the sides?
     if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
-      return typecast_check_return(
-        type,
-        expr2tc(new modulus2t(type, to_simplify_side_1, to_simplify_side_2)));
+    {
+      expr2tc new_mod =
+        expr2tc(new modulus2t(type, to_simplify_side_1, to_simplify_side_2));
+
+      return typecast_check_return(type, new_mod);
+    }
 
     return expr2tc();
   }
@@ -460,11 +472,14 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
 
   if (!is_constant_expr(to_simplify))
   {
-    // Were we able to simplify it?
+    // Were we able to simplify anything?
     if(value != to_simplify)
-      return typecast_check_return(
-        type,
-        expr2tc(new abs2t(type, to_simplify)));
+    {
+      expr2tc new_abs =
+        expr2tc(new abs2t(type, to_simplify));
+
+      return typecast_check_return(type, new_abs);
+    }
 
     return expr2tc();
   }
@@ -543,11 +558,14 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
 
   if (!is_constant_expr(to_simplify))
   {
-    // Were we able to simplify it?
+    // Were we able to simplify anything?
     if(value != to_simplify)
-      return typecast_check_return(
-        type,
-        expr2tc(new neg2t(type, to_simplify)));
+    {
+      expr2tc new_neg =
+        expr2tc(new neg2t(type, to_simplify));
+
+      return typecast_check_return(type, new_neg);
+    }
 
     return expr2tc();
   }
