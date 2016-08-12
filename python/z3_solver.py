@@ -174,7 +174,7 @@ class Z3python(esbmc.solve.smt_convt):
         res = self.solver.check()
         if res == z3.sat:
             return esbmc.solve.smt_result.sat
-        elif res == z3.sat:
+        elif res == z3.unsat:
             return esbmc.solve.smt_result.unsat
         else:
             return esbmc.solve.smt_result.error
