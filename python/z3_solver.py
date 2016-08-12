@@ -54,7 +54,18 @@ class Z3ast(esbmc.solve.smt_ast):
             assert self.sort.id == esbmc.solve.smt_sort_kind.struct
             # Hurrrr. Project all fields out except this one; update; create
             # new tuple.
-            assert idx_expr.expr_id == esbmc.expr.expr_ids.constant_int
+            decls = self.z3sort.proj_decls
+            # Place the tuple ast in an ast array
+            inp_array = (z3.Ast * 1)()
+            inp_array[0] = self.ast.ast
+
+            # Now apply projection functions to the tuple ast
+            projected = [z3.Z3_mk_app(conv.ctx.ctx, x.ast, 1, inp_array) for x in decls]
+
+            # We now have a list of all current tuple values. We need to update
+            # the identified one with the designated value
+            projected[idx] = value.ast.ast
+            print idx
             assert False
         result = Z3ast(res, self.conv, self.sort)
         # Also manually stash this ast
