@@ -310,7 +310,7 @@ template <typename constant,
           typename constant_value_type,
           typename div_type>
 static expr2tc
-divide(const expr2tc &numerator,
+simplify_divide(const expr2tc &numerator,
        const expr2tc &denominator,
        const div_type &type,
        std::function<bool(const expr2tc&)> is_constant,
@@ -374,7 +374,7 @@ div2t::do_simplify(bool second __attribute__((unused))) const
     std::function<BigInt(const expr2tc&)> get_value =
       [](const expr2tc& c) -> BigInt { return to_constant_int2t(c).constant_value; };
 
-    return divide<constant_int2t, BigInt, decltype(type)>(
+    return simplify_divide<constant_int2t, BigInt, decltype(type)>(
       to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
   }
   else if(is_fixedbv_type(type))
@@ -385,7 +385,7 @@ div2t::do_simplify(bool second __attribute__((unused))) const
     std::function<fixedbvt(const expr2tc&)> get_value =
       [](const expr2tc& c) -> fixedbvt { return to_constant_fixedbv2t(c).value; };
 
-    return divide<constant_fixedbv2t, fixedbvt, decltype(type)>(
+    return simplify_divide<constant_fixedbv2t, fixedbvt, decltype(type)>(
       to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
   }
   else if(is_floatbv_type(type))
@@ -396,7 +396,7 @@ div2t::do_simplify(bool second __attribute__((unused))) const
     std::function<ieee_floatt(const expr2tc&)> get_value =
       [](const expr2tc& c) -> ieee_floatt { return to_constant_floatbv2t(c).value; };
 
-    return divide<constant_floatbv2t, ieee_floatt, decltype(type)>(
+    return simplify_divide<constant_floatbv2t, ieee_floatt, decltype(type)>(
       to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
   }
 
@@ -454,7 +454,7 @@ template <typename constant,
           typename constant_value_type,
           typename div_type>
 static expr2tc
-abs(const expr2tc &number,
+simplify_abs(const expr2tc &number,
        const div_type &type,
        std::function<bool(const expr2tc&)> is_constant,
        std::function<constant_value_type(const expr2tc&)> get_value)
@@ -497,7 +497,7 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
       std::function<BigInt(const expr2tc&)> get_value =
         [](const expr2tc& c) -> BigInt { return to_constant_int2t(c).constant_value; };
 
-      return abs<constant_int2t, BigInt, decltype(type)>(
+      return simplify_abs<constant_int2t, BigInt, decltype(type)>(
         to_simplify, type, is_constant, get_value);
     }
     else if(is_fixedbv_type(type))
@@ -508,7 +508,7 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
       std::function<fixedbvt(const expr2tc&)> get_value =
         [](const expr2tc& c) -> fixedbvt { return to_constant_fixedbv2t(c).value; };
 
-      return abs<constant_fixedbv2t, fixedbvt, decltype(type)>(
+      return simplify_abs<constant_fixedbv2t, fixedbvt, decltype(type)>(
         to_simplify, type, is_constant, get_value);
     }
     else if(is_floatbv_type(type))
@@ -519,7 +519,7 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
       std::function<ieee_floatt(const expr2tc&)> get_value =
         [](const expr2tc& c) -> ieee_floatt { return to_constant_floatbv2t(c).value; };
 
-      return abs<constant_floatbv2t, ieee_floatt, decltype(type)>(
+      return simplify_abs<constant_floatbv2t, ieee_floatt, decltype(type)>(
         to_simplify, type, is_constant, get_value);
     }
   }
@@ -531,7 +531,7 @@ template <typename constant,
           typename constant_value_type,
           typename div_type>
 static expr2tc
-negate(const expr2tc &number,
+simplify_negate(const expr2tc &number,
        const div_type &type,
        std::function<bool(const expr2tc&)> is_constant,
        std::function<constant_value_type(const expr2tc&)> get_value)
@@ -569,7 +569,7 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
       std::function<BigInt(const expr2tc&)> get_value =
         [](const expr2tc& c) -> BigInt { return to_constant_int2t(c).constant_value; };
 
-      return negate<constant_int2t, BigInt, decltype(type)>(
+      return simplify_negate<constant_int2t, BigInt, decltype(type)>(
         to_simplify, type, is_constant, get_value);
     }
     else if(is_fixedbv_type(type))
@@ -580,7 +580,7 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
       std::function<fixedbvt(const expr2tc&)> get_value =
         [](const expr2tc& c) -> fixedbvt { return to_constant_fixedbv2t(c).value; };
 
-      return negate<constant_fixedbv2t, fixedbvt, decltype(type)>(
+      return simplify_negate<constant_fixedbv2t, fixedbvt, decltype(type)>(
         to_simplify, type, is_constant, get_value);
     }
     else if(is_floatbv_type(type))
@@ -591,7 +591,7 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
       std::function<ieee_floatt(const expr2tc&)> get_value =
         [](const expr2tc& c) -> ieee_floatt { return to_constant_floatbv2t(c).value; };
 
-      return negate<constant_floatbv2t, ieee_floatt, decltype(type)>(
+      return simplify_negate<constant_floatbv2t, ieee_floatt, decltype(type)>(
         to_simplify, type, is_constant, get_value);
     }
   }
