@@ -50,11 +50,13 @@ class Z3ast(esbmc.solve.smt_ast):
             int_val = esbmc.BigInt(idx)
             idx = conv.mk_smt_bvint(int_val, False, domain_sort.data_width)
             res = z3.Update(self.ast, idx.ast, value.ast)
+            result = Z3ast(res, self.conv, self.sort)
         else:
             assert self.sort.id == esbmc.solve.smt_sort_kind.struct
             # Hurrrr. Project all fields out except this one; update; create
             # new tuple.
             decls = self.z3sort.proj_decls
+
             # Place the tuple ast in an ast array
             inp_array = (z3.Ast * 1)()
             inp_array[0] = self.ast.ast
@@ -62,11 +64,19 @@ class Z3ast(esbmc.solve.smt_ast):
             # Now apply projection functions to the tuple ast
             projected = [z3.Z3_mk_app(conv.ctx.ctx, x.ast, 1, inp_array) for x in decls]
 
+            # Wrap those asts in SHORT TERM Z3ast's
+            projected = [z3.ExprRef(x) for x in projected]
+            # Zip with their sorts
+            asts_and_sorts = zip(projected, self.z3sort.sub_sorts)
+            # Put Z3ast around the outside
+            projected = [Z3ast(ar, conv, sort) for ar, sort in asts_and_sorts]
+
             # We now have a list of all current tuple values. We need to update
             # the identified one with the designated value
-            projected[idx] = value.ast.ast
-            assert False
-        result = Z3ast(res, self.conv, self.sort)
+            projected[idx] = value
+
+            result = conv._tuple_create(projected, self.z3sort)
+
         # Also manually stash this ast
         self.conv.ast_list.append(result)
         return result
