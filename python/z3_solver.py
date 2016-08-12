@@ -201,11 +201,12 @@ class Z3python(esbmc.solve.smt_convt):
             domain = args[1]
             range_ = args[2]
             arr_sort = z3.ArraySort(domain.sort, range_.sort)
-            arr_sort.dom_sort = domain
-            arr_sort.range_sort = range_
             range_width = range_.data_width if range_.data_width != 0 else 1
             assert domain.data_width != 0
-            return Z3sort(arr_sort, kind, range_width, domain.data_width)
+            res_sort = Z3sort(arr_sort, kind, range_width, domain.data_width)
+            res_sort.dom_sort = domain
+            res_sort.range_sort = range_
+            return res_sort
         else:
             print kind
             assert False
