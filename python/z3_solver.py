@@ -331,8 +331,10 @@ class Z3python(esbmc.solve.smt_convt):
     def l_get(self, ast):
         assert False
 
+    @stash_ast
     def mk_extract(self, a, high, low, s):
-        assert False
+        ast = z3.Extract(high, low, a.ast)
+        return Z3ast(ast, self, s)
 
 # Cruft for running below
 
