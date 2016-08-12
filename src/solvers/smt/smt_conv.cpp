@@ -791,7 +791,7 @@ expr_handle_table:
     break;
   }
   default:
-    std::cerr << "Couldn't convert expression in unrecognized format"
+    std::cerr << "Couldn't convert expression in unrecognised format"
               << std::endl;
     expr->dump();
     abort();
