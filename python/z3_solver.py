@@ -259,6 +259,17 @@ class Z3python(esbmc.solve.smt_convt):
         z3ast = z3.BitVecVal(theint.to_long(), w, self.ctx)
         return Z3ast(z3ast, self, bvsort)
 
+    @stash_ast
+    def convert_array_of(self, val, domain_width):
+        # Z3 directly supports initialized constant arrays
+        dom = z3.BitVecSort(domain_width, self.ctx)
+        ast = z3.K(dom, val.ast)
+
+        result_sort_ast = ast.sort()
+        z3_result_sort = Z3sort(result_sort_ast, esbmc.solve.smt_sort_kind.array, val.sort.data_width, domain_width)
+
+        return Z3ast(ast, self, z3_result_sort)
+
     def get_bool(self, ast):
         assert False
 
