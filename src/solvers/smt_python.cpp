@@ -147,7 +147,7 @@ public:
   assign(smt_convt *ctx, smt_astt sym) const
   {
     using namespace boost::python;
-    if (override f = get_override_checked(this, "assign"))
+    if (override f = this->get_override("assign"))
       f(conv_down(ctx), ast_down(sym));
     else
       smt_ast::assign(ctx, sym);

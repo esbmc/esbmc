@@ -42,9 +42,6 @@ class Z3ast(esbmc.solve.smt_ast):
         self.conv.ast_list.append(new_ast)
         return new_ast
 
-    def assign(self, conv, sym):
-        assert False
-
     def update(self, conv, value, idx, idx_expr):
         # Either a tuple update or an array update. Alas, all the exprs baked
         # into ESBMC make no distinguishment.
