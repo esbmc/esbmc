@@ -38,36 +38,34 @@ expr2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-template <typename constant,
-          typename constant_value_type,
-          typename div_type>
+template <typename constant_value_type>
 static expr2tc
-simplify_addition(const expr2tc &op1,
-       const expr2tc &op2,
-       const div_type &type,
-       std::function<bool(const expr2tc&)> is_constant,
-       std::function<constant_value_type(const expr2tc&)> get_value)
+simplify_addition(
+  expr2tc &op1,
+  expr2tc &op2,
+  std::function<bool(const expr2tc&)> is_constant,
+  std::function<constant_value_type&(expr2tc&)> get_value)
 {
   if(is_constant(op1))
   {
     // Found a zero? Simplify to op2
     if(get_value(op1).is_zero())
-      return expr2tc(new constant(type, get_value(op2)));
+      return expr2tc(op2->clone());
   }
 
   if(is_constant(op2))
   {
-    // Found a zero? Simplify to op2
+    // Found a zero? Simplify to op1
     if(get_value(op2).is_zero())
-      return expr2tc(new constant(type, get_value(op1)));
+      return expr2tc(op1->clone());
   }
 
   // Two constants? Simplify to result of the multiplication
   if (is_constant(op1) && is_constant(op2))
   {
-    auto c = get_value(op1);
-    c += get_value(op2);
-    return expr2tc(new constant(type, c));
+    auto c = expr2tc(op1->clone());
+    get_value(c) += get_value(op2);
+    return expr2tc(c);
   }
 
   return expr2tc();
@@ -91,41 +89,56 @@ add2t::do_simplify(bool __attribute__((unused))) const
     to_simplify_side_2 = expr2tc(side_2->clone());
 
   if (!is_constant_expr(to_simplify_side_1)
-      || !is_constant_expr(to_simplify_side_2))
+      && !is_constant_expr(to_simplify_side_2))
+  {
+    // Were we able to simplify the sides?
+    if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
+      return typecast_check_return(
+        type,
+        expr2tc(new add2t(type, to_simplify_side_1, to_simplify_side_2)));
+
     return expr2tc();
+  }
 
   if(is_bv_type(type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_int2t;
 
-    std::function<BigInt(const expr2tc&)> get_value =
-      [](const expr2tc& c) -> BigInt { return to_constant_int2t(c).constant_value; };
+    std::function<BigInt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> BigInt&
+        { return to_constant_int2t(c).constant_value; };
 
-    return simplify_addition<constant_int2t, BigInt, decltype(type)>(
-      to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
+    expr2tc simpl_res = simplify_addition<BigInt>(
+      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
+
+    return typecast_check_return(type, simpl_res);
   }
   else if(is_fixedbv_type(type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
 
-    std::function<fixedbvt(const expr2tc&)> get_value =
-      [](const expr2tc& c) -> fixedbvt { return to_constant_fixedbv2t(c).value; };
+    std::function<fixedbvt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> fixedbvt& { return to_constant_fixedbv2t(c).value; };
 
-    return simplify_addition<constant_fixedbv2t, fixedbvt, decltype(type)>(
-      to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
+    expr2tc simpl_res = simplify_addition<fixedbvt>(
+      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
+
+    return typecast_check_return(type, simpl_res);
   }
   else if(is_floatbv_type(type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
 
-    std::function<ieee_floatt(const expr2tc&)> get_value =
-      [](const expr2tc& c) -> ieee_floatt { return to_constant_floatbv2t(c).value; };
+    std::function<ieee_floatt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> ieee_floatt& { return to_constant_floatbv2t(c).value; };
 
-    return simplify_addition<constant_floatbv2t, ieee_floatt, decltype(type)>(
-      to_simplify_side_1, to_simplify_side_2, type, is_constant, get_value);
+    expr2tc simpl_res = simplify_addition<ieee_floatt>(
+      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
+
+    return typecast_check_return(type, simpl_res);
   }
 
   return expr2tc();
