@@ -10,6 +10,13 @@
 #include <expr_util.h>
 #include <type_byte_size.h>
 
+expr2tc
+expr2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  return expr2tc();
+}
+
 static expr2tc
 typecast_check_return(const type2tc &type, expr2tc expr)
 {
@@ -31,11 +38,13 @@ typecast_check_return(const type2tc &type, expr2tc expr)
   return typecast;
 }
 
-expr2tc
-expr2t::do_simplify(bool second __attribute__((unused))) const
+static expr2tc
+try_simplification(const expr2tc& expr)
 {
-
-  return expr2tc();
+  expr2tc to_simplify = expr->do_simplify();
+  if (is_nil_expr(to_simplify))
+    to_simplify = expr2tc(expr->clone());
+  return expr2tc(expr);
 }
 
 template <typename constant_value_type>
@@ -79,15 +88,9 @@ add2t::do_simplify(bool __attribute__((unused))) const
   if(!is_number_type(type) && !is_pointer_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations on side 1, if any
-  expr2tc to_simplify_side_1 = side_1->do_simplify();
-  if (is_nil_expr(to_simplify_side_1))
-    to_simplify_side_1 = expr2tc(side_1->clone());
-
-  // Try to recursively simplify nested operations on side 2, if any
-  expr2tc to_simplify_side_2 = side_2->do_simplify();
-  if (is_nil_expr(to_simplify_side_2))
-    to_simplify_side_2 = expr2tc(side_2->clone());
+  // Try to recursively simplify nested operations both sides, if any
+  expr2tc to_simplify_side_1 = try_simplification(side_1);
+  expr2tc to_simplify_side_2 = try_simplification(side_2);
 
   if (!is_constant_expr(to_simplify_side_1)
       && !is_constant_expr(to_simplify_side_2))
@@ -219,15 +222,9 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
   if(!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations on side 1, if any
-  expr2tc to_simplify_side_1 = side_1->do_simplify();
-  if (is_nil_expr(to_simplify_side_1))
-    to_simplify_side_1 = expr2tc(side_1->clone());
-
-  // Try to recursively simplify nested operations on side 2, if any
-  expr2tc to_simplify_side_2 = side_2->do_simplify();
-  if (is_nil_expr(to_simplify_side_2))
-    to_simplify_side_2 = expr2tc(side_2->clone());
+  // Try to recursively simplify nested operations both sides, if any
+  expr2tc to_simplify_side_1 = try_simplification(side_1);
+  expr2tc to_simplify_side_2 = try_simplification(side_2);
 
   if (!is_constant_expr(to_simplify_side_1)
       && !is_constant_expr(to_simplify_side_2))
@@ -333,15 +330,9 @@ div2t::do_simplify(bool second __attribute__((unused))) const
   if(!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations on side 1, if any
-  expr2tc to_simplify_side_1 = side_1->do_simplify();
-  if (is_nil_expr(to_simplify_side_1))
-    to_simplify_side_1 = expr2tc(side_1->clone());
-
-  // Try to recursively simplify nested operations on side 2, if any
-  expr2tc to_simplify_side_2 = side_2->do_simplify();
-  if (is_nil_expr(to_simplify_side_2))
-    to_simplify_side_2 = expr2tc(side_2->clone());
+  // Try to recursively simplify nested operations both sides, if any
+  expr2tc to_simplify_side_1 = try_simplification(side_1);
+  expr2tc to_simplify_side_2 = try_simplification(side_2);
 
   if (!is_constant_expr(to_simplify_side_1)
       && !is_constant_expr(to_simplify_side_2))
@@ -406,15 +397,9 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
   if(!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations on side 1, if any
-  expr2tc to_simplify_side_1 = side_1->do_simplify();
-  if (is_nil_expr(to_simplify_side_1))
-    to_simplify_side_1 = expr2tc(side_1->clone());
-
-  // Try to recursively simplify nested operations on side 2, if any
-  expr2tc to_simplify_side_2 = side_2->do_simplify();
-  if (is_nil_expr(to_simplify_side_2))
-    to_simplify_side_2 = expr2tc(side_2->clone());
+  // Try to recursively simplify nested operations both sides, if any
+  expr2tc to_simplify_side_1 = try_simplification(side_1);
+  expr2tc to_simplify_side_2 = try_simplification(side_2);
 
   if (!is_constant_expr(to_simplify_side_1)
       || !is_constant_expr(to_simplify_side_2))
@@ -472,10 +457,8 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
   if(!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations, if any
-  expr2tc to_simplify = value->do_simplify();
-  if (is_nil_expr(to_simplify))
-    to_simplify = expr2tc(value->clone());
+  // Try to recursively simplify nested operation, if any
+  expr2tc to_simplify = try_simplification(value);
 
   if (!is_constant_expr(to_simplify))
   {
@@ -557,10 +540,8 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
   if(!is_number_type(type))
     return expr2tc();
 
-  // Try to recursively simplify nested operations, if any
-  expr2tc to_simplify = value->do_simplify();
-  if (is_nil_expr(to_simplify))
-    to_simplify = expr2tc(value->clone());
+  // Try to recursively simplify nested operation, if any
+  expr2tc to_simplify = try_simplification(value);
 
   if (!is_constant_expr(to_simplify))
   {
