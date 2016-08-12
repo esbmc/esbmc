@@ -181,7 +181,7 @@ class Z3python(esbmc.solve.smt_convt):
             return esbmc.solve.smt_result.error
 
     def solve_text(self):
-        assert False
+        return "Z3 solver, from python"
 
     @stash_sort
     def mk_sort(self, args):
