@@ -83,7 +83,18 @@ class Z3ast(esbmc.solve.smt_ast):
         return result
 
     def project(self, conv, elem):
-        assert False
+        assert self.sort.id == esbmc.solve.smt_sort_kind.struct
+        proj_decl = self.z3sort.proj_decls[elem]
+
+        # We need to manually apply this function to project the elem out
+        inp_array = (z3.Ast * 1)()
+        inp_array[0] = self.ast.ast
+        projected_ast = z3.Z3_mk_app(conv.ctx.ctx, proj_decl, 1, inp_array)
+
+        result = Z3ast(projected_ast, self.conv, self.sub_sorts[idx])
+        # Also manually stash this ast
+        self.conv.ast_list.append(result)
+        return result
 
 class Z3python(esbmc.solve.smt_convt):
     def __init__(self, ns):
