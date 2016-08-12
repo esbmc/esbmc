@@ -78,7 +78,9 @@ class Z3python(esbmc.solve.smt_convt):
 
         self.func_map = {
             esbmc.solve.smt_func_kind.eq :
-                lambda self, args: args[0] == args[1]
+                lambda self, args, asts: asts[0] == args[1],
+            esbmc.solve.smt_func_kind.bvadd :
+                lambda self, args, asts: asts[0] + asts[1],
         }
 
         # Various accounting structures for the address space modeling need to
@@ -106,8 +108,9 @@ class Z3python(esbmc.solve.smt_convt):
 
     @stash_ast
     def mk_func_app(self, sort, k, args):
+        asts = [x.ast for x in args]
         if k in self.func_map:
-            z3ast = self.func_map[k](self, args)
+            z3ast = self.func_map[k](self, args, asts)
             return Z3ast(z3ast, self, sort)
         print "Unimplemented SMT function {}".format(k)
         assert False
