@@ -519,12 +519,28 @@ public:
   }
 };
 
+boost::python::object
+downcast_sort(smt_sort *s)
+{
+  return sort_down(s);
+}
+
+boost::python::object
+downcast_ast(smt_ast *a)
+{
+  return ast_down(a);
+}
+
 void
 build_smt_conv_python_class(void)
 {
   using namespace boost::python;
 
-  scope solve = class_<dummy_solver_class>("solve");
+  scope solve = class_<dummy_solver_class>("solve")
+    .def("downcast_sort", &downcast_sort)
+    .def("downcast_ast", &downcast_ast)
+    .staticmethod("downcast_sort")
+    .staticmethod("downcast_ast");
 
   // It would appear people _do_ want to write sovlers from python.
 
