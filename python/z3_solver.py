@@ -237,6 +237,12 @@ class Z3python(esbmc.solve.smt_convt):
         return Z3ast(z3var, self, sort)
 
     @stash_ast
+    def mk_array_symbol(self, name, sort, subtype):
+        # Same for arrays
+        z3var = z3.Const(name, sort.sort)
+        return Z3ast(z3var, self, sort)
+
+    @stash_ast
     def mk_tuple_array_symbol(self, expr):
         # Same for tuple arrays
         assert type(expr) == esbmc.expr.symbol
