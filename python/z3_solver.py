@@ -78,7 +78,7 @@ class Z3python(esbmc.solve.smt_convt):
 
         self.func_map = {
             esbmc.solve.smt_func_kind.eq :
-                lambda self, args, asts: asts[0] == args[1],
+                lambda self, args, asts: asts[0] == asts[1],
             esbmc.solve.smt_func_kind.bvadd :
                 lambda self, args, asts: asts[0] + asts[1],
         }
