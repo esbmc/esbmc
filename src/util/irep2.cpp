@@ -1986,6 +1986,7 @@ hash_value(lolnoop val)
 }
 
 // Local template for implementing delegate calling, with type dependency.
+// Can't easily extend to cover types because field type is _already_ abstracted
 template <typename T, typename U>
 void
 call_expr_delegate(T &ref, U &f)
@@ -2031,6 +2032,57 @@ call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>
                   (std::vector<expr2tc> &ref, expr2t::op_delegate &f)
 {
   for (expr2tc &r : ref)
+    f(r);
+
+  return;
+}
+
+// Repeat of call_expr_delegate, but for types
+template <typename T, typename U>
+void
+call_type_delegate(T &ref, U &f)
+{
+  // Don't do anything normally.
+  (void)ref;
+  (void)f;
+  return;
+}
+
+template <>
+void
+call_type_delegate<const type2tc,type2t::const_subtype_delegate>
+                  (const type2tc &ref, type2t::const_subtype_delegate &f)
+{
+  f(ref);
+  return;
+}
+
+template <>
+void
+call_type_delegate<type2tc, type2t::subtype_delegate>
+                  (type2tc &ref, type2t::subtype_delegate &f)
+{
+  f(ref);
+  return;
+}
+
+template <>
+void
+call_type_delegate<const std::vector<type2tc>, type2t::const_subtype_delegate>
+                 (const std::vector<type2tc> &ref, type2t::const_subtype_delegate &f)
+{
+  for (const type2tc &r : ref)
+    f(r);
+
+  return;
+}
+
+template <>
+void
+call_type_delegate<std::vector<type2tc>, type2t::subtype_delegate>
+                  (std::vector<type2tc> &ref, type2t::subtype_delegate &f)
+{
+  for (type2tc &r : ref)
     f(r);
 
   return;
@@ -2106,6 +2158,20 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
 #endif /* WITH_PYTHON */
 
 // Types
+
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
+void
+esbmct::type_methods2<derived, baseclass, traits, container, enable, fields>::foreach_subtype_impl_const(type2t::const_subtype_delegate &f) const
+{
+  superclass::foreach_subtype_impl_const_rec(f);
+}
+
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
+void
+esbmct::type_methods2<derived, baseclass, traits, container, enable, fields>::foreach_subtype_impl(type2t::subtype_delegate &f)
+{
+  superclass::foreach_subtype_impl_rec(f);
+}
 
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 auto
@@ -2368,6 +2434,32 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
 
 #endif /* WITH PYTHON */
 
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
+void
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &f) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  // Call delegate
+  call_type_delegate(derived_this->*m_ptr, f);
+
+  superclass::foreach_subtype_impl_const_rec(f);
+}
+
+template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
+void
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::foreach_subtype_impl_rec(type2t::subtype_delegate &f)
+{
+  derived *derived_this = static_cast<derived*>(this);
+  auto m_ptr = membr_ptr::value;
+
+  // Call delegate
+  call_type_delegate(derived_this->*m_ptr, f);
+
+  superclass::foreach_subtype_impl_rec(f);
+}
+
 /********************** Constants and explicit instantiations *****************/
 
 const expr2tc true_expr;
@@ -2617,7 +2709,7 @@ std::string concat2t::field_names [esbmct::num_type_fields]  =
 
 #undef irep_typedefs
 #define irep_typedefs(basename, superclass) \
-  template class esbmct::irep_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc>;
+  template class esbmct::type_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc>;
 
 irep_typedefs(bool, type2t)
 irep_typedefs(empty, type2t)

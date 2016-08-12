@@ -388,6 +388,9 @@ public:
   class symbolic_type_excp {
   };
 
+  typedef std::function<void (const type2tc &t)> const_subtype_delegate;
+  typedef std::function<void (type2tc &t)> subtype_delegate;
+
 protected:
   /** Primary constructor.
    *  @param id Type ID of type being constructed
@@ -396,6 +399,9 @@ protected:
 
   /** Copy constructor */
   type2t(const type2t &ref);
+
+  virtual void foreach_subtype_impl_const(const_subtype_delegate &t) const = 0;
+  virtual void foreach_subtype_impl(subtype_delegate &t) = 0;
 
 public:
   // Provide base / container types for some templates stuck on top:
@@ -519,6 +525,23 @@ public:
    *  @return New container, containing a duplicate of this object.
    */
   virtual type2tc clone(void) const = 0;
+
+  // Please see the equivalent methods in expr2t for documentation
+  template <typename T>
+  void foreach_subtype(T &&t) const
+  {
+    const_subtype_delegate wrapped(std::cref(t));
+    foreach_subtype_impl_const(wrapped);
+  }
+
+  template <typename T>
+  void Foreach_subtype(T &&t)
+  {
+    subtype_delegate wrapped(std::ref(t));
+    foreach_subtype_impl(wrapped);
+  }
+
+
 
   /** Instance of type_ids recording this types type. */
   // XXX XXX XXX this should be const
@@ -1037,6 +1060,8 @@ namespace esbmct {
     class irep_methods2;
   template <class derived, class baseclass, typename traits, typename container, typename fields = typename traits::fields, typename enable = void>
     class expr_methods2;
+  template <class derived, class baseclass, typename traits, typename container, typename fields = typename traits::fields, typename enable = void>
+    class type_methods2;
 
   /** Definition of irep methods template.
    *
@@ -1124,6 +1149,10 @@ namespace esbmct {
 
     void foreach_operand_impl_rec(expr2t::op_delegate &f);
     void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const;
+
+    // Similar story, but for type2tc
+    void foreach_subtype_impl_rec(type2t::subtype_delegate &t);
+    void foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &t)const;
 
 #ifdef WITH_PYTHON
     template <typename T>
@@ -1214,6 +1243,18 @@ namespace esbmct {
       return;
     }
 
+    void foreach_subtype_impl_rec(type2t::subtype_delegate &t)
+    {
+      (void)t;
+      return;
+    }
+
+    void foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &t) const
+    {
+      (void)t;
+      return;
+    }
+
 #ifdef WITH_PYTHON
     template <typename T>
     static void build_python_class_rec(T &obj, unsigned int idx)
@@ -1249,6 +1290,24 @@ namespace esbmct {
 
     void foreach_operand_impl_const(expr2t::const_op_delegate &expr) const;
     void foreach_operand_impl(expr2t::op_delegate &expr);
+  };
+
+  /** Type methods template for type ireps.
+   *  Like @expr_methods2, but for types. Also; written on the quick.
+   *  */
+  template <class derived, class baseclass, typename traits, typename container, typename fields, typename enable>
+    class type_methods2 : public irep_methods2<derived, baseclass, traits, container, fields, enable>
+  {
+  public:
+    typedef irep_methods2<derived, baseclass, traits, container, fields, enable> superclass;
+
+    template <typename ...Args> type_methods2(const Args&... args) : superclass(args...) { }
+
+    // See notes on irep_methods2 copy constructor
+    type_methods2(const derived &ref) : superclass(ref) { }
+
+    void foreach_subtype_impl_const(type2t::const_subtype_delegate &t) const;
+    void foreach_subtype_impl(type2t::subtype_delegate &t);
   };
 
   // So that we can write such things as:
@@ -1566,8 +1625,8 @@ public:
   typedef esbmct::something2tc<type2t, basename##_type2t,\
                               type2t::basename##_id, const type2t::type_ids,\
                               &type2t::type_id, superclass> basename##_type2tc;\
-  typedef esbmct::irep_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc> basename##_type_methods;\
-  extern template class esbmct::irep_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc>;
+  typedef esbmct::type_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc> basename##_type_methods;\
+  extern template class esbmct::type_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc>;
 
 irep_typedefs(bool, type2t)
 irep_typedefs(empty, type2t)
