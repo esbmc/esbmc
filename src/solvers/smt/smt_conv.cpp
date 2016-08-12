@@ -2021,11 +2021,15 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
   // Take a constant_array2t or an array_of, and format the data from them into
   // a form palatable to tuple_array_create.
 
+  // Strip out any pointers
+  type2tc arr_type = expr->type;
+  rewrite_ptrs_to_structs(arr_type);
+
   if (is_constant_array_of2t(expr)) {
     const constant_array_of2t &arr = to_constant_array_of2t(expr);
     smt_astt arg = convert_ast(arr.initializer);
 
-    return tuple_api->tuple_array_create(arr.type, &arg, true, domain);
+    return tuple_api->tuple_array_create(arr_type, &arg, true, domain);
   } else {
     assert(is_constant_array2t(expr));
     const constant_array2t &arr = to_constant_array2t(expr);
@@ -2036,7 +2040,7 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
       i++;
     }
 
-    return tuple_api->tuple_array_create(arr.type, args, false, domain);
+    return tuple_api->tuple_array_create(arr_type, args, false, domain);
   }
 }
 
