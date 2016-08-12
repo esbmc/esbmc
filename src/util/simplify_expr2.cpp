@@ -1221,17 +1221,16 @@ typecast2t::do_simplify(bool second) const
 
       if(is_bv_type(type))
       {
-        constant_int2tc new_int = expr2tc(theint.clone());
-
         // If we are typecasting from integer to a smaller integer,
         // this will return the number with the smaller size
         exprt number =
-          from_integer(new_int.get()->constant_value, migrate_type_back(type));
+          from_integer(theint.constant_value, migrate_type_back(type));
 
-        if(to_integer(number, new_int.get()->constant_value))
+        BigInt new_number;
+        if(to_integer(number, new_number))
           return expr2tc();
 
-        return expr2tc(new_int);
+        return expr2tc(new constant_int2t(type, new_number));
       }
       else if(is_fixedbv_type(type))
       {
