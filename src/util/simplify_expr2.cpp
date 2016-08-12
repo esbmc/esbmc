@@ -180,7 +180,7 @@ simplify_multiplication(
     // Found a zero? Simplify to zero
     if(get_value(op1).is_zero())
     {
-      auto c = expr2tc(op2->clone());
+      auto c = expr2tc(op1->clone());
       get_value(c) = constant_value_type();
       return expr2tc(c);
     }
