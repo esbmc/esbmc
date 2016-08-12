@@ -75,7 +75,8 @@ expr2tc
 add2t::do_simplify(bool __attribute__((unused))) const
 {
 
-  if(!is_number_type(type))
+  // We must also check for pointer arithmetic
+  if(!is_number_type(type) && !is_pointer_type(type))
     return expr2tc();
 
   // Try to recursively simplify nested operations on side 1, if any
@@ -100,7 +101,8 @@ add2t::do_simplify(bool __attribute__((unused))) const
     return expr2tc();
   }
 
-  if(is_bv_type(type))
+  // Pointer arithmetic is done only with integers
+  if(is_bv_type(type) || is_pointer_type(type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_int2t;
