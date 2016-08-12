@@ -291,7 +291,7 @@ simplify_division(
   expr2tc &numerator,
   expr2tc &denominator,
   std::function<bool(const expr2tc&)> is_constant,
-  std::function<constant_value_type(expr2tc&)> get_value)
+  std::function<constant_value_type&(expr2tc&)> get_value)
 {
   if(is_constant(numerator))
   {
@@ -444,9 +444,10 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
 
 template <typename constant_value_type>
 static expr2tc
-simplify_abs(expr2tc &number,
+simplify_abs(
+  expr2tc &number,
   std::function<bool(const expr2tc&)> is_constant,
-  std::function<constant_value_type(expr2tc&)> get_value)
+  std::function<constant_value_type&(expr2tc&)> get_value)
 {
   // Negate if it's a constant
   if (is_constant(number))
@@ -533,9 +534,10 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
 
 template <typename constant_value_type>
 static expr2tc
-simplify_negate(expr2tc &number,
+simplify_negate(
+  expr2tc &number,
   std::function<bool(const expr2tc&)> is_constant,
-  std::function<constant_value_type(expr2tc&)> get_value)
+  std::function<constant_value_type&(expr2tc&)> get_value)
 {
   // Negate if it's a constant
   if (is_constant(number))
