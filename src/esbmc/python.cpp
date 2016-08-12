@@ -165,11 +165,8 @@ init_esbmc_process(boost::python::object o)
   // Extract list from object; provoke exception if needs be.
   list l = extract<list>(o);
 
-  // Apparently no good way to iterate over list
-  while (len(l) > 0) {
-    object s = l.pop();
-    str_list.push_back(extract<std::string>(s));
-  }
+  for (unsigned int i = 0; i < len(l); i++)
+    str_list.push_back(extract<std::string>(l[i]));
 
   // Convert the list of C++ lists to C argc / argv.
   argc = str_list.size();

@@ -49,6 +49,12 @@ class Basic(unittest.TestCase):
         ns, opts, po = esbmc.init_esbmc_process(['./test_data/00_big_endian_01/main.c'])
         esbmc.kill_esbmc_process()
 
+    def test_args(self):
+        import esbmc
+        # Had a problem in the past with the arg list being reversed...
+        ns, opts, po = esbmc.init_esbmc_process(['./test_data/00_big_endian_01/main.c', '--timeout', '1m', '--memlimit', '1g'])
+        esbmc.kill_esbmc_process()
+
     def test_bigint(self):
         import esbmc
         from esbmc import BigInt
