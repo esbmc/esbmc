@@ -116,17 +116,17 @@ class Z3python(esbmc.solve.smt_convt):
 
         self.func_map = {
             esbmc.solve.smt_func_kind.ite :
-                lambda self, args, asts: z3.If(asts[0], asts[1], asts[2]),
+                lambda ctx, args, asts: z3.If(asts[0], asts[1], asts[2], ctx),
             esbmc.solve.smt_func_kind.eq :
-                lambda self, args, asts: asts[0] == asts[1],
+                lambda ctx, args, asts: asts[0] == asts[1],
             esbmc.solve.smt_func_kind._or : # or is a keyword in python
-                lambda self, args, asts: z3.Or(asts[0], asts[1]),
+                lambda ctx, args, asts: z3.Or(asts[0], asts[1]),
             esbmc.solve.smt_func_kind.bvadd :
-                lambda self, args, asts: asts[0] + asts[1],
+                lambda ctx, args, asts: asts[0] + asts[1],
             esbmc.solve.smt_func_kind.bvugt :
-                lambda self, args, asts: z3.UGT(asts[0], asts[1]),
+                lambda ctx, args, asts: z3.UGT(asts[0], asts[1]),
             esbmc.solve.smt_func_kind.bvult :
-                lambda self, args, asts: z3.ULT(asts[0], asts[1]),
+                lambda ctx, args, asts: z3.ULT(asts[0], asts[1]),
         }
 
         # Various accounting structures for the address space modeling need to
@@ -156,7 +156,7 @@ class Z3python(esbmc.solve.smt_convt):
     def mk_func_app(self, sort, k, args):
         asts = [x.ast for x in args]
         if k in self.func_map:
-            z3ast = self.func_map[k](self, args, asts)
+            z3ast = self.func_map[k](self.ctx, args, asts)
             return Z3ast(z3ast, self, sort)
         print "Unimplemented SMT function {}".format(k)
         assert False
