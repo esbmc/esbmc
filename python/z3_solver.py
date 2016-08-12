@@ -132,6 +132,8 @@ class Z3python(esbmc.solve.smt_convt):
             print domain
             print range_
             assert False
+            result.dom_sort = blah
+            result.range_sort = blah
         else:
             print kind
             assert False
@@ -148,7 +150,10 @@ class Z3python(esbmc.solve.smt_convt):
             dom_width = self.calculate_array_domain_width(t)
             width_sort = z3.BitVecSort(dom_width, self.ctx)
             arr_sort = z3.ArraySort(width_sort, struct_sort.sort)
-            return Z3sort(arr_sort, esbmc.solve.smt_sort_kind.array, 1, dom_width)
+            result = Z3sort(arr_sort, esbmc.solve.smt_sort_kind.array, 1, dom_width)
+            result.dom_sort = Z3sort(width_sort, esbmc.solve.smt_sort_kind.bv, dom_width)
+            result.range_sort = struct_sort
+            return result
 
     def mk_struct_sort2(self, t):
         # Z3 tuples don't _appear_ to be exported to python. Therefore we have
