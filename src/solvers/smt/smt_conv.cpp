@@ -876,6 +876,27 @@ smt_convt::convert_sort(const type2tc &type)
 
     if (is_tuple_ast_type(range)) {
       type2tc thetype = flatten_array_type(type);
+
+      // Subtype may contain pointers; replace those. Ideally the solver will
+      // never see pointer types.
+      // Create a delegate that recurses over all subtypes, replacing pointers
+      // as we go. Extra scaffolding is to work around the fact we can't refer
+      // to replace_w_ptr until after it's been defined, ho hum.
+      type2t::subtype_delegate *delegate;
+      auto replace_w_ptr = [this, delegate](type2tc &e) {
+        if (is_pointer_type(e)) {
+          // Replace this field of the expr with a pointer struct :O:O:O:O
+          e = pointer_struct;
+        } else {
+          // Recurse
+          e.get()->Foreach_subtype(*delegate);
+        }
+      };
+
+      type2t::subtype_delegate del_wrap(std::ref(replace_w_ptr));
+      delegate = &del_wrap;
+      thetype.get()->Foreach_subtype(replace_w_ptr);
+
       result = tuple_api->mk_struct_sort(thetype);
       break;
     }
