@@ -424,10 +424,27 @@ public:
   }
 
   smt_astt
-  tuple_array_create(const type2tc &array_type, smt_astt *inputargs, bool const_array, smt_sortt domain)
+  tuple_array_create(const type2tc &array_type, smt_astt *inputargs,
+      bool const_array, smt_sortt domain)
   {
-    // XXX XXX XXX this needs to be remangled, array ptr
-    return get_override_checked(this, "tuple_array_create")(array_type, inputargs, const_array, domain);
+    using namespace boost::python;
+    const array_type2t &arr_ref = to_array_type(array_type);
+    assert(arr_ref.subtype->type_id == type2t::struct_id);
+
+    const struct_type2t &struct_ref = to_struct_type(arr_ref.subtype);
+
+    list l;
+    for (unsigned int i = 0 ;i < struct_ref.members.size(); i++)
+      l.append(ast_down(inputargs[i]));
+
+    return tuple_array_create_remangled(array_type, l, const_array, domain);
+  }
+
+  smt_astt
+  tuple_array_create_remangled(const type2tc &array_type,
+      boost::python::object l, bool const_array, smt_sortt domain)
+  {
+    return get_override_checked(this, "tuple_array_create")(array_type, l, const_array, domain);
   }
 
   smt_astt
@@ -669,7 +686,8 @@ build_smt_conv_python_class(void)
     .def("mk_smt_bvint", pure_virtual(&smt_convt::mk_smt_bvint), rte())
     .def("get_bool", pure_virtual(&smt_convt::get_bool))
     .def("get_bv", pure_virtual(&smt_convt::get_bv))
-    .def("mk_extract", pure_virtual(&smt_convt::mk_extract), rte());
+    .def("mk_extract", pure_virtual(&smt_convt::mk_extract), rte())
+    .def("tuple_array_create", pure_virtual(&smt_convt_wrapper::tuple_array_create_remangled), rte());
 
   // Result enum for solving
   enum_<smt_convt::resultt>("smt_result")
