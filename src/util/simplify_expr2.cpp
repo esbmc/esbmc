@@ -357,7 +357,7 @@ div2t::do_simplify(bool second __attribute__((unused))) const
   if (is_nil_expr(to_simplify_side_1))
     to_simplify_side_1 = expr2tc(side_1->clone());
 
-  // Try to recursively simplify nested operations on side 1, if any
+  // Try to recursively simplify nested operations on side 2, if any
   expr2tc to_simplify_side_2 = side_2->do_simplify();
   if (is_nil_expr(to_simplify_side_2))
     to_simplify_side_2 = expr2tc(side_2->clone());
@@ -407,33 +407,25 @@ expr2tc
 modulus2t::do_simplify(bool second __attribute__((unused))) const
 {
 
+  if(!is_number_type(type))
+    return expr2tc();
+
   // Try to recursively simplify nested operations on side 1, if any
-  expr2tc to_simplify_side_1 = expr2tc(side_1->clone());
-  if(is_arith_type(to_simplify_side_1))
-  {
-    expr2tc res = to_simplify_side_1->do_simplify();
-
-    // If we can't simplify the nested operation, don't try any further
-    if (is_nil_expr(res))
-      return expr2tc();
-
-    to_simplify_side_1 = expr2tc(res->clone());
-  }
+  expr2tc to_simplify_side_1 = side_1->do_simplify();
+  if (is_nil_expr(to_simplify_side_1))
+    to_simplify_side_1 = expr2tc(side_1->clone());
 
   // Try to recursively simplify nested operations on side 2, if any
-  expr2tc to_simplify_side_2 = expr2tc(side_2->clone());
-  if(is_arith_type(to_simplify_side_2))
-  {
-    expr2tc res = to_simplify_side_2->do_simplify();
+  expr2tc to_simplify_side_2 = side_2->do_simplify();
+  if (is_nil_expr(to_simplify_side_2))
+    to_simplify_side_2 = expr2tc(side_2->clone());
 
-    // If we can't simplify the nested operation, don't try any further
-    if (is_nil_expr(res))
-      return expr2tc();
+  if (!is_constant_expr(to_simplify_side_1)
+      || !is_constant_expr(to_simplify_side_2))
+    return expr2tc();
 
-    to_simplify_side_2 = expr2tc(res->clone());
-  }
-
-  if (!is_constant_expr(to_simplify_side_1) || !is_constant_expr(to_simplify_side_2))
+  if (!is_constant_expr(to_simplify_side_1)
+      || !is_constant_expr(to_simplify_side_2))
     return expr2tc();
 
   if(is_bv_type(type))
@@ -441,10 +433,10 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
     const constant_int2t &numerator = to_constant_int2t(to_simplify_side_1);
     const constant_int2t &denominator = to_constant_int2t(to_simplify_side_2);
 
-    constant_int2tc new_number = expr2tc(numerator.clone());
-    new_number.get()->constant_value %= denominator.constant_value;
+    auto c = numerator.constant_value;
+    c %= denominator.constant_value;
 
-    return expr2tc(new_number);
+    return expr2tc(new constant_int2t(type, c));
   }
 
   return expr2tc();
