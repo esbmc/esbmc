@@ -337,6 +337,11 @@ class Z3python(esbmc.solve.smt_convt):
 
         return Z3ast(ast, self, z3_result_sort)
 
+    # XXX -- the get methods are called during counterexample building, and
+    # require the creation of a esbmc expr representing the given ast. This
+    # is fairly self explanatory and so implementing it isn't going to be that
+    # illustrative, you just have to be familiar with the esbmc expr structure
+    # and your own AST type.
     def get_bool(self, ast):
         assert False
 
