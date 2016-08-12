@@ -79,7 +79,7 @@ class Z3python(esbmc.solve.smt_convt):
         self.func_map = {
             esbmc.solve.smt_func_kind.eq :
                 lambda self, args, asts: asts[0] == asts[1],
-            esbmc.solve.smt_func_kind.or :
+            esbmc.solve.smt_func_kind._or : # or is a keyword in python
                 lambda self, args, asts: z3.Or(asts[0], asts[1]),
             esbmc.solve.smt_func_kind.bvadd :
                 lambda self, args, asts: asts[0] + asts[1],
