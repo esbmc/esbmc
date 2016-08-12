@@ -171,7 +171,14 @@ class Z3python(esbmc.solve.smt_convt):
         self.solver.add(ast.ast)
 
     def dec_solve(self):
-        assert False
+        #self.solver.check()
+        res = self.solver.check()
+        if res == z3.sat:
+            return esbmc.solve.smt_result.sat
+        elif res == z3.sat:
+            return esbmc.solve.smt_result.unsat
+        else:
+            return esbmc.solve.smt_result.error
 
     def solve_text(self):
         assert False
