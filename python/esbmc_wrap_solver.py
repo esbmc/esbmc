@@ -1,10 +1,12 @@
 #!/usr/bin/python
+import sys
 import esbmc
 from z3_solver import Z3python
 
-# Cruft for running below
+# Cruft for running below. Pass command line options through to esbmc.
+# Hopefully this means we effectively wrap esbmc.
 
-ns, opts, po = esbmc.init_esbmc_process(['../regression/python/test_data/00_big_endian_01/main.c', '--big-endian', '--bv'])
+ns, opts, po = esbmc.init_esbmc_process(sys.argv[1:])
 eq = esbmc.symex.equation(ns)
 art = esbmc.symex.reachability_tree(po.goto_functions, ns, opts, eq, po.context, po.message_handler)
 
