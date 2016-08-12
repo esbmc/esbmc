@@ -2707,9 +2707,12 @@ std::string concat2t::field_names [esbmct::num_type_fields]  =
 
 // Explicit template instanciations
 
+// Inexplicably, we get linking errors if the irep_methods2 explicit
+// instantiation isn't present below. Which seems crazy.
 #undef irep_typedefs
 #define irep_typedefs(basename, superclass) \
-  template class esbmct::type_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc>;
+  template class esbmct::type_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc>;\
+  template class esbmct::irep_methods2<basename##_type2t, superclass, superclass::traits, basename##_type2tc>;
 
 irep_typedefs(bool, type2t)
 irep_typedefs(empty, type2t)
