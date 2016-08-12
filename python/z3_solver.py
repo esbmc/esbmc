@@ -98,6 +98,7 @@ class Z3ast(esbmc.solve.smt_ast):
         inp_array = (z3.Ast * 1)()
         inp_array[0] = self.ast.ast
         projected_ast = z3.Z3_mk_app(conv.ctx.ctx, proj_decl.ast, 1, inp_array)
+        projected_ast = z3.ExprRef(projected_ast, conv.ctx)
 
         result = Z3ast(projected_ast, self.conv, self.z3sort.sub_sorts[elem])
         # Also manually stash this ast
