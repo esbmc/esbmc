@@ -189,10 +189,12 @@ class Z3python(esbmc.solve.smt_convt):
 
         # Reference management: output operands start with zero references IIRC,
         # We want to keep a handle on the returned sort_ref, and the FuncDecl
-        # typed ast, for creation of new tuples. The projection decls can
-        # merrily evaporate.
+        # typed ast, for creation of new tuples. The projection decls need to
+        # be kept so that we can extract fields from the tuple.
         finsort = Z3sort(z3.BoolSortRef(sort_ref, self.ctx), esbmc.solve.smt_sort_kind.struct)
+        proj_decls = [z3.FuncDeclRef(x) for x in proj_decl]
         finsort.decl_ref = z3.FuncDeclRef(ret_decl[0])
+        finsort.proj_decls = proj_decls
         return finsort
 
     @stash_ast
