@@ -62,7 +62,15 @@ class Z3ast(esbmc.solve.smt_ast):
         return result
 
     def select(self, conv, idx):
-        assert False
+        if self.sort.id == esbmc.solve.smt_sort_kind.array:
+            idx = conv.convert_ast(idx)
+            ast = z3.Select(self.ast, idx.ast)
+            result = Z3ast(res, self.conv, self.sort)
+        else:
+            assert False
+        # Also manually stash this ast
+        self.conv.ast_list.append(result)
+        return result
 
     def project(self, conv, elem):
         assert False
