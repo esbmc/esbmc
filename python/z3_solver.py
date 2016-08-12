@@ -363,7 +363,7 @@ art.setup_for_new_explore()
 result = art.get_next_formula()
 lolsolve = Z3python(ns)
 result.target.convert(lolsolve)
-issat = btor.dec_solve()
+issat = lolsolve.dec_solve()
 
 # This test case should have a counterexample
 assert (issat == esbmc.solve.smt_result.sat)
