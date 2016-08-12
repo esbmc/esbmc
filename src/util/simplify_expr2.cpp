@@ -511,6 +511,26 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
+template <typename constant,
+          typename constant_value_type,
+          typename div_type>
+static expr2tc
+negate(const expr2tc &number,
+       const div_type &type,
+       std::function<bool(const expr2tc&)> is_constant,
+       std::function<constant_value_type(const expr2tc&)> get_value)
+{
+  // Negate if it's a constant
+  if (is_constant(number))
+  {
+    auto c = get_value(number);
+    c.negate();
+    return expr2tc(new constant(type, c));
+  }
+
+  return expr2tc();
+}
+
 expr2tc
 neg2t::do_simplify(bool second __attribute__((unused))) const
 {
@@ -518,50 +538,45 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
   if(!is_number_type(type))
     return expr2tc();
 
-  if(type != value.get()->type)
-    return expr2tc();
-
   // Try to recursively simplify nested operations, if any
-  expr2tc to_simplify = expr2tc(value->clone());
-  if(is_arith_type(to_simplify))
-  {
-    expr2tc res = to_simplify->do_simplify();
-
-    // If we can't simplify the nested operation, don't try any further
-    if (is_nil_expr(res))
-      return expr2tc();
-
-    to_simplify = expr2tc(res->clone());
-  }
+  expr2tc to_simplify = value->do_simplify();
+  if (is_nil_expr(to_simplify))
+    to_simplify = expr2tc(value->clone());
 
   if(is_constant_expr(to_simplify))
   {
     if(is_bv_type(to_simplify))
     {
-      const constant_int2t &theint = to_constant_int2t(to_simplify);
+      std::function<bool(const expr2tc&)> is_constant =
+        (bool(*)(const expr2tc&)) &is_constant_int2t;
 
-      constant_int2tc new_int = expr2tc(theint.clone());
-      new_int.get()->constant_value.negate();
+      std::function<BigInt(const expr2tc&)> get_value =
+        [](const expr2tc& c) -> BigInt { return to_constant_int2t(c).constant_value; };
 
-      return expr2tc(new_int);
+      return negate<constant_int2t, BigInt, decltype(type)>(
+        to_simplify, type, is_constant, get_value);
     }
-    else if(is_constant_fixedbv2t(to_simplify))
+    else if(is_fixedbv_type(type))
     {
-      const constant_fixedbv2t &fbv = to_constant_fixedbv2t(to_simplify);
+      std::function<bool(const expr2tc&)> is_constant =
+        (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
 
-      constant_fixedbv2tc new_fbv = expr2tc(fbv.clone());
-      new_fbv.get()->value.negate();
+      std::function<fixedbvt(const expr2tc&)> get_value =
+        [](const expr2tc& c) -> fixedbvt { return to_constant_fixedbv2t(c).value; };
 
-      return expr2tc(new_fbv);
+      return negate<constant_fixedbv2t, fixedbvt, decltype(type)>(
+        to_simplify, type, is_constant, get_value);
     }
-    else if(is_constant_floatbv2t(to_simplify))
+    else if(is_floatbv_type(type))
     {
-      const constant_floatbv2t &fbv = to_constant_floatbv2t(to_simplify);
+      std::function<bool(const expr2tc&)> is_constant =
+        (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
 
-      constant_floatbv2tc new_fbv = expr2tc(fbv.clone());
-      new_fbv.get()->value.negate();
+      std::function<ieee_floatt(const expr2tc&)> get_value =
+        [](const expr2tc& c) -> ieee_floatt { return to_constant_floatbv2t(c).value; };
 
-      return expr2tc(new_fbv);
+      return negate<constant_floatbv2t, ieee_floatt, decltype(type)>(
+        to_simplify, type, is_constant, get_value);
     }
   }
 
