@@ -416,11 +416,15 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
 
   if (!is_constant_expr(to_simplify_side_1)
       || !is_constant_expr(to_simplify_side_2))
-    return expr2tc();
+  {
+    // Were we able to simplify the sides?
+    if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
+      return typecast_check_return(
+        type,
+        expr2tc(new modulus2t(type, to_simplify_side_1, to_simplify_side_2)));
 
-  if (!is_constant_expr(to_simplify_side_1)
-      || !is_constant_expr(to_simplify_side_2))
     return expr2tc();
+  }
 
   if(is_bv_type(type))
   {
@@ -472,6 +476,17 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
   expr2tc to_simplify = value->do_simplify();
   if (is_nil_expr(to_simplify))
     to_simplify = expr2tc(value->clone());
+
+  if (!is_constant_expr(to_simplify))
+  {
+    // Were we able to simplify it?
+    if(value != to_simplify)
+      return typecast_check_return(
+        type,
+        expr2tc(new abs2t(type, to_simplify)));
+
+    return expr2tc();
+  }
 
   if(is_constant_expr(to_simplify))
   {
@@ -544,6 +559,17 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
   expr2tc to_simplify = value->do_simplify();
   if (is_nil_expr(to_simplify))
     to_simplify = expr2tc(value->clone());
+
+  if (!is_constant_expr(to_simplify))
+  {
+    // Were we able to simplify it?
+    if(value != to_simplify)
+      return typecast_check_return(
+        type,
+        expr2tc(new neg2t(type, to_simplify)));
+
+    return expr2tc();
+  }
 
   if(is_constant_expr(to_simplify))
   {
