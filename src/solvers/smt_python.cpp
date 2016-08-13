@@ -117,7 +117,7 @@ public:
   {
     using namespace boost::python;
     if (override f = get_override_checked(this, "ite"))
-      return f(ctx, ast_down(cond), ast_down(falseop));
+      return f(conv_down(ctx), ast_down(cond), ast_down(falseop));
     else
       return smt_ast::ite(ctx, cond, falseop);
   }
