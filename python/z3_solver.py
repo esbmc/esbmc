@@ -313,13 +313,18 @@ class Z3python(esbmc.solve.smt_convt):
         # trivial to implement in Z3.
         arr_sort = self.convert_sort(arr_type)
         if const_array:
-            return z3.K(arr_sort.dom_sort, fields[0].ast)
+            ast = z3.K(arr_sort.dom_sort, fields[0].ast)
+            arr_ast = Z3ast(arr, self, arr_sort)
         else:
             # Generate a fresh array
             arr_name = "fresh_tuple_array_create_{}".format(self.fresh_arr_idx)
             self.fresh_arr_idx += 1
             arr = z3.Const(arr_name, arr_sort.sort)
             arr_ast = Z3ast(arr, self, arr_sort)
+
+            # Save initial ast... it's not referred to anywhere, and passing
+            # it into update method won't keep it alive.
+            self.store_ast(arr_ast)
 
             # Store at increasing indexes, the values from fields. Alas, there
             # isn't a python utility for easy constant int creation like C++.
@@ -329,7 +334,7 @@ class Z3python(esbmc.solve.smt_convt):
                 intexpr = esbmc.expr.constant_int.make(dom_type, intval)
                 arr_ast = arr_ast.update(self, fields[x], x, intexpr)
 
-            return arr_ast
+        return arr_ast
 
     def mk_smt_int(self, theint, sign):
         assert False
