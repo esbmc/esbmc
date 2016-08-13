@@ -510,7 +510,6 @@ struct Negator
     std::function<constant_type&(expr2tc&)> to_constant)
   {
     auto c = expr2tc(number->clone());
-    decltype(to_constant(c).value) zero;
     to_constant(c).value.negate();
     return expr2tc(c);
   }
