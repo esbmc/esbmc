@@ -8,6 +8,10 @@
 # XXX -- it would appear that smt_sort's aren't auto-downcasted to the correct
 # wrapped sort kind, _even_ if it's passed through downcast_sort?
 
+# Misery bandits: a dangling pointer exfiltration path is being set in a field
+# of a C++ object, then going out of scope and being destroyed. Passing a sort
+# into a Z3ast constructor is not sufficient!
+
 import esbmc
 import z3
 
@@ -376,6 +380,7 @@ class Z3python(esbmc.solve.smt_convt):
 
         result_sort_ast = ast.sort()
         z3_result_sort = Z3sort(result_sort_ast, esbmc.solve.smt_sort_kind.array, val.sort.data_width, domain_width)
+        self.store_sort(z3_result_sort)
 
         return Z3ast(ast, self, z3_result_sort)
 
