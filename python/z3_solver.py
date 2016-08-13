@@ -31,7 +31,11 @@ class Z3ast(esbmc.solve.smt_ast):
         self.conv = convobj
 
     def ite(self, conv, cond, falseop):
-        assert False
+        ast = z3.If(cond.ast, self.ast, falseop.ast, conv.ctx),
+        new_ast = Z3ast(ast, conv, self.sort)
+        # Also manually stash this ast
+        self.conv.ast_list.append(new_ast)
+        return new_ast
 
     def eq(self, conv, other):
         new_ast_ref = self.ast == other.ast
