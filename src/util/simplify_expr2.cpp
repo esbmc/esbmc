@@ -555,63 +555,62 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
 
   // Try to recursively simplify nested operation, if any
   expr2tc to_simplify = try_simplification(value);
-
   if (!is_constant_expr(to_simplify))
   {
     // Were we able to simplify anything?
     if(value != to_simplify)
     {
-      expr2tc new_neg =
-        expr2tc(new neg2t(type, to_simplify));
-
+      expr2tc new_neg = expr2tc(new neg2t(type, to_simplify));
       return typecast_check_return(type, new_neg);
     }
 
     return expr2tc();
   }
 
+  std::function<bool(const expr2tc&)> is_constant;
+  expr2tc simpl_res;
+
   if(is_bv_type(type))
   {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_int2t;
+    is_constant = (bool(*)(const expr2tc&)) &is_constant_int2t;
 
-    std::function<BigInt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> BigInt&
-        { return to_constant_int2t(c).value; };
+    std::function<decltype(std::declval<constant_int2t>().value)& (expr2tc&)>
+      get_value =
+        [](expr2tc& c) -> decltype(std::declval<constant_int2t>().value)&
+          { return to_constant_int2t(c).value; };
 
-    expr2tc simpl_res =
-      simplify_negate<BigInt>(to_simplify, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
+    simpl_res =
+      simplify_negate<decltype(std::declval<constant_int2t>().value)>
+        (to_simplify, is_constant, get_value);
   }
   else if(is_fixedbv_type(type))
   {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
+    is_constant = (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
 
-    std::function<fixedbvt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> fixedbvt& { return to_constant_fixedbv2t(c).value; };
+    std::function<decltype(std::declval<constant_fixedbv2t>().value)& (expr2tc&)>
+      get_value =
+        [](expr2tc& c) -> decltype(std::declval<constant_fixedbv2t>().value)&
+          { return to_constant_fixedbv2t(c).value; };
 
-    expr2tc simpl_res =
-      simplify_negate<fixedbvt>(to_simplify, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
+    simpl_res =
+      simplify_negate<decltype(std::declval<constant_fixedbv2t>().value)>
+        (to_simplify, is_constant, get_value);
   }
   else if(is_floatbv_type(type))
   {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+    is_constant = (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
 
-    std::function<ieee_floatt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> ieee_floatt& { return to_constant_floatbv2t(c).value; };
+    std::function<decltype(std::declval<constant_floatbv2t>().value)& (expr2tc&)>
+      get_value =
+        [](expr2tc& c) -> decltype(std::declval<constant_floatbv2t>().value)&
+          { return to_constant_floatbv2t(c).value; };
 
-    expr2tc simpl_res =
-      simplify_negate<ieee_floatt>(to_simplify, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
+    simpl_res =
+      simplify_negate<decltype(std::declval<constant_floatbv2t>().value)>
+        (to_simplify, is_constant, get_value);
   }
 
-  return expr2tc();
+  return typecast_check_return(type, simpl_res);
 }
 
 expr2tc
