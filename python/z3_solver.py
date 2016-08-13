@@ -380,8 +380,8 @@ class Z3python(esbmc.solve.smt_convt):
         # trivial to implement in Z3.
         arr_sort = self.convert_sort(arr_type)
         if const_array:
-            ast = z3.K(arr_sort.dom_sort, fields[0].ast)
-            arr_ast = Z3ast(arr, self, arr_sort)
+            ast = z3.K(arr_sort.dom_sort.sort, fields[0].ast)
+            arr_ast = Z3ast(ast, self, arr_sort)
         else:
             # Generate a fresh array
             arr_name = "fresh_tuple_array_create_{}".format(self.fresh_arr_idx)
