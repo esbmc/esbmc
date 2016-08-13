@@ -286,51 +286,13 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-template <typename constant_value_type>
+template<template<typename> class TFunctor, typename constructor>
 static expr2tc
-simplify_division(
-  expr2tc &numerator,
-  expr2tc &denominator,
-  std::function<bool(const expr2tc&)> is_constant,
-  std::function<constant_value_type&(expr2tc&)> get_value)
+simplify_arith_2ops(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
 {
-  if(is_constant(numerator))
-  {
-    // Numerator is zero? Simplify to zero
-    if(get_value(numerator).is_zero())
-    {
-      auto c = expr2tc(numerator->clone());
-      get_value(c) = constant_value_type();
-      return expr2tc(c);
-    }
-  }
-
-  if(is_constant(denominator))
-  {
-    // Denominator is zero? Don't simplify
-    if(get_value(denominator).is_zero())
-      return expr2tc();
-
-    // Denominator is one? Simplify to numerator's constant
-    if(get_value(denominator) == 1)
-      return expr2tc(numerator->clone());
-  }
-
-  // Two constants? Simplify to result of the division
-  if (is_constant(numerator) && is_constant(denominator))
-  {
-    auto c = expr2tc(numerator->clone());
-    get_value(c) /= get_value(denominator);
-    return expr2tc(c);
-  }
-
-  return expr2tc();
-}
-
-expr2tc
-div2t::do_simplify(bool second __attribute__((unused))) const
-{
-
   if(!is_number_type(type))
     return expr2tc();
 
@@ -345,13 +307,15 @@ div2t::do_simplify(bool second __attribute__((unused))) const
     if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
     {
       expr2tc new_div =
-        expr2tc(new div2t(type, to_simplify_side_1, to_simplify_side_2));
+        expr2tc(new constructor(type, to_simplify_side_1, to_simplify_side_2));
 
       return typecast_check_return(type, new_div);
     }
 
     return expr2tc();
   }
+
+  expr2tc simpl_res = expr2tc();
 
   if(is_bv_type(type))
   {
@@ -362,10 +326,9 @@ div2t::do_simplify(bool second __attribute__((unused))) const
       [](expr2tc& c) -> BigInt&
         { return to_constant_int2t(c).value; };
 
-    expr2tc simpl_res = simplify_division<BigInt>(
-      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
+    simpl_res =
+      TFunctor<BigInt>::simplify(
+        to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
   }
   else if(is_fixedbv_type(type))
   {
@@ -373,12 +336,12 @@ div2t::do_simplify(bool second __attribute__((unused))) const
       (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
 
     std::function<fixedbvt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> fixedbvt& { return to_constant_fixedbv2t(c).value; };
+      [](expr2tc& c) -> fixedbvt&
+        { return to_constant_fixedbv2t(c).value; };
 
-    expr2tc simpl_res = simplify_division<fixedbvt>(
-      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
+    simpl_res =
+      TFunctor<fixedbvt>::simplify(
+        to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
   }
   else if(is_floatbv_type(type))
   {
@@ -386,15 +349,64 @@ div2t::do_simplify(bool second __attribute__((unused))) const
       (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
 
     std::function<ieee_floatt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> ieee_floatt& { return to_constant_floatbv2t(c).value; };
+      [](expr2tc& c) -> ieee_floatt&
+        { return to_constant_floatbv2t(c).value; };
 
-    expr2tc simpl_res = simplify_division<ieee_floatt>(
-      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
+    simpl_res =
+      TFunctor<ieee_floatt>::simplify(
+        to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
   }
 
-  return expr2tc();
+  return typecast_check_return(type, simpl_res);
+}
+
+template<class constant_type>
+struct Divtor
+{
+  static expr2tc simplify(
+    expr2tc &numerator,
+    expr2tc &denominator,
+    std::function<bool(const expr2tc&)> is_constant,
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    if(is_constant(numerator))
+    {
+      // Numerator is zero? Simplify to zero
+      if(get_value(numerator).is_zero())
+      {
+        auto c = expr2tc(numerator->clone());
+        get_value(c) = constant_type();
+        return expr2tc(c);
+      }
+    }
+
+    if(is_constant(denominator))
+    {
+      // Denominator is zero? Don't simplify
+      if(get_value(denominator).is_zero())
+        return expr2tc();
+
+      // Denominator is one? Simplify to numerator's constant
+      if(get_value(denominator) == 1)
+        return expr2tc(numerator->clone());
+    }
+
+    // Two constants? Simplify to result of the division
+    if (is_constant(numerator) && is_constant(denominator))
+    {
+      auto c = expr2tc(numerator->clone());
+      get_value(c) /= get_value(denominator);
+      return expr2tc(c);
+    }
+
+    return expr2tc();
+  }
+};
+
+expr2tc
+div2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return simplify_arith_2ops<Divtor, div2t>(type, side_1, side_2);
 }
 
 expr2tc
