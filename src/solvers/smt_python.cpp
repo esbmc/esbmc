@@ -95,8 +95,11 @@ class smt_ast_wrapper : public smt_ast, public boost::python::wrapper<smt_ast>
 {
 public:
   friend class get_override_checked_class;
-  template <typename ...Args>
-  smt_ast_wrapper(Args ...args) : smt_ast(args...) { }
+  smt_ast_wrapper(smt_convt *ctx, smt_sortt s)
+    : smt_ast(ctx, s)
+  {
+    assert(dynamic_cast<const smt_sort_wrapper *>(s) != NULL);
+  }
 
   static
   inline boost::python::object
