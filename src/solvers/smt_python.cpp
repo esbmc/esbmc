@@ -452,7 +452,7 @@ public:
   tuple_array_create_remangled(const type2tc &array_type,
       boost::python::object l, bool const_array, smt_sortt domain)
   {
-    return get_override_checked(this, "tuple_array_create")(array_type, l, const_array, domain);
+    return get_override_checked(this, "tuple_array_create")(array_type, l, const_array, sort_down(domain));
   }
 
   smt_astt
