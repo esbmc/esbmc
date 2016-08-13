@@ -12,6 +12,10 @@
 # of a C++ object, then going out of scope and being destroyed. Passing a sort
 # into a Z3ast constructor is not sufficient!
 
+# Additional errata: printing a tuple z3.Ast explodes on account of the python
+# api not being designed for it. This doesn't seem to be due to any fault in
+# the code below.
+
 import esbmc
 import z3
 
@@ -41,8 +45,12 @@ class Z3ast(esbmc.solve.smt_ast):
         return new_ast
 
     def eq(self, conv, other):
-        new_ast_ref = self.ast == other.ast
-        new_ast = Z3ast(new_ast_ref, self.conv, self.conv.bool_sort)
+        # Problems: Z3 catches fire if we apply __eq__ to something of tuple
+        # sort, because apparently we contain DatatypeRef's, not ExprRef's.
+        # Therefore, we have to use our own eq facility.
+        eq = z3.Z3_mk_eq(conv.ctx.ctx, self.ast.ast, other.ast.ast)
+        ref = z3.BoolRef(eq, conv.ctx)
+        new_ast = Z3ast(ref, self.conv, self.conv.bool_sort)
         self.conv.store_ast(new_ast)
         return new_ast
 
