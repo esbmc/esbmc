@@ -33,15 +33,13 @@ class Z3ast(esbmc.solve.smt_ast):
     def ite(self, conv, cond, falseop):
         ast = z3.If(cond.ast, self.ast, falseop.ast, conv.ctx),
         new_ast = Z3ast(ast, conv, self.sort)
-        # Also manually stash this ast
-        self.conv.ast_list.append(new_ast)
+        self.conv.store_ast(new_ast)
         return new_ast
 
     def eq(self, conv, other):
         new_ast_ref = self.ast == other.ast
         new_ast = Z3ast(new_ast_ref, self.conv, self.conv.bool_sort)
-        # Also manually stash this ast
-        self.conv.ast_list.append(new_ast)
+        self.conv.store_ast(new_ast)
         return new_ast
 
     def update(self, conv, value, idx, idx_expr):
@@ -78,8 +76,7 @@ class Z3ast(esbmc.solve.smt_ast):
 
             result = conv._tuple_create(projected, self.sort)
 
-        # Also manually stash this ast
-        self.conv.ast_list.append(result)
+        self.conv.store_ast(result)
         return result
 
     def select(self, conv, idx):
@@ -89,8 +86,7 @@ class Z3ast(esbmc.solve.smt_ast):
             result = Z3ast(ast, self.conv, self.sort.range_sort)
         else:
             assert False # XXX is only arrays anyway?
-        # Also manually stash this ast
-        self.conv.ast_list.append(result)
+        self.conv.store_ast(result)
         return result
 
     def project(self, conv, elem):
@@ -105,7 +101,7 @@ class Z3ast(esbmc.solve.smt_ast):
 
         result = Z3ast(projected_ast, self.conv, self.sort.sub_sorts[elem])
         # Also manually stash this ast
-        self.conv.ast_list.append(result)
+        self.conv.store_ast(result)
         return result
 
 class Z3python(esbmc.solve.smt_convt):
