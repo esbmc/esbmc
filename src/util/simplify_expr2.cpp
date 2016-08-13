@@ -437,119 +437,12 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
-template <typename constant_value_type>
+template<template<typename> class TFunctor, typename constructor>
 static expr2tc
-simplify_abs(
-  expr2tc &number,
-  std::function<bool(const expr2tc&)> is_constant,
-  std::function<constant_value_type&(expr2tc&)> get_value)
+simplify_arith_1op(
+  const type2tc &type,
+  const expr2tc &value)
 {
-  // Negate if it's a constant
-  if (is_constant(number))
-  {
-    auto c = expr2tc(number->clone());
-
-    // TODO: How about floatbvs and -0?
-    if(get_value(c) > constant_value_type())
-      return expr2tc();
-
-    get_value(c).negate();
-    return expr2tc(c);
-  }
-
-  return expr2tc();
-}
-
-expr2tc
-abs2t::do_simplify(bool second __attribute__((unused))) const
-{
-
-  if(!is_number_type(type))
-    return expr2tc();
-
-  // Try to recursively simplify nested operation, if any
-  expr2tc to_simplify = try_simplification(value);
-
-  if (!is_constant_expr(to_simplify))
-  {
-    // Were we able to simplify anything?
-    if(value != to_simplify)
-    {
-      expr2tc new_abs =
-        expr2tc(new abs2t(type, to_simplify));
-
-      return typecast_check_return(type, new_abs);
-    }
-
-    return expr2tc();
-  }
-
-  if(is_bv_type(type))
-  {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_int2t;
-
-    std::function<BigInt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> BigInt&
-        { return to_constant_int2t(c).value; };
-
-    expr2tc simpl_res =
-      simplify_abs<BigInt>(to_simplify, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
-  }
-  else if(is_fixedbv_type(type))
-  {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
-
-    std::function<fixedbvt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> fixedbvt& { return to_constant_fixedbv2t(c).value; };
-
-    expr2tc simpl_res =
-      simplify_abs<fixedbvt>(to_simplify, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
-  }
-  else if(is_floatbv_type(type))
-  {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
-
-    std::function<ieee_floatt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> ieee_floatt& { return to_constant_floatbv2t(c).value; };
-
-    expr2tc simpl_res =
-      simplify_abs<ieee_floatt>(to_simplify, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
-  }
-
-  return expr2tc();
-}
-
-template <typename constant_value_type>
-static expr2tc
-simplify_negate(
-  expr2tc &number,
-  std::function<bool(const expr2tc&)> is_constant,
-  std::function<constant_value_type&(expr2tc&)> get_value)
-{
-  // Negate if it's a constant
-  if (is_constant(number))
-  {
-    auto c = expr2tc(number->clone());
-    get_value(c).negate();
-    return expr2tc(c);
-  }
-
-  return expr2tc();
-}
-
-expr2tc
-neg2t::do_simplify(bool second __attribute__((unused))) const
-{
-
   if(!is_number_type(type))
     return expr2tc();
 
@@ -560,57 +453,87 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
     // Were we able to simplify anything?
     if(value != to_simplify)
     {
-      expr2tc new_neg = expr2tc(new neg2t(type, to_simplify));
+      expr2tc new_neg = expr2tc(new constructor(type, to_simplify));
       return typecast_check_return(type, new_neg);
     }
 
     return expr2tc();
   }
 
-  std::function<bool(const expr2tc&)> is_constant;
-  expr2tc simpl_res;
+  expr2tc simpl_res = expr2tc();
 
   if(is_bv_type(type))
   {
-    is_constant = (bool(*)(const expr2tc&)) &is_constant_int2t;
-
-    std::function<decltype(std::declval<constant_int2t>().value)& (expr2tc&)>
-      get_value =
-        [](expr2tc& c) -> decltype(std::declval<constant_int2t>().value)&
-          { return to_constant_int2t(c).value; };
+    std::function<constant_int2t& (expr2tc&)> to_constant =
+      (constant_int2t&(*)(expr2tc&)) to_constant_int2t;
 
     simpl_res =
-      simplify_negate<decltype(std::declval<constant_int2t>().value)>
-        (to_simplify, is_constant, get_value);
+      TFunctor<constant_int2t>::simplify(to_simplify, to_constant);
   }
   else if(is_fixedbv_type(type))
   {
-    is_constant = (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
-
-    std::function<decltype(std::declval<constant_fixedbv2t>().value)& (expr2tc&)>
-      get_value =
-        [](expr2tc& c) -> decltype(std::declval<constant_fixedbv2t>().value)&
-          { return to_constant_fixedbv2t(c).value; };
+    std::function<constant_fixedbv2t& (expr2tc&)> to_constant =
+      (constant_fixedbv2t&(*)(expr2tc&)) to_constant_fixedbv2t;
 
     simpl_res =
-      simplify_negate<decltype(std::declval<constant_fixedbv2t>().value)>
-        (to_simplify, is_constant, get_value);
+      TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
   }
   else if(is_floatbv_type(type))
   {
-    is_constant = (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
-
-    std::function<decltype(std::declval<constant_floatbv2t>().value)& (expr2tc&)>
-      get_value =
-        [](expr2tc& c) -> decltype(std::declval<constant_floatbv2t>().value)&
-          { return to_constant_floatbv2t(c).value; };
+    std::function<constant_floatbv2t& (expr2tc&)> to_constant =
+      (constant_floatbv2t&(*)(expr2tc&)) to_constant_floatbv2t;
 
     simpl_res =
-      simplify_negate<decltype(std::declval<constant_floatbv2t>().value)>
-        (to_simplify, is_constant, get_value);
+      TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
   }
 
   return typecast_check_return(type, simpl_res);
+}
+
+template<class constant_type>
+struct Negator
+{
+  static expr2tc simplify(
+    const expr2tc &number,
+    std::function<constant_type&(expr2tc&)> to_constant)
+  {
+    auto c = expr2tc(number->clone());
+    decltype(to_constant(c).value) zero;
+    to_constant(c).value.negate();
+    return expr2tc(c);
+  }
+};
+
+expr2tc
+neg2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return simplify_arith_1op<Negator, neg2t>(type, value);
+}
+
+template<class constant_type>
+struct abstor
+{
+  static expr2tc simplify(
+    const expr2tc &number,
+    std::function<constant_type&(expr2tc&)> to_constant)
+  {
+    auto c = expr2tc(number->clone());
+
+    // When we call BigInt/fixedbv/floatbv constructor
+    // with no argument, it generates the zero equivalent
+    decltype(to_constant(c).value) zero;
+    if(to_constant(c).value > zero)
+      return expr2tc();
+
+    to_constant(c).value.negate();
+    return expr2tc(c);
+  }
+};
+
+expr2tc
+abs2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return simplify_arith_1op<abstor, abs2t>(type, value);
 }
 
 expr2tc
