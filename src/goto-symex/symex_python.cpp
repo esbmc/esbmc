@@ -14,6 +14,7 @@
 #include "execution_state.h"
 #include "goto_symex.h"
 #include "slice.h"
+#include "goto_trace.h"
 
 class dummy_renaming_class {};
 
@@ -700,6 +701,15 @@ build_equation_class()
     .def("get_insns", &get_insns)
     .def("append_insn", &append_insn)
     .def("pop_back", &pop_insn);
+
+  enum_<goto_trace_stept::typet>("symex_step_type")
+    .value("ASSIGN", goto_trace_stept::ASSIGNMENT)
+    .value("ASSUME", goto_trace_stept::ASSUME)
+    .value("ASSERT", goto_trace_stept::ASSERT)
+    .value("OUTPUT", goto_trace_stept::OUTPUT)
+    .value("SKIP", goto_trace_stept::SKIP)
+    .value("RENUMBER", goto_trace_stept::RENUMBER);
+
   return;
 
   // Some global functions
