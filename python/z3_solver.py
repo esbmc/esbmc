@@ -316,7 +316,8 @@ class Z3python(esbmc.solve.smt_convt):
             # isn't a python utility for easy constant int creation like C++.
             for x in range(len(fields)):
                 intval = esbmc.BigInt(x)
-                intexpr = esbmc.expr.constant_int(arr_sort.dom_sort, intval)
+                dom_type = esbmc.type.unsignedbv.make(arr_sort.dom_sort.data_width)
+                intexpr = esbmc.expr.constant_int.make(dom_type, intval)
                 arr_ast = arr_ast.update(self, fields[x], x, intexpr)
 
             return arr_ast
