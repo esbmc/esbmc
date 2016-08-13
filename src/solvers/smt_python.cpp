@@ -544,6 +544,18 @@ public:
   }
 };
 
+class
+const_smt_ast_to_python
+{
+public:
+  static PyObject *convert(smt_astt a)
+  {
+    using namespace boost::python;
+    smt_ast *aa = const_cast<smt_ast *>(a);
+    return incref(object(aa).ptr());
+  }
+};
+
 boost::python::object
 downcast_sort(smt_sort *s)
 {
@@ -772,5 +784,6 @@ build_smt_conv_python_class(void)
   // but irritating. Therefore we need to write/use a converter for converting
   // const smt_sort*'s to smt_sort* objects.
   to_python_converter<smt_sortt, const_smt_sort_to_python>();
+  to_python_converter<smt_astt, const_smt_ast_to_python>();
 }
 #endif
