@@ -47,245 +47,6 @@ try_simplification(const expr2tc& expr)
   return expr2tc(to_simplify->clone());
 }
 
-template <typename constant_value_type>
-static expr2tc
-simplify_addition(
-  expr2tc &op1,
-  expr2tc &op2,
-  std::function<bool(const expr2tc&)> is_constant,
-  std::function<constant_value_type&(expr2tc&)> get_value)
-{
-  if(is_constant(op1))
-  {
-    // Found a zero? Simplify to op2
-    if(get_value(op1).is_zero())
-      return expr2tc(op2->clone());
-  }
-
-  if(is_constant(op2))
-  {
-    // Found a zero? Simplify to op1
-    if(get_value(op2).is_zero())
-      return expr2tc(op1->clone());
-  }
-
-  // Two constants? Simplify to result of the multiplication
-  if (is_constant(op1) && is_constant(op2))
-  {
-    auto c = expr2tc(op1->clone());
-    get_value(c) += get_value(op2);
-    return expr2tc(c);
-  }
-
-  return expr2tc();
-}
-
-expr2tc
-add2t::do_simplify(bool __attribute__((unused))) const
-{
-
-  // We must also check for pointer arithmetic
-  if(!is_number_type(type) && !is_pointer_type(type))
-    return expr2tc();
-
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc to_simplify_side_1 = try_simplification(side_1);
-  expr2tc to_simplify_side_2 = try_simplification(side_2);
-
-  if (!is_constant_expr(to_simplify_side_1)
-      && !is_constant_expr(to_simplify_side_2))
-  {
-    // Were we able to simplify the sides?
-    if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
-    {
-      expr2tc new_add =
-        expr2tc(new add2t(type, to_simplify_side_1, to_simplify_side_2));
-
-      return typecast_check_return(type, new_add);
-    }
-
-    return expr2tc();
-  }
-
-  // Pointer arithmetic is done only with integers
-  if(is_bv_type(type) || is_pointer_type(type))
-  {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_int2t;
-
-    std::function<BigInt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> BigInt&
-        { return to_constant_int2t(c).value; };
-
-    expr2tc simpl_res = simplify_addition<BigInt>(
-      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
-  }
-  else if(is_fixedbv_type(type))
-  {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
-
-    std::function<fixedbvt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> fixedbvt& { return to_constant_fixedbv2t(c).value; };
-
-    expr2tc simpl_res = simplify_addition<fixedbvt>(
-      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
-  }
-  else if(is_floatbv_type(type))
-  {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
-
-    std::function<ieee_floatt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> ieee_floatt& { return to_constant_floatbv2t(c).value; };
-
-    expr2tc simpl_res = simplify_addition<ieee_floatt>(
-      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
-  }
-
-  return expr2tc();
-}
-
-expr2tc
-sub2t::do_simplify(bool second __attribute__((unused))) const
-{
-
-  // We must also check for pointer arithmetic
-  if(!is_number_type(type) && !is_pointer_type(type))
-    return expr2tc();
-
-  // rewrite "a-b" to "a+(-b)" and call simplify add
-  expr2tc neg = expr2tc(new neg2t(type, side_2->clone()));
-  expr2tc new_add = expr2tc(new add2t(type, side_1->clone(), neg->clone()));
-
-  return expr2tc(new_add->do_simplify());
-}
-
-template <typename constant_value_type>
-static expr2tc
-simplify_multiplication(
-  expr2tc &op1,
-  expr2tc &op2,
-  std::function<bool(const expr2tc&)> is_constant,
-  std::function<constant_value_type&(expr2tc&)> get_value)
-{
-  if(is_constant(op1))
-  {
-    // Found a zero? Simplify to zero
-    if(get_value(op1).is_zero())
-    {
-      auto c = expr2tc(op1->clone());
-      get_value(c) = constant_value_type();
-      return expr2tc(c);
-    }
-
-    // Found an one? Simplify to op2
-    if(get_value(op1) == 1)
-      return expr2tc(op2->clone());
-  }
-
-  if(is_constant(op2))
-  {
-    // Found a zero? Simplify to zero
-    if(get_value(op2).is_zero())
-    {
-      auto c = expr2tc(op2->clone());
-      get_value(c) = constant_value_type();
-      return expr2tc(c);
-    }
-
-    // Found an one? Simplify to op1
-    if(get_value(op2) == 1)
-      return expr2tc(op1->clone());
-  }
-
-  // Two constants? Simplify to result of the multiplication
-  if (is_constant(op1) && is_constant(op2))
-  {
-    auto c = expr2tc(op1->clone());
-    get_value(c) *= get_value(op2);
-    return expr2tc(c);
-  }
-
-  return expr2tc();
-}
-
-expr2tc
-mul2t::do_simplify(bool second __attribute__((unused))) const
-{
-
-  if(!is_number_type(type))
-    return expr2tc();
-
-  // Try to recursively simplify nested operations both sides, if any
-  expr2tc to_simplify_side_1 = try_simplification(side_1);
-  expr2tc to_simplify_side_2 = try_simplification(side_2);
-
-  if (!is_constant_expr(to_simplify_side_1)
-      && !is_constant_expr(to_simplify_side_2))
-  {
-    // Were we able to simplify the sides?
-    if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
-    {
-      expr2tc new_mul =
-        expr2tc(new mul2t(type, to_simplify_side_1, to_simplify_side_2));
-
-      return typecast_check_return(type, new_mul);
-    }
-
-    return expr2tc();
-  }
-
-  if(is_bv_type(type))
-  {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_int2t;
-
-    std::function<BigInt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> BigInt&
-        { return to_constant_int2t(c).value; };
-
-    expr2tc simpl_res = simplify_multiplication<BigInt>(
-      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
-  }
-  else if(is_fixedbv_type(type))
-  {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
-
-    std::function<fixedbvt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> fixedbvt& { return to_constant_fixedbv2t(c).value; };
-
-    expr2tc simpl_res = simplify_multiplication<fixedbvt>(
-      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
-  }
-  else if(is_floatbv_type(type))
-  {
-    std::function<bool(const expr2tc&)> is_constant =
-      (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
-
-    std::function<ieee_floatt& (expr2tc&)> get_value =
-      [](expr2tc& c) -> ieee_floatt& { return to_constant_floatbv2t(c).value; };
-
-    expr2tc simpl_res = simplify_multiplication<ieee_floatt>(
-      to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
-
-    return typecast_check_return(type, simpl_res);
-  }
-
-  return expr2tc();
-}
-
 template<template<typename> class TFunctor, typename constructor>
 static expr2tc
 simplify_arith_2ops(
@@ -293,7 +54,7 @@ simplify_arith_2ops(
   const expr2tc &side_1,
   const expr2tc &side_2)
 {
-  if(!is_number_type(type))
+  if(!is_number_type(type) && !is_pointer_type(type))
     return expr2tc();
 
   // Try to recursively simplify nested operations both sides, if any
@@ -358,6 +119,114 @@ simplify_arith_2ops(
   }
 
   return typecast_check_return(type, simpl_res);
+}
+
+template<class constant_type>
+struct Addtor
+{
+  static expr2tc simplify(
+    expr2tc &op1,
+    expr2tc &op2,
+    std::function<bool(const expr2tc&)> is_constant,
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    if(is_constant(op1))
+    {
+      // Found a zero? Simplify to op2
+      if(get_value(op1).is_zero())
+        return expr2tc(op2->clone());
+    }
+
+    if(is_constant(op2))
+    {
+      // Found a zero? Simplify to op1
+      if(get_value(op2).is_zero())
+        return expr2tc(op1->clone());
+    }
+
+    // Two constants? Simplify to result of the multiplication
+    if (is_constant(op1) && is_constant(op2))
+    {
+      auto c = expr2tc(op1->clone());
+      get_value(c) += get_value(op2);
+      return expr2tc(c);
+    }
+
+    return expr2tc();
+  }
+};
+
+expr2tc
+add2t::do_simplify(bool __attribute__((unused))) const
+{
+  return simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
+}
+
+expr2tc
+sub2t::do_simplify(bool second __attribute__((unused))) const
+{
+  // rewrite "a-b" to "a+(-b)" and call simplify add
+  expr2tc neg = expr2tc(new neg2t(type, side_2->clone()));
+  expr2tc new_add = expr2tc(new add2t(type, side_1->clone(), neg->clone()));
+
+  return expr2tc(new_add->do_simplify());
+}
+
+template<class constant_type>
+struct Multor
+{
+  static expr2tc simplify(
+    expr2tc &op1,
+    expr2tc &op2,
+    std::function<bool(const expr2tc&)> is_constant,
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    if(is_constant(op1))
+    {
+      // Found a zero? Simplify to zero
+      if(get_value(op1).is_zero())
+      {
+        auto c = expr2tc(op1->clone());
+        get_value(c) = constant_type();
+        return expr2tc(c);
+      }
+
+      // Found an one? Simplify to op2
+      if(get_value(op1) == 1)
+        return expr2tc(op2->clone());
+    }
+
+    if(is_constant(op2))
+    {
+      // Found a zero? Simplify to zero
+      if(get_value(op2).is_zero())
+      {
+        auto c = expr2tc(op2->clone());
+        get_value(c) = constant_type();
+        return expr2tc(c);
+      }
+
+      // Found an one? Simplify to op1
+      if(get_value(op2) == 1)
+        return expr2tc(op1->clone());
+    }
+
+    // Two constants? Simplify to result of the multiplication
+    if (is_constant(op1) && is_constant(op2))
+    {
+      auto c = expr2tc(op1->clone());
+      get_value(c) *= get_value(op2);
+      return expr2tc(c);
+    }
+
+    return expr2tc();
+  }
+};
+
+expr2tc
+mul2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return simplify_arith_2ops<Multor, mul2t>(type, side_1, side_2);
 }
 
 template<class constant_type>
