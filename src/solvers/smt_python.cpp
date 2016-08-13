@@ -548,6 +548,19 @@ downcast_ast(smt_ast *a)
   return ast_down(a);
 }
 
+// After all your wickedness boost.python, woe, woe unto you. If b.p is told
+// simply that the sort field of smt_ast's is a smt_sort, then it won't perform
+// any kind of unwrapping step to find the subclass. That's not too bad, but
+// then if we _manually_ downcast it from python, some kind of caching
+// mechanism (which rightly assumes a PyObject has only one type) prevents us
+// from recognizing the subclass, and downcasting fails.
+// Fix this by creating an accessor that unwraps the PyObject.
+boost::python::object
+get_sort_from_ast(smt_ast *a)
+{
+  return sort_down(a->sort);
+}
+
 void
 build_smt_conv_python_class(void)
 {
@@ -644,7 +657,7 @@ build_smt_conv_python_class(void)
   // to keep a python reference to all smt_ast's that C++ might point at.
   typedef return_internal_reference<> rte;
   class_<smt_ast_wrapper>("smt_ast", init<smt_convt*, smt_sortt>())
-    .def_readwrite("sort", &smt_ast::sort)
+    .add_property("sort", make_function(&get_sort_from_ast))
     .def("ite", &smt_ast_wrapper::ite, &smt_ast_wrapper::default_ite, rte())
     .def("eq", &smt_ast_wrapper::eq, &smt_ast_wrapper::default_eq, rte())
     .def("assign", &smt_ast_wrapper::assign, &smt_ast_wrapper::default_assign)
