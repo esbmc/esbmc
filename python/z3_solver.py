@@ -126,35 +126,94 @@ class Z3python(esbmc.solve.smt_convt):
         self.solver = z3.Solver(solver=None, ctx=self.ctx)
         self.fresh_arr_idx = 0
 
+        # No 'int' support at this time
         self.func_map = {
-            esbmc.solve.smt_func_kind.ite :
-                lambda ctx, args, asts: z3.If(asts[0], asts[1], asts[2], ctx),
+          #SMT_FUNC_ADD
+            esbmc.solve.smt_func_kind.bvadd :
+                lambda ctx, args, asts: asts[0] + asts[1],
+          #SMT_FUNC_SUB
+            esbmc.solve.smt_func_kind.bvsub :
+                lambda ctx, args, asts: asts[0] - asts[1],
+          #SMT_FUNC_MUL,
+            esbmc.solve.smt_func_kind.bvmul :
+                lambda ctx, args, asts: asts[0] * asts[1],
+          #SMT_FUNC_DIV,
+            esbmc.solve.smt_func_kind.bvudiv :
+                lambda ctx, args, asts: z3.UDiv(asts[0], asts[1]),
+            esbmc.solve.smt_func_kind.bvsdiv :
+                lambda ctx, args, asts: asts[0] / asts[1],
+          #SMT_FUNC_MOD,
+            esbmc.solve.smt_func_kind.bvsmod :
+                lambda ctx, args, asts: asts[0] % asts[1],
+            esbmc.solve.smt_func_kind.bvumod :
+                lambda ctx, args, asts: z3.URem(asts[0], asts[1]),
+          #SMT_FUNC_SHL,
+            esbmc.solve.smt_func_kind.bvshl :
+                lambda ctx, args, asts: asts[0] << asts[1],
+            esbmc.solve.smt_func_kind.bvashr :
+                lambda ctx, args, asts: asts[0] >> asts[1],
+          #SMT_FUNC_NEG,
+            esbmc.solve.smt_func_kind.bvneg :
+                lambda ctx, args, asts: -asts[0],
+            esbmc.solve.smt_func_kind.bvlshr :
+                lambda ctx, args, asts: z3.LShR(asts[0], asts[1]),
+            esbmc.solve.smt_func_kind.bvnot :
+                lambda ctx, args, asts: ~asts[0],
+          #SMT_FUNC_BVNXOR, These aren't actually used anywhere
+          #SMT_FUNC_BVNOR,
+          #SMT_FUNC_BVNAND,
+            esbmc.solve.smt_func_kind.bvxor :
+                lambda ctx, args, asts: asts[0] ^ asts[1],
+            esbmc.solve.smt_func_kind.bvor :
+                lambda ctx, args, asts: asts[0] | asts[1],
+            esbmc.solve.smt_func_kind.bvand :
+                lambda ctx, args, asts: asts[0] & asts[1],
+            esbmc.solve.smt_func_kind.implies :
+                lambda ctx, args, asts: z3.Implies(asts[0], asts[1], ctx),
+            esbmc.solve.smt_func_kind.xor :
+                lambda ctx, args, asts: asts[0] ^ asts[1],
+            esbmc.solve.smt_func_kind._or : # or is a keyword in python
+                lambda ctx, args, asts: z3.Or(asts[0], asts[1]),
+            esbmc.solve.smt_func_kind._and :
+                lambda ctx, args, asts: z3.And(asts[0], asts[1]),
+            esbmc.solve.smt_func_kind._not :
+                lambda ctx, args, asts: z3.Not(asts[0]),
+          #SMT_FUNC_LT,
+            esbmc.solve.smt_func_kind.bvslt :
+                lambda ctx, args, asts: asts[0] < asts[1],
+            esbmc.solve.smt_func_kind.bvult :
+                lambda ctx, args, asts: z3.ULT(asts[0], asts[1]),
+          #SMT_FUNC_GT,
+            esbmc.solve.smt_func_kind.bvsgt :
+                lambda ctx, args, asts: asts[0] > asts[1],
+            esbmc.solve.smt_func_kind.bvugt :
+                lambda ctx, args, asts: z3.UGT(asts[0], asts[1]),
+          #SMT_FUNC_LTE,
+            # Z3 doesn't do lte's, so invert gt
+            esbmc.solve.smt_func_kind.bvslte :
+                lambda ctx, args, asts: z3.Not(asts[0] > asts[1]),
+            esbmc.solve.smt_func_kind.bvulte :
+                lambda ctx, args, asts: z3.Not(z3.UGT(asts[0], asts[1])),
+          #SMT_FUNC_GTE,
+            esbmc.solve.smt_func_kind.bvsgte :
+                lambda ctx, args, asts: z3.Not(asts[0] < asts[1]),
+            esbmc.solve.smt_func_kind.bvugte :
+                lambda ctx, args, asts: z3.Not(z3.ULT(asts[0], asts[1])),
             esbmc.solve.smt_func_kind.eq :
                 lambda ctx, args, asts: asts[0] == asts[1],
             esbmc.solve.smt_func_kind.noteq :
                 lambda ctx, args, asts: asts[0] != asts[1],
-            esbmc.solve.smt_func_kind._or : # or is a keyword in python
-                lambda ctx, args, asts: z3.Or(asts[0], asts[1]),
-            esbmc.solve.smt_func_kind._not :
-                lambda ctx, args, asts: z3.Not(asts[0]),
-            esbmc.solve.smt_func_kind._and :
-                lambda ctx, args, asts: z3.And(asts[0], asts[1]),
-            esbmc.solve.smt_func_kind.implies :
-                lambda ctx, args, asts: z3.Implies(asts[0], asts[1], ctx),
-            esbmc.solve.smt_func_kind.bvadd :
-                lambda ctx, args, asts: asts[0] + asts[1],
-            esbmc.solve.smt_func_kind.bvugt :
-                lambda ctx, args, asts: z3.UGT(asts[0], asts[1]),
-            esbmc.solve.smt_func_kind.bvult :
-                lambda ctx, args, asts: z3.ULT(asts[0], asts[1]),
-            esbmc.solve.smt_func_kind.bvumod :
-                lambda ctx, args, asts: z3.URem(asts[0], asts[1]),
+            esbmc.solve.smt_func_kind.ite :
+                lambda ctx, args, asts: z3.If(asts[0], asts[1], asts[2], ctx),
+          #SMT_FUNC_STORE, Handled via ast functions
+          #SMT_FUNC_SELECT,
             esbmc.solve.smt_func_kind.concat :
                 lambda ctx, args, asts: z3.Concat(asts[0], asts[1]),
-            esbmc.solve.smt_func_kind.bvlshr :
-                lambda ctx, args, asts: z3.LShR(asts[0], asts[1]),
-            esbmc.solve.smt_func_kind.bvashr :
-                lambda ctx, args, asts: asts[0] >> asts[1],
+          #SMT_FUNC_EXTRACT, // Not for going through mk app due to sillyness.
+          # Int related stuff
+          #SMT_FUNC_INT2REAL,
+          #SMT_FUNC_REAL2INT,
+          #SMT_FUNC_IS_INT,
         }
 
         # Various accounting structures for the address space modeling need to
