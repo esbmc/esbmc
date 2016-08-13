@@ -161,16 +161,22 @@ class Z3python(esbmc.solve.smt_convt):
     def stash_ast(func):
         def tmp(self, *args, **kwargs):
             ast = func(self, *args, **kwargs)
-            self.ast_list.append(ast)
+            self.store_ast(ast)
             return ast
         return tmp
+
+    def store_ast(self, ast):
+        self.ast_list.append(ast)
 
     def stash_sort(func):
         def tmp(self, *args, **kwargs):
             sort = func(self, *args, **kwargs)
-            self.sort_list.append(sort)
+            self.store_sort(sort)
             return sort
         return tmp
+
+    def store_sort(self, ast):
+        self.sort_list.append(ast)
 
     @stash_ast
     def mk_func_app(self, sort, k, args):
