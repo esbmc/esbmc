@@ -29,7 +29,6 @@ class Z3ast(esbmc.solve.smt_ast):
         super(Z3ast, self).__init__(convobj, sort)
         self.ast = ast
         self.conv = convobj
-        self.z3sort = sort # self.sort loses type info? Needs investigation
 
     def ite(self, conv, cond, falseop):
         assert False
@@ -45,7 +44,7 @@ class Z3ast(esbmc.solve.smt_ast):
         # Either a tuple update or an array update. Alas, all the exprs baked
         # into ESBMC make no distinguishment.
         if self.sort.id == esbmc.solve.smt_sort_kind.array:
-            domain_sort = self.z3sort.dom_sort
+            domain_sort = self.sort.dom_sort
             int_val = esbmc.BigInt(idx)
             idx = conv.mk_smt_bvint(int_val, False, domain_sort.data_width)
             res = z3.Update(self.ast, idx.ast, value.ast)
@@ -54,7 +53,7 @@ class Z3ast(esbmc.solve.smt_ast):
             assert self.sort.id == esbmc.solve.smt_sort_kind.struct
             # Hurrrr. Project all fields out except this one; update; create
             # new tuple.
-            decls = self.z3sort.proj_decls
+            decls = self.sort.proj_decls
 
             # Place the tuple ast in an ast array
             inp_array = (z3.Ast * 1)()
@@ -65,7 +64,7 @@ class Z3ast(esbmc.solve.smt_ast):
             projected = [z3.ExprRef(z3.Z3_mk_app(conv.ctx.ctx, x.ast, 1, inp_array), conv.ctx) for x in decls]
 
             # Zip with their sorts
-            asts_and_sorts = zip(projected, self.z3sort.sub_sorts)
+            asts_and_sorts = zip(projected, self.sort.sub_sorts)
             # Put Z3ast around the outside
             projected = [Z3ast(ar, conv, sort) for ar, sort in asts_and_sorts]
 
@@ -73,7 +72,7 @@ class Z3ast(esbmc.solve.smt_ast):
             # the identified one with the designated value
             projected[idx] = value
 
-            result = conv._tuple_create(projected, self.z3sort)
+            result = conv._tuple_create(projected, self.sort)
 
         # Also manually stash this ast
         self.conv.ast_list.append(result)
@@ -83,7 +82,7 @@ class Z3ast(esbmc.solve.smt_ast):
         if self.sort.id == esbmc.solve.smt_sort_kind.array:
             idx = conv.convert_ast(idx)
             ast = z3.Select(self.ast, idx.ast)
-            result = Z3ast(ast, self.conv, self.z3sort.range_sort)
+            result = Z3ast(ast, self.conv, self.sort.range_sort)
         else:
             assert False # XXX is only arrays anyway?
         # Also manually stash this ast
@@ -92,7 +91,7 @@ class Z3ast(esbmc.solve.smt_ast):
 
     def project(self, conv, elem):
         assert self.sort.id == esbmc.solve.smt_sort_kind.struct
-        proj_decl = self.z3sort.proj_decls[elem]
+        proj_decl = self.sort.proj_decls[elem]
 
         # We need to manually apply this function to project the elem out
         inp_array = (z3.Ast * 1)()
@@ -100,7 +99,7 @@ class Z3ast(esbmc.solve.smt_ast):
         projected_ast = z3.Z3_mk_app(conv.ctx.ctx, proj_decl.ast, 1, inp_array)
         projected_ast = z3.ExprRef(projected_ast, conv.ctx)
 
-        result = Z3ast(projected_ast, self.conv, self.z3sort.sub_sorts[elem])
+        result = Z3ast(projected_ast, self.conv, self.sort.sub_sorts[elem])
         # Also manually stash this ast
         self.conv.ast_list.append(result)
         return result
