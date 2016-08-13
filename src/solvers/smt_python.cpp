@@ -644,7 +644,7 @@ build_smt_conv_python_class(void)
     .value("real2int", SMT_FUNC_REAL2INT)
     .value("isint", SMT_FUNC_IS_INT);
 
-  class_<smt_sort_wrapper>("smt_sort", init<smt_sort_kind>())
+  class_<smt_sort_wrapper, boost::noncopyable>("smt_sort", init<smt_sort_kind>())
     .def(init<smt_sort_kind, unsigned long>())
     .def(init<smt_sort_kind, unsigned long, unsigned long>())
     .def_readwrite("id", &smt_sort::id)
@@ -656,7 +656,7 @@ build_smt_conv_python_class(void)
   // problem to memory manage. If overridden, then it's the overriders problem
   // to keep a python reference to all smt_ast's that C++ might point at.
   typedef return_internal_reference<> rte;
-  class_<smt_ast_wrapper>("smt_ast", init<smt_convt*, smt_sortt>())
+  class_<smt_ast_wrapper, boost::noncopyable>("smt_ast", init<smt_convt*, smt_sortt>())
     .add_property("sort", make_function(&get_sort_from_ast))
     .def("ite", &smt_ast_wrapper::ite, &smt_ast_wrapper::default_ite, rte())
     .def("eq", &smt_ast_wrapper::eq, &smt_ast_wrapper::default_eq, rte())
