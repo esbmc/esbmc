@@ -437,8 +437,13 @@ public:
     const struct_type2t &struct_ref = to_struct_type(arr_ref.subtype);
 
     list l;
-    for (unsigned int i = 0 ;i < struct_ref.members.size(); i++)
-      l.append(ast_down(inputargs[i]));
+    if (const_array) {
+      // There's only one ast.
+      l.append(ast_down(inputargs[0]));
+    } else {
+      for (unsigned int i = 0 ;i < struct_ref.members.size(); i++)
+        l.append(ast_down(inputargs[i]));
+    }
 
     return tuple_array_create_remangled(array_type, l, const_array, domain);
   }
