@@ -115,7 +115,7 @@ add2t::do_simplify(bool __attribute__((unused))) const
 
     std::function<BigInt& (expr2tc&)> get_value =
       [](expr2tc& c) -> BigInt&
-        { return to_constant_int2t(c).constant_value; };
+        { return to_constant_int2t(c).value; };
 
     expr2tc simpl_res = simplify_addition<BigInt>(
       to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
@@ -249,7 +249,7 @@ mul2t::do_simplify(bool second __attribute__((unused))) const
 
     std::function<BigInt& (expr2tc&)> get_value =
       [](expr2tc& c) -> BigInt&
-        { return to_constant_int2t(c).constant_value; };
+        { return to_constant_int2t(c).value; };
 
     expr2tc simpl_res = simplify_multiplication<BigInt>(
       to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
@@ -360,7 +360,7 @@ div2t::do_simplify(bool second __attribute__((unused))) const
 
     std::function<BigInt& (expr2tc&)> get_value =
       [](expr2tc& c) -> BigInt&
-        { return to_constant_int2t(c).constant_value; };
+        { return to_constant_int2t(c).value; };
 
     expr2tc simpl_res = simplify_division<BigInt>(
       to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
@@ -428,8 +428,8 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
     const constant_int2t &numerator = to_constant_int2t(to_simplify_side_1);
     const constant_int2t &denominator = to_constant_int2t(to_simplify_side_2);
 
-    auto c = numerator.constant_value;
-    c %= denominator.constant_value;
+    auto c = numerator.value;
+    c %= denominator.value;
 
     return expr2tc(new constant_int2t(type, c));
   }
@@ -491,7 +491,7 @@ abs2t::do_simplify(bool second __attribute__((unused))) const
 
     std::function<BigInt& (expr2tc&)> get_value =
       [](expr2tc& c) -> BigInt&
-        { return to_constant_int2t(c).constant_value; };
+        { return to_constant_int2t(c).value; };
 
     expr2tc simpl_res =
       simplify_abs<BigInt>(to_simplify, is_constant, get_value);
@@ -577,7 +577,7 @@ neg2t::do_simplify(bool second __attribute__((unused))) const
 
     std::function<BigInt& (expr2tc&)> get_value =
       [](expr2tc& c) -> BigInt&
-        { return to_constant_int2t(c).constant_value; };
+        { return to_constant_int2t(c).value; };
 
     expr2tc simpl_res =
       simplify_negate<BigInt>(to_simplify, is_constant, get_value);
@@ -738,7 +738,7 @@ pointer_offs_simplify_2(const expr2tc &offs, const type2tc &type)
       const array_type2t &arr = to_array_type(index.source_value->type);
       unsigned int widthbits = arr.subtype->get_width();
       unsigned int widthbytes = widthbits / 8;
-      BigInt val = to_constant_int2t(index.index).constant_value;
+      BigInt val = to_constant_int2t(index.index).value;
       val *= widthbytes;
       return expr2tc(new constant_int2t(type, val));
     } else if (is_constant_string2t(index.source_value) &&
@@ -775,7 +775,7 @@ pointer_offset2t::do_simplify(bool second) const
 
     // If it simplified to zero, that's fine, return that.
     if (is_constant_int2t(reduced) &&
-        to_constant_int2t(reduced).constant_value.is_zero())
+        to_constant_int2t(reduced).value.is_zero())
       return reduced;
 
     // If it didn't reduce to zero, give up. Not sure why this is the case,
@@ -852,7 +852,7 @@ index2t::do_simplify(bool second __attribute__((unused))) const
     // Index might be greater than the constant array size. This means we can't
     // simplify it, and the user might be eaten by an assertion failure in the
     // model. We don't have to think about this now though.
-    if (idx.constant_value.is_negative())
+    if (idx.value.is_negative())
       return expr2tc();
 
     unsigned long the_idx = idx.as_ulong();
@@ -893,7 +893,7 @@ not2t::do_simplify(bool second __attribute__((unused))) const
     return expr2tc();
 
   const constant_bool2t &val = to_constant_bool2t(value);
-  return expr2tc(new constant_bool2t(!val.constant_value));
+  return expr2tc(new constant_bool2t(!val.value));
 }
 
 expr2tc
@@ -901,7 +901,7 @@ and2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (is_constant_bool2t(side_1)) {
-   if (to_constant_bool2t(side_1).constant_value)
+   if (to_constant_bool2t(side_1).value)
      // constant true; other operand determines truth
      return side_2;
    else
@@ -910,7 +910,7 @@ and2t::do_simplify(bool second __attribute__((unused))) const
   }
 
   if (is_constant_bool2t(side_2)) {
-   if (to_constant_bool2t(side_2).constant_value)
+   if (to_constant_bool2t(side_2).value)
      // constant true; other operand determines truth
      return side_1;
    else
@@ -923,8 +923,8 @@ and2t::do_simplify(bool second __attribute__((unused))) const
 
   const constant_bool2t &val1 = to_constant_bool2t(side_1);
   const constant_bool2t &val2 = to_constant_bool2t(side_2);
-  return expr2tc(new constant_bool2t(val1.constant_value &&
-                                     val2.constant_value));
+  return expr2tc(new constant_bool2t(val1.value &&
+                                     val2.value));
 }
 
 expr2tc
@@ -932,17 +932,17 @@ or2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   // If either operand is true, the expr is true
-  if (is_constant_bool2t(side_1) && to_constant_bool2t(side_1).constant_value)
+  if (is_constant_bool2t(side_1) && to_constant_bool2t(side_1).value)
     return true_expr;
 
-  if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).constant_value)
+  if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).value)
     return true_expr;
 
   // If both or operands are false, the expr is false.
   if (is_constant_bool2t(side_1)
-      && !to_constant_bool2t(side_1).constant_value
+      && !to_constant_bool2t(side_1).value
       && is_constant_bool2t(side_2)
-      && !to_constant_bool2t(side_2).constant_value)
+      && !to_constant_bool2t(side_2).value)
     return false_expr;
 
   return expr2tc();
@@ -957,8 +957,8 @@ xor2t::do_simplify(bool second __attribute__((unused))) const
 
   const constant_bool2t &val1 = to_constant_bool2t(side_1);
   const constant_bool2t &val2 = to_constant_bool2t(side_2);
-  return expr2tc(new constant_bool2t(val1.constant_value ^
-                                     val2.constant_value));
+  return expr2tc(new constant_bool2t(val1.value ^
+                                     val2.value));
 }
 
 expr2tc
@@ -966,12 +966,12 @@ implies2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   // False => * evaluate to true, always
-  if (is_constant_bool2t(side_1) && !to_constant_bool2t(side_1).constant_value)
+  if (is_constant_bool2t(side_1) && !to_constant_bool2t(side_1).value)
     return true_expr;
 
   // Otherwise, the only other thing that will make this expr always true is
   // if side 2 is true.
-  if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).constant_value)
+  if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).value)
     return true_expr;
 
   return expr2tc();
@@ -997,17 +997,17 @@ do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
   // Drama: BigInt does *not* do any kind of twos compliment representation.
   // In fact, negative numbers are stored as positive integers, but marked as
   // being negative. To get around this, perform operations in an {u,}int64,
-  if (int1.constant_value.get_len() * sizeof(BigInt::onedig_t)
+  if (int1.value.get_len() * sizeof(BigInt::onedig_t)
                                          > sizeof(int64_t) ||
-      int2.constant_value.get_len() * sizeof(BigInt::onedig_t)
+      int2.value.get_len() * sizeof(BigInt::onedig_t)
                                            > sizeof(int64_t))
     return expr2tc();
 
   // Dump will zero-prefix and right align the output number.
-  val1 = int1.constant_value.to_int64();
-  val2 = int2.constant_value.to_int64();
+  val1 = int1.value.to_int64();
+  val2 = int2.value.to_int64();
 
-  if (int1.constant_value.is_negative()) {
+  if (int1.value.is_negative()) {
     if (val1 & 0x8000000000000000ULL) {
       // Too large to fit, negative, in an int64_t.
       return expr2tc();
@@ -1016,7 +1016,7 @@ do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
     }
   }
 
-  if (int2.constant_value.is_negative()) {
+  if (int2.value.is_negative()) {
     if (val2 & 0x8000000000000000ULL) {
       // Too large to fit, negative, in an int64_t.
       return expr2tc();
@@ -1180,7 +1180,7 @@ typecast2t::do_simplify(bool second) const
     if (is_constant_bool2t(from) && is_bv_type(type))
     {
       // int/float/double to bool
-      if (to_constant_bool2t(from).constant_value)
+      if (to_constant_bool2t(from).value)
         return expr2tc(new constant_int2t(type, BigInt(1)));
       else
         return expr2tc(new constant_int2t(type, BigInt(0)));
@@ -1191,7 +1191,7 @@ typecast2t::do_simplify(bool second) const
       if(is_bv_type(from))
       {
         const constant_int2t &theint = to_constant_int2t(from);
-        if(theint.constant_value.is_zero())
+        if(theint.value.is_zero())
           return false_expr;
         else
           return true_expr;
@@ -1223,7 +1223,7 @@ typecast2t::do_simplify(bool second) const
         // If we are typecasting from integer to a smaller integer,
         // this will return the number with the smaller size
         exprt number =
-          from_integer(theint.constant_value, migrate_type_back(type));
+          from_integer(theint.value, migrate_type_back(type));
 
         BigInt new_number;
         if(to_integer(number, new_number))
@@ -1235,14 +1235,14 @@ typecast2t::do_simplify(bool second) const
       {
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
-        fbv.from_integer(theint.constant_value);
+        fbv.from_integer(theint.value);
         return expr2tc(new constant_fixedbv2t(type, fbv));
       }
       else if(is_floatbv_type(type))
       {
         ieee_floatt fbv;
         fbv.spec = to_floatbv_type(migrate_type_back(type));
-        fbv.from_integer(theint.constant_value);
+        fbv.from_integer(theint.value);
         return expr2tc(new constant_floatbv2t(type, fbv));
       }
     }
@@ -1393,7 +1393,7 @@ address_of2t::do_simplify(bool second __attribute__((unused))) const
 
     // Don't simplify &a[0]
     if (is_constant_int2t(idx.index) &&
-        to_constant_int2t(idx.index).constant_value.is_zero())
+        to_constant_int2t(idx.index).value.is_zero())
       return expr2tc();
 
     expr2tc new_index = idx.index->simplify();
@@ -1433,7 +1433,7 @@ equality2t::do_simplify(bool second __attribute__((unused))) const
     const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
     const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
 
-    bool res = (side_1.constant_value == side_2.constant_value);
+    bool res = (side_1.value == side_2.value);
     return expr2tc(new constant_bool2t(res));
   }
   if(is_fixedbv_type(to_simplify_side_1->type)
@@ -1481,7 +1481,7 @@ notequal2t::do_simplify(bool second __attribute__((unused))) const
     const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
     const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
 
-    bool res = (side_1.constant_value != side_2.constant_value);
+    bool res = (side_1.value != side_2.value);
     return expr2tc(new constant_bool2t(res));
   }
   if(is_fixedbv_type(to_simplify_side_1->type)
@@ -1529,7 +1529,7 @@ lessthan2t::do_simplify(bool second __attribute__((unused))) const
     const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
     const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
 
-    bool res = (side_1.constant_value < side_2.constant_value);
+    bool res = (side_1.value < side_2.value);
     return expr2tc(new constant_bool2t(res));
   }
   if(is_fixedbv_type(to_simplify_side_1->type)
@@ -1577,7 +1577,7 @@ greaterthan2t::do_simplify(bool second __attribute__((unused))) const
     const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
     const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
 
-    bool res = (side_1.constant_value > side_2.constant_value);
+    bool res = (side_1.value > side_2.value);
     return expr2tc(new constant_bool2t(res));
   }
   if(is_fixedbv_type(to_simplify_side_1->type)
@@ -1625,7 +1625,7 @@ lessthanequal2t::do_simplify(bool second __attribute__((unused))) const
     const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
     const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
 
-    bool res = (side_1.constant_value <= side_2.constant_value);
+    bool res = (side_1.value <= side_2.value);
     return expr2tc(new constant_bool2t(res));
   }
   if(is_fixedbv_type(to_simplify_side_1->type)
@@ -1673,7 +1673,7 @@ greaterthanequal2t::do_simplify(bool second __attribute__((unused))) const
     const constant_int2t &side_1 = to_constant_int2t(to_simplify_side_1);
     const constant_int2t &side_2 = to_constant_int2t(to_simplify_side_2);
 
-    bool res = (side_1.constant_value >= side_2.constant_value);
+    bool res = (side_1.value >= side_2.value);
     return expr2tc(new constant_bool2t(res));
   }
   if(is_fixedbv_type(to_simplify_side_1->type)
@@ -1704,7 +1704,7 @@ if2t::do_simplify(bool second __attribute__((unused))) const
   if (is_constant_expr(cond)) {
     // We can simplify this.
     if (is_constant_bool2t(cond)) {
-      if (to_constant_bool2t(cond).constant_value) {
+      if (to_constant_bool2t(cond).value) {
         return true_value;
       } else {
         return false_value;
@@ -1716,7 +1716,7 @@ if2t::do_simplify(bool second __attribute__((unused))) const
       assert(!is_nil_expr(cast) && "We should always be able to cast a "
              "constant value to a constant bool");
 
-      if (to_constant_bool2t(cast).constant_value) {
+      if (to_constant_bool2t(cast).value) {
         return true_value;
       } else {
         return false_value;
@@ -1844,8 +1844,8 @@ concat2t::do_simplify(bool second __attribute__((unused))) const
   if (!is_constant_int2t(side_1) || !is_constant_int2t(side_2))
     return expr2tc();
 
-  const mp_integer &value1 = to_constant_int2t(side_1).constant_value;
-  const mp_integer &value2 = to_constant_int2t(side_2).constant_value;
+  const mp_integer &value1 = to_constant_int2t(side_1).value;
+  const mp_integer &value2 = to_constant_int2t(side_2).value;
 
   // k; Take the values, and concatenate. Side 1 has higher end bits.
   mp_integer accuml = value1;

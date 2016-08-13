@@ -38,7 +38,7 @@ void guardt::add(const expr2tc &expr)
     return;
   }
 
-  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).constant_value)
+  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
   {
   }
   else
@@ -49,7 +49,7 @@ void guardt::add(const expr2tc &expr)
 
 void guardt::move(expr2tc &expr)
 {
-  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).constant_value)
+  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
   {
   }
   else
@@ -123,9 +123,9 @@ guardt &operator |= (guardt &g1, const guardt &g2)
   if (tmp != and_expr1)
   {
     if ((is_constant_bool2t(and_expr1) &&
-         to_constant_bool2t(and_expr1).constant_value) ||
+         to_constant_bool2t(and_expr1).value) ||
         (is_constant_bool2t(and_expr2) &&
-         to_constant_bool2t(and_expr2).constant_value))
+         to_constant_bool2t(and_expr2).value))
     {
     }
     else
@@ -150,7 +150,7 @@ std::ostream &operator << (std::ostream &out, const guardt &g)
 bool guardt::is_false() const
 {
   forall_guard(it, guard_list)
-    if (is_constant_bool2t(*it) && !to_constant_bool2t(*it).constant_value)
+    if (is_constant_bool2t(*it) && !to_constant_bool2t(*it).value)
       return true;
       
   return false;

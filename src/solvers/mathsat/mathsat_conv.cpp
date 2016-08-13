@@ -153,9 +153,9 @@ tvt
 mathsat_convt::l_get(const smt_ast *a)
 {
   constant_bool2tc b = get_bool(a);
-  if (b->constant_value)
+  if (b->value)
     return tvt(true);
-  else if (!b->constant_value)
+  else if (!b->value)
     return tvt(false);
   else
     assert(0);

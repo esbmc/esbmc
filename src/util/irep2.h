@@ -1995,15 +1995,15 @@ class constant_int_data : public constant2t
 {
 public:
   constant_int_data(const type2tc &t, expr2t::expr_ids id, const BigInt &bint)
-    : constant2t(t, id), constant_value(bint) { }
+    : constant2t(t, id), value(bint) { }
   constant_int_data(const constant_int_data &ref)
-    : constant2t(ref), constant_value(ref.constant_value) { }
+    : constant2t(ref), value(ref.value) { }
 
-  BigInt constant_value;
+  BigInt value;
 
 // Type mangling:
-  typedef esbmct::field_traits<BigInt, constant_int_data, &constant_int_data::constant_value> constant_value_field;
-  typedef esbmct::expr2t_traits<constant_value_field> traits;
+  typedef esbmct::field_traits<BigInt, constant_int_data, &constant_int_data::value> value_field;
+  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class constant_fixedbv_data : public constant2t
@@ -2058,15 +2058,15 @@ class constant_bool_data : public constant2t
 {
 public:
   constant_bool_data(const type2tc &t, expr2t::expr_ids id, bool value)
-    : constant2t(t, id), constant_value(value) { }
+    : constant2t(t, id), value(value) { }
   constant_bool_data(const constant_bool_data &ref)
-    : constant2t(ref), constant_value(ref.constant_value) { }
+    : constant2t(ref), value(ref.value) { }
 
-  bool constant_value;
+  bool value;
 
 // Type mangling:
-  typedef esbmct::field_traits<bool, constant_bool_data, &constant_bool_data::constant_value> constant_value_field;
-  typedef esbmct::expr2t_traits<constant_value_field> traits;
+  typedef esbmct::field_traits<bool, constant_bool_data, &constant_bool_data::value> value_field;
+  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class constant_array_of_data : public constant2t
@@ -4665,7 +4665,7 @@ inline bool is_arith_type(const expr2tc &t)
 inline bool
 is_true(const expr2tc &expr)
 {
-  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).constant_value)
+  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
     return true;
   else
     return false;
@@ -4680,7 +4680,7 @@ is_true(const expr2tc &expr)
 inline bool
 is_false(const expr2tc &expr)
 {
-  if (is_constant_bool2t(expr) && !to_constant_bool2t(expr).constant_value)
+  if (is_constant_bool2t(expr) && !to_constant_bool2t(expr).value)
     return true;
   else
     return false;

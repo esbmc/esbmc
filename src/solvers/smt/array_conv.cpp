@@ -151,7 +151,7 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
   // If this is a constant index, then simply access the designated element.
   if (is_constant_int2t(idx)) {
     const constant_int2t &intref = to_constant_int2t(idx);
-    unsigned long intval = intref.constant_value.to_ulong();
+    unsigned long intval = intref.value.to_ulong();
     if (intval > ma->array_fields.size())
       // Return a fresh value.
       return ctx->mk_fresh(ressort, "array_mk_select_badidx::");
@@ -195,7 +195,7 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
   // If this is a constant index, simply update that particular field.
   if (is_constant_int2t(idx)) {
     const constant_int2t &intref = to_constant_int2t(idx);
-    unsigned long intval = intref.constant_value.to_ulong();
+    unsigned long intval = intref.value.to_ulong();
     if (intval > ma->array_fields.size())
       return ma;
 
@@ -481,7 +481,7 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
       continue;
 
     const constant_int2t &intval = to_constant_int2t(e2);
-    if (intval.constant_value.to_uint64() == index)
+    if (intval.value.to_uint64() == index)
       break;
   }
 

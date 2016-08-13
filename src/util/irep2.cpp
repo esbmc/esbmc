@@ -638,27 +638,27 @@ unsigned long
 constant_int2t::as_ulong(void) const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
-  assert(!constant_value.is_negative());
-  return constant_value.to_ulong();
+  assert(!value.is_negative());
+  return value.to_ulong();
 }
 
 long
 constant_int2t::as_long(void) const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
-  return constant_value.to_long();
+  return value.to_long();
 }
 
 bool
 constant_bool2t::is_true(void) const
 {
-  return constant_value;
+  return value;
 }
 
 bool
 constant_bool2t::is_false(void) const
 {
-  return !constant_value;
+  return !value;
 }
 
 std::string
@@ -2125,7 +2125,7 @@ std::string cpp_name_type2t::field_names [esbmct::num_type_fields]  =
 // Exprs
 
 std::string constant_int2t::field_names [esbmct::num_type_fields]  =
-{ "constant_value", "", "", "", ""};
+{ "value", "", "", "", ""};
 std::string constant_fixedbv2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string constant_floatbv2t::field_names [esbmct::num_type_fields]  =
@@ -2135,7 +2135,7 @@ std::string constant_struct2t::field_names [esbmct::num_type_fields]  =
 std::string constant_union2t::field_names [esbmct::num_type_fields]  =
 { "members", "", "", "", ""};
 std::string constant_bool2t::field_names [esbmct::num_type_fields]  =
-{ "constant_value", "", "", "", ""};
+{ "value", "", "", "", ""};
 std::string constant_array2t::field_names [esbmct::num_type_fields]  =
 { "members", "", "", "", ""};
 std::string constant_array_of2t::field_names [esbmct::num_type_fields]  =

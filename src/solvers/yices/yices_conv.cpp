@@ -620,7 +620,7 @@ yices_convt::tuple_array_create(const type2tc &array_type,
 {
   const array_type2t &arr_type = to_array_type(array_type);
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
-  uint64_t sz = thesize.constant_value.to_ulong();
+  uint64_t sz = thesize.value.to_ulong();
 
   // We support both tuples and arrays of them, so just repeatedly store
   smt_sortt sort = convert_sort(array_type);
@@ -665,7 +665,7 @@ yices_convt::tuple_array_of(const expr2tc &init_value,
 
   // Now repeatedly store Things into it
   unsigned long elems =
-    to_constant_int2t(array_domain_to_width(domtype)).constant_value.to_ulong();
+    to_constant_int2t(array_domain_to_width(domtype)).value.to_ulong();
   for (unsigned long i = 0; i < elems; i++) {
     term_t idxterm;
 
@@ -748,8 +748,8 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
   if (type->type_id != type2t::pointer_id) {
     return constant_struct2tc(type, members);
   } else {
-    uint64_t num = to_constant_int2t(members[0]).constant_value.to_uint64();
-    uint64_t offs = to_constant_int2t(members[1]).constant_value.to_uint64();
+    uint64_t num = to_constant_int2t(members[0]).value.to_uint64();
+    uint64_t offs = to_constant_int2t(members[1]).value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
     return pointer_logic.back().pointer_expr(p, type);
   }

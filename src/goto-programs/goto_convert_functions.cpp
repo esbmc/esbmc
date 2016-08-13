@@ -96,7 +96,7 @@ void goto_convert_functionst::add_return(
   if(!f.body.instructions.empty() &&
      f.body.instructions.back().is_goto() &&
      is_constant_bool2t(f.body.instructions.back().guard) &&
-     to_constant_bool2t(f.body.instructions.back().guard).constant_value)
+     to_constant_bool2t(f.body.instructions.back().guard).value)
     return;
 
   goto_programt::targett t=f.body.add_instruction();

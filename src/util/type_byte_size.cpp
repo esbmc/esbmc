@@ -148,7 +148,7 @@ type_byte_size(const type2t &type)
     }
 
     const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
-    return subsize * arrsize_int.constant_value;
+    return subsize * arrsize_int.value;
   }
   case type2t::struct_id:
   {
@@ -232,7 +232,7 @@ compute_pointer_offset(const expr2tc &expr)
     if (is_constant_int2t(index.index)) {
       const constant_int2t &index_val = to_constant_int2t(index.index);
       result =
-        gen_ulong(BigInt(sub_size * index_val.constant_value).to_ulong());
+        gen_ulong(BigInt(sub_size * index_val.value).to_ulong());
     } else {
       // Non constant, create multiply.
       // Index operand needs to be the bitwidth of a 'long'.

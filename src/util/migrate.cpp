@@ -561,7 +561,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
 
     // Iterate over each field and flatten to bytes
     const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
-    for (unsigned long i = 0; i < intref.constant_value.to_uint64(); i++) {
+    for (unsigned long i = 0; i < intref.value.to_uint64(); i++) {
       index2tc idx(arraytype.subtype, new_expr, gen_ulong(i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
     }
@@ -1240,7 +1240,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     bool invalid = false;
     bool unknown = false;
     if (is_constant_bool2t(op1)) {
-      invalid = to_constant_bool2t(op1).constant_value;
+      invalid = to_constant_bool2t(op1).value;
     } else {
       assert(expr.op1().id() == "unknown");
       unknown = true;
@@ -1624,7 +1624,7 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
-    theexpr.set_value(integer2binary(ref2.constant_value, width));
+    theexpr.set_value(integer2binary(ref2.value, width));
     return theexpr;
   }
   case expr2t::constant_fixedbv_id:
@@ -1653,7 +1653,7 @@ migrate_expr_back(const expr2tc &ref)
   case expr2t::constant_bool_id:
   {
     const constant_bool2t &ref2 = to_constant_bool2t(ref);
-    if (ref2.constant_value)
+    if (ref2.value)
       return true_exprt();
     else
       return false_exprt();

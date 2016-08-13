@@ -946,9 +946,9 @@ smt_convt::convert_terminal(const expr2tc &expr)
     const constant_int2t &theint = to_constant_int2t(expr);
     unsigned int width = expr->type->get_width();
     if (int_encoding)
-      return mk_smt_int(theint.constant_value, sign);
+      return mk_smt_int(theint.value, sign);
     else
-      return mk_smt_bvint(theint.constant_value, sign, width);
+      return mk_smt_bvint(theint.value, sign, width);
   }
   case expr2t::constant_fixedbv_id:
   {
@@ -980,7 +980,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
   case expr2t::constant_bool_id:
   {
     const constant_bool2t &thebool = to_constant_bool2t(expr);
-    return mk_smt_bool(thebool.constant_value);
+    return mk_smt_bool(thebool.value);
   }
   case expr2t::symbol_id:
   {
@@ -1264,7 +1264,7 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
   // machine word size.
   if (!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size)) {
     constant_int2tc thesize = arr.array_size;
-    return size_to_bit_width(thesize->constant_value.to_ulong());
+    return size_to_bit_width(thesize->value.to_ulong());
   } else {
     return config.ansi_c.word_size;
   }
@@ -1789,7 +1789,7 @@ smt_convt::get(const expr2tc &expr)
       return tmp;
 
     const constant_int2t &intval = to_constant_int2t(tmp);
-    uint64_t val = intval.constant_value.to_ulong();
+    uint64_t val = intval.value.to_ulong();
     std::stringstream ss;
     ss << val;
     constant_exprt value_expr(migrate_type_back(expr->type));
@@ -1874,7 +1874,7 @@ smt_convt::array_create(const expr2tc &expr)
   }
 
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
-  uint64_t sz = thesize.constant_value.to_ulong();
+  uint64_t sz = thesize.value.to_ulong();
 
   assert(is_constant_array2t(expr));
   const constant_array2t &array = to_constant_array2t(expr);
@@ -1930,7 +1930,7 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
       // Duplicate contents repeatedly.
       assert(is_constant_int2t(arrtype.array_size) &&
           "Cannot have complex nondet-sized array_of initializers");
-      const BigInt &size = to_constant_int2t(arrtype.array_size).constant_value;
+      const BigInt &size = to_constant_int2t(arrtype.array_size).value;
 
       std::vector<expr2tc> new_contents;
       for (uint64_t i = 0; i < size.to_uint64(); i++)

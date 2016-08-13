@@ -404,7 +404,7 @@ void value_sett::get_value_set_rec(
       bool is_const = false;
       try {
         if (is_constant_int2t(non_ptr_op)) {
-          if (to_constant_int2t(non_ptr_op).constant_value.is_zero()) {
+          if (to_constant_int2t(non_ptr_op).value.is_zero()) {
             total_offs = 0;
           } else {
             if (is_empty_type(subtype))
@@ -413,7 +413,7 @@ void value_sett::get_value_set_rec(
             // Potentially rename,
             const type2tc renamed = ns.follow(subtype);
             mp_integer elem_size = type_byte_size(*renamed);
-            const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
+            const mp_integer &val =to_constant_int2t(non_ptr_op).value;
             total_offs = val * elem_size;
             if (is_sub2t(expr))
               total_offs.negate();
@@ -429,7 +429,7 @@ void value_sett::get_value_set_rec(
         // pointers, or worse. If a void pointer, treat the multiplier of the
         // addition as being one. If not void pointer, throw cookies.
         if (is_empty_type(subtype)) {
-          total_offs = to_constant_int2t(non_ptr_op).constant_value;
+          total_offs = to_constant_int2t(non_ptr_op).value;
           is_const = true;
         } else {
           std::cerr << "Pointer arithmetic on type where we can't determine ";
@@ -578,7 +578,7 @@ void value_sett::get_value_set_rec(
 
     assert(is_constant_int2t(dyn.instance));
     const constant_int2t &intref = to_constant_int2t(dyn.instance);
-    std::string idnum = integer2string(intref.constant_value);
+    std::string idnum = integer2string(intref.value);
     const std::string name = "value_set::dynamic_object" + idnum + suffix;
 
     // look it up
@@ -648,7 +648,7 @@ void value_sett::get_reference_set_rec(
     mp_integer index_offset;
     bool has_const_index_offset = false;
     if (is_constant_int2t(index.index)) {
-      index_offset = to_constant_int2t(index.index).constant_value *
+      index_offset = to_constant_int2t(index.index).value *
                          type_byte_size(*index.type);
       has_const_index_offset = true;
     }
@@ -776,7 +776,7 @@ void value_sett::get_reference_set_rec(
 
     // This may or may not have a constant offset
     objectt o = (is_constant_int2t(extract.source_offset))
-      ? objectt(true, to_constant_int2t(extract.source_offset).constant_value)
+      ? objectt(true, to_constant_int2t(extract.source_offset).value)
       // Unclear what to do about alignments; default to nothing.
       : objectt(false, 1);
 
@@ -1023,7 +1023,7 @@ void value_sett::assign_rec(
       return; // We're assigning to something unknown. Not much we can do.
     assert(is_constant_int2t(dynamic_object.instance));
     unsigned int idnum =
-      to_constant_int2t(dynamic_object.instance).constant_value.to_long();
+      to_constant_int2t(dynamic_object.instance).value.to_long();
     const std::string name = "value_set::dynamic_object" + i2string(idnum);
 
     make_union(get_entry(name, suffix).object_map, values_rhs);

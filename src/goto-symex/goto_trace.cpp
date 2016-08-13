@@ -133,7 +133,7 @@ counterexample_value(
       if (is_bv_type(value))
       {
         value_string +=
-          " (" + integer2string(to_constant_int2t(value).constant_value) + ")";
+          " (" + integer2string(to_constant_int2t(value).value) + ")";
       }
       else if (is_fixedbv_type(value))
       {
