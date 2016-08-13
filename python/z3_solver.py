@@ -39,7 +39,7 @@ class Z3ast(esbmc.solve.smt_ast):
         self.conv = convobj
 
     def ite(self, conv, cond, falseop):
-        ast = z3.If(cond.ast, self.ast, falseop.ast, conv.ctx),
+        ast = z3.If(cond.ast, self.ast, falseop.ast, conv.ctx)
         new_ast = Z3ast(ast, conv, self.sort)
         self.conv.store_ast(new_ast)
         return new_ast
