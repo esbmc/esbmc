@@ -514,8 +514,15 @@ class Z3python(esbmc.solve.smt_convt):
         if thetype.type_id == esbmc.type.type_ids.pointer:
             thetype = esbmc.downcast_type(self.pointer_struct)
 
-        ast_list = [ast.project(self, x) for x in range(len(thetype.members))]
-        assert False
+        # Project out all elements, convert to expr
+        ast_list = [(ast.project(self, x), thetype.members[x]) for x in range(len(thetype.members))]
+        ast_list = [self._ast_get(ast.ast, ast.sort, thetype) for ast, thetype in ast_list]
+
+        expr_vec = esbmc.expr.expr_vec()
+        for x in ast_list:
+            expr_vec.append(x)
+
+        return esbmc.expr.constant_struct.make(expr.type, expr_vec)
 
     @stash_ast
     def mk_extract(self, a, high, low, s):
