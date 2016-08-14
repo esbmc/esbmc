@@ -12,6 +12,7 @@ art = esbmc.symex.reachability_tree(po.goto_functions, ns, opts, eq, po.context,
 
 art.setup_for_new_explore()
 result = art.get_next_formula()
+esbmc.symex.slice(result.target)
 lolsolve = Z3python(ns)
 result.target.convert(lolsolve)
 issat = lolsolve.dec_solve()
