@@ -20,6 +20,7 @@ issat = lolsolve.dec_solve()
 if issat == esbmc.solve.smt_result.sat:
     trace = esbmc.symex.goto_tracet()
     esbmc.symex.build_goto_trace(result.target, lolsolve, trace)
+    print trace.to_string(ns)
     print "VERIFICATION FAILED"
 elif issat == esbmc.solve.smt_result.unsat:
     print "VERIFICATION SUCCESSFUL"
