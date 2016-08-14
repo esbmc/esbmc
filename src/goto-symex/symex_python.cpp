@@ -17,6 +17,7 @@
 #include "goto_symex.h"
 #include "slice.h"
 #include "goto_trace.h"
+#include "build_goto_trace.h"
 
 class dummy_renaming_class {};
 
@@ -160,6 +161,8 @@ build_goto_symex_classes()
   symex.staticmethod("slice");
   symex.def("simple_slice", &::simple_slice);
   symex.staticmethod("simple_slice");
+  symex.def("build_goto_trace", &build_goto_trace);
+  symex.staticmethod("build_goto_trace");
 
   build_equation_class();
 
