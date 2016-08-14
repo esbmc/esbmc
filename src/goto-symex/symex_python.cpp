@@ -10,6 +10,8 @@
 #include <util/bp_opaque_ptr.h>
 #include <util/bp_converter.h>
 
+#include <solvers/smt_python.h>
+
 #include "reachability_tree.h"
 #include "execution_state.h"
 #include "goto_symex.h"
@@ -556,11 +558,23 @@ build_goto_symex_classes()
   return;
 }
 
+static boost::python::object
+get_guard_ast(symex_target_equationt::SSA_stept &step)
+{
+  return smt_ast_wrapper::cast_ast_down(step.guard_ast);
+}
+
 static void
 set_guard_ast(symex_target_equationt::SSA_stept &step, const smt_ast *ast)
 {
   step.guard_ast = ast;
   return;
+}
+
+static boost::python::object
+get_cond_ast(symex_target_equationt::SSA_stept &step)
+{
+  return smt_ast_wrapper::cast_ast_down(step.cond_ast);
 }
 
 static void
@@ -664,8 +678,9 @@ build_equation_class()
     .def_readwrite("comment", &step::comment)
     // For some reason, def_readwrite can't synthesize it's own setter
     // due to const perhaps, or smt_astt being opaque
-    .add_property("guard_ast", make_getter(&step::guard_ast), make_function(&set_guard_ast))
-    .add_property("cond_ast", make_getter(&step::cond_ast), make_function(&set_cond_ast))
+    // Need getters because the ast needs to be downcasted before returning
+    .add_property("guard_ast", make_function(&get_guard_ast), make_function(&set_guard_ast))
+    .add_property("cond_ast", make_function(&get_cond_ast), make_function(&set_cond_ast))
     .def_readwrite("ignore", &step::ignore);
 
   {
