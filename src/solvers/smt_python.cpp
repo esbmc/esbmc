@@ -577,6 +577,20 @@ build_smt_conv_python_class(void)
 
   // It would appear people _do_ want to write sovlers from python.
 
+  enum_<tvt::tv_enumt>("tvt_enum")
+    .value("true", tvt::tv_enumt::TV_TRUE)
+    .value("false", tvt::tv_enumt::TV_FALSE)
+    .value("unknown", tvt::tv_enumt::TV_UNKNOWN);
+
+  class_<tvt>("tvt")
+    .def(init<bool>())
+    .def(init<tvt::tv_enumt>())
+    .def("is_true", &tvt::is_true)
+    .def("is_false", &tvt::is_false)
+    .def("is_unknown", &tvt::is_unknown)
+    .def("is_known", &tvt::is_known)
+    .def("invert", &tvt::invert);
+
   enum_<smt_sort_kind>("smt_sort_kind")
     .value("int", SMT_SORT_INT)
     .value("real", SMT_SORT_REAL)
