@@ -8,9 +8,9 @@
 # XXX -- it would appear that smt_sort's aren't auto-downcasted to the correct
 # wrapped sort kind, _even_ if it's passed through downcast_sort?
 
-# Misery bandits: a dangling pointer exfiltration path is being set in a field
-# of a C++ object, then going out of scope and being destroyed. Passing a sort
-# into a Z3ast constructor is not sufficient!
+# Misery bandits: a dangling pointer exfiltration path is that ptr being set in
+# a field of a C++ object, then going out of scope and being destroyed. Passing
+# a sort into a Z3ast constructor is not sufficient!
 
 # Additional errata: printing a tuple z3.Ast explodes on account of the python
 # api not being designed for it. This doesn't seem to be due to any fault in
