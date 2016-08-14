@@ -489,15 +489,18 @@ class Z3python(esbmc.solve.smt_convt):
     def get_array_elem(self, ast, idx, subtype):
         out = self.solver.model().eval(ast.ast)
         out = out[idx]
+        return self._ast_get(out, ast.sort, subtype)
+
+    def _ast_get(self, astref, sort, thetype):
         # Alas, we need to create an expr representation of this Thing. We're
         # guaranteed that it isn't another array, as multidimensional arrays
         # get flattened, but it could be a bool / bv / fixedbv / tuple.
-        if isinstance(out, z3.BitVecRef):
-            return self.get_bv(subtype, Z3ast(out, self, ast.sort.range_sort))
-        elif isinstance(out, z3.BoolRef):
+        if isinstance(astref, z3.BitVecRef):
+            return self.get_bv(thetype, Z3ast(astref, self, sort))
+        elif isinstance(astref, z3.BoolRef):
             # See above
-            return self.get_bool(Z3ast(out, self, ast.sort.range_sort))
-        elif isinstance(out, z3.DatatypeRef):
+            return self.get_bool(Z3ast(astref, self, sort.range_sort))
+        elif isinstance(astref, z3.DatatypeRef):
             # Tuple?
             assert False
         else:
