@@ -58,10 +58,9 @@ class Z3ast(esbmc.solve.smt_ast):
         # Either a tuple update or an array update. Alas, all the exprs baked
         # into ESBMC make no distinguishment.
         if self.sort.id == esbmc.solve.smt_sort_kind.array:
-            domain_sort = self.sort.dom_sort
-            int_val = esbmc.BigInt(idx)
-            idx = conv.mk_smt_bvint(int_val, False, domain_sort.data_width)
-            res = z3.Update(self.ast, idx.ast, value.ast)
+            # Use idx_expr
+            idx_ast = conv.convert_ast(idx_expr)
+            res = z3.Update(self.ast, idx_ast.ast, value.ast)
             result = Z3ast(res, self.conv, self.sort)
         else:
             assert self.sort.id == esbmc.solve.smt_sort_kind.struct
