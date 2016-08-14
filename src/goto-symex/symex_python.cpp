@@ -656,6 +656,19 @@ set_prog(symex_targett::sourcet &src, goto_programt &prog)
   return;
 }
 
+static boost::python::object
+get_goto_trace_steps(const goto_tracet &trace)
+{
+  using namespace boost::python;
+
+  list l;
+  for (const auto &step : trace.steps) {
+    l.append(object(step));
+  }
+
+  return l;
+}
+
 void
 build_equation_class()
 {
@@ -737,6 +750,22 @@ build_equation_class()
     .value("OUTPUT", goto_trace_stept::OUTPUT)
     .value("SKIP", goto_trace_stept::SKIP)
     .value("RENUMBER", goto_trace_stept::RENUMBER);
+
+  class_<goto_trace_stept>("goto_trace_stept")
+    .def_readwrite("stack_trace", &goto_trace_stept::stack_trace)
+    .def_readwrite("type", &goto_trace_stept::type)
+    .def_readwrite("thread_nr", &goto_trace_stept::thread_nr)
+    .def_readwrite("guard", &goto_trace_stept::guard)
+    .def_readwrite("comment", &goto_trace_stept::comment)
+    .def_readwrite("lhs", &goto_trace_stept::lhs)
+    .def_readwrite("rhs", &goto_trace_stept::rhs)
+    .def_readwrite("value", &goto_trace_stept::value)
+    .def_readwrite("original_lhs", &goto_trace_stept::original_lhs);
+
+  class_<goto_tracet>("goto_tracet")
+    .def("clear", &goto_tracet::clear)
+    .def_readwrite("mode", &goto_tracet::mode)
+    .add_property("steps", make_function(&get_goto_trace_steps));
 }
 
 // A function for trapping to python. Assumptions: it's in the context of
