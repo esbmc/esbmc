@@ -483,6 +483,23 @@ class Z3python(esbmc.solve.smt_convt):
         else:
             raise Exception("Unknown model eval value from l_get")
 
+    def get_array_elem(self, ast, idx, subtype):
+        out = self.solver.model().eval(ast.ast)
+        out = out[idx]
+        # Alas, we need to create an expr representation of this Thing. We're
+        # guaranteed that it isn't another array, as multidimensional arrays
+        # get flattened, but it could be a bool / bv / fixedbv / tuple.
+        if isinstance(out, z3.ExprRef):
+            return self.get_bv(subtype, Z3ast(out, self, ast.sort.range_sort))
+        elif isinstance(out, z3.BoolRef):
+            # See above
+            return self.get_bool(Z3ast(out, self, ast.sort.range_sort))
+        elif isinstance(out, z3.DatatypeRef):
+            # Tuple?
+            assert False
+        else:
+            assert False
+
     @stash_ast
     def mk_extract(self, a, high, low, s):
         ast = z3.Extract(high, low, a.ast)
