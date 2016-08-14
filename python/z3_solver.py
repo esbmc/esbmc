@@ -467,7 +467,10 @@ class Z3python(esbmc.solve.smt_convt):
         return esbmc.expr.constant_bool.make(val)
 
     def get_bv(self, thetype, ast):
-        assert False
+        val = self.solver.model().eval(ast.ast)
+        val = val.as_long()
+        expr = esbmc.expr.constant_int.make(thetype, esbmc.BigInt(val))
+        return expr
 
     # This model-value getter returns a three-value-logic object to represent
     # when a particular boolean has no value in the model, aka isn't something
