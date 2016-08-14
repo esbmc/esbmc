@@ -1,4 +1,6 @@
 #ifdef WITH_PYTHON
+#include <sstream>
+
 #include <boost/python/class.hpp>
 #include <boost/python/init.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
@@ -144,6 +146,14 @@ const renaming::level2t &
 get_state_level2(const goto_symex_statet::goto_statet &state)
 {
   return state.level2;
+}
+
+static std::string
+goto_trace_2_text(goto_tracet &trace, const namespacet &ns)
+{
+  std::stringstream ss;
+  show_goto_trace(ss, ns, trace);
+  return ss.str();
 }
 
 class dummy_symex_class { };
@@ -766,6 +776,7 @@ build_equation_class()
     .def_readwrite("original_lhs", &goto_trace_stept::original_lhs);
 
   class_<goto_tracet>("goto_tracet")
+    .def("to_string", &goto_trace_2_text)
     .def("clear", &goto_tracet::clear)
     .def_readwrite("mode", &goto_tracet::mode)
     .add_property("steps", make_function(&get_goto_trace_steps));
