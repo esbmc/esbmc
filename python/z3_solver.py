@@ -469,8 +469,19 @@ class Z3python(esbmc.solve.smt_convt):
     def get_bv(self, thetype, ast):
         assert False
 
+    # This model-value getter returns a three-value-logic object to represent
+    # when a particular boolean has no value in the model, aka isn't something
+    # that the counterexample depends upon.
     def l_get(self, ast):
-        assert False
+        val = self.solver.model().eval(ast.ast)
+        if val == None:
+            return esbmc.solve.tvt(esbmc.solve.tvt_enum.unknown)
+        elif z3.is_true(val):
+            return esbmc.solve.tvt(esbmc.solve.tvt_enum.true)
+        elif z3.is_false(val):
+            return esbmc.solve.tvt(esbmc.solve.tvt_enum.false)
+        else:
+            raise Exception("Unknown model eval value from l_get")
 
     @stash_ast
     def mk_extract(self, a, high, low, s):
