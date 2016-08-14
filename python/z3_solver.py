@@ -462,7 +462,9 @@ class Z3python(esbmc.solve.smt_convt):
     # illustrative, you just have to be familiar with the esbmc expr structure
     # and your own AST type.
     def get_bool(self, ast):
-        assert False
+        val = self.solver.model().eval(ast.ast)
+        val = z3.is_true(val)
+        return esbmc.expr.constant_bool.make(val)
 
     def get_bv(self, thetype, ast):
         assert False
