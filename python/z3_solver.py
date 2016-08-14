@@ -503,6 +503,17 @@ class Z3python(esbmc.solve.smt_convt):
         else:
             assert False
 
+    def tuple_get(self, expr):
+        ast = self.convert_ast(expr)
+        thetype = esbmc.downcast_type(expr.type)
+
+        # Alas: we have to deal with the pointer -> tuple situation here
+        if thetype.type_id == esbmc.type.type_ids.pointer:
+            thetype = esbmc.downcast_type(self.pointer_struct)
+
+        ast_list = [ast.project(self, x) for x in range(len(thetype.members))]
+        assert False
+
     @stash_ast
     def mk_extract(self, a, high, low, s):
         ast = z3.Extract(high, low, a.ast)
