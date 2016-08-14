@@ -710,8 +710,6 @@ build_equation_class()
     .value("SKIP", goto_trace_stept::SKIP)
     .value("RENUMBER", goto_trace_stept::RENUMBER);
 
-  return;
-
   // Some global functions
   def("slice", &::slice);
   def("simple_slice", &::simple_slice);
