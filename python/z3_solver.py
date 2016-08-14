@@ -489,7 +489,7 @@ class Z3python(esbmc.solve.smt_convt):
         # Alas, we need to create an expr representation of this Thing. We're
         # guaranteed that it isn't another array, as multidimensional arrays
         # get flattened, but it could be a bool / bv / fixedbv / tuple.
-        if isinstance(out, z3.ExprRef):
+        if isinstance(out, z3.BitVecRef):
             return self.get_bv(subtype, Z3ast(out, self, ast.sort.range_sort))
         elif isinstance(out, z3.BoolRef):
             # See above
