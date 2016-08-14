@@ -688,6 +688,7 @@ build_smt_conv_python_class(void)
   // Refrain from registering enums too: basic implementation pls.
   typedef return_value_policy<return_opaque_pointer> ropaque;
   class_<smt_convt_wrapper, boost::noncopyable>("smt_convt", init<bool,const namespacet &, bool, bool, bool>())
+    .def_readonly("pointer_struct", &smt_convt::pointer_struct)
     .def("smt_post_init", &smt_convt::smt_post_init)
     .def("convert_sort", &smt_convt::convert_sort, rte())
     .def("convert_ast", &bounce_convert_ast, rte())
