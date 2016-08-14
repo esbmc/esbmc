@@ -385,13 +385,7 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
     .def("from_locationt", &location::from_locationt)
     .staticmethod("from_locationt");
 
-  {
-    auto symex = class_<dummy_symex_class>("symex");
-    scope quux = symex;
-
-    build_goto_symex_classes();
-    build_equation_class();
-  }
+  build_goto_symex_classes();
 
   def("downcast_type", &downcast_type);
   def("downcast_expr", &downcast_expr);

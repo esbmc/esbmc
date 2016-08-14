@@ -143,10 +143,23 @@ get_state_level2(const goto_symex_statet::goto_statet &state)
   return state.level2;
 }
 
+class dummy_symex_class { };
+void build_equation_class();
+
 void
 build_goto_symex_classes()
 {
   using namespace boost::python;
+
+  auto symex = class_<dummy_symex_class>("symex");
+  scope quux = symex;
+
+  symex.def("slice", &::slice);
+  symex.staticmethod("slice");
+  symex.def("simple_slice", &::simple_slice);
+  symex.staticmethod("simple_slice");
+
+  build_equation_class();
 
   {
     using namespace renaming;
@@ -709,10 +722,6 @@ build_equation_class()
     .value("OUTPUT", goto_trace_stept::OUTPUT)
     .value("SKIP", goto_trace_stept::SKIP)
     .value("RENUMBER", goto_trace_stept::RENUMBER);
-
-  // Some global functions
-  def("slice", &::slice);
-  def("simple_slice", &::simple_slice);
 }
 
 // A function for trapping to python. Assumptions: it's in the context of
