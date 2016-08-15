@@ -871,14 +871,14 @@ struct Ortor
     if(is_constant(op1))
     {
       // True? Simplify to op2
-      if(get_value(op1) != 0)
+      if(!(get_value(op1) == 0))
         return true_expr;
     }
 
     if(is_constant(op2))
     {
       // True? Simplify to op1
-      if(get_value(op2) != 0)
+      if(!(get_value(op2) == 0))
         return true_expr;
     }
 
@@ -945,7 +945,7 @@ struct Impliestor
 
     // Otherwise, the only other thing that will make this expr always true is
     // if side 2 is true.
-    if(is_constant(op2) && (get_value(op2) != 0))
+    if(is_constant(op2) && !(get_value(op2) == 0))
       return true_expr;
 
     return expr2tc();
