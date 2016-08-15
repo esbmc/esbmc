@@ -3556,7 +3556,7 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Bit nxor operation. Invert bits in bitvector operand. Operand must have the
+/** Bit not operation. Invert bits in bitvector operand. Operand must have the
  *  same type as this expr. @extends bitnot_data */
 class bitnot2t : public bitnot_expr_methods
 {
@@ -3895,7 +3895,7 @@ public:
 };
 
 /** With operation. Updates either an array or a struct/union with a new element
- *  or member. Expression value is the arary or struct/union with the updated
+ *  or member. Expression value is the array or struct/union with the updated
  *  value. Ideally in the future this will become two operations, one for arrays
  *  and one for structs/unions. @extends with_data */
 class with2t : public with_expr_methods
