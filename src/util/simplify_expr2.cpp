@@ -78,7 +78,7 @@ simplify_arith_2ops(
 
   expr2tc simpl_res = expr2tc();
 
-  if(is_bv_type(simplied_side_1->type) && is_bv_type(simplied_side_2->type))
+  if(is_bv_type(simplied_side_1->type) || is_bv_type(simplied_side_2->type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_int2t;
@@ -92,7 +92,7 @@ simplify_arith_2ops(
         simplied_side_1, simplied_side_2, is_constant, get_value);
   }
   else if(is_fixedbv_type(simplied_side_1->type)
-          && is_fixedbv_type(simplied_side_2->type))
+          || is_fixedbv_type(simplied_side_2->type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
@@ -106,7 +106,7 @@ simplify_arith_2ops(
         simplied_side_1, simplied_side_2, is_constant, get_value);
   }
   else if(is_floatbv_type(simplied_side_1->type)
-          && is_floatbv_type(simplied_side_2->type))
+          || is_floatbv_type(simplied_side_2->type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
@@ -120,7 +120,7 @@ simplify_arith_2ops(
         simplied_side_1, simplied_side_2, is_constant, get_value);
   }
   else if(is_bool_type(simplied_side_1->type)
-          && is_bool_type(simplied_side_2->type))
+          || is_bool_type(simplied_side_2->type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_bool2t;
