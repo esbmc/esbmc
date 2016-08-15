@@ -20,13 +20,13 @@ public:
   fixedbv_spect():integer_bits(0), width(0)
   {
   }
-  
+
   fixedbv_spect(unsigned _width, unsigned _integer_bits):
     integer_bits(_integer_bits), width(_width)
   {
     assert(width >= integer_bits);
   }
-  
+
   fixedbv_spect(const class fixedbv_typet &type);
 
   inline unsigned get_fraction_bits() const
@@ -39,7 +39,7 @@ class fixedbvt
 {
 public:
   fixedbv_spect spec;
-  
+
   fixedbvt():v(0)
   {
   }
@@ -64,21 +64,25 @@ public:
   {
     return v==0;
   }
-  
+
   void negate();
 
   fixedbvt &operator /= (const fixedbvt &other);
   fixedbvt &operator *= (const fixedbvt &other);
   fixedbvt &operator += (const fixedbvt &other);
   fixedbvt &operator -= (const fixedbvt &other);
-  
+
+  fixedbvt &operator ! ();
+
   friend bool operator < (const fixedbvt &a, const fixedbvt &b) { return a.v<b.v; }
   friend bool operator <=(const fixedbvt &a, const fixedbvt &b) { return a.v<=b.v; }
   friend bool operator > (const fixedbvt &a, const fixedbvt &b) { return a.v>b.v; }
   friend bool operator >=(const fixedbvt &a, const fixedbvt &b) { return a.v>=b.v; }
   friend bool operator ==(const fixedbvt &a, const fixedbvt &b) { return a.v==b.v; }
   friend bool operator !=(const fixedbvt &a, const fixedbvt &b) { return a.v!=b.v; }
-  
+
+  friend bool operator > (const fixedbvt &a, int i);
+
   const mp_integer &get_value() const { return v; }
   void set_value(const mp_integer &_v) { v=_v; }
 

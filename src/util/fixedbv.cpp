@@ -97,7 +97,21 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
   v=result;
   spec=dest_spec;
 }
-  
+
+fixedbvt& fixedbvt::operator !()
+{
+  this->negate();
+  return (*this);
+}
+
+bool operator >(const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a > other;
+}
+
 void fixedbvt::negate()
 {
   v=-v;
@@ -186,7 +200,7 @@ std::string fixedbvt::format(
 
   if(!fraction_part.empty())
     dest+="."+fraction_part;
-  
+
   while(dest.size()<format_spec.min_width)
     dest=" "+dest;
 

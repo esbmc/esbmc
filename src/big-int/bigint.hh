@@ -227,6 +227,7 @@ public:
 
   BigInt &negate()			{ if(!is_zero()) positive = !positive; return *this; }
   BigInt operator-() const		{ return BigInt (*this).negate(); }
+  BigInt operator!() const    { return operator-(); }
 
   BigInt &operator+= (llong_t) _fast;
   BigInt &operator-= (llong_t) _fast;

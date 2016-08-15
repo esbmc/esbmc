@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <arith_tools.h>
 #include <std_types.h>
 
-
 #include "ieee_float.h"
 
 /*******************************************************************\
@@ -1124,6 +1123,24 @@ ieee_floatt &ieee_floatt::operator -= (const ieee_floatt &other)
 
 /*******************************************************************\
 
+Function: operator !
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+ieee_floatt &ieee_floatt::operator ! ()
+{
+  this->negate();
+  return (*this);
+}
+
+/*******************************************************************\
+
 Function: operator <
 
   Inputs:
@@ -1314,6 +1331,26 @@ bool operator ==(const ieee_floatt &a, int i)
   other.spec=a.spec;
   other.from_integer(i);
   return a==other;
+}
+
+/*******************************************************************\
+
+Function: operator >
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool operator >(const ieee_floatt &a, int i)
+{
+  ieee_floatt other;
+  other.spec=a.spec;
+  other.from_integer(i);
+  return a > other;
 }
 
 /*******************************************************************\

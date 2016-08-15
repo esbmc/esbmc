@@ -220,6 +220,8 @@ public:
   ieee_floatt &operator += (const ieee_floatt &other);
   ieee_floatt &operator -= (const ieee_floatt &other);
 
+  ieee_floatt &operator ! ();
+
   friend bool operator < (const ieee_floatt &a, const ieee_floatt &b);
   friend bool operator <=(const ieee_floatt &a, const ieee_floatt &b);
   friend bool operator > (const ieee_floatt &a, const ieee_floatt &b);
@@ -230,6 +232,7 @@ public:
   friend bool operator ==(const ieee_floatt &a, const ieee_floatt &b);
   friend bool operator !=(const ieee_floatt &a, const ieee_floatt &b);
   friend bool operator ==(const ieee_floatt &a, int i);
+  friend bool operator >(const ieee_floatt &a, int i);
 
   // these do IEEE equality
 
