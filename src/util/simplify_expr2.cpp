@@ -133,18 +133,18 @@ struct Addtor
     if(is_constant(op1))
     {
       // Found a zero? Simplify to op2
-      if(get_value(op1).is_zero())
+      if(get_value(op1) == 0)
         return expr2tc(op2->clone());
     }
 
     if(is_constant(op2))
     {
       // Found a zero? Simplify to op1
-      if(get_value(op2).is_zero())
+      if(get_value(op2) == 0)
         return expr2tc(op1->clone());
     }
 
-    // Two constants? Simplify to result of the multiplication
+    // Two constants? Simplify to result of the addition
     if (is_constant(op1) && is_constant(op2))
     {
       auto c = expr2tc(op1->clone());
@@ -184,7 +184,7 @@ struct Multor
     if(is_constant(op1))
     {
       // Found a zero? Simplify to zero
-      if(get_value(op1).is_zero())
+      if(get_value(op1) == 0)
       {
         auto c = expr2tc(op1->clone());
         get_value(c) = constant_type();
@@ -199,7 +199,7 @@ struct Multor
     if(is_constant(op2))
     {
       // Found a zero? Simplify to zero
-      if(get_value(op2).is_zero())
+      if(get_value(op2) == 0)
       {
         auto c = expr2tc(op2->clone());
         get_value(c) = constant_type();
@@ -241,7 +241,7 @@ struct Divtor
     if(is_constant(numerator))
     {
       // Numerator is zero? Simplify to zero
-      if(get_value(numerator).is_zero())
+      if(get_value(numerator) == 0)
       {
         auto c = expr2tc(numerator->clone());
         get_value(c) = constant_type();
@@ -252,7 +252,7 @@ struct Divtor
     if(is_constant(denominator))
     {
       // Denominator is zero? Don't simplify
-      if(get_value(denominator).is_zero())
+      if(get_value(denominator) == 0)
         return expr2tc();
 
       // Denominator is one? Simplify to numerator's constant
@@ -379,7 +379,7 @@ struct Negator
     std::function<constant_type&(expr2tc&)> to_constant)
   {
     auto c = expr2tc(number->clone());
-    to_constant(c).value.negate();
+    to_constant(c).value = !to_constant(c).value;
     return expr2tc(c);
   }
 };
@@ -401,11 +401,10 @@ struct abstor
 
     // When we call BigInt/fixedbv/floatbv constructor
     // with no argument, it generates the zero equivalent
-    decltype(to_constant(c).value) zero;
-    if(to_constant(c).value > zero)
+    if(to_constant(c).value > 0)
       return expr2tc();
 
-    to_constant(c).value.negate();
+    to_constant(c).value = !to_constant(c).value;
     return expr2tc(c);
   }
 };
