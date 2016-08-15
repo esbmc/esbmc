@@ -1796,7 +1796,8 @@ inline bool is_number_type(const type2tc &t)
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id ||
           t->type_id == type2t::fixedbv_id ||
-          t->type_id == type2t::floatbv_id); }
+          t->type_id == type2t::floatbv_id ||
+          t->type_id == type2t::bool_id); }
 
 inline bool is_number_type(const expr2tc &e)
 { return is_number_type(e->type); }
