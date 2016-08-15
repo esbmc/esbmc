@@ -56,17 +56,7 @@ get_override_checked(const T *x, const char *name)
 // just a coincidence that that derived smt_convt is in a managed environment.
 #define ast_down(x) smt_ast_wrapper::cast_ast_down((x))
 #define sort_down(x) smt_sort_wrapper::cast_sort_down((x))
-#define conv_down(x) smt_convt_wrapper_cvt::cast_conv_down((x))
-
-// Dependency misery: need a definition of a class to extract a PyObject from
-// it's wrapper, but smt_ast and smt_convt are mutually dependent. Thus we
-// have to make a declaration and put a definition further down the file.
-class smt_convt;
-class smt_convt_wrapper_cvt
-{
-public:
-  static boost::python::object cast_conv_down(smt_convt *conv);
-};
+#define conv_down(x) smt_convt_wrapper::cast_conv_down((x))
 
 template <typename ...Args>
 smt_sort_wrapper::smt_sort_wrapper(Args ...args) : smt_sort(args...) { }
@@ -485,7 +475,7 @@ smt_convt_wrapper::pop_tuple_ctx()
 
 // Method for casting an smt_convt down to the wrapped type.
 boost::python::object
-smt_convt_wrapper_cvt::cast_conv_down(smt_convt *c)
+smt_convt_wrapper::cast_conv_down(smt_convt *c)
 {
   using namespace boost::python;
   smt_convt_wrapper *conv = dynamic_cast<smt_convt_wrapper *>(c);

@@ -45,6 +45,7 @@ public:
   friend class get_override_checked_class;
   friend class smt_convt_wrapper_cvt;
   smt_convt_wrapper(bool int_encoding, const namespacet &_ns, bool is_cpp, bool bools_in_arrays, bool can_init_inf_arrays);
+  static boost::python::object cast_conv_down(smt_convt *c);
   smt_astt mk_func_app(smt_sortt s, smt_func_kind k, smt_astt const *args, unsigned int numargs);
   smt_astt mk_func_app_remangled(smt_sortt s, smt_func_kind k, boost::python::object o);
   void assert_ast(smt_astt a);
