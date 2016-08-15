@@ -58,19 +58,19 @@ simplify_arith_2ops(
     return expr2tc();
 
   // Try to recursively simplify nested operations both sides, if any
-  expr2tc to_simplify_side_1 = try_simplification(side_1);
-  expr2tc to_simplify_side_2 = try_simplification(side_2);
+  expr2tc simplied_side_1 = try_simplification(side_1);
+  expr2tc simplied_side_2 = try_simplification(side_2);
 
-  if (!is_constant_expr(to_simplify_side_1)
-      && !is_constant_expr(to_simplify_side_2))
+  if (!is_constant_expr(simplied_side_1)
+      && !is_constant_expr(simplied_side_2))
   {
     // Were we able to simplify the sides?
-    if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
+    if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
     {
-      expr2tc new_div =
-        expr2tc(new constructor(type, to_simplify_side_1, to_simplify_side_2));
+      expr2tc new_op =
+        expr2tc(new constructor(type, simplied_side_1, simplied_side_2));
 
-      return typecast_check_return(type, new_div);
+      return typecast_check_return(type, new_op);
     }
 
     return expr2tc();
@@ -78,7 +78,7 @@ simplify_arith_2ops(
 
   expr2tc simpl_res = expr2tc();
 
-  if(is_bv_type(type))
+  if(is_bv_type(simplied_side_1->type) && is_bv_type(simplied_side_2->type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_int2t;
@@ -89,9 +89,10 @@ simplify_arith_2ops(
 
     simpl_res =
       TFunctor<BigInt>::simplify(
-        to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
+        simplied_side_1, simplied_side_2, is_constant, get_value);
   }
-  else if(is_fixedbv_type(type))
+  else if(is_fixedbv_type(simplied_side_1->type)
+          && is_fixedbv_type(simplied_side_2->type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
@@ -102,9 +103,10 @@ simplify_arith_2ops(
 
     simpl_res =
       TFunctor<fixedbvt>::simplify(
-        to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
+        simplied_side_1, simplied_side_2, is_constant, get_value);
   }
-  else if(is_floatbv_type(type))
+  else if(is_floatbv_type(simplied_side_1->type)
+          && is_floatbv_type(simplied_side_2->type))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
@@ -115,7 +117,21 @@ simplify_arith_2ops(
 
     simpl_res =
       TFunctor<ieee_floatt>::simplify(
-        to_simplify_side_1, to_simplify_side_2, is_constant, get_value);
+        simplied_side_1, simplied_side_2, is_constant, get_value);
+  }
+  else if(is_bool_type(simplied_side_1->type)
+          && is_bool_type(simplied_side_2->type))
+  {
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_bool2t;
+
+    std::function<bool& (expr2tc&)> get_value =
+      [](expr2tc& c) -> bool&
+        { return to_constant_bool2t(c).value; };
+
+    simpl_res =
+      TFunctor<bool>::simplify(
+        simplied_side_1, simplied_side_2, is_constant, get_value);
   }
 
   return typecast_check_return(type, simpl_res);
@@ -343,7 +359,7 @@ simplify_arith_1op(
 
   expr2tc simpl_res = expr2tc();
 
-  if(is_bv_type(type))
+  if(is_bv_type(value->type))
   {
     std::function<constant_int2t& (expr2tc&)> to_constant =
       (constant_int2t&(*)(expr2tc&)) to_constant_int2t;
@@ -351,7 +367,7 @@ simplify_arith_1op(
     simpl_res =
       TFunctor<constant_int2t>::simplify(to_simplify, to_constant);
   }
-  else if(is_fixedbv_type(type))
+  else if(is_fixedbv_type(value->type))
   {
     std::function<constant_fixedbv2t& (expr2tc&)> to_constant =
       (constant_fixedbv2t&(*)(expr2tc&)) to_constant_fixedbv2t;
@@ -359,13 +375,21 @@ simplify_arith_1op(
     simpl_res =
       TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
   }
-  else if(is_floatbv_type(type))
+  else if(is_floatbv_type(value->type))
   {
     std::function<constant_floatbv2t& (expr2tc&)> to_constant =
       (constant_floatbv2t&(*)(expr2tc&)) to_constant_floatbv2t;
 
     simpl_res =
       TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
+  }
+  else if(is_bool_type(value->type))
+  {
+    std::function<constant_bool2t& (expr2tc&)> to_constant =
+      (constant_bool2t&(*)(expr2tc&)) to_constant_bool2t;
+
+    simpl_res =
+      TFunctor<constant_bool2t>::simplify(to_simplify, to_constant);
   }
 
   return typecast_check_return(type, simpl_res);
