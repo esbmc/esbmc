@@ -3565,6 +3565,8 @@ public:
    *  @param v Value to invert */
   bitnot2t(const type2tc &type, const expr2tc &v)
     : bitnot_expr_methods(type, bitnot_id, v) {}
+  bitnot2t(const type2tc &type, const expr2tc &v, const expr2tc& __attribute__((unused)))
+    : bitnot_expr_methods(type, bitnot_id, v) {}
   bitnot2t(const bitnot2t &ref)
     : bitnot_expr_methods(ref) {}
 

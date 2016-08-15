@@ -779,12 +779,32 @@ implies2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
+template<typename constructor>
 static expr2tc
-do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
-                       const type2tc &type, const expr2tc &side_1,
-                       const expr2tc &side_2)
+do_bit_munge_operation(
+  std::function<int64_t(int64_t, int64_t)> opfunc,
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
 {
-  int64_t val1, val2;
+  // Try to recursively simplify nested operations both sides, if any
+  expr2tc to_simplify_side_1 = try_simplification(side_1);
+  expr2tc to_simplify_side_2 = try_simplification(side_2);
+
+  if (!is_constant_expr(to_simplify_side_1)
+      && !is_constant_expr(to_simplify_side_2))
+  {
+    // Were we able to simplify the sides?
+    if((side_1 != to_simplify_side_1) || (side_2 != to_simplify_side_2))
+    {
+      expr2tc new_div =
+        expr2tc(new constructor(type, to_simplify_side_1, to_simplify_side_2));
+
+      return typecast_check_return(type, new_div);
+    }
+
+    return expr2tc();
+  }
 
   // Only support integer and's. If you're a float, pointer, or whatever, you're
   // on your own.
@@ -799,15 +819,13 @@ do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
   // Drama: BigInt does *not* do any kind of twos compliment representation.
   // In fact, negative numbers are stored as positive integers, but marked as
   // being negative. To get around this, perform operations in an {u,}int64,
-  if (int1.value.get_len() * sizeof(BigInt::onedig_t)
-                                         > sizeof(int64_t) ||
-      int2.value.get_len() * sizeof(BigInt::onedig_t)
-                                           > sizeof(int64_t))
+  if (((int1.value.get_len() * sizeof(BigInt::onedig_t)) > sizeof(int64_t))
+      || ((int2.value.get_len() * sizeof(BigInt::onedig_t)) > sizeof(int64_t)))
     return expr2tc();
 
   // Dump will zero-prefix and right align the output number.
-  val1 = int1.value.to_int64();
-  val2 = int2.value.to_int64();
+  int64_t val1 = int1.value.to_int64();
+  int64_t val2 = int2.value.to_int64();
 
   if (int1.value.is_negative()) {
     if (val1 & 0x8000000000000000ULL) {
@@ -846,124 +864,104 @@ do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
   return expr2tc(theint);
 }
 
-static int64_t
-do_bitand_op(int64_t op1, int64_t op2)
-{
-  return op1 & op2;
-}
-
 expr2tc
 bitand2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return do_bit_munge_operation(do_bitand_op, type, side_1, side_2);
-}
+  std::function<int64_t(int64_t, int64_t)> op =
+    [] (int64_t op1, int64_t op2)
+      { return (op1 & op2); };
 
-static int64_t
-do_bitor_op(int64_t op1, int64_t op2)
-{
-  return op1 | op2;
+  return do_bit_munge_operation<bitand2t>(op, type, side_1, side_2);
 }
 
 expr2tc
 bitor2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return do_bit_munge_operation(do_bitor_op, type, side_1, side_2);
-}
+  std::function<int64_t(int64_t, int64_t)> op =
+    [] (int64_t op1, int64_t op2)
+      { return (op1 | op2); };
 
-static int64_t
-do_bitxor_op(int64_t op1, int64_t op2)
-{
-  return op1 ^ op2;
+  return do_bit_munge_operation<bitor2t>(op, type, side_1, side_2);
 }
 
 expr2tc
 bitxor2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return do_bit_munge_operation(do_bitxor_op, type, side_1, side_2);
-}
+  std::function<int64_t(int64_t, int64_t)> op =
+    [] (int64_t op1, int64_t op2)
+      { return (op1 ^ op2); };
 
-static int64_t
-do_bitnand_op(int64_t op1, int64_t op2)
-{
-  return ~(op1 & op2);
+  return do_bit_munge_operation<bitxor2t>(op, type, side_1, side_2);
 }
 
 expr2tc
 bitnand2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return do_bit_munge_operation(do_bitnand_op, type, side_1, side_2);
-}
+  std::function<int64_t(int64_t, int64_t)> op =
+    [] (int64_t op1, int64_t op2)
+      { return ~(op1 & op2); };
 
-static int64_t
-do_bitnor_op(int64_t op1, int64_t op2)
-{
-  return ~(op1 | op2);
+  return do_bit_munge_operation<bitnand2t>(op, type, side_1, side_2);
 }
 
 expr2tc
 bitnor2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return do_bit_munge_operation(do_bitnor_op, type, side_1, side_2);
-}
+  std::function<int64_t(int64_t, int64_t)> op =
+    [] (int64_t op1, int64_t op2)
+      { return ~(op1 | op2); };
 
-static int64_t
-do_bitnxor_op(int64_t op1, int64_t op2)
-{
-  return ~(op1 ^ op2);
+  return do_bit_munge_operation<bitnor2t>(op, type, side_1, side_2);
 }
 
 expr2tc
 bitnxor2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return do_bit_munge_operation(do_bitnxor_op, type, side_1, side_2);
-}
+  std::function<int64_t(int64_t, int64_t)> op =
+    [] (int64_t op1, int64_t op2)
+      { return ~(op1 ^ op2); };
 
-static int64_t
-do_bitnot_op(int64_t op1, int64_t op2 __attribute__((unused)))
-{
-  return ~op1;
+  return do_bit_munge_operation<bitnxor2t>(op, type, side_1, side_2);
 }
 
 expr2tc
 bitnot2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return do_bit_munge_operation(do_bitnot_op, type, value, value);
-}
+  std::function<int64_t(int64_t, int64_t)> op =
+    [] (int64_t op1, int64_t op2 __attribute__((unused)))
+      { return ~(op1); };
 
-static int64_t
-do_shl_op(int64_t op1, int64_t op2)
-{
-  return op1 << op2;
+  return do_bit_munge_operation<bitnot2t>(op, type, value, value);
 }
 
 expr2tc
 shl2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return do_bit_munge_operation(do_shl_op, type, side_1, side_2);
-}
+  std::function<int64_t(int64_t, int64_t)> op =
+    [] (int64_t op1, int64_t op2)
+      { return (op1 << op2); };
 
-static int64_t
-do_lshr_op(int64_t op1, int64_t op2)
-{
-  return ((uint64_t)op1) >> ((uint64_t)op2);
+  return do_bit_munge_operation<shl2t>(op, type, side_1, side_2);
 }
 
 expr2tc
 lshr2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return do_bit_munge_operation(do_lshr_op, type, side_1, side_2);
-}
+  std::function<int64_t(int64_t, int64_t)> op =
+    [] (int64_t op1, int64_t op2)
+      { return ((uint64_t)op1) >> ((uint64_t)op2); };
 
-static int64_t
-do_ashr_op(int64_t op1, int64_t op2)
-{
-  return op1 >> op2;
+  return do_bit_munge_operation<lshr2t>(op, type, side_1, side_2);
 }
 
 expr2tc
 ashr2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return do_bit_munge_operation(do_ashr_op, type, side_1, side_2);
+  std::function<int64_t(int64_t, int64_t)> op =
+    [] (int64_t op1, int64_t op2)
+      { return (op1 >> op2); };
+
+  return do_bit_munge_operation<ashr2t>(op, type, side_1, side_2);
 }
 
 expr2tc
