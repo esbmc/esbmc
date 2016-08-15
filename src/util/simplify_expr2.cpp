@@ -826,15 +826,21 @@ struct Andtor
 
     if(is_constant(op1))
     {
-      // False? Simplify to op2
+      // False? never true
       if(get_value(op1) == 0)
+        return expr2tc(op1->clone());
+      else
+        // constant true; other operand determines truth
         return expr2tc(op2->clone());
     }
 
     if(is_constant(op2))
     {
-      // False? Simplify to op1
+      // False? never true
       if(get_value(op2) == 0)
+        return expr2tc(op2->clone());
+      else
+        // constant true; other operand determines truth
         return expr2tc(op1->clone());
     }
 
@@ -865,15 +871,15 @@ struct Ortor
     if(is_constant(op1))
     {
       // True? Simplify to op2
-      if(get_value(op1) == 1)
-        return expr2tc(op2->clone());
+      if(get_value(op1) != 0)
+        return true_expr;
     }
 
     if(is_constant(op2))
     {
       // True? Simplify to op1
-      if(get_value(op2) == 1)
-        return expr2tc(op1->clone());
+      if(get_value(op2) != 0)
+        return true_expr;
     }
 
     return expr2tc();
@@ -895,7 +901,7 @@ struct Xortor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    // Two constants? Simplify to result of the or
+    // Two constants? Simplify to result of the xor
     if (is_constant(op1) && is_constant(op2))
       return expr2tc(
         new constant_bool2t(!(get_value(op1) == 0) ^ !(get_value(op2) == 0)));
@@ -939,7 +945,7 @@ struct Impliestor
 
     // Otherwise, the only other thing that will make this expr always true is
     // if side 2 is true.
-    if(is_constant(op2) && (get_value(op2) == 0))
+    if(is_constant(op2) && (get_value(op2) != 0))
       return true_expr;
 
     return expr2tc();
