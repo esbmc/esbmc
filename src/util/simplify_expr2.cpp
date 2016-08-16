@@ -228,23 +228,11 @@ struct Multor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    // Two constants? Simplify to result of the multiplication
-    if (is_constant(op1) && is_constant(op2))
-    {
-      auto c = expr2tc(op1->clone());
-      get_value(c) *= get_value(op2);
-      return expr2tc(c);
-    }
-
     if(is_constant(op1))
     {
       // Found a zero? Simplify to zero
       if(get_value(op1) == 0)
-      {
-        auto c = expr2tc(op1->clone());
-        get_value(c) = constant_type();
-        return expr2tc(c);
-      }
+        return expr2tc(op1->clone());
 
       // Found an one? Simplify to op2
       if(get_value(op1) == 1)
@@ -255,15 +243,19 @@ struct Multor
     {
       // Found a zero? Simplify to zero
       if(get_value(op2) == 0)
-      {
-        auto c = expr2tc(op2->clone());
-        get_value(c) = constant_type();
-        return expr2tc(c);
-      }
+        return expr2tc(op2->clone());
 
       // Found an one? Simplify to op1
       if(get_value(op2) == 1)
         return expr2tc(op1->clone());
+    }
+
+    // Two constants? Simplify to result of the multiplication
+    if (is_constant(op1) && is_constant(op2))
+    {
+      auto c = expr2tc(op1->clone());
+      get_value(c) *= get_value(op2);
+      return expr2tc(c);
     }
 
     return expr2tc();
@@ -285,23 +277,11 @@ struct Divtor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    // Two constants? Simplify to result of the division
-    if (is_constant(numerator) && is_constant(denominator))
-    {
-      auto c = expr2tc(numerator->clone());
-      get_value(c) /= get_value(denominator);
-      return expr2tc(c);
-    }
-
     if(is_constant(numerator))
     {
       // Numerator is zero? Simplify to zero
       if(get_value(numerator) == 0)
-      {
-        auto c = expr2tc(numerator->clone());
-        get_value(c) = constant_type();
-        return expr2tc(c);
-      }
+        return expr2tc(numerator->clone());
     }
 
     if(is_constant(denominator))
@@ -313,6 +293,14 @@ struct Divtor
       // Denominator is one? Simplify to numerator's constant
       if(get_value(denominator) == 1)
         return expr2tc(numerator->clone());
+    }
+
+    // Two constants? Simplify to result of the division
+    if (is_constant(numerator) && is_constant(denominator))
+    {
+      auto c = expr2tc(numerator->clone());
+      get_value(c) /= get_value(denominator);
+      return expr2tc(c);
     }
 
     return expr2tc();
@@ -850,11 +838,6 @@ struct Andtor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    // Two constants? Simplify to result of the and
-    if (is_constant(op1) && is_constant(op2))
-      return expr2tc(
-        new constant_bool2t(!(get_value(op1) == 0) && !(get_value(op2) == 0)));
-
     if(is_constant(op1))
     {
       // False? never true
@@ -874,6 +857,11 @@ struct Andtor
         // constant true; other operand determines truth
         return expr2tc(op1->clone());
     }
+
+    // Two constants? Simplify to result of the and
+    if (is_constant(op1) && is_constant(op2))
+      return expr2tc(
+        new constant_bool2t(!(get_value(op1) == 0) && !(get_value(op2) == 0)));
 
     return expr2tc();
   }
@@ -894,11 +882,6 @@ struct Ortor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    // Two constants? Simplify to result of the or
-    if (is_constant(op1) && is_constant(op2))
-      return expr2tc(
-        new constant_bool2t(!(get_value(op1) == 0) || !(get_value(op2) == 0)));
-
     if(is_constant(op1))
     {
       // True? Simplify to op2
@@ -912,6 +895,11 @@ struct Ortor
       if(!(get_value(op2) == 0))
         return true_expr;
     }
+
+    // Two constants? Simplify to result of the or
+    if (is_constant(op1) && is_constant(op2))
+      return expr2tc(
+        new constant_bool2t(!(get_value(op1) == 0) || !(get_value(op2) == 0)));
 
     return expr2tc();
   }
@@ -932,11 +920,6 @@ struct Xortor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    // Two constants? Simplify to result of the xor
-    if (is_constant(op1) && is_constant(op2))
-      return expr2tc(
-        new constant_bool2t(!(get_value(op1) == 0) ^ !(get_value(op2) == 0)));
-
     if(is_constant(op1))
     {
       // False? Simplify to op2
@@ -950,6 +933,11 @@ struct Xortor
       if(get_value(op2) == 0)
         return expr2tc(op1->clone());
     }
+
+    // Two constants? Simplify to result of the xor
+    if (is_constant(op1) && is_constant(op2))
+      return expr2tc(
+        new constant_bool2t(!(get_value(op1) == 0) ^ !(get_value(op2) == 0)));
 
     return expr2tc();
   }
