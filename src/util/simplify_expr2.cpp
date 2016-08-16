@@ -189,9 +189,9 @@ struct Subtor
   {
     if(is_constant(op1))
     {
-      // Found a zero? Simplify to op2
+      // Found a zero? Simplify to -op2
       if(get_value(op1) == 0)
-        return expr2tc(op2->clone());
+        return expr2tc(new neg2t(op2->type, op2));
     }
 
     if(is_constant(op2))
