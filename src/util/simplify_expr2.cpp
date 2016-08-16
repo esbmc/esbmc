@@ -178,14 +178,45 @@ add2t::do_simplify(bool __attribute__((unused))) const
   return simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
 }
 
+template<class constant_type>
+struct Subtor
+{
+  static expr2tc simplify(
+    expr2tc &op1,
+    expr2tc &op2,
+    std::function<bool(const expr2tc&)> is_constant,
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    if(is_constant(op1))
+    {
+      // Found a zero? Simplify to op2
+      if(get_value(op1) == 0)
+        return expr2tc(op2->clone());
+    }
+
+    if(is_constant(op2))
+    {
+      // Found a zero? Simplify to op1
+      if(get_value(op2) == 0)
+        return expr2tc(op1->clone());
+    }
+
+    // Two constants? Simplify to result of the subtraction
+    if (is_constant(op1) && is_constant(op2))
+    {
+      auto c = expr2tc(op1->clone());
+      get_value(c) -= get_value(op2);
+      return expr2tc(c);
+    }
+
+    return expr2tc();
+  }
+};
+
 expr2tc
 sub2t::do_simplify(bool second __attribute__((unused))) const
 {
-  // rewrite "a-b" to "a+(-b)" and call simplify add
-  expr2tc neg = expr2tc(new neg2t(type, side_2->clone()));
-  expr2tc new_add = expr2tc(new add2t(type, side_1->clone(), neg->clone()));
-
-  return expr2tc(new_add->do_simplify());
+  return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
 }
 
 template<class constant_type>
