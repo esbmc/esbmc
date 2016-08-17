@@ -32,7 +32,7 @@
  *
  *  The conceptual data flow is that an SSA program held by
  *  symex_target_equationt is converted into a series of boolean propositions
- *  in some kind of solver context, the handle to which are objects of class 
+ *  in some kind of solver context, the handle to which are objects of class
  *  smt_ast. These are then asserted as appropriate (or conjoined or
  *  disjuncted), after which the solver may be asked whether the formula is
  *  or not. If it is, the value of symbols in the formula may be retrieved
@@ -433,7 +433,7 @@ public:
    *  @return The inverted piece of AST. */
   smt_astt invert_ast(smt_astt a);
 
-  /** Create an ipmlication between two smt_ast's. 
+  /** Create an ipmlication between two smt_ast's.
    *  @param a The ast that implies the truth of the other. Boolean.
    *  @param b The ast whos truth is implied. Boolean.
    *  @return The resulting piece of AST. */
@@ -575,6 +575,10 @@ public:
    *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w) = 0;
+
+  /** Create a floating point bitvector
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_bvfloat() = 0;
 
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.

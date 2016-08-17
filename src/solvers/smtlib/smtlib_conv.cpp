@@ -730,6 +730,13 @@ smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 }
 
 smt_ast *
+smtlib_convt::mk_smt_bvfloat()
+{
+  std::cout << "Floatbv not supported yet" << std::endl;
+  abort();
+}
+
+smt_ast *
 smtlib_convt::mk_smt_bool(bool val)
 {
   smtlib_smt_ast *a =

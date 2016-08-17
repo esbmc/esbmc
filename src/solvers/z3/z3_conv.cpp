@@ -660,6 +660,13 @@ z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 }
 
 smt_astt
+z3_convt::mk_smt_bvfloat()
+{
+  std::cout << "Floatbv not supported yet" << std::endl;
+  abort();
+}
+
+smt_astt
 z3_convt::mk_smt_bool(bool val)
 {
   smt_sort *s = mk_sort(SMT_SORT_BOOL);

@@ -259,6 +259,13 @@ boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 }
 
 smt_ast *
+boolector_convt::mk_smt_bvfloat()
+{
+  std::cout << "Floatbv not supported yet" << std::endl;
+  abort();
+}
+
+smt_ast *
 boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
                               unsigned int w)
 {
