@@ -287,14 +287,6 @@ struct Addtor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    // Two constants? Simplify to result of the addition
-    if (is_constant(op1) && is_constant(op2))
-    {
-      auto c = expr2tc(op1->clone());
-      get_value(c) += get_value(op2);
-      return expr2tc(c);
-    }
-
     if(is_constant(op1))
     {
       // Found a zero? Simplify to op2
@@ -307,6 +299,14 @@ struct Addtor
       // Found a zero? Simplify to op1
       if(get_value(op2) == 0)
         return expr2tc(op1->clone());
+    }
+
+    // Two constants? Simplify to result of the addition
+    if (is_constant(op1) && is_constant(op2))
+    {
+      auto c = expr2tc(op1->clone());
+      get_value(c) += get_value(op2);
+      return expr2tc(c);
     }
 
     return expr2tc();
