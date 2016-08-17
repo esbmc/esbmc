@@ -24,6 +24,11 @@ typecast_check_return(const type2tc &type, expr2tc &expr)
   if(is_nil_expr(expr))
     return expr2tc();
 
+  // Don't type cast from constant to pointer
+  // TODO: check if this is right
+  if(is_pointer_type(type) && is_number_type(expr))
+    return expr;
+
   // Create a typecast of the result
   expr2tc typecast = expr2tc(new typecast2t(type, expr));
 
