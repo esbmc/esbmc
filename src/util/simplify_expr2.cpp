@@ -342,7 +342,16 @@ struct Subtor
     {
       // Found a zero? Simplify to -op2
       if(get_value(op1) == 0)
-        return expr2tc(new neg2t(op2->type, op2));
+      {
+        auto c = expr2tc(new neg2t(op2->type, op2));
+        expr2tc neg_simpl_res = expr2tc(c->simplify());
+
+        // We might not be able to simplify the negation, if op2 is a symbol
+        if(!is_nil_expr(neg_simpl_res))
+          return expr2tc(neg_simpl_res->clone());
+
+        return expr2tc(c);
+      }
     }
 
     if(is_constant(op2))
