@@ -421,6 +421,7 @@ expr_handle_table:
   switch (expr->expr_id) {
   case expr2t::constant_int_id:
   case expr2t::constant_fixedbv_id:
+  case expr2t::constant_floatbv_id:
   case expr2t::constant_bool_id:
   case expr2t::symbol_id:
     a = convert_terminal(expr);
@@ -842,6 +843,7 @@ smt_convt::convert_sort(const type2tc &type)
   }
   break;
   case type2t::fixedbv_id:
+  case type2t::floatbv_id:
   {
     unsigned int width = type->get_width();
     if (int_encoding)
@@ -975,6 +977,17 @@ smt_convt::convert_terminal(const expr2tc &expr)
       fin = magnitude | fraction;
 
       return mk_smt_bvint(mp_integer(fin), false, bitwidth);
+    }
+  }
+  case expr2t::constant_floatbv_id:
+  {
+    const constant_fixedbv2t &thereal = to_constant_fixedbv2t(expr);
+    if (int_encoding) {
+      std::string val = thereal.value.to_expr().value().as_string();
+      std::string result = fixed_point(val, thereal.value.spec.width);
+      return mk_smt_real(result);
+    } else {
+      return mk_smt_bvfloat();
     }
   }
   case expr2t::constant_bool_id:
