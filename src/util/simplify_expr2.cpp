@@ -52,6 +52,142 @@ try_simplification(const expr2tc& expr)
   return expr2tc(to_simplify->clone());
 }
 
+static void
+fetch_ops_from_this_type(
+  std::list<expr2tc> &ops,
+  expr2t::expr_ids id,
+  const expr2tc &expr)
+{
+
+  if (expr->expr_id == id) {
+    expr->foreach_operand([&ops, id] (const expr2tc &e) {
+      fetch_ops_from_this_type(ops, id, e);
+      }
+    );
+  } else {
+    ops.push_back(expr);
+  }
+}
+
+static bool
+rebalance_associative_tree(
+  const expr2t &expr,
+  std::list<expr2tc> &ops,
+  std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> op_wrapper)
+{
+
+  // So the purpose of this is to take a tree of all-the-same-operation and
+  // re-arrange it so that there are some operations that we can simplify.
+  // In old irep things like addition or subtraction or whatever could take
+  // a whole set of operands (however many you shoved in the vector) and those
+  // could all be simplified with each other. However, now that we've moved to
+  // binary-only ireps, this isn't possible (and it's causing high
+  // inefficiencies).
+  // So instead, reconstruct a tree of all-the-same ireps into a vector and
+  // try to simplify all of their contents, then try to reconfigure into another
+  // set of operations.
+  // There's great scope for making this /much/ more efficient via passing modes
+  // and vectors downwards, but lets not prematurely optimise. All this is
+  // faster than stringly stuff.
+
+  // Extract immediate operands
+  expr.foreach_operand([&ops, &expr] (const expr2tc &e) {
+      fetch_ops_from_this_type(ops, expr.expr_id, e);
+    }
+  );
+
+  // Are there enough constant values in there?
+  unsigned int const_values = 0;
+  unsigned int orig_size = ops.size();
+  for (std::list<expr2tc>::const_iterator it = ops.begin();
+       it != ops.end(); it++)
+    if (is_constant_expr(*it))
+      const_values++;
+
+  // Nothing for us to simplify.
+  if (const_values <= 1)
+    return false;
+
+  // Otherwise, we can go through simplifying operands.
+  expr2tc accuml;
+  for (std::list<expr2tc>::iterator it = ops.begin();
+       it != ops.end(); it++) {
+    if (!is_constant_expr(*it))
+      continue;
+
+    // We have a constant; do we have another constant to simplify with?
+    if (is_nil_expr(accuml)) {
+      // Juggle iterators, our iterator becomes invalid when we erase it.
+      std::list<expr2tc>::iterator back = it;
+      back--;
+      accuml = *it;
+      ops.erase(it);
+      it = back;
+      continue;
+    }
+
+    // Now attempt to simplify that. Create a new associative object and
+    // give it a shot.
+    expr2tc tmp = op_wrapper(accuml, *it);
+    if (is_nil_expr(tmp))
+      continue; // Creating wrapper rejected it.
+
+    tmp = tmp->simplify();
+    if (is_nil_expr(tmp))
+      // For whatever reason we're unable to simplify these two constants.
+      continue;
+
+    // It's good; remove that object from the list.
+    accuml = tmp;
+    std::list<expr2tc>::iterator back = it;
+    back--;
+    ops.erase(it);
+    it = back;
+  }
+
+  // So, we've attempted to remove some things. There are three cases.
+  // First, nothing was pulled out of the list. Shouldn't happen, but just
+  // in case...
+  if (ops.size() == orig_size)
+    return false;
+
+  // If only one constant value was removed from the list, then we attempted to
+  // simplify two constants and it failed. No simplification.
+  if (ops.size() == orig_size - 1)
+    return false;
+
+  // Finally; we've succeeded and simplified something. Push the simplified
+  // constant back at the end of the list.
+  ops.push_back(accuml);
+  return true;
+}
+
+expr2tc
+attempt_associative_simplify(
+  const expr2t &expr,
+  std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> op_wrapper)
+{
+
+  std::list<expr2tc> operands;
+  if (rebalance_associative_tree(expr, operands, op_wrapper)) {
+    // Horray, we simplified. Recreate.
+    assert(operands.size() >= 2);
+    std::list<expr2tc>::const_iterator it = operands.begin();
+    expr2tc accuml = *it;
+    it++;
+    for ( ; it != operands.end(); it++) {
+      expr2tc tmp;
+      accuml = op_wrapper(accuml, *it);
+      if (is_nil_expr(accuml))
+        return expr2tc(); // wrapper rejected new obj :O
+    }
+
+    return accuml;
+  } else {
+    return expr2tc();
+  }
+}
+
 template<template<typename> class TFunctor, typename constructor>
 static expr2tc
 simplify_arith_2ops(
@@ -180,7 +316,17 @@ struct Addtor
 expr2tc
 add2t::do_simplify(bool __attribute__((unused))) const
 {
-  return simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
+  expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
+
+  if(!is_nil_expr(res))
+    return res;
+
+  // Attempt associative simplification
+  std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
+    [this] (const expr2tc &arg1, const expr2tc &arg2) -> expr2tc
+      { return expr2tc(new add2t(this->type, arg1, arg2)); };
+
+  return attempt_associative_simplify(*this, add_wrapper);
 }
 
 template<class constant_type>
