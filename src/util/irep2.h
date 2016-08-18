@@ -1395,9 +1395,9 @@ public:
   unsigned int exponent;
 
 // Type mangling:
-  typedef esbmct::field_traits<unsigned int, floatbv_data, &floatbv_data::exponent> exponent_field;
   typedef esbmct::field_traits<unsigned int, floatbv_data, &floatbv_data::fraction> fraction_field;
-  typedef esbmct::type2t_traits<exponent_field, fraction_field> traits;
+  typedef esbmct::field_traits<unsigned int, floatbv_data, &floatbv_data::exponent> exponent_field;
+  typedef esbmct::type2t_traits<fraction_field, exponent_field> traits;
 };
 
 class string_data : public type2t
