@@ -301,6 +301,12 @@ cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
   return new cvc_smt_ast(this, s, e);
 }
 
+smt_ast* cvc_convt::mk_smt_bvfloat()
+{
+  std::cout << "Floatbv not supported yet" << std::endl;
+  abort();
+}
+
 smt_ast *
 cvc_convt::mk_smt_bool(bool val)
 {

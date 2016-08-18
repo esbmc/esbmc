@@ -367,6 +367,12 @@ yices_convt::mk_smt_bvint(const mp_integer &theint,
   return new yices_smt_ast(this, s, term);
 }
 
+smt_astt yices_convt::mk_smt_bvfloat()
+{
+  std::cout << "Floatbv not supported yet" << std::endl;
+  abort();
+}
+
 smt_astt
 yices_convt::mk_smt_bool(bool val)
 {

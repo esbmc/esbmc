@@ -426,6 +426,12 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint,
   return new mathsat_smt_ast(this, s, t);
 }
 
+smt_ast* mathsat_convt::mk_smt_bvfloat()
+{
+  std::cout << "Floatbv not supported yet" << std::endl;
+  abort();
+}
+
 smt_ast *
 mathsat_convt::mk_smt_bool(bool val)
 {
