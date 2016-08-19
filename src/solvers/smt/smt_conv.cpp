@@ -981,13 +981,27 @@ smt_convt::convert_terminal(const expr2tc &expr)
   }
   case expr2t::constant_floatbv_id:
   {
-    const constant_fixedbv2t &thereal = to_constant_fixedbv2t(expr);
+    const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
     if (int_encoding) {
       std::string val = thereal.value.to_expr().value().as_string();
-      std::string result = fixed_point(val, thereal.value.spec.width);
+      std::string result = fixed_point(val, thereal.value.spec.width());
       return mk_smt_real(result);
     } else {
-      return mk_smt_bvfloat();
+
+      unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
+      unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
+
+      // TODO: handle the hidden bit?
+      const mp_integer fraction = thereal.value.get_fraction();
+      const mp_integer exponent = thereal.value.get_exponent();
+      bool sign = thereal.value.get_sign();
+
+      return mk_smt_bvfloat(
+        exponent,
+        fraction,
+        sign,
+        exponent_width,
+        fraction_width);
     }
   }
   case expr2t::constant_bool_id:
