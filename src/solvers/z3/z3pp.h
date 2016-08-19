@@ -474,6 +474,10 @@ namespace z3 {
         */
         bool is_bv() const { return sort_kind() == Z3_BV_SORT; }
         /**
+            \brief Return true if this sort is a Floating point sort.
+         */
+        bool is_fpa() const { return sort_kind() == Z3_FLOATING_POINT_SORT; }
+        /**
             \brief Return true if this sort is a Array sort.
         */
         bool is_array() const { return sort_kind() == Z3_ARRAY_SORT; }
@@ -591,6 +595,10 @@ namespace z3 {
            \brief Return true if this is a Bit-vector expression.
         */
         bool is_bv() const { return get_sort().is_bv(); }
+        /**
+           \brief Return true if this is a Floating point expression.
+         */
+        bool is_fpa() const { return get_sort().is_fpa(); }
         /**
            \brief Return true if this is a Array expression.
         */
