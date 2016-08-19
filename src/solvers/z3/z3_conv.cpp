@@ -660,7 +660,8 @@ z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 }
 
 smt_astt
-z3_convt::mk_smt_bvfloat()
+z3_convt::mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
+                         bool sgn, unsigned ew, unsigned sw)
 {
   std::cout << "Floatbv not supported yet" << std::endl;
   abort();

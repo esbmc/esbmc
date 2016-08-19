@@ -79,7 +79,8 @@ public:
   virtual smt_astt mk_smt_real(const std::string &str);
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
-  virtual smt_astt mk_smt_bvfloat();
+  virtual smt_astt mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
+                                  bool sgn, unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_bool(bool val);
   virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_astt mk_array_symbol(const std::string &name, const smt_sort *s,
