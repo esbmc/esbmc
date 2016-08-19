@@ -1022,11 +1022,38 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
     return expr2tc();
   }
 
-  if (Z3_get_ast_kind(z3_ctx, e) != Z3_NUMERAL_AST)
-    return expr2tc();
+  if (Z3_get_ast_kind(z3_ctx, e) == Z3_NUMERAL_AST)
+  {
+    std::string value = Z3_get_numeral_string(z3_ctx, e);
+    return constant_int2tc(t, BigInt(value.c_str()));
+  }
+  else if (Z3_get_ast_kind(z3_ctx, e) == Z3_APP_AST)
+  {
+    // floatbv?
+    if(!is_floatbv_type(t))
+      return expr2tc();
 
-  std::string value = Z3_get_numeral_string(z3_ctx, e);
-  return constant_int2tc(t, BigInt(value.c_str()));
+    ieee_float_spect spec(
+      Z3_fpa_get_sbits(z3_ctx, e.get_sort()),
+      Z3_fpa_get_ebits(z3_ctx, e.get_sort()));
+
+    int sgn;
+    Z3_fpa_get_numeral_sign(z3_ctx, e, &sgn);
+
+    long long unsigned int sig;
+    Z3_fpa_get_numeral_significand_uint64(z3_ctx, e, &sig);
+
+    long long int exp;
+    Z3_fpa_get_numeral_exponent_int64(z3_ctx, e, &exp);
+
+    ieee_floatt value(spec);
+    value.from_base10(sig, exp);
+    value.set_sign(sgn);
+
+    return constant_floatbv2tc(t, value);
+  }
+
+  return expr2tc();
 }
 
 expr2tc

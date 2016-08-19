@@ -1834,6 +1834,14 @@ smt_convt::get(const expr2tc &expr)
     fbv.from_expr(value_expr);
     return constant_fixedbv2tc(expr->type, fbv);
   }
+  case type2t::floatbv_id:
+  {
+    expr2tc tmp = get_bv(expr->type, convert_ast(expr));
+    if (is_nil_expr(tmp))
+      return expr2tc();
+
+    return tmp;
+  }
   case type2t::array_id:
     return get_array(convert_ast(expr), expr->type);
   case type2t::struct_id:
