@@ -843,13 +843,22 @@ smt_convt::convert_sort(const type2tc &type)
   }
   break;
   case type2t::fixedbv_id:
-  case type2t::floatbv_id:
   {
     unsigned int width = type->get_width();
     if (int_encoding)
       result = mk_sort(SMT_SORT_REAL);
     else
       result = mk_sort(SMT_SORT_BV, width, false);
+  }
+  break;
+  case type2t::floatbv_id:
+  {
+    unsigned int fraw = to_floatbv_type(type).fraction;
+    unsigned int expw = to_floatbv_type(type).exponent;
+    if (int_encoding)
+      result = mk_sort(SMT_SORT_REAL);
+    else
+      result = mk_sort(SMT_SORT_FLOATBV, expw, fraw);
   }
   break;
   case type2t::string_id:
