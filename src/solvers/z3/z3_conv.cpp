@@ -692,8 +692,7 @@ smt_sort *
 z3_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
-  z3_smt_sort *s = NULL, *dom, *range;
-  unsigned long uint;
+  z3_smt_sort *s = NULL;
 
   va_start(ap, k);
   switch (k) {
@@ -704,13 +703,15 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
     s = new z3_smt_sort(k, ctx.real_sort());
     break;
   case SMT_SORT_BV:
-    uint = va_arg(ap, unsigned long);
+  {
+    unsigned long uint = va_arg(ap, unsigned long);
     s = new z3_smt_sort(k, ctx.bv_sort(uint), uint);
     break;
+  }
   case SMT_SORT_ARRAY:
   {
-    dom = va_arg(ap, z3_smt_sort *); // Consider constness?
-    range = va_arg(ap, z3_smt_sort *);
+    z3_smt_sort *dom = va_arg(ap, z3_smt_sort *); // Consider constness?
+    z3_smt_sort *range = va_arg(ap, z3_smt_sort *);
     assert(int_encoding || dom->data_width != 0);
 
     // The range data width is allowed to be zero, which happens if the range
@@ -726,6 +727,13 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_BOOL:
     s = new z3_smt_sort(k, ctx.bool_sort());
     break;
+  case SMT_SORT_FLOATBV:
+  {
+    unsigned ew = va_arg(ap, unsigned long);
+    unsigned sw = va_arg(ap, unsigned long);
+    s = new z3_smt_sort(k, ctx.fpa_sort(ew, sw));
+    break;
+  }
   default:
     assert(0);
   }

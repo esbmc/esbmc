@@ -102,6 +102,7 @@ enum smt_sort_kind {
   SMT_SORT_BOOL = 16,
   SMT_SORT_STRUCT = 32,
   SMT_SORT_UNION = 64, // Contencious
+  SMT_SORT_FLOATBV = 128,
 };
 
 #define SMT_SORT_ALLINTS (SMT_SORT_INT | SMT_SORT_REAL | SMT_SORT_BV)
