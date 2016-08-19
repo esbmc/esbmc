@@ -230,6 +230,10 @@ namespace z3 {
         */
         sort bv_sort(unsigned sz);
         /**
+           \brief Return the floating point Bit-vector sort of size \c ew + sw + 1.
+        */
+        sort fpa_sort(unsigned ew, unsigned sw);
+        /**
            \brief Return the sort for ASCII strings.
          */
         sort string_sort();
@@ -299,6 +303,8 @@ namespace z3 {
         expr bv_val(int64_t n, unsigned sz);
         expr bv_val(uint64_t n, unsigned sz);
         expr bv_val(char const * n, unsigned sz);
+
+        expr fpa_val(bool sgn, signed int exp, unsigned int sig, sort const & sort);
 
         expr string_val(char const* s);
         expr string_val(std::string const& s);
@@ -1952,6 +1958,7 @@ namespace z3 {
     inline sort context::int_sort() { Z3_sort s = Z3_mk_int_sort(m_ctx); check_error(); return sort(*this, s); }
     inline sort context::real_sort() { Z3_sort s = Z3_mk_real_sort(m_ctx); check_error(); return sort(*this, s); }
     inline sort context::bv_sort(unsigned sz) { Z3_sort s = Z3_mk_bv_sort(m_ctx, sz); check_error(); return sort(*this, s); }
+    inline sort context::fpa_sort(unsigned ew, unsigned sw) { Z3_sort s = Z3_mk_fpa_sort(m_ctx, ew, sw); check_error(); return sort(*this, s); }
 
     inline sort context::array_sort(sort d, sort r) { Z3_sort s = Z3_mk_array_sort(m_ctx, d, r); check_error(); return sort(*this, s); }
     inline sort context::enumeration_sort(char const * name, unsigned n, char const * const * enum_names, func_decl_vector & cs, func_decl_vector & ts) {
@@ -2086,6 +2093,13 @@ namespace z3 {
     inline expr context::bv_val(int64_t n, unsigned sz) { Z3_ast r = Z3_mk_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
     inline expr context::bv_val(uint64_t n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
     inline expr context::bv_val(char const * n, unsigned sz) { Z3_ast r = Z3_mk_numeral(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
+
+    inline expr context::fpa_val(bool sgn, signed exp, unsigned sig, sort const & sort)
+    {
+      Z3_ast r = Z3_mk_fpa_numeral_int_uint(m_ctx, bool_val(sgn), exp, sig, sort);
+      check_error();
+      return expr(*this, r);
+    }
 
     inline expr context::num_val(int n, sort const & s) { Z3_ast r = Z3_mk_int(m_ctx, n, s); check_error(); return expr(*this, r); }
 
