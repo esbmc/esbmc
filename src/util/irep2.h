@@ -3925,7 +3925,7 @@ public:
   /** Primary constructor.
    *  @param type Type of extracted member.
    *  @param source Data structure to extract from.
-   *  @param memb ΩName of member to extract.  */
+   *  @param memb Name of member to extract.  */
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : member_expr_methods(type, member_id, source, memb) {}
   member2t(const member2t &ref)
