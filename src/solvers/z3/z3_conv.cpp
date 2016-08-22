@@ -1033,22 +1033,29 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
     if(!is_floatbv_type(t))
       return expr2tc();
 
-    ieee_float_spect spec(
-      Z3_fpa_get_sbits(z3_ctx, e.get_sort()),
-      Z3_fpa_get_ebits(z3_ctx, e.get_sort()));
+    unsigned ew = Z3_fpa_get_ebits(z3_ctx, e.get_sort());
+    unsigned sw = Z3_fpa_get_sbits(z3_ctx, e.get_sort());
 
-    int sgn;
+    ieee_float_spect spec(sw, ew);
+
+    int sgn = 0;
     Z3_fpa_get_numeral_sign(z3_ctx, e, &sgn);
 
-    long long unsigned int sig;
+    long long unsigned int sig = 0;
     Z3_fpa_get_numeral_significand_uint64(z3_ctx, e, &sig);
 
-    long long int exp;
+    long long int exp = 0;
     Z3_fpa_get_numeral_exponent_int64(z3_ctx, e, &exp);
 
+    std::string value_str = (sgn > 0) ? "1" : "0";
+    value_str += integer2binary(exp + 127, ew);
+    value_str += integer2binary(sig, sw);
+
+    constant_exprt value_expr(spec.to_type());
+    value_expr.set_value(value_str);
+
     ieee_floatt value(spec);
-    value.from_base10(sig, exp);
-    value.set_sign(sgn);
+    value.from_expr(value_expr);
 
     return constant_floatbv2tc(t, value);
   }

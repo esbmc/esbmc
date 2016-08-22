@@ -1000,10 +1000,9 @@ smt_convt::convert_terminal(const expr2tc &expr)
       unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
       unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
 
-      // TODO: handle the hidden bit?
+      bool sign = thereal.value.get_sign();
       const mp_integer fraction = thereal.value.get_fraction();
       const mp_integer exponent = thereal.value.get_exponent();
-      bool sign = thereal.value.get_sign();
 
       return mk_smt_bvfloat(
         exponent,
