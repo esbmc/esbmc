@@ -189,8 +189,8 @@ public:
   bool is_double() const;
   bool is_float() const;
   mp_integer pack() const;
-  void extract_base2(mp_integer &_exponent, mp_integer &_fraction) const;
-  void extract_base10(mp_integer &_exponent, mp_integer &_fraction) const;
+  void extract_base2(mp_integer &_fraction, mp_integer &_exponent) const;
+  void extract_base10(mp_integer &_fraction, mp_integer &_exponent) const;
   mp_integer to_integer() const; // this always rounds to zero
 
   // performs conversion from ieee floating point format
