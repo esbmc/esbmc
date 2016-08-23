@@ -1002,7 +1002,11 @@ smt_convt::convert_terminal(const expr2tc &expr)
 
       bool sign = thereal.value.get_sign();
       const mp_integer fraction = thereal.value.get_fraction();
-      const mp_integer exponent = thereal.value.get_exponent();
+
+      // If the number is denormal, we set the exponent to 0,
+      // which is equivalent to -bias()
+      const mp_integer exponent = thereal.value.is_normal() ?
+        thereal.value.get_exponent() : -thereal.value.spec.bias();
 
       return mk_smt_bvfloat(
         exponent,
