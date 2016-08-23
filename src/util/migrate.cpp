@@ -683,7 +683,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_fixedbv) {
     migrate_type(expr.type(), type);
 
-    fixedbvt bv(expr);
+    fixedbvt bv(to_constant_expr(expr));
 
     expr2t *new_expr = new constant_fixedbv2t(type, bv);
     new_expr_ref = expr2tc(new_expr);
@@ -1644,9 +1644,6 @@ migrate_expr_back(const expr2tc &ref)
   case expr2t::constant_floatbv_id:
   {
     const constant_floatbv2t &ref2 = to_constant_floatbv2t(ref);
-
-    // TODO: should we try to round the number like it's done for
-    // the fixedbv?
     ieee_floatt tmp = ref2.value;
     return tmp.to_expr();
   }

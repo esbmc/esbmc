@@ -513,7 +513,7 @@ expr_handle_table:
       a = mk_func_app(sort, SMT_FUNC_DIV, args, 2);
     } else if (is_fixedbv_type(expr)) {
       const div2t &div = to_div2t(expr);
-      fixedbvt fbt(migrate_expr_back(expr));
+      fixedbvt fbt(to_constant_expr(migrate_expr_back(expr)));
 
       unsigned int fraction_bits = fbt.spec.get_fraction_bits();
       unsigned int topbit2 = div.side_2->type->get_width();

@@ -27,7 +27,7 @@ std::string format_constantt::operator()(const exprt &expr)
     }
     else if(expr.type().id()=="fixedbv")
     {
-      return fixedbvt(expr).format(*this);
+      return fixedbvt(to_constant_expr(expr)).format(*this);
     }
     else if(expr.type().id()=="floatbv")
     {

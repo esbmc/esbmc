@@ -138,12 +138,12 @@ counterexample_value(
       else if (is_fixedbv_type(value))
       {
         value_string +=
-          " (" + to_constant_fixedbv2t(value).value.to_ansi_c_string() + ")";
+         " (" + to_constant_fixedbv2t(value).value.to_expr().get_value().as_string() + ")";
       }
       else if (is_floatbv_type(value))
       {
         value_string +=
-          " (" + to_constant_floatbv2t(value).value.to_ansi_c_string() + ")";
+          " (" + to_constant_floatbv2t(value).value.to_expr().get_value().as_string() + ")";
       }
     }
   }

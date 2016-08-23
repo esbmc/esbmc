@@ -268,14 +268,14 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
          expr_type_id=="signedbv")
       {
         // cast from float to int
-        fixedbvt f(expr.op0());
+        fixedbvt f(to_constant_expr(expr.op0()));
         expr=from_integer(f.to_integer(), expr.type());
         return false;
       }
       else if(expr_type_id=="fixedbv")
       {
         // float to double or double to float
-        fixedbvt f(expr.op0());
+        fixedbvt f(to_constant_expr(expr.op0()));
         f.round(to_fixedbv_type(expr.type()));
         expr=f.to_expr();
         return false;
@@ -760,8 +760,8 @@ bool simplify_exprt::simplify_division(exprt &expr)
 
     if(expr.op0().is_constant() && expr.op1().is_constant())
     {
-      fixedbvt f0(expr.op0());
-      fixedbvt f1(expr.op1());
+      fixedbvt f0(to_constant_expr(expr.op0()));
+      fixedbvt f1(to_constant_expr(expr.op1()));
       if(!f1.is_zero())
       {
         f0/=f1;
@@ -2058,8 +2058,8 @@ bool simplify_exprt::simplify_inequality(exprt &expr)
     }
     else if(expr.op0().type().id()=="fixedbv")
     {
-      fixedbvt f0(expr.op0());
-      fixedbvt f1(expr.op1());
+      fixedbvt f0(to_constant_expr(expr.op0()));
+      fixedbvt f1(to_constant_expr(expr.op1()));
 
       if(expr.id()=="notequal")
         expr.make_bool(f0!=f1);
@@ -3274,7 +3274,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
     }
     else if(expr.type().is_fixedbv())
     {
-      fixedbvt f(expr.op0());
+      fixedbvt f(to_constant_expr(expr.op0()));
       f.negate();
       expr=f.to_expr();
       return false;
