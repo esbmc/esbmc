@@ -733,7 +733,10 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   {
     unsigned ew = va_arg(ap, unsigned long);
     unsigned sw = va_arg(ap, unsigned long);
-    s = new z3_smt_sort(k, ctx.fpa_sort(ew, sw));
+
+    // We need to add an extra bit to the significand size,
+    // as it has no hidden bit
+    s = new z3_smt_sort(k, ctx.fpa_sort(ew, sw + 1));
     break;
   }
   default:
@@ -1034,7 +1037,10 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
       return expr2tc();
 
     unsigned ew = Z3_fpa_get_ebits(z3_ctx, e.get_sort());
-    unsigned sw = Z3_fpa_get_sbits(z3_ctx, e.get_sort());
+
+    // Remove an extra bit added when creating the sort,
+    // because we represent the hidden bit like Z3 does
+    unsigned sw = Z3_fpa_get_sbits(z3_ctx, e.get_sort()) - 1;
 
     ieee_float_spect spec(sw, ew);
 
