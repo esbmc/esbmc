@@ -236,6 +236,9 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_BOOL:
     s = new smt_sort(k);
     break;
+  case SMT_SORT_FLOATBV:
+    std::cerr << "Boolector does not support floating point encoding mode" << std::endl;
+    abort();
   default:
     std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
     abort();
