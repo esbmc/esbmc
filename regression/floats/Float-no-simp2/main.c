@@ -2,8 +2,8 @@ int main()
 {
   double f, f2;
   // the following rely on f not being a NaN
-  __CPROVER_assume(!__CPROVER_isnand(f2));
-  __CPROVER_assume(__CPROVER_isfinited(f2));
+  __ESBMC_assume(!__ESBMC_isnand(f2));
+  __ESBMC_assume(__ESBMC_isfinited(f2));
   f=f2;
   
   // addition

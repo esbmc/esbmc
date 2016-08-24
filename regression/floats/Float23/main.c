@@ -1,5 +1,5 @@
 int main()
 {
   float a, b;
-  __CPROVER_assert((a>b)==(a-b>0), "theorem");
+  __ESBMC_assert((a>b)==(a-b>0), "theorem");
 }

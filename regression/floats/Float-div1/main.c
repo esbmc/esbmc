@@ -6,7 +6,7 @@ void inductiveStepHunt (float startState)
 {
   float target = 0x1.fffffep-3f;
 
-  __CPROVER_assume((0 < startState) && (fpclassify(startState) == FP_NORMAL) && (0x1p-126f <= startState));
+  __ESBMC_assume((0 < startState) && (fpclassify(startState) == FP_NORMAL) && (0x1p-126f <= startState));
 
   float secondPoint = (target / startState);
 
@@ -22,7 +22,7 @@ void simplifiedInductiveStepHunt (float nextState)
   float target = 0x1.fffffep-3f;
 
   // Implies nextState == 0x1p+124f;
-  __CPROVER_assume((0x1.fffffep+123f < nextState) && (nextState < 0x1.000002p+124f));
+  __ESBMC_assume((0x1.fffffep+123f < nextState) && (nextState < 0x1.000002p+124f));
   
   float oneAfter = (target / nextState);
 

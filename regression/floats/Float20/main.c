@@ -11,7 +11,7 @@
 #define FULP 1
 
 void bug (float min) {
-  __CPROVER_assume(min == 0x1.fffffep-105f);
+  __ESBMC_assume(min == 0x1.fffffep-105f);
   float modifier = (0x1.0p-23 * (1<<FULP));
   float ulpdiff = min * modifier;
 
@@ -21,7 +21,7 @@ void bug (float min) {
 }
 
 void bugBrokenOut (float min) {
-  __CPROVER_assume(min == 0x1.fffffep-105f);
+  __ESBMC_assume(min == 0x1.fffffep-105f);
   float modifier = (0x1.0p-23 * (1<<FULP));
   double dulpdiff = (double)min * (double)modifier;  // Fine up to here
   float ulpdiff = (float)dulpdiff;  // Error
@@ -32,7 +32,7 @@ void bugBrokenOut (float min) {
 }
 
 void bugCasting (double d) {
-  __CPROVER_assume(d == 0x1.fffffep-127);
+  __ESBMC_assume(d == 0x1.fffffep-127);
 
   float f = (float) d;
 

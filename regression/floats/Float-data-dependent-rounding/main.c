@@ -6,8 +6,8 @@ int main (void) {
   float f;
   float g;
 
-  __CPROVER_assume(!isnan(f));
-  __CPROVER_assume(!isnan(g));
+  __ESBMC_assume(!isnan(f));
+  __ESBMC_assume(!isnan(g));
 
   if (f > g) {
     fesetround(FE_UPWARD);

@@ -30,7 +30,7 @@ int main(void)
   int x = nondet_int();
 
   // x is 33554433, 33554434 or 33554435
-  __CPROVER_assume((33554432 < x) && (x < 33554436));
+  __ESBMC_assume((33554432 < x) && (x < 33554436));
 
   assert((castWithRounding(FE_TONEAREST,x) == high) ==
 	 (x == 33554435));
