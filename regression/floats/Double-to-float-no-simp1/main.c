@@ -22,7 +22,7 @@ int main (void)
   // 0x1.fffffep+127f is the largest binary32 float so
   // these should all be representable as floats...
   test(FE_TONEAREST, 0x1.fffffep+127, 0x1.fffffep+127);
-/*
+
   #ifdef FE_UPWARD
   test(FE_UPWARD, 0x1.fffffep+127, 0x1.fffffep+127);
   #endif
@@ -154,7 +154,7 @@ int main (void)
   test(FE_DOWNWARD, -0x1.fffffffffffffp+1023, -INFINITY);
   #endif
   test(FE_TOWARDZERO, -0x1.fffffffffffffp+1023, -0x1.fffffep+127);
-*/
+
   #endif
   return 1;
 }
