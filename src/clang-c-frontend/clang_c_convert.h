@@ -186,11 +186,6 @@ private:
     const clang::FloatingLiteral &floating_literal,
     exprt &dest);
 
-  std::string parse_float(
-    llvm::SmallVector<char, 32> &src,
-    mp_integer &significand,
-    mp_integer &exponent);
-
   bool search_add_type_map(
     const clang::TagDecl &tag,
     type_mapt::iterator &type_it);
