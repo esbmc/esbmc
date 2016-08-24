@@ -492,12 +492,16 @@ expr_handle_table:
     if (is_fixedbv_type(expr)) {
       const mul2t &mul = to_mul2t(expr);
       const fixedbv_type2t &fbvt = to_fixedbv_type(mul.type);
+
       unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
       unsigned int topbit = mul.side_1->type->get_width();
+
       smt_sortt s1 = convert_sort(mul.side_1->type);
       smt_sortt s2 = convert_sort(mul.side_2->type);
+
       args[0] = convert_sign_ext(args[0], s1, topbit, fraction_bits);
       args[1] = convert_sign_ext(args[1], s2, topbit, fraction_bits);
+
       a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort);
     } else {
@@ -513,20 +517,22 @@ expr_handle_table:
       a = mk_func_app(sort, SMT_FUNC_DIV, args, 2);
     } else if (is_fixedbv_type(expr)) {
       const div2t &div = to_div2t(expr);
-      fixedbvt fbt(to_constant_expr(migrate_expr_back(expr)));
+      const fixedbv_type2t &fbvt = to_fixedbv_type(div.type);
 
-      unsigned int fraction_bits = fbt.spec.get_fraction_bits();
-      unsigned int topbit2 = div.side_2->type->get_width();
+      unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
+      unsigned int topbit = div.side_2->type->get_width();
+
       smt_sortt s2 = convert_sort(div.side_2->type);
+      args[1] = convert_sign_ext(args[1], s2, topbit, fraction_bits);
 
-      args[1] = convert_sign_ext(args[1], s2, topbit2,fraction_bits);
       smt_astt zero = mk_smt_bvint(BigInt(0), false, fraction_bits);
       smt_astt op0 = args[0];
+
       args[0] = mk_func_app(s2, SMT_FUNC_CONCAT, op0, zero);
 
       // Sorts.
       a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2);
-      a = mk_extract(a, fbt.spec.width - 1, 0, s2);
+      a = mk_extract(a, fbvt.width - 1, 0, s2);
     } else {
       assert(is_bv_type(expr));
       smt_func_kind k = (seen_signed_operand)
