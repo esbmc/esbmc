@@ -48,7 +48,7 @@ void configt::ansi_ct::set_32()
   long_double_width=8*8;
   char_is_unsigned=false;
   word_size=32;
-  wchar_t_width=2*8;
+  wchar_t_width=4*8;
   alignment=4;
 
   // Configure exprs we use as long / uints etc for this mode.
@@ -70,10 +70,10 @@ void configt::ansi_ct::set_64()
   pointer_diff_width=8*8;
   single_width=4*8;
   double_width=8*8;
-  long_double_width=8*8;
+  long_double_width=16*8;
   char_is_unsigned=false;
   word_size=64;
-  wchar_t_width=2*8;
+  wchar_t_width=4*8;
   alignment=4;
 
   // Configure exprs we use as long / uints etc for this mode.
