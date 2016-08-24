@@ -1054,7 +1054,7 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
     Z3_fpa_get_numeral_exponent_int64(z3_ctx, e, &exp);
 
     std::string value_str = (sgn > 0) ? "1" : "0";
-    value_str += integer2binary(exp + 127, ew);
+    value_str += integer2binary(exp + spec.bias().to_int64(), ew);
     value_str += integer2binary(sig, sw);
 
     constant_exprt value_expr(spec.to_type());
