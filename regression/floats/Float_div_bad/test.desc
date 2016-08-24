@@ -1,0 +1,7 @@
+main.c
+--floatbv
+^EXIT=0$
+^SIGNAL=0$
+^VERIFICATION FAILED$
+--
+^warning: ignoring
