@@ -1,7 +1,3 @@
 main.cpp
-
-^EXIT=0$
-^SIGNAL=0$
+--floatbv
 ^VERIFICATION SUCCESSFUL$
---
-^warning: ignoring

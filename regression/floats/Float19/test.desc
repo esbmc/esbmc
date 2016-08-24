@@ -1,7 +1,3 @@
 main.c
 --floatbv
-^EXIT=0$
-^SIGNAL=0$
 ^VERIFICATION SUCCESSFUL$
---
-^warning: ignoring

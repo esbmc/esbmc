@@ -1,6 +1,3 @@
 main.c
---floatbv --float-overflow-check
-^EXIT=10$
-^SIGNAL=0$
+--floatbv --overflow-check
 ^VERIFICATION FAILED$
---

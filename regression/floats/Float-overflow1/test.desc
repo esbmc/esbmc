@@ -1,7 +1,3 @@
 main.c
---floatbv --float-overflow-check
-^EXIT=0$
-^SIGNAL=0$
+--floatbv --overflow-check
 ^VERIFICATION SUCCESSFUL$
---
-^warning: ignoring
