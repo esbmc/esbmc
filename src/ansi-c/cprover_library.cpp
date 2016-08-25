@@ -147,9 +147,6 @@ void add_cprover_library(
   uint64_t size;
   int fd;
 
-  if(config.ansi_c.lib==configt::ansi_ct::LIB_NONE)
-    return;
-
   if (config.ansi_c.word_size == 32) {
     this_clib_ptrs = &clib_ptrs[0][0];
   } else if (config.ansi_c.word_size == 64) {
