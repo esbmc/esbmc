@@ -700,6 +700,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 {
   const exprt &f_op = expr.function();
+  const locationt location = expr.location();
 
   // some built-in functions
   if(f_op.id() == "symbol")
@@ -718,47 +719,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       exprt same_object_expr("same-object", bool_typet());
       same_object_expr.operands() = expr.arguments();
       expr.swap(same_object_expr);
-    }
-    else if(identifier == CPROVER_PREFIX "buffer_size")
-    {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "buffer_size expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
-      exprt buffer_size_expr("buffer_size", uint_type());
-      buffer_size_expr.operands() = expr.arguments();
-      expr.swap(buffer_size_expr);
-    }
-    else if(identifier == CPROVER_PREFIX "is_zero_string")
-    {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "is_zero_string expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
-      exprt is_zero_string_expr("is_zero_string", bool_typet());
-      is_zero_string_expr.operands() = expr.arguments();
-      is_zero_string_expr.cmt_lvalue(true); // make it an lvalue
-      expr.swap(is_zero_string_expr);
-    }
-    else if(identifier == CPROVER_PREFIX "zero_string_length")
-    {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "zero_string_length expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
-      exprt zero_string_length_expr("zero_string_length", uint_type());
-      zero_string_length_expr.operands() = expr.arguments();
-      zero_string_length_expr.cmt_lvalue(true); // make it an lvalue
-      expr.swap(zero_string_length_expr);
     }
     else if(identifier == CPROVER_PREFIX "POINTER_OFFSET")
     {
@@ -786,7 +746,10 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       pointer_object_expr.operands() = expr.arguments();
       expr.swap(pointer_object_expr);
     }
-    else if(identifier == CPROVER_PREFIX "isnan")
+    else if(identifier==CPROVER_PREFIX "isnanf" ||
+            identifier==CPROVER_PREFIX "isnand" ||
+            identifier==CPROVER_PREFIX "isnanld" ||
+            identifier=="__builtin_isnan")
     {
       if(expr.arguments().size() != 1)
       {
@@ -799,7 +762,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       isnan_expr.operands() = expr.arguments();
       expr.swap(isnan_expr);
     }
-    else if(identifier == CPROVER_PREFIX "isfinite")
+    else if(identifier==CPROVER_PREFIX "isfinitef" ||
+            identifier==CPROVER_PREFIX "isfinited" ||
+            identifier==CPROVER_PREFIX "isfiniteld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -812,10 +777,40 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       isfinite_expr.operands() = expr.arguments();
       expr.swap(isfinite_expr);
     }
-    else if(identifier == CPROVER_PREFIX "abs"
-        || identifier == CPROVER_PREFIX "fabs"
-        || identifier == CPROVER_PREFIX "fabsf"
-        || identifier == CPROVER_PREFIX "fabsl")
+    else if(identifier==CPROVER_PREFIX "inf" ||
+            identifier=="__builtin_inf" ||
+            identifier=="__builtin_huge_val")
+    {
+      constant_exprt inf_expr=
+        ieee_floatt::plus_infinity(ieee_float_spect::double_precision()).to_expr();
+
+      expr.swap(inf_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "inff" ||
+            identifier=="__builtin_inff" ||
+            identifier=="__builtin_huge_valf")
+    {
+      constant_exprt inff_expr=
+        ieee_floatt::plus_infinity(ieee_float_spect::single_precision()).to_expr();
+
+      expr.swap(inff_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "infl" ||
+            identifier=="__builtin_infl" ||
+            identifier=="__builtin_huge_vall")
+    {
+      floatbv_typet type=to_floatbv_type(long_double_type());
+      constant_exprt infl_expr=
+        ieee_floatt::plus_infinity(ieee_float_spect(type)).to_expr();
+
+      expr.swap(infl_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "abs" ||
+            identifier==CPROVER_PREFIX "labs" ||
+            identifier==CPROVER_PREFIX "llabs" ||
+            identifier==CPROVER_PREFIX "fabs" ||
+            identifier==CPROVER_PREFIX "fabsf" ||
+            identifier==CPROVER_PREFIX "fabsl")
     {
       if(expr.arguments().size() != 1)
       {
@@ -828,7 +823,14 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       abs_expr.operands() = expr.arguments();
       expr.swap(abs_expr);
     }
-    else if(identifier == CPROVER_PREFIX "isinf")
+    else if(identifier==CPROVER_PREFIX "isinf" ||
+            identifier==CPROVER_PREFIX "isinff" ||
+            identifier==CPROVER_PREFIX "isinfd" ||
+            identifier==CPROVER_PREFIX "isinfld" ||
+            identifier=="__builtin_isinf" ||
+            identifier=="__builtin_isinff" ||
+            identifier=="__builtin_isinfd"||
+            identifier=="__builtin_isinfld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -841,7 +843,12 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       isinf_expr.operands() = expr.arguments();
       expr.swap(isinf_expr);
     }
-    else if(identifier == CPROVER_PREFIX "isnormal")
+    else if(identifier==CPROVER_PREFIX "isnormalf" ||
+            identifier==CPROVER_PREFIX "isnormald" ||
+            identifier==CPROVER_PREFIX "isnormalld" ||
+            identifier=="__builtin_isnormalf" ||
+            identifier=="__builtin_isnormald" ||
+            identifier=="__builtin_isnormalld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -854,7 +861,12 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       isnormal_expr.operands() = expr.arguments();
       expr.swap(isnormal_expr);
     }
-    else if(identifier == CPROVER_PREFIX "sign")
+    else if(identifier==CPROVER_PREFIX "signf" ||
+            identifier==CPROVER_PREFIX "signd" ||
+            identifier==CPROVER_PREFIX "signld" ||
+            identifier=="__builtin_signbit" ||
+            identifier=="__builtin_signbitf" ||
+            identifier=="__builtin_signbitl")
     {
       if(expr.arguments().size() != 1)
       {
@@ -863,11 +875,27 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
         abort();
       }
 
-      exprt sign_expr("sign", bool_typet());
+      exprt sign_expr("signbit", bool_typet());
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
     }
+    else if(identifier == "c::__builtin_expect")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_expect expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt tmp = expr.arguments()[0];
+      expr.swap(tmp);
+    }
   }
+
+  // Restore location
+  expr.location() = location;
 }
 
 void clang_c_adjust::adjust_side_effect_statement_expression(
