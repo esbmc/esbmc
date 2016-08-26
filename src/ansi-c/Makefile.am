@@ -34,7 +34,7 @@ c2goto_LDADD = libansic.la libansicscanner.la @ESBMC_CLANG_ARCHIVES@ \
       ../goto-programs/libgotoprograms.a ../langapi/liblangapi.a \
       ../util/libutil.a cpp/libcpp.a ./headers/libheaders.a
 
-libclib_la_SOURCES = cprover_library.cpp clib32.c clib64.c
+libclib_la_SOURCES = cprover_library.cpp clib32.c clib64.c clib32_fp.c clib64_fp.c
 
 clib32.c: c2goto $(srcdir)/library/*.c
 	./c2goto $(srcdir)/library/*.c --output clib32.goto
@@ -43,6 +43,14 @@ clib32.c: c2goto $(srcdir)/library/*.c
 clib64.c: c2goto $(srcdir)/library/*.c
 	./c2goto $(srcdir)/library/*.c --64 --output clib64.goto
 	$(srcdir)/headers/flail.sh clib64 clib64.goto > $@
+
+clib32_fp.c: c2goto $(srcdir)/library/*.c
+	./c2goto $(srcdir)/library/*.c --floatbv --output clib32_fp.goto
+	$(srcdir)/headers/flail.sh clib32_fp clib32_fp.goto > $@
+
+clib64_fp.c: c2goto $(srcdir)/library/*.c
+	./c2goto $(srcdir)/library/*.c --64 --floatbv --output clib64_fp.goto
+	$(srcdir)/headers/flail.sh clib64_fp clib64_fp.goto > $@
 
 clean-local:
 	-rm scanner.cpp scanner.hpp parser.hpp parser.cpp
