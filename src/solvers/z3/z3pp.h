@@ -1101,6 +1101,9 @@ namespace z3 {
         else if (a.is_bv()) {
             r = Z3_mk_bvneg(a.ctx(), a);
         }
+        else if (a.is_fpa()) {
+            r = Z3_mk_fpa_neg(a.ctx(), a);
+        }
         else {
             // operator is not supported by given arguments.
             abort();
