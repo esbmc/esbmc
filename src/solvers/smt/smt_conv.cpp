@@ -757,6 +757,21 @@ expr_handle_table:
     break;
   }
   case expr2t::lessthan_id:
+  {
+    // Pointer relation:
+    const expr2tc &side1 = *expr->get_sub_expr(0);
+    const expr2tc &side2 = *expr->get_sub_expr(1);
+    if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
+      a = convert_ptr_cmp(side1, side2, expr);
+    } else {
+      const lessthan2t &lt = to_lessthan2t(expr);
+      args[0] = convert_ast(lt.side_1);
+      args[1] = convert_ast(lt.side_2);
+
+      a = mk_func_app(sort, SMT_FUNC_LT, args, 2);
+    }
+    break;
+  }
   case expr2t::lessthanequal_id:
   case expr2t::greaterthan_id:
   case expr2t::greaterthanequal_id:

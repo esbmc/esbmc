@@ -847,10 +847,14 @@ namespace z3 {
         r = Z3_mk_lt(a.ctx(), a, b);
       }
       else if (a.is_bv() && b.is_bv()) {
-        if (is_unsigned)
+        if (is_unsigned) {
           r = Z3_mk_bvult(a.ctx(), a, b);
-        else
+        } else {
           r = Z3_mk_bvslt(a.ctx(), a, b);
+        }
+      }
+      else if (a.is_fpa() && b.is_fpa()) {
+        r = Z3_mk_fpa_lt(a.ctx(), a, b);
       }
       else {
           // operator is not supported by given arguments.
