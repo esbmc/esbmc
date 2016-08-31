@@ -649,6 +649,9 @@ expr_handle_table:
   }
   case expr2t::member_id:
   {
+    assert(expr->get_num_sub_exprs() == 1);
+    args[0] = convert_ast(*expr->get_sub_expr(0));
+
     a = convert_member(expr, args[0]);
     break;
   }
