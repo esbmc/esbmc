@@ -538,6 +538,9 @@ expr_handle_table:
       unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
       unsigned int topbit = mul.side_1->type->get_width();
 
+      args[0] = convert_ast(mul.side_1);
+      args[1] = convert_ast(mul.side_2);
+
       smt_sortt s1 = convert_sort(mul.side_1->type);
       smt_sortt s2 = convert_sort(mul.side_2->type);
 
@@ -563,6 +566,9 @@ expr_handle_table:
 
       unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
       unsigned int topbit = div.side_2->type->get_width();
+
+      args[0] = convert_ast(div.side_1);
+      args[1] = convert_ast(div.side_2);
 
       smt_sortt s2 = convert_sort(div.side_2->type);
       args[1] = convert_sign_ext(args[1], s2, topbit, fraction_bits);
@@ -620,7 +626,12 @@ expr_handle_table:
   }
   case expr2t::same_object_id:
   {
+    assert(expr->get_num_sub_exprs() == 2);
+    args[0] = convert_ast(*expr->get_sub_expr(0));
+    args[1] = convert_ast(*expr->get_sub_expr(1));
+
     // Two projects, then comparison.
+
     args[0] = args[0]->project(this, 0);
     args[1] = args[1]->project(this, 0);
     a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2);
@@ -667,6 +678,9 @@ expr_handle_table:
   }
   case expr2t::isnan_id:
   {
+    assert(expr->get_num_sub_exprs() == 1);
+    args[0] = convert_ast(*expr->get_sub_expr(0));
+
     a = convert_is_nan(expr, args[0]);
     break;
   }
@@ -710,6 +724,10 @@ expr_handle_table:
   }
   case expr2t::shl_id:
   {
+    assert(expr->get_num_sub_exprs() == 2);
+    args[0] = convert_ast(*expr->get_sub_expr(0));
+    args[1] = convert_ast(*expr->get_sub_expr(1));
+
     const shl2t &shl = to_shl2t(expr);
 
     if (shl.side_1->type->get_width() != shl.side_2->type->get_width()) {
@@ -732,6 +750,10 @@ expr_handle_table:
   }
   case expr2t::ashr_id:
   {
+    assert(expr->get_num_sub_exprs() == 2);
+    args[0] = convert_ast(*expr->get_sub_expr(0));
+    args[1] = convert_ast(*expr->get_sub_expr(1));
+
     const ashr2t &ashr = to_ashr2t(expr);
 
     if (ashr.side_1->type->get_width() != ashr.side_2->type->get_width()) {
@@ -754,6 +776,10 @@ expr_handle_table:
   }
   case expr2t::lshr_id:
   {
+    assert(expr->get_num_sub_exprs() == 2);
+    args[0] = convert_ast(*expr->get_sub_expr(0));
+    args[1] = convert_ast(*expr->get_sub_expr(1));
+
     // Like ashr. Haven't got around to cleaning this up yet.
     const lshr2t &lshr = to_lshr2t(expr);
 
@@ -779,6 +805,12 @@ expr_handle_table:
   {
     // Handle all kinds of structs by inverted equality. The only that's really
     // going to turn up is pointers though.
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const notequal2t &implies = to_notequal2t(expr);
+    args[0] = convert_ast(implies.side_1);
+    args[1] = convert_ast(implies.side_2);
+
     a = args[0]->eq(this, args[1]);
     a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
     break;
@@ -788,7 +820,7 @@ expr_handle_table:
     const abs2t &abs = to_abs2t(expr);
     if (is_unsignedbv_type(abs.value)) {
       // No need to do anything.
-      a = args[0];
+      a = convert_ast(abs.value);
     } else {
       constant_int2tc zero(abs.value->type, BigInt(0));
       lessthan2tc lt(abs.value, zero);
