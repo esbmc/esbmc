@@ -768,7 +768,15 @@ expr_handle_table:
       args[0] = convert_ast(lt.side_1);
       args[1] = convert_ast(lt.side_2);
 
-      a = mk_func_app(sort, SMT_FUNC_LT, args, 2);
+      if (is_unsignedbv_type(side1->type) && is_unsignedbv_type(side2->type)) {
+        a = mk_func_app(sort, SMT_FUNC_BVULT, args, 2);
+      } else if ((is_signedbv_type(side1->type) && is_signedbv_type(side2->type))
+               || (is_fixedbv_type(side1->type) && is_fixedbv_type(side2->type))) {
+        a = mk_func_app(sort, SMT_FUNC_BVSLT, args, 2);
+      } else {
+        // integer encoding and floabv
+        a = mk_func_app(sort, SMT_FUNC_LT, args, 2);
+      }
     }
     break;
   }
@@ -780,11 +788,19 @@ expr_handle_table:
     if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
       a = convert_ptr_cmp(side1, side2, expr);
     } else {
-      const lessthanequal2t &lt = to_lessthanequal2t(expr);
-      args[0] = convert_ast(lt.side_1);
-      args[1] = convert_ast(lt.side_2);
+      const lessthanequal2t &lte = to_lessthanequal2t(expr);
+      args[0] = convert_ast(lte.side_1);
+      args[1] = convert_ast(lte.side_2);
 
-      a = mk_func_app(sort, SMT_FUNC_LTE, args, 2);
+      if (is_unsignedbv_type(side1->type) && is_unsignedbv_type(side2->type)) {
+        a = mk_func_app(sort, SMT_FUNC_BVULTE, args, 2);
+      } else if ((is_signedbv_type(side1->type) && is_signedbv_type(side2->type))
+                  || (is_fixedbv_type(side1->type) && is_fixedbv_type(side2->type))) {
+        a = mk_func_app(sort, SMT_FUNC_BVSLTE, args, 2);
+      } else {
+        // integer encoding and floabv
+        a = mk_func_app(sort, SMT_FUNC_LTE, args, 2);
+      }
     }
     break;
   }
@@ -796,11 +812,19 @@ expr_handle_table:
     if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
       a = convert_ptr_cmp(side1, side2, expr);
     } else {
-      const greaterthan2t &lt = to_greaterthan2t(expr);
-      args[0] = convert_ast(lt.side_1);
-      args[1] = convert_ast(lt.side_2);
+      const greaterthan2t &gt = to_greaterthan2t(expr);
+      args[0] = convert_ast(gt.side_1);
+      args[1] = convert_ast(gt.side_2);
 
-      a = mk_func_app(sort, SMT_FUNC_GT, args, 2);
+      if (is_unsignedbv_type(side1->type) && is_unsignedbv_type(side2->type)) {
+        a = mk_func_app(sort, SMT_FUNC_BVUGT, args, 2);
+      } else if ((is_signedbv_type(side1->type) && is_signedbv_type(side2->type))
+                  || (is_fixedbv_type(side1->type) && is_fixedbv_type(side2->type))) {
+        a = mk_func_app(sort, SMT_FUNC_BVSGT, args, 2);
+      } else {
+        // integer encoding and floabv
+        a = mk_func_app(sort, SMT_FUNC_GT, args, 2);
+      }
     }
     break;
   }
@@ -812,11 +836,19 @@ expr_handle_table:
     if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
       a = convert_ptr_cmp(side1, side2, expr);
     } else {
-      const greaterthanequal2t &lt = to_greaterthanequal2t(expr);
-      args[0] = convert_ast(lt.side_1);
-      args[1] = convert_ast(lt.side_2);
+      const greaterthanequal2t &gte = to_greaterthanequal2t(expr);
+      args[0] = convert_ast(gte.side_1);
+      args[1] = convert_ast(gte.side_2);
 
-      a = mk_func_app(sort, SMT_FUNC_GTE, args, 2);
+      if (is_unsignedbv_type(side1->type) && is_unsignedbv_type(side2->type)) {
+        a = mk_func_app(sort, SMT_FUNC_BVUGTE, args, 2);
+      } else if ((is_signedbv_type(side1->type) && is_signedbv_type(side2->type))
+                  || (is_fixedbv_type(side1->type) && is_fixedbv_type(side2->type))) {
+        a = mk_func_app(sort, SMT_FUNC_BVSGTE, args, 2);
+      } else {
+        // integer encoding and floabv
+        a = mk_func_app(sort, SMT_FUNC_GTE, args, 2);
+      }
     }
     break;
   }
