@@ -835,6 +835,18 @@ expr_handle_table:
 
     break;
   }
+  case expr2t::implies_id:
+  {
+    assert(sort->id == SMT_SORT_BOOL);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const implies2t &implies = to_implies2t(expr);
+    args[0] = convert_ast(implies.side_1);
+    args[1] = convert_ast(implies.side_2);
+
+    a = mk_func_app(sort, SMT_FUNC_IMPLIES, args, 2);
+    break;
+  }
   default:
     std::cerr << "Couldn't convert expression in unrecognized format"
               << std::endl;
