@@ -1054,7 +1054,43 @@ expr_handle_table:
     const neg2t &n = to_neg2t(expr);
     args[0] = convert_ast(n.value);
 
-    a = mk_func_app(sort, SMT_FUNC_NEG, args, 1);
+    if(is_bv_type(expr))
+      a = mk_func_app(sort, SMT_FUNC_BVNEG, args, 1);
+    else
+      a = mk_func_app(sort, SMT_FUNC_NEG, args, 1);
+    break;
+  }
+  case expr2t::and_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const and2t &an = to_and2t(expr);
+    args[0] = convert_ast(an.side_1);
+    args[1] = convert_ast(an.side_2);
+
+    a = mk_func_app(sort, SMT_FUNC_AND, args, 2);
+    break;
+  }
+  case expr2t::or_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const or2t &o = to_or2t(expr);
+    args[0] = convert_ast(o.side_1);
+    args[1] = convert_ast(o.side_2);
+
+    a = mk_func_app(sort, SMT_FUNC_OR, args, 2);
+    break;
+  }
+  case expr2t::xor_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const xor2t &xo = to_xor2t(expr);
+    args[0] = convert_ast(xo.side_1);
+    args[1] = convert_ast(xo.side_2);
+
+    a = mk_func_app(sort, SMT_FUNC_XOR, args, 2);
     break;
   }
   default:
