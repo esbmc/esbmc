@@ -962,6 +962,27 @@ expr_handle_table:
     a = mk_func_app(sort, SMT_FUNC_BVNOT, args, 1);
     break;
   }
+  case expr2t::not_id:
+  {
+    assert(sort->id == SMT_SORT_BOOL);
+    assert(expr->get_num_sub_exprs() == 1);
+
+    const not2t &n = to_not2t(expr);
+    args[0] = convert_ast(n.value);
+
+    a = mk_func_app(sort, SMT_FUNC_NOT, args, 1);
+    break;
+  }
+  case expr2t::neg_id:
+  {
+    assert(expr->get_num_sub_exprs() == 1);
+
+    const neg2t &n = to_neg2t(expr);
+    args[0] = convert_ast(n.value);
+
+    a = mk_func_app(sort, SMT_FUNC_NEG, args, 1);
+    break;
+  }
   default:
     std::cerr << "Couldn't convert expression in unrecognized format"
               << std::endl;
