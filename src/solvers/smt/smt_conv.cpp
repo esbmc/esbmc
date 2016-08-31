@@ -1009,7 +1009,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     const neg2t &n = to_neg2t(expr);
     args[0] = convert_ast(n.value);
 
-    if(is_bv_type(expr))
+    if(is_bv_type(expr) || is_fixedbv_type(expr))
       a = mk_func_app(sort, SMT_FUNC_BVNEG, args, 1);
     else
       a = mk_func_app(sort, SMT_FUNC_NEG, args, 1);
