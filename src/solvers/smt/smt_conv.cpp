@@ -812,18 +812,11 @@ expr_handle_table:
     if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
       a = convert_ptr_cmp(side1, side2, expr);
     } else {
-      // One operand isn't a pointer; go the slow way, with typecasts.
-      type2tc inttype = machine_ptr;
-      expr2tc cast1 = (!is_unsignedbv_type(side1))
-        ? typecast2tc(inttype, side1)
-        : side1;
-      expr2tc cast2 = (!is_unsignedbv_type(side2))
-        ? typecast2tc(inttype, side2)
-        : side2;
-      expr2tc new_expr = expr;
-      *new_expr.get()->get_sub_expr_nc(0) = cast1;
-      *new_expr.get()->get_sub_expr_nc(1) = cast2;
-      a = convert_ast(new_expr);
+      const greaterthanequal2t &lt = to_greaterthanequal2t(expr);
+      args[0] = convert_ast(lt.side_1);
+      args[1] = convert_ast(lt.side_2);
+
+      a = mk_func_app(sort, SMT_FUNC_GTE, args, 2);
     }
     break;
   }
