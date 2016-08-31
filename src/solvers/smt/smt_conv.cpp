@@ -478,9 +478,51 @@ expr_handle_table:
     break;
   }
   case expr2t::add_id:
+  {
+    if(is_pointer_type(expr->type)) {
+      a = convert_pointer_arith(expr, expr->type);
+    } else {
+
+      const expr2tc &side1 = *expr->get_sub_expr(0);
+      const expr2tc &side2 = *expr->get_sub_expr(1);
+
+      args[0] = convert_ast(side1);
+      args[1] = convert_ast(side2);
+
+      if ((is_bv_type(side1) && is_bv_type(side2))
+          || (is_fixedbv_type(side1) && is_fixedbv_type(side2))) {
+        a = mk_func_app(sort, SMT_FUNC_BVADD, args, 2);
+      } else if(is_floatbv_type(side1) && is_floatbv_type(side2)) {
+        abort();
+      } else {
+        // integer encoding
+        a = mk_func_app(sort, SMT_FUNC_ADD, args, 2);
+      }
+    }
+    break;
+  }
   case expr2t::sub_id:
   {
-    a = convert_pointer_arith(expr, expr->type);
+    if(is_pointer_type(expr->type)) {
+      a = convert_pointer_arith(expr, expr->type);
+    } else {
+
+      const expr2tc &side1 = *expr->get_sub_expr(0);
+      const expr2tc &side2 = *expr->get_sub_expr(1);
+
+      args[0] = convert_ast(side1);
+      args[1] = convert_ast(side2);
+
+      if ((is_bv_type(side1) && is_bv_type(side2))
+          || (is_fixedbv_type(side1) && is_fixedbv_type(side2))) {
+        a = mk_func_app(sort, SMT_FUNC_BVSUB, args, 2);
+      } else if(is_floatbv_type(side1) && is_floatbv_type(side2)) {
+        abort();
+      } else {
+        // integer encoding
+        a = mk_func_app(sort, SMT_FUNC_SUB, args, 2);
+      }
+    }
     break;
   }
   case expr2t::mul_id:
