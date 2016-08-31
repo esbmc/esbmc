@@ -1,0 +1,5 @@
+stateful01.c
+--deadlock-check
+^VERIFICATION SUCCESSFUL$
+--
+^VERIFICATION SUCCESSFUL$
