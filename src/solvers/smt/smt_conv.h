@@ -1004,15 +1004,6 @@ public:
   // up to 2^64.
   smt_astt int_shift_op_array;
 
-  /** Table containing information about how to handle expressions to convert
-   *  them to SMT. There are various options -- convert all the operands and
-   *  pass straight down to smt_convt::mk_func_app with a corresponding SMT
-   *  function id (depending on the integer encoding mode). Alternately, it
-   *  might be a terminal. Alternately, a special case may be required, and
-   *  that special case may only be required for certain types of operands.
-   *
-   *  There are a /lot/ of special cases. */
-  static const expr_op_convert smt_convert_table[expr2t::end_expr_id];
   /** Mapping of SMT function IDs to their names. XXX, incorrect size. */
   static const std::string smt_func_name_table[expr2t::end_expr_id];
 };
