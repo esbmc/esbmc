@@ -847,6 +847,89 @@ expr_handle_table:
     a = mk_func_app(sort, SMT_FUNC_IMPLIES, args, 2);
     break;
   }
+  case expr2t::bitand_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const bitand2t &band = to_bitand2t(expr);
+    args[0] = convert_ast(band.side_1);
+    args[1] = convert_ast(band.side_2);
+
+    a = mk_func_app(sort, SMT_FUNC_BVAND, args, 2);
+    break;
+  }
+  case expr2t::bitor_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const bitor2t &bor = to_bitor2t(expr);
+    args[0] = convert_ast(bor.side_1);
+    args[1] = convert_ast(bor.side_2);
+
+    a = mk_func_app(sort, SMT_FUNC_BVOR, args, 2);
+    break;
+  }
+  case expr2t::bitxor_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const bitxor2t &bxor = to_bitxor2t(expr);
+    args[0] = convert_ast(bxor.side_1);
+    args[1] = convert_ast(bxor.side_2);
+
+    a = mk_func_app(sort, SMT_FUNC_BVXOR, args, 2);
+    break;
+  }
+  case expr2t::bitnand_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const bitnand2t &bnand = to_bitnand2t(expr);
+    args[0] = convert_ast(bnand.side_1);
+    args[1] = convert_ast(bnand.side_2);
+
+    a = mk_func_app(sort, SMT_FUNC_BVNAND, args, 2);
+    break;
+  }
+  case expr2t::bitnor_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const bitnor2t &bnor = to_bitnor2t(expr);
+    args[0] = convert_ast(bnor.side_1);
+    args[1] = convert_ast(bnor.side_2);
+
+    a = mk_func_app(sort, SMT_FUNC_BVNOR, args, 2);
+    break;
+  }
+  case expr2t::bitnxor_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const bitnxor2t &bnxor = to_bitnxor2t(expr);
+    args[0] = convert_ast(bnxor.side_1);
+    args[1] = convert_ast(bnxor.side_2);
+
+    a = mk_func_app(sort, SMT_FUNC_BVNXOR, args, 2);
+    break;
+  }
+  case expr2t::bitnot_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 1);
+
+    const bitnot2t &bnot = to_bitnot2t(expr);
+    args[0] = convert_ast(bnot.value);
+
+    a = mk_func_app(sort, SMT_FUNC_BVNOT, args, 1);
+    break;
+  }
   default:
     std::cerr << "Couldn't convert expression in unrecognized format"
               << std::endl;
