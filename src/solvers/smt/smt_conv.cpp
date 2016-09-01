@@ -340,6 +340,30 @@ smt_convt::convert_ast(const expr2tc &expr)
   if (cache_result != smt_cache.end())
     return (cache_result->ast);
 
+  unsigned int i = 0;
+
+  switch (expr->expr_id) {
+    case expr2t::with_id:
+    case expr2t::constant_array_id:
+    case expr2t::constant_array_of_id:
+    case expr2t::index_id:
+    case expr2t::address_of_id:
+      break; // Don't convert their operands
+
+    case expr2t::equality_id:
+      if(is_array_type(to_equality2t(expr).side_1->type))
+        break;
+
+    default:
+      // Convert /all the arguments/. Via magical delegates.
+      expr->foreach_operand(
+        [this, &args, &i](const expr2tc &e)
+        {
+          args[i++] = convert_ast(e);
+        }
+      );
+  }
+
   sort = convert_sort(expr->type);
 
   switch (expr->expr_id) {
