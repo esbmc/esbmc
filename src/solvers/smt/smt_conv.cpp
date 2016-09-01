@@ -783,20 +783,19 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::lessthan_id:
   {
-    // Pointer relation:
-    const expr2tc &side1 = *expr->get_sub_expr(0);
-    const expr2tc &side2 = *expr->get_sub_expr(1);
-    if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
-      a = convert_ptr_cmp(side1, side2, expr);
-    } else {
-      const lessthan2t &lt = to_lessthan2t(expr);
-      args[0] = convert_ast(lt.side_1);
-      args[1] = convert_ast(lt.side_2);
+    assert(expr->get_num_sub_exprs() == 2);
 
-      if (is_unsignedbv_type(side1->type) && is_unsignedbv_type(side2->type)) {
+    const lessthan2t &lt = to_lessthan2t(expr);
+    assert(lt.side_1->type == lt.side_2->type);
+
+    // Pointer relation:
+    if (is_pointer_type(lt.side_1)) {
+      a = convert_ptr_cmp(lt.side_1, lt.side_2, expr);
+    } else {
+
+      if (is_unsignedbv_type(lt.side_1)) {
         a = mk_func_app(sort, SMT_FUNC_BVULT, args, 2);
-      } else if ((is_signedbv_type(side1->type) && is_signedbv_type(side2->type))
-               || (is_fixedbv_type(side1->type) && is_fixedbv_type(side2->type))) {
+      } else if (is_signedbv_type(lt.side_1) || is_fixedbv_type(lt.side_1)) {
         a = mk_func_app(sort, SMT_FUNC_BVSLT, args, 2);
       } else {
         // integer encoding and floabv
@@ -807,20 +806,19 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::lessthanequal_id:
   {
-    // Pointer relation:
-    const expr2tc &side1 = *expr->get_sub_expr(0);
-    const expr2tc &side2 = *expr->get_sub_expr(1);
-    if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
-      a = convert_ptr_cmp(side1, side2, expr);
-    } else {
-      const lessthanequal2t &lte = to_lessthanequal2t(expr);
-      args[0] = convert_ast(lte.side_1);
-      args[1] = convert_ast(lte.side_2);
+    assert(expr->get_num_sub_exprs() == 2);
 
-      if (is_unsignedbv_type(side1->type) && is_unsignedbv_type(side2->type)) {
+    const lessthanequal2t &lte = to_lessthanequal2t(expr);
+    assert(lte.side_1->type == lte.side_2->type);
+
+    // Pointer relation:
+    if (is_pointer_type(lte.side_1)) {
+      a = convert_ptr_cmp(lte.side_1, lte.side_2, expr);
+    } else {
+
+      if (is_unsignedbv_type(lte.side_1)) {
         a = mk_func_app(sort, SMT_FUNC_BVULTE, args, 2);
-      } else if ((is_signedbv_type(side1->type) && is_signedbv_type(side2->type))
-                  || (is_fixedbv_type(side1->type) && is_fixedbv_type(side2->type))) {
+      } else if (is_signedbv_type(lte.side_1) || is_fixedbv_type(lte.side_1)) {
         a = mk_func_app(sort, SMT_FUNC_BVSLTE, args, 2);
       } else {
         // integer encoding and floabv
@@ -831,20 +829,19 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::greaterthan_id:
   {
-    // Pointer relation:
-    const expr2tc &side1 = *expr->get_sub_expr(0);
-    const expr2tc &side2 = *expr->get_sub_expr(1);
-    if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
-      a = convert_ptr_cmp(side1, side2, expr);
-    } else {
-      const greaterthan2t &gt = to_greaterthan2t(expr);
-      args[0] = convert_ast(gt.side_1);
-      args[1] = convert_ast(gt.side_2);
+    assert(expr->get_num_sub_exprs() == 2);
 
-      if (is_unsignedbv_type(side1->type) && is_unsignedbv_type(side2->type)) {
+    const greaterthan2t &gt = to_greaterthan2t(expr);
+    assert(gt.side_1->type == gt.side_2->type);
+
+    // Pointer relation:
+    if (is_pointer_type(gt.side_1)) {
+      a = convert_ptr_cmp(gt.side_1, gt.side_2, expr);
+    } else {
+
+      if (is_unsignedbv_type(gt.side_1)) {
         a = mk_func_app(sort, SMT_FUNC_BVUGT, args, 2);
-      } else if ((is_signedbv_type(side1->type) && is_signedbv_type(side2->type))
-                  || (is_fixedbv_type(side1->type) && is_fixedbv_type(side2->type))) {
+      } else if (is_signedbv_type(gt.side_1) || is_fixedbv_type(gt.side_1)) {
         a = mk_func_app(sort, SMT_FUNC_BVSGT, args, 2);
       } else {
         // integer encoding and floabv
@@ -855,20 +852,19 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::greaterthanequal_id:
   {
-    // Pointer relation:
-    const expr2tc &side1 = *expr->get_sub_expr(0);
-    const expr2tc &side2 = *expr->get_sub_expr(1);
-    if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
-      a = convert_ptr_cmp(side1, side2, expr);
-    } else {
-      const greaterthanequal2t &gte = to_greaterthanequal2t(expr);
-      args[0] = convert_ast(gte.side_1);
-      args[1] = convert_ast(gte.side_2);
+    assert(expr->get_num_sub_exprs() == 2);
 
-      if (is_unsignedbv_type(side1->type) && is_unsignedbv_type(side2->type)) {
+    const greaterthanequal2t &gte = to_greaterthanequal2t(expr);
+    assert(gte.side_1->type == gte.side_2->type);
+
+    // Pointer relation:
+    if (is_pointer_type(gte.side_1)) {
+      a = convert_ptr_cmp(gte.side_1, gte.side_2, expr);
+    } else {
+
+      if (is_unsignedbv_type(gte.side_1)) {
         a = mk_func_app(sort, SMT_FUNC_BVUGTE, args, 2);
-      } else if ((is_signedbv_type(side1->type) && is_signedbv_type(side2->type))
-                  || (is_fixedbv_type(side1->type) && is_fixedbv_type(side2->type))) {
+      } else if (is_signedbv_type(gte.side_1) || is_fixedbv_type(gte.side_1)) {
         a = mk_func_app(sort, SMT_FUNC_BVSGTE, args, 2);
       } else {
         // integer encoding and floabv
