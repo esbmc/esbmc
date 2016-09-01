@@ -909,14 +909,6 @@ public:
 
   typedef hash_map_cont<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
 
-  struct expr_op_convert {
-    smt_func_kind int_mode_func;
-    smt_func_kind bv_mode_func_signed;
-    smt_func_kind bv_mode_func_unsigned;
-    unsigned int args;
-    unsigned long permitted_sorts;
-  };
-
   // Members
   /** Number of un-popped context pushes encountered so far. */
   unsigned int ctx_level;
