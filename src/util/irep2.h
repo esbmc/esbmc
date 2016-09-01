@@ -522,6 +522,8 @@ public:
     code_cpp_throw_decl_end_id,
     isinf_id,
     isnormal_id,
+    isfinite_id,
+    signbit_id,
     concat_id,
     end_expr_id
   };
@@ -1981,6 +1983,8 @@ class code_cpp_throw_decl2t;
 class code_cpp_throw_decl_end2t;
 class isinf2t;
 class isnormal2t;
+class isfinite2t;
+class signbit2t;
 class concat2t;
 
 // Data definitions.
@@ -2305,19 +2309,6 @@ public:
   typedef esbmct::expr2t_traits<value_field> traits;
 };
 
-class isinf_data : public arith_1op
-{
-public:
-  isinf_data(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v)
-    : arith_1op(t, id, v) { }
-  isinf_data(const isinf_data &ref)
-    : arith_1op(ref) { }
-
-// Type mangling:
-  typedef esbmct::field_traits<expr2tc, arith_1op, &arith_1op::value> value_field;
-  typedef esbmct::expr2t_traits_always_construct<value_field> traits;
-};
-
 class arith_2ops : public arith_ops
 {
 public:
@@ -2519,21 +2510,6 @@ public:
 // Type mangling:
   typedef esbmct::field_traits<expr2tc, string_ops, &string_ops::string> string_field;
   typedef esbmct::expr2t_traits<string_field> traits;
-};
-
-class isnan_data : public expr2t
-{
-public:
-  isnan_data(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &in)
-    : expr2t(t, id), value(in) { }
-  isnan_data(const isnan_data &ref)
-    : expr2t(ref), value(ref.value) { }
-
-  expr2tc value;
-
-// Type mangling:
-  typedef esbmct::field_traits<expr2tc, isnan_data, &isnan_data::value> value_field;
-  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class overflow_ops : public expr2t
@@ -2972,7 +2948,7 @@ irep_typedefs(byte_update, byte_update_data);
 irep_typedefs(with, with_data);
 irep_typedefs(member, member_data);
 irep_typedefs(index, index_data);
-irep_typedefs(isnan, isnan_data);
+irep_typedefs(isnan, arith_1op);
 irep_typedefs(overflow, overflow_ops);
 irep_typedefs(overflow_cast, overflow_cast_data);
 irep_typedefs(overflow_neg, overflow_ops);
@@ -3006,8 +2982,10 @@ irep_typedefs(code_cpp_catch, code_cpp_catch_data);
 irep_typedefs(code_cpp_throw, code_cpp_throw_data);
 irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data);
 irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
-irep_typedefs(isinf, isinf_data);
-irep_typedefs(isnormal, isinf_data); // Ho hum
+irep_typedefs(isinf, arith_1op);
+irep_typedefs(isnormal, arith_1op);
+irep_typedefs(isfinite, arith_1op);
+irep_typedefs(signbit, arith_1op);
 irep_typedefs(concat, bit_2ops);
 
 /** Constant integer class.
@@ -4451,6 +4429,28 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class isfinite2t : public isfinite_expr_methods
+{
+public:
+  isfinite2t(const expr2tc &val)
+    : isfinite_expr_methods(type_pool.get_bool(), isfinite_id, val) { }
+  isfinite2t(const isfinite2t &ref)
+    : isfinite_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class signbit2t : public signbit_expr_methods
+{
+public:
+  signbit2t(const expr2tc &val)
+    : signbit_expr_methods(type_pool.get_bool(), signbit_id, val) { }
+  signbit2t(const signbit2t &ref)
+    : signbit_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 class concat2t : public concat_expr_methods
 {
 public:
@@ -4619,6 +4619,8 @@ expr_macros(code_cpp_throw_decl);
 expr_macros(code_cpp_throw_decl_end);
 expr_macros(isinf);
 expr_macros(isnormal);
+expr_macros(isfinite);
+expr_macros(signbit);
 expr_macros(concat);
 #undef expr_macros
 #ifdef dynamic_cast

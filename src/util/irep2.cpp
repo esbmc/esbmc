@@ -599,6 +599,8 @@ static const char *expr_names[] = {
   "cpp_throw_decl_end",
   "isinf",
   "isnormal",
+  "isfinite",
+  "signbit",
   "concat",
 };
 // If this fires, you've added/removed an expr id, and need to update the list
@@ -2294,6 +2296,10 @@ std::string isinf2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string isnormal2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
+std::string isfinite2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", "", ""};
+std::string signbit2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", "", ""};
 std::string concat2t::field_names [esbmct::num_type_fields]  =
 { "forward", "aft", "", "", ""};
 
@@ -2377,7 +2383,7 @@ irep_typedefs(byte_update, byte_update_data);
 irep_typedefs(with, with_data);
 irep_typedefs(member, member_data);
 irep_typedefs(index, index_data);
-irep_typedefs(isnan, isnan_data);
+irep_typedefs(isnan, arith_1op);
 irep_typedefs(overflow, overflow_ops);
 irep_typedefs(overflow_cast, overflow_cast_data);
 irep_typedefs(overflow_neg, overflow_ops);
@@ -2411,6 +2417,8 @@ irep_typedefs(code_cpp_catch, code_cpp_catch_data);
 irep_typedefs(code_cpp_throw, code_cpp_throw_data);
 irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data);
 irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
-irep_typedefs(isinf, isinf_data);
-irep_typedefs(isnormal, isinf_data);
+irep_typedefs(isinf, arith_1op);
+irep_typedefs(isnormal, arith_1op);
+irep_typedefs(isfinite, arith_1op);
+irep_typedefs(signbit, arith_1op);
 irep_typedefs(concat, bit_2ops);

@@ -1425,13 +1425,29 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = expr2tc(new code_cpp_throw_decl2t(expr_list));
   } else if (expr.id() == "isinf") {
-    expr2tc op;
-    migrate_expr(expr.op0(), op);
-    new_expr_ref = isinf2tc(op);
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    isinf2t *n = new isinf2t(theval);
+    new_expr_ref = expr2tc(n);
   } else if (expr.id() == "isnormal") {
-    expr2tc op;
-    migrate_expr(expr.op0(), op);
-    new_expr_ref = isnormal2tc(op);
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    isnormal2t *n = new isnormal2t(theval);
+    new_expr_ref = expr2tc(n);
+  } else if (expr.id() == "isfinite") {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    isfinite2t *n = new isfinite2t(theval);
+    new_expr_ref = expr2tc(n);
+  } else if (expr.id() == "signbit") {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    signbit2t *n = new signbit2t(theval);
+    new_expr_ref = expr2tc(n);
   } else if (expr.id() ==  "concat") {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
@@ -2429,6 +2445,20 @@ migrate_expr_back(const expr2tc &ref)
   {
     const isnormal2t &ref2 = to_isnormal2t(ref);
     exprt back("isnormal", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
+  }
+  case expr2t::isfinite_id:
+  {
+    const isfinite2t &ref2 = to_isfinite2t(ref);
+    exprt back("isfinite", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
+  }
+  case expr2t::signbit_id:
+  {
+    const signbit2t &ref2 = to_signbit2t(ref);
+    exprt back("signbit", bool_typet());
     back.copy_to_operands(migrate_expr_back(ref2.value));
     return back;
   }
