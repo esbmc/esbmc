@@ -403,59 +403,61 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::add_id:
   {
-    if(is_pointer_type(expr->type)) {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const add2t &add = to_add2t(expr);
+    if(is_pointer_type(expr->type)
+       || is_pointer_type(add.side_1)
+       || is_pointer_type(add.side_2)) {
       a = convert_pointer_arith(expr, expr->type);
     } else {
 
-      const expr2tc &side1 = *expr->get_sub_expr(0);
-      const expr2tc &side2 = *expr->get_sub_expr(1);
-
-      args[0] = convert_ast(side1);
-      args[1] = convert_ast(side2);
-
-      if (is_bv_type(expr) || is_fixedbv_type(expr)) {
+      if (int_encoding) {
+        a = mk_func_app(sort, SMT_FUNC_ADD, args, 2);
+      } else if (is_bv_type(expr) || is_fixedbv_type(expr)) {
         a = mk_func_app(sort, SMT_FUNC_BVADD, args, 2);
-      } else if(is_floatbv_type(side1) && is_floatbv_type(side2)) {
+      } else if(is_floatbv_type(expr)) {
         abort();
       } else {
-        // integer encoding
-        a = mk_func_app(sort, SMT_FUNC_ADD, args, 2);
+        abort();
       }
     }
     break;
   }
   case expr2t::sub_id:
   {
-    if(is_pointer_type(expr->type)) {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const sub2t &sub = to_sub2t(expr);
+    if(is_pointer_type(expr->type)
+       || is_pointer_type(sub.side_1)
+       || is_pointer_type(sub.side_2)) {
       a = convert_pointer_arith(expr, expr->type);
     } else {
 
-      const expr2tc &side1 = *expr->get_sub_expr(0);
-      const expr2tc &side2 = *expr->get_sub_expr(1);
-
-      args[0] = convert_ast(side1);
-      args[1] = convert_ast(side2);
-
-      if (is_bv_type(expr) || is_fixedbv_type(expr)) {
+      if (int_encoding) {
+        a = mk_func_app(sort, SMT_FUNC_SUB, args, 2);
+      } else if (is_bv_type(expr) || is_fixedbv_type(expr)) {
         a = mk_func_app(sort, SMT_FUNC_BVSUB, args, 2);
       } else if(is_floatbv_type(expr)) {
         abort();
       } else {
-        // integer encoding
-        a = mk_func_app(sort, SMT_FUNC_SUB, args, 2);
+        abort();
       }
     }
     break;
   }
   case expr2t::mul_id:
   {
-    const mul2t &mul = to_mul2t(expr);
-    args[0] = convert_ast(mul.side_1);
-    args[1] = convert_ast(mul.side_2);
+    assert(expr->get_num_sub_exprs() == 2);
 
     // Handle BV mode multiplies: for normal integers multiply normally, for
     // fixedbv apply hacks.
-    if (is_fixedbv_type(expr)) {
+    if (int_encoding) {
+      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2);
+    } else if (is_bv_type(expr)) {
+      a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
+    } else if(is_fixedbv_type(expr)) {
       const mul2t &mul = to_mul2t(expr);
       const fixedbv_type2t &fbvt = to_fixedbv_type(mul.type);
 
@@ -473,24 +475,26 @@ smt_convt::convert_ast(const expr2tc &expr)
 
       a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort);
-    } else if(is_bv_type(expr)) {
-      a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
     } else if(is_floatbv_type(expr)) {
       abort();
     } else {
-      // int encoding
-      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2);
+      abort();
     }
     break;
   }
   case expr2t::div_id:
   {
-    const div2t &div = to_div2t(expr);
-    args[0] = convert_ast(div.side_1);
-    args[1] = convert_ast(div.side_2);
+    assert(expr->get_num_sub_exprs() == 2);
 
     // Handle BV mode divisions. Similar arrangement to multiplies.
-    if (is_fixedbv_type(expr)) {
+    if (int_encoding) {
+      a = mk_func_app(sort, SMT_FUNC_DIV, args, 2);
+    } else if (is_signedbv_type(expr)) {
+      a = mk_func_app(sort, SMT_FUNC_BVSDIV, args, 2);
+    } else if(is_unsignedbv_type(expr)) {
+      a = mk_func_app(sort, SMT_FUNC_BVUDIV, args, 2);
+    } else if(is_fixedbv_type(expr)) {
+      const div2t &div = to_div2t(expr);
       const fixedbv_type2t &fbvt = to_fixedbv_type(div.type);
 
       unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
@@ -507,15 +511,10 @@ smt_convt::convert_ast(const expr2tc &expr)
       // Sorts.
       a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2);
       a = mk_extract(a, fbvt.width - 1, 0, s2);
-    } else if(is_signedbv_type(expr)) {
-      a = mk_func_app(sort, SMT_FUNC_BVSDIV, args, 2);
-    } else if(is_unsignedbv_type(expr)) {
-      a = mk_func_app(sort, SMT_FUNC_BVUDIV, args, 2);
     } else if(is_floatbv_type(expr)) {
       abort();
     } else {
-      // int encoding
-      a = mk_func_app(sort, SMT_FUNC_DIV, args, 2);
+      abort();
     }
     break;
   }
@@ -523,22 +522,16 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(expr->get_num_sub_exprs() == 2);
 
-    const modulus2t &xo = to_modulus2t(expr);
-    args[0] = convert_ast(xo.side_1);
-    args[1] = convert_ast(xo.side_2);
-
-    // Handle BV mode divisions. Similar arrangement to multiplies.
-    if (is_fixedbv_type(expr)) {
-      abort();
-    } else if(is_signedbv_type(expr)) {
+    if (int_encoding) {
+      a = mk_func_app(sort, SMT_FUNC_MOD, args, 2);
+    } else if (is_signedbv_type(expr) || is_fixedbv_type(expr)) {
       a = mk_func_app(sort, SMT_FUNC_BVSMOD, args, 2);
     } else if(is_unsignedbv_type(expr)) {
       a = mk_func_app(sort, SMT_FUNC_BVUMOD, args, 2);
     } else if(is_floatbv_type(expr)) {
       abort();
     } else {
-      // int encoding
-      a = mk_func_app(sort, SMT_FUNC_DIV, args, 2);
+      abort();
     }
     break;
   }
