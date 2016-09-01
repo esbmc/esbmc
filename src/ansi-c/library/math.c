@@ -56,6 +56,8 @@ enum
 
 double fabs(double x) { return (x < 0) ? -x : x; }
 
+double fmod(double a, double b) { return a - (b * (int)(a/b)); }
+
 long double fabsl(long double d) { return __ESBMC_fabsl(d); }
 
 float fabsf(float f) { return __ESBMC_fabsf(f); }
