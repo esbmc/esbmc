@@ -1107,6 +1107,9 @@ smt_convt::convert_ast(const expr2tc &expr)
     abort();
   }
 
+  struct smt_cache_entryt entry = { expr, a, ctx_level };
+  smt_cache.insert(entry);
+
   return a;
 }
 
