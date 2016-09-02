@@ -419,6 +419,7 @@ public:
    *
    *  @param expr The expression to convert into the SMT solver
    *  @param type The expression's type
+   *  @param args The expression's args
    *  @param int_encoding_func Ast to be created if using integer encoding
    *  @param signedbv_func Ast to be created if the type is signedbv
    *  @param unsignedbv_func Ast to be created if the type is unsignedbv
@@ -428,6 +429,7 @@ public:
   smt_astt convert_ast(
     const expr2tc &expr,
     const type2tc &type,
+    smt_astt  const *args,
     smt_func_kind int_encoding_func,
     smt_func_kind signedbv_func,
     smt_func_kind unsignedbv_func,

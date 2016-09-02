@@ -331,55 +331,45 @@ smt_astt
 smt_convt::convert_ast(
   const expr2tc& expr,
   const type2tc &type,
+  smt_astt  const *args,
   smt_func_kind int_encoding_func,
   smt_func_kind signedbv_func,
   smt_func_kind unsignedbv_func,
   smt_func_kind fixedbv_func,
   smt_func_kind floatbv_func)
 {
-  // Variable length array; constant array's and so forth can have hundreds
-  // of fields.
-  smt_astt args[expr->get_num_sub_exprs()];
-
-  // Convert /all the arguments/. Via magical delegates.
-  unsigned int i = 0;
-  expr->foreach_operand(
-    [this, &args, &i](const expr2tc &e)
-    {
-      args[i++] = convert_ast(e);
-    }
-  );
-
   // Convert type
   smt_sortt sort = convert_sort(expr->type);
 
   // Call mk_func_app for each type
   smt_astt a;
 
+  unsigned size = expr->get_num_sub_exprs();
+
   if (int_encoding || is_bool_type(type))
   {
     assert(int_encoding_func);
-    a = mk_func_app(sort, int_encoding_func, args, i);
+    a = mk_func_app(sort, int_encoding_func, args, size);
   }
   else if (is_signedbv_type(type))
   {
     assert(signedbv_func);
-    a = mk_func_app(sort, signedbv_func, args, i);
+    a = mk_func_app(sort, signedbv_func, args, size);
   }
   else if (is_unsignedbv_type(type))
   {
     assert(unsignedbv_func);
-    a = mk_func_app(sort, unsignedbv_func, args, i);
+    a = mk_func_app(sort, unsignedbv_func, args, size);
   }
   else if (is_fixedbv_type(type))
   {
     assert(fixedbv_func);
-    a = mk_func_app(sort, fixedbv_func, args, i);
+    a = mk_func_app(sort, fixedbv_func, args, size);
   }
   else if (is_floatbv_type(type))
   {
     assert(floatbv_func);
-    a = mk_func_app(sort, floatbv_func, args, i);
+    a = mk_func_app(sort, floatbv_func, args, size);
   }
   else
   {
@@ -500,7 +490,7 @@ smt_convt::convert_ast(const expr2tc &expr)
        || is_pointer_type(add.side_2)) {
       a = convert_pointer_arith(expr, expr->type);
     } else {
-        a = convert_ast(expr, expr->type,
+        a = convert_ast(expr, expr->type, args,
               SMT_FUNC_ADD,
               SMT_FUNC_BVADD,
               SMT_FUNC_BVADD,
@@ -519,7 +509,7 @@ smt_convt::convert_ast(const expr2tc &expr)
        || is_pointer_type(sub.side_2)) {
       a = convert_pointer_arith(expr, expr->type);
     } else {
-      a = convert_ast(expr, expr->type,
+      a = convert_ast(expr, expr->type, args,
             SMT_FUNC_SUB,
             SMT_FUNC_BVSUB,
             SMT_FUNC_BVSUB,
@@ -550,7 +540,7 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort);
     } else {
-      a = convert_ast(expr, expr->type,
+      a = convert_ast(expr, expr->type, args,
             SMT_FUNC_MUL,
             SMT_FUNC_BVMUL,
             SMT_FUNC_BVMUL,
@@ -583,7 +573,7 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2);
       a = mk_extract(a, fbvt.width - 1, 0, s2);
     } else {
-      a = convert_ast(expr, expr->type,
+      a = convert_ast(expr, expr->type, args,
             SMT_FUNC_DIV,
             SMT_FUNC_BVSDIV,
             SMT_FUNC_BVUDIV,
@@ -596,7 +586,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_MOD,
           SMT_FUNC_BVSMOD,
           SMT_FUNC_BVUMOD,
@@ -748,7 +738,7 @@ smt_convt::convert_ast(const expr2tc &expr)
       args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_MUL, &args[0], 2);
     } else {
-      a = convert_ast(expr, expr->type,
+      a = convert_ast(expr, expr->type, args,
             SMT_FUNC_INVALID,
             SMT_FUNC_BVSHL,
             SMT_FUNC_BVSHL,
@@ -776,7 +766,7 @@ smt_convt::convert_ast(const expr2tc &expr)
       args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
-      a = convert_ast(expr, expr->type,
+      a = convert_ast(expr, expr->type, args,
             SMT_FUNC_INVALID,
             SMT_FUNC_BVASHR,
             SMT_FUNC_BVASHR,
@@ -806,7 +796,7 @@ smt_convt::convert_ast(const expr2tc &expr)
       args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
-      a = convert_ast(expr, expr->type,
+      a = convert_ast(expr, expr->type, args,
             SMT_FUNC_INVALID,
             SMT_FUNC_BVLSHR,
             SMT_FUNC_BVLSHR,
@@ -854,7 +844,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (is_pointer_type(lt.side_1)) {
       a = convert_ptr_cmp(lt.side_1, lt.side_2, expr);
     } else {
-      a = convert_ast(expr, lt.side_1->type,
+      a = convert_ast(expr, lt.side_1->type, args,
             SMT_FUNC_LT,
             SMT_FUNC_BVSLT,
             SMT_FUNC_BVULT,
@@ -874,7 +864,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (is_pointer_type(lte.side_1)) {
       a = convert_ptr_cmp(lte.side_1, lte.side_2, expr);
     } else {
-      a = convert_ast(expr, lte.side_1->type,
+      a = convert_ast(expr, lte.side_1->type, args,
             SMT_FUNC_LTE,
             SMT_FUNC_BVSLTE,
             SMT_FUNC_BVULTE,
@@ -894,7 +884,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (is_pointer_type(gt.side_1)) {
       a = convert_ptr_cmp(gt.side_1, gt.side_2, expr);
     } else {
-      a = convert_ast(expr, gt.side_1->type,
+      a = convert_ast(expr, gt.side_1->type, args,
           SMT_FUNC_GT,
           SMT_FUNC_BVSGT,
           SMT_FUNC_BVUGT,
@@ -914,7 +904,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (is_pointer_type(gte.side_1)) {
       a = convert_ptr_cmp(gte.side_1, gte.side_2, expr);
     } else {
-      a = convert_ast(expr, gte.side_1->type,
+      a = convert_ast(expr, gte.side_1->type, args,
             SMT_FUNC_GTE,
             SMT_FUNC_BVSGTE,
             SMT_FUNC_BVUGTE,
@@ -940,7 +930,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_IMPLIES,
           SMT_FUNC_IMPLIES,
           SMT_FUNC_IMPLIES,
@@ -953,7 +943,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(!int_encoding);
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_INVALID,
           SMT_FUNC_BVAND,
           SMT_FUNC_BVAND,
@@ -966,7 +956,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(!int_encoding);
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_INVALID,
           SMT_FUNC_BVOR,
           SMT_FUNC_BVOR,
@@ -979,7 +969,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(!int_encoding);
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_INVALID,
           SMT_FUNC_BVXOR,
           SMT_FUNC_BVXOR,
@@ -992,7 +982,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(!int_encoding);
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_INVALID,
           SMT_FUNC_BVNAND,
           SMT_FUNC_BVNAND,
@@ -1005,7 +995,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(!int_encoding);
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_INVALID,
           SMT_FUNC_BVNOR,
           SMT_FUNC_BVNOR,
@@ -1018,7 +1008,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(!int_encoding);
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_INVALID,
           SMT_FUNC_BVNXOR,
           SMT_FUNC_BVNXOR,
@@ -1031,7 +1021,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(!int_encoding);
     assert(expr->get_num_sub_exprs() == 1);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_INVALID,
           SMT_FUNC_BVNOT,
           SMT_FUNC_BVNOT,
@@ -1044,7 +1034,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(sort->id == SMT_SORT_BOOL);
     assert(expr->get_num_sub_exprs() == 1);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_NOT,
           SMT_FUNC_NOT,
           SMT_FUNC_NOT,
@@ -1056,7 +1046,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(expr->get_num_sub_exprs() == 1);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_NEG,
           SMT_FUNC_BVNEG,
           SMT_FUNC_BVNEG,
@@ -1068,7 +1058,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_AND,
           SMT_FUNC_AND,
           SMT_FUNC_AND,
@@ -1080,7 +1070,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
           SMT_FUNC_OR,
           SMT_FUNC_OR,
           SMT_FUNC_OR,
@@ -1092,7 +1082,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(expr->get_num_sub_exprs() == 2);
 
-    a = convert_ast(expr, expr->type,
+    a = convert_ast(expr, expr->type, args,
         SMT_FUNC_XOR,
         SMT_FUNC_XOR,
         SMT_FUNC_XOR,
