@@ -716,7 +716,7 @@ public:
    *  a struct, for example). */
   smt_astt convert_addr_of(const expr2tc &expr);
   /** Handle union/struct based corner cases for member2tc expressions */
-  smt_astt convert_member(const expr2tc &expr, smt_astt src);
+  smt_astt convert_member(const expr2tc &expr);
   /** Convert an identifier to a pointer. When given the name of a variable
    *  that we want to take the address of, this inspects our current tracking
    *  of addresses / variables, and returns a pointer for the given symbol.

@@ -591,7 +591,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::member_id:
   {
     assert(expr->get_num_sub_exprs() == 1);
-    a = convert_member(expr, args[0]);
+    a = convert_member(expr);
     break;
   }
   case expr2t::same_object_id:
@@ -1306,7 +1306,7 @@ smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
 }
 
 smt_astt
-smt_convt::convert_member(const expr2tc &expr, smt_astt src)
+smt_convt::convert_member(const expr2tc &expr)
 {
   const member2t &member = to_member2t(expr);
   unsigned int idx = -1;
@@ -1315,6 +1315,7 @@ smt_convt::convert_member(const expr2tc &expr, smt_astt src)
          is_pointer_type(member.source_value));
   idx = get_member_name_field(member.source_value->type, member.member);
 
+  smt_astt src = convert_ast(member.source_value);
   return src->project(this, idx);
 }
 
