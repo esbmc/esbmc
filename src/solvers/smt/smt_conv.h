@@ -323,6 +323,8 @@ public:
    *  @param elem Struct index to project.
    *  @return AST representing the chosen element / element-array */
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+
+  virtual void dump() const { abort(); };
 };
 
 // Pull in the tuple interface definitions. _after_ the AST defs.

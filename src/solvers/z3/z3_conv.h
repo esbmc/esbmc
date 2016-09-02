@@ -151,6 +151,8 @@ public:
                                   unsigned int idx, expr2tc idx_expr) const;
     virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
     virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
+
+    virtual void dump() const override;
   };
 
   inline z3_smt_ast *
