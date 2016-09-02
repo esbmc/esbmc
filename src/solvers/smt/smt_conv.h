@@ -105,8 +105,6 @@ enum smt_sort_kind {
   SMT_SORT_FLOATBV = 128,
 };
 
-#define SMT_SORT_ALLINTS (SMT_SORT_INT | SMT_SORT_REAL | SMT_SORT_BV)
-
 /** Identifiers for SMT functions.
  *  Each SMT function gets a unique identifier, representing its interpretation
  *  when applied to some arguments. This can be used to describe a function
@@ -121,8 +119,8 @@ enum smt_sort_kind {
  */
 enum smt_func_kind {
   // Terminals
-  SMT_FUNC_HACKS = 0, // indicate the solver /has/ to use the temp expr.
-  SMT_FUNC_INVALID = 1, // For conversion lookup table only
+  SMT_FUNC_INVALID = 0, // For conversion lookup table only
+  SMT_FUNC_HACKS = 1, // indicate the solver /has/ to use the temp expr.
   SMT_FUNC_INT = 2,
   SMT_FUNC_BOOL,
   SMT_FUNC_BVINT,
