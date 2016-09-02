@@ -533,7 +533,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     // Fixedbvs are handled separately
-    if(is_fixedbv_type(expr)) {
+    if(is_fixedbv_type(expr) && !int_encoding) {
       auto mul = to_mul2t(expr);
       auto fbvt = to_fixedbv_type(mul.type);
 
@@ -564,7 +564,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     // Fixedbvs are handled separately
-    if(is_fixedbv_type(expr)) {
+    if(is_fixedbv_type(expr) && !int_encoding) {
       auto div = to_div2t(expr);
       auto fbvt = to_fixedbv_type(div.type);
 
