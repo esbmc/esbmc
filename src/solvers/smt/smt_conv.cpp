@@ -328,6 +328,71 @@ smt_convt::convert_assign(const expr2tc &expr)
 }
 
 smt_astt
+smt_convt::convert_ast(
+  const expr2tc& expr,
+  const type2tc &type,
+  smt_func_kind int_encoding_func,
+  smt_func_kind signedbv_func,
+  smt_func_kind unsignedbv_func,
+  smt_func_kind fixedbv_func,
+  smt_func_kind floatbv_func)
+{
+  // Variable length array; constant array's and so forth can have hundreds
+  // of fields.
+  smt_astt args[expr->get_num_sub_exprs()];
+
+  // Convert /all the arguments/. Via magical delegates.
+  unsigned int i = 0;
+  expr->foreach_operand(
+    [this, &args, &i](const expr2tc &e)
+    {
+      args[i++] = convert_ast(e);
+    }
+  );
+
+  // Convert type
+  smt_sortt sort = convert_sort(expr->type);
+
+  // Call mk_func_app for each type
+  smt_astt a;
+
+  if (int_encoding || is_bool_type(type))
+  {
+    assert(int_encoding_func);
+    a = mk_func_app(sort, int_encoding_func, args, i);
+  }
+  else if (is_signedbv_type(type))
+  {
+    assert(signedbv_func);
+    a = mk_func_app(sort, signedbv_func, args, i);
+  }
+  else if (is_unsignedbv_type(type))
+  {
+    assert(unsignedbv_func);
+    a = mk_func_app(sort, unsignedbv_func, args, i);
+  }
+  else if (is_fixedbv_type(type))
+  {
+    assert(fixedbv_func);
+    a = mk_func_app(sort, fixedbv_func, args, i);
+  }
+  else if (is_floatbv_type(type))
+  {
+    assert(floatbv_func);
+    a = mk_func_app(sort, floatbv_func, args, i);
+  }
+  else
+  {
+    abort();
+  }
+
+  struct smt_cache_entryt entry = { expr, a, ctx_level };
+  smt_cache.insert(entry);
+
+  return a;
+}
+
+smt_astt
 smt_convt::convert_ast(const expr2tc &expr)
 {
   // Variable length array; constant array's and so forth can have hundreds

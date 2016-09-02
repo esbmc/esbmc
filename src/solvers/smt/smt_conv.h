@@ -413,6 +413,27 @@ public:
    *  @return The resulting handle to the SMT value. */
   smt_astt convert_ast(const expr2tc &expr);
 
+  /** Interface to specifig SMT conversion.
+   *  Takes one expression, and converts it into the underlying SMT solver,
+   *  depending on the type of the expression.
+   *
+   *  @param expr The expression to convert into the SMT solver
+   *  @param type The expression's type
+   *  @param int_encoding_func Ast to be created if using integer encoding
+   *  @param signedbv_func Ast to be created if the type is signedbv
+   *  @param unsignedbv_func Ast to be created if the type is unsignedbv
+   *  @param fixedbv_func Ast to be created if the type is fixedbv
+   *  @param floatbv_func Ast to be created if the type is floatbv
+   *  @return The resulting handle to the SMT value. */
+  smt_astt convert_ast(
+    const expr2tc &expr,
+    const type2tc &type,
+    smt_func_kind int_encoding_func,
+    smt_func_kind signedbv_func,
+    smt_func_kind unsignedbv_func,
+    smt_func_kind fixedbv_func,
+    smt_func_kind floatbv_func);
+
   void convert_assign(const expr2tc &expr);
 
   /** Make an n-ary 'or' function application.
