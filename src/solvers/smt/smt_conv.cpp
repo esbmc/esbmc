@@ -773,6 +773,8 @@ smt_convt::convert_ast(const expr2tc &expr)
       // No need to do anything.
       a = args[0];
     } else {
+      // TODO: Shouldn't we create a zero constant of the same type of
+      // abs.value?
       constant_int2tc zero(abs.value->type, BigInt(0));
       lessthan2tc lt(abs.value, zero);
       sub2tc sub(abs.value->type, zero, abs.value);
