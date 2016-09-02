@@ -646,7 +646,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::isnan_id:
   {
     assert(expr->get_num_sub_exprs() == 1);
-    a = convert_is_nan(expr, args[0]);
+    a = convert_is_nan(expr);
     break;
   }
   case expr2t::overflow_id:
@@ -1281,7 +1281,7 @@ smt_convt::mk_fresh(smt_sortt s, const std::string &tag,
 }
 
 smt_astt
-smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
+smt_convt::convert_is_nan(const expr2tc &expr)
 {
   const isnan2t &isnan = to_isnan2t(expr);
   smt_sortt bs = boolean_sort;
@@ -1293,6 +1293,7 @@ smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
   smt_astt t = mk_smt_bool(true);
   smt_astt f = mk_smt_bool(false);
 
+  smt_astt operand = convert_ast(isnan.value);
   if (int_encoding) {
     smt_astt asint = round_real_to_int(operand);
     smt_astt zero = mk_smt_int(BigInt(0), false);
