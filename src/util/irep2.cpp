@@ -69,7 +69,7 @@ public:
     // Everything here should have become an lvalue over an rvalue. Only thing
     // that should pass through this far is None. 
     (void) type; (void) out;
-    assert("rvalue of irep2tc_to_irep2t should never be called");
+    assert(0 && "rvalue of irep2tc_to_irep2t should never be called");
   }
 
   static void *lvalue_cvt(const Container *foo)
