@@ -174,6 +174,13 @@ type2t::operator==(const type2t &ref) const
 }
 
 bool
+type2t::operator!=(const type2t &ref) const
+{
+
+  return !cmpchecked(ref);
+}
+
+bool
 type2t::operator<(const type2t &ref) const
 {
   int tmp = type2t::lt(ref);
