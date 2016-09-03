@@ -398,7 +398,7 @@ class register_irep_methods<type2t>
 {
 public:
   template <typename O>
-  void operator()(O &o)
+  void operator()(O &o, const std::string &irep_name __attribute__((unused)))
   {
     // Define standard methods
     o.def("pretty", &type2t::pretty);
@@ -427,7 +427,7 @@ build_base_type2t_python_class(void)
   using namespace boost::python;
   class_<type2t, boost::noncopyable, irep_container<type2t> > foo("type2t", no_init);
   register_irep_methods<type2t> bar;
-  bar(foo);
+  bar(foo, "type");
 
   // Register our manual type2tc -> type2t converter.
   esbmc_python_cvt<type2t, type2tc, true, true, true, irep2tc_to_irep2t<type2tc, type2t> >();
@@ -812,7 +812,7 @@ class register_irep_methods<expr2t>
 {
 public:
   template <typename O>
-  void operator()(O &o)
+  void operator()(O &o, const std::string &irep_name)
   {
     // Define standard methods
     o.def("clone", &expr2t::clone);
@@ -835,6 +835,10 @@ public:
 
     bool (*ltptr)(const expr2tc &a, const expr2tc &b) = &operator<;
     o.def("__lt__", ltptr);
+
+    // Register super special irep methods
+    if (irep_name == "symbol")
+      o.def("get_symbol_name", &symbol2t::get_symbol_name);
     return;
   }
 };
@@ -845,7 +849,7 @@ build_base_expr2t_python_class(void)
   using namespace boost::python;
   class_<expr2t, boost::noncopyable, irep_container<expr2t> > foo("expr2t", no_init);
   register_irep_methods<expr2t> bar;
-  bar(foo);
+  bar(foo, "expr2t");
 
   // Register our manual expr2tc -> expr2t converter.
   esbmc_python_cvt<expr2t, expr2tc, true, true, true, irep2tc_to_irep2t<expr2tc, expr2t> >();
@@ -2152,7 +2156,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   build_python_class_rec(foo, 0);
   
   register_irep_methods<base2t> bar;
-  bar(foo);
+  bar(foo, basename);
   return;
 }
 #endif /* WITH_PYTHON */
