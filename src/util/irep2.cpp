@@ -84,6 +84,35 @@ public:
   }
 };
 
+// Facility to build one kind of container from another. For some reason, b.p
+// doesn't currently want to upcast a symbol2tc to a expr2tc. It has sufficient
+// information to work that out (it knows expr2t is a base of symbol2t) but
+// it seems because the container types are different, it won't do it. So,
+// encode that conversion manually.
+template <typename DownType, typename BaseType>
+class irep2tc_to_irep2tc
+{
+public:
+  static void* rvalue_cvt(const DownType *type, BaseType *out)
+  {
+    // Potentially build a null irep, otherwise build a base2tc out of the
+    // derived class.
+    if (reinterpret_cast<const PyObject*>(type) == Py_None)
+      new (out) BaseType();
+    else
+      new (out) BaseType(*type);
+
+    return const_cast<void*>(reinterpret_cast<const void *>(out));
+  }
+
+  static void *lvalue_cvt(const DownType *foo)
+  {
+    // Cast derived type down to base type ptr
+    return const_cast<void *>(reinterpret_cast<const void*>(
+          dynamic_cast<const BaseType*>(foo)));
+  }
+};
+
 template<typename Container>
 class none_to_irep2tc
 {
@@ -471,6 +500,11 @@ build_type2t_container_converters(void)
   // Needs to be called _after_ the type types are registered.
 #define hahatemporary(r, data, elem) \
   esbmc_python_cvt<BOOST_PP_CAT(elem,_type2t), BOOST_PP_CAT(elem,_type2tc), false, true, true, irep2tc_to_irep2t<BOOST_PP_CAT(elem,_type2tc), BOOST_PP_CAT(elem,_type2t)> >();
+BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_TYPES)
+#undef hahatemporary
+
+#define hahatemporary(r, data, elem) \
+  esbmc_python_cvt<type2tc, BOOST_PP_CAT(elem,_type2tc), true, true, true, irep2tc_to_irep2tc<BOOST_PP_CAT(elem,_type2tc),type2tc> >();
 BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_TYPES)
 #undef hahatemporary
 
@@ -917,6 +951,11 @@ build_expr2t_container_converters(void)
   // Needs to be called _after_ the expr types are registered.
 #define hahatemporary(r, data, elem) \
   esbmc_python_cvt<BOOST_PP_CAT(elem,2t), BOOST_PP_CAT(elem,2tc), false, true, true, irep2tc_to_irep2t<BOOST_PP_CAT(elem,2tc), BOOST_PP_CAT(elem,2t)> >();
+BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_EXPRS)
+#undef hahatemporary
+
+#define hahatemporary(r, data, elem) \
+  esbmc_python_cvt<expr2tc, BOOST_PP_CAT(elem,2tc), true, true, true, irep2tc_to_irep2tc<BOOST_PP_CAT(elem,2tc),expr2tc> >();
 BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_EXPRS)
 #undef hahatemporary
 
