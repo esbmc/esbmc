@@ -450,7 +450,7 @@ build_base_type2t_python_class(void)
   bar(foo, "type");
 
   // Register our manual type2tc -> type2t converter.
-  esbmc_python_cvt<type2t, type2tc, true, true, true, irep2tc_to_irep2t<type2tc, type2t> >();
+  esbmc_python_cvt<type2t, type2tc, false, true, true, irep2tc_to_irep2t<type2tc, type2t> >();
   // None converter
   esbmc_python_cvt<type2tc, char, true, true, false, none_to_irep2tc<type2tc> >();
 
@@ -470,7 +470,7 @@ build_type2t_container_converters(void)
 {
   // Needs to be called _after_ the type types are registered.
 #define hahatemporary(r, data, elem) \
-  esbmc_python_cvt<BOOST_PP_CAT(elem,_type2t), BOOST_PP_CAT(elem,_type2tc), true, true, true, irep2tc_to_irep2t<BOOST_PP_CAT(elem,_type2tc), BOOST_PP_CAT(elem,_type2t)> >();
+  esbmc_python_cvt<BOOST_PP_CAT(elem,_type2t), BOOST_PP_CAT(elem,_type2tc), false, true, true, irep2tc_to_irep2t<BOOST_PP_CAT(elem,_type2tc), BOOST_PP_CAT(elem,_type2t)> >();
 BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_TYPES)
 #undef hahatemporary
 
@@ -877,7 +877,7 @@ build_base_expr2t_python_class(void)
   bar(foo, "expr2t");
 
   // Register our manual expr2tc -> expr2t converter.
-  esbmc_python_cvt<expr2t, expr2tc, true, true, true, irep2tc_to_irep2t<expr2tc, expr2t> >();
+  esbmc_python_cvt<expr2t, expr2tc, false, true, true, irep2tc_to_irep2t<expr2tc, expr2t> >();
   // None converter
   esbmc_python_cvt<expr2tc, char, true, true, false, none_to_irep2tc<expr2tc> >();
 
@@ -916,7 +916,7 @@ build_expr2t_container_converters(void)
 {
   // Needs to be called _after_ the expr types are registered.
 #define hahatemporary(r, data, elem) \
-  esbmc_python_cvt<BOOST_PP_CAT(elem,2t), BOOST_PP_CAT(elem,2tc), true, true, true, irep2tc_to_irep2t<BOOST_PP_CAT(elem,2tc), BOOST_PP_CAT(elem,2t)> >();
+  esbmc_python_cvt<BOOST_PP_CAT(elem,2t), BOOST_PP_CAT(elem,2tc), false, true, true, irep2tc_to_irep2t<BOOST_PP_CAT(elem,2tc), BOOST_PP_CAT(elem,2t)> >();
 BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_EXPRS)
 #undef hahatemporary
 
