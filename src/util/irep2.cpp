@@ -66,16 +66,11 @@ class irep2tc_to_irep2t
 public:
   static void* rvalue_cvt(const Container *type, Base *out)
   {
+    (void)type;
+    (void)out;
     // Everything here should have become an lvalue over an rvalue. Only thing
     // that should pass through this far is None. 
-    // Despite that, for expr2t::operator== and the like, b.p seems to want to
-    // convert perfectly good exprs into rvalues.
-    //assert(0 && "rvalue of irep2tc_to_irep2t should never be called");
-
-    // XXX this pretty decently breaks our ownership model?
-    // XXX due to lvalue converter, type is in fact the base2t object ptr
-    (void)out;
-    return const_cast<void*>(reinterpret_cast<const void *>(type));
+    assert(0 && "rvalue of irep2tc_to_irep2t should never be called");
   }
 
   static void *lvalue_cvt(const Container *foo)
@@ -454,15 +449,12 @@ public:
     // operator to work on the containers. First resolve overload:
     bool (*eqptr)(const type2tc &a, const type2tc &b) = &operator==;
     o.def("__eq__", eqptr);
-    o.def("__req__", &type2t::operator==);
 
     bool (*neptr)(const type2tc &a, const type2tc &b) = &operator!=;
     o.def("__ne__", neptr);
-    o.def("__rne__", &type2t::operator!=);
 
     bool (*ltptr)(const type2tc &a, const type2tc &b) = &operator<;
     o.def("__lt__", ltptr);
-    o.def("__lt__", &type2t::operator<);
 
     o.def("__hash__", &type2t::crc);
 
@@ -883,15 +875,12 @@ public:
     // operator to work on the containers, and refs. First resolve overload:
     bool (*eqptr)(const expr2tc &a, const expr2tc &b) = &operator==;
     o.def("__eq__", eqptr);
-    o.def("__eq__", &expr2t::operator==);
 
     bool (*neptr)(const expr2tc &a, const expr2tc &b) = &operator!=;
     o.def("__ne__", neptr);
-    o.def("__ne__", &expr2t::operator!=);
 
     bool (*ltptr)(const expr2tc &a, const expr2tc &b) = &operator<;
     o.def("__lt__", ltptr);
-    o.def("__lt__", &expr2t::operator<);
 
     o.def("__hash__", &expr2t::crc);
 
