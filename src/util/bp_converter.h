@@ -86,10 +86,11 @@ struct esbmc_python_cvt
       // Pass storage and from-ptr to rvalue converter, which should in-place
       // initialize the storage.
       const InPython *foo = reinterpret_cast<const InPython*>(stage1->convertible);
-      ValueCvt::rvalue_cvt(foo, obj_store);
+      void *res_storage = ValueCvt::rvalue_cvt(foo, obj_store);
 
-      // Let rvalue holder know that needs deconstructing please
-      store->stage1.convertible = obj_store;
+      // If rvalue converter used the provided storage, this will also cause
+      // the constructed object to be deleted.
+      store->stage1.convertible = res_storage;
       return;
     }
 };

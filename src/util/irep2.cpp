@@ -64,12 +64,18 @@ template <typename Container, typename Base>
 class irep2tc_to_irep2t
 {
 public:
-  static void rvalue_cvt(const Container *type, Base *out)
+  static void* rvalue_cvt(const Container *type, Base *out)
   {
     // Everything here should have become an lvalue over an rvalue. Only thing
     // that should pass through this far is None. 
-    (void) type; (void) out;
-    assert(0 && "rvalue of irep2tc_to_irep2t should never be called");
+    // Despite that, for expr2t::operator== and the like, b.p seems to want to
+    // convert perfectly good exprs into rvalues.
+    //assert(0 && "rvalue of irep2tc_to_irep2t should never be called");
+
+    // XXX this pretty decently breaks our ownership model?
+    // XXX due to lvalue converter, type is in fact the base2t object ptr
+    (void)out;
+    return const_cast<void*>(reinterpret_cast<const void *>(type));
   }
 
   static void *lvalue_cvt(const Container *foo)
@@ -82,13 +88,14 @@ template<typename Container>
 class none_to_irep2tc
 {
 public:
-  static void rvalue_cvt(const char *src, Container *type)
+  static void *rvalue_cvt(const char *src, Container *type)
   {
     // Everything here should have become an lvalue over an rvalue. Only thing
     // that should pass through this far is None
     assert(reinterpret_cast<const PyObject*>(src) == Py_None);
     new (type) Container(); // Empty
     (void)src; // unused
+    return (void*)type;
   }
 
   static void *lvalue_cvt(const char *foo)

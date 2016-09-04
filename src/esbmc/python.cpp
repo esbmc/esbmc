@@ -80,10 +80,11 @@ template<>
 class migrate_func<type2tc>
 {
 public:
-  static void rvalue_cvt(const typet *type, type2tc *out)
+  static void *rvalue_cvt(const typet *type, type2tc *out)
   {
     new (out) type2tc();
     migrate_type(*type, *out);
+    return (void*)out;
   }
 
   static void *lvalue_cvt(const typet *foo)
@@ -96,10 +97,11 @@ template<>
 class migrate_func<expr2tc>
 {
 public:
-  static void rvalue_cvt(const exprt *expr, expr2tc *out)
+  static void *rvalue_cvt(const exprt *expr, expr2tc *out)
   {
     new (out) expr2tc();
     migrate_expr(*expr, *out);
+    return (void*)out;
   }
 
   static void *lvalue_cvt(const exprt *foo)
@@ -112,10 +114,11 @@ template<>
 class migrate_func<typet>
 {
 public:
-  static void rvalue_cvt(const type2tc *type, typet *out)
+  static void *rvalue_cvt(const type2tc *type, typet *out)
   {
     new (out) typet();
     *out = migrate_type_back(*type);
+    return (void*)out;
   }
 
   static void *lvalue_cvt(const type2tc *foo)
@@ -128,10 +131,11 @@ template<>
 class migrate_func<exprt>
 {
 public:
-  static void rvalue_cvt(const expr2tc *expr, exprt *out)
+  static void *rvalue_cvt(const expr2tc *expr, exprt *out)
   {
     new (out) exprt();
     *out = migrate_expr_back(*expr);
+    return (void*)out;
   }
 
   static void *lvalue_cvt(const expr2tc *foo)
