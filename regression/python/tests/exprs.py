@@ -205,6 +205,24 @@ class Exprs(unittest.TestCase):
         reftext = "constant_fixedbv\n* value : 0\n* type : fixedbv\n  * width : 32\n  * integer_bits : 32"
         self.assertTrue(const_fbv.pretty(0) == reftext, "Created fixedbv has wrong form")
 
+    def test_sym_compare(self):
+        import esbmc
+        # Build an expr we indirectly access and a symbol
+        foo = self.make_int()
+        ubv = self.make_unsigned()
+        add = esbmc.expr.add.make(ubv, foo, foo)
+        idt = esbmc.irep_idt("fgasfd")
+        lev = esbmc.expr.symbol_renaming.level0
+        sym = esbmc.expr.symbol.make(ubv, idt, lev, 0, 0, 0, 0)
+
+        # Problem: when we downcast this b.p knows that 'sym' is a symbol2tc.
+        # But it doesn't know for some reason that it can just cast that to
+        # a expr2tc, via inheritance. Test for this -- __eq__ returns
+        # NotImplemented when the operator== call construction fails.
+        sym = esbmc.downcast_expr(sym)
+        foo2 = add.side_1
+        self.assertFalse(foo2.__eq__(sym) == NotImplemented, "Downcasted expr should be castable to expr2tc")
+
     def test_call_none(self):
         import esbmc
         # Create what is, admitedly, an invalid irep
