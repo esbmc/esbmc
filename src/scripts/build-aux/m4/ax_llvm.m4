@@ -51,7 +51,7 @@ AC_DEFUN([AX_LLVM],
 
     CXXFLAGS="$CXXFLAGS -I`$LLVMCONFIG --includedir`"
     LLVMLDFLAGS=`$LLVMCONFIG --ldflags`
-    LLVMLIBS=`$LLVMCONFIG --libs mcparser option bitreader`
+    LLVMLIBS=`$LLVMCONFIG --libs mcparser option bitreader profiledata`
     SYSLIBS=`$LLVMCONFIG --system-libs 2>/dev/null`
     if test "x$?" = "x0"; then
       LLVMLDFLAGS="$LLVMLDFLAGS $SYSLIBS"
