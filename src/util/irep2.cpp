@@ -425,12 +425,18 @@ public:
     // operator to work on the containers. First resolve overload:
     bool (*eqptr)(const type2tc &a, const type2tc &b) = &operator==;
     o.def("__eq__", eqptr);
+    o.def("__req__", &type2t::operator==);
 
     bool (*neptr)(const type2tc &a, const type2tc &b) = &operator!=;
     o.def("__ne__", neptr);
+    o.def("__rne__", &type2t::operator!=);
 
     bool (*ltptr)(const type2tc &a, const type2tc &b) = &operator<;
     o.def("__lt__", ltptr);
+    o.def("__lt__", &type2t::operator<);
+
+    o.def("__hash__", &type2t::crc);
+
     return;
   }
 };
@@ -840,15 +846,20 @@ public:
 
     // Operators. Can't use built-in boost.python way because it only
     // compares the base object, not the container. So, define our equality
-    // operator to work on the containers. First resolve overload:
+    // operator to work on the containers, and refs. First resolve overload:
     bool (*eqptr)(const expr2tc &a, const expr2tc &b) = &operator==;
     o.def("__eq__", eqptr);
+    o.def("__eq__", &expr2t::operator==);
 
     bool (*neptr)(const expr2tc &a, const expr2tc &b) = &operator!=;
     o.def("__ne__", neptr);
+    o.def("__ne__", &expr2t::operator!=);
 
     bool (*ltptr)(const expr2tc &a, const expr2tc &b) = &operator<;
     o.def("__lt__", ltptr);
+    o.def("__lt__", &expr2t::operator<);
+
+    o.def("__hash__", &expr2t::crc);
 
     // Register super special irep methods
     if (irep_name == "symbol")
