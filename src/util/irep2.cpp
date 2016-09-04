@@ -449,9 +449,11 @@ public:
     // operator to work on the containers. First resolve overload:
     bool (*eqptr)(const type2tc &a, const type2tc &b) = &operator==;
     o.def("__eq__", eqptr);
+    o.def("__req__", eqptr);
 
     bool (*neptr)(const type2tc &a, const type2tc &b) = &operator!=;
     o.def("__ne__", neptr);
+    o.def("__rne__", neptr);
 
     bool (*ltptr)(const type2tc &a, const type2tc &b) = &operator<;
     o.def("__lt__", ltptr);
@@ -875,9 +877,11 @@ public:
     // operator to work on the containers, and refs. First resolve overload:
     bool (*eqptr)(const expr2tc &a, const expr2tc &b) = &operator==;
     o.def("__eq__", eqptr);
+    o.def("__req__", eqptr);
 
     bool (*neptr)(const expr2tc &a, const expr2tc &b) = &operator!=;
     o.def("__ne__", neptr);
+    o.def("__rne__", neptr);
 
     bool (*ltptr)(const expr2tc &a, const expr2tc &b) = &operator<;
     o.def("__lt__", ltptr);
