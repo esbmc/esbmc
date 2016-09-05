@@ -191,6 +191,17 @@ enum smt_func_kind {
   SMT_FUNC_IS_INT,
 };
 
+/** Class that will hold information about which operation
+ *  will be applied for a particular type
+ */
+struct expr_op_convert {
+  smt_func_kind int_encoding_func;
+  smt_func_kind signedbv_func;
+  smt_func_kind unsignedbv_func;
+  smt_func_kind fixedbv_func;
+  smt_func_kind floatbv_func;
+};
+
 /** A class for storing an SMT sort.
  *  This class abstractly represents an SMT sort: solver converter classes are
  *  expected to extend this and add fields that store their solvers
@@ -420,21 +431,13 @@ public:
    *  @param expr The expression to convert into the SMT solver
    *  @param type The expression's type
    *  @param args The expression's args
-   *  @param int_encoding_func Ast to be created if using integer encoding
-   *  @param signedbv_func Ast to be created if the type is signedbv
-   *  @param unsignedbv_func Ast to be created if the type is unsignedbv
-   *  @param fixedbv_func Ast to be created if the type is fixedbv
-   *  @param floatbv_func Ast to be created if the type is floatbv
+   *  @param ops The operations for each sort type
    *  @return The resulting handle to the SMT value. */
   smt_astt convert_ast(
     const expr2tc &expr,
     const type2tc &type,
-    smt_astt  const *args,
-    smt_func_kind int_encoding_func,
-    smt_func_kind signedbv_func,
-    smt_func_kind unsignedbv_func,
-    smt_func_kind fixedbv_func,
-    smt_func_kind floatbv_func);
+    smt_astt const *args,
+    struct expr_op_convert ops);
 
   void convert_assign(const expr2tc &expr);
 

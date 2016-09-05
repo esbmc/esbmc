@@ -329,14 +329,10 @@ smt_convt::convert_assign(const expr2tc &expr)
 
 smt_astt
 smt_convt::convert_ast(
-  const expr2tc& expr,
+  const expr2tc &expr,
   const type2tc &type,
-  smt_astt  const *args,
-  smt_func_kind int_encoding_func,
-  smt_func_kind signedbv_func,
-  smt_func_kind unsignedbv_func,
-  smt_func_kind fixedbv_func,
-  smt_func_kind floatbv_func)
+  smt_astt const *args,
+  struct expr_op_convert ops)
 {
   // Convert type
   smt_sortt sort = convert_sort(expr->type);
@@ -348,28 +344,28 @@ smt_convt::convert_ast(
 
   if (int_encoding || is_bool_type(type))
   {
-    assert(int_encoding_func);
-    a = mk_func_app(sort, int_encoding_func, args, size);
+    assert(ops.int_encoding_func);
+    a = mk_func_app(sort, ops.int_encoding_func, args, size);
   }
   else if (is_signedbv_type(type))
   {
-    assert(signedbv_func);
-    a = mk_func_app(sort, signedbv_func, args, size);
+    assert(ops.signedbv_func);
+    a = mk_func_app(sort, ops.signedbv_func, args, size);
   }
   else if (is_unsignedbv_type(type))
   {
-    assert(unsignedbv_func);
-    a = mk_func_app(sort, unsignedbv_func, args, size);
+    assert(ops.unsignedbv_func);
+    a = mk_func_app(sort, ops.unsignedbv_func, args, size);
   }
   else if (is_fixedbv_type(type))
   {
-    assert(fixedbv_func);
-    a = mk_func_app(sort, fixedbv_func, args, size);
+    assert(ops.fixedbv_func);
+    a = mk_func_app(sort, ops.fixedbv_func, args, size);
   }
   else if (is_floatbv_type(type))
   {
-    assert(floatbv_func);
-    a = mk_func_app(sort, floatbv_func, args, size);
+    assert(ops.floatbv_func);
+    a = mk_func_app(sort, ops.floatbv_func, args, size);
   }
   else
   {
@@ -490,12 +486,13 @@ smt_convt::convert_ast(const expr2tc &expr)
        || is_pointer_type(add.side_2)) {
       a = convert_pointer_arith(expr, expr->type);
     } else {
-        a = convert_ast(expr, expr->type, args,
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{
               SMT_FUNC_ADD,
               SMT_FUNC_BVADD,
               SMT_FUNC_BVADD,
               SMT_FUNC_BVADD,
-              SMT_FUNC_INVALID);
+              SMT_FUNC_INVALID});
     }
     break;
   }
@@ -510,11 +507,12 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = convert_pointer_arith(expr, expr->type);
     } else {
       a = convert_ast(expr, expr->type, args,
-            SMT_FUNC_SUB,
-            SMT_FUNC_BVSUB,
-            SMT_FUNC_BVSUB,
-            SMT_FUNC_BVSUB,
-            SMT_FUNC_INVALID);
+            expr_op_convert{
+              SMT_FUNC_SUB,
+              SMT_FUNC_BVSUB,
+              SMT_FUNC_BVSUB,
+              SMT_FUNC_BVSUB,
+              SMT_FUNC_INVALID});
     }
     break;
   }
@@ -541,11 +539,12 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort);
     } else {
       a = convert_ast(expr, expr->type, args,
-            SMT_FUNC_MUL,
-            SMT_FUNC_BVMUL,
-            SMT_FUNC_BVMUL,
-            SMT_FUNC_INVALID,
-            SMT_FUNC_INVALID);
+            expr_op_convert{
+              SMT_FUNC_MUL,
+              SMT_FUNC_BVMUL,
+              SMT_FUNC_BVMUL,
+              SMT_FUNC_INVALID,
+              SMT_FUNC_INVALID});
     }
     break;
   }
@@ -574,11 +573,12 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = mk_extract(a, fbvt.width - 1, 0, s2);
     } else {
       a = convert_ast(expr, expr->type, args,
-            SMT_FUNC_DIV,
-            SMT_FUNC_BVSDIV,
-            SMT_FUNC_BVUDIV,
-            SMT_FUNC_INVALID,
-            SMT_FUNC_INVALID);
+            expr_op_convert{
+              SMT_FUNC_DIV,
+              SMT_FUNC_BVSDIV,
+              SMT_FUNC_BVUDIV,
+              SMT_FUNC_INVALID,
+              SMT_FUNC_INVALID});
     }
     break;
   }
@@ -587,11 +587,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_MOD,
-          SMT_FUNC_BVSMOD,
-          SMT_FUNC_BVUMOD,
-          SMT_FUNC_BVSMOD,  // TODO: is this right?
-          SMT_FUNC_INVALID);
+          expr_op_convert{
+            SMT_FUNC_MOD,
+            SMT_FUNC_BVSMOD,
+            SMT_FUNC_BVUMOD,
+            SMT_FUNC_BVSMOD,  // TODO: is this right?
+            SMT_FUNC_INVALID});
     break;
   }
   case expr2t::index_id:
@@ -739,11 +740,12 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = mk_func_app(sort, SMT_FUNC_MUL, &args[0], 2);
     } else {
       a = convert_ast(expr, expr->type, args,
-            SMT_FUNC_INVALID,
-            SMT_FUNC_BVSHL,
-            SMT_FUNC_BVSHL,
-            SMT_FUNC_BVSHL,
-            SMT_FUNC_INVALID);
+            expr_op_convert{
+              SMT_FUNC_INVALID,
+              SMT_FUNC_BVSHL,
+              SMT_FUNC_BVSHL,
+              SMT_FUNC_BVSHL,
+              SMT_FUNC_INVALID});
     }
     break;
   }
@@ -767,11 +769,12 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
       a = convert_ast(expr, expr->type, args,
-            SMT_FUNC_INVALID,
-            SMT_FUNC_BVASHR,
-            SMT_FUNC_BVASHR,
-            SMT_FUNC_BVASHR,
-            SMT_FUNC_INVALID);
+            expr_op_convert{
+              SMT_FUNC_INVALID,
+              SMT_FUNC_BVASHR,
+              SMT_FUNC_BVASHR,
+              SMT_FUNC_BVASHR,
+              SMT_FUNC_INVALID});
     }
     break;
   }
@@ -797,11 +800,12 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
       a = convert_ast(expr, expr->type, args,
-            SMT_FUNC_INVALID,
-            SMT_FUNC_BVLSHR,
-            SMT_FUNC_BVLSHR,
-            SMT_FUNC_BVLSHR,
-            SMT_FUNC_INVALID);
+            expr_op_convert{
+              SMT_FUNC_INVALID,
+              SMT_FUNC_BVLSHR,
+              SMT_FUNC_BVLSHR,
+              SMT_FUNC_BVLSHR,
+              SMT_FUNC_INVALID});
     }
     break;
   }
@@ -845,11 +849,12 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = convert_ptr_cmp(lt.side_1, lt.side_2, expr);
     } else {
       a = convert_ast(expr, lt.side_1->type, args,
-            SMT_FUNC_LT,
-            SMT_FUNC_BVSLT,
-            SMT_FUNC_BVULT,
-            SMT_FUNC_BVSLT,
-            SMT_FUNC_LT);
+            expr_op_convert{
+              SMT_FUNC_LT,
+              SMT_FUNC_BVSLT,
+              SMT_FUNC_BVULT,
+              SMT_FUNC_BVSLT,
+              SMT_FUNC_LT});
     }
     break;
   }
@@ -865,11 +870,12 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = convert_ptr_cmp(lte.side_1, lte.side_2, expr);
     } else {
       a = convert_ast(expr, lte.side_1->type, args,
-            SMT_FUNC_LTE,
-            SMT_FUNC_BVSLTE,
-            SMT_FUNC_BVULTE,
-            SMT_FUNC_BVSLTE,
-            SMT_FUNC_LTE);
+            expr_op_convert{
+              SMT_FUNC_LTE,
+              SMT_FUNC_BVSLTE,
+              SMT_FUNC_BVULTE,
+              SMT_FUNC_BVSLTE,
+              SMT_FUNC_LTE});
     }
     break;
   }
@@ -885,11 +891,12 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = convert_ptr_cmp(gt.side_1, gt.side_2, expr);
     } else {
       a = convert_ast(expr, gt.side_1->type, args,
-          SMT_FUNC_GT,
-          SMT_FUNC_BVSGT,
-          SMT_FUNC_BVUGT,
-          SMT_FUNC_BVSGT,
-          SMT_FUNC_GT);
+            expr_op_convert{
+              SMT_FUNC_GT,
+              SMT_FUNC_BVSGT,
+              SMT_FUNC_BVUGT,
+              SMT_FUNC_BVSGT,
+              SMT_FUNC_GT});
     }
     break;
   }
@@ -905,11 +912,12 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = convert_ptr_cmp(gte.side_1, gte.side_2, expr);
     } else {
       a = convert_ast(expr, gte.side_1->type, args,
-            SMT_FUNC_GTE,
-            SMT_FUNC_BVSGTE,
-            SMT_FUNC_BVUGTE,
-            SMT_FUNC_BVSGTE,
-            SMT_FUNC_GTE);
+            expr_op_convert{
+              SMT_FUNC_GTE,
+              SMT_FUNC_BVSGTE,
+              SMT_FUNC_BVUGTE,
+              SMT_FUNC_BVSGTE,
+              SMT_FUNC_GTE});
     }
     break;
   }
@@ -931,11 +939,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_IMPLIES,
-          SMT_FUNC_IMPLIES,
-          SMT_FUNC_IMPLIES,
-          SMT_FUNC_IMPLIES,
-          SMT_FUNC_IMPLIES);
+          expr_op_convert{
+            SMT_FUNC_IMPLIES,
+            SMT_FUNC_IMPLIES,
+            SMT_FUNC_IMPLIES,
+            SMT_FUNC_IMPLIES,
+            SMT_FUNC_IMPLIES});
     break;
   }
   case expr2t::bitand_id:
@@ -944,11 +953,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_BVAND,
-          SMT_FUNC_BVAND,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_INVALID);
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVAND,
+            SMT_FUNC_BVAND,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
     break;
   }
   case expr2t::bitor_id:
@@ -957,11 +967,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_BVOR,
-          SMT_FUNC_BVOR,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_INVALID);
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVOR,
+            SMT_FUNC_BVOR,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
     break;
   }
   case expr2t::bitxor_id:
@@ -970,11 +981,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_BVXOR,
-          SMT_FUNC_BVXOR,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_INVALID);
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVXOR,
+            SMT_FUNC_BVXOR,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
     break;
   }
   case expr2t::bitnand_id:
@@ -983,11 +995,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_BVNAND,
-          SMT_FUNC_BVNAND,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_INVALID);
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVNAND,
+            SMT_FUNC_BVNAND,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
     break;
   }
   case expr2t::bitnor_id:
@@ -996,11 +1009,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_BVNOR,
-          SMT_FUNC_BVNOR,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_INVALID);
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVNOR,
+            SMT_FUNC_BVNOR,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
     break;
   }
   case expr2t::bitnxor_id:
@@ -1009,11 +1023,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_BVNXOR,
-          SMT_FUNC_BVNXOR,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_INVALID);
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVNXOR,
+            SMT_FUNC_BVNXOR,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
     break;
   }
   case expr2t::bitnot_id:
@@ -1022,11 +1037,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 1);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_BVNOT,
-          SMT_FUNC_BVNOT,
-          SMT_FUNC_INVALID,
-          SMT_FUNC_INVALID);
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVNOT,
+            SMT_FUNC_BVNOT,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
     break;
   }
   case expr2t::not_id:
@@ -1035,11 +1051,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 1);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_NOT,
-          SMT_FUNC_NOT,
-          SMT_FUNC_NOT,
-          SMT_FUNC_NOT,
-          SMT_FUNC_NOT);
+          expr_op_convert{
+            SMT_FUNC_NOT,
+            SMT_FUNC_NOT,
+            SMT_FUNC_NOT,
+            SMT_FUNC_NOT,
+            SMT_FUNC_NOT});
     break;
   }
   case expr2t::neg_id:
@@ -1047,11 +1064,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 1);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_NEG,
-          SMT_FUNC_BVNEG,
-          SMT_FUNC_BVNEG,
-          SMT_FUNC_BVNEG,
-          SMT_FUNC_NEG);
+          expr_op_convert{
+            SMT_FUNC_NEG,
+            SMT_FUNC_BVNEG,
+            SMT_FUNC_BVNEG,
+            SMT_FUNC_BVNEG,
+            SMT_FUNC_NEG});
     break;
   }
   case expr2t::and_id:
@@ -1059,11 +1077,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_AND,
-          SMT_FUNC_AND,
-          SMT_FUNC_AND,
-          SMT_FUNC_AND,
-          SMT_FUNC_AND);
+          expr_op_convert{
+            SMT_FUNC_AND,
+            SMT_FUNC_AND,
+            SMT_FUNC_AND,
+            SMT_FUNC_AND,
+            SMT_FUNC_AND});
     break;
   }
   case expr2t::or_id:
@@ -1071,11 +1090,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-          SMT_FUNC_OR,
-          SMT_FUNC_OR,
-          SMT_FUNC_OR,
-          SMT_FUNC_OR,
-          SMT_FUNC_OR);
+          expr_op_convert{
+            SMT_FUNC_OR,
+            SMT_FUNC_OR,
+            SMT_FUNC_OR,
+            SMT_FUNC_OR,
+            SMT_FUNC_OR});
     break;
   }
   case expr2t::xor_id:
@@ -1083,11 +1103,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     a = convert_ast(expr, expr->type, args,
-        SMT_FUNC_XOR,
-        SMT_FUNC_XOR,
-        SMT_FUNC_XOR,
-        SMT_FUNC_XOR,
-        SMT_FUNC_XOR);
+          expr_op_convert{
+            SMT_FUNC_XOR,
+            SMT_FUNC_XOR,
+            SMT_FUNC_XOR,
+            SMT_FUNC_XOR,
+            SMT_FUNC_XOR});
     break;
   }
   default:
