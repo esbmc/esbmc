@@ -1,5 +1,5 @@
 /*
- * include/41/omp.h.var
+ * include/45/omp.h.var
  */
 
 
@@ -62,6 +62,7 @@
     extern int    __KAI_KMPC_CONVENTION  omp_get_thread_limit        (void);
     extern int    __KAI_KMPC_CONVENTION  omp_get_max_active_levels   (void);
     extern void   __KAI_KMPC_CONVENTION  omp_get_schedule            (omp_sched_t *, int *);
+    extern int    __KAI_KMPC_CONVENTION  omp_get_max_task_priority   (void);
 
     /* lock API functions */
     typedef struct omp_lock_t {
@@ -115,6 +116,17 @@
     extern int  __KAI_KMPC_CONVENTION  omp_get_cancellation (void);
 
 #   include <stdlib.h>
+    /* OpenMP 4.5 */
+    extern int   __KAI_KMPC_CONVENTION  omp_get_initial_device (void);
+    extern void* __KAI_KMPC_CONVENTION  omp_target_alloc(size_t, int);
+    extern void  __KAI_KMPC_CONVENTION  omp_target_free(void *, int);
+    extern int   __KAI_KMPC_CONVENTION  omp_target_is_present(void *, int);
+    extern int   __KAI_KMPC_CONVENTION  omp_target_memcpy(void *, void *, size_t, size_t, size_t, int, int);
+    extern int   __KAI_KMPC_CONVENTION  omp_target_memcpy_rect(void *, void *, size_t, int, const size_t *,
+                                            const size_t *, const size_t *, const size_t *, const size_t *, int, int);
+    extern int   __KAI_KMPC_CONVENTION  omp_target_associate_ptr(void *, void *, size_t, size_t, int);
+    extern int   __KAI_KMPC_CONVENTION  omp_target_disassociate_ptr(void *, int);
+
     /* kmp API functions */
     extern int    __KAI_KMPC_CONVENTION  kmp_get_stacksize          (void);
     extern void   __KAI_KMPC_CONVENTION  kmp_set_stacksize          (int);
@@ -128,6 +140,7 @@
     extern void   __KAI_KMPC_CONVENTION  kmp_set_library_turnaround (void);
     extern void   __KAI_KMPC_CONVENTION  kmp_set_library_throughput (void);
     extern void   __KAI_KMPC_CONVENTION  kmp_set_defaults           (char const *);
+    extern void   __KAI_KMPC_CONVENTION  kmp_set_disp_num_buffers   (int);
 
     /* Intel affinity API */
     typedef void * kmp_affinity_mask_t;
@@ -152,7 +165,16 @@
 
     extern omp_proc_bind_t __KAI_KMPC_CONVENTION omp_get_proc_bind (void);
 
+    /* OpenMP 4.5 affinity API */
+    extern int  __KAI_KMPC_CONVENTION omp_get_num_places (void);
+    extern int  __KAI_KMPC_CONVENTION omp_get_place_num_procs (int);
+    extern void __KAI_KMPC_CONVENTION omp_get_place_proc_ids (int, int *);
+    extern int  __KAI_KMPC_CONVENTION omp_get_place_num (void);
+    extern int  __KAI_KMPC_CONVENTION omp_get_partition_num_places (void);
+    extern void __KAI_KMPC_CONVENTION omp_get_partition_place_nums (int *);
+
     extern void * __KAI_KMPC_CONVENTION  kmp_malloc  (size_t);
+    extern void * __KAI_KMPC_CONVENTION  kmp_aligned_malloc  (size_t, size_t);
     extern void * __KAI_KMPC_CONVENTION  kmp_calloc  (size_t, size_t);
     extern void * __KAI_KMPC_CONVENTION  kmp_realloc (void *, size_t);
     extern void   __KAI_KMPC_CONVENTION  kmp_free    (void *);
