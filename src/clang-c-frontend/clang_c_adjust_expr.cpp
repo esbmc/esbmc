@@ -749,7 +749,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "isnanf" ||
             identifier==CPROVER_PREFIX "isnand" ||
             identifier==CPROVER_PREFIX "isnanld" ||
-            identifier=="__builtin_isnan")
+            identifier=="c::__builtin_isnan")
     {
       if(expr.arguments().size() != 1)
       {
@@ -778,8 +778,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       expr.swap(isfinite_expr);
     }
     else if(identifier==CPROVER_PREFIX "inf" ||
-            identifier=="__builtin_inf" ||
-            identifier=="__builtin_huge_val")
+            identifier=="c::__builtin_inf" ||
+            identifier=="c::__builtin_huge_val")
     {
       constant_exprt inf_expr=
         ieee_floatt::plus_infinity(ieee_float_spect::double_precision()).to_expr();
@@ -787,8 +787,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       expr.swap(inf_expr);
     }
     else if(identifier==CPROVER_PREFIX "inff" ||
-            identifier=="__builtin_inff" ||
-            identifier=="__builtin_huge_valf")
+            identifier=="c::__builtin_inff" ||
+            identifier=="c::__builtin_huge_valf")
     {
       constant_exprt inff_expr=
         ieee_floatt::plus_infinity(ieee_float_spect::single_precision()).to_expr();
@@ -796,8 +796,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       expr.swap(inff_expr);
     }
     else if(identifier==CPROVER_PREFIX "infl" ||
-            identifier=="__builtin_infl" ||
-            identifier=="__builtin_huge_vall")
+            identifier=="c::__builtin_infl" ||
+            identifier=="c::__builtin_huge_vall")
     {
       floatbv_typet type=to_floatbv_type(long_double_type());
       constant_exprt infl_expr=
@@ -806,7 +806,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       expr.swap(infl_expr);
     }
     else if(identifier==CPROVER_PREFIX "nan" ||
-            identifier=="__builtin_nan")
+            identifier=="c::__builtin_nan")
     {
       floatbv_typet type=to_floatbv_type(float_type());
       constant_exprt nan_expr=
@@ -815,7 +815,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       expr.swap(nan_expr);
     }
     else if(identifier==CPROVER_PREFIX "nanf" ||
-            identifier=="__builtin_nanf")
+            identifier=="c::__builtin_nanf")
     {
       floatbv_typet type=to_floatbv_type(double_type());
       constant_exprt nan_expr=
@@ -824,7 +824,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       expr.swap(nan_expr);
     }
     else if(identifier==CPROVER_PREFIX "nanl" ||
-            identifier=="__builtin_nanl")
+            identifier=="c::__builtin_nanl")
     {
       floatbv_typet type=to_floatbv_type(long_double_type());
       constant_exprt nan_expr=
@@ -854,10 +854,10 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
             identifier==CPROVER_PREFIX "isinff" ||
             identifier==CPROVER_PREFIX "isinfd" ||
             identifier==CPROVER_PREFIX "isinfld" ||
-            identifier=="__builtin_isinf" ||
-            identifier=="__builtin_isinff" ||
-            identifier=="__builtin_isinfd"||
-            identifier=="__builtin_isinfld")
+            identifier=="c::__builtin_isinf" ||
+            identifier=="c::__builtin_isinff" ||
+            identifier=="c::__builtin_isinfd"||
+            identifier=="c::__builtin_isinfld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -873,9 +873,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "isnormalf" ||
             identifier==CPROVER_PREFIX "isnormald" ||
             identifier==CPROVER_PREFIX "isnormalld" ||
-            identifier=="__builtin_isnormalf" ||
-            identifier=="__builtin_isnormald" ||
-            identifier=="__builtin_isnormalld")
+            identifier=="c::__builtin_isnormalf" ||
+            identifier=="c::__builtin_isnormald" ||
+            identifier=="c::__builtin_isnormalld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -891,9 +891,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "signf" ||
             identifier==CPROVER_PREFIX "signd" ||
             identifier==CPROVER_PREFIX "signld" ||
-            identifier=="__builtin_signbit" ||
-            identifier=="__builtin_signbitf" ||
-            identifier=="__builtin_signbitl")
+            identifier=="c::__builtin_signbit" ||
+            identifier=="c::__builtin_signbitf" ||
+            identifier=="c::__builtin_signbitl")
     {
       if(expr.arguments().size() != 1)
       {
