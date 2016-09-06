@@ -1315,8 +1315,13 @@ smt_convt::convert_terminal(const expr2tc &expr)
 
       unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
       unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
+      if(thereal.value.is_NaN())
+        return mk_smt_bvfloat_nan(exponent_width, fraction_width);
 
       bool sign = thereal.value.get_sign();
+      if(thereal.value.is_infinity())
+        return mk_smt_bvfloat_inf(sign, exponent_width, fraction_width);
+
       const mp_integer fraction = thereal.value.get_fraction();
 
       // If the number is denormal, we set the exponent to 0,
