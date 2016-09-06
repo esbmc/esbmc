@@ -808,7 +808,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "nan" ||
             identifier=="c::__builtin_nan")
     {
-      floatbv_typet type=to_floatbv_type(float_type());
+      floatbv_typet type=to_floatbv_type(double_type());
       constant_exprt nan_expr=
         ieee_floatt::NaN(ieee_float_spect(type)).to_expr();
 
@@ -817,7 +817,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "nanf" ||
             identifier=="c::__builtin_nanf")
     {
-      floatbv_typet type=to_floatbv_type(double_type());
+      floatbv_typet type=to_floatbv_type(float_type());
       constant_exprt nan_expr=
         ieee_floatt::NaN(ieee_float_spect(type)).to_expr();
 
