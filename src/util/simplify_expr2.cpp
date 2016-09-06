@@ -275,6 +275,8 @@ simplify_arith_2ops(
       TFunctor<bool>::simplify(
         simplied_side_1, simplied_side_2, is_constant, get_value);
   }
+  else
+    return expr2tc();
 
   return typecast_check_return(type, simpl_res);
 }
@@ -571,6 +573,8 @@ simplify_arith_1op(
     simpl_res =
       TFunctor<constant_bool2t>::simplify(to_simplify, to_constant);
   }
+  else
+    return expr2tc();
 
   return typecast_check_return(type, simpl_res);
 }
@@ -986,6 +990,8 @@ simplify_logic_2ops(
       TFunctor<bool>::simplify(
         simplied_side_1, simplied_side_2, is_constant, get_value);
   }
+  else
+    return expr2tc();
 
   return typecast_check_return(type, simpl_res);
 }
@@ -1654,6 +1660,8 @@ simplify_relations(
       TFunctor<bool>::simplify(
         simplied_side_1, simplied_side_2, is_constant, get_value);
   }
+  else
+    return expr2tc();
 
   return typecast_check_return(type, simpl_res);
 }
