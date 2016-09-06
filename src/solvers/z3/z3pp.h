@@ -305,6 +305,8 @@ namespace z3 {
         expr bv_val(char const * n, unsigned sz);
 
         expr fpa_val(int sgn, long long int exp, long long unsigned int sig, sort const & sort);
+        expr fpa_nan(sort const & sort);
+        expr fpa_inf(int sgn, sort const & sort);
 
         expr string_val(char const* s);
         expr string_val(std::string const& s);
@@ -2128,6 +2130,20 @@ namespace z3 {
     inline expr context::fpa_val(int sgn, long long int exp, long long unsigned int sig, sort const & sort)
     {
       Z3_ast r = Z3_mk_fpa_numeral_int64_uint64(m_ctx, sgn, exp, sig, sort);
+      check_error();
+      return expr(*this, r);
+    }
+
+    inline expr context::fpa_nan(sort const & sort)
+    {
+      Z3_ast r = Z3_mk_fpa_nan(m_ctx, sort);
+      check_error();
+      return expr(*this, r);
+    }
+
+    inline expr context::fpa_inf(int sign, sort const & sort)
+    {
+      Z3_ast r = Z3_mk_fpa_inf(m_ctx, sort, sign);
       check_error();
       return expr(*this, r);
     }
