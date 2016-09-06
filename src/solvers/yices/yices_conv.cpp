@@ -374,6 +374,18 @@ smt_astt yices_convt::mk_smt_bvfloat(const mp_integer &exp, const mp_integer &si
   abort();
 }
 
+smt_astt yices_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+{
+  std::cerr << "NaN floatbv not supported on yices yet" << std::endl;
+  abort();
+}
+
+smt_astt yices_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  std::cerr << "Inf floatbv not supported on yices yet" << std::endl;
+  abort();
+}
+
 smt_astt
 yices_convt::mk_smt_bool(bool val)
 {

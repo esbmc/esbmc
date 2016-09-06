@@ -669,6 +669,16 @@ z3_convt::mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
   return new_ast(ctx.fpa_val(sgn, exp.to_int64(), sig.to_uint64(), zs->s), s);
 }
 
+smt_astt z3_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+{
+  abort();
+}
+
+smt_astt z3_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  abort();
+}
+
 smt_astt
 z3_convt::mk_smt_bool(bool val)
 {

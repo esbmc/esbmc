@@ -433,6 +433,18 @@ smt_ast* mathsat_convt::mk_smt_bvfloat(const mp_integer &exp, const mp_integer &
   abort();
 }
 
+smt_astt mathsat_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+{
+  std::cerr << "NaN floatbv not supported on mathsat yet" << std::endl;
+  abort();
+}
+
+smt_astt mathsat_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  std::cerr << "Inf floatbv not supported on mathsat yet" << std::endl;
+  abort();
+}
+
 smt_ast *
 mathsat_convt::mk_smt_bool(bool val)
 {

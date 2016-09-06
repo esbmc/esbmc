@@ -269,6 +269,20 @@ boolector_convt::mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
   abort();
 }
 
+smt_astt
+boolector_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+{
+  std::cerr << "Boolector can't create NaN floatbv sorts" << std::endl;
+  abort();
+}
+
+smt_astt
+boolector_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  std::cerr << "Boolector can't create inf floatbv sorts" << std::endl;
+  abort();
+}
+
 smt_ast *
 boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
                               unsigned int w)

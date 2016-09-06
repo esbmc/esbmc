@@ -308,6 +308,18 @@ smt_ast* cvc_convt::mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
   abort();
 }
 
+smt_astt cvc_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+{
+  std::cerr << "NaN floatbv not supported on cvc4 yet" << std::endl;
+  abort();
+}
+
+smt_astt cvc_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  std::cerr << "Inf floatbv not supported on cvc4 yet" << std::endl;
+  abort();
+}
+
 smt_ast *
 cvc_convt::mk_smt_bool(bool val)
 {

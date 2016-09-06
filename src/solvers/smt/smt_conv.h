@@ -606,12 +606,25 @@ public:
   /** Create a floating point bitvector
    *  @param exp the exponent in integer
    *  @param sig the significand in integer
-   *  @param sgn Whether this bitvector is to be considered signed or not.
+   *  @param sgn Whether this bitvector is negative or positive.
    *  @param ew Exponent width, in bits, of the bitvector to create.
    *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_astt mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
                                   bool sgn, unsigned ew, unsigned sw) = 0;
+
+  /** Create a NaN floating point bitvector
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw) = 0;
+
+  /** Create a (+/-)inf floating point bitvector
+   *  @param sgn Whether this bitvector is negative or positive.
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw) = 0;
 
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.
