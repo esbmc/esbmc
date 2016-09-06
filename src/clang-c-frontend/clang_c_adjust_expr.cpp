@@ -805,6 +805,33 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 
       expr.swap(infl_expr);
     }
+    else if(identifier==CPROVER_PREFIX "nan" ||
+            identifier=="__builtin_nan")
+    {
+      floatbv_typet type=to_floatbv_type(float_type());
+      constant_exprt nan_expr=
+        ieee_floatt::NaN(ieee_float_spect(type)).to_expr();
+
+      expr.swap(nan_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "nanf" ||
+            identifier=="__builtin_nanf")
+    {
+      floatbv_typet type=to_floatbv_type(double_type());
+      constant_exprt nan_expr=
+        ieee_floatt::NaN(ieee_float_spect(type)).to_expr();
+
+      expr.swap(nan_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "nanl" ||
+            identifier=="__builtin_nanl")
+    {
+      floatbv_typet type=to_floatbv_type(long_double_type());
+      constant_exprt nan_expr=
+        ieee_floatt::NaN(ieee_float_spect(type)).to_expr();
+
+      expr.swap(nan_expr);
+    }
     else if(identifier==CPROVER_PREFIX "abs" ||
             identifier==CPROVER_PREFIX "labs" ||
             identifier==CPROVER_PREFIX "llabs" ||
