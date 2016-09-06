@@ -395,7 +395,7 @@ namespace z3 {
         unsigned size() { return Z3_param_descrs_size(ctx(), m_descrs); }
         symbol name(unsigned i) { return symbol(ctx(), Z3_param_descrs_get_name(ctx(), m_descrs, i)); }
         Z3_param_kind kind(symbol const& s) { return Z3_param_descrs_get_kind(ctx(), m_descrs, s); }
-        std::string documentation(symbol const& s) { char const* r = Z3_param_descrs_get_documentation(ctx(), m_descrs, s); check_error(); return r; }
+//        std::string documentation(symbol const& s) { char const* r = Z3_param_descrs_get_documentation(ctx(), m_descrs, s); check_error(); return r; }
         std::string to_string() const { return Z3_param_descrs_to_string(ctx(), m_descrs); }
     };
 
