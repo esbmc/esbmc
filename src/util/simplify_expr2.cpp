@@ -1934,32 +1934,144 @@ concat2t::do_simplify(bool second __attribute__((unused))) const
   return constant_int2tc(type, accuml);
 }
 
+template<template<typename> class TFunctor, typename constructor>
+static expr2tc
+simplify_floatbv_1op(
+  const type2tc &type,
+  const expr2tc &value)
+{
+  if(!is_number_type(type))
+    return expr2tc();
+
+  // Try to recursively simplify nested operation, if any
+  expr2tc to_simplify = try_simplification(value);
+  if (!is_constant_expr(to_simplify))
+  {
+    // Were we able to simplify anything?
+    if(value != to_simplify)
+    {
+      expr2tc new_neg = expr2tc(new constructor(to_simplify));
+      return typecast_check_return(type, new_neg);
+    }
+
+    return expr2tc();
+  }
+
+  expr2tc simpl_res = expr2tc();
+
+  if(is_fixedbv_type(value))
+  {
+    std::function<constant_fixedbv2t& (expr2tc&)> to_constant =
+      (constant_fixedbv2t&(*)(expr2tc&)) to_constant_fixedbv2t;
+
+    simpl_res =
+      TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
+  }
+  else if(is_floatbv_type(value))
+  {
+    std::function<constant_floatbv2t& (expr2tc&)> to_constant =
+      (constant_floatbv2t&(*)(expr2tc&)) to_constant_floatbv2t;
+
+    simpl_res =
+      TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
+  }
+  else
+    return expr2tc();
+
+  return typecast_check_return(type, simpl_res);
+}
+
+template<class constant_type>
+struct Isnantor
+{
+  static expr2tc simplify(
+    const expr2tc &number,
+    std::function<constant_type&(expr2tc&)> to_constant)
+  {
+    auto c = expr2tc(number->clone());
+    bool res = to_constant(c).value.is_NaN();
+    return expr2tc(new constant_bool2t(res));
+  }
+};
+
 expr2tc
 isnan2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_1op<Isnantor, isnan2t>(type, value);
 }
+
+template<class constant_type>
+struct Isinftor
+{
+  static expr2tc simplify(
+    const expr2tc &number,
+    std::function<constant_type&(expr2tc&)> to_constant)
+  {
+    auto c = expr2tc(number->clone());
+    bool res = to_constant(c).value.is_infinity();
+    return expr2tc(new constant_bool2t(res));
+  }
+};
 
 expr2tc
 isinf2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_1op<Isinftor, isinf2t>(type, value);
 }
+
+template<class constant_type>
+struct Isnormaltor
+{
+  static expr2tc simplify(
+    const expr2tc &number,
+    std::function<constant_type&(expr2tc&)> to_constant)
+  {
+    auto c = expr2tc(number->clone());
+    bool res = to_constant(c).value.is_normal();
+    return expr2tc(new constant_bool2t(res));
+  }
+};
 
 expr2tc
 isnormal2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_1op<Isnormaltor, isnormal2t>(type, value);
 }
+
+template<class constant_type>
+struct Isfinitetor
+{
+  static expr2tc simplify(
+    const expr2tc &number,
+    std::function<constant_type&(expr2tc&)> to_constant)
+  {
+    auto c = expr2tc(number->clone());
+    bool res = to_constant(c).value.is_finite();
+    return expr2tc(new constant_bool2t(res));
+  }
+};
 
 expr2tc
 isfinite2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_1op<Isfinitetor, isfinite2t>(type, value);
 }
+
+template<class constant_type>
+struct Signbittor
+{
+  static expr2tc simplify(
+    const expr2tc &number,
+    std::function<constant_type&(expr2tc&)> to_constant)
+  {
+    auto c = expr2tc(number->clone());
+    bool res = to_constant(c).value.get_sign();
+    return expr2tc(new constant_bool2t(res));
+  }
+};
 
 expr2tc
 signbit2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_1op<Signbittor, signbit2t>(type, value);
 }
