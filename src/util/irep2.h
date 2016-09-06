@@ -3944,6 +3944,8 @@ public:
   isnan2t(const isnan2t &ref)
     : isnan_expr_methods(ref) {}
 
+  virtual expr2tc do_simplify(bool second) const;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -4415,6 +4417,8 @@ public:
   isinf2t(const isinf2t &ref)
     : isinf_expr_methods(ref) { }
 
+  virtual expr2tc do_simplify(bool second) const;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -4425,6 +4429,8 @@ public:
     : isnormal_expr_methods(type_pool.get_bool(), isnormal_id, val) { }
   isnormal2t(const isnormal2t &ref)
     : isnormal_expr_methods(ref) { }
+
+  virtual expr2tc do_simplify(bool second) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4437,6 +4443,8 @@ public:
   isfinite2t(const isfinite2t &ref)
     : isfinite_expr_methods(ref) { }
 
+  virtual expr2tc do_simplify(bool second) const;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -4447,6 +4455,8 @@ public:
     : signbit_expr_methods(type_pool.get_bool(), signbit_id, val) { }
   signbit2t(const signbit2t &ref)
     : signbit_expr_methods(ref) { }
+
+  virtual expr2tc do_simplify(bool second) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };

@@ -1934,3 +1934,33 @@ concat2t::do_simplify(bool second __attribute__((unused))) const
 
   return constant_int2tc(type, accuml);
 }
+
+expr2tc
+isnan2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
+
+expr2tc
+isinf2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
+
+expr2tc
+isnormal2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
+
+expr2tc
+isfinite2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
+
+expr2tc
+signbit2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
