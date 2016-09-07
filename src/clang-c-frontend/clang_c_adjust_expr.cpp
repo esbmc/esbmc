@@ -153,8 +153,8 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   }
   else if(expr.id() == "typecast")
   {
-    // New typecast for floatbvs
-    if(expr.op0().type().is_floatbv())
+    // New typecast for and to floatbvs
+    if(expr.op0().type().is_floatbv() || expr.type().is_floatbv())
     {
       exprt ieee_typecast("ieee_typecast", expr.type());
       ieee_typecast.copy_to_operands(expr.op0());

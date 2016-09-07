@@ -648,8 +648,8 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
       expr.cmt_lvalue(true);
   }
 
-  // New typecast for floatbvs
-  if(expr.op0().type().is_floatbv())
+  // New typecast for and to floatbvs
+  if(expr.op0().type().is_floatbv() || expr.type().is_floatbv())
   {
     exprt ieee_typecast("ieee_typecast", expr.type());
     ieee_typecast.copy_to_operands(expr.op0());
