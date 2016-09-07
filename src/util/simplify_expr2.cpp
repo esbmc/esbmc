@@ -1584,6 +1584,19 @@ simplify_relations(
       TFunctor<fixedbvt>::simplify(
         simplied_side_1, simplied_side_2, is_constant, get_value);
   }
+  else if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
+  {
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+
+    std::function<ieee_floatt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> ieee_floatt&
+        { return to_constant_floatbv2t(c).value; };
+
+    simpl_res =
+      TFunctor<ieee_floatt>::simplify(
+        simplied_side_1, simplied_side_2, is_constant, get_value);
+  }
   else if(is_bool_type(simplied_side_1) || is_bool_type(simplied_side_2))
   {
     std::function<bool(const expr2tc&)> is_constant =
