@@ -786,7 +786,7 @@ public:
   /** Identical to convert_sign_ext, but extends AST with zeros */
   smt_astt convert_zero_ext(smt_astt a, smt_sortt s,
                                   unsigned int topwidth);
-  /** Checks for equality with NaN representation. Nto sure if this works. */
+  /** Checks for equality with NaN representation. */
   smt_astt convert_is_nan(const expr2tc &expr);
   /** Convert a byte_extract2tc, pulling a byte from the byte representation
    *  of some piece of data. */

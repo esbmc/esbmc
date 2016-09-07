@@ -1411,26 +1411,14 @@ smt_astt
 smt_convt::convert_is_nan(const expr2tc &expr)
 {
   const isnan2t &isnan = to_isnan2t(expr);
+
+  // Anything other than floats will never be NaNs
+  if(!is_floatbv_type(isnan.value))
+    return mk_smt_bool(false);
+
   smt_sortt bs = boolean_sort;
-
-  // Assumes operand is fixedbv.
-  assert(is_fixedbv_type(isnan.value));
-  unsigned width = isnan.value->type->get_width();
-
-  smt_astt t = mk_smt_bool(true);
-  smt_astt f = mk_smt_bool(false);
-
   smt_astt operand = convert_ast(isnan.value);
-  if (int_encoding) {
-    smt_astt asint = round_real_to_int(operand);
-    smt_astt zero = mk_smt_int(BigInt(0), false);
-    smt_astt gte = mk_func_app(bs, SMT_FUNC_GTE, asint, zero);
-    return mk_func_app(bs, SMT_FUNC_ITE, gte, t, f);
-  } else {
-    smt_astt zero =  mk_smt_bvint(BigInt(0), false, width);
-    smt_astt gte = mk_func_app(bs, SMT_FUNC_GTE, operand, zero);
-    return mk_func_app(bs, SMT_FUNC_ITE, gte, t, f);
-  }
+  return mk_func_app(bs, SMT_FUNC_ISNAN, operand);
 }
 
 smt_astt

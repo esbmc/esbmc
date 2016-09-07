@@ -67,7 +67,7 @@ public:
   }
 
   bool get_sign() const { return v.is_negative(); }
-  bool is_NaN() const { return v >= 0; } // Copied from our SMT backend
+  bool is_NaN() const { return false; } // Never true
   bool is_infinity() const { return false; } // Never true
   bool is_finite() const { return true; } // Always true
   bool is_normal() const { return true; } // Always true?
