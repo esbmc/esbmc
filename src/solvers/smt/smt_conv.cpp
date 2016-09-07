@@ -685,6 +685,30 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = convert_is_nan(expr);
     break;
   }
+  case expr2t::isinf_id:
+  {
+    assert(expr->get_num_sub_exprs() == 1);
+    a = convert_is_inf(expr);
+    break;
+  }
+  case expr2t::isnormal_id:
+  {
+    assert(expr->get_num_sub_exprs() == 1);
+    a = convert_is_normal(expr);
+    break;
+  }
+  case expr2t::isfinite_id:
+  {
+    assert(expr->get_num_sub_exprs() == 1);
+    a = convert_is_finite(expr);
+    break;
+  }
+  case expr2t::signbit_id:
+  {
+    assert(expr->get_num_sub_exprs() == 1);
+    a = convert_signbit(expr);
+    break;
+  }
   case expr2t::overflow_id:
   {
     a = overflow_arith(expr);
@@ -1423,21 +1447,25 @@ smt_convt::convert_is_nan(const expr2tc &expr)
 
 smt_astt smt_convt::convert_is_inf(const expr2tc& expr)
 {
+  (void) expr;
   abort();
 }
 
 smt_astt smt_convt::convert_is_normal(const expr2tc& expr)
 {
+  (void) expr;
   abort();
 }
 
 smt_astt smt_convt::convert_is_finite(const expr2tc& expr)
 {
+  (void) expr;
   abort();
 }
 
 smt_astt smt_convt::convert_signbit(const expr2tc& expr)
 {
+  (void) expr;
   abort();
 }
 
