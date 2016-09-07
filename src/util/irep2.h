@@ -2178,7 +2178,7 @@ public:
 // Type mangling:
   typedef esbmct::field_traits<expr2tc, ieee_typecast_data, &ieee_typecast_data::from> from_field;
   typedef esbmct::field_traits<expr2tc, ieee_typecast_data, &ieee_typecast_data::rounding_mode> rounding_mode_field;
-  typedef esbmct::expr2t_traits<from_field> traits;
+  typedef esbmct::expr2t_traits<from_field, rounding_mode_field> traits;
 };
 
 class if_data : public expr2t
@@ -3248,7 +3248,7 @@ public:
 /** IEEE typecast expression.
  *  Represents an ieee cast from contained expression 'from' to the type
  *  of this typecast, using 'rounding mode'.
- *  @extends typecast_data
+ *  @extends ieee_typecast_data
  */
 class ieee_typecast2t : public ieee_typecast_expr_methods
 {
