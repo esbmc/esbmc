@@ -2075,3 +2075,9 @@ signbit2t::do_simplify(bool second __attribute__((unused))) const
 {
   return simplify_floatbv_1op<Signbittor, signbit2t>(type, value);
 }
+
+expr2tc
+ieee_typecast2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}

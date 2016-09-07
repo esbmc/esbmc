@@ -602,6 +602,7 @@ static const char *expr_names[] = {
   "isfinite",
   "signbit",
   "concat",
+  "ieee_typecast"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -2148,6 +2149,8 @@ std::string symbol2t::field_names [esbmct::num_type_fields]  =
 { "name", "renamelev", "level1_num", "level2_num", "thread_num", "node_num"};
 std::string typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "", "", "", ""};
+std::string ieee_typecast2t::field_names [esbmct::num_type_fields]  =
+{ "from", "rounding_mode", "", "", "", ""};
 std::string if2t::field_names [esbmct::num_type_fields]  =
 { "cond", "true_value", "false_value", "", ""};
 std::string equality2t::field_names [esbmct::num_type_fields]  =
@@ -2345,6 +2348,7 @@ irep_typedefs(constant_array_of, constant_array_of_data);
 irep_typedefs(constant_string, constant_string_data);
 irep_typedefs(symbol, symbol_data);
 irep_typedefs(typecast,typecast_data);
+irep_typedefs(ieee_typecast,ieee_typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);

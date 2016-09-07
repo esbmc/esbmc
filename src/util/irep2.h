@@ -525,6 +525,7 @@ public:
     isfinite_id,
     signbit_id,
     concat_id,
+    ieee_typecast_id,
     end_expr_id
   };
 
@@ -1909,6 +1910,7 @@ class constant_array2t;
 class constant_array_of2t;
 class symbol2t;
 class typecast2t;
+class ieee_typecast2t;
 class if2t;
 class equality2t;
 class notequal2t;
@@ -2159,6 +2161,23 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<expr2tc, typecast_data, &typecast_data::from> from_field;
+  typedef esbmct::expr2t_traits<from_field> traits;
+};
+
+class ieee_typecast_data : public expr2t
+{
+public:
+  ieee_typecast_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v, const expr2tc &r)
+    : expr2t(t, id), from(v), rounding_mode(r) { }
+  ieee_typecast_data(const ieee_typecast_data &ref)
+    : expr2t(ref), from(ref.from), rounding_mode(ref.rounding_mode) { }
+
+  expr2tc from;
+  expr2tc rounding_mode;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, ieee_typecast_data, &ieee_typecast_data::from> from_field;
+  typedef esbmct::field_traits<expr2tc, ieee_typecast_data, &ieee_typecast_data::rounding_mode> rounding_mode_field;
   typedef esbmct::expr2t_traits<from_field> traits;
 };
 
@@ -2910,6 +2929,7 @@ irep_typedefs(constant_array_of, constant_array_of_data);
 irep_typedefs(constant_string, constant_string_data);
 irep_typedefs(symbol, symbol_data);
 irep_typedefs(typecast,typecast_data);
+irep_typedefs(ieee_typecast,ieee_typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
@@ -3220,6 +3240,27 @@ public:
     : typecast_expr_methods(type, typecast_id, from) { }
   typecast2t(const typecast2t &ref)
     : typecast_expr_methods(ref){}
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE typecast expression.
+ *  Represents an ieee cast from contained expression 'from' to the type
+ *  of this typecast, using 'rounding mode'.
+ *  @extends typecast_data
+ */
+class ieee_typecast2t : public ieee_typecast_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type to typecast to
+   *  @param from Expression to cast from.
+   */
+  ieee_typecast2t(const type2tc &type, const expr2tc &from, const expr2tc &rounding_mode)
+    : ieee_typecast_expr_methods(type, ieee_typecast_id, from, rounding_mode) { }
+  ieee_typecast2t(const ieee_typecast2t &ref)
+    : ieee_typecast_expr_methods(ref){}
   virtual expr2tc do_simplify(bool second) const;
 
   static std::string field_names[esbmct::num_type_fields];
@@ -4555,6 +4596,7 @@ expr_macros(constant_array);
 expr_macros(constant_array_of);
 expr_macros(symbol);
 expr_macros(typecast);
+expr_macros(ieee_typecast);
 expr_macros(if);
 expr_macros(equality);
 expr_macros(notequal);
