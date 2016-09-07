@@ -2025,5 +2025,76 @@ signbit2t::do_simplify(bool second __attribute__((unused))) const
 expr2tc
 ieee_typecast2t::do_simplify(bool second __attribute__((unused))) const
 {
+  // This should only happens for floatbv types
+  assert(is_floatbv_type(from));
+
+  // Try to recursively simplify nested operation, if any
+  expr2tc to_simplify = try_simplification(from);
+  if (!is_constant_expr(to_simplify))
+  {
+    // Were we able to simplify anything?
+    if(from != to_simplify)
+    {
+      expr2tc new_neg = expr2tc(new ieee_typecast2t(type, to_simplify, rounding_mode));
+      return typecast_check_return(type, new_neg);
+    }
+
+    return expr2tc();
+  }
+
+  if(!is_constant_int2t(rounding_mode))
+    return expr2tc(); // No constant propagation?
+
+  const constant_int2t &rm = to_constant_int2t(rounding_mode);
+
+  mp_integer rounding_mode = rm.value;
+  if (is_floatbv_type(to_simplify) && is_number_type(type))
+  {
+    // float/double to int/float/double/bool
+    ieee_floatt fbv(to_constant_floatbv2t(to_simplify).value);
+    fbv.rounding_mode = ieee_floatt::rounding_modet(rounding_mode.to_int64());
+
+    if(is_bv_type(type))
+    {
+      return expr2tc(new constant_int2t(type, fbv.to_integer()));
+    }
+    else if(is_floatbv_type(type))
+    {
+      fbv.change_spec(to_floatbv_type(migrate_type_back(type)));
+      return expr2tc(new constant_floatbv2t(type, fbv));
+    }
+    else if(is_bool_type(type))
+    {
+      return fbv.is_zero() ? false_expr : true_expr;
+    }
+  }
+  else if(is_number_type(to_simplify) && is_floatbv_type(type))
+  {
+    // int/float/double/bool to float/double
+    ieee_floatt fbv;
+    fbv.rounding_mode = ieee_floatt::rounding_modet(rounding_mode.to_int64());
+
+    if(is_bv_type(to_simplify))
+    {
+      fbv.spec = to_floatbv_type(migrate_type_back(type));
+      fbv.from_integer(to_constant_int2t(to_simplify).value);
+    }
+    else if(is_floatbv_type(to_simplify))
+    {
+      fbv.from_expr(to_constant_floatbv2t(to_simplify).value.to_expr());
+      fbv.change_spec(to_floatbv_type(migrate_type_back(type)));
+    }
+    else if(is_bool_type(to_simplify))
+    {
+      fbv.spec = to_floatbv_type(migrate_type_back(type));
+      fbv.from_integer(to_constant_bool2t(to_simplify).value);
+    }
+
+    return expr2tc(new constant_floatbv2t(type, fbv));
+  }
+  else
+    // We only convert to and from floatbvs
+    assert(0);
+
   return expr2tc();
 }
