@@ -554,3 +554,9 @@ smt_convt::convert_typecast(const expr2tc &expr)
   abort();
 }
 
+smt_astt
+smt_convt::convert_ieee_typecast(const expr2tc &expr)
+{
+  (void) expr;
+  abort();
+}

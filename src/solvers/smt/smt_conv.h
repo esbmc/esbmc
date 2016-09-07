@@ -848,8 +848,10 @@ public:
   smt_astt convert_typecast_from_ptr(const typecast2t &cast);
   /** Typecast structs to other structs */
   smt_astt convert_typecast_to_struct(const typecast2t &cast);
-  /** Despatch a typecast expression to a more specific typecast mkethod */
+  /** Despatch a typecast expression to a more specific typecast method */
   smt_astt convert_typecast(const expr2tc &expr);
+  /** Despatch a ieee_typecast expression to a more specific typecast method */
+  smt_astt convert_ieee_typecast(const expr2tc &expr);
   /** Round a real to an integer; not straightforwards at all. */
   smt_astt round_real_to_int(smt_astt a);
   /** Round a fixedbv to an integer. */
