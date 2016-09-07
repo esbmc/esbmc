@@ -1421,6 +1421,26 @@ smt_convt::convert_is_nan(const expr2tc &expr)
   return mk_func_app(bs, SMT_FUNC_ISNAN, operand);
 }
 
+smt_astt smt_convt::convert_is_inf(const expr2tc& expr)
+{
+  abort();
+}
+
+smt_astt smt_convt::convert_is_normal(const expr2tc& expr)
+{
+  abort();
+}
+
+smt_astt smt_convt::convert_is_finite(const expr2tc& expr)
+{
+  abort();
+}
+
+smt_astt smt_convt::convert_signbit(const expr2tc& expr)
+{
+  abort();
+}
+
 smt_astt
 smt_convt::convert_member(const expr2tc &expr)
 {
