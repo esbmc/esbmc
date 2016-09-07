@@ -704,6 +704,19 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     typecast2t *t = new typecast2t(type, old_expr);
     new_expr_ref = expr2tc(t);
+  } else if (expr.id() == "ieee_typecast") {
+    assert(expr.op0().id_string() != "");
+
+    migrate_type(expr.type(), type);
+
+    expr2tc old_expr;
+    migrate_expr(expr.op0(), old_expr);
+
+    expr2tc rounding_mode;
+    migrate_expr(expr.op1(), rounding_mode);
+
+    ieee_typecast2t *t = new ieee_typecast2t(type, old_expr, rounding_mode);
+    new_expr_ref = expr2tc(t);
   } else if (expr.id() == typet::t_struct) {
     migrate_type(expr.type(), type);
 
@@ -1754,6 +1767,17 @@ migrate_expr_back(const expr2tc &ref)
     const typecast2t &ref2 = to_typecast2t(ref);
     typet thetype = migrate_type_back(ref->type);
     return typecast_exprt(migrate_expr_back(ref2.from), thetype);
+  }
+  case expr2t::ieee_typecast_id:
+  {
+    const ieee_typecast2t &ref2 = to_ieee_typecast2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+
+    exprt ieee_typecast("ieee_typecast", thetype);
+    ieee_typecast.copy_to_operands(migrate_expr_back(ref2.from));
+    ieee_typecast.copy_to_operands(migrate_expr_back(ref2.rounding_mode));
+
+    return ieee_typecast;
   }
   case expr2t::if_id:
   {
