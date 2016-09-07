@@ -1447,14 +1447,28 @@ smt_convt::convert_is_nan(const expr2tc &expr)
 
 smt_astt smt_convt::convert_is_inf(const expr2tc& expr)
 {
-  (void) expr;
-  abort();
+  const isinf2t &isinf = to_isinf2t(expr);
+
+  // Anything other than floats will never be infs
+  if(!is_floatbv_type(isinf.value))
+    return mk_smt_bool(false);
+
+  smt_sortt bs = boolean_sort;
+  smt_astt operand = convert_ast(isinf.value);
+  return mk_func_app(bs, SMT_FUNC_ISINF, operand);
 }
 
 smt_astt smt_convt::convert_is_normal(const expr2tc& expr)
 {
-  (void) expr;
-  abort();
+  const isnormal2t &isnormal = to_isnormal2t(expr);
+
+  // Anything other than floats will always be normal
+  if(!is_floatbv_type(isnormal.value))
+    return mk_smt_bool(true);
+
+  smt_sortt bs = boolean_sort;
+  smt_astt operand = convert_ast(isnormal.value);
+  return mk_func_app(bs, SMT_FUNC_ISNORMAL, operand);
 }
 
 smt_astt smt_convt::convert_is_finite(const expr2tc& expr)
