@@ -175,6 +175,9 @@ enum smt_func_kind {
   SMT_FUNC_BVSGTE,
   SMT_FUNC_BVUGTE,
 
+  // floatbv operations
+  SMT_FUNC_ISNAN,
+
   SMT_FUNC_EQ,
   SMT_FUNC_NOTEQ,
 
