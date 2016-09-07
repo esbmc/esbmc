@@ -1336,40 +1336,20 @@ typecast2t::do_simplify(bool second) const
   else if (is_constant_expr(from))
   {
     // Casts from constant operands can be done here.
-    if (is_constant_bool2t(from) && is_bv_type(type))
+    if (is_bool_type(from) && is_number_type(type))
     {
-      // int/float/double to bool
-      if (to_constant_bool2t(from).value)
-        return expr2tc(new constant_int2t(type, BigInt(1)));
-      else
-        return expr2tc(new constant_int2t(type, BigInt(0)));
-    }
-    else if (is_number_type(from) && is_bool_type(type))
-    {
-      // bool to int/float/double
-      if(is_bv_type(from))
+      if(is_bv_type(type))
       {
-        const constant_int2t &theint = to_constant_int2t(from);
-        if(theint.value.is_zero())
-          return false_expr;
-        else
-          return true_expr;
+        // bool to int
+        return expr2tc(
+          new constant_int2t(type, BigInt(to_constant_bool2t(from).value)));
       }
-      else if(is_fixedbv_type(from))
+      else if(is_fixedbv_type(type))
       {
-        const constant_fixedbv2t &fbv = to_constant_fixedbv2t(from);
-        if(fbv.value.is_zero())
-          return false_expr;
-        else
-          return true_expr;
-      }
-      else if(is_floatbv_type(from))
-      {
-        const constant_floatbv2t &fbv = to_constant_floatbv2t(from);
-        if(fbv.value.is_zero())
-          return false_expr;
-        else
-          return true_expr;
+        fixedbvt fbv;
+        fbv.spec = to_fixedbv_type(migrate_type_back(type));
+        fbv.from_integer(to_constant_bool2t(from).value);
+        return expr2tc(new constant_fixedbv2t(type, fbv));
       }
     }
     else if (is_bv_type(from) && is_number_type(type))
@@ -1397,12 +1377,10 @@ typecast2t::do_simplify(bool second) const
         fbv.from_integer(theint.value);
         return expr2tc(new constant_fixedbv2t(type, fbv));
       }
-      else if(is_floatbv_type(type))
+      else if(is_bool_type(type))
       {
-        ieee_floatt fbv;
-        fbv.spec = to_floatbv_type(migrate_type_back(type));
-        fbv.from_integer(theint.value);
-        return expr2tc(new constant_floatbv2t(type, fbv));
+        const constant_int2t &theint = to_constant_int2t(from);
+        return theint.value.is_zero() ? false_expr : true_expr;
       }
     }
     else if (is_fixedbv_type(from) && is_number_type(type))
@@ -1419,22 +1397,16 @@ typecast2t::do_simplify(bool second) const
         fbv.round(to_fixedbv_type(migrate_type_back(type)));
         return expr2tc(new constant_fixedbv2t(type, fbv));
       }
+      else if(is_bool_type(type))
+      {
+        const constant_fixedbv2t &fbv = to_constant_fixedbv2t(from);
+        return fbv.value.is_zero() ? false_expr : true_expr;
+      }
     }
-    else if (is_floatbv_type(from) && is_number_type(type))
-    {
-      // float/double to int/float/double
-      ieee_floatt fbv(to_constant_floatbv2t(from).value);
 
-      if(is_bv_type(type))
-      {
-        return expr2tc(new constant_int2t(type, fbv.to_integer()));
-      }
-      else if(is_floatbv_type(type))
-      {
-        fbv.change_spec(to_floatbv_type(migrate_type_back(type)));
-        return expr2tc(new constant_floatbv2t(type, fbv));
-      }
-    }
+    // Floatbvs should be handled by ieee_typecast
+    assert(!is_floatbv_type(from));
+    assert(!is_floatbv_type(type));
   }
   else if (is_bool_type(type))
   {
