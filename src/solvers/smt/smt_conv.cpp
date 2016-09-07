@@ -1491,8 +1491,23 @@ smt_astt smt_convt::convert_is_finite(const expr2tc& expr)
 
 smt_astt smt_convt::convert_signbit(const expr2tc& expr)
 {
-  (void) expr;
-  abort();
+  const signbit2t &signbit = to_signbit2t(expr);
+
+  smt_sortt bs = boolean_sort;
+  smt_astt operand = convert_ast(signbit.value);
+
+  if(int_encoding)
+  {
+    smt_astt asint = round_real_to_int(operand);
+    smt_astt zero = mk_smt_int(BigInt(0), false);
+    smt_astt gte = mk_func_app(bs, SMT_FUNC_GTE, asint, zero);
+    return mk_func_app(bs, SMT_FUNC_ITE, gte, mk_smt_bool(true), mk_smt_bool(false));
+  }
+
+  unsigned int topbit = signbit.value->type->get_width();
+
+  smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
+  return mk_extract(operand, topbit-1, topbit-1, bit);
 }
 
 smt_astt
