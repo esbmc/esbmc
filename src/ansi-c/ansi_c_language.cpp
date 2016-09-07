@@ -87,7 +87,7 @@ static void internal_additions(std::string &code)
     "_Bool __ESBMC_isfinite(double f);\n"
     "_Bool __ESBMC_isinf(double f);\n"
     "_Bool __ESBMC_isnormal(double f);\n"
-    "extern int __ESBMC_rounding_mode;\n"
+    "int __ESBMC_rounding_mode = 0;\n"
 
     // absolute value
     "int __ESBMC_abs(int x);\n"
