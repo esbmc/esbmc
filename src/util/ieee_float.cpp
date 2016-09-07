@@ -812,6 +812,17 @@ void ieee_floatt::align()
 
   if(fraction==0)
     exponent=0;
+
+  // Update flags
+  // if the exponent is all 1, than this is either an infinity or a NaN
+  if(exponent == (spec.bias() + 1))
+  {
+    // Infinity if fraction is all 0
+    infinity_flag = (fraction == (spec.max_fraction() + 1));
+
+    // NaN if fraction is anything, except all 0
+    NaN_flag = !(fraction == (spec.max_fraction() + 1));
+  }
 }
 
 /*******************************************************************\
