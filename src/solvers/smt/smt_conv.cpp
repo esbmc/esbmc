@@ -1473,8 +1473,20 @@ smt_astt smt_convt::convert_is_normal(const expr2tc& expr)
 
 smt_astt smt_convt::convert_is_finite(const expr2tc& expr)
 {
-  (void) expr;
-  abort();
+  const isfinite2t &isfinite = to_isfinite2t(expr);
+
+  // Anything other than floats will always be finite
+  if(!is_floatbv_type(isfinite.value))
+    return mk_smt_bool(true);
+
+  smt_sortt bs = boolean_sort;
+
+  // isfinite = !(isinf || isnan)
+  smt_astt isinf = convert_is_inf(expr);
+  smt_astt isnan = convert_is_nan(expr);
+
+  smt_astt or_op = mk_func_app(bs, SMT_FUNC_OR, isinf, isnan);
+  return mk_func_app(bs, SMT_FUNC_NOT, or_op);
 }
 
 smt_astt smt_convt::convert_signbit(const expr2tc& expr)
