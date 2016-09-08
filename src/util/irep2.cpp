@@ -525,9 +525,12 @@ static const char *expr_names[] = {
   "constant_array_of",
   "symbol",
   "typecast",
+  "ieee_typecast",
   "if",
   "equality",
   "notequal",
+  "ieee_equality",
+  "ieee_notequal",
   "lessthan",
   "greaterthan",
   "lessthanequal",
@@ -551,6 +554,10 @@ static const char *expr_names[] = {
   "sub",
   "mul",
   "div",
+  "ieee_add",
+  "ieee_sub",
+  "ieee_mul",
+  "ieee_div",
   "modulus",
   "shl",
   "ashr",
@@ -602,7 +609,6 @@ static const char *expr_names[] = {
   "isfinite",
   "signbit",
   "concat",
-  "ieee_typecast"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -2157,6 +2163,10 @@ std::string equality2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string notequal2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
+std::string ieee_equality2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "rounding_mode", "", "", ""};
+std::string ieee_notequal2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "rounding_mode", "", "", ""};
 std::string lessthan2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string greaterthan2t::field_names [esbmct::num_type_fields]  =
@@ -2203,6 +2213,14 @@ std::string mul2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string div2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
+std::string ieee_add2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "rounding_mode", "", "", ""};
+std::string ieee_sub2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "rounding_mode", "", "", ""};
+std::string ieee_mul2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "rounding_mode", "", "", ""};
+std::string ieee_div2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "rounding_mode", "", "", ""};
 std::string modulus2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string shl2t::field_names [esbmct::num_type_fields]  =
@@ -2352,6 +2370,8 @@ irep_typedefs(ieee_typecast,ieee_typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
+irep_typedefs(ieee_equality, relation_data);
+irep_typedefs(ieee_notequal, relation_data);
 irep_typedefs(lessthan, relation_data);
 irep_typedefs(greaterthan, relation_data);
 irep_typedefs(lessthanequal, relation_data);
@@ -2375,6 +2395,10 @@ irep_typedefs(add, arith_2ops);
 irep_typedefs(sub, arith_2ops);
 irep_typedefs(mul, arith_2ops);
 irep_typedefs(div, arith_2ops);
+irep_typedefs(ieee_add, ieee_arith_2ops);
+irep_typedefs(ieee_sub, ieee_arith_2ops);
+irep_typedefs(ieee_mul, ieee_arith_2ops);
+irep_typedefs(ieee_div, ieee_arith_2ops);
 irep_typedefs(modulus, arith_2ops);
 irep_typedefs(shl, arith_2ops);
 irep_typedefs(ashr, arith_2ops);

@@ -526,6 +526,12 @@ public:
     signbit_id,
     concat_id,
     ieee_typecast_id,
+    ieee_equality_id,
+    ieee_notequal_id,
+    ieee_add_id,
+    ieee_sub_id,
+    ieee_mul_id,
+    ieee_div_id,
     end_expr_id
   };
 
@@ -1988,6 +1994,12 @@ class isnormal2t;
 class isfinite2t;
 class signbit2t;
 class concat2t;
+class ieee_equality2t;
+class ieee_notequal2t;
+class ieee_add2t;
+class ieee_sub2t;
+class ieee_mul2t;
+class ieee_div2t;
 
 // Data definitions.
 
@@ -2344,6 +2356,26 @@ public:
   typedef esbmct::field_traits<expr2tc, arith_2ops, &arith_2ops::side_1> side_1_field;
   typedef esbmct::field_traits<expr2tc, arith_2ops, &arith_2ops::side_2> side_2_field;
   typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
+};
+
+class ieee_arith_2ops : public arith_ops
+{
+public:
+  ieee_arith_2ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
+                  const expr2tc &v2, const expr2tc &rm)
+    : arith_ops(t, id), side_1(v1), side_2(v2), rounding_mode(rm) { }
+  ieee_arith_2ops(const ieee_arith_2ops &ref)
+    : arith_ops(ref), side_1(ref.side_1), side_2(ref.side_2), rounding_mode(ref.rounding_mode) { }
+
+  expr2tc side_1;
+  expr2tc side_2;
+  expr2tc rounding_mode;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::side_1> side_1_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::side_2> side_2_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::rounding_mode> rounding_mode_field;
+  typedef esbmct::expr2t_traits<side_1_field, side_2_field, rounding_mode_field> traits;
 };
 
 class same_object_data : public expr2t
@@ -2933,6 +2965,8 @@ irep_typedefs(ieee_typecast,ieee_typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
+irep_typedefs(ieee_equality, relation_data);
+irep_typedefs(ieee_notequal, relation_data);
 irep_typedefs(lessthan, relation_data);
 irep_typedefs(greaterthan, relation_data);
 irep_typedefs(lessthanequal, relation_data);
@@ -2956,6 +2990,10 @@ irep_typedefs(add, arith_2ops);
 irep_typedefs(sub, arith_2ops);
 irep_typedefs(mul, arith_2ops);
 irep_typedefs(div, arith_2ops);
+irep_typedefs(ieee_add, ieee_arith_2ops);
+irep_typedefs(ieee_sub, ieee_arith_2ops);
+irep_typedefs(ieee_mul, ieee_arith_2ops);
+irep_typedefs(ieee_div, ieee_arith_2ops);
 irep_typedefs(modulus, arith_2ops);
 irep_typedefs(shl, arith_2ops);
 irep_typedefs(ashr, arith_2ops);
@@ -3314,6 +3352,36 @@ public:
     : notequal_expr_methods(type_pool.get_bool(), notequal_id, v1, v2) {}
   notequal2t(const notequal2t &ref)
     : notequal_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE equality expression. Evaluate whether two floatbvs exprs are the same. Always has
+ *  boolean type. @extends ieee_relation_data */
+class ieee_equality2t : public ieee_equality_expr_methods
+{
+public:
+  ieee_equality2t(const expr2tc &v1, const expr2tc &v2)
+    : ieee_equality_expr_methods(type_pool.get_bool(), ieee_equality_id, v1, v2) {}
+  ieee_equality2t(const ieee_equality2t &ref)
+    : ieee_equality_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE inequality expression. Evaluate whether two floatbvs exprs are different. Always has
+ *  boolean type. @extends ieee_relation_data */
+class ieee_notequal2t : public ieee_notequal_expr_methods
+{
+public:
+  ieee_notequal2t(const expr2tc &v1, const expr2tc &v2)
+    : ieee_notequal_expr_methods(type_pool.get_bool(), ieee_notequal_id, v1, v2) {}
+  ieee_notequal2t(const ieee_notequal2t &ref)
+    : ieee_notequal_expr_methods(ref) {}
 
   virtual expr2tc do_simplify(bool second) const;
 
@@ -3725,6 +3793,89 @@ public:
     : div_expr_methods(type, div_id, v1, v2) {}
   div2t(const div2t &ref)
     : div_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE Addition operation. Adds two floatbvs together.
+ *  Types of both operands and expr type should match. @extends ieee_arith_2ops */
+class ieee_add2t : public ieee_add_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param rm rounding mode. */
+  ieee_add2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
+    : ieee_add_expr_methods(type, ieee_add_id, v1, v2, rm) {}
+  ieee_add2t(const ieee_add2t &ref)
+    : ieee_add_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE subtraction operation. Subtracts second operand from first operand. Must both
+ *  be floatbvs types. Types of both operands and expr type should match.
+ *  @extends ieee_arith_2ops */
+class ieee_sub2t : public ieee_sub_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param rm rounding mode. */
+  ieee_sub2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
+    : ieee_sub_expr_methods(type, ieee_sub_id, v1, v2, rm) {}
+  ieee_sub2t(const ieee_sub2t &ref)
+    : ieee_sub_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE multiplication operation. Multiplies the two operands. Must both be floatbvs
+ *  types. Types of both operands and expr type should match.
+ *  @extends ieee_arith_2ops */
+class ieee_mul2t : public ieee_mul_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param rm rounding mode. */
+ ieee_mul2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
+    : ieee_mul_expr_methods(type, ieee_mul_id, v1, v2, rm) {}
+  ieee_mul2t(const ieee_mul2t &ref)
+    : ieee_mul_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE division operation. Divides first operand by second operand. Must both be
+ *  floatbvs types. Types of both operands and expr type should match.
+ *  @extends ieee_arith_2ops */
+class ieee_div2t : public ieee_div_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param rm rounding mode. */
+  ieee_div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
+    : ieee_div_expr_methods(type, ieee_div_id, v1, v2, rm) {}
+  ieee_div2t(const ieee_div2t &ref)
+    : ieee_div_expr_methods(ref) {}
 
   virtual expr2tc do_simplify(bool second) const;
 
@@ -4600,6 +4751,8 @@ expr_macros(ieee_typecast);
 expr_macros(if);
 expr_macros(equality);
 expr_macros(notequal);
+expr_macros(ieee_equality);
+expr_macros(ieee_notequal);
 expr_macros(lessthan);
 expr_macros(greaterthan);
 expr_macros(lessthanequal);
@@ -4623,6 +4776,10 @@ expr_macros(add);
 expr_macros(sub);
 expr_macros(mul);
 expr_macros(div);
+expr_macros(ieee_add);
+expr_macros(ieee_sub);
+expr_macros(ieee_mul);
+expr_macros(ieee_div);
 expr_macros(modulus);
 expr_macros(shl);
 expr_macros(ashr);

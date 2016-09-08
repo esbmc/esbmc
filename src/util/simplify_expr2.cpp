@@ -2111,3 +2111,39 @@ ieee_typecast2t::do_simplify(bool second __attribute__((unused))) const
 
   return expr2tc();
 }
+
+expr2tc
+ieee_equality2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
+
+expr2tc
+ieee_notequal2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
+
+expr2tc
+ieee_add2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
+
+expr2tc
+ieee_sub2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
+
+expr2tc
+ieee_mul2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
+
+expr2tc
+ieee_div2t::do_simplify(bool second __attribute__((unused))) const
+{
+  return expr2tc();
+}
