@@ -220,6 +220,9 @@ simplify_arith_2ops(
 
   expr2tc simpl_res = expr2tc();
 
+  // This should be handled by ieee_*
+  assert(!is_floatbv_type(type));
+
   if(is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc&)> is_constant =
@@ -1633,6 +1636,10 @@ struct Equalitytor
 expr2tc
 equality2t::do_simplify(bool second __attribute__((unused))) const
 {
+  // This should be handled by ieee_*
+  assert(!is_floatbv_type(side_1));
+  assert(!is_floatbv_type(side_2));
+
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
 }
 
@@ -1653,6 +1660,10 @@ struct Notequaltor
 expr2tc
 notequal2t::do_simplify(bool second __attribute__((unused))) const
 {
+  // This should be handled by ieee_*
+  assert(!is_floatbv_type(side_1));
+  assert(!is_floatbv_type(side_2));
+
   return simplify_relations<Notequaltor, notequal2t>(type, side_1, side_2);
 }
 
