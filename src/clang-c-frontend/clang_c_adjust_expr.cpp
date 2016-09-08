@@ -468,7 +468,8 @@ void clang_c_adjust::adjust_float_arith(exprt &expr)
     }
 
     // Add rounding mode
-    expr.copy_to_operands(
+    expr.set(
+      "rounding_mode",
       symbol_exprt(CPROVER_PREFIX "rounding_mode", int_type()));
   }
 }
