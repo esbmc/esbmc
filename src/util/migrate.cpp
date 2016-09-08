@@ -792,7 +792,19 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     notequal2t *n = new notequal2t(side1, side2);
     new_expr_ref = expr2tc(n);
-   } else if (expr.id() == exprt::i_lt) {
+  } else if (expr.id() == "ieee_equality") {
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    ieee_equality2t *e = new ieee_equality2t(side1, side2);
+    new_expr_ref = expr2tc(e);
+  } else if (expr.id() == "ieee_notequal") {
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    ieee_notequal2t *n = new ieee_notequal2t(side1, side2);
+    new_expr_ref = expr2tc(n);
+  } else if (expr.id() == exprt::i_lt) {
     expr2tc side1, side2;
 
     convert_operand_pair(expr, side1, side2);
@@ -1034,6 +1046,67 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     convert_operand_pair(expr, side1, side2);
 
     div2t *d = new div2t(type, side1, side2);
+    new_expr_ref = expr2tc(d);
+  } else if (expr.id() == "ieee_add") {
+    migrate_type(expr.type(), type);
+
+    if (expr.operands().size() > 2) {
+      splice_expr(expr, new_expr_ref);
+      return;
+    }
+
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    expr2tc rm;
+    migrate_expr(expr.find_expr("rounding_mode"), rm);
+
+    ieee_add2t *a = new ieee_add2t(type, side1, side2, rm);
+    new_expr_ref = expr2tc(a);
+  } else if (expr.id() == "ieee_sub") {
+    migrate_type(expr.type(), type);
+
+    if (expr.operands().size() > 2) {
+      splice_expr(expr, new_expr_ref);
+      return;
+    }
+
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    expr2tc rm;
+    migrate_expr(expr.find_expr("rounding_mode"), rm);
+
+    ieee_sub2t *s = new ieee_sub2t(type, side1, side2, rm);
+    new_expr_ref = expr2tc(s);
+  } else if (expr.id() == "ieee_mul") {
+    migrate_type(expr.type(), type);
+
+    if (expr.operands().size() > 2) {
+      splice_expr(expr, new_expr_ref);
+      return;
+    }
+
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    expr2tc rm;
+    migrate_expr(expr.find_expr("rounding_mode"), rm);
+
+    ieee_mul2t *s = new ieee_mul2t(type, side1, side2, rm);
+    new_expr_ref = expr2tc(s);
+  } else if (expr.id() == "ieee_div") {
+    migrate_type(expr.type(), type);
+
+    assert(expr.operands().size() == 2);
+
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    expr2tc rm;
+    migrate_expr(expr.find_expr("rounding_mode"), rm);
+
+    ieee_div2t *d = new ieee_div2t(type, side1, side2, rm);
     new_expr_ref = expr2tc(d);
   } else if (expr.id() == exprt::mod) {
     migrate_type(expr.type(), type);
@@ -1993,6 +2066,54 @@ migrate_expr_back(const expr2tc &ref)
     exprt divval("/", thetype);
     divval.copy_to_operands(migrate_expr_back(ref2.side_1),
                             migrate_expr_back(ref2.side_2));
+    return divval;
+  }
+  case expr2t::ieee_add_id:
+  {
+    const ieee_add2t &ref2 = to_ieee_add2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt addval("+", thetype);
+    addval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_2));
+
+    // Add rounding mode
+    addval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return addval;
+  }
+  case expr2t::ieee_sub_id:
+  {
+    const ieee_sub2t &ref2 = to_ieee_sub2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt subval("-", thetype);
+    subval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_2));
+
+    // Add rounding mode
+    subval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return subval;
+  }
+  case expr2t::ieee_mul_id:
+  {
+    const ieee_mul2t &ref2 = to_ieee_mul2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt mulval("*", thetype);
+    mulval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_2));
+
+    // Add rounding mode
+    mulval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return mulval;
+  }
+  case expr2t::ieee_div_id:
+  {
+    const ieee_div2t &ref2 = to_ieee_div2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt divval("/", thetype);
+    divval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_2));
+
+    // Add rounding mode
+    divval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
     return divval;
   }
   case expr2t::modulus_id:
