@@ -361,6 +361,9 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt& expr)
 //        typecheck_expr_pointer_arithmetic(expr);
         return;
       }
+
+      adjust_float_arith(expr);
+      return;
     }
   }
 }
@@ -436,19 +439,37 @@ void clang_c_adjust::adjust_float_rel(exprt& expr)
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
 
-  if(!expr.op0().is_symbol())
-    return;
-
-  if(!expr.op1().is_symbol())
-    return;
-
-  if(!expr.op0().type().is_fixedbv())
-    return;
-
-  if(expr.id()=="=" and (expr.op0() == expr.op1()))
+  if(ns.follow(expr.type()).is_floatbv())
   {
-    expr.id("notequal");
-    expr.op1() = side_effect_expr_nondett(expr.op0().type());
+    if(expr.id() == "=") {
+      expr.id("ieee_equality");
+    } else if(expr.id() == "notequal") {
+      expr.id("ieee_notequal");
+    }
+  }
+}
+
+void clang_c_adjust::adjust_float_arith(exprt &expr)
+{
+  // equality and disequality on float is not mathematical equality!
+  assert(expr.operands().size()==2);
+
+  if(ns.follow(expr.type()).is_floatbv())
+  {
+    // And change id
+    if(expr.id() == "+") {
+      expr.id("ieee_add");
+    } else if(expr.id() == "-") {
+      expr.id("ieee_sub");
+    } else if(expr.id() == "*") {
+      expr.id("ieee_mul");
+    } else if(expr.id()=="/") {
+      expr.id("ieee_div");
+    }
+
+    // Add rounding mode
+    expr.copy_to_operands(
+      symbol_exprt(CPROVER_PREFIX "rounding_mode", int_type()));
   }
 }
 

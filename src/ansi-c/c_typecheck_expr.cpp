@@ -793,13 +793,49 @@ void c_typecheck_baset::adjust_float_rel(exprt &expr)
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
 
-  if(follow(expr.op0().type()).id()=="fixedbv")
+  if(follow(expr.type()).is_floatbv())
   {
-    if(expr.id()=="=" and (expr.op0() == expr.op1()))
-    {
-      expr.id("notequal");
-      expr.op1() = side_effect_expr_nondett(follow(expr.op0().type()));
+    if(expr.id() == "=") {
+      expr.id("ieee_equality");
+    } else if(expr.id() == "notequal") {
+      expr.id("ieee_notequal");
     }
+  }
+}
+
+/*******************************************************************\
+
+Function: c_typecheck_baset::adjust_float_arith
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void c_typecheck_baset::adjust_float_arith(exprt &expr)
+{
+  // equality and disequality on float is not mathematical equality!
+  assert(expr.operands().size()==2);
+
+  if(follow(expr.type()).is_floatbv())
+  {
+    // And change id
+    if(expr.id() == "+") {
+      expr.id("ieee_add");
+    } else if(expr.id() == "-") {
+      expr.id("ieee_sub");
+    } else if(expr.id() == "*") {
+      expr.id("ieee_mul");
+    } else if(expr.id()=="/") {
+      expr.id("ieee_div");
+    }
+
+    // Add rounding mode
+    expr.copy_to_operands(
+      symbol_exprt(CPROVER_PREFIX "rounding_mode", int_type()));
   }
 }
 
@@ -1980,6 +2016,7 @@ void c_typecheck_baset::typecheck_expr_binary_arithmetic(exprt &expr)
         if(is_number(type0))
         {
           expr.type()=type0;
+          adjust_float_arith(expr);
           return;
         }
       }
