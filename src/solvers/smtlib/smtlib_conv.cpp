@@ -749,6 +749,12 @@ smt_astt smtlib_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
   abort();
 }
 
+smt_astt smtlib_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet mode)
+{
+  std::cerr << "Rounding mode not supported on smtlib yet" << std::endl;
+  abort();
+}
+
 smt_ast *
 smtlib_convt::mk_smt_bool(bool val)
 {

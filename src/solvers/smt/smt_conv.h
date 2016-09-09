@@ -637,6 +637,11 @@ public:
    *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw) = 0;
 
+  /** Create a floating point rounding mode
+   *  @param mode the rounding mode (EVEN, +INF, -INF, ZERO)
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet mode) = 0;
+
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.
    *  @return The newly created terminal smt_ast of this boolean. */
