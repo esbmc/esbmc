@@ -218,6 +218,14 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   else if(expr.id() == "array_of")
   {
   }
+  else if(expr.id()=="ieee_equality" ||
+          expr.id()=="ieee_notequal" ||
+          expr.id()=="ieee_add" ||
+          expr.id()=="ieee_sub" ||
+          expr.id()=="ieee_mul" ||
+          expr.id()=="ieee_div")
+  {
+  }
   else
   {
     std::cout << "Unexpected expression: " << expr.id().as_string()
@@ -438,8 +446,9 @@ void clang_c_adjust::adjust_float_rel(exprt& expr)
 {
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
+  assert(expr.op0().type() == expr.op1().type());
 
-  if(ns.follow(expr.type()).is_floatbv())
+  if(ns.follow(expr.op0().type()).is_floatbv())
   {
     if(expr.id() == "=") {
       expr.id("ieee_equality");
@@ -708,6 +717,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
   for(unsigned i=0; i<arguments.size(); i++)
   {
     exprt &op=arguments[i];
+    adjust_expr(op);
 
     if(i<argument_types.size())
     {
