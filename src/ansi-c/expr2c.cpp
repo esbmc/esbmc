@@ -340,7 +340,10 @@ std::string expr2ct::convert_typecast(
 {
   precedence=14;
 
-  if(src.operands().size()!=1)
+  if(src.id() == "typecast" && src.operands().size()!=1)
+    return convert_norep(src, precedence);
+
+  if(src.id() == "ieee_typecast" && src.operands().size()!=2)
     return convert_norep(src, precedence);
 
   // some special cases
@@ -3137,6 +3140,9 @@ std::string expr2ct::convert(
 
   else if(src.id()=="ieee_div")
     return convert_function(src, "IEEE_DIV", precedence=15);
+
+  else if(src.id()=="ieee_typecast")
+    return convert_typecast(src, precedence);
 
   else if(src.id()=="width")
     return convert_function(src, "WIDTH", precedence=15);
