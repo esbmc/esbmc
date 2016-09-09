@@ -582,6 +582,24 @@ smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+  case expr2t::ieee_equality_id:
+  {
+    const ieee_equality2t &ieee_eq = to_ieee_equality2t(expr);
+    assert(is_floatbv_type(ieee_eq.side_1));
+    assert(is_floatbv_type(ieee_eq.side_2));
+
+    a = convert_ieee_equal(expr);
+    break;
+  }
+  case expr2t::ieee_notequal_id:
+  {
+    const ieee_notequal2t &ieee_neq = to_ieee_notequal2t(expr);
+    assert(is_floatbv_type(ieee_neq.side_1));
+    assert(is_floatbv_type(ieee_neq.side_2));
+
+    a = mk_func_app(boolean_sort, SMT_FUNC_NOT, convert_ieee_equal(expr));
+    break;
+  }
   case expr2t::modulus_id:
   {
     assert(expr->get_num_sub_exprs() == 2);
@@ -1513,6 +1531,38 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
 
   smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
   return mk_extract(operand, topbit-1, topbit-1, bit);
+}
+
+smt_astt
+smt_convt::convert_ieee_equal(const expr2tc &expr)
+{
+  smt_sortt bs = boolean_sort;
+  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
+  smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
+
+  // This will be converted to:
+  // ((is_zero(s1) && is_zero(s2)) || fp.eq(s1,s2)) && !(is_nan(s1) && is_nan(s2))
+
+  // is_zero returns true for -0 and +0
+  smt_astt is_zero_s1 = mk_func_app(bs, SMT_FUNC_ISZERO, s1);
+  smt_astt is_zero_s2 = mk_func_app(bs, SMT_FUNC_ISZERO, s2);
+  smt_astt is_zero_and = mk_func_app(bs, SMT_FUNC_AND, is_zero_s1, is_zero_s2);
+
+  // Fp eq
+  smt_astt is_eq = mk_func_app(bs, SMT_FUNC_EQ, s1, s2);
+
+  // Check for NaNs
+  smt_astt is_nan_s1 = mk_func_app(bs, SMT_FUNC_ISNAN, s1);
+  smt_astt is_nan_s2 = mk_func_app(bs, SMT_FUNC_ISNAN, s2);
+  smt_astt is_nan_or = mk_func_app(bs, SMT_FUNC_OR, is_nan_s1, is_nan_s2);
+
+  // Not is_nan
+  smt_astt is_not_nan = mk_func_app(bs, SMT_FUNC_NOT, is_nan_or);
+
+  // ((is_zero(s1) && is_zero(s2)) || fp.eq(s1,s2))
+  smt_astt is_zero_or_eq = mk_func_app(bs, SMT_FUNC_OR, is_zero_and, is_eq);
+
+  return mk_func_app(bs, SMT_FUNC_AND, is_zero_or_eq, is_not_nan);
 }
 
 smt_astt

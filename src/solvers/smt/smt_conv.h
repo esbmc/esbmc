@@ -808,8 +808,10 @@ public:
   smt_astt convert_is_normal(const expr2tc &expr);
   /** Checks for equality with finite representation. */
   smt_astt convert_is_finite(const expr2tc &expr);
-  /** Checks for signbit representation. */
+  /** Converts signbit representation. */
   smt_astt convert_signbit(const expr2tc &expr);
+  /** Converts equality between two floatbvs. */
+  smt_astt convert_ieee_equal(const expr2tc &expr);
   /** Convert a byte_extract2tc, pulling a byte from the byte representation
    *  of some piece of data. */
   smt_astt convert_byte_extract(const expr2tc &expr);
