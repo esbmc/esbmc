@@ -51,6 +51,7 @@ public:
                                   bool sgn, unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet mode);
   virtual smt_ast *mk_smt_bool(bool val);
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s,
