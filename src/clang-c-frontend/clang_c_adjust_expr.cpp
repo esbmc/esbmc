@@ -446,9 +446,9 @@ void clang_c_adjust::adjust_float_rel(exprt& expr)
 {
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
-  assert(expr.op0().type() == expr.op1().type());
 
-  if(ns.follow(expr.op0().type()).is_floatbv())
+  if(ns.follow(expr.op0().type()).is_floatbv()
+     || ns.follow(expr.op1().type()).is_floatbv())
   {
     if(expr.id() == "=") {
       expr.id("ieee_equality");
@@ -717,7 +717,6 @@ void clang_c_adjust::adjust_side_effect_function_call(
   for(unsigned i=0; i<arguments.size(); i++)
   {
     exprt &op=arguments[i];
-    adjust_expr(op);
 
     if(i<argument_types.size())
     {

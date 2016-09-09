@@ -801,9 +801,9 @@ void c_typecheck_baset::adjust_float_rel(exprt &expr)
 {
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
-  assert(expr.op0().type() == expr.op1().type());
 
-  if(follow(expr.op0().type()).is_floatbv())
+  if(follow(expr.op0().type()).is_floatbv()
+     || follow(expr.op1().type()).is_floatbv())
   {
     if(expr.id() == "=") {
       expr.id("ieee_equality");
@@ -1835,7 +1835,6 @@ void c_typecheck_baset::typecheck_function_call_arguments(
   for(unsigned i=0; i<arguments.size(); i++)
   {
     exprt &op=arguments[i];
-    typecheck_expr(op);
 
     if(i<argument_types.size())
     {
