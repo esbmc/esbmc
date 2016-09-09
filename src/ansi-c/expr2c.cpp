@@ -3120,14 +3120,26 @@ std::string expr2ct::convert(
   else if(src.id()=="=")
     return convert_binary(src, "==", precedence=9, true);
 
-  else if(src.id()=="ieee_float_equal")
-    return convert_function(src, "IEEE_FLOAT_EQUAL", precedence=15);
+  else if(src.id()=="ieee_equal")
+    return convert_function(src, "IEEE_EQUAL", precedence=15);
+
+  else if(src.id()=="ieee_notequal")
+    return convert_function(src, "IEEE_NOTEQUAL", precedence=15);
+
+  else if(src.id()=="ieee_add")
+    return convert_function(src, "IEEE_ADD", precedence=15);
+
+  else if(src.id()=="ieee_sub")
+    return convert_function(src, "IEEE_SUB", precedence=15);
+
+  else if(src.id()=="ieee_mul")
+    return convert_function(src, "IEEE_MUL", precedence=15);
+
+  else if(src.id()=="ieee_div")
+    return convert_function(src, "IEEE_DIV", precedence=15);
 
   else if(src.id()=="width")
     return convert_function(src, "WIDTH", precedence=15);
-
-  else if(src.id()=="ieee_float_notequal")
-    return convert_function(src, "IEEE_FLOAT_NOTEQUAL", precedence=15);
 
   else if(src.id()=="byte_update_little_endian")
     return convert_function(src, "BYTE_UPDATE_LITTLE_ENDIAN", precedence=15);
