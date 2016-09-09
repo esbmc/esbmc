@@ -3120,7 +3120,7 @@ std::string expr2ct::convert(
   else if(src.id()=="=")
     return convert_binary(src, "==", precedence=9, true);
 
-  else if(src.id()=="ieee_equal")
+  else if(src.id()=="ieee_equality")
     return convert_function(src, "IEEE_EQUAL", precedence=15);
 
   else if(src.id()=="ieee_notequal")
