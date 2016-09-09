@@ -607,6 +607,8 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     return new_ast(z3::to_expr(ctx, Z3_mk_fpa_is_infinite(ctx, asts[0]->e)),s);
   case SMT_FUNC_ISNORMAL:
     return new_ast(z3::to_expr(ctx, Z3_mk_fpa_is_normal(ctx, asts[0]->e)),s);
+  case SMT_FUNC_ISZERO:
+    return new_ast(z3::to_expr(ctx, Z3_mk_fpa_is_zero(ctx, asts[0]->e)),s);
   case SMT_FUNC_ITE:
     return new_ast(ite(asts[0]->e, asts[1]->e, asts[2]->e), s);
   case SMT_FUNC_STORE:
