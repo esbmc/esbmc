@@ -2050,7 +2050,7 @@ expr2tc
 ieee_typecast2t::do_simplify(bool second __attribute__((unused))) const
 {
   // This should only happens for floatbv types
-  assert(is_floatbv_type(from));
+  assert(is_floatbv_type(from) || is_floatbv_type(type));
 
   // Try to recursively simplify nested operation, if any
   expr2tc to_simplify = try_simplification(from);
