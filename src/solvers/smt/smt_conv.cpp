@@ -1540,6 +1540,7 @@ smt_convt::convert_ieee_equal(const expr2tc &expr)
   smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
   smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
 
+#if 0
   // This will be converted to:
   // ((is_zero(s1) && is_zero(s2)) || fp.eq(s1,s2)) && !(is_nan(s1) && is_nan(s2))
 
@@ -1563,6 +1564,9 @@ smt_convt::convert_ieee_equal(const expr2tc &expr)
   smt_astt is_zero_or_eq = mk_func_app(bs, SMT_FUNC_OR, is_zero_and, is_eq);
 
   return mk_func_app(bs, SMT_FUNC_AND, is_zero_or_eq, is_not_nan);
+#else
+  return mk_func_app(bs, SMT_FUNC_EQ, s1, s2);
+#endif
 }
 
 smt_astt
