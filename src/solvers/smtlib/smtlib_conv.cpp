@@ -730,7 +730,7 @@ smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 }
 
 smt_ast *
-smtlib_convt::mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
+smtlib_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
                              bool sgn, unsigned ew, unsigned sw)
 {
   std::cerr << "Floatbv not supported on smtlib yet" << std::endl;

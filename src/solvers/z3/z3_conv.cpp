@@ -668,11 +668,18 @@ z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 }
 
 smt_astt
-z3_convt::mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
+z3_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
                          bool sgn, unsigned ew, unsigned sw)
 {
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
+
+  const mp_integer sig = thereal.get_fraction();
+
+  // If the number is denormal, we set the exponent to 0,
+  // which is equivalent to -bias()
+  const mp_integer exp = thereal.is_normal() ?
+    thereal.get_exponent() : -thereal.spec.bias();
 
   return new_ast(ctx.fpa_val(sgn, exp.to_int64(), sig.to_uint64(), zs->s), s);
 }

@@ -426,7 +426,7 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint,
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_ast* mathsat_convt::mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
+smt_ast* mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
                                        bool sgn, unsigned ew, unsigned sw)
 {
   std::cerr << "Floatbv not supported on mathsat yet" << std::endl;

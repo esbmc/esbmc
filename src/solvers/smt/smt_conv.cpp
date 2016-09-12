@@ -1369,19 +1369,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
       if(thereal.value.is_infinity())
         return mk_smt_bvfloat_inf(sign, exponent_width, fraction_width);
 
-      const mp_integer fraction = thereal.value.get_fraction();
-
-      // If the number is denormal, we set the exponent to 0,
-      // which is equivalent to -bias()
-      const mp_integer exponent = thereal.value.is_normal() ?
-        thereal.value.get_exponent() : -thereal.value.spec.bias();
-
-      return mk_smt_bvfloat(
-        exponent,
-        fraction,
-        sign,
-        exponent_width,
-        fraction_width);
+      return mk_smt_bvfloat(thereal.value, sign, exponent_width, fraction_width);
     }
   }
   case expr2t::constant_bool_id:

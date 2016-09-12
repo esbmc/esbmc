@@ -68,7 +68,7 @@ public:
   virtual smt_ast *mk_smt_real(const std::string &str);
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
-  virtual smt_ast *mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
+  virtual smt_ast *mk_smt_bvfloat(const ieee_floatt &thereal,
                                   bool sgn, unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);

@@ -262,7 +262,7 @@ boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 }
 
 smt_ast *
-boolector_convt::mk_smt_bvfloat(const mp_integer &exp, const mp_integer &sig,
+boolector_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
                                 bool sgn, unsigned ew, unsigned sw)
 {
   std::cerr << "Boolector can't create floatbv sorts" << std::endl;
