@@ -2123,38 +2123,328 @@ ieee_typecast2t::do_simplify(bool second __attribute__((unused))) const
   return expr2tc();
 }
 
+template<template<typename> class TFunctor, typename constructor>
+static expr2tc
+simplify_floatbv_relations(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  if(!is_number_type(type))
+    return expr2tc();
+
+  // Try to recursively simplify nested operations both sides, if any
+  expr2tc simplied_side_1 = try_simplification(side_1);
+  expr2tc simplied_side_2 = try_simplification(side_2);
+
+  if (is_constant_expr(simplied_side_1)
+      || is_constant_expr(simplied_side_2)
+      || (simplied_side_1 == simplied_side_2))
+  {
+    expr2tc simpl_res = expr2tc();
+
+    if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
+    {
+      std::function<bool(const expr2tc&)> is_constant =
+        (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+
+      std::function<ieee_floatt& (expr2tc&)> get_value =
+        [](expr2tc& c) -> ieee_floatt&
+          { return to_constant_floatbv2t(c).value; };
+
+      simpl_res =
+        TFunctor<ieee_floatt>::simplify(
+          simplied_side_1, simplied_side_2, is_constant, get_value);
+    }
+    else
+      assert(0);
+
+    return typecast_check_return(type, simpl_res);
+  }
+
+  // Were we able to simplify the sides?
+  if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
+  {
+    expr2tc new_op =
+      expr2tc(new constructor(simplied_side_1, simplied_side_2));
+
+    return typecast_check_return(type, new_op);
+  }
+
+  return expr2tc();
+}
+
+template<class constant_type>
+struct IEEE_equalitytor
+{
+  static expr2tc simplify(
+    expr2tc &op1,
+    expr2tc &op2,
+    std::function<bool(const expr2tc&)> is_constant __attribute__((unused)),
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    // Two constants? Simplify to result of the comparison
+    if (is_constant(op1) && is_constant(op2))
+    {
+      bool res = ieee_equal(get_value(op1), get_value(op2));
+      return expr2tc(new constant_bool2t(res));
+    }
+
+    if(op1 == op2)
+    {
+      // x == x is the same as saying isnan(x)
+      auto isnan = expr2tc(new isnan2t(op1));
+
+      auto isnan_simp = isnan->simplify();
+      if(is_nil_expr(isnan_simp))
+        isnan_simp = isnan;
+
+      return isnan_simp;
+    }
+
+    return expr2tc();
+  }
+};
+
 expr2tc
 ieee_equality2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_relations<IEEE_equalitytor, ieee_equality2t>(
+    type, side_1, side_2);
 }
+
+template<class constant_type>
+struct IEEE_notequaltor
+{
+  static expr2tc simplify(
+    expr2tc &op1,
+    expr2tc &op2,
+    std::function<bool(const expr2tc&)> is_constant __attribute__((unused)),
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    // Two constants? Simplify to result of the comparison
+    if (is_constant(op1) && is_constant(op2))
+    {
+      bool res = ieee_not_equal(get_value(op1), get_value(op2));
+      return expr2tc(new constant_bool2t(res));
+    }
+
+    return expr2tc();
+  }
+};
 
 expr2tc
 ieee_notequal2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_relations<IEEE_notequaltor, ieee_notequal2t>(
+    type, side_1, side_2);
 }
+
+template<template<typename> class TFunctor, typename constructor>
+static expr2tc
+simplify_floatbv_2ops(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2,
+  const expr2tc &rounding_mode)
+{
+  assert(is_floatbv_type(type));
+
+  if(!is_number_type(type) && !is_pointer_type(type))
+    return expr2tc();
+
+  // Try to recursively simplify nested operations both sides, if any
+  expr2tc simplied_side_1 = try_simplification(side_1);
+  expr2tc simplied_side_2 = try_simplification(side_2);
+
+  if (!is_constant_expr(simplied_side_1)
+      && !is_constant_expr(simplied_side_2)
+      && !is_constant_int2t(rounding_mode))
+  {
+    // Were we able to simplify the sides?
+    if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
+    {
+      expr2tc new_op =
+        expr2tc(new constructor(type, simplied_side_1, simplied_side_2, rounding_mode));
+
+      return typecast_check_return(type, new_op);
+    }
+
+    return expr2tc();
+  }
+
+  expr2tc simpl_res = expr2tc();
+
+  if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
+  {
+    std::function<bool(const expr2tc&)> is_constant =
+      (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+
+    std::function<ieee_floatt& (expr2tc&)> get_value =
+      [](expr2tc& c) -> ieee_floatt&
+        { return to_constant_floatbv2t(c).value; };
+
+    simpl_res =
+      TFunctor<ieee_floatt>::simplify(
+        simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
+  }
+  else
+    assert(0);
+
+  return typecast_check_return(type, simpl_res);
+}
+
+template<class constant_type>
+struct IEEE_addtor
+{
+  static expr2tc simplify(
+    expr2tc &op1,
+    expr2tc &op2,
+    const expr2tc &rm,
+    std::function<bool(const expr2tc&)> is_constant,
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    // Two constants? Simplify to result of the addition
+    if (is_constant(op1) && is_constant(op2))
+    {
+      ieee_floatt::rounding_modet mode =
+        static_cast<ieee_floatt::rounding_modet>(to_constant_int2t(rm).value.to_long());
+
+      auto c1 = expr2tc(op1->clone());
+      get_value(c1).rounding_mode = mode;
+
+      auto c2 = expr2tc(op2->clone());
+      get_value(c2).rounding_mode = mode;
+
+      get_value(c1) += get_value(c2);
+      return expr2tc(c1);
+    }
+
+    return expr2tc();
+  }
+};
 
 expr2tc
 ieee_add2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_2ops<IEEE_addtor, ieee_add2t>(
+    type, side_1, side_2, rounding_mode);
 }
+
+template<class constant_type>
+struct IEEE_subtor
+{
+  static expr2tc simplify(
+    expr2tc &op1,
+    expr2tc &op2,
+    const expr2tc &rm,
+    std::function<bool(const expr2tc&)> is_constant,
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    // Two constants? Simplify to result of the subtraction
+    if (is_constant(op1) && is_constant(op2))
+    {
+      ieee_floatt::rounding_modet mode =
+        static_cast<ieee_floatt::rounding_modet>(to_constant_int2t(rm).value.to_long());
+
+      auto c1 = expr2tc(op1->clone());
+      get_value(c1).rounding_mode = mode;
+
+      auto c2 = expr2tc(op2->clone());
+      get_value(c2).rounding_mode = mode;
+
+      get_value(c1) -= get_value(c2);
+      return expr2tc(c1);
+    }
+
+    return expr2tc();
+  }
+};
 
 expr2tc
 ieee_sub2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_2ops<IEEE_subtor, ieee_sub2t>(
+    type, side_1, side_2, rounding_mode);
 }
+
+template<class constant_type>
+struct IEEE_multor
+{
+  static expr2tc simplify(
+    expr2tc &op1,
+    expr2tc &op2,
+    const expr2tc &rm,
+    std::function<bool(const expr2tc&)> is_constant,
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    // Two constants? Simplify to result of the multiplication
+    if (is_constant(op1) && is_constant(op2))
+    {
+      ieee_floatt::rounding_modet mode =
+        static_cast<ieee_floatt::rounding_modet>(to_constant_int2t(rm).value.to_long());
+
+      auto c1 = expr2tc(op1->clone());
+      get_value(c1).rounding_mode = mode;
+
+      auto c2 = expr2tc(op2->clone());
+      get_value(c2).rounding_mode = mode;
+
+      get_value(c1) *= get_value(c2);
+      return expr2tc(c1);
+    }
+
+    return expr2tc();
+  }
+};
 
 expr2tc
 ieee_mul2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_2ops<IEEE_multor, ieee_mul2t>(
+    type, side_1, side_2, rounding_mode);
 }
+
+template<class constant_type>
+struct IEEE_divtor
+{
+  static expr2tc simplify(
+    expr2tc &op1,
+    expr2tc &op2,
+    const expr2tc &rm,
+    std::function<bool(const expr2tc&)> is_constant,
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    // Two constants? Simplify to result of the division
+    if (is_constant(op1) && is_constant(op2))
+    {
+      ieee_floatt::rounding_modet mode =
+        static_cast<ieee_floatt::rounding_modet>(to_constant_int2t(rm).value.to_long());
+
+      auto c1 = expr2tc(op1->clone());
+      get_value(c1).rounding_mode = mode;
+
+      auto c2 = expr2tc(op2->clone());
+      get_value(c2).rounding_mode = mode;
+
+      get_value(c1) /= get_value(c2);
+      return expr2tc(c1);
+    }
+
+    if(is_constant(op2))
+    {
+      // Denominator is one? Exact for all rounding modes.
+      if(get_value(op2) == 1)
+        return expr2tc(op1->clone());
+    }
+
+    return expr2tc();
+  }
+};
 
 expr2tc
 ieee_div2t::do_simplify(bool second __attribute__((unused))) const
 {
-  return expr2tc();
+  return simplify_floatbv_2ops<IEEE_divtor, ieee_div2t>(
+    type, side_1, side_2, rounding_mode);
 }
