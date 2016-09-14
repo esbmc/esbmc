@@ -441,15 +441,15 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint,
 smt_ast* mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
                                        unsigned ew, unsigned sw)
 {
-  // Binary representation of the number
-  std::string value_str = thereal.to_expr().get_value().as_string();
+  const mp_integer sig = thereal.get_fraction();
 
-  std::string sgn_str = value_str.substr(0, 1);
-  std::string exp_str = value_str.substr(1, ew);
-  std::string sig_str = value_str.substr(1 + ew, sw);
+  // If the number is denormal, we set the exponent to 0
+  const mp_integer exp = thereal.is_normal() ?
+    thereal.get_exponent() + thereal.spec.bias() : 0;
 
-  // Saanity check
-  assert(value_str.length() == (sgn_str.length() + exp_str.length() + sig_str.length()));
+  std::string sgn_str = thereal.get_sign() ? "1" : "0";
+  std::string exp_str = integer2binary(exp, ew);
+  std::string sig_str = integer2binary(sig, sw);
 
   std::string smt_str = "(fp #b" + sgn_str;
   smt_str += " #b" + exp_str;
