@@ -447,14 +447,21 @@ smt_ast* mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
 
 smt_astt mathsat_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
 {
-  std::cerr << "NaN floatbv not supported on mathsat yet" << std::endl;
-  abort();
+  msat_term t = msat_make_fp_nan(env, ew, sw);
+  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat fp NaN term");
+
+  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_astt mathsat_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  std::cerr << "Inf floatbv not supported on mathsat yet" << std::endl;
-  abort();
+  msat_term t =
+    sgn ? msat_make_fp_minus_inf(env, ew, sw) : msat_make_fp_plus_inf(env, ew, sw);
+  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat fp inf term");
+
+  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_ast *
