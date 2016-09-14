@@ -367,9 +367,6 @@ smt_sort *
 mathsat_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
-  unsigned long uint;
-  int thebool;
-  const mathsat_smt_sort *dom, *range;
 
   va_start(ap, k);
   switch (k) {
@@ -378,9 +375,10 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
     std::cerr << "Sorry, no integer encoding sorts for MathSAT" << std::endl;
     abort();
   case SMT_SORT_BV:
-    uint = va_arg(ap, unsigned long);
-    thebool = va_arg(ap, int);
+  {
+    unsigned long uint = va_arg(ap, unsigned long);
     return new mathsat_smt_sort(k, msat_get_bv_type(env, uint), uint);
+  }
   case SMT_SORT_FLOATBV:
   {
     unsigned ew = va_arg(ap, unsigned long);
@@ -389,8 +387,8 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
   }
   case SMT_SORT_ARRAY:
   {
-    dom = va_arg(ap, const mathsat_smt_sort *);
-    range = va_arg(ap, const mathsat_smt_sort *);
+    const mathsat_smt_sort *dom = va_arg(ap, const mathsat_smt_sort *);
+    const mathsat_smt_sort *range = va_arg(ap, const mathsat_smt_sort *);
     mathsat_smt_sort *result =
       new mathsat_smt_sort(k, msat_get_array_type(env, dom->t, range->t),
                            range->data_width, dom->data_width);
