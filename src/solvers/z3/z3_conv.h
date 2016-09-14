@@ -134,7 +134,7 @@ private:
     unsigned int major, minor, build, revision;
     Z3_get_version(&major, &minor, &build, &revision);
     std::stringstream ss;
-    ss << "Z3 v" << major << "." << minor;
+    ss << "Z3 v" << major << "." << minor << "." << build;
     return ss.str();
   }
 
