@@ -441,8 +441,26 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint,
 smt_ast* mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
                                        unsigned ew, unsigned sw)
 {
-  std::cerr << "Floatbv not supported on mathsat yet" << std::endl;
-  abort();
+  // Binary representation of the number
+  std::string value_str = thereal.to_expr().get_value().as_string();
+
+  std::string sgn_str = value_str.substr(0, 1);
+  std::string exp_str = value_str.substr(1, ew);
+  std::string sig_str = value_str.substr(1 + ew, sw);
+
+  // Saanity check
+  assert(value_str.length() == (sgn_str.length() + exp_str.length() + sig_str.length()));
+
+  std::string smt_str = "(fp #b" + sgn_str;
+  smt_str += " #b" + exp_str;
+  smt_str += " #b" + sig_str;
+  smt_str += ")";
+
+  msat_term t = msat_from_string(env, smt_str.c_str());
+  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat fp term");
+
+  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_astt mathsat_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
