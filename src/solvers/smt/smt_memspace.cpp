@@ -536,7 +536,7 @@ smt_convt::init_addr_space_array(void)
   symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
   symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_end_0");
   equality2tc obj0_start_eq(obj0_start, zero_ptr_int);
-  equality2tc obj0_end_eq(obj0_start, zero_ptr_int);
+  equality2tc obj0_end_eq(obj0_end, zero_ptr_int);
 
   assert_expr(obj0_start_eq);
   assert_expr(obj0_end_eq);
