@@ -82,10 +82,9 @@ private:
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
   virtual smt_astt mk_smt_bvfloat(const ieee_floatt &thereal,
-                                  bool sgn, unsigned ew, unsigned sw);
+                                  unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);
-  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet mode);
   virtual smt_astt mk_smt_bool(bool val);
   virtual smt_astt mk_array_symbol(const std::string &name, const smt_sort *s,
                                    smt_sortt array_subtype);

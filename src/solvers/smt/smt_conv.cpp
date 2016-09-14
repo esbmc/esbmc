@@ -1369,7 +1369,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
       if(thereal.value.is_infinity())
         return mk_smt_bvfloat_inf(sign, exponent_width, fraction_width);
 
-      return mk_smt_bvfloat(thereal.value, sign, exponent_width, fraction_width);
+      return mk_smt_bvfloat(thereal.value, exponent_width, fraction_width);
     }
   }
   case expr2t::constant_bool_id:

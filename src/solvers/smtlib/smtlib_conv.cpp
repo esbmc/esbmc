@@ -731,7 +731,7 @@ smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 
 smt_ast *
 smtlib_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                             bool sgn, unsigned ew, unsigned sw)
+                             unsigned ew, unsigned sw)
 {
   std::cerr << "Floatbv not supported on smtlib yet" << std::endl;
   abort();
@@ -746,12 +746,6 @@ smt_astt smtlib_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
 smt_astt smtlib_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
 {
   std::cerr << "Inf floatbv not supported on smtlib yet" << std::endl;
-  abort();
-}
-
-smt_astt smtlib_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet mode)
-{
-  std::cerr << "Rounding mode not supported on smtlib yet" << std::endl;
   abort();
 }
 

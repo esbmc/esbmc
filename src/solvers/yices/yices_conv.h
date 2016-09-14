@@ -80,7 +80,7 @@ public:
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
   virtual smt_astt mk_smt_bvfloat(const ieee_floatt &thereal,
-                                  bool sgn, unsigned ew, unsigned sw);
+                                  unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_bool(bool val);

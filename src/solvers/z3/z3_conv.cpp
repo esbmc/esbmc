@@ -669,7 +669,7 @@ z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 
 smt_astt
 z3_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                         bool sgn, unsigned ew, unsigned sw)
+                         unsigned ew, unsigned sw)
 {
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
@@ -698,11 +698,6 @@ smt_astt z3_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
 
   return new_ast(ctx.fpa_inf(sgn, zs->s), s);
-}
-
-smt_astt z3_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet mode __attribute__((unused)))
-{
-  abort();
 }
 
 smt_astt

@@ -427,7 +427,7 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint,
 }
 
 smt_ast* mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                       bool sgn, unsigned ew, unsigned sw)
+                                       unsigned ew, unsigned sw)
 {
   std::cerr << "Floatbv not supported on mathsat yet" << std::endl;
   abort();

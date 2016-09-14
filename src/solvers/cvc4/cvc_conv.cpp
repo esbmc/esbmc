@@ -270,6 +270,11 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
     CVC4::ArrayType t = em.mkArrayType(dom->t, range->t);
     return new cvc_smt_sort(k, t, range->data_width, dom->data_width);
   }
+  case SMT_SORT_FLOATBV:
+  {
+    std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+    abort();
+  }
   default:
     std::cerr << "Unimplemented smt sort " << k << " in CVC mk_sort"
               << std::endl;
@@ -302,21 +307,21 @@ cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 }
 
 smt_ast* cvc_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                   bool sgn, unsigned ew, unsigned sw)
+                                   unsigned ew, unsigned sw)
 {
-  std::cerr << "Floatbv not supported on cvc4 yet" << std::endl;
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
   abort();
 }
 
 smt_astt cvc_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
 {
-  std::cerr << "NaN floatbv not supported on cvc4 yet" << std::endl;
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
   abort();
 }
 
 smt_astt cvc_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  std::cerr << "Inf floatbv not supported on cvc4 yet" << std::endl;
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
   abort();
 }
 

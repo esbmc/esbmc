@@ -368,21 +368,21 @@ yices_convt::mk_smt_bvint(const mp_integer &theint,
 }
 
 smt_astt yices_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                     bool sgn, unsigned ew, unsigned sw)
+                                     unsigned ew, unsigned sw)
 {
-  std::cerr << "Floatbv not supported on yices yet" << std::endl;
+  std::cerr << "Yices can't create floating point sorts" << std::endl;
   abort();
 }
 
 smt_astt yices_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
 {
-  std::cerr << "NaN floatbv not supported on yices yet" << std::endl;
+  std::cerr << "Yices can't create floating point sorts" << std::endl;
   abort();
 }
 
 smt_astt yices_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  std::cerr << "Inf floatbv not supported on yices yet" << std::endl;
+  std::cerr << "Yices can't create floating point sorts" << std::endl;
   abort();
 }
 

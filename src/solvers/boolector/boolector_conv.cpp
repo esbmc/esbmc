@@ -237,7 +237,7 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
     s = new smt_sort(k);
     break;
   case SMT_SORT_FLOATBV:
-    std::cerr << "Boolector does not support floating point encoding mode" << std::endl;
+    std::cerr << "Boolector can't create floating point sorts" << std::endl;
     abort();
   default:
     std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
@@ -263,30 +263,23 @@ boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 
 smt_ast *
 boolector_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                bool sgn, unsigned ew, unsigned sw)
+                                unsigned ew, unsigned sw)
 {
-  std::cerr << "Boolector can't create floatbv sorts" << std::endl;
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
   abort();
 }
 
 smt_astt
 boolector_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
 {
-  std::cerr << "Boolector can't create floatbvs" << std::endl;
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
   abort();
 }
 
 smt_astt
 boolector_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  std::cerr << "Boolector can't create floatbvs" << std::endl;
-  abort();
-}
-
-smt_astt
-boolector_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet mode)
-{
-  std::cerr << "Boolector can't create floatbvs" << std::endl;
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
   abort();
 }
 

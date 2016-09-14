@@ -617,9 +617,11 @@ public:
 
   /** Create a floating point bitvector
    *  @param thereal the ieee float number
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_astt mk_smt_bvfloat(const ieee_floatt &thereal,
-                                  bool sgn, unsigned ew, unsigned sw) = 0;
+                                  unsigned ew, unsigned sw) = 0;
 
   /** Create a NaN floating point bitvector
    *  @param ew Exponent width, in bits, of the bitvector to create.
@@ -633,11 +635,6 @@ public:
    *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw) = 0;
-
-  /** Create a floating point rounding mode
-   *  @param mode the rounding mode (EVEN, +INF, -INF, ZERO)
-   *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet mode) = 0;
 
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.
