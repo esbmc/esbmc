@@ -94,7 +94,7 @@ mathsat_convt::get_bool(const smt_ast *a)
 }
 
 expr2tc
-mathsat_convt::get_bv(const type2tc &_t __attribute__((unused)),
+mathsat_convt::get_bv(const type2tc &_t,
                       const smt_ast *a)
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
@@ -118,6 +118,27 @@ mathsat_convt::get_bv(const type2tc &_t __attribute__((unused)),
   mpz_set(num, mpq_numref(val));
   char buffer[mpz_sizeinbase(num, 10) + 2];
   mpz_get_str(buffer, 10, num);
+
+  std::string value_str = integer2binary(BigInt(buffer), _t->get_width() + 1);
+
+  if(is_floatbv_type(_t))
+  {
+    ieee_float_spect spec(
+      to_floatbv_type(_t).fraction,
+      to_floatbv_type(_t).exponent);
+
+    // We must remove the extra bit before creating the floatbv
+    value_str.erase(to_floatbv_type(_t).exponent + 1, 1);
+
+    constant_exprt value_expr(migrate_type_back(_t));
+    value_expr.set_value(value_str);
+
+    ieee_floatt number(spec);
+    number.unpack(BigInt(buffer));
+
+    return constant_floatbv2tc(_t, number);
+  }
+
   char *foo = buffer;
   int64_t finval = strtoll(buffer, &foo, 10);
 
@@ -143,7 +164,7 @@ mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
   free(tmpast);
 
   mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(elem_sort), t);
-  expr2tc result = get_bv(type2tc(), tmpb);
+  expr2tc result = get_bv(elem_sort, tmpb);
   free(tmpb);
 
   return result;
@@ -176,10 +197,6 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
                              const smt_ast * const *_args,
                              unsigned int numargs)
 {
-  s = s;
-  k = k;
-  numargs = numargs;
-
   const mathsat_smt_ast *args[4];
   unsigned int i;
 
