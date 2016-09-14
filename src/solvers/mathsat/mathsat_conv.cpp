@@ -336,7 +336,16 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_SELECT:
     r = msat_make_array_read(env, args[0]->t, args[1]->t);
     break;
-
+  case SMT_FUNC_ISZERO:
+    r = msat_make_fp_iszero(env, args[0]->t);
+    break;
+  case SMT_FUNC_ISNAN:
+    r = msat_make_fp_isnan(env, args[0]->t);
+    break;
+  case SMT_FUNC_ISINF:
+    r = msat_make_fp_isinf(env, args[0]->t);
+  case SMT_FUNC_ISNORMAL:
+    r = msat_make_fp_isnormal(env, args[0]->t);
   default:
     std::cerr << "Unhandled SMT function \"" << smt_func_name_table[k] << "\" "
               << "in mathsat conversion" << std::endl;
