@@ -380,8 +380,13 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
     thebool = va_arg(ap, int);
-    thebool = thebool;
     return new mathsat_smt_sort(k, msat_get_bv_type(env, uint), uint);
+  case SMT_SORT_FLOATBV:
+  {
+    unsigned ew = va_arg(ap, unsigned long);
+    unsigned sw = va_arg(ap, unsigned long);
+    return new mathsat_smt_sort(k, msat_get_fp_type(env, ew, sw));
+  }
   case SMT_SORT_ARRAY:
   {
     dom = va_arg(ap, const mathsat_smt_sort *);
