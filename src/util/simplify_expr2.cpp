@@ -2194,12 +2194,13 @@ struct IEEE_equalitytor
     {
       // x == x is the same as saying isnan(x)
       auto isnan = expr2tc(new isnan2t(op1));
+      auto is_not_nan = expr2tc(new not2t(isnan));
 
-      auto isnan_simp = isnan->simplify();
-      if(is_nil_expr(isnan_simp))
-        isnan_simp = isnan;
+      auto simp = is_not_nan->simplify();
+      if(is_nil_expr(simp))
+        simp = is_not_nan;
 
-      return isnan_simp;
+      return simp;
     }
 
     return expr2tc();
