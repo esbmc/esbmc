@@ -203,6 +203,8 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     // MathSAT demands we use iff for boolean equivalence.
     if (args[0]->sort->id == SMT_SORT_BOOL)
       r = msat_make_iff(env, args[0]->t, args[1]->t);
+    else if((args[0]->sort->id == SMT_SORT_FLOATBV))
+      r = msat_make_fp_equal(env, args[0]->t, args[1]->t);
     else
       r = msat_make_equal(env, args[0]->t, args[1]->t);
     break;
@@ -257,8 +259,13 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVNOT:
     r = msat_make_bv_not(env, args[0]->t);
     break;
+  case SMT_FUNC_NEG:
   case SMT_FUNC_BVNEG:
-    r = msat_make_bv_neg(env, args[0]->t);
+    if (s->id == SMT_SORT_FLOATBV) {
+      r = msat_make_fp_neg(env, args[0]->t);
+    } else {
+      r = msat_make_bv_neg(env, args[0]->t);
+    }
     break;
   case SMT_FUNC_BVAND:
     r = msat_make_bv_and(env, args[0]->t, args[1]->t);
@@ -319,6 +326,7 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVULT:
     r = msat_make_bv_ult(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_GTE:
   case SMT_FUNC_BVSGTE:
   {
     // This is !SLT
@@ -326,6 +334,7 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     const smt_ast *a = mk_func_app(s, SMT_FUNC_BVSLT, _args, numargs);
     return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
   }
+  case SMT_FUNC_GT:
   case SMT_FUNC_BVSGT:
   {
     // This is !SLTE
@@ -333,11 +342,21 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     const smt_ast *a = mk_func_app(s, SMT_FUNC_BVSLTE, _args, numargs);
     return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
   }
+  case SMT_FUNC_LTE:
   case SMT_FUNC_BVSLTE:
-    r = msat_make_bv_sleq(env, args[0]->t, args[1]->t);
+    if((args[0]->sort->id == SMT_SORT_FLOATBV)
+        && (args[1]->sort->id == SMT_SORT_FLOATBV))
+      r = msat_make_fp_leq(env, args[0]->t, args[1]->t);
+    else
+      r = msat_make_bv_sleq(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_LT:
   case SMT_FUNC_BVSLT:
-    r = msat_make_bv_slt(env, args[0]->t, args[1]->t);
+    if((args[0]->sort->id == SMT_SORT_FLOATBV)
+        && (args[1]->sort->id == SMT_SORT_FLOATBV))
+      r = msat_make_fp_lt(env, args[0]->t, args[1]->t);
+    else
+      r = msat_make_bv_slt(env, args[0]->t, args[1]->t);
     break;
   case SMT_FUNC_STORE:
     r = msat_make_array_write(env, args[0]->t, args[1]->t, args[2]->t);
