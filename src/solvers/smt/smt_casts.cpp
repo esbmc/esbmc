@@ -551,12 +551,6 @@ smt_convt::convert_typecast(const expr2tc &expr)
   }
 
   std::cerr << "Typecast for unexpected type" << std::endl;
-  abort();
-}
-
-smt_astt
-smt_convt::convert_ieee_typecast(const expr2tc &expr)
-{
-  (void) expr;
+  expr->dump();
   abort();
 }

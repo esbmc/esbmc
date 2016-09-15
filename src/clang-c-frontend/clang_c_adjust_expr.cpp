@@ -153,18 +153,6 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   }
   else if(expr.id() == "typecast")
   {
-    // New typecast for and to floatbvs
-    if(expr.op0().type().is_floatbv() || expr.type().is_floatbv())
-    {
-      exprt ieee_typecast("ieee_typecast", expr.type());
-      ieee_typecast.copy_to_operands(expr.op0());
-
-      // Add rounding_mode
-      ieee_typecast.copy_to_operands(
-        symbol_exprt(CPROVER_PREFIX "rounding_mode", int_type()));
-
-      expr.swap(ieee_typecast);
-    }
   }
   else if(expr.id() == "sizeof")
   {

@@ -711,11 +711,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = convert_typecast(expr);
     break;
   }
-  case expr2t::ieee_typecast_id:
-  {
-    a = convert_ieee_typecast(expr);
-    break;
-  }
   case expr2t::if_id:
   {
     // Only attempt to handle struct.s

@@ -696,26 +696,21 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(new_expr);
   } else if (expr.id() == exprt::typecast) {
     assert(expr.op0().id_string() != "");
-    expr2tc old_expr;
-
-    migrate_type(expr.type(), type);
-
-    migrate_expr(expr.op0(), old_expr);
-
-    typecast2t *t = new typecast2t(type, old_expr);
-    new_expr_ref = expr2tc(t);
-  } else if (expr.id() == "ieee_typecast") {
-    assert(expr.op0().id_string() != "");
-
     migrate_type(expr.type(), type);
 
     expr2tc old_expr;
     migrate_expr(expr.op0(), old_expr);
 
-    expr2tc rounding_mode;
-    migrate_expr(expr.op1(), rounding_mode);
+    // Default to rounding mode symbol
+    expr2tc rounding_mode =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
 
-    ieee_typecast2t *t = new ieee_typecast2t(type, old_expr, rounding_mode);
+    // If it's no nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rounding_mode);
+
+    typecast2t *t = new typecast2t(type, old_expr, rounding_mode);
     new_expr_ref = expr2tc(t);
   } else if (expr.id() == typet::t_struct) {
     migrate_type(expr.type(), type);
@@ -1839,18 +1834,10 @@ migrate_expr_back(const expr2tc &ref)
   {
     const typecast2t &ref2 = to_typecast2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    return typecast_exprt(migrate_expr_back(ref2.from), thetype);
-  }
-  case expr2t::ieee_typecast_id:
-  {
-    const ieee_typecast2t &ref2 = to_ieee_typecast2t(ref);
-    typet thetype = migrate_type_back(ref->type);
 
-    exprt ieee_typecast("ieee_typecast", thetype);
-    ieee_typecast.copy_to_operands(migrate_expr_back(ref2.from));
-    ieee_typecast.copy_to_operands(migrate_expr_back(ref2.rounding_mode));
-
-    return ieee_typecast;
+    typecast_exprt new_expr(migrate_expr_back(ref2.from), thetype);
+    new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return new_expr;
   }
   case expr2t::if_id:
   {

@@ -656,19 +656,6 @@ void c_typecheck_baset::typecheck_expr_typecast(exprt &expr)
     if(expr_type.id()=="pointer")
       expr.cmt_lvalue(true);
   }
-
-  // New typecast for and to floatbvs
-  if(expr.op0().type().is_floatbv() || expr.type().is_floatbv())
-  {
-    exprt ieee_typecast("ieee_typecast", expr.type());
-    ieee_typecast.copy_to_operands(expr.op0());
-
-    // Add rounding_mode
-    ieee_typecast.copy_to_operands(
-      symbol_exprt(CPROVER_PREFIX "rounding_mode", int_type()));
-
-    expr.swap(ieee_typecast);
-  }
 }
 
 /*******************************************************************\
