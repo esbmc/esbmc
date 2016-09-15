@@ -5,6 +5,7 @@
 #include <base_type.h>
 #include <arith_tools.h>
 #include <c_types.h>
+#include <expr_util.h>
 
 #include "smt_conv.h"
 #include <solvers/prop/literal.h>
@@ -1526,18 +1527,12 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
   smt_sortt bs = boolean_sort;
   smt_astt operand = convert_ast(signbit.value);
 
-  if(int_encoding)
-  {
-    smt_astt asint = round_real_to_int(operand);
-    smt_astt zero = mk_smt_int(BigInt(0), false);
-    smt_astt gte = mk_func_app(bs, SMT_FUNC_GTE, asint, zero);
-    return mk_func_app(bs, SMT_FUNC_ITE, gte, mk_smt_bool(true), mk_smt_bool(false));
-  }
+  expr2tc zero_expr;
+  migrate_expr(gen_zero(migrate_type_back(signbit.value->type)), zero_expr);
 
-  unsigned int topbit = signbit.value->type->get_width();
-
-  smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
-  return mk_extract(operand, topbit-1, topbit-1, bit);
+  smt_astt zero = convert_ast(zero_expr);
+  smt_astt gte = mk_func_app(bs, SMT_FUNC_GTE, operand, zero);
+  return mk_func_app(bs, SMT_FUNC_ITE, gte, mk_smt_bool(true), mk_smt_bool(false));
 }
 
 smt_astt
