@@ -1323,25 +1323,28 @@ typecast2t::do_simplify(bool second) const
     // Typecast to same type means this can be eliminated entirely
     return from;
   }
-  else if (is_constant_expr(from))
+
+  auto simp = try_simplification(from);
+
+  if (is_constant_expr(simp))
   {
     // Casts from constant operands can be done here.
-    if (is_bool_type(from) && is_number_type(type))
+    if (is_bool_type(simp) && is_number_type(type))
     {
       if(is_bv_type(type))
       {
         // bool to int
         return expr2tc(
-          new constant_int2t(type, BigInt(to_constant_bool2t(from).value)));
+          new constant_int2t(type, BigInt(to_constant_bool2t(simp).value)));
       }
       else if(is_fixedbv_type(type))
       {
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
-        fbv.from_integer(to_constant_bool2t(from).value);
+        fbv.from_integer(to_constant_bool2t(simp).value);
         return expr2tc(new constant_fixedbv2t(type, fbv));
       }
-      else if(is_floatbv_type(from))
+      else if(is_floatbv_type(simp))
       {
         if(!is_constant_int2t(rounding_mode))
           return expr2tc();
@@ -1351,16 +1354,16 @@ typecast2t::do_simplify(bool second) const
         mp_integer rm_value = to_constant_int2t(rounding_mode).value;
         fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
-        fpbv.from_expr(to_constant_floatbv2t(from).value.to_expr());
+        fpbv.from_expr(to_constant_floatbv2t(simp).value.to_expr());
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
 
         return expr2tc(new constant_floatbv2t(type, fpbv));
       }
     }
-    else if (is_bv_type(from) && is_number_type(type))
+    else if (is_bv_type(simp) && is_number_type(type))
     {
       // int to int/float/double
-      const constant_int2t &theint = to_constant_int2t(from);
+      const constant_int2t &theint = to_constant_int2t(simp);
 
       if(is_bv_type(type))
       {
@@ -1384,7 +1387,7 @@ typecast2t::do_simplify(bool second) const
       }
       else if(is_bool_type(type))
       {
-        const constant_int2t &theint = to_constant_int2t(from);
+        const constant_int2t &theint = to_constant_int2t(simp);
         return theint.value.is_zero() ? false_expr : true_expr;
       }
       else if(is_floatbv_type(type))
@@ -1398,15 +1401,15 @@ typecast2t::do_simplify(bool second) const
         fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
 
         fpbv.spec = to_floatbv_type(migrate_type_back(type));
-        fpbv.from_integer(to_constant_int2t(from).value);
+        fpbv.from_integer(to_constant_int2t(simp).value);
 
         return expr2tc(new constant_floatbv2t(type, fpbv));
       }
     }
-    else if (is_fixedbv_type(from) && is_number_type(type))
+    else if (is_fixedbv_type(simp) && is_number_type(type))
     {
       // float/double to int/float/double
-      fixedbvt fbv(to_constant_fixedbv2t(from).value);
+      fixedbvt fbv(to_constant_fixedbv2t(simp).value);
 
       if(is_bv_type(type))
       {
@@ -1419,17 +1422,17 @@ typecast2t::do_simplify(bool second) const
       }
       else if(is_bool_type(type))
       {
-        const constant_fixedbv2t &fbv = to_constant_fixedbv2t(from);
+        const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
         return fbv.value.is_zero() ? false_expr : true_expr;
       }
     }
-    else if (is_floatbv_type(from) && is_number_type(type))
+    else if (is_floatbv_type(simp) && is_number_type(type))
     {
       // float/double to int/float/double
       if(!is_constant_int2t(rounding_mode))
         return expr2tc();
 
-      ieee_floatt fpbv(to_constant_floatbv2t(from).value);
+      ieee_floatt fpbv(to_constant_floatbv2t(simp).value);
 
       mp_integer rm_value = to_constant_int2t(rounding_mode).value;
       fpbv.rounding_mode = ieee_floatt::rounding_modet(rm_value.to_int64());
@@ -1452,31 +1455,31 @@ typecast2t::do_simplify(bool second) const
   else if (is_bool_type(type))
   {
     // Bool type -> turn into equality with zero
-    exprt zero = gen_zero(migrate_type_back(from->type));
+    exprt zero = gen_zero(migrate_type_back(simp->type));
 
     expr2tc zero2;
     migrate_expr(zero, zero2);
 
-    expr2tc eq = expr2tc(new equality2t(from, zero2));
+    expr2tc eq = expr2tc(new equality2t(simp, zero2));
     expr2tc noteq = expr2tc(new not2t(eq));
     return noteq;
   }
-  else if (is_symbol2t(from)
-           && to_symbol2t(from).thename == "NULL"
+  else if (is_symbol2t(simp)
+           && to_symbol2t(simp).thename == "NULL"
            && is_pointer_type(type))
   {
     // Casts of null can operate on null directly. So long as we're casting it
     // to a pointer. Code like 32_floppy casts it to an int though; were we to
     // simplify that away, we end up with type errors.
-    return from;
+    return simp;
   }
-  else if (is_pointer_type(type) && is_pointer_type(from))
+  else if (is_pointer_type(type) && is_pointer_type(simp))
   {
     // Casting from one pointer to another is meaningless... except when there's
     // pointer arithmetic about to be applied to it. So, only remove typecasts
     // that don't change the subtype width.
     const pointer_type2t &ptr_to = to_pointer_type(type);
-    const pointer_type2t &ptr_from = to_pointer_type(from->type);
+    const pointer_type2t &ptr_from = to_pointer_type(simp->type);
 
     if (is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype) ||
         is_code_type(ptr_to.subtype) || is_code_type(ptr_from.subtype))
@@ -1497,7 +1500,7 @@ typecast2t::do_simplify(bool second) const
                               : ptr_from.subtype->get_width();
 
       if (to_width == from_width)
-        return from;
+        return simp;
       else
         return expr2tc();
     } catch (array_type2t::dyn_sized_array_excp*e) {
@@ -1506,30 +1509,30 @@ typecast2t::do_simplify(bool second) const
       return expr2tc();
     }
   }
-  else if (is_typecast2t(from) && type == from->type)
+  else if (is_typecast2t(simp) && type == simp->type)
   {
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
-    return expr2tc(new typecast2t(type, to_typecast2t(from).from));
+    return expr2tc(new typecast2t(type, to_typecast2t(simp).from));
   }
   else if (second
            && is_bv_type(type)
-           && is_bv_type(from)
-           && is_arith_type(from)
-           && (from->type->get_width() <= type->get_width()))
+           && is_bv_type(simp)
+           && is_arith_type(simp)
+           && (simp->type->get_width() <= type->get_width()))
   {
     // So, if this is an integer type, performing an integer arith operation,
     // and the type we're casting to isn't _supposed_ to result in a loss of
     // information, push the cast downwards.
     std::list<expr2tc> set2;
-    from->foreach_operand([&set2, this] (const expr2tc &e)
+    simp->foreach_operand([&set2, this] (const expr2tc &e)
     {
       expr2tc cast = expr2tc(new typecast2t(type, e));
       set2.push_back(cast);
     });
 
     // Now clone the expression and update its operands.
-    expr2tc newobj = expr2tc(from->clone());
+    expr2tc newobj = expr2tc(simp->clone());
     newobj.get()->type = type;
 
     std::list<expr2tc>::const_iterator it2 = set2.begin();
@@ -1541,11 +1544,7 @@ typecast2t::do_simplify(bool second) const
 
     // Caller won't simplify us further if it's called us with second=true, so
     // give simplification another shot ourselves.
-    expr2tc tmp = newobj->simplify();
-    if (is_nil_expr(tmp))
-      return newobj;
-    else
-      return tmp;
+    return try_simplification(newobj);
   }
 
   return expr2tc();
@@ -1568,10 +1567,7 @@ address_of2t::do_simplify(bool second __attribute__((unused))) const
         to_constant_int2t(idx.index).value.is_zero())
       return expr2tc();
 
-    expr2tc new_index = idx.index->simplify();
-    if (is_nil_expr(new_index))
-      new_index = idx.index;
-
+    expr2tc new_index = try_simplification(idx.index);
     expr2tc zero = expr2tc(new constant_int2t(index_type2(), BigInt(0)));
     expr2tc new_idx = expr2tc(new index2t(idx.type, idx.source_value, zero));
     expr2tc sub_addr_of = expr2tc(new address_of2t(ptr_type.subtype, new_idx));
@@ -2169,12 +2165,7 @@ struct IEEE_equalitytor
       // x == x is the same as saying isnan(x)
       auto isnan = expr2tc(new isnan2t(op1));
       auto is_not_nan = expr2tc(new not2t(isnan));
-
-      auto simp = is_not_nan->simplify();
-      if(is_nil_expr(simp))
-        simp = is_not_nan;
-
-      return simp;
+      return try_simplification(is_not_nan);
     }
 
     return expr2tc();
