@@ -674,10 +674,10 @@ z3_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
 
+  bool sgn = thereal.get_sign();
   const mp_integer sig = thereal.get_fraction();
 
-  // If the number is denormal, we set the exponent to 0,
-  // which is equivalent to -bias()
+  // If the number is denormal, we set the exponent to -bias
   const mp_integer exp = thereal.is_normal() ?
     thereal.get_exponent() : -thereal.spec.bias();
 
@@ -1066,27 +1066,16 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
     unsigned sw = Z3_fpa_get_sbits(z3_ctx, e.get_sort()) - 1;
 
     ieee_float_spect spec(sw, ew);
-
-    int sgn = 0;
-    Z3_fpa_get_numeral_sign(z3_ctx, e, &sgn);
-
-    long long unsigned int sig = 0;
-    Z3_fpa_get_numeral_significand_uint64(z3_ctx, e, &sig);
-
-    long long int exp = 0;
-    Z3_fpa_get_numeral_exponent_int64(z3_ctx, e, &exp);
-
-    std::string value_str = (sgn > 0) ? "1" : "0";
-    value_str += integer2binary(exp + spec.bias().to_int64(), ew);
-    value_str += integer2binary(sig, sw);
-
-    constant_exprt value_expr(spec.to_type());
-    value_expr.set_value(value_str);
-
     ieee_floatt value(spec);
-    value.from_expr(value_expr);
 
-    return constant_floatbv2tc(t, value);
+    Z3_ast v;
+    if(Z3_model_eval(z3_ctx, model, Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
+    {
+      ieee_floatt number(spec);
+      number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
+
+      return constant_floatbv2tc(t, number);
+    }
   }
 
   return expr2tc();
