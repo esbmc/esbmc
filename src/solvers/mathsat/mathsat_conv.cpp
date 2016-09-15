@@ -119,19 +119,11 @@ mathsat_convt::get_bv(const type2tc &_t,
   char buffer[mpz_sizeinbase(num, 10) + 2];
   mpz_get_str(buffer, 10, num);
 
-  std::string value_str = integer2binary(BigInt(buffer), _t->get_width() + 1);
-
   if(is_floatbv_type(_t))
   {
     ieee_float_spect spec(
       to_floatbv_type(_t).fraction,
       to_floatbv_type(_t).exponent);
-
-    // We must remove the extra bit before creating the floatbv
-    value_str.erase(to_floatbv_type(_t).exponent + 1, 1);
-
-    constant_exprt value_expr(migrate_type_back(_t));
-    value_expr.set_value(value_str);
 
     ieee_floatt number(spec);
     number.unpack(BigInt(buffer));
