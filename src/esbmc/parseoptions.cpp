@@ -43,7 +43,8 @@ extern "C" {
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_k_induction.h>
-
+#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_unreachable.h>
 #include <goto-programs/add_race_assertions.h>
 
 #include <pointer-analysis/value_set_analysis.h>
@@ -1667,6 +1668,16 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
+
+    // remove skips
+    remove_skip(goto_functions);
+
+    // remove unreachable code
+    Forall_goto_functions(f_it, goto_functions)
+      remove_unreachable(f_it->second.body);
+
+    // remove skips
+    remove_skip(goto_functions);
 
     // recalculate numbers, etc.
     goto_functions.update();
