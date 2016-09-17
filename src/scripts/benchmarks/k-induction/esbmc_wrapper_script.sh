@@ -15,8 +15,8 @@ dirname=$1
 filename=$1
 
 # Options we might run with.
-NORMALOPTS=" --unwind 6 --no-unwinding-assertions --64 --no-assertions -D_Bool=int --no-bounds-check --no-pointer-check --no-div-by-zero-check --error-label ERROR -DLDV_ERROR=ERROR -Dassert=notassert --quiet --context-switch 3 --state-hashing --no-assertions"
-MEMSAFETYOPTS=" --unwind 6 --no-unwinding-assertions --64 --no-assertions -D_Bool=int --memory-leak-check -DLDV_ERROR=ERROR -Dassert=notassert --quiet --context-switch 3 --state-hashing"
+NORMALOPTS=" --unwind 6 --no-unwinding-assertions --64 --no-assertions -D_Bool=int --no-bounds-check --no-pointer-check --no-div-by-zero-check --error-label ERROR -DLDV_ERROR=ERROR -Dassert=notassert --quiet --context-bound 3 --state-hashing --no-assertions"
+MEMSAFETYOPTS=" --unwind 6 --no-unwinding-assertions --64 --no-assertions -D_Bool=int --memory-leak-check -DLDV_ERROR=ERROR -Dassert=notassert --quiet --context-bound 3 --state-hashing"
 
 # There are two modes we might run in: Normal, and memsafety. The first is just
 # a general set of options that work well for all testcases, the second is
@@ -84,21 +84,21 @@ timeout=$?
 if test $timeout = 0; then
    echo "TIMEOUT"
 elif test $failed = 0; then
-    # Error path found    
-    IS_PARALLEL_K_INDUCTION=$(echo $global_cmd_line | grep -o "k-induction-parallel" | wc -l )    
+    # Error path found
+    IS_PARALLEL_K_INDUCTION=$(echo $global_cmd_line | grep -o "k-induction-parallel" | wc -l )
     if [ $IS_PARALLEL_K_INDUCTION -eq 1 ]; then
 	RESULT=$(tac ${TMPFILE} | head -n2 );
 	TYPE=$(echo $(echo $RESULT | sed -e "s:VERIFICATION FAILED Solution found by the ::"))
     else
-        TYPE=$(grep -G "\*\*\* Checking" ${TMPFILE} | tac | head -n1 | tr '[:upper:]' '[:lower:]' | sed -e "s:\*\*\* checking ::")     
+        TYPE=$(grep -G "\*\*\* Checking" ${TMPFILE} | tac | head -n1 | tr '[:upper:]' '[:lower:]' | sed -e "s:\*\*\* checking ::")
     fi
     if [ -z "$TYPE"  ]; then
        TYPE="BMC"
-    fi    
-    echo "FALSE - $TYPE"    
+    fi
+    echo "FALSE - $TYPE"
     echo "Counterexample is in ${TMPFILE}"
-elif test $success = 0; then    
-    IS_PARALLEL_K_INDUCTION=$(echo $global_cmd_line | grep -o "k-induction-parallel" | wc -l )    
+elif test $success = 0; then
+    IS_PARALLEL_K_INDUCTION=$(echo $global_cmd_line | grep -o "k-induction-parallel" | wc -l )
     if [ $IS_PARALLEL_K_INDUCTION -eq 1 ]; then
 	RESULT=$(tac ${TMPFILE} | head -n2 );
 	TYPE=$(echo $(echo $RESULT | sed -e "s:VERIFICATION SUCCESSFUL Solution found by the ::"))
@@ -114,4 +114,3 @@ elif test $success = 0; then
 else
     echo "UNKNOWN"
 fi
-
