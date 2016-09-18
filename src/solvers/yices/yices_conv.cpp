@@ -386,6 +386,12 @@ smt_astt yices_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
   abort();
 }
 
+smt_astt yices_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+{
+  std::cerr << "Yices can't create floating point sorts" << std::endl;
+  abort();
+}
+
 smt_astt
 yices_convt::mk_smt_bool(bool val)
 {

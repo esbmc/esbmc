@@ -700,6 +700,12 @@ smt_astt z3_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
   return new_ast(ctx.fpa_inf(sgn, zs->s), s);
 }
 
+smt_astt z3_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+{
+  (void) rm;
+  abort();
+}
+
 smt_astt
 z3_convt::mk_smt_bool(bool val)
 {

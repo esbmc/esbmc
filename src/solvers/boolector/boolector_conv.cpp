@@ -283,6 +283,12 @@ boolector_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
   abort();
 }
 
+smt_astt boolector_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
+  abort();
+}
+
 smt_ast *
 boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
                               unsigned int w)

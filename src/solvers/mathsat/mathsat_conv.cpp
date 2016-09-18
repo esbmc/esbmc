@@ -512,6 +512,12 @@ smt_astt mathsat_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
   return new mathsat_smt_ast(this, s, t);
 }
 
+smt_astt mathsat_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+{
+  (void) rm;
+  abort();
+}
+
 smt_ast *
 mathsat_convt::mk_smt_bool(bool val)
 {

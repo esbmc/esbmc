@@ -733,19 +733,25 @@ smt_ast *
 smtlib_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
                              unsigned ew, unsigned sw)
 {
-  std::cerr << "Floatbv not supported on smtlib yet" << std::endl;
+  std::cerr << "Can't create floating points on smtlib yet" << std::endl;
   abort();
 }
 
 smt_astt smtlib_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
 {
-  std::cerr << "NaN floatbv not supported on smtlib yet" << std::endl;
+  std::cerr << "Can't create NaNs on smtlib yet" << std::endl;
   abort();
 }
 
 smt_astt smtlib_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
 {
-  std::cerr << "Inf floatbv not supported on smtlib yet" << std::endl;
+  std::cerr << "Can't create Infs on smtlib yet" << std::endl;
+  abort();
+}
+
+smt_astt smtlib_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+{
+  std::cerr << "Can't create rounding modes on smtlib yet" << std::endl;
   abort();
 }
 
