@@ -7,7 +7,7 @@ path_to_esbmc=esbmc
 global_cmd_line="--k-induction-parallel --k-step 100 --error-label ERROR --boolector"
 # The simple memory model command line is the global, without all the
 # safety checks.
-memory_cmd_line="--no-unwinding-assertions --64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --quiet --context-switch 3 --state-hashing"
+memory_cmd_line="--no-unwinding-assertions --64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --quiet --context-bound 3 --state-hashing"
 
 # The '-D' options are a series of workarounds for some problems encountered:
 #  -DLDV_ERROR=ERROR  maps the error label in the 'regression' dir to 'ERROR',
@@ -84,8 +84,8 @@ timeout=$?
 # counterexample, then there's an error.
 if test $failed = 0; then
     # Error path found
-    
-    IS_PARALLEL_K_INDUCTION=$(echo $global_cmd_line | grep -o "k-induction-parallel" | wc -l )    
+
+    IS_PARALLEL_K_INDUCTION=$(echo $global_cmd_line | grep -o "k-induction-parallel" | wc -l )
     if [ $IS_PARALLEL_K_INDUCTION -eq 1 ]; then
 	RESULT=$(tac ${TMPFILE} | head -n2 );
 	TYPE=$(echo $(echo $RESULT | sed -e "s:VERIFICATION FAILED Solution found by the ::"))
@@ -94,11 +94,11 @@ if test $failed = 0; then
         TYPE=$(grep -G "\*\*\* Checking" ${TMPFILE} | tac | head -n1 | tr '[:upper:]' '[:lower:]' | sed -e "s:\*\*\* checking ::")
         echo "FALSE - $TYPE"
     fi
-   
+
     echo "Counterexample is in ${TMPFILE}"
 elif test $success = 0; then
-    
-    IS_PARALLEL_K_INDUCTION=$(echo $global_cmd_line | grep -o "k-induction-parallel" | wc -l )    
+
+    IS_PARALLEL_K_INDUCTION=$(echo $global_cmd_line | grep -o "k-induction-parallel" | wc -l )
     if [ $IS_PARALLEL_K_INDUCTION -eq 1 ]; then
 	RESULT=$(tac ${TMPFILE} | head -n2 );
 	TYPE=$(echo $(echo $RESULT | sed -e "s:VERIFICATION SUCCESSFUL Solution found by the ::"))

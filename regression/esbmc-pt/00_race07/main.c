@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <assert.h>
 
 #define USAGE "./reorder <param1> <param2>\n"
 
@@ -75,6 +76,7 @@ void *setThread(void *param) {
 void *checkThread(void *param) {
     if (! ((a == 0 && b == 0) || (a == 1 && b == -1))) {
         fprintf(stderr, "Bug found!\n");
+	assert(0);
         exit(-1);
     }
 

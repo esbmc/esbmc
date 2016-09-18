@@ -100,7 +100,7 @@ What follows is a short description of each command line option to ESBMC that
 exists. All are prefixed with \url{--} when given. Some information is also
 available by running \url{esbmc --help}.
 
-\begin{longtable}{| p{.20\textwidth} | p{.80\textwidth} |} 
+\begin{longtable}{| p{.20\textwidth} | p{.80\textwidth} |}
 \hline
 Option & Description\\
 \hline
@@ -187,7 +187,7 @@ show-claims & Print a list of all assertions in the program.\\
 \hline
 claim & Takes integer argument identifying what assertion to check in the
 program, from the list in show-claims. Disables all other assertions. Specify
-the claim option multiple times to check multiple claims.\\ 
+the claim option multiple times to check multiple claims.\\
 \hline
 atomicity-check & During multithreaded exploration, verify that expressions
 are executed atomically. Rewrites assignments to check that the variables on the
@@ -214,7 +214,7 @@ outfile option, in QF\_AUFBV logic.\\
 qf\_auflira & Print the SMT formula for the program to the file given in the
 outfile option, in QF\_AUFLIRA logic.\\
 \hline
-context-switch & Takes one integer parameter. Specifies the number of thread
+context-bound & Takes one integer parameter. Specifies the number of thread
 context switches allowed during exploration. Defaults to infinite.\\
 \hline
 time-slice & How many time slice to permit during round-robin scheduling.\\
@@ -540,7 +540,7 @@ The static analysis is initiated from the GOTO program processing code in the
 \url{cbmc_parseoptionst} object. The high level analysis logic actually
 lies in the \url{goto-programs} directory with the
 \url{static_analysist} and \url{abstract_domain_baset}
-classes. Code in these classes call abstract methods to perform transformations 
+classes. Code in these classes call abstract methods to perform transformations
 between states as appropriate, over all GOTO instructions, to find a fixedpoint
 where all values of the abstract domain have been discovered for all states.
 
@@ -558,7 +558,7 @@ where a string identifying a variable name maps to a
 \url{value_sett::entryt}, which stores a set of variables that may be
 pointed at and the offset into them.
 
-The string key of each of these entries is important -- When interpreting 
+The string key of each of these entries is important -- When interpreting
 an assignment of a pointer value to a variable, we take the original variable
 name being worked on and then interpret the left hand side, appending strings
 to indicate /what/ part of the variable is being assigned to. To illustrate,

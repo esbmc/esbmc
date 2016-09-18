@@ -1,5 +1,3 @@
 main.c
---data-races-check --context-switch 3
+--data-races-check --context-bound 3
 ^VERIFICATION SUCCESSFUL$
---
-^VERIFICATION FAILURE$

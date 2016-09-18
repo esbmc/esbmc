@@ -1,10 +1,11 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 #include "account.h"
 
 
-#define ACCTS 1
+#define ACCTS 5
 
 static Account *accounts[ACCTS];
 
