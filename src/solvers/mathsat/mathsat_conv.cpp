@@ -516,8 +516,28 @@ smt_astt mathsat_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
 
 smt_astt mathsat_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
 {
-  (void) rm;
-  abort();
+  msat_term t;
+  switch(rm)
+  {
+    case ieee_floatt::ROUND_TO_EVEN:
+      t = msat_make_fp_roundingmode_nearest_even(env);
+      break;
+    case ieee_floatt::ROUND_TO_MINUS_INF:
+      t = msat_make_fp_roundingmode_minus_inf(env);
+      break;
+    case ieee_floatt::ROUND_TO_PLUS_INF:
+      t = msat_make_fp_roundingmode_plus_inf(env);
+      break;
+    case ieee_floatt::ROUND_TO_ZERO:
+      t = msat_make_fp_roundingmode_zero(env);
+      break;
+    default:
+      abort();
+  }
+  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat fp rounding mode term");
+
+  smt_sort *s = mk_sort(SMT_SORT_FLOATBV_RM);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_ast *
