@@ -301,6 +301,12 @@ smt_astt boolector_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
   abort();
 }
 
+smt_astt boolector_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
+  abort();
+}
+
 smt_ast *
 boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
                               unsigned int w)

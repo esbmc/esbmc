@@ -820,6 +820,12 @@ smt_astt z3_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
   return new_ast(z3::expr(ctx, r), s);
 }
 
+smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
+{
+  (void) expr;
+  abort();
+}
+
 smt_astt
 z3_convt::mk_smt_bool(bool val)
 {

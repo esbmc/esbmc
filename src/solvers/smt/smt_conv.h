@@ -657,6 +657,11 @@ public:
    *  @return The newly created cast smt_ast. */
   virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast) = 0;
 
+  /** Convert the ieee arithmetic operations (add, sub, mul, div, mod)
+   *  @param expr the arithmetic operations
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr) = 0;
+
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.
    *  @return The newly created terminal smt_ast of this boolean. */

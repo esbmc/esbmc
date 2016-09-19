@@ -767,6 +767,12 @@ smt_astt smtlib_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
   abort();
 }
 
+smt_astt smtlib_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
+{
+  std::cerr << "Can't create floating point arith op on smtlib yet" << std::endl;
+  abort();
+}
+
 smt_ast *
 smtlib_convt::mk_smt_bool(bool val)
 {
