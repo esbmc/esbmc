@@ -542,14 +542,57 @@ smt_astt mathsat_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
 
 smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 {
-  (void) cast;
-  abort();
+  smt_astt rm = convert_rounding_mode(cast.rounding_mode);
+  const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
+
+  smt_astt from = convert_ast(cast.from);
+  const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
+
+  msat_term t;
+  smt_sort *s;
+  if(is_bool_type(cast.type)) {
+    s = mk_sort(SMT_SORT_BOOL);
+    t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, t);
+  } else if(is_bv_type(cast.type)) {
+    s = mk_sort(SMT_SORT_BV);
+    t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, t);
+  } else if(is_floatbv_type(cast.type)) {
+    unsigned ew = to_floatbv_type(cast.type).exponent;
+    unsigned sw = to_floatbv_type(cast.type).fraction;
+
+    s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+    t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
+  }
+
+  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat cast fp term");
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
 {
-  (void) cast;
-  abort();
+  smt_astt rm = convert_rounding_mode(cast.rounding_mode);
+  const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
+
+  smt_astt from = convert_ast(cast.from);
+  const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
+
+  unsigned ew = to_floatbv_type(cast.type).exponent;
+  unsigned sw = to_floatbv_type(cast.type).fraction;
+  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+
+  msat_term t;
+  if(is_bool_type(cast.from)) {
+    t = msat_make_fp_from_ubv(env, ew, sw, mrm->t, mfrom->t);
+  } else if(is_unsignedbv_type(cast.from)) {
+    t = msat_make_fp_from_ubv(env, ew, sw, mrm->t, mfrom->t);
+  } else if(is_signedbv_type(cast.from)) {
+    t = msat_make_fp_from_sbv(env, ew, sw, mrm->t, mfrom->t);
+  } else if(is_floatbv_type(cast.from)) {
+    t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
+  }
+
+  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat cast fp term");
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_ast *
