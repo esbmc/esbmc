@@ -1573,8 +1573,6 @@ smt_convt::convert_ieee_equal(const expr2tc &expr)
 
 smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
 {
-  expr->dump();
-
   // Easy case, we know the rounding mode
   if(is_constant_int2t(expr))
   {
