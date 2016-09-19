@@ -672,16 +672,22 @@ z3_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
                          unsigned ew, unsigned sw)
 {
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
-  const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
 
-  bool sgn = thereal.get_sign();
   const mp_integer sig = thereal.get_fraction();
 
   // If the number is denormal, we set the exponent to -bias
   const mp_integer exp = thereal.is_normal() ?
-    thereal.get_exponent() : -thereal.spec.bias();
+    thereal.get_exponent() + thereal.spec.bias() : 0;
 
-  return new_ast(ctx.fpa_val(sgn, exp.to_int64(), sig.to_uint64(), zs->s), s);
+  smt_astt sgn_bv = mk_smt_bvint(BigInt(thereal.get_sign()), false, 1);
+  smt_astt exp_bv = mk_smt_bvint(exp, false, ew);
+  smt_astt sig_bv = mk_smt_bvint(sig, false, sw);
+
+  return new_ast(
+    ctx.fpa_val(
+      z3_smt_downcast(sgn_bv)->e,
+      z3_smt_downcast(exp_bv)->e,
+      z3_smt_downcast(sig_bv)->e), s);
 }
 
 smt_astt z3_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
