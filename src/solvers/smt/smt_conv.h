@@ -643,9 +643,19 @@ public:
   virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw) = 0;
 
   /** Create a rounding mode to be used by floating point cast and arith ops
-   *  @param rm the kind of rounding mdoe
+   *  @param rm the kind of rounding mode
    *  @return The newly created rounding mode smt_ast. */
   virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm) = 0;
+
+  /** Typecast from a floating point
+   *  @param cast the cast expression
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast) = 0;
+
+  /** Typecast to a floating point
+   *  @param cast the cast expression
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast) = 0;
 
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.

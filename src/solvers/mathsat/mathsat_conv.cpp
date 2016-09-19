@@ -540,6 +540,18 @@ smt_astt mathsat_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
   return new mathsat_smt_ast(this, s, t);
 }
 
+smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
+{
+  (void) cast;
+  abort();
+}
+
+smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
+{
+  (void) cast;
+  abort();
+}
+
 smt_ast *
 mathsat_convt::mk_smt_bool(bool val)
 {

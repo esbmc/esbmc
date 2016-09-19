@@ -392,6 +392,18 @@ smt_astt yices_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
   abort();
 }
 
+smt_astt yices_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
+{
+  std::cerr << "Yices can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt yices_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
+{
+  std::cerr << "Yices can't create floating point sorts" << std::endl;
+  abort();
+}
+
 smt_astt
 yices_convt::mk_smt_bool(bool val)
 {

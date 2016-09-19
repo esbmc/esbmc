@@ -755,6 +755,18 @@ smt_astt smtlib_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
   abort();
 }
 
+smt_astt smtlib_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
+{
+  std::cerr << "Can't cast floating point on smtlib yet" << std::endl;
+  abort();
+}
+
+smt_astt smtlib_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
+{
+  std::cerr << "Can't cast floating point on smtlib yet" << std::endl;
+  abort();
+}
+
 smt_ast *
 smtlib_convt::mk_smt_bool(bool val)
 {

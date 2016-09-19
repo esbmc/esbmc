@@ -169,6 +169,8 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
     return convert_typecast_to_ints_from_fbv_sint(cast);
   } else if (is_unsignedbv_type(cast.from)) {
     return convert_typecast_to_ints_from_unsigned(cast);
+  } else if (is_floatbv_type(cast.from)) {
+    return mk_smt_typecast_from_bvfloat(cast);
   } else if (is_bool_type(cast.from)) {
     return convert_typecast_to_ints_from_bool(cast);
   }
@@ -539,6 +541,8 @@ smt_convt::convert_typecast(const expr2tc &expr)
     return convert_typecast_to_fixedbv_nonint(expr);
   } else if (is_bv_type(cast.type) || is_fixedbv_type(cast.type)) {
     return convert_typecast_to_ints(cast);
+  } else if (is_floatbv_type(cast.type)) {
+    return mk_smt_typecast_to_bvfloat(cast);
   } else if (is_struct_type(cast.type)) {
     return convert_typecast_to_struct(cast);
   } else if (is_union_type(cast.type)) {
