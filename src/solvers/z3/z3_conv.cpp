@@ -708,27 +708,28 @@ smt_astt z3_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
 
 smt_astt z3_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
 {
-  Z3_ast r;
+  smt_sort *s = mk_sort(SMT_SORT_FLOATBV_RM);
+
+  Z3_ast rm_kind;
   switch(rm)
   {
     case ieee_floatt::ROUND_TO_EVEN:
-      r = Z3_mk_fpa_round_nearest_ties_to_even(z3_ctx);
+      rm_kind = Z3_mk_fpa_round_nearest_ties_to_even(ctx);
       break;
     case ieee_floatt::ROUND_TO_MINUS_INF:
-      r = Z3_mk_fpa_round_toward_negative(z3_ctx);
+      rm_kind = Z3_mk_fpa_round_toward_negative(ctx);
       break;
     case ieee_floatt::ROUND_TO_PLUS_INF:
-      r = Z3_mk_fpa_round_toward_positive(z3_ctx);
+      rm_kind = Z3_mk_fpa_round_toward_positive(ctx);
       break;
     case ieee_floatt::ROUND_TO_ZERO:
-      r = Z3_mk_fpa_round_toward_zero(z3_ctx);
+      rm_kind = Z3_mk_fpa_round_toward_zero(ctx);
       break;
     default:
       abort();
   }
 
-  smt_sort *s = mk_sort(SMT_SORT_FLOATBV_RM);
-  return new_ast(z3::expr(ctx, r), s);
+  return new_ast(z3::expr(ctx, rm_kind), s);
 }
 
 smt_astt
