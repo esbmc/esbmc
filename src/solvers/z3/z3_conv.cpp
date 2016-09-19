@@ -732,16 +732,92 @@ smt_astt z3_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
   return new_ast(z3::expr(ctx, rm_kind), s);
 }
 
+smt_astt z3_convt::add_rounding_mode_eq(const expr2tc& expr)
+{
+  // Apparently, we can't create the rounding mode directly in Z3
+  // We need to create a symbol (I decided to call it __$rm to avoid problems
+  // with possible defined variables with the same name in the program), and
+  // assert that the symbol is equal to the desired rounding mode
+
+  // Generate rounding mode
+  smt_astt rm = convert_rounding_mode(expr);
+
+  // Rounding mode symbol
+  // TODO: should we generate a unique __rm$ (add static counter)?
+  smt_astt rm_const = mk_smt_symbol("__rm$", mk_sort(SMT_SORT_FLOATBV_RM));
+
+  // Generate an equality for the __rm symbol and the rounding mode value
+  smt_astt args[2] = {rm, rm_const};
+
+  // Add to smt formula
+  assert_ast(mk_func_app(boolean_sort, SMT_FUNC_EQ, args, 2));
+
+  return rm_const;
+}
+
 smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 {
-  (void) cast;
-  abort();
+  // Rounding mode symbol
+  smt_astt rm_const = add_rounding_mode_eq(cast.rounding_mode);
+  const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
+
+  smt_astt from = convert_ast(cast.from);
+  const z3_smt_ast *mfrom = z3_smt_downcast(from);
+
+  Z3_ast r;
+  smt_sort *s;
+  if(is_bool_type(cast.type)) {
+    s = mk_sort(SMT_SORT_BOOL);
+    r = Z3_mk_fpa_to_ubv(ctx, mrm_const->e, mfrom->e, cast.type->get_width());
+  } else if(is_unsignedbv_type(cast.type)) {
+    s = mk_sort(SMT_SORT_BV);
+    r = Z3_mk_fpa_to_ubv(ctx, mrm_const->e, mfrom->e, cast.type->get_width());
+  } else if(is_signedbv_type(cast.type)) {
+    s = mk_sort(SMT_SORT_BV);
+    r = Z3_mk_fpa_to_sbv(ctx, mrm_const->e, mfrom->e, cast.type->get_width());
+  } else if(is_floatbv_type(cast.type)) {
+    unsigned ew = to_floatbv_type(cast.type).exponent;
+    unsigned sw = to_floatbv_type(cast.type).fraction;
+
+    s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+    const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
+
+    r = Z3_mk_fpa_to_fp_float(ctx, mrm_const->e, mfrom->e, zs->s);
+  }
+
+  return new_ast(z3::expr(ctx, r), s);
 }
 
 smt_astt z3_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
 {
-  (void) cast;
-  abort();
+  // Rounding mode symbol
+  smt_astt rm_const = add_rounding_mode_eq(cast.rounding_mode);
+  const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
+
+  // Convert the expr to be casted
+  smt_astt from = convert_ast(cast.from);
+  const z3_smt_ast *mfrom = z3_smt_downcast(from);
+
+  // The target type
+  unsigned ew = to_floatbv_type(cast.type).exponent;
+  unsigned sw = to_floatbv_type(cast.type).fraction;
+
+  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
+
+  // Convert each type
+  Z3_ast r;
+  if(is_bool_type(cast.from)) {
+    r = Z3_mk_fpa_to_fp_unsigned(ctx, mrm_const->e, mfrom->e, zs->s);
+  } if(is_unsignedbv_type(cast.from)) {
+    r = Z3_mk_fpa_to_fp_unsigned(ctx, mrm_const->e, mfrom->e, zs->s);
+  } else if(is_signedbv_type(cast.from)) {
+    r = Z3_mk_fpa_to_fp_signed(ctx, mrm_const->e, mfrom->e, zs->s);
+  } else if(is_floatbv_type(cast.from)) {
+    r = Z3_mk_fpa_to_fp_float(ctx, mrm_const->e, mfrom->e, zs->s);
+  }
+
+  return new_ast(z3::expr(ctx, r), s);
 }
 
 smt_astt
