@@ -53,9 +53,6 @@ public:
                                  const type2tc &subtype);
 
 private:
-  bool assign_z3_expr(const exprt expr);
-  u_int convert_member_name(const exprt &lhs, const exprt &rhs);
-
   smt_astt add_rounding_mode_eq(const expr2tc& expr);
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
