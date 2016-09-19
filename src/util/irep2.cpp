@@ -2203,9 +2203,18 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   // name of the expr_id. Alas, the expr id isn't currently in the type record
   // so can't be sucked out here.
   // container.
+
+  // Certain irep names collide with python keywords. Mark those as illegal,
+  // and append an underscore behind them.
+  std::vector<std::string> illegal_names = {"not", "or", "and"};
+
   const char *basename = base_to_names<typename traits::base2t>::names[id];
+  std::string basename_str(basename);
+  if (std::find(illegal_names.begin(), illegal_names.end(), basename_str) != illegal_names.end())
+    basename_str.append("_");
+
   class_<derived, bases<base2t>, container, boost::noncopyable>
-    foo(basename, no_init);
+    foo(basename_str.c_str(), no_init);
 
   foo.def("make", &traits::template make_contained<derived>);
   foo.staticmethod("make");
