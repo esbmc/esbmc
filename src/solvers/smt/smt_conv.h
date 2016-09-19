@@ -814,6 +814,8 @@ public:
   smt_astt convert_is_finite(const expr2tc &expr);
   /** Converts signbit representation. */
   smt_astt convert_signbit(const expr2tc &expr);
+  /** Converts rounding mode for ieee fp operations. */
+  smt_astt convert_rounding_mode(const expr2tc& expr);
   /** Converts equality between two floatbvs. */
   smt_astt convert_ieee_equal(const expr2tc &expr);
   /** Convert a byte_extract2tc, pulling a byte from the byte representation

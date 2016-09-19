@@ -1571,6 +1571,66 @@ smt_convt::convert_ieee_equal(const expr2tc &expr)
 #endif
 }
 
+smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
+{
+  expr->dump();
+
+  // Easy case, we know the rounding mode
+  if(is_constant_int2t(expr))
+  {
+    ieee_floatt::rounding_modet rm =
+      static_cast<ieee_floatt::rounding_modet>
+        (to_constant_int2t(expr).value.to_int64());
+    return mk_smt_bvfloat_rm(rm);
+  }
+
+  assert(is_symbol2t(expr));
+
+  // Bad, we have to select given the result of c::__ESBMC_rounding_mode:
+  // 0 is round to Nearest/even
+  // 1 is round to -oo
+  // 2 is round to +oo
+  // 3 is round to zero
+
+  smt_sortt bs = boolean_sort;
+
+  smt_astt symbol = convert_ast(expr);
+
+  smt_astt is_eq_zero =
+    mk_func_app(bs, SMT_FUNC_EQ, symbol,
+      mk_smt_bvint(BigInt(0), false, get_int32_type()->get_width()));
+
+  smt_astt is_eq_one =
+    mk_func_app(bs, SMT_FUNC_EQ, symbol,
+      mk_smt_bvint(BigInt(1), false, get_int32_type()->get_width()));
+
+  smt_astt is_eq_two =
+    mk_func_app(bs, SMT_FUNC_EQ, symbol,
+      mk_smt_bvint(BigInt(2), false, get_int32_type()->get_width()));
+
+  smt_astt ne = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt mi = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_MINUS_INF);
+  smt_astt pi = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_PLUS_INF);
+  smt_astt ze = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+
+  smt_astt ite2 =
+    mk_func_app(
+      mk_sort(SMT_SORT_FLOATBV_RM),
+      SMT_FUNC_ITE, is_eq_two, pi, ze);
+
+  smt_astt ite1 =
+    mk_func_app(
+      mk_sort(SMT_SORT_FLOATBV_RM),
+      SMT_FUNC_ITE, is_eq_one, mi, ite2);
+
+  smt_astt ite0 =
+    mk_func_app(
+      mk_sort(SMT_SORT_FLOATBV_RM),
+      SMT_FUNC_ITE, is_eq_zero, ne, ite1);
+
+  return ite0;
+}
+
 smt_astt
 smt_convt::convert_member(const expr2tc &expr)
 {
