@@ -776,6 +776,9 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
     s = new z3_smt_sort(k, ctx.fpa_sort(ew, sw + 1));
     break;
   }
+  case SMT_SORT_FLOATBV_RM:
+    s = new z3_smt_sort(k, ctx.fpa_rm_sort());
+    break;
   default:
     assert(0);
   }

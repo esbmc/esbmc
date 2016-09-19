@@ -415,6 +415,8 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
     unsigned sw = va_arg(ap, unsigned long);
     return new mathsat_smt_sort(k, msat_get_fp_type(env, ew, sw));
   }
+  case SMT_SORT_FLOATBV_RM:
+    return new mathsat_smt_sort(k, msat_get_fp_roundingmode_type(env));
   case SMT_SORT_ARRAY:
   {
     const mathsat_smt_sort *dom = va_arg(ap, const mathsat_smt_sort *);

@@ -103,6 +103,7 @@ enum smt_sort_kind {
   SMT_SORT_STRUCT = 32,
   SMT_SORT_UNION = 64, // Contencious
   SMT_SORT_FLOATBV = 128,
+  SMT_SORT_FLOATBV_RM = 256
 };
 
 /** Identifiers for SMT functions.
