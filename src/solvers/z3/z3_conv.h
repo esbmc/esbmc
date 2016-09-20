@@ -211,8 +211,6 @@ public:
 
   z3::sort pointer_sort;
   z3::func_decl pointer_decl;
-
-  Z3_context z3_ctx;
 };
 
 #endif
