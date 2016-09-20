@@ -110,7 +110,9 @@ inline int __signbitd(double d) { return __ESBMC_signd(d); }
 
 inline int __signbitf(float f) { return __ESBMC_signf(f); }
 
-inline int __signbit(double ld) { return __ESBMC_signld(ld); }
+inline int __signbitl(long double f) { return __ESBMC_signld(f); }
+
+inline int __signbit(double d) { return __ESBMC_signd(d); }
 
 int abs(int i) { return __ESBMC_abs(i); }
 
