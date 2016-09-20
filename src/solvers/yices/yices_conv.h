@@ -54,6 +54,7 @@ public:
                                 unsigned int idx,
                                 expr2tc idx_expr = expr2tc()) const;
   virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
+  virtual void dump() const { abort(); }
 
   term_t term;
   std::string symname;

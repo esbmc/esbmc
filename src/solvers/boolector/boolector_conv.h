@@ -19,6 +19,7 @@ public:
   btor_smt_ast(smt_convt *ctx, const smt_sort *_s, BoolectorNode *_e)
     : smt_ast(ctx, _s), e(_e) { }
   virtual ~btor_smt_ast() { }
+  virtual void dump() const { abort(); }
 
   BoolectorNode *e;
 };

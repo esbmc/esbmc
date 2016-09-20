@@ -8,6 +8,9 @@
 
 #include <c_types.h>
 
+// Ahem
+msat_env* _env = NULL;
+
 smt_convt *
 create_new_mathsat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &opts __attribute__((unused)),
@@ -34,6 +37,7 @@ mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
   /* XXX -- where is the list of options?" */
   msat_set_option(cfg, "model_generation", "true");
   env = msat_create_env(cfg);
+  _env = &env;
 }
 
 mathsat_convt::~mathsat_convt(void)
@@ -665,4 +669,9 @@ void
 mathsat_convt::pop_array_ctx(void)
 {
   return;
+}
+
+void mathsat_smt_ast::dump() const
+{
+  std::cout << msat_to_smtlib2(*_env, t) << std::endl;
 }

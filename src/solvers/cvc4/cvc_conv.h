@@ -26,6 +26,7 @@ public:
   cvc_smt_ast(smt_convt *ctx, const smt_sort *_s, CVC4::Expr &_e)
     : smt_ast(ctx, _s), e(_e) { }
   virtual ~cvc_smt_ast() { }
+  virtual void dump() const { abort(); }
 
   CVC4::Expr e;
 };

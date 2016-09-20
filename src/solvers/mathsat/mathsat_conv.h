@@ -30,6 +30,7 @@ public:
   mathsat_smt_ast(smt_convt *ctx, const smt_sort *_s, msat_term _t)
     : smt_ast(ctx, _s), t(_t) { }
   virtual ~mathsat_smt_ast() { }
+  virtual void dump() const;
 
   msat_term t;
 };

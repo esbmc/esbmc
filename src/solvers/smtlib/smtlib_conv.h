@@ -38,6 +38,8 @@ public:
   smtlib_smt_ast(smt_convt *ctx, const smt_sort *s, smt_func_kind k)
     : smt_ast(ctx, s), kind(k) { }
   ~smtlib_smt_ast() { }
+  virtual void dump() const { abort(); }
+
   smt_func_kind kind;
   std::string symname;
   BigInt intval;
