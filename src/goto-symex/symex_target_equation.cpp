@@ -155,6 +155,12 @@ void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
     return;
   }
 
+  if(ssa_trace)
+  {
+    step.output(ns, std::cout);
+    std::cout << std::endl;
+  }
+
   expr2tc tmp(step.guard);
   step.guard_ast = smt_conv.convert_ast(tmp);
 
@@ -264,7 +270,8 @@ void symex_target_equationt::SSA_stept::output(
   if(is_assert())
     out << comment << std::endl;
 
-  out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << std::endl;
+  if(!config.options.get_bool_option("no-guard-printing"))
+    out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << std::endl;
 }
 
 void symex_target_equationt::SSA_stept::short_output(
