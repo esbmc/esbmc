@@ -552,10 +552,10 @@ smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
   smt_sort *s;
   if(is_bool_type(cast.type)) {
     s = mk_sort(SMT_SORT_BOOL);
-    t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, t);
+    t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, mfrom->t);
   } else if(is_bv_type(cast.type)) {
     s = mk_sort(SMT_SORT_BV);
-    t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, t);
+    t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, mfrom->t);
   } else if(is_floatbv_type(cast.type)) {
     unsigned ew = to_floatbv_type(cast.type).exponent;
     unsigned sw = to_floatbv_type(cast.type).fraction;
