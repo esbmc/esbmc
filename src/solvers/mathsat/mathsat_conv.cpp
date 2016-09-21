@@ -11,6 +11,16 @@
 // Ahem
 msat_env* _env = NULL;
 
+void check_msat_error(msat_term r)
+{
+  if (MSAT_ERROR_TERM(r)) {
+    std::cerr << "Error creating SMT " << std::endl;
+    std::cerr << "Error text: \"" << msat_last_error_message(*_env) << "\""
+              << std::endl;
+    abort();
+  }
+}
+
 smt_convt *
 create_new_mathsat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &opts __attribute__((unused)),
@@ -86,6 +96,7 @@ mathsat_convt::get_bool(const smt_ast *a)
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_get_model_value(env, mast->t);
+  check_msat_error(t);
 
   if (msat_term_is_true(env, t)) {
     return true_expr;
@@ -103,19 +114,14 @@ mathsat_convt::get_bv(const type2tc &_t,
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_get_model_value(env, mast->t);
-  assert(msat_term_is_number(env, t) && "Model value of bitvector isn't "
-         "a bitvector");
+  check_msat_error(t);
 
   // GMP rational value object.
   mpq_t val;
   mpq_init(val);
-  if (msat_term_to_number(env, t, val)) {
-    std::cerr << "Error fetching number from MathSAT. Message reads:"
-              << std::endl;
-    std::cerr << "\"" << msat_last_error_message(env) << "\""
-              << std::endl;
-    abort();
-  }
+
+  msat_term_to_number(env, t, val);
+  check_msat_error(t);
 
   mpz_t num;
   mpz_init(num);
@@ -156,7 +162,9 @@ mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
 
   smt_ast *tmpast = mk_smt_bvint(BigInt(idx), false, orig_w);
   const mathsat_smt_ast *tmpa = mathsat_ast_downcast(tmpast);
+
   msat_term t = msat_make_array_read(env, mast->t, tmpa->t);
+  check_msat_error(t);
   free(tmpast);
 
   mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(elem_sort), t);
@@ -231,8 +239,14 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     // Another thing that mathsat doesn't implement.
     // Do this as and(or(a,b),not(and(a,b)))
     msat_term and2 = msat_make_and(env, args[0]->t, args[1]->t);
+    check_msat_error(and2);
+
     msat_term notand2 = msat_make_not(env, and2);
+    check_msat_error(notand2);
+
     msat_term or1 = msat_make_or(env, args[0]->t, args[1]->t);
+    check_msat_error(or1);
+
     r = msat_make_and(env, or1, notand2);
     break;
   }
@@ -240,6 +254,8 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     // MathSAT doesn't seem to implement this; so do it manually. Following the
     // CNF conversion CBMC does, this is: lor(lnot(a), b)
     r = msat_make_not(env, args[0]->t);
+    check_msat_error(r);
+
     r = msat_make_or(env, r, args[1]->t);
     break;
   case SMT_FUNC_ITE:
@@ -250,8 +266,14 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
       //
       //   or(and(c,t),and(not(c), f))
       msat_term land1 = msat_make_and(env, args[0]->t, args[1]->t);
+      check_msat_error(land1);
+
       msat_term notval = msat_make_not(env, args[0]->t);
+      check_msat_error(notval);
+
       msat_term land2 = msat_make_and(env, notval, args[2]->t);
+      check_msat_error(land2);
+
       r = msat_make_or(env, land1, land2);
     } else {
       r = msat_make_term_ite(env, args[0]->t, args[1]->t, args[2]->t);
@@ -385,14 +407,7 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
               << "in mathsat conversion" << std::endl;
     abort();
   }
-
-  if (MSAT_ERROR_TERM(r)) {
-    std::cerr << "Error creating SMT " << smt_func_name_table[k] << " function "
-              << "application" << std::endl;
-    std::cerr << "Error text: \"" << msat_last_error_message(env) << "\""
-              << std::endl;
-    abort();
-  }
+  check_msat_error(r);
 
   return new mathsat_smt_ast(this, s, r);
 }
@@ -469,7 +484,8 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint,
 
   // Make bv int from textual representation.
   msat_term t = msat_make_bv_number(env, str.c_str(), w, 2);
-  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat BV integer term");
+  check_msat_error(t);
+
   smt_sort *s = mk_sort(SMT_SORT_BV, w, false);
   return new mathsat_smt_ast(this, s, t);
 }
@@ -493,7 +509,7 @@ smt_ast* mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
   smt_str += ")";
 
   msat_term t = msat_from_string(env, smt_str.c_str());
-  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat fp term");
+  check_msat_error(t);
 
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
   return new mathsat_smt_ast(this, s, t);
@@ -502,7 +518,7 @@ smt_ast* mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
 smt_astt mathsat_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
 {
   msat_term t = msat_make_fp_nan(env, ew, sw);
-  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat fp NaN term");
+  check_msat_error(t);
 
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
   return new mathsat_smt_ast(this, s, t);
@@ -512,7 +528,7 @@ smt_astt mathsat_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
 {
   msat_term t =
     sgn ? msat_make_fp_minus_inf(env, ew, sw) : msat_make_fp_plus_inf(env, ew, sw);
-  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat fp inf term");
+  check_msat_error(t);
 
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
   return new mathsat_smt_ast(this, s, t);
@@ -538,7 +554,7 @@ smt_astt mathsat_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
     default:
       abort();
   }
-  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat fp rounding mode term");
+  check_msat_error(t);
 
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV_RM);
   return new mathsat_smt_ast(this, s, t);
@@ -567,8 +583,8 @@ smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
     s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
     t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
   }
+  check_msat_error(t);
 
-  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat cast fp term");
   return new mathsat_smt_ast(this, s, t);
 }
 
@@ -595,7 +611,7 @@ smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
     t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
   }
 
-  assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat cast fp term");
+  check_msat_error(t);
   return new mathsat_smt_ast(this, s, t);
 }
 
@@ -627,8 +643,9 @@ mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   // XXX - does 'd' leak?
   msat_decl d = msat_declare_function(env, name.c_str(), ms->t);
   assert(!MSAT_ERROR_DECL(d) && "Invalid function symbol declaration sort");
+
   msat_term t = msat_make_constant(env, d);
-  assert(!MSAT_ERROR_TERM(t) && "Invalid function decl for mathsat term");
+  check_msat_error(t);
   return new mathsat_smt_ast(this, s, t);
 }
 
@@ -644,6 +661,8 @@ mathsat_convt::mk_extract(const smt_ast *a, unsigned int high,
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_make_bv_extract(env, high, low, mast->t);
+  check_msat_error(t);
+
   return new mathsat_smt_ast(this, s, t);
 }
 
