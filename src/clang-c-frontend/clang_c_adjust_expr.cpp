@@ -933,7 +933,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
         abort();
       }
 
-      exprt sign_expr("signbit", bool_typet());
+      exprt sign_expr("signbit", int_type());
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
     }

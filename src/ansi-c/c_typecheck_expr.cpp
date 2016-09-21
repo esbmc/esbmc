@@ -1753,7 +1753,7 @@ void c_typecheck_baset::do_special_functions(
         throw "sign expects one operand" ;
       }
 
-      exprt sign_expr("signbit", bool_typet());
+      exprt sign_expr("signbit", int_type());
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
     }

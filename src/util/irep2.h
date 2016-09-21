@@ -4618,7 +4618,7 @@ class signbit2t : public signbit_expr_methods
 {
 public:
   signbit2t(const expr2tc &val)
-    : signbit_expr_methods(type_pool.get_bool(), signbit_id, val) { }
+    : signbit_expr_methods(type_pool.get_int32(), signbit_id, val) { }
   signbit2t(const signbit2t &ref)
     : signbit_expr_methods(ref) { }
 
