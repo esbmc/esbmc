@@ -53,7 +53,6 @@ public:
                                  const type2tc &subtype);
 
 private:
-  smt_astt add_rounding_mode_eq(const expr2tc& expr);
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 

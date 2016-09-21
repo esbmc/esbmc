@@ -312,6 +312,11 @@ namespace z3 {
         expr fpa_nan(sort const & sort);
         expr fpa_inf(int sgn, sort const & sort);
 
+        expr fpa_rm_ne();
+        expr fpa_rm_mi();
+        expr fpa_rm_pi();
+        expr fpa_rm_ze();
+
         expr string_val(char const* s);
         expr string_val(std::string const& s);
 
@@ -2153,6 +2158,34 @@ namespace z3 {
     inline expr context::fpa_inf(int sign, sort const & sort)
     {
       Z3_ast r = Z3_mk_fpa_inf(m_ctx, sort, sign);
+      check_error();
+      return expr(*this, r);
+    }
+
+    inline expr context::fpa_rm_ne()
+    {
+      Z3_ast r = Z3_mk_fpa_round_nearest_ties_to_even(m_ctx);
+      check_error();
+      return expr(*this, r);
+    }
+
+    inline expr context::fpa_rm_mi()
+    {
+      Z3_ast r = Z3_mk_fpa_round_toward_negative(m_ctx);
+      check_error();
+      return expr(*this, r);
+    }
+
+    inline expr context::fpa_rm_pi()
+    {
+      Z3_ast r = Z3_mk_fpa_round_toward_positive(m_ctx);
+      check_error();
+      return expr(*this, r);
+    }
+
+    inline expr context::fpa_rm_ze()
+    {
+      Z3_ast r = Z3_mk_fpa_round_toward_zero(m_ctx);
       check_error();
       return expr(*this, r);
     }

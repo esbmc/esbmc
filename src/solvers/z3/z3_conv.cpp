@@ -709,55 +709,27 @@ smt_astt z3_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
 {
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV_RM);
 
-  Z3_ast rm_kind;
   switch(rm)
   {
     case ieee_floatt::ROUND_TO_EVEN:
-      rm_kind = Z3_mk_fpa_round_nearest_ties_to_even(ctx);
-      break;
+      return new_ast(ctx.fpa_rm_ne(), s);
     case ieee_floatt::ROUND_TO_MINUS_INF:
-      rm_kind = Z3_mk_fpa_round_toward_negative(ctx);
-      break;
+      return new_ast(ctx.fpa_rm_mi(), s);
     case ieee_floatt::ROUND_TO_PLUS_INF:
-      rm_kind = Z3_mk_fpa_round_toward_positive(ctx);
-      break;
+      return new_ast(ctx.fpa_rm_pi(), s);
     case ieee_floatt::ROUND_TO_ZERO:
-      rm_kind = Z3_mk_fpa_round_toward_zero(ctx);
-      break;
+      return new_ast(ctx.fpa_rm_ze(), s);
     default:
-      abort();
+      break;
   }
 
-  return new_ast(z3::expr(ctx, rm_kind), s);
-}
-
-smt_astt z3_convt::add_rounding_mode_eq(const expr2tc& expr)
-{
-  // Apparently, we can't create the rounding mode directly in Z3
-  // We need to create a symbol (I decided to call it __$rm to avoid problems
-  // with possible defined variables with the same name in the program), and
-  // assert that the symbol is equal to the desired rounding mode
-
-  // Generate rounding mode
-  smt_astt rm = convert_rounding_mode(expr);
-
-  // Rounding mode symbol
-  // TODO: should we generate a unique __rm$ (add static counter)?
-  smt_astt rm_const = mk_smt_symbol("__rm$", mk_sort(SMT_SORT_FLOATBV_RM));
-
-  // Generate an equality for the __rm symbol and the rounding mode value
-  smt_astt args[2] = {rm, rm_const};
-
-  // Add to smt formula
-  assert_ast(mk_func_app(boolean_sort, SMT_FUNC_EQ, args, 2));
-
-  return rm_const;
+  abort();
 }
 
 smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 {
   // Rounding mode symbol
-  smt_astt rm_const = add_rounding_mode_eq(cast.rounding_mode);
+  smt_astt rm_const = convert_rounding_mode(cast.rounding_mode);
   const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
   smt_astt from = convert_ast(cast.from);
@@ -790,7 +762,7 @@ smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 smt_astt z3_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
 {
   // Rounding mode symbol
-  smt_astt rm_const = add_rounding_mode_eq(cast.rounding_mode);
+  smt_astt rm_const = convert_rounding_mode(cast.rounding_mode);
   const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
   // Convert the expr to be casted
