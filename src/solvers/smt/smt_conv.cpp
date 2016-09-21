@@ -1513,8 +1513,11 @@ smt_astt smt_convt::convert_is_finite(const expr2tc& expr)
   smt_sortt bs = boolean_sort;
 
   // isfinite = !(isinf || isnan)
-  smt_astt isinf = convert_is_inf(expr);
-  smt_astt isnan = convert_is_nan(expr);
+  auto is_inf = expr2tc(new isinf2t(isfinite.value->clone()));
+  smt_astt isinf = convert_is_inf(is_inf);
+
+  auto is_nan = expr2tc(new isnan2t(isfinite.value->clone()));
+  smt_astt isnan = convert_is_nan(is_nan);
 
   smt_astt or_op = mk_func_app(bs, SMT_FUNC_OR, isinf, isnan);
   return mk_func_app(bs, SMT_FUNC_NOT, or_op);
