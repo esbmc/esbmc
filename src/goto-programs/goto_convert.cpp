@@ -516,30 +516,45 @@ void goto_convertt::convert_sideeffect(
 
     exprt rhs;
 
-    if(statement=="assign+")
-      rhs.id("+");
-    else if(statement=="assign-")
-      rhs.id("-");
-    else if(statement=="assign*")
-      rhs.id("*");
-    else if(statement=="assign_div")
-      rhs.id("/");
-    else if(statement=="assign_mod")
+    if(statement == "assign+") {
+      if(expr.type().is_floatbv()) {
+        rhs.id("ieee_add");
+      } else {
+        rhs.id("+");
+      }
+    } else if(statement == "assign-") {
+      if(expr.type().is_floatbv()) {
+        rhs.id("ieee_sub");
+      } else {
+        rhs.id("-");
+      }
+    } else if(statement == "assign*") {
+      if(expr.type().is_floatbv()) {
+        rhs.id("ieee_mul");
+      } else {
+        rhs.id("*");
+      }
+    } else if(statement == "assign_div") {
+      if(expr.type().is_floatbv()) {
+        rhs.id("ieee_div");
+      } else {
+        rhs.id("/");
+      }
+    } else if(statement == "assign_mod") {
       rhs.id("mod");
-    else if(statement=="assign_shl")
+    } else if(statement == "assign_shl") {
       rhs.id("shl");
-    else if(statement=="assign_ashr")
+    } else if(statement == "assign_ashr") {
       rhs.id("ashr");
-    else if(statement=="assign_lshr")
+    } else if(statement == "assign_lshr") {
       rhs.id("lshr");
-    else if(statement=="assign_bitand")
+    } else if(statement == "assign_bitand") {
       rhs.id("bitand");
-    else if(statement=="assign_bitxor")
+    } else if(statement == "assign_bitxor") {
       rhs.id("bitxor");
-    else if(statement=="assign_bitor")
+    } else if(statement == "assign_bitor") {
       rhs.id("bitor");
-    else
-    {
+    } else {
       err_location(expr);
       str << statement << " not yet supproted";
       throw 0;
