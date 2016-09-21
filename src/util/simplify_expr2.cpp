@@ -2224,8 +2224,8 @@ simplify_floatbv_2ops(
   expr2tc simplied_side_2 = try_simplification(side_2);
 
   if (!is_constant_expr(simplied_side_1)
-      && !is_constant_expr(simplied_side_2)
-      && !is_constant_int2t(rounding_mode))
+      || !is_constant_expr(simplied_side_2)
+      || !is_constant_int2t(rounding_mode))
   {
     // Were we able to simplify the sides?
     if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
