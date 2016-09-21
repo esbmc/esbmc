@@ -200,6 +200,8 @@ std::string expr2ct::convert_rec(
       return q+"float";
     else if(width==config.ansi_c.double_width)
       return q+"double";
+    else if(width==config.ansi_c.long_double_width)
+      return q+"long double";
   }
   else if(src.id()=="struct" ||
           src.id()=="incomplete_struct")
