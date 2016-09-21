@@ -705,7 +705,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc rounding_mode =
       expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
 
-    // If it's no nil, convert it
+    // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
     if(old_rm.is_not_nil())
       migrate_expr(old_rm, rounding_mode);
@@ -1053,8 +1053,14 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
 
-    expr2tc rm;
-    migrate_expr(expr.find_expr("rounding_mode"), rm);
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
 
     ieee_add2t *a = new ieee_add2t(type, side1, side2, rm);
     new_expr_ref = expr2tc(a);
@@ -1069,8 +1075,14 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
 
-    expr2tc rm;
-    migrate_expr(expr.find_expr("rounding_mode"), rm);
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
 
     ieee_sub2t *s = new ieee_sub2t(type, side1, side2, rm);
     new_expr_ref = expr2tc(s);
@@ -1085,8 +1097,14 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
 
-    expr2tc rm;
-    migrate_expr(expr.find_expr("rounding_mode"), rm);
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
 
     ieee_mul2t *s = new ieee_mul2t(type, side1, side2, rm);
     new_expr_ref = expr2tc(s);
@@ -1098,8 +1116,14 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc side1, side2;
     convert_operand_pair(expr, side1, side2);
 
-    expr2tc rm;
-    migrate_expr(expr.find_expr("rounding_mode"), rm);
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
 
     ieee_div2t *d = new ieee_div2t(type, side1, side2, rm);
     new_expr_ref = expr2tc(d);
@@ -2075,7 +2099,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const ieee_add2t &ref2 = to_ieee_add2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    exprt addval("+", thetype);
+    exprt addval("ieee_add", thetype);
     addval.copy_to_operands(migrate_expr_back(ref2.side_1),
                             migrate_expr_back(ref2.side_2));
 
@@ -2087,7 +2111,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const ieee_sub2t &ref2 = to_ieee_sub2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    exprt subval("-", thetype);
+    exprt subval("ieee_sub", thetype);
     subval.copy_to_operands(migrate_expr_back(ref2.side_1),
                             migrate_expr_back(ref2.side_2));
 
@@ -2099,7 +2123,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const ieee_mul2t &ref2 = to_ieee_mul2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    exprt mulval("*", thetype);
+    exprt mulval("ieee_mul", thetype);
     mulval.copy_to_operands(migrate_expr_back(ref2.side_1),
                             migrate_expr_back(ref2.side_2));
 
@@ -2111,7 +2135,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const ieee_div2t &ref2 = to_ieee_div2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    exprt divval("/", thetype);
+    exprt divval("ieee_div", thetype);
     divval.copy_to_operands(migrate_expr_back(ref2.side_1),
                             migrate_expr_back(ref2.side_2));
 
