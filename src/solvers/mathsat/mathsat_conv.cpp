@@ -617,8 +617,52 @@ smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
 
 smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 {
-  (void) expr;
-  abort();
+  // Rounding mode symbol
+  smt_astt rm_const;
+
+  // Sides
+  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
+  const mathsat_smt_ast *ms1 = mathsat_ast_downcast(s1);
+
+  smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
+  const mathsat_smt_ast *ms2 = mathsat_ast_downcast(s2);
+
+  msat_term t;
+  switch (expr->expr_id) {
+    case expr2t::ieee_add_id:
+    {
+      rm_const = convert_rounding_mode(to_ieee_add2t(expr).rounding_mode);
+      t = msat_make_fp_plus(env, mathsat_ast_downcast(rm_const)->t, ms1->t, ms2->t);
+      break;
+    }
+    case expr2t::ieee_sub_id:
+    {
+      rm_const = convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode);
+      t = msat_make_fp_minus(env, mathsat_ast_downcast(rm_const)->t, ms1->t, ms2->t);
+      break;
+    }
+    case expr2t::ieee_mul_id:
+    {
+      rm_const = convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode);
+      t = msat_make_fp_times(env, mathsat_ast_downcast(rm_const)->t, ms1->t, ms2->t);
+      break;
+    }
+    case expr2t::ieee_div_id:
+    {
+      rm_const = convert_rounding_mode(to_ieee_div2t(expr).rounding_mode);
+      t = msat_make_fp_div(env, mathsat_ast_downcast(rm_const)->t, ms1->t, ms2->t);
+      break;
+    }
+    default:
+      abort();
+  }
+  check_msat_error(t);
+
+  unsigned ew = to_floatbv_type(expr->type).exponent;
+  unsigned sw = to_floatbv_type(expr->type).fraction;
+  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_ast *
