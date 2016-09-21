@@ -176,6 +176,21 @@ enum smt_func_kind {
   SMT_FUNC_BVSGTE,
   SMT_FUNC_BVUGTE,
 
+  SMT_FUNC_EQ,
+  SMT_FUNC_NOTEQ,
+
+  SMT_FUNC_ITE,
+
+  SMT_FUNC_STORE,
+  SMT_FUNC_SELECT,
+
+  SMT_FUNC_CONCAT,
+  SMT_FUNC_EXTRACT, // Not for going through mk app due to sillyness.
+
+  SMT_FUNC_INT2REAL,
+  SMT_FUNC_REAL2INT,
+  SMT_FUNC_IS_INT,
+
   // floatbv operations
   SMT_FUNC_ISZERO,
   SMT_FUNC_ISNAN,
@@ -192,21 +207,6 @@ enum smt_func_kind {
   SMT_FUNC_IEEE_RM_ZR,
   SMT_FUNC_IEEE_RM_PI,
   SMT_FUNC_IEEE_RM_MI,
-
-  SMT_FUNC_EQ,
-  SMT_FUNC_NOTEQ,
-
-  SMT_FUNC_ITE,
-
-  SMT_FUNC_STORE,
-  SMT_FUNC_SELECT,
-
-  SMT_FUNC_CONCAT,
-  SMT_FUNC_EXTRACT, // Not for going through mk app due to sillyness.
-
-  SMT_FUNC_INT2REAL,
-  SMT_FUNC_REAL2INT,
-  SMT_FUNC_IS_INT,
 };
 
 /** Class that will hold information about which operation

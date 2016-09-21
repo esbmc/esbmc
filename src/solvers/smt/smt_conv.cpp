@@ -2222,7 +2222,21 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "extract",
   "int2real",
   "real2int",
-  "is_int"
+  "is_int",
+  "is_zero",
+  "is_nan",
+  "is_inf",
+  "is_normal",
+  "ieee_eq",
+  "ieee_neq",
+  "ieee_add",
+  "ieee_sub",
+  "ieee_mul",
+  "ieee_div",
+  "ieee_rm_ne",
+  "ieee_rm_zr",
+  "ieee_rm_pi",
+  "ieee_rm_mi",
 };
 
 // Debris from prop_convt: to be reorganized.
