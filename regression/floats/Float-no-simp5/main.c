@@ -10,6 +10,6 @@ int main()
   au.f = a;
   bu.f = b;
   
-  assert((au.i == bu.i) == __ESBMC_equal(a, b));
+  assert((au.i == bu.i) == (a == b));
 }
 
