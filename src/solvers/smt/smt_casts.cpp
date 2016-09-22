@@ -1,26 +1,26 @@
 #include <sstream>
 
 #include <base_type.h>
+#include <expr_util.h>
 
 #include "smt_conv.h"
 
 smt_astt
 smt_convt::convert_typecast_to_bool(const typecast2t &cast)
 {
-
-  if (is_bv_type(cast.from)) {
-    notequal2tc neq(cast.from, gen_uint(cast.from->type, 0));
-    return convert_ast(neq);
-  } else if (is_pointer_type(cast.from)) {
+  if (is_pointer_type(cast.from)) {
     // Convert to two casts.
     typecast2tc to_int(machine_ptr, cast.from);
     constant_int2tc zero(machine_ptr, BigInt(0));
     equality2tc as_bool(zero, to_int);
     return convert_ast(as_bool);
-  } else {
-    std::cerr << "Unimplemented bool typecast" << std::endl;
-    abort();
   }
+
+  expr2tc zero_expr;
+  migrate_expr(gen_zero(migrate_type_back(cast.from->type)), zero_expr);
+
+  notequal2tc neq(cast.from, zero_expr);
+  return convert_ast(neq);
 }
 
 smt_astt
