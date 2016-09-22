@@ -1460,7 +1460,12 @@ typecast2t::do_simplify(bool second) const
     expr2tc zero2;
     migrate_expr(zero, zero2);
 
-    expr2tc eq = expr2tc(new equality2t(simp, zero2));
+    expr2tc eq;
+    if(is_floatbv_type(simp))
+      eq = expr2tc(new ieee_equality2t(simp, zero2));
+    else
+      eq = expr2tc(new equality2t(simp, zero2));
+
     expr2tc noteq = expr2tc(new not2t(eq));
     return noteq;
   }
