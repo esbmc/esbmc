@@ -7,6 +7,7 @@
 #include <gmp.h>
 
 #include <c_types.h>
+#include <expr_util.h>
 
 // Ahem
 msat_env* _env = NULL;
@@ -576,10 +577,7 @@ smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 
   msat_term t;
   smt_sort *s;
-  if(is_bool_type(cast.type)) {
-    s = mk_sort(SMT_SORT_BOOL);
-    t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, mfrom->t);
-  } else if(is_bv_type(cast.type)) {
+  if(is_bv_type(cast.type)) {
     s = mk_sort(SMT_SORT_BV);
     t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, mfrom->t);
   } else if(is_floatbv_type(cast.type)) {
@@ -608,7 +606,20 @@ smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
 
   msat_term t;
   if(is_bool_type(cast.from)) {
-    t = msat_make_fp_from_ubv(env, ew, sw, mrm->t, mfrom->t);
+    // For bools, there is no direct conversion, so the cast is
+    // transformed into fpa = b ? 1 : 0;
+    expr2tc zero_expr;
+    migrate_expr(gen_zero(migrate_type_back(cast.type)), zero_expr);
+
+    expr2tc one_expr;
+    migrate_expr(gen_one(migrate_type_back(cast.type)), one_expr);
+
+    const smt_ast *args[3];
+    args[0] = from;
+    args[1] = convert_ast(one_expr);
+    args[2] = convert_ast(zero_expr);
+
+    return mk_func_app(s, SMT_FUNC_ITE, args, 3);
   } else if(is_unsignedbv_type(cast.from)) {
     t = msat_make_fp_from_ubv(env, ew, sw, mrm->t, mfrom->t);
   } else if(is_signedbv_type(cast.from)) {
