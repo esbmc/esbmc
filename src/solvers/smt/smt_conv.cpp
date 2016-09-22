@@ -1513,15 +1513,23 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
 {
   const signbit2t &signbit = to_signbit2t(expr);
 
-  smt_sortt bs = boolean_sort;
-  smt_astt operand = convert_ast(signbit.value);
+  // Since we can't extract the top bit, from the fpbv, we'll
+  // convert it to return if(is_neg) ? 1 : 0;
+  auto value = convert_ast(signbit.value);
+  auto sort = convert_sort(signbit.type);
+
+  // Create is_neg
+  auto is_neg = mk_func_app(boolean_sort, SMT_FUNC_ISNEG, value);
 
   expr2tc zero_expr;
-  migrate_expr(gen_zero(migrate_type_back(signbit.value->type)), zero_expr);
+  migrate_expr(gen_zero(migrate_type_back(signbit.type)), zero_expr);
 
-  smt_astt zero = convert_ast(zero_expr);
-  smt_astt gte = mk_func_app(bs, SMT_FUNC_GTE, operand, zero);
-  return mk_func_app(bs, SMT_FUNC_ITE, gte, mk_smt_bool(true), mk_smt_bool(false));
+  expr2tc one_expr;
+  migrate_expr(gen_one(migrate_type_back(signbit.type)), one_expr);
+
+  // If it's true, return 1. Return 0, othewise.
+  return mk_func_app(
+    sort, SMT_FUNC_ITE, is_neg, convert_ast(one_expr), convert_ast(zero_expr));
 }
 
 smt_astt
