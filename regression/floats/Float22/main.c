@@ -70,7 +70,7 @@ void testTwo (void) {
 
    assert(f1.ieee.negative != f2.ieee.negative);
 
-   return 1;
+   return;
 }
 
 
