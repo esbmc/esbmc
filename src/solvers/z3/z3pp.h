@@ -308,7 +308,7 @@ namespace z3 {
         expr bv_val(uint64_t n, unsigned sz);
         expr bv_val(char const * n, unsigned sz);
 
-        expr fpa_val(z3::ast sgn, z3::ast exp, z3::ast sig);
+        expr fpa_val(z3::expr sgn, z3::expr exp, z3::expr sig);
         expr fpa_nan(sort const & sort);
         expr fpa_inf(int sgn, sort const & sort);
 
@@ -316,6 +316,13 @@ namespace z3 {
         expr fpa_rm_mi();
         expr fpa_rm_pi();
         expr fpa_rm_ze();
+
+        expr fpa_to_ubv(z3::expr rm, z3::expr const t, unsigned sz);
+        expr fpa_to_sbv(z3::expr rm, z3::expr t, unsigned sz);
+        expr fpa_to_fpa(z3::expr rm, z3::expr t, sort sort);
+
+        expr fpa_from_unsigned(z3::expr rm, z3::expr t, sort sort);
+        expr fpa_from_signed(z3::expr rm, z3::expr t, sort sort);
 
         expr string_val(char const* s);
         expr string_val(std::string const& s);
@@ -2141,7 +2148,7 @@ namespace z3 {
     inline expr context::bv_val(uint64_t n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
     inline expr context::bv_val(char const * n, unsigned sz) { Z3_ast r = Z3_mk_numeral(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
 
-    inline expr context::fpa_val(z3::ast sgn, z3::ast exp, z3::ast sig)
+    inline expr context::fpa_val(z3::expr sgn, z3::expr exp, z3::expr sig)
     {
       Z3_ast r = Z3_mk_fpa_fp(m_ctx, sgn, exp, sig);
       check_error();
@@ -2186,6 +2193,41 @@ namespace z3 {
     inline expr context::fpa_rm_ze()
     {
       Z3_ast r = Z3_mk_fpa_round_toward_zero(m_ctx);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_to_ubv(z3::expr rm, z3::expr t, unsigned sz)
+    {
+      Z3_ast r = Z3_mk_fpa_to_ubv(m_ctx, rm, t, sz);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_to_sbv(z3::expr rm, z3::expr t, unsigned sz)
+    {
+      Z3_ast r = Z3_mk_fpa_to_sbv(m_ctx, rm, t, sz);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_to_fpa(z3::expr rm, z3::expr t, sort sort)
+    {
+      Z3_ast r = Z3_mk_fpa_to_fp_float(m_ctx, rm, t, sort);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_from_unsigned(z3::expr rm, z3::expr t, sort sort)
+    {
+      Z3_ast r = Z3_mk_fpa_to_fp_unsigned(m_ctx, rm, t, sort);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_from_signed(z3::expr rm, z3::expr t, sort sort)
+    {
+      Z3_ast r = Z3_mk_fpa_to_fp_signed(m_ctx, rm, t, sort);
       check_error();
       return expr(*this, r);
     }
