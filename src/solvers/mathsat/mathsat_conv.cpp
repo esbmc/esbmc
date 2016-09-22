@@ -402,6 +402,12 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_ISNORMAL:
     r = msat_make_fp_isnormal(env, args[0]->t);
     break;
+  case SMT_FUNC_ISNEG:
+    r = msat_make_fp_isneg(env, args[0]->t);
+    break;
+  case SMT_FUNC_ISPOS:
+    r = msat_make_fp_ispos(env, args[0]->t);
+    break;
   default:
     std::cerr << "Unhandled SMT function \"" << smt_func_name_table[k] << "\" "
               << "in mathsat conversion" << std::endl;

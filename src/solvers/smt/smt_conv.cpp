@@ -2213,6 +2213,8 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "is_nan",
   "is_inf",
   "is_normal",
+  "is_neg",
+  "is_pos",
   "ieee_eq",
   "ieee_neq",
   "ieee_add",
