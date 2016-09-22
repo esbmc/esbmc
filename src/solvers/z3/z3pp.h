@@ -324,6 +324,11 @@ namespace z3 {
         expr fpa_from_unsigned(z3::expr rm, z3::expr t, sort sort);
         expr fpa_from_signed(z3::expr rm, z3::expr t, sort sort);
 
+        expr fpa_add(z3::expr rm, z3::expr s1, z3::expr s2);
+        expr fpa_sub(z3::expr rm, z3::expr s1, z3::expr s2);
+        expr fpa_mul(z3::expr rm, z3::expr s1, z3::expr s2);
+        expr fpa_div(z3::expr rm, z3::expr s1, z3::expr s2);
+
         expr string_val(char const* s);
         expr string_val(std::string const& s);
 
@@ -2228,6 +2233,34 @@ namespace z3 {
     expr context::fpa_from_signed(z3::expr rm, z3::expr t, sort sort)
     {
       Z3_ast r = Z3_mk_fpa_to_fp_signed(m_ctx, rm, t, sort);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_add(z3::expr rm, z3::expr s1, z3::expr s2)
+    {
+      Z3_ast r = Z3_mk_fpa_add(m_ctx, rm, s1, s2);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_sub(z3::expr rm, z3::expr s1, z3::expr s2)
+    {
+      Z3_ast r = Z3_mk_fpa_sub(m_ctx, rm, s1, s2);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_mul(z3::expr rm, z3::expr s1, z3::expr s2)
+    {
+      Z3_ast r = Z3_mk_fpa_mul(m_ctx, rm, s1, s2);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_div(z3::expr rm, z3::expr s1, z3::expr s2)
+    {
+      Z3_ast r = Z3_mk_fpa_div(m_ctx, rm, s1, s2);
       check_error();
       return expr(*this, r);
     }

@@ -805,7 +805,34 @@ smt_astt z3_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
 
 smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 {
-  (void) expr;
+  // Rounding mode symbol
+  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(2));
+  const z3_smt_ast *mrm = z3_smt_downcast(rm);
+
+  unsigned ew = to_floatbv_type(expr->type).exponent;
+  unsigned sw = to_floatbv_type(expr->type).fraction;
+  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+
+  // Sides
+  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
+  const z3_smt_ast *ms1 = z3_smt_downcast(s1);
+
+  smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
+  const z3_smt_ast *ms2 = z3_smt_downcast(s2);
+
+  switch (expr->expr_id) {
+    case expr2t::ieee_add_id:
+      return new_ast(ctx.fpa_add(mrm->e, ms1->e, ms2->e), s);
+    case expr2t::ieee_sub_id:
+      return new_ast(ctx.fpa_sub(mrm->e, ms1->e, ms2->e), s);
+    case expr2t::ieee_mul_id:
+      return new_ast(ctx.fpa_mul(mrm->e, ms1->e, ms2->e), s);
+    case expr2t::ieee_div_id:
+      return new_ast(ctx.fpa_div(mrm->e, ms1->e, ms2->e), s);
+    default:
+      break;
+  }
+
   abort();
 }
 
