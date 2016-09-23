@@ -138,9 +138,7 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     // already fine, just set type
     expr.type()=empty_typet();
   }
-  else if(expr.id()=="ieee_equality" ||
-          expr.id()=="ieee_notequal" ||
-          expr.id()=="ieee_add" ||
+  else if(expr.id()=="ieee_add" ||
           expr.id()=="ieee_sub" ||
           expr.id()=="ieee_mul" ||
           expr.id()=="ieee_div")
@@ -774,34 +772,6 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
 
 /*******************************************************************\
 
-Function: c_typecheck_baset::adjust_float_rel
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void c_typecheck_baset::adjust_float_rel(exprt &expr)
-{
-  // equality and disequality on float is not mathematical equality!
-  assert(expr.operands().size()==2);
-
-  if(follow(expr.op0().type()).is_floatbv()
-     || follow(expr.op1().type()).is_floatbv())
-  {
-    if(expr.id() == "=") {
-      expr.id("ieee_equality");
-    } else if(expr.id() == "notequal") {
-      expr.id("ieee_notequal");
-    }
-  }
-}
-
-/*******************************************************************\
-
 Function: c_typecheck_baset::adjust_float_arith
 
   Inputs:
@@ -876,7 +846,6 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
          final_type.id()!="incomplete_array" &&
          final_type.id()!="incomplete_struct")
       {
-        adjust_float_rel(expr);
         return; // no promotion necessary
       }
     }
@@ -890,10 +859,7 @@ void c_typecheck_baset::typecheck_expr_rel(exprt &expr)
   if(type0==type1)
   {
     if(is_number(type0))
-    {
-      adjust_float_rel(expr);
       return;
-    }
 
     if(type0.id()=="pointer")
     {

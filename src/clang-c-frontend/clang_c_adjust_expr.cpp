@@ -206,9 +206,7 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   else if(expr.id() == "array_of")
   {
   }
-  else if(expr.id()=="ieee_equality" ||
-          expr.id()=="ieee_notequal" ||
-          expr.id()=="ieee_add" ||
+  else if(expr.id()=="ieee_add" ||
           expr.id()=="ieee_sub" ||
           expr.id()=="ieee_mul" ||
           expr.id()=="ieee_div")
@@ -412,38 +410,7 @@ void clang_c_adjust::adjust_expr_rel(exprt& expr)
   exprt &op0=expr.op0();
   exprt &op1=expr.op1();
 
-  const typet o_type0=op0.type();
-  const typet o_type1=op1.type();
-
-  if(expr.id()=="=" || expr.id()=="notequal")
-  {
-    if(o_type0==o_type1)
-    {
-      if(!o_type0.is_array())
-      {
-        adjust_float_rel(expr);
-        return; // no promotion necessary
-      }
-    }
-  }
-
   gen_typecast_arithmetic(ns, op0, op1);
-}
-
-void clang_c_adjust::adjust_float_rel(exprt& expr)
-{
-  // equality and disequality on float is not mathematical equality!
-  assert(expr.operands().size()==2);
-
-  if(ns.follow(expr.op0().type()).is_floatbv()
-     || ns.follow(expr.op1().type()).is_floatbv())
-  {
-    if(expr.id() == "=") {
-      expr.id("ieee_equality");
-    } else if(expr.id() == "notequal") {
-      expr.id("ieee_notequal");
-    }
-  }
 }
 
 void clang_c_adjust::adjust_float_arith(exprt &expr)

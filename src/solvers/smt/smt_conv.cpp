@@ -593,24 +593,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = mk_smt_bvfloat_arith_ops(expr);
     break;
   }
-  case expr2t::ieee_equality_id:
-  {
-    const ieee_equality2t &ieee_eq = to_ieee_equality2t(expr);
-    assert(is_floatbv_type(ieee_eq.side_1));
-    assert(is_floatbv_type(ieee_eq.side_2));
-
-    a = convert_ieee_equal(expr);
-    break;
-  }
-  case expr2t::ieee_notequal_id:
-  {
-    const ieee_notequal2t &ieee_neq = to_ieee_notequal2t(expr);
-    assert(is_floatbv_type(ieee_neq.side_1));
-    assert(is_floatbv_type(ieee_neq.side_2));
-
-    a = mk_func_app(boolean_sort, SMT_FUNC_NOT, convert_ieee_equal(expr));
-    break;
-  }
   case expr2t::modulus_id:
   {
     assert(expr->get_num_sub_exprs() == 2);

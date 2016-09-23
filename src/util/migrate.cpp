@@ -787,18 +787,6 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     notequal2t *n = new notequal2t(side1, side2);
     new_expr_ref = expr2tc(n);
-  } else if (expr.id() == "ieee_equality") {
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    ieee_equality2t *e = new ieee_equality2t(side1, side2);
-    new_expr_ref = expr2tc(e);
-  } else if (expr.id() == "ieee_notequal") {
-    expr2tc side1, side2;
-    convert_operand_pair(expr, side1, side2);
-
-    ieee_notequal2t *n = new ieee_notequal2t(side1, side2);
-    new_expr_ref = expr2tc(n);
   } else if (expr.id() == exprt::i_lt) {
     expr2tc side1, side2;
 
@@ -1886,22 +1874,6 @@ migrate_expr_back(const expr2tc &ref)
     notequal.copy_to_operands(migrate_expr_back(ref2.side_1),
                               migrate_expr_back(ref2.side_2));
     return notequal;
-  }
-  case expr2t::ieee_equality_id:
-  {
-    const ieee_equality2t &ref2 = to_ieee_equality2t(ref);
-    exprt ieee_eq("ieee_equality", bool_typet());
-    ieee_eq.copy_to_operands(migrate_expr_back(ref2.side_1),
-                              migrate_expr_back(ref2.side_2));
-    return ieee_eq;
-  }
-  case expr2t::ieee_notequal_id:
-  {
-    const ieee_notequal2t &ref2 = to_ieee_notequal2t(ref);
-    exprt ieee_neq("ieee_notequal", bool_typet());
-    ieee_neq.copy_to_operands(migrate_expr_back(ref2.side_1),
-                              migrate_expr_back(ref2.side_2));
-    return ieee_neq;
   }
   case expr2t::lessthan_id:
   {

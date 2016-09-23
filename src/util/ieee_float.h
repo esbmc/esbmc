@@ -235,11 +235,6 @@ public:
   friend bool operator ==(const ieee_floatt &a, int i);
   friend bool operator >(const ieee_floatt &a, int i);
 
-  // these do IEEE equality
-
-  friend bool ieee_equal(const ieee_floatt &a, const ieee_floatt &b);
-  friend bool ieee_not_equal(const ieee_floatt &a, const ieee_floatt &b);
-
 protected:
   void divide_and_round(mp_integer &fraction, const mp_integer &factor);
   void align();
@@ -262,7 +257,5 @@ bool operator >=(const ieee_floatt &a, const ieee_floatt &b);
 bool operator ==(const ieee_floatt &a, const ieee_floatt &b);
 bool operator !=(const ieee_floatt &a, const ieee_floatt &b);
 std::ostream& operator << (std::ostream &, const ieee_floatt &);
-bool ieee_equal(const ieee_floatt &a, const ieee_floatt &b);
-bool ieee_not_equal(const ieee_floatt &a, const ieee_floatt &b);
 
 #endif

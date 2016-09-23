@@ -1287,41 +1287,31 @@ Function: operator ==
 
 bool operator ==(const ieee_floatt &a, const ieee_floatt &b)
 {
-  // packed equality!
+  // NaNs are always equal
   if(a.NaN_flag && b.NaN_flag)
     return true;
-  else if(a.NaN_flag || b.NaN_flag)
+
+  // If one is NaN, it's always false
+  if(a.NaN_flag || b.NaN_flag)
     return false;
 
-  if(a.infinity_flag && b.infinity_flag &&
-     a.sign_flag == b.sign_flag) return true;
-  else if(a.infinity_flag || b.infinity_flag)
+  // Compare infs
+  if(a.infinity_flag && b.infinity_flag && (a.sign_flag == b.sign_flag))
+    return true;
+
+  // If one is Nan, it's always false
+  if(a.infinity_flag || b.infinity_flag)
     return false;
 
+  // Zeros are always equal, despite their sign
+  if(a.is_zero() && b.is_zero())
+    return true;
+
+  assert(a.spec==b.spec);
 
   return a.exponent==b.exponent &&
          a.fraction==b.fraction &&
          a.sign_flag==b.sign_flag;
-}
-
-/*******************************************************************\
-
-Function: ieee_equal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool ieee_equal(const ieee_floatt &a, const ieee_floatt &b)
-{
-  if(a.NaN_flag || b.NaN_flag) return false;
-  if(a.is_zero() && b.is_zero()) return true;
-  assert(a.spec==b.spec);
-  return a==b;
 }
 
 /*******************************************************************\
@@ -1379,26 +1369,6 @@ Function: operator !=
 bool operator !=(const ieee_floatt &a, const ieee_floatt &b)
 {
   return !(a==b);
-}
-
-/*******************************************************************\
-
-Function: ieee_not_equal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool ieee_not_equal(const ieee_floatt &a, const ieee_floatt &b)
-{
-  if(a.NaN_flag || b.NaN_flag) return true; // !!!
-  if(a.is_zero() && b.is_zero()) return false;
-  assert(a.spec==b.spec);
-  return a!=b;
 }
 
 /*******************************************************************\

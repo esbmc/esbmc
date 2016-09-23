@@ -450,9 +450,7 @@ public:
     typecast_id,
     if_id,
     equality_id,
-    ieee_equality_id,
     notequal_id,
-    ieee_notequal_id,
     lessthan_id,
     greaterthan_id,
     lessthanequal_id,
@@ -1992,8 +1990,6 @@ class isnormal2t;
 class isfinite2t;
 class signbit2t;
 class concat2t;
-class ieee_equality2t;
-class ieee_notequal2t;
 class ieee_add2t;
 class ieee_sub2t;
 class ieee_mul2t;
@@ -2947,8 +2943,6 @@ irep_typedefs(typecast,typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
-irep_typedefs(ieee_equality, relation_data);
-irep_typedefs(ieee_notequal, relation_data);
 irep_typedefs(lessthan, relation_data);
 irep_typedefs(greaterthan, relation_data);
 irep_typedefs(lessthanequal, relation_data);
@@ -3326,36 +3320,6 @@ public:
     : notequal_expr_methods(type_pool.get_bool(), notequal_id, v1, v2) {}
   notequal2t(const notequal2t &ref)
     : notequal_expr_methods(ref) {}
-
-  virtual expr2tc do_simplify(bool second) const;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** IEEE equality expression. Evaluate whether two floatbvs exprs are the same. Always has
- *  boolean type. @extends ieee_relation_data */
-class ieee_equality2t : public ieee_equality_expr_methods
-{
-public:
-  ieee_equality2t(const expr2tc &v1, const expr2tc &v2)
-    : ieee_equality_expr_methods(type_pool.get_bool(), ieee_equality_id, v1, v2) {}
-  ieee_equality2t(const ieee_equality2t &ref)
-    : ieee_equality_expr_methods(ref) {}
-
-  virtual expr2tc do_simplify(bool second) const;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** IEEE inequality expression. Evaluate whether two floatbvs exprs are different. Always has
- *  boolean type. @extends ieee_relation_data */
-class ieee_notequal2t : public ieee_notequal_expr_methods
-{
-public:
-  ieee_notequal2t(const expr2tc &v1, const expr2tc &v2)
-    : ieee_notequal_expr_methods(type_pool.get_bool(), ieee_notequal_id, v1, v2) {}
-  ieee_notequal2t(const ieee_notequal2t &ref)
-    : ieee_notequal_expr_methods(ref) {}
 
   virtual expr2tc do_simplify(bool second) const;
 
@@ -4724,8 +4688,6 @@ expr_macros(typecast);
 expr_macros(if);
 expr_macros(equality);
 expr_macros(notequal);
-expr_macros(ieee_equality);
-expr_macros(ieee_notequal);
 expr_macros(lessthan);
 expr_macros(greaterthan);
 expr_macros(lessthanequal);

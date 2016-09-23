@@ -527,9 +527,7 @@ static const char *expr_names[] = {
   "typecast",
   "if",
   "equality",
-  "ieee_equality",
   "notequal",
-  "ieee_notequal",
   "lessthan",
   "greaterthan",
   "lessthanequal",
@@ -2160,10 +2158,6 @@ std::string equality2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string notequal2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
-std::string ieee_equality2t::field_names [esbmct::num_type_fields]  =
-{ "side_1", "side_2", "rounding_mode", "", "", ""};
-std::string ieee_notequal2t::field_names [esbmct::num_type_fields]  =
-{ "side_1", "side_2", "rounding_mode", "", "", ""};
 std::string lessthan2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string greaterthan2t::field_names [esbmct::num_type_fields]  =
@@ -2366,8 +2360,6 @@ irep_typedefs(typecast,typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
-irep_typedefs(ieee_equality, relation_data);
-irep_typedefs(ieee_notequal, relation_data);
 irep_typedefs(lessthan, relation_data);
 irep_typedefs(greaterthan, relation_data);
 irep_typedefs(lessthanequal, relation_data);
