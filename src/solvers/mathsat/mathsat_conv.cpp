@@ -252,13 +252,15 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     break;
   }
   case SMT_FUNC_IMPLIES:
+  {
     // MathSAT doesn't seem to implement this; so do it manually. Following the
     // CNF conversion CBMC does, this is: lor(lnot(a), b)
-    r = msat_make_not(env, args[0]->t);
-    check_msat_error(r);
+    msat_term nota = msat_make_not(env, args[0]->t);
+    check_msat_error(nota);
 
-    r = msat_make_or(env, r, args[1]->t);
+    r = msat_make_or(env, nota, args[1]->t);
     break;
+  }
   case SMT_FUNC_ITE:
     if (s->id == SMT_SORT_BOOL) {
       // MathSAT shows a dislike of implementing this with booleans. Follow
