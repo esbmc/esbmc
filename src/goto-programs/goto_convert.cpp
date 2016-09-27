@@ -436,11 +436,20 @@ void goto_convertt::convert_sideeffect(
 
     exprt rhs;
 
-    if(statement=="postincrement" ||
-       statement=="preincrement")
-      rhs.id("+");
+    if(statement == "postincrement" || statement == "preincrement")
+    {
+      if(expr.type().is_floatbv())
+        rhs.id("ieee_add");
+      else
+        rhs.id("+");
+    }
     else
-      rhs.id("-");
+    {
+      if(expr.type().is_floatbv())
+        rhs.id("ieee_sub");
+      else
+        rhs.id("-");
+    }
 
     const typet &op_type=ns.follow(expr.op0().type());
 
