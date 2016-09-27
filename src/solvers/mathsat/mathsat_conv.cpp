@@ -571,8 +571,8 @@ smt_astt mathsat_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
 
 smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 {
-  smt_astt rm = convert_rounding_mode(cast.rounding_mode);
-  const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
+  // Rounding mode symbol
+  smt_astt rm_const;
 
   smt_astt from = convert_ast(cast.from);
   const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
@@ -581,12 +581,23 @@ smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
   smt_sort *s;
   if(is_bv_type(cast.type)) {
     s = mk_sort(SMT_SORT_BV);
+
+    // Conversion from float to integers always truncate, so we assume
+    // the round mode to be toward infinity
+    rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+    const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm_const);
+
     t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, mfrom->t);
   } else if(is_floatbv_type(cast.type)) {
     unsigned ew = to_floatbv_type(cast.type).exponent;
     unsigned sw = to_floatbv_type(cast.type).fraction;
 
     s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+
+    // Use the round mode
+    rm_const = convert_rounding_mode(cast.rounding_mode);
+    const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm_const);
+
     t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
   }
   check_msat_error(t);

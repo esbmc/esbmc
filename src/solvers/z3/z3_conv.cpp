@@ -733,8 +733,7 @@ smt_astt z3_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
 smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 {
   // Rounding mode symbol
-  smt_astt rm_const = convert_rounding_mode(cast.rounding_mode);
-  const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
+  smt_astt rm_const;
 
   smt_astt from = convert_ast(cast.from);
   const z3_smt_ast *mfrom = z3_smt_downcast(from);
@@ -742,9 +741,21 @@ smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
   smt_sort *s;
   if(is_unsignedbv_type(cast.type)) {
     s = mk_sort(SMT_SORT_BV);
+
+    // Conversion from float to integers always truncate, so we assume
+    // the round mode to be toward infinity
+    rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+    const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
+
     return new_ast(ctx.fpa_to_ubv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
   } else if(is_signedbv_type(cast.type)) {
     s = mk_sort(SMT_SORT_BV);
+
+    // Conversion from float to integers always truncate, so we assume
+    // the round mode to be toward infinity
+    rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+    const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
+
     return new_ast(ctx.fpa_to_sbv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
   } else if(is_floatbv_type(cast.type)) {
     unsigned ew = to_floatbv_type(cast.type).exponent;
@@ -752,6 +763,10 @@ smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 
     s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
     const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
+
+    // Use the round mode
+    rm_const = convert_rounding_mode(cast.rounding_mode);
+    const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
     return new_ast(ctx.fpa_to_fpa(mrm_const->e, mfrom->e, zs->s), s);
   }
