@@ -24,7 +24,7 @@ int main (void)
 
   assert(__fpclassifyf(largestSubnormalFloat) == FP_SUBNORMAL);
 
-  char b = __ESBMC_isnormalf(largestSubnormalFloat);
+  char b = isnormal(largestSubnormalFloat);
 
   assert(!b);
   #endif
