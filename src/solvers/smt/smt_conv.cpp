@@ -1503,7 +1503,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
   // Create is_neg
   // For fixedbvs, we check if it's < 0
   smt_astt is_neg;
-  if(is_floatbv_type(signbit.type) && !int_encoding)
+  if(!config.ansi_c.use_fixed_for_float && !int_encoding)
     is_neg = mk_func_app(boolean_sort, SMT_FUNC_ISNEG, value);
   else
   {
