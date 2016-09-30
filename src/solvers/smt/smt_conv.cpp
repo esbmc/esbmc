@@ -1501,7 +1501,17 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
   auto sort = convert_sort(signbit.type);
 
   // Create is_neg
-  auto is_neg = mk_func_app(boolean_sort, SMT_FUNC_ISNEG, value);
+  // For fixedbvs, we check if it's < 0
+  smt_astt is_neg;
+  if(is_floatbv_type(signbit.type) && !int_encoding)
+    is_neg = mk_func_app(boolean_sort, SMT_FUNC_ISNEG, value);
+  else
+  {
+    expr2tc zero_expr;
+    migrate_expr(gen_zero(migrate_type_back(signbit.value->type)), zero_expr);
+
+    is_neg = mk_func_app(boolean_sort, SMT_FUNC_LT, value, convert_ast(zero_expr));
+  }
 
   expr2tc zero_expr;
   migrate_expr(gen_zero(migrate_type_back(signbit.type)), zero_expr);
