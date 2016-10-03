@@ -366,10 +366,15 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_GT:
   case SMT_FUNC_BVSGT:
   {
-    // This is !SLTE
     assert(s->id == SMT_SORT_BOOL);
-    const smt_ast *a = mk_func_app(s, SMT_FUNC_BVSLTE, _args, numargs);
-    return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
+
+    // (a > b) iff (b < a)
+    if((args[0]->sort->id == SMT_SORT_FLOATBV)
+        && (args[1]->sort->id == SMT_SORT_FLOATBV))
+      r = msat_make_fp_lt(env, args[1]->t, args[0]->t);
+    else
+      r = msat_make_bv_slt(env, args[1]->t, args[0]->t);
+    break;
   }
   case SMT_FUNC_LTE:
   case SMT_FUNC_BVSLTE:
