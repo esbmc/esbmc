@@ -545,18 +545,16 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
     || expr.is_typecast())
   {
     if(expr.id() == "/" || expr.id() == "mod")
-    {
       div_by_zero_check(expr, guard);
-    }
 
-    if (expr.type().is_signedbv())
-    {
-      overflow_check(expr, guard);
-    }
-    else if (expr.type().is_floatbv())
-    {
-      nan_check(expr, guard);
-    }
+    overflow_check(expr, guard);
+  }
+  else if (expr.id() == "ieee_add" || expr.id() == "ieee_sub"
+    || expr.id() == "ieee_mul" || expr.id() == "ieee_div"
+    || expr.is_typecast())
+  {
+    float_overflow_check(expr, guard);
+    nan_check(expr, guard);
   }
   else if (expr.id() == "<=" || expr.id() == "<" || expr.id() == ">="
       || expr.id() == ">")
