@@ -77,7 +77,7 @@ void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
     return;
 
   // first, check type
-  if (expr.type().id() != "signedbv")
+  if (!expr.type().is_signedbv())
     return;
 
   // add overflow subgoal
@@ -115,7 +115,7 @@ void goto_checkt::nan_check(const exprt &expr, const guardt &guard)
     return;
 
   // first, check type
-  if (expr.type().id() != "floatbv")
+  if (!expr.type().is_floatbv())
     return;
 
   if (expr.id() != "+" && expr.id() != "*" && expr.id() != "/"
@@ -428,21 +428,15 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
   {
     bounds_check(expr, guard);
   }
-  else if ((expr.id() == "/") || expr.id() == "mod")
+  else if (expr.id() == "+" || expr.id() == "-"
+    || expr.id() == "*" || expr.id() == "unary-"
+    || expr.id() == "/" || expr.id() == "mod"
+    || expr.is_typecast())
   {
-    div_by_zero_check(expr, guard);
-    if (expr.type().is_signedbv())
+    if(expr.id() == "/" || expr.id() == "mod")
     {
-      overflow_check(expr, guard);
+      div_by_zero_check(expr, guard);
     }
-    else if (expr.type().is_floatbv())
-    {
-      nan_check(expr, guard);
-    }
-  }
-  else if (expr.id() == "+" || expr.id() == "-" || expr.id() == "*"
-      || expr.id() == "unary-" || expr.is_typecast())
-  {
 
     if (expr.type().is_signedbv())
     {
