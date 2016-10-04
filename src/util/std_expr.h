@@ -739,6 +739,11 @@ public:
     copy_to_operands(op0, op1);
   }
 
+  or_exprt(const exprt &op0, const exprt &op1, const exprt &op2):exprt(exprt::i_or, typet("bool"))
+  {
+    copy_to_operands(op0, op1, op2);
+  }
+
   or_exprt(const exprt::operandst &op):exprt(exprt::i_or, typet("bool"))
   {
     if(op.empty())
