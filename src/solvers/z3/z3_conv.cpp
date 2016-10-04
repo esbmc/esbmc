@@ -61,9 +61,9 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
       z3::tactic(ctx, "simplify") &
       z3::tactic(ctx, "smt")).mk_solver();
 
-   z3::params p(ctx);
-   p.set("relevancy", (unsigned int) 0);
-   solver.set(p);
+  z3::params p(ctx);
+  p.set("relevancy", (unsigned int) 0);
+  solver.set(p);
 
   Z3_set_ast_print_mode(ctx, Z3_PRINT_SMTLIB_COMPLIANT);
 
