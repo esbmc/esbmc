@@ -12,6 +12,18 @@
 // Ahem
 msat_env* _env = NULL;
 
+void print_mathsat_formula()
+{
+  size_t num_of_asserted;
+  msat_term * asserted_formulas =
+      msat_get_asserted_formulas(*_env, &num_of_asserted);
+
+  for (unsigned i=0; i< num_of_asserted; i++)
+    std::cout << msat_to_smtlib2(*_env, asserted_formulas[i]) << "\n";
+
+  msat_free(asserted_formulas);
+}
+
 void check_msat_error(msat_term r)
 {
   if (MSAT_ERROR_TERM(r)) {
