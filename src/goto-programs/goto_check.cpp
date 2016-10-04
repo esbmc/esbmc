@@ -541,9 +541,6 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
     || expr.id() == "ieee_mul" || expr.id() == "ieee_div"
     || expr.is_typecast())
   {
-    if(expr.id() == "ieee_div")
-      div_by_zero_check(expr, guard);
-
     float_overflow_check(expr, guard);
     nan_check(expr, guard);
   }
