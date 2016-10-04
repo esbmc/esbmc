@@ -241,8 +241,10 @@ bool clang_c_convertert::convert_float_literal(
       parse_float(string, significand, exponent);
 
       a.from_base10(significand, exponent);
-      value = a.pack();
     }
+
+    // Pack the value to generate the correct number, regardless of the case
+    value = a.pack();
 
     // Save value string format
     value_string = a.to_ansi_c_string();
