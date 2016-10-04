@@ -1680,6 +1680,57 @@ struct Equalitytor
   }
 };
 
+template<template<typename> class TFunctor, typename constructor>
+static expr2tc
+simplify_floatbv_relations(
+  const type2tc &type,
+  const expr2tc &side_1,
+  const expr2tc &side_2)
+{
+  if(!is_number_type(type))
+    return expr2tc();
+
+  // Try to recursively simplify nested operations both sides, if any
+  expr2tc simplied_side_1 = try_simplification(side_1);
+  expr2tc simplied_side_2 = try_simplification(side_2);
+
+  if (is_constant_expr(simplied_side_1)
+      || is_constant_expr(simplied_side_2)
+      || (simplied_side_1 == simplied_side_2))
+  {
+    expr2tc simpl_res = expr2tc();
+
+    if(is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
+    {
+      std::function<bool(const expr2tc&)> is_constant =
+        (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+
+      std::function<ieee_floatt& (expr2tc&)> get_value =
+        [](expr2tc& c) -> ieee_floatt&
+          { return to_constant_floatbv2t(c).value; };
+
+      simpl_res =
+        TFunctor<ieee_floatt>::simplify(
+          simplied_side_1, simplied_side_2, is_constant, get_value);
+    }
+    else
+      assert(0);
+
+    return typecast_check_return(type, simpl_res);
+  }
+
+  // Were we able to simplify the sides?
+  if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
+  {
+    expr2tc new_op =
+      expr2tc(new constructor(simplied_side_1, simplied_side_2));
+
+    return typecast_check_return(type, new_op);
+  }
+
+  return expr2tc();
+}
+
 template<class constant_type>
 struct IEEE_equalitytor
 {
@@ -1698,7 +1749,7 @@ struct IEEE_equalitytor
 
     if(op1 == op2)
     {
-      // x == x is the same as saying isnan(x)
+      // x == x is the same as saying !isnan(x)
       auto isnan = expr2tc(new isnan2t(op1));
       auto is_not_nan = expr2tc(new not2t(isnan));
       return try_simplification(is_not_nan);
@@ -1713,7 +1764,7 @@ equality2t::do_simplify(bool second __attribute__((unused))) const
 {
   // If we're dealing with floatbvs, call IEEE_equalitytor instead
   if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
-    return simplify_relations<IEEE_equalitytor, equality2t>(
+    return simplify_floatbv_relations<IEEE_equalitytor, equality2t>(
       type,side_1, side_2);
 
   return simplify_relations<Equalitytor, equality2t>(type, side_1, side_2);
