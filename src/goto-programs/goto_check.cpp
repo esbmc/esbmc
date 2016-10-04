@@ -115,7 +115,7 @@ void goto_checkt::float_overflow_check(const exprt &expr, const guardt &guard)
         guard);
     }
   }
-  else if(expr.id()=="/")
+  else if(expr.id()=="ieee_div")
   {
     assert(expr.operands().size()==2);
 
@@ -134,18 +134,7 @@ void goto_checkt::float_overflow_check(const exprt &expr, const guardt &guard)
 
     return;
   }
-  else if(expr.id()=="mod")
-  {
-    // Can't overflow
-    return;
-  }
-  else if(expr.id()=="unary-")
-  {
-    // Can't overflow
-    return;
-  }
-  else if(expr.id()=="+" || expr.id()=="*" ||
-      expr.id()=="-")
+  else if(expr.id()=="ieee_add" || expr.id()=="ieee_mul" || expr.id()=="ieee_sub")
   {
     if(expr.operands().size()==2)
     {
@@ -430,7 +419,6 @@ void goto_checkt::add_guarded_claim(const exprt &_expr,
 
 void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
 {
-
   if (address)
   {
     if (expr.is_dereference())
@@ -553,6 +541,9 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
     || expr.id() == "ieee_mul" || expr.id() == "ieee_div"
     || expr.is_typecast())
   {
+    if(expr.id() == "ieee_div")
+      div_by_zero_check(expr, guard);
+
     float_overflow_check(expr, guard);
     nan_check(expr, guard);
   }
