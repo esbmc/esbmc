@@ -29,7 +29,7 @@ int main (int argc, char **argv) {
   assert(signbit(plusZero) == 0);
 
   double minusZero = -0.0;
-  assert(signbit(minusZero) == 1);
+  assert(signbit(minusZero) != 0);
 
   double var = 0x1.73b7985271bcep+4;
 
