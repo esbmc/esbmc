@@ -322,12 +322,12 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
 
   if (address)
   {
-    if (expr.id() == "dereference")
+    if (expr.is_dereference())
     {
       assert(expr.operands().size() == 1);
       check_rec(expr.op0(), guard, false);
     }
-    else if (expr.id() == "index")
+    else if (expr.is_index())
     {
       assert(expr.operands().size() == 2);
       check_rec(expr.op0(), guard, true);
@@ -347,7 +347,7 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
     check_rec(expr.op0(), guard, true);
     return;
   }
-  else if (expr.is_and() || expr.id() == "or")
+  else if (expr.is_and() || expr.is_or())
   {
     if (!expr.is_boolean())
       throw expr.id_string() + " must be Boolean, but got " + expr.pretty();
@@ -364,7 +364,7 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
 
       check_rec(op, guard, false);
 
-      if (expr.id() == "or")
+      if (expr.is_or())
       {
         exprt tmp(op);
         tmp.make_not();
@@ -424,31 +424,31 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
   forall_operands(it, expr)
     check_rec(*it, guard, false);
 
-  if (expr.id() == "index")
+  if (expr.is_index())
   {
     bounds_check(expr, guard);
   }
-  else if (expr.id() == "/")
+  else if ((expr.id() == "/") || expr.id() == "mod")
   {
     div_by_zero_check(expr, guard);
-    if (expr.type().id() == "signedbv")
+    if (expr.type().is_signedbv())
     {
       overflow_check(expr, guard);
     }
-    else if (expr.type().id() == "floatbv")
+    else if (expr.type().is_floatbv())
     {
       nan_check(expr, guard);
     }
   }
   else if (expr.id() == "+" || expr.id() == "-" || expr.id() == "*"
-      || expr.id() == "unary-" || expr.id() == "typecast")
+      || expr.id() == "unary-" || expr.is_typecast())
   {
 
-    if (expr.type().id() == "signedbv")
+    if (expr.type().is_signedbv())
     {
       overflow_check(expr, guard);
     }
-    else if (expr.type().id() == "floatbv")
+    else if (expr.type().is_floatbv())
     {
       nan_check(expr, guard);
     }
@@ -457,18 +457,6 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
       || expr.id() == ">")
   {
     pointer_rel_check(expr, guard);
-  }
-  else if (expr.id() == "mod")
-  {
-    div_by_zero_check(expr, guard);
-    if (expr.type().id() == "signedbv")
-    {
-      overflow_check(expr, guard);
-    }
-    else if (expr.type().id() == "floatbv")
-    {
-      nan_check(expr, guard);
-    }
   }
 }
 
