@@ -1784,34 +1784,9 @@ struct Notequaltor
   }
 };
 
-template<class constant_type>
-struct IEEE_notequaltor
-{
-  static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant __attribute__((unused)),
-    std::function<constant_type&(expr2tc&)> get_value)
-  {
-    // Two constants? Simplify to result of the comparison
-    if (is_constant(op1) && is_constant(op2))
-    {
-      bool res = (get_value(op1) != get_value(op2));
-      return expr2tc(new constant_bool2t(res));
-    }
-
-    return expr2tc();
-  }
-};
-
 expr2tc
 notequal2t::do_simplify(bool second __attribute__((unused))) const
 {
-  // If we're dealing with floatbvs, call IEEE_notequaltor instead
-  if(is_floatbv_type(side_1) || is_floatbv_type(side_2))
-    return simplify_relations<IEEE_notequaltor, equality2t>(
-      type,side_1, side_2);
-
   return simplify_relations<Notequaltor, notequal2t>(type, side_1, side_2);
 }
 
