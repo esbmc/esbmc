@@ -515,9 +515,10 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVMUL:
     return new_ast((asts[0]->e * asts[1]->e), s);
   case SMT_FUNC_MOD:
-    return new_ast(
-                    z3::to_expr(ctx, Z3_mk_mod(ctx, asts[0]->e, asts[1]->e)),
-                    s);
+    if(s->id == SMT_SORT_FLOATBV)
+      return new_ast(z3::to_expr(ctx, Z3_mk_fpa_rem(ctx, asts[0]->e, asts[1]->e)), s);
+    else
+      return new_ast(z3::to_expr(ctx, Z3_mk_mod(ctx, asts[0]->e, asts[1]->e)), s);
   case SMT_FUNC_BVSMOD:
     return new_ast(
                  z3::to_expr(ctx, Z3_mk_bvsrem(ctx, asts[0]->e, asts[1]->e)),
