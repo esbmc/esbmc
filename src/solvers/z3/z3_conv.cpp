@@ -799,7 +799,7 @@ smt_astt z3_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
     migrate_expr(gen_zero(migrate_type_back(cast.type)), zero_expr);
 
     expr2tc one_expr;
-    migrate_expr(gen_zero(migrate_type_back(cast.type)), one_expr);
+    migrate_expr(gen_one(migrate_type_back(cast.type)), one_expr);
 
     const smt_ast *args[3];
     args[0] = from;
