@@ -25,11 +25,11 @@ int main()
   double d4, _d4;
   d4=_d4;
   __ESBMC_assume(isfinite(d4));
-  assert(!isnand(d4));
-  assert(!isinfd(d4));
+  assert(!isnan(d4));
+  assert(!isinf(d4));
 
   double d5, _d5;
   d5=_d5;
   __ESBMC_assume(!isnan(d5) && !isinf(d5));
-  assert(isfinited(d5));
+  assert(isfinite(d5));
 }
