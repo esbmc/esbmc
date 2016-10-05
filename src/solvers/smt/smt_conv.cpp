@@ -761,6 +761,21 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = args[0]->eq(this, args[1]);
     break;
   }
+  case expr2t::notequal_id:
+  {
+    // Handle all kinds of structs by inverted equality. The only that's really
+    // going to turn up is pointers though.
+    assert(expr->get_num_sub_exprs() == 2);
+
+    expr2tc side1 = *expr->get_sub_expr(0);
+    expr2tc side2 = *expr->get_sub_expr(1);
+    if(is_floatbv_type(side1) && is_floatbv_type(side2))
+      a = convert_ieee_equal(expr);
+    else
+      a = args[0]->eq(this, args[1]);
+    a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
+    break;
+  }
   case expr2t::shl_id:
   {
     assert(expr->get_num_sub_exprs() == 2);
@@ -848,15 +863,6 @@ smt_convt::convert_ast(const expr2tc &expr)
               SMT_FUNC_BVLSHR,
               SMT_FUNC_INVALID});
     }
-    break;
-  }
-  case expr2t::notequal_id:
-  {
-    // Handle all kinds of structs by inverted equality. The only that's really
-    // going to turn up is pointers though.
-    assert(expr->get_num_sub_exprs() == 2);
-    a = args[0]->eq(this, args[1]);
-    a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
     break;
   }
   case expr2t::abs_id:
