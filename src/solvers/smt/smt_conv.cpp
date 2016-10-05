@@ -752,7 +752,13 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::equality_id:
   {
-    a = args[0]->eq(this, args[1]);
+    expr2tc side1 = *expr->get_sub_expr(0);
+    expr2tc side2 = *expr->get_sub_expr(1);
+
+    if(is_floatbv_type(side1) && is_floatbv_type(side2))
+      a = convert_ieee_equal(expr);
+    else
+      a = args[0]->eq(this, args[1]);
     break;
   }
   case expr2t::shl_id:
@@ -1531,33 +1537,7 @@ smt_convt::convert_ieee_equal(const expr2tc &expr)
   smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
   smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
 
-#if 0
-  // This will be converted to:
-  // ((is_zero(s1) && is_zero(s2)) || fp.eq(s1,s2)) && !(is_nan(s1) && is_nan(s2))
-
-  // is_zero returns true for -0 and +0
-  smt_astt is_zero_s1 = mk_func_app(bs, SMT_FUNC_ISZERO, s1);
-  smt_astt is_zero_s2 = mk_func_app(bs, SMT_FUNC_ISZERO, s2);
-  smt_astt is_zero_and = mk_func_app(bs, SMT_FUNC_AND, is_zero_s1, is_zero_s2);
-
-  // Fp eq
-  smt_astt is_eq = mk_func_app(bs, SMT_FUNC_EQ, s1, s2);
-
-  // Check for NaNs
-  smt_astt is_nan_s1 = mk_func_app(bs, SMT_FUNC_ISNAN, s1);
-  smt_astt is_nan_s2 = mk_func_app(bs, SMT_FUNC_ISNAN, s2);
-  smt_astt is_nan_or = mk_func_app(bs, SMT_FUNC_OR, is_nan_s1, is_nan_s2);
-
-  // Not is_nan
-  smt_astt is_not_nan = mk_func_app(bs, SMT_FUNC_NOT, is_nan_or);
-
-  // ((is_zero(s1) && is_zero(s2)) || fp.eq(s1,s2))
-  smt_astt is_zero_or_eq = mk_func_app(bs, SMT_FUNC_OR, is_zero_and, is_eq);
-
-  return mk_func_app(bs, SMT_FUNC_AND, is_zero_or_eq, is_not_nan);
-#else
-  return mk_func_app(bs, SMT_FUNC_EQ, s1, s2);
-#endif
+  return mk_func_app(bs, SMT_FUNC_IEEE_EQ, s1, s2);
 }
 
 smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)

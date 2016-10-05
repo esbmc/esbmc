@@ -228,8 +228,6 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     // MathSAT demands we use iff for boolean equivalence.
     if (args[0]->sort->id == SMT_SORT_BOOL)
       r = msat_make_iff(env, args[0]->t, args[1]->t);
-    else if((args[0]->sort->id == SMT_SORT_FLOATBV))
-      r = msat_make_fp_equal(env, args[0]->t, args[1]->t);
     else
       r = msat_make_equal(env, args[0]->t, args[1]->t);
     break;
@@ -427,6 +425,9 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     break;
   case SMT_FUNC_ISPOS:
     r = msat_make_fp_ispos(env, args[0]->t);
+    break;
+  case SMT_FUNC_IEEE_EQ:
+    r = msat_make_fp_equal(env, args[0]->t, args[1]->t);
     break;
   default:
     std::cerr << "Unhandled SMT function \"" << smt_func_name_table[k] << "\" "

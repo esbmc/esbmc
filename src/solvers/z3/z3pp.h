@@ -1014,11 +1014,7 @@ namespace z3 {
 
     inline expr operator==(expr const & a, expr const & b) {
         check_context(a, b);
-        Z3_ast r = 0;
-        if(a.is_fpa() && b.is_fpa())
-          r = Z3_mk_fpa_eq(a.ctx(), a, b);
-        else
-          r = Z3_mk_eq(a.ctx(), a, b);
+        Z3_ast r = Z3_mk_eq(a.ctx(), a, b);
         a.check_error();
         return expr(a.ctx(), r);
     }
