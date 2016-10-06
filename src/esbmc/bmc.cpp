@@ -100,22 +100,22 @@ void bmct::successful_trace(smt_convt &smt_conv,
   switch(ui)
   {
     case ui_message_handlert::GRAPHML:
-  	  status("Building successful trace");
+      status("Building successful trace");
 
-  	  /* FIXME - currently, the goto trace construction fails in successful case */
-  	  //build_goto_trace(equation, smt_conv, goto_trace);
+      /* TODO - implement a correctness witness */
+      //build_goto_trace(equation, smt_conv, goto_trace);
 
-  	  generate_goto_trace_in_graphml_format(
-  		true,
+      generate_goto_trace_in_graphml_format(
+        true,
         graphml_output_filename,
         ns,
         goto_trace
-  	  );
+      );
 
       std::cout
-  	    << "The correctness witness using GraphML format is available in: "
+        << "The correctness witness using GraphML format is available in: "
         << options.get_option("witness-path")
-  	    << std::endl;
+        << std::endl;
     break;
 
     case ui_message_handlert::OLD_GUI:
@@ -142,9 +142,7 @@ void bmct::successful_trace(smt_convt &smt_conv,
     default:
       assert(false);
   }
-
   status("VERIFICATION SUCCESSFUL");
-
 }
 
 /*******************************************************************\
@@ -182,9 +180,9 @@ void bmct::error_trace(smt_convt &smt_conv,
         ns,
         goto_trace);
       std::cout
-	    << "The violation witness using GraphML format is available in: "
+        << "The violation witness using GraphML format is available in: "
         << options.get_option("witness-path")
-		<< std::endl;
+        << std::endl;
       std::cout << std::endl << "Counterexample:" << std::endl;
       show_goto_trace(std::cout, ns, goto_trace);
     break;
