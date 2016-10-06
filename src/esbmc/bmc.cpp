@@ -99,23 +99,20 @@ void bmct::successful_trace(smt_convt &smt_conv,
 
   switch(ui)
   {
-    case ui_message_handlert::GRAPHML:
-      status("Building successful trace");
-
-      /* TODO - implement a correctness witness */
-      //build_goto_trace(equation, smt_conv, goto_trace);
-
-      generate_goto_trace_in_graphml_format(
-        true,
-        graphml_output_filename,
-        ns,
-        goto_trace
-      );
-
-      std::cout
-        << "The correctness witness using GraphML format is available in: "
-        << options.get_option("witness-path")
-        << std::endl;
+    case ui_message_handlert::GRAPHML:      
+      /* FIXME - implement a correctness witness */
+      // status("Building successful trace");
+      // build_goto_trace(equation, smt_conv, goto_trace);
+      // generate_goto_trace_in_graphml_format(
+      //   true,
+      //   graphml_output_filename,
+      //   ns,
+      //   goto_trace
+      // );
+      // std::cout
+      //   << "The correctness witness using GraphML format is available in: "
+      //   << options.get_option("witness-path")
+      //   << std::endl;
     break;
 
     case ui_message_handlert::OLD_GUI:
