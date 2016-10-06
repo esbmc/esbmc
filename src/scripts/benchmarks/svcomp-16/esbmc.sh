@@ -70,7 +70,7 @@ fi
 
 # Add graphml informations
 TMPGRAPHML="error-witness.graphml"
-cmdline="$cmdline --witnesspath $TMPGRAPHML"
+cmdline="$cmdline --witness-output $TMPGRAPHML"
 
 if test $IS_OVERFLOW_BENCHMARK = 1; then
    cmdline="$cmdline --overflow-check "

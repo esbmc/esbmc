@@ -71,7 +71,7 @@ fi
 
 # Add graphml informations
 TMPGRAPHML="./witness.graphml"
-cmdline="$cmdline --witnesspath $TMPGRAPHML"
+cmdline="$cmdline --witness-output $TMPGRAPHML"
 
 # Drop all output into a temporary file,
 TMPFILE=`mktemp`
