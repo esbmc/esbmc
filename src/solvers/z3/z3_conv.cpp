@@ -921,7 +921,7 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
 
     // We need to add an extra bit to the significand size,
     // as it has no hidden bit
-    s = new z3_smt_sort(k, ctx.fpa_sort(ew, sw + 1));
+    s = new z3_smt_sort(k, ctx.fpa_sort(ew, sw + 1), ew + sw + 1);
     break;
   }
   case SMT_SORT_FLOATBV_RM:
