@@ -314,7 +314,6 @@ void generate_goto_trace_in_graphml_format(
 
     if(already_initialized == false)
     {
-      create_graphml(graphml, filename);
       create_graph(graph);
       boost::property_tree::ptree first_node;
       node_p first_node_p;
@@ -449,6 +448,7 @@ void generate_goto_trace_in_graphml_format(
   }
 
   /* write graphml */
+  create_graphml(graphml, last_filename);
   graphml.add_child("graphml.graph", graph);
 
 #if (BOOST_VERSION >= 105700)

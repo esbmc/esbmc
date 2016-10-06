@@ -183,9 +183,9 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.cmdline(cmdline);
 
   /* graphML generation options check */
-  if(cmdline.isset("witness-path"))
+  if(cmdline.isset("witness-output"))
   {
-    options.set_option("witness-path", cmdline.getval("witness-path"));
+    options.set_option("witness-output", cmdline.getval("witness-output"));
     options.set_option("no-slice", true);
   }
 
@@ -1802,7 +1802,7 @@ void cbmc_parseoptionst::help()
     " --show-goto-functions        show goto program\n"
     " --extended-try-analysis      check all the try block, even when an exception is throw\n"
     " --version                    show current ESBMC version and exit\n"
-    " --witness-path filename      generate a verification result witness in GraphML format\n"
+    " --witness-output <filename>  generate a verification result witness in GraphML format\n"
     " --clang-frontend             parse source files using clang (beta)\n\n"
     "BMC options\n"
     " --function name              set main function name\n"
@@ -1821,7 +1821,7 @@ void cbmc_parseoptionst::help()
     " --eager                      use eager instantiation\n"
     " --lazy                       use lazy instantiation (default)\n"
     " --smtlib                     use SMT lib format\n"
-    " --output Filename            output VCCs in SMT lib format to given file\n\n"
+    " --output <filename>          output VCCs in SMT lib format to given file\n\n"
     "Incremental SMT solving with Z3\n"
     " --smt-during-symex           enable incremental SMT solving (experimental)\n"
     " --smt-thread-guard           call the solver during thread exploration (experimental)\n"

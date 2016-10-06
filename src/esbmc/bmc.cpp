@@ -90,7 +90,7 @@ void bmct::successful_trace(smt_convt &smt_conv,
 
   goto_tracet goto_trace;
 
-  std::string graphml_output_filename = options.get_option("witness-path");
+  std::string graphml_output_filename = options.get_option("witness-output");
 
   if(!graphml_output_filename.empty())
   {
@@ -110,8 +110,8 @@ void bmct::successful_trace(smt_convt &smt_conv,
       //   goto_trace
       // );
       // std::cout
-      //   << "The correctness witness using GraphML format is available in: "
-      //   << options.get_option("witness-path")
+      //   << "The correctness witness in GraphML format is available at: "
+      //   << options.get_option("witness-output")
       //   << std::endl;
     break;
 
@@ -162,7 +162,7 @@ void bmct::error_trace(smt_convt &smt_conv,
   goto_tracet goto_trace;
   build_goto_trace(equation, smt_conv, goto_trace);
 
-  std::string graphml_output_filename = options.get_option("witness-path");
+  std::string graphml_output_filename = options.get_option("witness-output");
   if(!graphml_output_filename.empty())
   {
     set_ui(ui_message_handlert::GRAPHML);
@@ -177,8 +177,8 @@ void bmct::error_trace(smt_convt &smt_conv,
         ns,
         goto_trace);
       std::cout
-        << "The violation witness using GraphML format is available in: "
-        << options.get_option("witness-path")
+        << "The violation witness in GraphML format is available at: "
+        << options.get_option("witness-output")
         << std::endl;
       std::cout << std::endl << "Counterexample:" << std::endl;
       show_goto_trace(std::cout, ns, goto_trace);
