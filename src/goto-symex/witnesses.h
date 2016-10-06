@@ -448,7 +448,6 @@ void create_graphml(boost::property_tree::ptree & graphml,
     "string");
   key_returnFunction.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", key_returnFunction);
-
 }
 
 void create_graph(boost::property_tree::ptree & graph)
