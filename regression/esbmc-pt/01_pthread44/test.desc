@@ -1,5 +1,3 @@
 main.c
---control-flow-test
+
 ^VERIFICATION SUCCESSFUL$
---
-^VERIFICATION FAILURE$

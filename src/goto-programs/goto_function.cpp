@@ -205,15 +205,6 @@ void goto_functionst::compute_location_numbers()
     it->second.body.compute_location_numbers(nr);
 }
 
-void goto_functionst::compute_incoming_edges()
-{
-  for(typename function_mapt::iterator
-      it=function_map.begin();
-      it!=function_map.end();
-      it++)
-    it->second.body.compute_incoming_edges();
-}
-
 void goto_functionst::compute_target_numbers()
 {
   for(typename function_mapt::iterator

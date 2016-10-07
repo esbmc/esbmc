@@ -999,7 +999,7 @@ namespace esbmct {
     typedef typename baseclass::container_type container2tc;
     typedef typename baseclass::base_type base2t;
 
-    template <typename ...Args> irep_methods2(Args... args) : superclass(args...) { }
+    template <typename ...Args> irep_methods2(const Args& ... args) : superclass(args...) { }
 
     // Copy constructor. Construct from derived ref rather than just
     // irep_methods2, because the template above will be able to directly
@@ -1097,6 +1097,8 @@ namespace esbmct {
     {
       // No result, so desired must exceed the number of idx's
       assert(cur_idx >= desired);
+      (void)cur_idx;
+      (void)desired;
       return NULL;
     }
 
@@ -1104,6 +1106,8 @@ namespace esbmct {
     {
       // See above
       assert(cur_idx >= desired);
+      (void)cur_idx;
+      (void)desired;
       return NULL;
     }
 
@@ -1139,7 +1143,7 @@ namespace esbmct {
   public:
     typedef irep_methods2<derived, baseclass, traits, enable> superclass;
 
-    template <typename ...Args> expr_methods2(Args... args) : superclass(args...) { }
+    template <typename ...Args> expr_methods2(const Args&... args) : superclass(args...) { }
 
     // See notes on irep_methods2 copy constructor
     expr_methods2(const derived &ref) : superclass(ref) { }

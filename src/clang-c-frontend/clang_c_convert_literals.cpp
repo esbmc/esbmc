@@ -161,7 +161,8 @@ std::string clang_c_convertert::parse_float(
   str_whole_number += src[p++];
 
   // skip dot
-  assert(src[p++] == '.');
+  assert(src[p] == '.');
+  p++;
 
   // get fraction part
   std::string str_fraction_part = "";
@@ -169,7 +170,8 @@ std::string clang_c_convertert::parse_float(
     str_fraction_part += src[p++];
 
   // skip E
-  assert(src[p++] == 'E');
+  assert(src[p] == 'E');
+  p++;
 
   // get exponent
   assert(src[p] == '+' || src[p] == '-');

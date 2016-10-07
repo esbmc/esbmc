@@ -55,9 +55,13 @@ int main(int argc, const char **argv)
 const mode_table_et mode_table[] =
 {
   LANGAPI_HAVE_MODE_C,
+#ifndef WITHOUT_CLANG
   LANGAPI_HAVE_MODE_CLANG_C,
+#endif
   LANGAPI_HAVE_MODE_CPP,
+#ifndef WITHOUT_CLANG
   LANGAPI_HAVE_MODE_CLANG_CPP,
+#endif
   LANGAPI_HAVE_MODE_END
 };
 

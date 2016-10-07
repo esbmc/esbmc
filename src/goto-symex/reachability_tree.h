@@ -116,7 +116,7 @@ public:
 
   /**
    *  Permitted number of context switches to take.
-   *  Set with --context-switch <integer> on the command line. Paths where more
+   *  Set with --context-bound <integer> on the command line. Paths where more
    *  than this many context switches occur will not be explored.
    */
   int get_CS_bound() const;

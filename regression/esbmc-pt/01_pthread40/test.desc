@@ -1,5 +1,3 @@
 main.c
---context-switch 5
+--context-bound 5
 ^VERIFICATION SUCCESSFUL$
---
-^VERIFICATION FAILURE$

@@ -73,11 +73,9 @@ public:
   void compute_location_numbers();
   void compute_loop_numbers();
   void compute_target_numbers();
-  void compute_incoming_edges();
 
   void update()
   {
-    compute_incoming_edges();
     compute_target_numbers();
     compute_location_numbers();
   }

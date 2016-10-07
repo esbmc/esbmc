@@ -117,7 +117,14 @@ bool language_uit::parse(const std::string &filename)
   }
 
   if(config.options.get_bool_option("clang-frontend"))
+  {
+#ifndef WITHOUT_CLANG
     mode++;
+#else
+    std::cerr << "The clang frontend has not been built into this version of ESBMC, sorry" << std::endl;
+    abort();
+#endif
+  }
 
   // Check that it opens
   std::ifstream infile(filename.c_str());

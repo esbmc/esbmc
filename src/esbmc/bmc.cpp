@@ -296,63 +296,50 @@ void bmct::show_program(symex_target_equationt &equation)
 
   languagest languages(ns, MODE_C);
 
-  std::cout << std::endl << "Program constraints:" << std::endl;
+  std::cout << "\n" << "Program constraints:" << "\n";
+
+  bool print_guard = config.options.get_bool_option("no-guard-printing");
 
   for(symex_target_equationt::SSA_stepst::const_iterator
       it=equation.SSA_steps.begin();
       it!=equation.SSA_steps.end(); it++)
   {
+    std::cout << "// " << it->source.pc->location_number << " ";
+    std::cout << it->source.pc->location.as_string() << "\n";
+
+    std::string string_value;
+
     if(it->is_assignment())
     {
-      std::string string_value;
       languages.from_expr(migrate_expr_back(it->cond), string_value);
-      std::cout << "(" << count << ") " << string_value << std::endl;
-
-      if(!is_true(it->guard))
-      {
-        languages.from_expr(migrate_expr_back(it->guard), string_value);
-        std::cout << std::string(i2string(count).size()+3, ' ');
-        std::cout << "guard: " << string_value << "\n";
-      }
-
-      count++;
+      std::cout << "(" << count << ") " << string_value << "\n";
     }
     else if(it->is_assert())
     {
-      std::string string_value;
       languages.from_expr(migrate_expr_back(it->cond), string_value);
-      std::cout << "(" << count << ") " << "(assert)" << string_value << std::endl;
-
-      if(!is_true(it->guard))
-      {
-        languages.from_expr(migrate_expr_back(it->guard), string_value);
-        std::cout << std::string(i2string(count).size()+3, ' ');
-        std::cout << "guard: " << string_value << "\n";
-      }
-
-      count++;
+      std::cout << "(" << count << ") " << "(assert)" << string_value << "\n";
     }
     else if(it->is_assume())
     {
-      std::string string_value;
       languages.from_expr(migrate_expr_back(it->cond), string_value);
-      std::cout << "(" << count << ") " << "(assume)" << string_value << std::endl;
-
-      if(!is_true(it->guard))
-      {
-        languages.from_expr(migrate_expr_back(it->guard), string_value);
-        std::cout << std::string(i2string(count).size()+3, ' ');
-        std::cout << "guard: " << string_value << "\n";
-      }
-
-      count++;
+      std::cout << "(" << count << ") " << "(assume)" << string_value << "\n";
     }
     else if (it->is_renumber())
     {
       std::cout << "(" << count << ") " << "renumber: " <<
-                   from_expr(ns, "", it->lhs) << std::endl;
-      count++;
+                   from_expr(ns, "", it->lhs) << "\n";
     }
+
+    if(!migrate_expr_back(it->guard).is_true() && !print_guard)
+    {
+      languages.from_expr(migrate_expr_back(it->guard), string_value);
+      std::cout << std::string(i2string(count).size()+3, ' ');
+      std::cout << "guard: " << string_value << "\n";
+    }
+
+    std::cout << "\n";
+
+    count++;
   }
 }
 

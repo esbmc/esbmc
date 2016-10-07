@@ -3,6 +3,3 @@ main.c
 ^EXIT=0$
 ^SIGNAL=0$
 ^VERIFICATION SUCCESSFUL$
---
-^warning: ignoring
-^VERIFICATION FAILED$

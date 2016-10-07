@@ -41,6 +41,7 @@ public:
   symex_target_equationt(const namespacet &_ns):ns(_ns)
   {
     debug_print = config.options.get_bool_option("symex-ssa-trace");
+    ssa_trace = config.options.get_bool_option("ssa-trace");
   }
 
   // assignment to a variable - must be symbol
@@ -186,6 +187,7 @@ public:
 protected:
   const namespacet &ns;
   bool debug_print;
+  bool ssa_trace;
 };
 
 class runtime_encoded_equationt : public symex_target_equationt

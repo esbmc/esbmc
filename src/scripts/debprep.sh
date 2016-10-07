@@ -7,7 +7,7 @@ fi
 
 VER=$1
 
-if test ! -e ../.git; then
+if test ! -e esbmc; then
   echo "Please run from src/ dir";
   exit 1
 fi

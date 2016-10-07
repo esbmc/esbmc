@@ -45,7 +45,7 @@ reachability_treet::reachability_treet(
   sym.base_name = "execution_statet::\\guard_exec";
   context.move(sym);
 
-  CS_bound = atoi(options.get_option("context-switch").c_str());
+  CS_bound = atoi(options.get_option("context-bound").c_str());
   TS_slice = atoi(options.get_option("time-slice").c_str());
   state_hashing = options.get_bool_option("state-hashing");
   directed_interleavings = options.get_bool_option("direct-interleavings");

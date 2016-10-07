@@ -338,7 +338,6 @@ void goto_programt::get_successors(
 
 void goto_programt::update()
 {
-  compute_incoming_edges();
   compute_target_numbers();
   compute_location_numbers();
 }
@@ -468,40 +467,7 @@ void goto_programt::copy_from(const goto_programt &src)
     }
   }
 
-  compute_incoming_edges();
   compute_target_numbers();
-}
-
-void goto_programt::compute_incoming_edges()
-{
-  for(instructionst::iterator
-      it=instructions.begin();
-      it!=instructions.end();
-      it++)
-  {
-    it->incoming_edges.clear();
-  }
-
-  for(instructionst::iterator
-      it=instructions.begin();
-      it!=instructions.end();
-      it++)
-  {
-    targetst successors;
-
-    get_successors(it, successors);
-
-    for(targetst::const_iterator
-        s_it=successors.begin();
-        s_it!=successors.end();
-        s_it++)
-    {
-      targett t=*s_it;
-
-      if(t!=instructions.end())
-        t->incoming_edges.insert(it);
-    }
-  }
 }
 
 std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)

@@ -43,7 +43,8 @@ extern "C" {
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_k_induction.h>
-
+#include <goto-programs/remove_skip.h>
+#include <goto-programs/remove_unreachable.h>
 #include <goto-programs/add_race_assertions.h>
 
 #include <pointer-analysis/value_set_analysis.h>
@@ -226,10 +227,10 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   options.set_option("fixedbv", true);
 
-  if(cmdline.isset("context-switch"))
-    options.set_option("context-switch", cmdline.getval("context-switch"));
+  if(cmdline.isset("context-bound"))
+    options.set_option("context-bound", cmdline.getval("context-bound"));
   else
-    options.set_option("context-switch", -1);
+    options.set_option("context-bound", -1);
 
   if(cmdline.isset("lock-order-check"))
     options.set_option("lock-order-check", true);
@@ -1160,7 +1161,6 @@ int cbmc_parseoptionst::doit_k_induction()
 int cbmc_parseoptionst::doit_falsification()
 {
   // Generate goto functions for base case and forward condition
-  status("\n*** Generating GOTO functions ***");
   goto_functionst goto_functions;
 
   optionst opts;
@@ -1181,14 +1181,22 @@ int cbmc_parseoptionst::doit_falsification()
   if(set_claims(goto_functions))
     return 7;
 
-  bool res = 0;
-  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
-  if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = -1;
+  // Get max number of iterations
+  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
-  u_int k_step = 1;
-  do
+  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
+  if(cmdline.isset("unlimited-k-steps"))
+    max_k_step = UINT_MAX;
+
+  // Get the increment
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
+    opts.set_option("base-case", true);
+    opts.set_option("forward-condition", false);
+    opts.set_option("inductive-step", false);
+
     bmct bmc(goto_functions, opts, context, ui_message_handler);
     set_verbosity_msg(bmc);
 
@@ -1198,14 +1206,13 @@ int cbmc_parseoptionst::doit_falsification()
     std::cout << i2string((unsigned long) k_step);
     std::cout << " ***" << std::endl;
 
-    res = do_bmc(bmc);
-
-    ++k_step;
-
-    if(res)
-      return res;
-
-  } while(k_step <= max_k_step);
+    if(do_bmc(bmc))
+    {
+      std::cout << std::endl << "Bug found at k = "
+          << k_step << std::endl;
+      return true;
+    }
+  }
 
   status("Unable to prove or falsify the program, giving up.");
   status("VERIFICATION UNKNOWN");
@@ -1742,6 +1749,16 @@ bool cbmc_parseoptionst::process_goto_program(
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
 
+    // remove skips
+    remove_skip(goto_functions);
+
+    // remove unreachable code
+    Forall_goto_functions(f_it, goto_functions)
+      remove_unreachable(f_it->second.body);
+
+    // remove skips
+    remove_skip(goto_functions);
+
     // recalculate numbers, etc.
     goto_functions.update();
 
@@ -1902,7 +1919,12 @@ void cbmc_parseoptionst::help()
     " --ir                         use solver with integer/real arithmetic\n"
     " --eager                      use eager instantiation\n"
     " --lazy                       use lazy instantiation (default)\n"
-    " --outfile Filename           output VCCs in SMT lib format to given file\n\n"
+    " --smtlib                     use SMT lib format\n"
+    " --output Filename            output VCCs in SMT lib format to given file\n\n"
+    "Incremental SMT solving with Z3\n"
+    " --smt-during-symex           enable incremental SMT solving (experimental)\n"
+    " --smt-thread-guard           call the solver during thread exploration (experimental)\n"
+    " --smt-symex-guard            call the solver during symbolic execution (experimental)\n\n"
     "Property checking\n"
     " --no-assertions              ignore assertions\n"
     " --no-bounds-check            do not do array bounds check\n"
@@ -1931,7 +1953,7 @@ void cbmc_parseoptionst::help()
     " --time-slice nr              set the time slice of the round robin algorithm\n"
     "                              (default is 1) \n\n"
     "Concurrency checking\n"
-    " --context-switch nr          limit number of context switches for each thread \n"
+    " --context-bound nr           limit number of context switches for each thread \n"
     " --state-hashing              enable state-hashing, prunes duplicate states\n"
     " --control-flow-test          enable context switch before control flow tests\n"
     " --no-por                     do not do partial order reduction\n\n"

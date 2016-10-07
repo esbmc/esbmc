@@ -7,11 +7,11 @@ path_to_esbmc=./esbmc
 tokenizer_path=./tokenizer
 
 # Global command line, common to all (normal) tests.
-global_cmd_line="--64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --no-bounds-check --no-pointer-check --error-label ERROR --no-div-by-zero-check --no-assertions --quiet --context-switch 4 --force-malloc-success --boolector"
+global_cmd_line="--64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --no-bounds-check --no-pointer-check --error-label ERROR --no-div-by-zero-check --no-assertions --quiet --context-bound 4 --force-malloc-success --boolector"
 
 # The simple memory model command line is the global, without all the
 # safety checks.
-memory_cmd_line="--64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --quiet --context-switch 3 --force-malloc-success --memory-leak-check --boolector"
+memory_cmd_line="--64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --quiet --context-bound 3 --force-malloc-success --memory-leak-check --boolector"
 
 # The '-D' options are a series of workarounds for some problems encountered:
 #  -DLDV_ERROR=ERROR  maps the error label in the 'regression' dir to 'ERROR',

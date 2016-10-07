@@ -292,11 +292,11 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       cur_state->current_name(goto_state, true_val);
       cur_state->current_name(false_val);
       rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
+      do_simplify(rhs);
     }
 
-    exprt tmp_lhs(symbol_expr(symbol));
     expr2tc lhs;
-    migrate_expr(tmp_lhs, lhs);
+    migrate_expr(symbol_expr(symbol), lhs);
     expr2tc new_lhs = lhs;
 
     cur_state->assignment(new_lhs, rhs, false);

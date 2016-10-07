@@ -7,6 +7,7 @@
 #include <c_types.h>
 #include <base_type.h>
 #include <type_byte_size.h>
+#include <limits.h>
 
 expr2tc
 expr2t::do_simplify(bool second __attribute__((unused))) const
@@ -956,7 +957,7 @@ do_bit_munge_operation(int64_t (*opfunc)(int64_t, int64_t),
   // This has potentially become negative. Check the top bit.
   if (val1 & (1 << (type->get_width() - 1)) && is_signedbv_type(type)) {
     // Sign extend.
-    val1 |= -1LL << (type->get_width());
+    val1 |= ULLONG_MAX << (type->get_width());
   }
 
   // And now, restore, paying attention to whether this is supposed to be

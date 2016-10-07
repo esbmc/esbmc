@@ -961,14 +961,6 @@ z3_convt::tuple_get(const expr2tc &expr)
   return outstruct;
 }
 
-// Gigantic hack, implement a method in z3::ast, so that we can call from gdb
-namespace z3 {
-  void ast::dump(void) const {
-    std::cout << Z3_ast_to_string(ctx(), m_ast) << std::endl;
-    std::cout << "sort is " << Z3_sort_to_string(ctx(), Z3_get_sort(ctx(), m_ast)) << std::endl;
-  }
-};
-
 // ***************************** 'get' api *******************************
 
 expr2tc
@@ -1118,4 +1110,10 @@ void
 z3_convt::pop_tuple_ctx()
 {
   return;
+}
+
+void z3_convt::z3_smt_ast::dump() const
+{
+  std::cout << Z3_ast_to_string(e.ctx(), e) << std::endl;
+  std::cout << "sort is " << Z3_sort_to_string(e.ctx(), Z3_get_sort(e.ctx(), e)) << std::endl;
 }

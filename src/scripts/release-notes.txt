@@ -1,5 +1,19 @@
 Release Notes of the ESBMC model checker
 
+*** Version 3.0.2
++ Fix bug on deadlock verification
++ Fix an off-by-allthenumbers when dealing with dynamic structs
++ Fix compilation with newer version of GCC
++ Updates to support clang 3.9.0 on our frontend
++ We now ship with all clang 3.9.0 headers
+
+*** Version 3.0.1
++ Fix falsification crash
++ Fix switch condition typecast
++ Fix float literal generation
++ Back to Z3 v4.4.1 (stable API)
++ Update to Boolector v2.2.0
+
 *** Version 3.0.0
 + Several bugfixes
 + New clang frontend!

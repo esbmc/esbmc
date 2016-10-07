@@ -1409,8 +1409,10 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     unsigned int i = 0;
     forall_types(it, struct_type.members) {
       // Quickly skip over scalar subtypes.
-      if (is_scalar_type(*it))
+      if (is_scalar_type(*it)) {
+        i++;
         continue;
+      }
 
       mp_integer memb_offs = member_offset(struct_type,
                                       struct_type.member_names[i]);

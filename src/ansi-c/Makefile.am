@@ -29,18 +29,18 @@ BUILT_SOURCES = parser.hpp
 
 noinst_PROGRAMS = c2goto
 c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp -I$(top_srcdir)/utils
-c2goto_LDADD = libansic.la libansicscanner.la ../clang-c-frontend/libclangcfrontend.a \
-      ../clang-cpp-frontend/libclangcppfrontend.a ../big-int/libbigint.a \
+c2goto_LDADD = libansic.la libansicscanner.la @ESBMC_CLANG_ARCHIVES@ \
+      ../big-int/libbigint.a ../cpp/libcxx.la \
       ../goto-programs/libgotoprograms.a ../langapi/liblangapi.a \
       ../util/libutil.a cpp/libcpp.a ./headers/libheaders.a
 
 libclib_la_SOURCES = cprover_library.cpp clib32.c clib64.c
 
-clib32.c: c2goto
+clib32.c: c2goto $(srcdir)/library/*.c
 	./c2goto $(srcdir)/library/*.c --output clib32.goto
 	$(srcdir)/headers/flail.sh clib32 clib32.goto > $@
 
-clib64.c: c2goto
+clib64.c: c2goto $(srcdir)/library/*.c
 	./c2goto $(srcdir)/library/*.c --64 --output clib64.goto
 	$(srcdir)/headers/flail.sh clib64 clib64.goto > $@
 

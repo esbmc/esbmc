@@ -508,7 +508,7 @@ bool clang_c_convertert::get_function(
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
-  for (const auto &pdecl : fd.params())
+  for (const auto &pdecl : fd.parameters())
   {
     code_typet::argumentt param;
     if(get_function_params(*pdecl, param))
@@ -1174,7 +1174,14 @@ bool clang_c_convertert::get_expr(
 
       // Use clang to calculate offsetof
       llvm::APSInt val;
-      assert(offset.EvaluateAsInt(val, *ASTContext));
+      bool res = offset.EvaluateAsInt(val, *ASTContext);
+      if(!res)
+      {
+        std::cerr << "Clang could not calculate offset"
+                  << std::endl;
+        offset.dumpColor();
+        return true;
+      }
 
       new_expr =
         constant_exprt(
