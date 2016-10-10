@@ -149,16 +149,20 @@ goto_symext::symex_step(reachability_treet & art)
     {
       if (!no_assertions || !cur_state->source.pc->location.user_provided())
       {
-        std::string msg = cur_state->source.pc->location.comment().as_string();
-        if (msg == "") msg = "assertion";
+        // Don't allow user assertions on forward condition
+        if (!forward_condition || !cur_state->source.pc->location.user_provided())
+        {
+          std::string msg = cur_state->source.pc->location.comment().as_string();
+          if (msg == "") msg = "assertion";
 
-        expr2tc tmp = instruction.guard;
-        replace_nondet(tmp);
+          expr2tc tmp = instruction.guard;
+          replace_nondet(tmp);
 
-        dereference(tmp, false);
-        replace_dynamic_allocation(tmp);
+          dereference(tmp, false);
+          replace_dynamic_allocation(tmp);
 
-        claim(tmp, msg);
+          claim(tmp, msg);
+        }
       }
     }
     cur_state->source.pc++;

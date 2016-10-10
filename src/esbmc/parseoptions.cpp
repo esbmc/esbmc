@@ -284,6 +284,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("forward-condition", true);
     options.set_option("no-unwinding-assertions", false);
     options.set_option("partial-loops", false);
+    options.set_option("no-assertions", true);
   }
 
   if(cmdline.isset("inductive-step"))
