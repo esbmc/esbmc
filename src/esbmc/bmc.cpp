@@ -306,28 +306,28 @@ void bmct::show_program(symex_target_equationt &equation)
   {
     std::cout << "// " << it->source.pc->location_number << " ";
     std::cout << it->source.pc->location.as_string() << "\n";
+    std::cout <<   "(" << count << ") ";
 
     std::string string_value;
 
     if(it->is_assignment())
     {
       languages.from_expr(migrate_expr_back(it->cond), string_value);
-      std::cout << "(" << count << ") " << string_value << "\n";
+      std::cout << string_value << "\n";
     }
     else if(it->is_assert())
     {
       languages.from_expr(migrate_expr_back(it->cond), string_value);
-      std::cout << "(" << count << ") " << "(assert)" << string_value << "\n";
+      std::cout << "(assert)" << string_value << "\n";
     }
     else if(it->is_assume())
     {
       languages.from_expr(migrate_expr_back(it->cond), string_value);
-      std::cout << "(" << count << ") " << "(assume)" << string_value << "\n";
+      std::cout << "(assume)" << string_value << "\n";
     }
     else if (it->is_renumber())
     {
-      std::cout << "(" << count << ") " << "renumber: " <<
-                   from_expr(ns, "", it->lhs) << "\n";
+      std::cout << "renumber: " << from_expr(ns, "", it->lhs) << "\n";
     }
 
     if(!migrate_expr_back(it->guard).is_true() && !print_guard)

@@ -589,7 +589,7 @@ public:
 
   unsigned get_e() const
   {
-    return get_width()-get_f();
+    return get_width()-get_f()-1;
   }
 
   unsigned get_f() const;

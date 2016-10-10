@@ -65,6 +65,8 @@ public:
 
   smt_astt eq_fixedsize(smt_convt *ctx, const array_ast *other) const;
 
+  virtual void dump() const { return; }
+
   std::string symname; // Only if this was produced from mk_smt_symbol.
 
   std::vector<smt_astt> array_fields;

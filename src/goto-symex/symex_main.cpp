@@ -316,21 +316,24 @@ void goto_symext::symex_assert(void)
     }
   }
 
-  if (!no_assertions || !cur_state->source.pc->location.user_provided())
-  {
-    std::string msg = cur_state->source.pc->location.comment().as_string();
-    if (msg == "") msg = "assertion";
+  // Don't convert if it's an user provided assertion and we're running in
+  // no assertion mode or forward condition
+  if(cur_state->source.pc->location.user_provided())
+    if(no_assertions || forward_condition)
+      return;
 
-    const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  std::string msg = cur_state->source.pc->location.comment().as_string();
+  if (msg == "") msg = "assertion";
 
-    expr2tc tmp = instruction.guard;
-    replace_nondet(tmp);
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
-    dereference(tmp, false);
-    replace_dynamic_allocation(tmp);
+  expr2tc tmp = instruction.guard;
+  replace_nondet(tmp);
 
-    claim(tmp, msg);
-  }
+  dereference(tmp, false);
+  replace_dynamic_allocation(tmp);
+
+  claim(tmp, msg);
 }
 
 void

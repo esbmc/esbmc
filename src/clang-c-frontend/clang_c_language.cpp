@@ -229,6 +229,8 @@ void clang_c_languaget::internal_additions()
     "_Bool __ESBMC_isinf(double f);\n"
     "__attribute__((used))\n"
     "_Bool __ESBMC_isnormal(double f);\n"
+    "__attribute__((used))\n"
+    "int __ESBMC_rounding_mode = 0;\n"
 
     // absolute value
     "__attribute__((used))\n"

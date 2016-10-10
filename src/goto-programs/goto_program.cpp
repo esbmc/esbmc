@@ -75,7 +75,7 @@ void goto_programt::instructiont::output_instruction(
 
   case GOTO:
     if (!is_constant_bool2t(guard) ||
-        !to_constant_bool2t(guard).constant_value)
+        !to_constant_bool2t(guard).value)
     {
       out << "IF "
           << from_expr(ns, identifier, guard)

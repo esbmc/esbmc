@@ -9,7 +9,7 @@ PROPERTY_ARRAY_BOUND_VIOLATED_TAG2="dereference failure: Access to object out of
 PROPERTY_UNWIND_ASSERTION_LOOP_TAG="unwinding assertion loop"
 PROPERTY_INVALID_FREE_TAG="Operand of free must have zero pointer offset"
 
-cmdline=" --timeout 895s --memlimit 15g -DLDV_ERROR=ERROR -D_Bool=int --no-div-by-zero-check --boolector --force-malloc-success --unroll-loops --unwind 128 --no-unwinding-assertions "
+cmdline=" --timeout 895s --memlimit 15g --no-div-by-zero-check --boolector --force-malloc-success --unroll-loops --unwind 128 --no-unwinding-assertions "
 
 BENCHMARK_FALSE_VALID_MEMTRACK=${PROPERTY_FORGOTTEN_MEMORY_TAG}
 BENCHMARK_FALSE_VALID_FREE=${PROPERTY_INVALID_FREE_TAG}
@@ -82,7 +82,7 @@ fi
 if test $IS_MEMSAFETY_BENCHMARK = 1; then
    cmdline="$cmdline --memory-leak-check "
 else
-   cmdline="$cmdline --no-pointer-check --no-bounds-check --error-label ERROR"
+   cmdline="$cmdline --no-pointer-check --no-bounds-check "
 fi
 
 # Drop all output into a temporary file,

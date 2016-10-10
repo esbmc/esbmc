@@ -1,26 +1,26 @@
 #include <sstream>
 
 #include <base_type.h>
+#include <expr_util.h>
 
 #include "smt_conv.h"
 
 smt_astt
 smt_convt::convert_typecast_to_bool(const typecast2t &cast)
 {
-
-  if (is_bv_type(cast.from)) {
-    notequal2tc neq(cast.from, gen_uint(cast.from->type, 0));
-    return convert_ast(neq);
-  } else if (is_pointer_type(cast.from)) {
+  if (is_pointer_type(cast.from)) {
     // Convert to two casts.
     typecast2tc to_int(machine_ptr, cast.from);
     constant_int2tc zero(machine_ptr, BigInt(0));
     equality2tc as_bool(zero, to_int);
     return convert_ast(as_bool);
-  } else {
-    std::cerr << "Unimplemented bool typecast" << std::endl;
-    abort();
   }
+
+  expr2tc zero_expr;
+  migrate_expr(gen_zero(migrate_type_back(cast.from->type)), zero_expr);
+
+  notequal2tc neq(cast.from, zero_expr);
+  return convert_ast(neq);
 }
 
 smt_astt
@@ -169,6 +169,8 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
     return convert_typecast_to_ints_from_fbv_sint(cast);
   } else if (is_unsignedbv_type(cast.from)) {
     return convert_typecast_to_ints_from_unsigned(cast);
+  } else if (is_floatbv_type(cast.from)) {
+    return mk_smt_typecast_from_bvfloat(cast);
   } else if (is_bool_type(cast.from)) {
     return convert_typecast_to_ints_from_bool(cast);
   }
@@ -539,6 +541,8 @@ smt_convt::convert_typecast(const expr2tc &expr)
     return convert_typecast_to_fixedbv_nonint(expr);
   } else if (is_bv_type(cast.type) || is_fixedbv_type(cast.type)) {
     return convert_typecast_to_ints(cast);
+  } else if (is_floatbv_type(cast.type)) {
+    return mk_smt_typecast_to_bvfloat(cast);
   } else if (is_struct_type(cast.type)) {
     return convert_typecast_to_struct(cast);
   } else if (is_union_type(cast.type)) {
@@ -551,6 +555,6 @@ smt_convt::convert_typecast(const expr2tc &expr)
   }
 
   std::cerr << "Typecast for unexpected type" << std::endl;
+  expr->dump();
   abort();
 }
-

@@ -17,15 +17,15 @@ fixedbv_spect::fixedbv_spect(const fixedbv_typet &type)
   width=type.get_width();
 }
 
-fixedbvt::fixedbvt(const exprt &expr)
+fixedbvt::fixedbvt(const constant_exprt &expr)
 {
   from_expr(expr);
 }
 
-void fixedbvt::from_expr(const exprt &expr)
+void fixedbvt::from_expr(const constant_exprt &expr)
 {
   spec=to_fixedbv_type(expr.type());
-  v=binary2integer(id2string(expr.value().as_string()), true);
+  v=binary2integer(id2string(expr.get_value()), true);
 }
 
 void fixedbvt::from_integer(const mp_integer &i)
@@ -39,14 +39,14 @@ mp_integer fixedbvt::to_integer() const
   return v/power(2, spec.get_fraction_bits());
 }
 
-exprt fixedbvt::to_expr() const
+constant_exprt fixedbvt::to_expr() const
 {
   fixedbv_typet type;
   type.set_width(spec.width);
   type.set_integer_bits(spec.integer_bits);
-  exprt expr=exprt("constant", type);
+  constant_exprt expr(type);
   assert(spec.width!=0);
-  expr.value(integer2binary(v, spec.width));
+  expr.set_value(integer2binary(v, spec.width));
   return expr;
 }
 
@@ -97,7 +97,7 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
   v=result;
   spec=dest_spec;
 }
-  
+
 void fixedbvt::negate()
 {
   v=-v;
@@ -125,26 +125,6 @@ fixedbvt &fixedbvt::operator/=(const fixedbvt &o)
   return *this;
 }
 
-fixedbvt &fixedbvt::operator+=(const fixedbvt &o)
-{
-  v+=o.v;
-
-  // No need to change the spec.
-  round(spec);
-
-  return *this;
-}
-
-fixedbvt &fixedbvt::operator-=(const fixedbvt &o)
-{
-  v-=o.v;
-
-  // No need to change the spec.
-  round(spec);
-
-  return *this;
-}
-
 bool fixedbvt::operator==(int i) const
 {
   return v==power(2, spec.get_fraction_bits())*i;
@@ -161,7 +141,7 @@ std::string fixedbvt::format(
 
   if(int_value.is_negative())
   {
-    dest+="-";
+    dest+='-';
     int_value.negate();
   }
 
@@ -186,9 +166,43 @@ std::string fixedbvt::format(
 
   if(!fraction_part.empty())
     dest+="."+fraction_part;
-  
+
   while(dest.size()<format_spec.min_width)
     dest=" "+dest;
 
   return dest;
+}
+
+fixedbvt &fixedbvt::operator+=(const fixedbvt &o)
+{
+  v+=o.v;
+
+  // No need to change the spec.
+  round(spec);
+
+  return *this;
+}
+
+fixedbvt &fixedbvt::operator-=(const fixedbvt &o)
+{
+  v-=o.v;
+
+  // No need to change the spec.
+  round(spec);
+
+  return *this;
+}
+
+fixedbvt& fixedbvt::operator !()
+{
+  this->negate();
+  return (*this);
+}
+
+bool operator >(const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a > other;
 }

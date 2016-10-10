@@ -200,6 +200,8 @@ std::string expr2ct::convert_rec(
       return q+"float";
     else if(width==config.ansi_c.double_width)
       return q+"double";
+    else if(width==config.ansi_c.long_double_width)
+      return q+"long double";
   }
   else if(src.id()=="struct" ||
           src.id()=="incomplete_struct")
@@ -340,7 +342,7 @@ std::string expr2ct::convert_typecast(
 {
   precedence=14;
 
-  if(src.operands().size()!=1)
+  if(src.id() == "typecast" && src.operands().size()!=1)
     return convert_norep(src, precedence);
 
   // some special cases
@@ -1408,12 +1410,19 @@ std::string expr2ct::convert_constant(
   }
   else if(type.id()=="floatbv")
   {
-    std::cerr << "floatbv unsupported, sorry" << std::endl;
-    abort();
+    dest=ieee_floatt(to_constant_expr(src)).to_ansi_c_string();
+
+    if(dest!="" && isdigit(dest[dest.size()-1]))
+    {
+      if(src.type()==float_type())
+        dest+="f";
+      else if(src.type()==double_type())
+        dest+="l";
+    }
   }
   else if(type.id()=="fixedbv")
   {
-    dest=fixedbvt(src).to_ansi_c_string();
+    dest=fixedbvt(to_constant_expr(src)).to_ansi_c_string();
 
     if(dest!="" && isdigit(dest[dest.size()-1]))
     {
@@ -2988,6 +2997,11 @@ std::string expr2ct::convert(
     return convert_function(src, "isnormal", precedence=15);
   }
 
+  else if(src.id()=="signbit")
+  {
+    return convert_function(src, "signbit", precedence=15);
+  }
+
   else if(src.id()=="builtin_va_arg")
   {
     return convert_function(src, "builtin_va_arg", precedence=15);
@@ -3113,14 +3127,20 @@ std::string expr2ct::convert(
   else if(src.id()=="=")
     return convert_binary(src, "==", precedence=9, true);
 
-  else if(src.id()=="ieee_float_equal")
-    return convert_function(src, "IEEE_FLOAT_EQUAL", precedence=15);
+  else if(src.id()=="ieee_add")
+    return convert_function(src, "IEEE_ADD", precedence=15);
+
+  else if(src.id()=="ieee_sub")
+    return convert_function(src, "IEEE_SUB", precedence=15);
+
+  else if(src.id()=="ieee_mul")
+    return convert_function(src, "IEEE_MUL", precedence=15);
+
+  else if(src.id()=="ieee_div")
+    return convert_function(src, "IEEE_DIV", precedence=15);
 
   else if(src.id()=="width")
     return convert_function(src, "WIDTH", precedence=15);
-
-  else if(src.id()=="ieee_float_notequal")
-    return convert_function(src, "IEEE_FLOAT_NOTEQUAL", precedence=15);
 
   else if(src.id()=="byte_update_little_endian")
     return convert_function(src, "BYTE_UPDATE_LITTLE_ENDIAN", precedence=15);

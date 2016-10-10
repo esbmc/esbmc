@@ -48,7 +48,7 @@ void configt::ansi_ct::set_32()
   long_double_width=8*8;
   char_is_unsigned=false;
   word_size=32;
-  wchar_t_width=2*8;
+  wchar_t_width=4*8;
   alignment=4;
 
   // Configure exprs we use as long / uints etc for this mode.
@@ -70,10 +70,10 @@ void configt::ansi_ct::set_64()
   pointer_diff_width=8*8;
   single_width=4*8;
   double_width=8*8;
-  long_double_width=8*8;
+  long_double_width=16*8;
   char_is_unsigned=false;
   word_size=64;
-  wchar_t_width=2*8;
+  wchar_t_width=4*8;
   alignment=4;
 
   // Configure exprs we use as long / uints etc for this mode.
@@ -97,6 +97,7 @@ bool configt::set(const cmdlinet &cmdline)
   ansi_c.endianess=ansi_ct::NO_ENDIANESS;
   ansi_c.os=ansi_ct::NO_OS;
   ansi_c.lib=configt::ansi_ct::LIB_NONE;
+  ansi_c.rounding_mode=ieee_floatt::ROUND_TO_EVEN;
 
   if(cmdline.isset("16"))
     ansi_c.set_16();
@@ -115,6 +116,12 @@ bool configt::set(const cmdlinet &cmdline)
 
   if(cmdline.isset('I'))
     ansi_c.include_paths=cmdline.get_values('I');
+
+  if(cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
+  {
+    std::cerr << "Can't set both floatbv and fixedbv modes" << std::endl;
+    return true;
+  }
 
   if(cmdline.isset("floatbv"))
     ansi_c.use_fixed_for_float=false;
@@ -185,10 +192,22 @@ bool configt::set(const cmdlinet &cmdline)
   if(cmdline.isset("big-endian"))
     ansi_c.endianess=configt::ansi_ct::IS_BIG_ENDIAN;
 
-  if(cmdline.isset("little-endian") &&
-     cmdline.isset("big-endian")) {
-      std::cerr << "Can't set both little and big endian modes" << std::endl;
-      return true;
+  if(cmdline.isset("round-to-even") || cmdline.isset("round-to-nearest"))
+    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_EVEN;
+
+  if(cmdline.isset("round-to-plus-inf"))
+    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_PLUS_INF;
+
+  if(cmdline.isset("round-to-minus-inf"))
+    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_MINUS_INF;
+
+  if(cmdline.isset("round-to-zero"))
+    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_ZERO;
+
+  if(cmdline.isset("little-endian") && cmdline.isset("big-endian"))
+  {
+    std::cerr << "Can't set both little and big endian modes" << std::endl;
+    return true;
   }
 
   if(cmdline.isset("unsigned-char"))

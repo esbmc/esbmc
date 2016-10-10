@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "mp_arith.h"
 #include "fixedbv.h"
+#include "ieee_float.h"
 #include "expr.h"
 
 void exprt::move_to_operands(exprt &expr)
@@ -205,12 +206,11 @@ bool exprt::is_zero() const
     }
     else if(type_id=="fixedbv")
     {
-      if(fixedbvt(*this)==0) return true;
+      if(fixedbvt(to_constant_expr(*this))==0) return true;
     }
     else if(type_id=="floatbv")
     {
-      std::cerr << "floatbv unsupported, sorry" << std::endl;
-      abort();
+      if(ieee_floatt(to_constant_expr(*this))==0) return true;
     }
     else if(type_id=="pointer")
     {
@@ -240,13 +240,11 @@ bool exprt::is_one() const
     }
     else if(type_id=="fixedbv")
     {
-      if(fixedbvt(*this)==1)
-        return true;
+      if(fixedbvt(to_constant_expr(*this))==1) return true;
     }
     else if(type_id=="floatbv")
     {
-      std::cerr << "floatbv unsupported, sorry" << std::endl;
-      abort();
+      if(ieee_floatt(to_constant_expr(*this))==1) return true;
     }
   }
 
@@ -277,16 +275,17 @@ bool exprt::sum(const exprt &expr)
   }
   else if(type_id=="fixedbv")
   {
-    set(a_value, integer2binary(
-      binary2integer(get_string(a_value), false)+
-      binary2integer(expr.get_string(a_value), false),
-      atoi(type().width().c_str())));
+    fixedbvt f(to_constant_expr(*this));
+    f+=fixedbvt(to_constant_expr(expr));
+    *this=f.to_expr();
     return false;
   }
   else if(type_id=="floatbv")
   {
-    std::cerr << "floatbv unsupported, sorry" << std::endl;
-    abort();
+    ieee_floatt f(to_constant_expr(*this));
+    f+=ieee_floatt(to_constant_expr(expr));
+    *this=f.to_expr();
+    return false;
   }
 
   return true;
@@ -316,15 +315,17 @@ bool exprt::mul(const exprt &expr)
   }
   else if(type_id=="fixedbv")
   {
-    fixedbvt f(*this);
-    f*=fixedbvt(expr);
+    fixedbvt f(to_constant_expr(*this));
+    f*=fixedbvt(to_constant_expr(expr));
     *this=f.to_expr();
     return false;
   }
   else if(type_id=="floatbv")
   {
-    std::cerr << "floatbv unsupported, sorry" << std::endl;
-    abort();
+    ieee_floatt f(to_constant_expr(*this));
+    f*=ieee_floatt(to_constant_expr(expr));
+    *this=f.to_expr();
+    return false;
   }
 
   return true;
@@ -352,11 +353,19 @@ bool exprt::subtract(const exprt &expr)
       binary2integer(expr.get_string(a_value), false),
       atoi(type().width().c_str())));
     return false;
-  } else if(type_id=="fixedbv") {
-    set("value", integer2binary(
-      binary2integer(get_string("value"), false)-
-      binary2integer(expr.get_string("value"), false),
-      atoi(type().get("width").c_str())));
+  }
+  else if(type_id=="fixedbv")
+  {
+    fixedbvt f(to_constant_expr(*this));
+    f-=fixedbvt(to_constant_expr(expr));
+    *this=f.to_expr();
+    return false;
+  }
+  else if(type_id=="floatbv")
+  {
+    ieee_floatt f(to_constant_expr(*this));
+    f-=ieee_floatt(to_constant_expr(expr));
+    *this=f.to_expr();
     return false;
   }
 

@@ -51,7 +51,7 @@ cvc_convt::l_get(const smt_ast *a)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   constant_bool2tc b = get_bool(ca);
-  if (b->constant_value)
+  if (b->value)
     return tvt(true);
   else
     return tvt(false);
@@ -270,6 +270,11 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
     CVC4::ArrayType t = em.mkArrayType(dom->t, range->t);
     return new cvc_smt_sort(k, t, range->data_width, dom->data_width);
   }
+  case SMT_SORT_FLOATBV:
+  {
+    std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+    abort();
+  }
   default:
     std::cerr << "Unimplemented smt sort " << k << " in CVC mk_sort"
               << std::endl;
@@ -299,6 +304,49 @@ cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
   CVC4::BitVector bv = CVC4::BitVector(w, (uint64_t)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
   return new cvc_smt_ast(this, s, e);
+}
+
+smt_ast* cvc_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
+                                   unsigned ew, unsigned sw)
+{
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt cvc_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+{
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt cvc_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt cvc_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+{
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt cvc_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
+{
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt cvc_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
+{
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt cvc_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
+{
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+  abort();
 }
 
 smt_ast *

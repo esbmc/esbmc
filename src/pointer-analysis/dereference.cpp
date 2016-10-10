@@ -912,7 +912,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
   bool is_correctly_aligned = false;
   if (is_const_offset) {
     // Constant offset is aligned with array boundaries?
-    uint64_t offs = to_constant_int2t(offset).constant_value.to_ulong();
+    uint64_t offs = to_constant_int2t(offset).value.to_ulong();
     is_correctly_aligned = ((offs % subtype_size) == 0);
   } else {
     // Dyn offset -- is alignment guarantee strong enough?
@@ -955,7 +955,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   // We're accessing some kind of scalar type; might be a valid, correct
   // access, or we might need to be byte extracting it.
 
-  if (theint.constant_value == 0 &&
+  if (theint.value == 0 &&
       value->type->get_width() == type->get_width()) {
     // Offset is zero, and we select the entire contents of the field. We may
     // need to perform a cast though.
@@ -981,7 +981,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 {
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
-  const mp_integer int_offset = to_constant_int2t(offset).constant_value;
+  const mp_integer int_offset = to_constant_int2t(offset).value;
   mp_integer access_size = type_byte_size(*type.get());
 
   unsigned int i = 0;
@@ -1232,7 +1232,7 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
   std::vector<expr2tc> fields;
   assert(is_struct_type(type));
   const struct_type2t &structtype = to_struct_type(type);
-  uint64_t struct_offset = intref.constant_value.to_uint64();
+  uint64_t struct_offset = intref.value.to_uint64();
   forall_types(it, structtype.members) {
     const type2tc &target_type = *it;
     expr2tc target = value; // The byte array;
@@ -1263,7 +1263,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
     //   a) it's a misaligned access, which is an error
     //   b) there's a struct within a struct here that we should recurse into.
 
-    if (intref.constant_value == 0) {
+    if (intref.value == 0) {
       // Success?
       if (dereference_type_compare(value, type)) {
         // Good, just return this expression.
@@ -1284,11 +1284,11 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
       mp_integer size = type_byte_size(*(*it).get());
 
       if (!is_scalar_type(*it) &&
-            intref.constant_value >= offs &&
-            intref.constant_value < (offs + size)) {
+            intref.value >= offs &&
+            intref.value < (offs + size)) {
         // It's this field. Don't make a decision about whether it's correct
         // or not, recurse to make that happen.
-        mp_integer new_offs = intref.constant_value - offs;
+        mp_integer new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_ulong());
         value = member2tc(*it, value, struct_type.member_names[i]);
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
