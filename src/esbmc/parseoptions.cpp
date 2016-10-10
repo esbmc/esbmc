@@ -1101,16 +1101,11 @@ int cbmc_parseoptionst::doit_falsification()
     return 7;
 
   // Get max number of iterations
-  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
+  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
   if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = UINT_MAX;
+    max_k_step = -1;
 
-  // Get the increment
-  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
-
-  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  for(unsigned long k_step = 1; k_step <= max_k_step; k_step++)
   {
     opts.set_option("base-case", true);
     opts.set_option("forward-condition", false);
