@@ -82,7 +82,7 @@ fi
 if test $IS_MEMSAFETY_BENCHMARK = 1; then
    cmdline="$cmdline --memory-leak-check "
 else
-   cmdline="$cmdline --no-pointer-check --no-bounds-check --error-label ERROR"
+   cmdline="$cmdline --no-pointer-check --no-bounds-check "
 fi
 
 # Drop all output into a temporary file,
