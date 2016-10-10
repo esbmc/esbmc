@@ -9,6 +9,25 @@
 #include <c_types.h>
 #include <expr_util.h>
 
+static const char* mathsat_config =
+  "preprocessor.toplevel_propagation = true\n"
+  "preprocessor.simplification = 1\n"
+  "dpll.branching_random_frequency = 0.01\n"
+  "dpll.branching_random_invalidate_phase_cache = true\n"
+  "dpll.restart_strategy = 3\n"
+  "dpll.glucose_var_activity = true\n"
+  "dpll.glucose_learnt_minimization = true\n"
+  "dpll.preprocessor.mode = 1\n"
+  "theory.bv.eager = true\n"
+  "theory.bv.bit_blast_mode = 2\n"
+  "theory.bv.delay_propagated_eqs = true\n"
+  "theory.la.enabled = false\n"
+  "theory.fp.mode = 1\n"
+  "theory.fp.bit_blast_mode = 2\n"
+  "theory.fp.bv_combination_enabled = true\n"
+  "theory.arr.permanent_lemma_inst = true\n"
+  "theory.arr.enable_witness = true";
+
 // Ahem
 msat_env* _env = NULL;
 
@@ -56,8 +75,7 @@ mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
     abort();
   }
 
-  cfg = msat_create_config();
-  /* XXX -- where is the list of options?" */
+  cfg = msat_parse_config(mathsat_config);
   msat_set_option(cfg, "model_generation", "true");
   env = msat_create_env(cfg);
   _env = &env;
