@@ -84,8 +84,8 @@ Function: bmct::successful_trace
 
 \*******************************************************************/
 
-void bmct::successful_trace(smt_convt &smt_conv,
-                       symex_target_equationt &equation)
+void bmct::successful_trace(smt_convt &smt_conv __attribute__((unused)),
+                       symex_target_equationt &equation __attribute__((unused)))
 {
 
   goto_tracet goto_trace;
