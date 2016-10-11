@@ -183,222 +183,32 @@ void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
     return;
 
   // add overflow subgoal
-  if (expr.is_typecast())
-  {
-    // conversion to signed int may overflow
 
-    if(expr.operands().size()!=1)
-      throw "typecast takes one operand";
-
-    const typet &old_type=ns.follow(expr.op0().type());
-
-    if(type.is_signedbv())
-    {
-      unsigned new_width=to_signedbv_type(type).get_width();
-
-      if(old_type.is_signedbv()) // signed -> signed
-      {
-        unsigned old_width=to_signedbv_type(old_type).get_width();
-        if(new_width>=old_width) return; // always ok
-
-        binary_relation_exprt no_overflow_upper("<=");
-        no_overflow_upper.lhs()=expr.op0();
-        no_overflow_upper.rhs()=from_integer(power(2, new_width-1)-1, old_type);
-
-        binary_relation_exprt no_overflow_lower(">=");
-        no_overflow_lower.lhs()=expr.op0();
-        no_overflow_lower.rhs()=from_integer(-power(2, new_width-1), old_type);
-
-        add_guarded_claim(
-          and_exprt(no_overflow_lower, no_overflow_upper),
-          "arithmetic overflow on signed type conversion",
-          "overflow",
-          expr.find_location(),
-          guard);
-      }
-      else if(old_type.is_unsignedbv()) // unsigned -> signed
-      {
-        unsigned old_width=to_unsignedbv_type(old_type).get_width();
-        if(new_width>=old_width+1) return; // always ok
-
-        binary_relation_exprt no_overflow_upper("<=");
-        no_overflow_upper.lhs()=expr.op0();
-        no_overflow_upper.rhs()=from_integer(power(2, new_width-1)-1, old_type);
-
-        add_guarded_claim(
-          no_overflow_upper,
-          "arithmetic overflow on unsigned to signed type conversion",
-          "overflow",
-          expr.find_location(),
-          guard);
-      }
-      else if(old_type.is_floatbv()) // float -> signed
-      {
-        std::cerr << "floatbv unsupported, sorry" << std::endl;
-        abort();
-      }
-    }
-    else if(type.is_unsignedbv())
-    {
-      unsigned new_width=to_unsignedbv_type(type).get_width();
-
-      if(old_type.is_unsignedbv()) // signed -> unsigned
-      {
-        unsigned old_width=to_signedbv_type(old_type).get_width();
-
-        if(new_width>=old_width-1)
-        {
-          // only need lower bound check
-          binary_relation_exprt no_overflow_lower(">=");
-          no_overflow_lower.lhs()=expr.op0();
-          no_overflow_lower.rhs()=from_integer(0, old_type);
-
-          add_guarded_claim(
-            no_overflow_lower,
-            "arithmetic overflow on signed to unsigned type conversion",
-            "overflow",
-            expr.find_location(),
-            guard);
-        }
-        else
-        {
-          // need both
-          binary_relation_exprt no_overflow_upper("<=");
-          no_overflow_upper.lhs()=expr.op0();
-          no_overflow_upper.rhs()=from_integer(power(2, new_width)-1, old_type);
-
-          binary_relation_exprt no_overflow_lower(">=");
-          no_overflow_lower.lhs()=expr.op0();
-          no_overflow_lower.rhs()=from_integer(0, old_type);
-
-          add_guarded_claim(
-            and_exprt(no_overflow_lower, no_overflow_upper),
-            "arithmetic overflow on signed to unsigned type conversion",
-            "overflow",
-            expr.find_location(),
-            guard);
-        }
-      }
-      else if(old_type.is_unsignedbv()) // unsigned -> unsigned
-      {
-        unsigned old_width=to_unsignedbv_type(old_type).get_width();
-        if(new_width>=old_width) return; // always ok
-
-        binary_relation_exprt no_overflow_upper("<=");
-        no_overflow_upper.lhs()=expr.op0();
-        no_overflow_upper.rhs()=from_integer(power(2, new_width)-1, old_type);
-
-        add_guarded_claim(
-          no_overflow_upper,
-          "arithmetic overflow on unsigned to unsigned type conversion",
-          "overflow",
-          expr.find_location(),
-          guard);
-      }
-      else if(old_type.is_floatbv()) // float -> unsigned
-      {
-        std::cerr << "floatbv unsupported, sorry" << std::endl;
-        abort();
-      }
-    }
-
-    return;
-  }
-  else if(expr.id()=="/")
-  {
-    assert(expr.operands().size()==2);
-
-    // undefined for signed division INT_MIN/-1
-    if(type.is_signedbv())
-    {
-      equality_exprt int_min_eq(
-        expr.op0(), to_signedbv_type(type).smallest_expr());
-
-      equality_exprt minus_one_eq(
-        expr.op1(), from_integer(-1, type));
-
-      add_guarded_claim(
-        not_exprt(and_exprt(int_min_eq, minus_one_eq)),
-        "arithmetic overflow on signed division",
-        "overflow",
-        expr.find_location(),
-        guard);
-    }
-
-    return;
-  }
-  else if(expr.id()=="mod")
-  {
-    // these can't overflow
-    return;
-  }
-  else if(expr.id()=="unary-")
-  {
-    if(type.is_signedbv())
-    {
-      // overflow on unary- can only happen with the smallest
-      // representable number 100....0
-
-      equality_exprt int_min_eq(
-        expr.op0(), to_signedbv_type(type).smallest_expr());
-
-      add_guarded_claim(
-        not_exprt(int_min_eq),
-        "arithmetic overflow on signed unary minus",
-        "overflow",
-        expr.find_location(),
-        guard);
-    }
-
-    return;
-  }
   exprt overflow("overflow-" + expr.id_string(), bool_typet());
   overflow.operands() = expr.operands();
 
-  if(expr.operands().size()>=3)
+  if (expr.is_typecast())
   {
-    // The overflow checks are binary!
-    // We break these up.
+    if (expr.operands().size() != 1)
+      throw "typecast takes one operand";
 
-    for(unsigned i=1; i<expr.operands().size(); i++)
-    {
-      exprt tmp;
+    const typet &old_type = expr.op0().type();
 
-      if(i==1)
-        tmp=expr.op0();
-      else
-      {
-        tmp=expr;
-        tmp.operands().resize(i);
-      }
+    unsigned new_width = atoi(expr.type().width().c_str());
+    unsigned old_width = atoi(old_type.width().c_str());
 
-      overflow.operands().resize(2);
-      overflow.op0()=tmp;
-      overflow.op1()=expr.operands()[i];
+    if (old_type.is_unsignedbv())
+      new_width--;
+    if (new_width >= old_width)
+      return;
 
-      std::string kind=
-        type.is_unsignedbv()?"unsigned":"signed";
-
-      add_guarded_claim(
-        not_exprt(overflow),
-        "arithmetic overflow on "+kind+" "+expr.id_string(),
-        "overflow",
-        expr.find_location(),
-        guard);
-    }
+    overflow.id(overflow.id_string() + "-" + i2string(new_width));
   }
-  else
-  {
-    std::string kind=
-      type.is_unsignedbv()?"unsigned":"signed";
 
-    add_guarded_claim(
-      not_exprt(overflow),
-      "arithmetic overflow on "+kind+" "+expr.id_string(),
-      "overflow",
-      expr.find_location(),
-      guard);
-  }
+  overflow.make_not();
+
+  add_guarded_claim(overflow, "arithmetic overflow on " + expr.id_string(),
+      "overflow", expr.find_location(), guard);
 }
 
 void goto_checkt::nan_check(const exprt &expr, const guardt &guard)
@@ -468,6 +278,9 @@ static bool has_dereference(const exprt &expr)
 void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
 {
   if (options.get_bool_option("no-bounds-check"))
+    return;
+
+  if (!expr.is_index())
     return;
 
   if (expr.operands().size() != 2)
@@ -554,15 +367,12 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
       inequality.copy_to_operands(index, size);
 
       // typecast size
-      if(inequality.op1().type()!=inequality.op0().type())
+      if (inequality.op1().type() != inequality.op0().type())
         inequality.op1().make_typecast(inequality.op0().type());
 
       add_guarded_claim(
-        inequality,
-        name + " upper bound",
-        "array bounds",
-        expr.find_location(),
-        guard);
+        inequality, name + " upper bound", "array bounds",
+        expr.find_location(), guard);
     }
   }
 }
