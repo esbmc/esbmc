@@ -142,10 +142,6 @@ void goto_programt::instructiont::output_instruction(
     out << "END_FUNCTION" << std::endl;
     break;
 
-  case LOCATION:
-    out << "LOCATION" << std::endl;
-    break;
-
   case THROW:
     out << "THROW";
 
@@ -480,7 +476,6 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case ASSERT: out << "ASSERT"; break;
   case OTHER: out << "OTHER"; break;
   case SKIP: out << "SKIP"; break;
-  case LOCATION: out << "LOCATION"; break;
   case END_FUNCTION: out << "END_FUNCTION"; break;
   case ATOMIC_BEGIN: out << "ATOMIC_BEGIN"; break;
   case ATOMIC_END: out << "ATOMIC_END"; break;

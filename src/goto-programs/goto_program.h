@@ -35,7 +35,6 @@ typedef enum { NO_INSTRUCTION_TYPE=0,
                ASSERT=3,        // assertions
                OTHER=4,         // anything else
                SKIP=5,          // just advance the PC
-               LOCATION=8,      // semantically like SKIP
                END_FUNCTION=9,  // exit point of a function
                ATOMIC_BEGIN=10, // marks a block without interleavings
                ATOMIC_END=11,   // end of a block without interleavings
@@ -197,7 +196,6 @@ public:
     inline bool is_throw        () const { return type==THROW; }
     inline bool is_catch        () const { return type==CATCH;         }
     inline bool is_skip         () const { return type==SKIP;          }
-    inline bool is_location     () const { return type==LOCATION;      }
     inline bool is_other        () const { return type==OTHER;         }
     inline bool is_assume       () const { return type==ASSUME;        }
     inline bool is_assert       () const { return type==ASSERT;        }
