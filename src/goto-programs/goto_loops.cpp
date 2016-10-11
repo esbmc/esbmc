@@ -44,12 +44,6 @@ void goto_loopst::create_function_loop(
   it1->set_original_loop_head(loop_head);
   it1->set_original_loop_exit(loop_exit);
 
-  // This means something like:
-  // A: goto A;
-  // There is no body, so we can skip it
-  if(loop_head->location_number == loop_exit->location_number)
-    return;
-
   std::size_t size = 0;
   // Copy the loop body
   while (it != loop_exit)
