@@ -14,7 +14,8 @@ class loopst
 {
 public:
   loopst(contextt &_context) :
-    context(_context)
+    context(_context),
+    size(0)
   {}
 
   typedef std::map<irep_idt, const exprt> loop_varst;
@@ -36,11 +37,6 @@ public:
 
   void dump();
   void dump_loop_vars();
-
-  std::size_t get_size() const
-  {
-    return size;
-  }
 
   void set_size(std::size_t size)
   {

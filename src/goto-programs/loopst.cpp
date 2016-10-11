@@ -207,10 +207,9 @@ void loopst::dump()
   for(goto_programt::instructionst::iterator l_it = original_loop_head;
       l_it != original_loop_exit;
       ++l_it)
-  {
-    if(l_it != original_loop_head) std::cout << ", ";
-    std::cout << (*l_it).location_number;
-  }
+    std::cout << (*l_it).location_number << ", ";
+  std::cout << original_loop_exit->location_number;
+
   std::cout << " }" << std::endl;
 
   dump_loop_vars();
