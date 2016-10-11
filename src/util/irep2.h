@@ -2571,7 +2571,7 @@ public:
 // Type mangling:
   typedef esbmct::field_traits<unsigned int, overflow_cast_data, &overflow_cast_data::bits> bits_field;
   typedef esbmct::field_traits<expr2tc, overflow_ops, &overflow_ops::operand> operand_field;
-  typedef esbmct::expr2t_traits<bits_field, operand_field> traits;
+  typedef esbmct::expr2t_traits<operand_field, bits_field> traits;
 };
 
 class dynamic_object_data : public expr2t
