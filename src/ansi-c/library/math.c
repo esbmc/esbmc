@@ -214,7 +214,7 @@ int abs(int i) { return __ESBMC_abs(i); }
 long int labs(long int i) { return __ESBMC_labs(i); }
 
 inline short _dclass(double d) {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   return __ESBMC_isnand(d)?FP_NAN:
          __ESBMC_isinfd(d)?FP_INFINITE:
          d==0?FP_ZERO:
@@ -223,7 +223,7 @@ inline short _dclass(double d) {
 }
 
 inline short _ldclass(long double ld) {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   return __ESBMC_isnanld(ld)?FP_NAN:
          __ESBMC_isinfld(ld)?FP_INFINITE:
          ld==0?FP_ZERO:
@@ -232,7 +232,7 @@ inline short _ldclass(long double ld) {
 }
 
 inline short _fdclass(float f) {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   return __ESBMC_isnanf(f)?FP_NAN:
          __ESBMC_isinff(f)?FP_INFINITE:
          f==0?FP_ZERO:
@@ -241,7 +241,7 @@ inline short _fdclass(float f) {
 }
 
 inline int __fpclassifyd(double d) {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   return __ESBMC_isnand(d)?FP_NAN:
          __ESBMC_isinfd(d)?FP_INFINITE:
          d==0?FP_ZERO:
@@ -250,7 +250,7 @@ inline int __fpclassifyd(double d) {
 }
 
 inline int __fpclassifyl(long double f) {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   return __ESBMC_isnanld(f)?FP_NAN:
          __ESBMC_isinfld(f)?FP_INFINITE:
          f==0?FP_ZERO:
@@ -259,7 +259,7 @@ inline int __fpclassifyl(long double f) {
 }
 
 inline int __fpclassify(double d) {
-  __ESBMC_HIDE:
+  __ESBMC_HIDE:;
   return __ESBMC_isnand(d)?FP_NAN:
          __ESBMC_isinfd(d)?FP_INFINITE:
          d==0?FP_ZERO:
@@ -267,8 +267,9 @@ inline int __fpclassify(double d) {
          FP_SUBNORMAL;
 }
 
-inline int __fpclassifyf(float f) {
-  __ESBMC_HIDE:
+inline int __fpclassifyf(float f)
+{
+  __ESBMC_HIDE:;
   return __ESBMC_isnanf(f)?FP_NAN:
          __ESBMC_isinff(f)?FP_INFINITE:
          f==0?FP_ZERO:
@@ -298,7 +299,7 @@ double cos(double x)
 
 double sin(double x)
 {
-   return cos(x-M_PI_2);
+  return cos(x - M_PI_2);
 }
 
 /*Returns the square root of n. Note that the function */
@@ -310,14 +311,12 @@ double sqrt(double n)
    This can definitely be improved */
   double x = n;
   double y = 1;
-  //float e = 0.000001; /* e decides the accuracy level*/
-  //double e = 1e-16;
   double e = 1;
   int i = 0;
   while(i++ < 15) //Change this line to increase precision
   {
-    x = (x + y)/2.0;
-    y = n/x;
+    x = (x + y) / 2.0;
+    y = n / x;
   }
   return x;
 }
@@ -346,25 +345,25 @@ static double _atan(double f, int n)
   if(f > root_eps || f < -root_eps)
   {
     g = f * f;
-    q = (((g + q3)*g + q2)*g + q1)*g + q0;
-    r = (((p3*g + p2)*g + p1)*g + p0)*g / q;
+    q = (((g + q3) * g + q2) * g + q1) * g + q0;
+    r = (((p3 * g + p2) * g + p1) * g + p0) * g / q;
     f = f + f * r;
   }
-  if (n > 1)
+  if(n > 1)
     f = -f;
-  return(f + a[n]);
+  return (f + a[n]);
 }
 
 double atan(double x)
 {
-    double a;
+  double a;
 
-    a = x < 0.0 ? -x : x;
-    if (a > 1.0)
-        a = _atan(1.0 / a, 2);
-    else
-        a = _atan(a, 0);
-    return(x < 0.0 ? -a : a);
+  a = x < 0.0 ? -x : x;
+  if(a > 1.0)
+    a = _atan(1.0 / a, 2);
+  else
+    a = _atan(a, 0);
+  return (x < 0.0 ? -a : a);
 }
 
 double atan2(double v, double u)
@@ -404,15 +403,16 @@ double atan2(double v, double u)
   return (v < 0.0 ? -f : f);
 }
 
-double pow(double base, double exponent){
-   int result = 1;
-   if (exponent == 0)
-      return result;
-   if (exponent < 0)
-      return 1 / pow(base, -exponent);
-   float temp = pow(base, exponent / 2);
-   if ((int)exponent % 2 == 0)
-      return temp * temp;
-   else
-      return (base * temp * temp);
+double pow(double base, double exponent)
+{
+  int result = 1;
+  if(exponent == 0)
+    return result;
+  if(exponent < 0)
+    return 1 / pow(base, -exponent);
+  float temp = pow(base, exponent / 2);
+  if((int) exponent % 2 == 0)
+    return temp * temp;
+  else
+    return (base * temp * temp);
 }
