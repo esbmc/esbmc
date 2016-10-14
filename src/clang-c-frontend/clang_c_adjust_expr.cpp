@@ -1006,6 +1006,108 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       exprt tmp = expr.arguments()[0];
       expr.swap(tmp);
     }
+    else if(identifier == "c::__builtin_isgreater")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_isgreater expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op(">", bool_typet());
+      op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      expr.swap(op);
+    }
+    else if(identifier == "c::__builtin_isgreaterequal")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_isgreaterequal expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op(">=", bool_typet());
+      op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      expr.swap(op);
+    }
+    else if(identifier == "c::__builtin_isless")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_isless expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op("<", bool_typet());
+      op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      expr.swap(op);
+    }
+    else if(identifier == "c::__builtin_islessequal")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_islessequal expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op("<=", bool_typet());
+      op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      expr.swap(op);
+    }
+    else if(identifier == "c::__builtin_islessgreater")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_islessgreater expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op1("<", bool_typet());
+      op1.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      exprt op2(">", bool_typet());
+      op2.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      exprt op("or", bool_typet());
+      op.copy_to_operands(op1, op2);
+
+      expr.swap(op);
+    }
+    else if(identifier == "c::__builtin_isunordered")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_islessequal expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op1("isnan", bool_typet());
+      op1.copy_to_operands(expr.arguments()[0]);
+
+      exprt op2("isnan", bool_typet());
+      op2.copy_to_operands(expr.arguments()[1]);
+
+      exprt op("or", bool_typet());
+      op.copy_to_operands(op1, op2);
+
+      expr.swap(op);
+    }
   }
 
   // Restore location
