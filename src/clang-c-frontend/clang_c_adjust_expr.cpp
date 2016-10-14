@@ -779,8 +779,24 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
             identifier=="c::__builtin_inf" ||
             identifier=="c::__builtin_huge_val")
     {
-      constant_exprt inf_expr=
-        ieee_floatt::plus_infinity(ieee_float_spect::double_precision()).to_expr();
+      typet t = double_type();
+
+      constant_exprt inf_expr;
+      if(config.ansi_c.use_fixed_for_float)
+      {
+        // We saturate to the biggest value
+        mp_integer value = power(2, bv_width(t) - 1) - 1;
+        inf_expr =
+          constant_exprt(
+            integer2binary(value, bv_width(t)),
+            integer2string(value, 10),
+            t);
+      }
+      else
+      {
+        inf_expr = ieee_floatt::plus_infinity(
+          ieee_float_spect::double_precision()).to_expr();
+      }
 
       expr.swap(inf_expr);
     }
@@ -788,8 +804,24 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
             identifier=="c::__builtin_inff" ||
             identifier=="c::__builtin_huge_valf")
     {
-      constant_exprt inff_expr=
-        ieee_floatt::plus_infinity(ieee_float_spect::single_precision()).to_expr();
+      typet t = float_type();
+
+      constant_exprt inff_expr;
+      if(config.ansi_c.use_fixed_for_float)
+      {
+        // We saturate to the biggest value
+         mp_integer value = power(2, bv_width(t) - 1) - 1;
+         inff_expr =
+           constant_exprt(
+             integer2binary(value, bv_width(t)),
+             integer2string(value, 10),
+             t);
+      }
+      else
+      {
+        inff_expr = ieee_floatt::plus_infinity(
+          ieee_float_spect::single_precision()).to_expr();
+      }
 
       expr.swap(inff_expr);
     }
@@ -797,36 +829,93 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
             identifier=="c::__builtin_infl" ||
             identifier=="c::__builtin_huge_vall")
     {
-      floatbv_typet type=to_floatbv_type(long_double_type());
-      constant_exprt infl_expr=
-        ieee_floatt::plus_infinity(ieee_float_spect(type)).to_expr();
+      typet t = long_double_type();
+
+      constant_exprt infl_expr;
+      if(config.ansi_c.use_fixed_for_float)
+      {
+        // We saturate to the biggest value
+         mp_integer value = power(2, bv_width(t) - 1) - 1;
+         infl_expr =
+           constant_exprt(
+             integer2binary(value, bv_width(t)),
+             integer2string(value, 10),
+             t);
+      }
+      else
+      {
+        infl_expr = ieee_floatt::plus_infinity(
+          ieee_float_spect::quadruple_precision()).to_expr();
+      }
 
       expr.swap(infl_expr);
     }
     else if(identifier==CPROVER_PREFIX "nan" ||
             identifier=="c::__builtin_nan")
     {
-      floatbv_typet type=to_floatbv_type(double_type());
-      constant_exprt nan_expr=
-        ieee_floatt::NaN(ieee_float_spect(type)).to_expr();
+      typet t = double_type();
+
+      constant_exprt nan_expr;
+      if(config.ansi_c.use_fixed_for_float)
+      {
+        mp_integer value = 0;
+        nan_expr =
+          constant_exprt(
+            integer2binary(value, bv_width(t)),
+            integer2string(value, 10),
+            t);
+      }
+      else
+      {
+        nan_expr = ieee_floatt::NaN(
+          ieee_float_spect::double_precision()).to_expr();
+      }
 
       expr.swap(nan_expr);
     }
     else if(identifier==CPROVER_PREFIX "nanf" ||
             identifier=="c::__builtin_nanf")
     {
-      floatbv_typet type=to_floatbv_type(float_type());
-      constant_exprt nan_expr=
-        ieee_floatt::NaN(ieee_float_spect(type)).to_expr();
+      typet t = float_type();
+
+      constant_exprt nan_expr;
+      if(config.ansi_c.use_fixed_for_float)
+      {
+        mp_integer value = 0;
+        nan_expr =
+          constant_exprt(
+            integer2binary(value, bv_width(t)),
+            integer2string(value, 10),
+            t);
+      }
+      else
+      {
+        nan_expr = ieee_floatt::NaN(
+          ieee_float_spect::single_precision()).to_expr();
+      }
 
       expr.swap(nan_expr);
     }
     else if(identifier==CPROVER_PREFIX "nanl" ||
             identifier=="c::__builtin_nanl")
     {
-      floatbv_typet type=to_floatbv_type(long_double_type());
-      constant_exprt nan_expr=
-        ieee_floatt::NaN(ieee_float_spect(type)).to_expr();
+      typet t = long_double_type();
+
+      constant_exprt nan_expr;
+      if(config.ansi_c.use_fixed_for_float)
+      {
+        mp_integer value = 0;
+        nan_expr =
+          constant_exprt(
+            integer2binary(value, bv_width(t)),
+            integer2string(value, 10),
+            t);
+      }
+      else
+      {
+        nan_expr = ieee_floatt::NaN(
+          ieee_float_spect::quadruple_precision()).to_expr();
+      }
 
       expr.swap(nan_expr);
     }
