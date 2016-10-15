@@ -421,6 +421,11 @@ double sin(double x)
   return cos(x - M_PI_2);
 }
 
+double acos(double x)
+{
+  return 1/cos(x);
+}
+
 /*Returns the square root of n. Note that the function */
 /*Babylonian method*/
 /*http://www.geeksforgeeks.org/square-root-of-a-perfect-square/*/
