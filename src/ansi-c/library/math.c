@@ -8,6 +8,8 @@
 #undef isinf
 #undef signbit
 
+#include <fenv.h>
+
 #include "intrinsics.h"
 
 #ifdef _WIN32
@@ -155,6 +157,123 @@ long double fmodl(long double x, long double y)
     return x;
 
   return x - (y * (int)(x/y));
+}
+
+float remquof(float x, float y, int *quo)
+{
+  // If either argument is NaN, NaN is returned
+  if(__ESBMC_isnanf(x) || __ESBMC_isnanf(y))
+    return NAN;
+
+  // If y is +0.0/-0.0 and x is not NaN, NaN is returned and FE_INVALID is raised
+  if(y == 0.0)
+    return NAN;
+
+  // If x is +inf/-inf and y is not NaN, NaN is returned and FE_INVALID is raised
+  if(__ESBMC_isinff(x))
+    return NAN;
+
+  // remainder = x - rquot * y
+  // Where rquot is the result of: x/y, rounded toward the nearest
+  // integral value (with halfway cases rounded toward the even number).
+
+  // Save previous rounding mode
+  int old_rm = fegetround();
+
+  // Set round to nearest
+  fesetround(FE_TONEAREST);
+
+  // Perform division
+  float rquot = x/y;
+
+  // Restore old rounding mode
+  fesetround(old_rm);
+
+  return x - (y * (int)rquot);
+}
+
+double remquo(double x, double y, int *quo)
+{
+  // If either argument is NaN, NaN is returned
+  if(__ESBMC_isnand(x) || __ESBMC_isnand(y))
+    return NAN;
+
+  // If y is +0.0/-0.0 and x is not NaN, NaN is returned and FE_INVALID is raised
+  if(y == 0.0)
+    return NAN;
+
+  // If x is +inf/-inf and y is not NaN, NaN is returned and FE_INVALID is raised
+  if(__ESBMC_isinfd(x))
+    return NAN;
+
+  // remainder = x - rquot * y
+  // Where rquot is the result of: x/y, rounded toward the nearest
+  // integral value (with halfway cases rounded toward the even number).
+
+  // Save previous rounding mode
+  int old_rm = fegetround();
+
+  // Set round to nearest
+  fesetround(FE_TONEAREST);
+
+  // Perform division
+  double rquot = x/y;
+
+  // Restore old rounding mode
+  fesetround(old_rm);
+
+  return x - (y * (int)rquot);
+}
+
+long double remquol(long double x, long double y, int *quo)
+{
+  // If either argument is NaN, NaN is returned
+  if(__ESBMC_isnanl(x) || __ESBMC_isnanl(y))
+    return NAN;
+
+  // If y is +0.0/-0.0 and x is not NaN, NaN is returned and FE_INVALID is raised
+  if(y == 0.0)
+    return NAN;
+
+  // If x is +inf/-inf and y is not NaN, NaN is returned and FE_INVALID is raised
+  if(__ESBMC_isinfl(x))
+    return NAN;
+
+  // remainder = x - rquot * y
+  // Where rquot is the result of: x/y, rounded toward the nearest
+  // integral value (with halfway cases rounded toward the even number).
+
+  // Save previous rounding mode
+  int old_rm = fegetround();
+
+  // Set round to nearest
+  fesetround(FE_TONEAREST);
+
+  // Perform division
+  long double rquot = x/y;
+
+  // Restore old rounding mode
+  fesetround(old_rm);
+
+  return x - (y * (int)rquot);
+}
+
+float remainderf(float x, float y)
+{
+  int quo;
+  return remquof(x, y, &quo);
+}
+
+double remainder(double x, double y)
+{
+  int quo;
+  return remquo(x, y, &quo);
+}
+
+long double remainderl(long double x, long double y)
+{
+  int quo;
+  return remquol(x, y, &quo);
 }
 
 int isfinite(double d) { return __ESBMC_isfinited(d); }
