@@ -1022,6 +1022,21 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 
       expr.swap(op);
     }
+    else if(identifier==CPROVER_PREFIX "nearbyintf" ||
+            identifier==CPROVER_PREFIX "nearbyint" ||
+            identifier==CPROVER_PREFIX "nearbyintld")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "sign expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt sign_expr("nearbyint", expr.type());
+      sign_expr.operands() = expr.arguments();
+      expr.swap(sign_expr);
+    }
   }
 
   // Restore location

@@ -712,6 +712,24 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     typecast2t *t = new typecast2t(type, old_expr, rounding_mode);
     new_expr_ref = expr2tc(t);
+  } else if (expr.id() == "nearbyint") {
+    assert(expr.op0().id_string() != "");
+    migrate_type(expr.type(), type);
+
+    expr2tc old_expr;
+    migrate_expr(expr.op0(), old_expr);
+
+    // Default to rounding mode symbol
+    expr2tc rounding_mode =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rounding_mode);
+
+    nearbyint2t *t = new nearbyint2t(type, old_expr, rounding_mode);
+    new_expr_ref = expr2tc(t);
   } else if (expr.id() == typet::t_struct) {
     migrate_type(expr.type(), type);
 
@@ -1848,6 +1866,16 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
 
     typecast_exprt new_expr(migrate_expr_back(ref2.from), thetype);
+    new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return new_expr;
+  }
+  case expr2t::nearbyint_id:
+  {
+    const nearbyint2t &ref2 = to_nearbyint2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+
+    exprt new_expr("nearbyint", thetype);
+    new_expr.copy_to_operands(migrate_expr_back(ref2.from));
     new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
     return new_expr;
   }

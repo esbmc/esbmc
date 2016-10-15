@@ -448,6 +448,7 @@ public:
     constant_array_of_id,
     symbol_id,
     typecast_id,
+    nearbyint_id,
     if_id,
     equality_id,
     notequal_id,
@@ -1913,6 +1914,7 @@ class constant_array2t;
 class constant_array_of2t;
 class symbol2t;
 class typecast2t;
+class nearbyint2t;
 class if2t;
 class equality2t;
 class notequal2t;
@@ -2939,7 +2941,8 @@ irep_typedefs(constant_bool, constant_bool_data);
 irep_typedefs(constant_array_of, constant_array_of_data);
 irep_typedefs(constant_string, constant_string_data);
 irep_typedefs(symbol, symbol_data);
-irep_typedefs(typecast,typecast_data);
+irep_typedefs(nearbyint, typecast_data);
+irep_typedefs(typecast, typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
@@ -3238,6 +3241,39 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Nearbyint expression.
+ *  Represents a rounding operation on a floatbv, we extend typecast as
+ *  it already have a field for the rounding mode
+ *  @extends typecast_data
+ */
+class nearbyint2t : public nearbyint_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type to round to
+   *  @param from Expression to round from.
+   *  @param rounding_mode Rounding mode, important only for floatbvs
+   */
+  nearbyint2t(const type2tc &type, const expr2tc &from, const expr2tc &rounding_mode)
+    : nearbyint_expr_methods(type, nearbyint_id, from, rounding_mode) { }
+
+  /** Primary constructor. This constructor defaults the rounding mode to
+   *  the c::__ESBMC_rounding_mode symbol
+   *  @param type Type to round to
+   *  @param from Expression to round from.
+   */
+  nearbyint2t(const type2tc &type, const expr2tc &from)
+    : nearbyint_expr_methods(type, nearbyint_id, from,
+        expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode")))
+  {
+  }
+
+  nearbyint2t(const nearbyint2t &ref)
+    : nearbyint_expr_methods(ref){}
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 /** Typecast expression.
  *  Represents cast from contained expression 'from' to the type of this
  *  typecast.
@@ -3260,8 +3296,8 @@ public:
    *  @param from Expression to cast from.
    */
   typecast2t(const type2tc &type, const expr2tc &from)
-      : typecast_expr_methods(type, typecast_id, from,
-          expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode")))
+    : typecast_expr_methods(type, typecast_id, from,
+        expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode")))
   {
   }
 
@@ -4685,6 +4721,7 @@ expr_macros(constant_array);
 expr_macros(constant_array_of);
 expr_macros(symbol);
 expr_macros(typecast);
+expr_macros(nearbyint);
 expr_macros(if);
 expr_macros(equality);
 expr_macros(notequal);
