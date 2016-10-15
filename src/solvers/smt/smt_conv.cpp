@@ -874,12 +874,13 @@ smt_convt::convert_ast(const expr2tc &expr)
       // No need to do anything.
       a = args[0];
     } else {
-      // TODO: Shouldn't we create a zero constant of the same type of
-      // abs.value?
-      constant_int2tc zero(abs.value->type, BigInt(0));
+      expr2tc zero;
+      migrate_expr(gen_zero(migrate_type_back(abs.value->type)), zero);
+
       lessthan2tc lt(abs.value, zero);
-      sub2tc sub(abs.value->type, zero, abs.value);
-      if2tc ite(abs.type, lt, sub, abs.value);
+      neg2tc neg(abs.value->type, abs.value);
+      if2tc ite(abs.type, lt, neg, abs.value);
+
       a = convert_ast(ite);
     }
     break;
