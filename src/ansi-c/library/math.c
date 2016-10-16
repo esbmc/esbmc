@@ -173,6 +173,10 @@ float remquof(float x, float y, int *quo)
   if(__ESBMC_isinff(x))
     return NAN;
 
+  // If y is +inf/-inf, return x
+  if(__ESBMC_isinff(y))
+    return x;
+
   // remainder = x - rquot * y
   // Where rquot is the result of: x/y, rounded toward the nearest
   // integral value (with halfway cases rounded toward the even number).
@@ -184,12 +188,12 @@ float remquof(float x, float y, int *quo)
   fesetround(FE_TONEAREST);
 
   // Perform division
-  float rquot = x/y;
+  float rquot = nearbyintf(x/y);
 
   // Restore old rounding mode
   fesetround(old_rm);
 
-  return x - (y * (int)rquot);
+  return x - (y * rquot);
 }
 
 double remquo(double x, double y, int *quo)
@@ -206,6 +210,10 @@ double remquo(double x, double y, int *quo)
   if(__ESBMC_isinfd(x))
     return NAN;
 
+  // If y is +inf/-inf, return x
+  if(__ESBMC_isinfd(y))
+    return x;
+
   // remainder = x - rquot * y
   // Where rquot is the result of: x/y, rounded toward the nearest
   // integral value (with halfway cases rounded toward the even number).
@@ -217,12 +225,12 @@ double remquo(double x, double y, int *quo)
   fesetround(FE_TONEAREST);
 
   // Perform division
-  double rquot = x/y;
+  double rquot = nearbyint(x/y);
 
   // Restore old rounding mode
   fesetround(old_rm);
 
-  return x - (y * (int)rquot);
+  return x - (y * rquot);
 }
 
 long double remquol(long double x, long double y, int *quo)
@@ -239,6 +247,10 @@ long double remquol(long double x, long double y, int *quo)
   if(__ESBMC_isinfld(x))
     return NAN;
 
+  // If y is +inf/-inf, return x
+  if(__ESBMC_isinfld(y))
+    return x;
+
   // remainder = x - rquot * y
   // Where rquot is the result of: x/y, rounded toward the nearest
   // integral value (with halfway cases rounded toward the even number).
@@ -250,12 +262,12 @@ long double remquol(long double x, long double y, int *quo)
   fesetround(FE_TONEAREST);
 
   // Perform division
-  long double rquot = x/y;
+  long double rquot = nearbyintl(x/y);
 
   // Restore old rounding mode
   fesetround(old_rm);
 
-  return x - (y * (int)rquot);
+  return x - (y * rquot);
 }
 
 float remainderf(float x, float y)
