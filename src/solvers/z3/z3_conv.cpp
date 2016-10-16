@@ -825,8 +825,15 @@ smt_astt z3_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
 
 smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
 {
-  (void) expr;
-  abort();
+  // Rounding mode symbol
+  smt_astt rm = convert_rounding_mode(expr.rounding_mode);
+  const z3_smt_ast *mrm = z3_smt_downcast(rm);
+
+  smt_astt from = convert_ast(expr.from);
+  const z3_smt_ast *mfrom = z3_smt_downcast(from);
+
+  smt_sortt s = convert_sort(expr.type);
+  return new_ast(ctx.fpa_to_integral(mrm->e, mfrom->e), s);
 }
 
 smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)

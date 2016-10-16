@@ -680,6 +680,11 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = convert_typecast(expr);
     break;
   }
+  case expr2t::nearbyint_id:
+  {
+    a = mk_smt_nearbyint_from_float(to_nearbyint2t(expr));
+    break;
+  }
   case expr2t::if_id:
   {
     // Only attempt to handle struct.s

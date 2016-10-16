@@ -687,8 +687,19 @@ smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
 
 smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
 {
-  (void) expr;
-  abort();
+  // Rounding mode symbol
+  smt_astt rm = convert_rounding_mode(expr.rounding_mode);
+  const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
+
+  smt_astt from = convert_ast(expr.from);
+  const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
+
+  // Conversion from float, using the correct rounding mode
+  msat_term t = msat_make_fp_round_to_int(env, mrm->t, mfrom->t);
+  check_msat_error(t);
+
+  smt_sortt s = convert_sort(expr.type);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)

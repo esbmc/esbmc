@@ -320,6 +320,7 @@ namespace z3 {
         expr fpa_to_ubv(z3::expr rm, z3::expr const t, unsigned sz);
         expr fpa_to_sbv(z3::expr rm, z3::expr t, unsigned sz);
         expr fpa_to_fpa(z3::expr rm, z3::expr t, sort sort);
+        expr fpa_to_integral(z3::expr rm, z3::expr t);
 
         expr fpa_from_unsigned(z3::expr rm, z3::expr t, sort sort);
         expr fpa_from_signed(z3::expr rm, z3::expr t, sort sort);
@@ -2215,6 +2216,13 @@ namespace z3 {
     expr context::fpa_to_fpa(z3::expr rm, z3::expr t, sort sort)
     {
       Z3_ast r = Z3_mk_fpa_to_fp_float(m_ctx, rm, t, sort);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_to_integral(z3::expr rm, z3::expr t)
+    {
+      Z3_ast r = Z3_mk_fpa_round_to_integral(m_ctx, rm, t);
       check_error();
       return expr(*this, r);
     }
