@@ -327,6 +327,18 @@ double rint(double d) { return nearbyint(d); }
 
 long double rintl(long double ld) { return nearbyintl(ld); }
 
+long lrintf(float f) { return nearbyintf(f); }
+
+long lrint(double d)  { return nearbyint(d); }
+
+long lrintl(long double ld) { return nearbyintl(ld); }
+
+long long llrintf(float f) { return nearbyintf(f); }
+
+long long llrint(double d)  { return nearbyint(d); }
+
+long long llrintl(long double ld) { return nearbyintl(ld); }
+
 int isfinite(double d) { return __ESBMC_isfinited(d); }
 
 int __finite(double d) { return __ESBMC_isfinited(d); }
