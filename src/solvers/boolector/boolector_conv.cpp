@@ -301,6 +301,12 @@ smt_astt boolector_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
   abort();
 }
 
+smt_astt boolector_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
+  abort();
+}
+
 smt_astt boolector_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 {
   std::cerr << "Boolector can't create floating point sorts" << std::endl;

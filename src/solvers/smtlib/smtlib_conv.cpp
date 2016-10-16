@@ -773,6 +773,12 @@ smt_astt smtlib_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   abort();
 }
 
+smt_astt smtlib_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  std::cerr << "Can't create floating point nearbyint expression on smtlibt yet" << std::endl;
+  abort();
+}
+
 smt_ast *
 smtlib_convt::mk_smt_bool(bool val)
 {

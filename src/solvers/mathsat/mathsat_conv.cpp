@@ -685,6 +685,12 @@ smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
   return new mathsat_smt_ast(this, s, t);
 }
 
+smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  (void) expr;
+  abort();
+}
+
 smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol

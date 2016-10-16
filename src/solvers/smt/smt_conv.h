@@ -659,6 +659,11 @@ public:
    *  @return The newly created cast smt_ast. */
   virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast) = 0;
 
+  /** Calculate the nearby int from a floating point, considering the rounding mode
+   *  @param expr the nearby int expression
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) = 0;
+
   /** Convert the ieee arithmetic operations (add, sub, mul, div, mod)
    *  @param expr the arithmetic operations
    *  @return The newly created cast smt_ast. */
