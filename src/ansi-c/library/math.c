@@ -276,6 +276,39 @@ long double remainderl(long double x, long double y)
   return remquol(x, y, &quo);
 }
 
+float nearbyintf(float f)
+{
+  if(f == 0.0)
+    return f;
+  if(__ESBMC_isinff(f))
+    return f;
+  if(__ESBMC_isnanf(f))
+    return NAN;
+  return __ESBMC_nearbyintf(f);
+}
+
+double nearbyint(double d)
+{
+  if(d == 0.0)
+    return d;
+  if(__ESBMC_isinfd(d))
+    return d;
+  if(__ESBMC_isnand(d))
+    return NAN;
+  return __ESBMC_nearbyintd(d);
+}
+
+long double nearbyintl(long double ld)
+{
+  if(ld == 0.0)
+    return ld;
+  if(__ESBMC_isinfl(ld))
+    return ld;
+  if(__ESBMC_isnanl(ld))
+    return NAN;
+  return __ESBMC_nearbyintl(ld);
+}
+
 int isfinite(double d) { return __ESBMC_isfinited(d); }
 
 int __finite(double d) { return __ESBMC_isfinited(d); }

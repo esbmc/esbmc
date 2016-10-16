@@ -1023,19 +1023,19 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       expr.swap(op);
     }
     else if(identifier==CPROVER_PREFIX "nearbyintf" ||
-            identifier==CPROVER_PREFIX "nearbyint" ||
-            identifier==CPROVER_PREFIX "nearbyintld")
+            identifier==CPROVER_PREFIX "nearbyintd" ||
+            identifier==CPROVER_PREFIX "nearbyintl")
     {
       if(expr.arguments().size() != 1)
       {
-        std::cout << "sign expects one operand" << std::endl;
+        std::cout << "nearbyint expects one operand" << std::endl;
         expr.dump();
         abort();
       }
 
-      exprt sign_expr("nearbyint", expr.type());
-      sign_expr.operands() = expr.arguments();
-      expr.swap(sign_expr);
+      exprt new_expr("nearbyint", expr.arguments()[0].type());
+      new_expr.operands() = expr.arguments();
+      expr.swap(new_expr);
     }
   }
 

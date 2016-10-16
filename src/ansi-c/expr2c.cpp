@@ -3002,6 +3002,11 @@ std::string expr2ct::convert(
     return convert_function(src, "signbit", precedence=15);
   }
 
+  else if(src.id()=="nearbyint")
+  {
+    return convert_function(src, "nearbyint", precedence=15);
+  }
+
   else if(src.id()=="builtin_va_arg")
   {
     return convert_function(src, "builtin_va_arg", precedence=15);
