@@ -1906,6 +1906,16 @@ if2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 expr2tc
+overflow_cast2t::do_simplify(bool second __attribute__((unused))) const
+{
+  expr2tc new_operand = try_simplification(operand);
+  if(new_operand != operand)
+    return new_operand;
+
+  return expr2tc();
+}
+
+expr2tc
 overflow2t::do_simplify(bool second __attribute__((unused))) const
 {
   unsigned int num_const = 0;
