@@ -1547,6 +1547,16 @@ typecast2t::do_simplify(bool second) const
 }
 
 expr2tc
+nearbyint2t::do_simplify(bool second __attribute__((unused))) const
+{
+  expr2tc new_from = try_simplification(from);
+  if(new_from != from)
+    return new_from;
+
+  return expr2tc();
+}
+
+expr2tc
 address_of2t::do_simplify(bool second __attribute__((unused))) const
 {
 
