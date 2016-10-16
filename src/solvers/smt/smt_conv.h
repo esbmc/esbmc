@@ -192,6 +192,7 @@ enum smt_func_kind {
   SMT_FUNC_IS_INT,
 
   // floatbv operations
+  SMT_FUNC_FABS,
   SMT_FUNC_ISZERO,
   SMT_FUNC_ISNAN,
   SMT_FUNC_ISINF,

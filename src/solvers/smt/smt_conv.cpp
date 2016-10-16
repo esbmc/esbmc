@@ -873,6 +873,8 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (is_unsignedbv_type(abs.value)) {
       // No need to do anything.
       a = args[0];
+    } else if(is_floatbv_type(abs.value)) {
+      a = mk_func_app(sort, SMT_FUNC_FABS, &args[0], 1);
     } else {
       expr2tc zero;
       migrate_expr(gen_zero(migrate_type_back(abs.value->type)), zero);
@@ -2196,6 +2198,7 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "int2real",
   "real2int",
   "is_int",
+  "fabs",
   "is_zero",
   "is_nan",
   "is_inf",

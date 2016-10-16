@@ -40,7 +40,7 @@ double fabs(double d)
 {
   if(d == 0.0)
     return 0.0;
-  if(__ESBMC_isfinited(d))
+  if(__ESBMC_isinfd(d))
     return INFINITY;
   if(__ESBMC_isnand(d))
     return NAN;
@@ -51,7 +51,7 @@ long double fabsl(long double ld)
 {
   if(ld == 0.0)
     return 0.0;
-  if(__ESBMC_isfinitel(ld))
+  if(__ESBMC_isinfl(ld))
     return INFINITY;
   if(__ESBMC_isnanl(ld))
     return NAN;
@@ -62,7 +62,7 @@ float fabsf(float f)
 {
   if(f == 0.0)
     return 0.0;
-  if(__ESBMC_isfinitef(f))
+  if(__ESBMC_isinff(f))
     return INFINITY;
   if(__ESBMC_isnanf(f))
     return NAN;

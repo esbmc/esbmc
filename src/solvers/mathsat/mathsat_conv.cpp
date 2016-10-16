@@ -429,6 +429,9 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_ISZERO:
     r = msat_make_fp_iszero(env, args[0]->t);
     break;
+  case SMT_FUNC_FABS:
+    r = msat_make_fp_abs(env, args[0]->t);
+    break;
   case SMT_FUNC_ISNAN:
     r = msat_make_fp_isnan(env, args[0]->t);
     break;
