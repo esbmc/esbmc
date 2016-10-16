@@ -748,7 +748,7 @@ smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
     s = mk_sort(SMT_SORT_BV);
 
     // Conversion from float to integers always truncate, so we assume
-    // the round mode to be toward infinity
+    // the round mode to be toward zero
     rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
     const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
@@ -757,7 +757,7 @@ smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
     s = mk_sort(SMT_SORT_BV);
 
     // Conversion from float to integers always truncate, so we assume
-    // the round mode to be toward infinity
+    // the round mode to be toward zero
     rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
     const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
