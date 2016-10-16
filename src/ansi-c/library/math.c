@@ -513,6 +513,33 @@ long long llround(double d) { return round(d); }
 
 long long llroundl(long double ld) { return roundl(ld); }
 
+float modff(float value, float* iptr)
+{
+  int save_round = fegetround();
+  fesetround(FE_TOWARDZERO);
+  *iptr = nearbyint(value);
+  fesetround(save_round);
+  return copysign(isinf(value) ? 0.0 : value - (*iptr), value);
+}
+
+double modf(double value, double* iptr)
+{
+  int save_round = fegetround();
+  fesetround(FE_TOWARDZERO);
+  *iptr = nearbyint(value);
+  fesetround(save_round);
+  return copysign(isinf(value) ? 0.0 : value - (*iptr), value);
+}
+
+long double modfl(long double value, long double* iptr)
+{
+  int save_round = fegetround();
+  fesetround(FE_TOWARDZERO);
+  *iptr = nearbyint(value);
+  fesetround(save_round);
+  return copysign(isinf(value) ? 0.0 : value - (*iptr), value);
+}
+
 int isfinite(double d) { return __ESBMC_isfinited(d); }
 
 int __finite(double d) { return __ESBMC_isfinited(d); }
