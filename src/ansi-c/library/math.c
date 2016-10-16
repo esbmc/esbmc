@@ -51,11 +51,11 @@ long double fabsl(long double ld)
 {
   if(ld == 0.0)
     return 0.0;
-  if(__ESBMC_isinfl(ld))
+  if(__ESBMC_isinfld(ld))
     return INFINITY;
-  if(__ESBMC_isnanl(ld))
+  if(__ESBMC_isnanld(ld))
     return NAN;
-  return __ESBMC_fabsl(ld);
+  return __ESBMC_fabsld(ld);
 }
 
 float fabsf(float f)
@@ -228,7 +228,7 @@ double remquo(double x, double y, int *quo)
 long double remquol(long double x, long double y, int *quo)
 {
   // If either argument is NaN, NaN is returned
-  if(__ESBMC_isnanl(x) || __ESBMC_isnanl(y))
+  if(__ESBMC_isnanld(x) || __ESBMC_isnanld(y))
     return NAN;
 
   // If y is +0.0/-0.0 and x is not NaN, NaN is returned and FE_INVALID is raised
@@ -236,7 +236,7 @@ long double remquol(long double x, long double y, int *quo)
     return NAN;
 
   // If x is +inf/-inf and y is not NaN, NaN is returned and FE_INVALID is raised
-  if(__ESBMC_isinfl(x))
+  if(__ESBMC_isinfld(x))
     return NAN;
 
   // remainder = x - rquot * y
@@ -302,11 +302,11 @@ long double nearbyintl(long double ld)
 {
   if(ld == 0.0)
     return ld;
-  if(__ESBMC_isinfl(ld))
+  if(__ESBMC_isinfld(ld))
     return ld;
-  if(__ESBMC_isnanl(ld))
+  if(__ESBMC_isnanld(ld))
     return NAN;
-  return __ESBMC_nearbyintl(ld);
+  return __ESBMC_nearbyintld(ld);
 }
 
 int isfinite(double d) { return __ESBMC_isfinited(d); }

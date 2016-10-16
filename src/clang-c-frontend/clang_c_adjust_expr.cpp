@@ -701,7 +701,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
   const locationt location = expr.location();
 
   // some built-in functions
-  if(f_op.id() == "symbol")
+  if(f_op.is_symbol())
   {
     const irep_idt &identifier = to_symbol_expr(f_op).get_identifier();
 
@@ -777,10 +777,10 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     }
     else if(identifier==CPROVER_PREFIX "inff" ||
             identifier==CPROVER_PREFIX "inf" ||
-            identifier==CPROVER_PREFIX "infl" ||
+            identifier==CPROVER_PREFIX "infld" ||
             identifier=="c::__builtin_inff" ||
             identifier=="c::__builtin_inf" ||
-            identifier=="c::__builtin_infl" ||
+            identifier=="c::__builtin_infld" ||
             identifier=="c::__builtin_huge_valf" ||
             identifier=="c::__builtin_huge_val" ||
             identifier=="c::__builtin_huge_vall")
@@ -808,7 +808,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     }
     else if(identifier==CPROVER_PREFIX "nanf" ||
             identifier==CPROVER_PREFIX "nan" ||
-            identifier==CPROVER_PREFIX "nanl" ||
+            identifier==CPROVER_PREFIX "nanld" ||
             identifier=="c::__builtin_nanf" ||
             identifier=="c::__builtin_nan" ||
             identifier=="c::__builtin_nanl")
@@ -838,7 +838,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
             identifier==CPROVER_PREFIX "llabs" ||
             identifier==CPROVER_PREFIX "fabs" ||
             identifier==CPROVER_PREFIX "fabsf" ||
-            identifier==CPROVER_PREFIX "fabsl")
+            identifier==CPROVER_PREFIX "fabsld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -1024,7 +1024,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     }
     else if(identifier==CPROVER_PREFIX "nearbyintf" ||
             identifier==CPROVER_PREFIX "nearbyintd" ||
-            identifier==CPROVER_PREFIX "nearbyintl")
+            identifier==CPROVER_PREFIX "nearbyintld")
     {
       if(expr.arguments().size() != 1)
       {
