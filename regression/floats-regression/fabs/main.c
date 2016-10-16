@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <math.h>
 
 extern void __VERIFIER_error() __attribute__ ((__noreturn__));
@@ -11,4 +10,5 @@ int main(void)
   __VERIFIER_assert(fabs(-0.0) == -0.0);
   __VERIFIER_assert(fabs(-0.0) == +0.0);
   __VERIFIER_assert(fabs(-INFINITY) == INFINITY);
+  __VERIFIER_assert(isnan(fabs(-NAN)));
 }
