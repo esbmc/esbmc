@@ -188,7 +188,7 @@ float remquof(float x, float y, int *quo)
   fesetround(FE_TONEAREST);
 
   // Perform division
-  float rquot = nearbyintf(x/y);
+  long long rquot = llrintf(x/y);
 
   // Restore old rounding mode
   fesetround(old_rm);
@@ -225,7 +225,7 @@ double remquo(double x, double y, int *quo)
   fesetround(FE_TONEAREST);
 
   // Perform division
-  double rquot = nearbyint(x/y);
+  long long rquot = llrint(x/y);
 
   // Restore old rounding mode
   fesetround(old_rm);
@@ -262,7 +262,7 @@ long double remquol(long double x, long double y, int *quo)
   fesetround(FE_TONEAREST);
 
   // Perform division
-  long double rquot = nearbyintl(x/y);
+  long long rquot = llrintl(x/y);
 
   // Restore old rounding mode
   fesetround(old_rm);
