@@ -309,6 +309,12 @@ long double nearbyintl(long double ld)
   return __ESBMC_nearbyintld(ld);
 }
 
+float rintf(float f) { return nearbyintf(f); }
+
+double rint(double d) { return nearbyint(d); }
+
+long double rintl(long double ld) { return nearbyintl(ld); }
+
 int isfinite(double d) { return __ESBMC_isfinited(d); }
 
 int __finite(double d) { return __ESBMC_isfinited(d); }
