@@ -381,6 +381,138 @@ long double copysignl(long double x, long double y)
   return y_sign ? -__ESBMC_fabsld(x) : __ESBMC_fabsld(x);
 }
 
+float ceilf(float f)
+{
+  float result;
+  int save_round = fegetround();
+  fesetround(FE_UPWARD);
+  result = rintf(f);
+  fesetround(save_round);
+  return result;
+}
+
+double ceil(double d)
+{
+  double result;
+  int save_round = fegetround();
+  fesetround(FE_UPWARD);
+  result = rint(d);
+  fesetround(save_round);
+  return result;
+}
+
+long double ceill(long double ld)
+{
+  long double result;
+  int save_round = fegetround();
+  fesetround(FE_UPWARD);
+  result = rintl(ld);
+  fesetround(save_round);
+  return result;
+}
+
+float floorf(float f)
+{
+  float result;
+  int save_round = fegetround();
+  fesetround(FE_DOWNWARD);
+  result = rintf(f);
+  fesetround(save_round);
+  return result;
+}
+
+double floor(double d)
+{
+  double result;
+  int save_round = fegetround();
+  fesetround(FE_DOWNWARD);
+  result = rint(d);
+  fesetround(save_round);
+  return result;
+}
+
+long double floorl(long double ld)
+{
+  long double result;
+  int save_round = fegetround();
+  fesetround(FE_DOWNWARD);
+  result = rintl(ld);
+  fesetround(save_round);
+  return result;
+}
+
+float truncf(float f)
+{
+  float result;
+  int save_round = fegetround();
+  fesetround(FE_TOWARDZERO);
+  result = rintf(f);
+  fesetround(save_round);
+  return result;
+}
+
+double trunc(double d)
+{
+  double result;
+  int save_round = fegetround();
+  fesetround(FE_TOWARDZERO);
+  result = rint(d);
+  fesetround(save_round);
+  return result;
+}
+
+long double truncl(long double ld)
+{
+  long double result;
+  int save_round = fegetround();
+  fesetround(FE_TOWARDZERO);
+  result = rintl(ld);
+  fesetround(save_round);
+  return result;
+}
+
+float roundf(float f)
+{
+  float result;
+  int save_round = fegetround();
+  fesetround(FE_TOWARDZERO);
+  result = rintf(copysign(0.5 + fabsf(f), f));
+  fesetround(save_round);
+  return result;
+}
+
+double round(double d)
+{
+  double result;
+  int save_round = fegetround();
+  fesetround(FE_TOWARDZERO);
+  result = rint(copysign(0.5 + fabs(d), d));
+  fesetround(save_round);
+  return result;
+}
+
+long double roundl(long double ld)
+{
+  long double result;
+  int save_round = fegetround();
+  fesetround(FE_TOWARDZERO);
+  result = rintl(copysign(0.5 + fabsl(ld), ld));
+  fesetround(save_round);
+  return result;
+}
+
+long lroundf(float f) { return roundf(f); }
+
+long lround(double d) { return round(d); }
+
+long lroundl(long double ld) { return roundl(ld); }
+
+long long llroundf(float f) { return roundf(f); }
+
+long long llround(double d) { return round(d); }
+
+long long llroundl(long double ld) { return roundl(ld); }
+
 int isfinite(double d) { return __ESBMC_isfinited(d); }
 
 int __finite(double d) { return __ESBMC_isfinited(d); }
