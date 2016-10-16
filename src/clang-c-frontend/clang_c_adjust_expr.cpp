@@ -836,7 +836,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "abs" ||
             identifier==CPROVER_PREFIX "labs" ||
             identifier==CPROVER_PREFIX "llabs" ||
-            identifier==CPROVER_PREFIX "fabs" ||
+            identifier==CPROVER_PREFIX "fabsd" ||
             identifier==CPROVER_PREFIX "fabsf" ||
             identifier==CPROVER_PREFIX "fabsld")
     {

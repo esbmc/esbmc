@@ -8,7 +8,7 @@ void __ESBMC_switch_to(unsigned int tid);
 int __ESBMC_abs(int);
 long int __ESBMC_labs(long int);
 long long int __ESBMC_llabs(long long int);
-double __ESBMC_fabs(double);
+double __ESBMC_fabsd(double);
 long double __ESBMC_fabsld(long double);
 float __ESBMC_fabsf(float);
 

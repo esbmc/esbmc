@@ -44,7 +44,7 @@ double fabs(double d)
     return INFINITY;
   if(__ESBMC_isnand(d))
     return NAN;
-  return __ESBMC_fabs(d);
+  return __ESBMC_fabsd(d);
 }
 
 long double fabsl(long double ld)
