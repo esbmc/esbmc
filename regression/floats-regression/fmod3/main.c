@@ -13,7 +13,7 @@ int main()
 
   double plus_zero = 0.0;
   double plus_zero_mod = fmod(plus_zero, a);
-  _Bool plus_zero_mod_sign = __signbit(plus_zero);
+  _Bool plus_zero_mod_sign = signbit(plus_zero);
   __VERIFIER_assert((plus_zero_mod == 0.0) && !plus_zero_mod_sign);
 
   double minus_zero = -0.0;
