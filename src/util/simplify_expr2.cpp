@@ -597,7 +597,7 @@ struct abstor
     // When we call BigInt/fixedbv/floatbv constructor
     // with no argument, it generates the zero equivalent
     if(to_constant(c).value > 0)
-      return expr2tc();
+      return expr2tc(c);
 
     to_constant(c).value = !to_constant(c).value;
     return expr2tc(c);
