@@ -791,6 +791,17 @@ mathsat_convt::mk_extract(const smt_ast *a, unsigned int high,
                           unsigned int low, const smt_sort *s)
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
+
+  // If it's a floatbv, convert it to bv
+  if(a->sort->id == SMT_SORT_FLOATBV)
+  {
+    msat_term t = msat_make_fp_as_ieeebv(env, mast->t);
+    check_msat_error(t);
+
+    smt_ast * bv = new mathsat_smt_ast(this, s, t);
+    mast = mathsat_ast_downcast(bv);
+  }
+
   msat_term t = msat_make_bv_extract(env, high, low, mast->t);
   check_msat_error(t);
 

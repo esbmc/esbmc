@@ -330,6 +330,8 @@ namespace z3 {
         expr fpa_mul(z3::expr rm, z3::expr s1, z3::expr s2);
         expr fpa_div(z3::expr rm, z3::expr s1, z3::expr s2);
 
+        expr fpa_to_ieeebv(z3::expr fp);
+
         expr string_val(char const* s);
         expr string_val(std::string const& s);
 
@@ -2265,6 +2267,13 @@ namespace z3 {
     expr context::fpa_div(z3::expr rm, z3::expr s1, z3::expr s2)
     {
       Z3_ast r = Z3_mk_fpa_div(m_ctx, rm, s1, s2);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_to_ieeebv(z3::expr fp)
+    {
+      Z3_ast r = Z3_mk_fpa_to_ieee_bv(m_ctx, fp);
       check_error();
       return expr(*this, r);
     }
