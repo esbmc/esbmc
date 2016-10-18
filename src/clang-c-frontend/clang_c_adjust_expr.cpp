@@ -1033,7 +1033,22 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
         abort();
       }
 
-      exprt new_expr("nearbyint", expr.arguments()[0].type());
+      exprt new_expr("nearbyint", expr.type());
+      new_expr.operands() = expr.arguments();
+      expr.swap(new_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "fmaf" ||
+            identifier==CPROVER_PREFIX "fmad" ||
+            identifier==CPROVER_PREFIX "fmald")
+    {
+      if(expr.arguments().size() != 3)
+      {
+        std::cout << "fma expects three operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt new_expr("ieee_fma", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
