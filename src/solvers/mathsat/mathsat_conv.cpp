@@ -35,7 +35,7 @@ void print_mathsat_formula()
 {
   size_t num_of_asserted;
   msat_term * asserted_formulas =
-      msat_get_asserted_formulas(*_env, &num_of_asserted);
+   msat_get_asserted_formulas(*_env, &num_of_asserted);
 
   for (unsigned i=0; i< num_of_asserted; i++)
     std::cout << msat_to_smtlib2(*_env, asserted_formulas[i]) << "\n";
