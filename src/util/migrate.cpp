@@ -1133,6 +1133,25 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     ieee_div2t *d = new ieee_div2t(type, side1, side2, rm);
     new_expr_ref = expr2tc(d);
+  } else if (expr.id() == "ieee_fma") {
+    migrate_type(expr.type(), type);
+
+    expr2tc v1, v2, v3;
+    migrate_expr(expr.op0(), v1);
+    migrate_expr(expr.op1(), v2);
+    migrate_expr(expr.op2(), v3);
+
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
+
+    ieee_fma2t *a = new ieee_fma2t(type, v1, v2, v3, rm);
+    new_expr_ref = expr2tc(a);
   } else if (expr.id() == exprt::mod) {
     migrate_type(expr.type(), type);
 
@@ -2142,6 +2161,19 @@ migrate_expr_back(const expr2tc &ref)
     // Add rounding mode
     divval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
     return divval;
+  }
+  case expr2t::ieee_fma_id:
+  {
+    const ieee_fma2t &ref2 = to_ieee_fma2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt addval("ieee_fma", thetype);
+    addval.copy_to_operands(migrate_expr_back(ref2.value1),
+                            migrate_expr_back(ref2.value2),
+                            migrate_expr_back(ref2.value3));
+
+    // Add rounding mode
+    addval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return addval;
   }
   case expr2t::modulus_id:
   {

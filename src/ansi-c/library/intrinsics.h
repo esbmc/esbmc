@@ -40,6 +40,10 @@ float __ESBMC_nearbyintf(float d);
 double __ESBMC_nearbyintd(double d);
 long double __ESBMC_nearbyintld(long double d);
 
+float __ESBMC_fmaf(float x, float y, float z);
+double __ESBMC_fmad(double x, double y, double z);
+long double __ESBMC_fmald(long double x, long double y, long double z);
+
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
 
 void __ESBMC_terminate_thread(void);

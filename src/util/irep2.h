@@ -479,6 +479,7 @@ public:
     ieee_sub_id,
     ieee_mul_id,
     ieee_div_id,
+    ieee_fma_id,
     modulus_id,
     shl_id,
     ashr_id,
@@ -1996,6 +1997,7 @@ class ieee_add2t;
 class ieee_sub2t;
 class ieee_mul2t;
 class ieee_div2t;
+class ieee_fma2t;
 
 // Data definitions.
 
@@ -2973,6 +2975,7 @@ irep_typedefs(ieee_add, ieee_arith_2ops);
 irep_typedefs(ieee_sub, ieee_arith_2ops);
 irep_typedefs(ieee_mul, ieee_arith_2ops);
 irep_typedefs(ieee_div, ieee_arith_2ops);
+irep_typedefs(ieee_fma, expr2t);
 irep_typedefs(modulus, arith_2ops);
 irep_typedefs(shl, arith_2ops);
 irep_typedefs(ashr, arith_2ops);
@@ -3854,6 +3857,41 @@ public:
     : ieee_div_expr_methods(ref) {}
 
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE fused multiply-add operation. Computes (x*y) + z as if to infinite
+ *  precision and rounded only once to fit the result type. Must be
+ *  floatbvs types. Types of the 3 operands and expr type should match.
+ *  @extends ieee_arith_2ops */
+class ieee_fma2t : public ieee_fma_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param v3 Second operand.
+   *  @param rm rounding mode. */
+  ieee_fma2t(
+    const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &v3, const expr2tc &rm)
+    : ieee_fma_expr_methods(type, ieee_fma_id),
+      value1(v1), value2(v2), value3(v3), rounding_mode(rm) {}
+
+  ieee_fma2t(const ieee_fma2t &ref)
+    : ieee_fma_expr_methods(ref) {}
+
+  expr2tc value1;
+  expr2tc value2;
+  expr2tc value3;
+  expr2tc rounding_mode;
+
+  typedef esbmct::field_traits<expr2tc, ieee_fma2t, &ieee_fma2t::value1> value_1_field;
+  typedef esbmct::field_traits<expr2tc, ieee_fma2t, &ieee_fma2t::value2> value_2_field;
+  typedef esbmct::field_traits<expr2tc, ieee_fma2t, &ieee_fma2t::value3> value_3_field;
+  typedef esbmct::field_traits<expr2tc, ieee_fma2t, &ieee_fma2t::rounding_mode> rounding_mode_field;
+  typedef esbmct::expr2t_traits<value_1_field, value_2_field, value_3_field, rounding_mode_field> traits;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4756,6 +4794,7 @@ expr_macros(ieee_add);
 expr_macros(ieee_sub);
 expr_macros(ieee_mul);
 expr_macros(ieee_div);
+expr_macros(ieee_fma);
 expr_macros(modulus);
 expr_macros(shl);
 expr_macros(ashr);
