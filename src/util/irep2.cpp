@@ -2394,7 +2394,7 @@ irep_typedefs(ieee_add, ieee_arith_2ops);
 irep_typedefs(ieee_sub, ieee_arith_2ops);
 irep_typedefs(ieee_mul, ieee_arith_2ops);
 irep_typedefs(ieee_div, ieee_arith_2ops);
-irep_typedefs(ieee_fma, expr2t);
+irep_typedefs(ieee_fma, ieee_arith_3ops);
 irep_typedefs(modulus, arith_2ops);
 irep_typedefs(shl, arith_2ops);
 irep_typedefs(ashr, arith_2ops);

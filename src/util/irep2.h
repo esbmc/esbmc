@@ -2361,6 +2361,29 @@ public:
   typedef esbmct::expr2t_traits<side_1_field, side_2_field, rounding_mode_field> traits;
 };
 
+class ieee_arith_3ops : public arith_ops
+{
+public:
+  ieee_arith_3ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
+                  const expr2tc &v2, const expr2tc &v3, const expr2tc &rm)
+    : arith_ops(t, id), value_1(v1), value_2(v2), rounding_mode(rm), value_3(v3) { }
+  ieee_arith_3ops(const ieee_arith_3ops &ref)
+    : arith_ops(ref), value_1(ref.value_1), value_2(ref.value_2),
+      rounding_mode(ref.rounding_mode), value_3(ref.value_3) { }
+
+  expr2tc value_1;
+  expr2tc value_2;
+  expr2tc rounding_mode;
+  expr2tc value_3;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_1> value_1_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_2> value_2_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::rounding_mode> rounding_mode_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_3> value_3_field;
+  typedef esbmct::expr2t_traits<value_1_field, value_2_field, rounding_mode_field, value_3_field> traits;
+};
+
 class same_object_data : public expr2t
 {
 public:
@@ -2975,7 +2998,7 @@ irep_typedefs(ieee_add, ieee_arith_2ops);
 irep_typedefs(ieee_sub, ieee_arith_2ops);
 irep_typedefs(ieee_mul, ieee_arith_2ops);
 irep_typedefs(ieee_div, ieee_arith_2ops);
-irep_typedefs(ieee_fma, expr2t);
+irep_typedefs(ieee_fma, ieee_arith_3ops);
 irep_typedefs(modulus, arith_2ops);
 irep_typedefs(shl, arith_2ops);
 irep_typedefs(ashr, arith_2ops);
@@ -3876,22 +3899,9 @@ public:
    *  @param rm rounding mode. */
   ieee_fma2t(
     const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &v3, const expr2tc &rm)
-    : ieee_fma_expr_methods(type, ieee_fma_id),
-      value1(v1), value2(v2), value3(v3), rounding_mode(rm) {}
-
+    : ieee_fma_expr_methods(type, ieee_fma_id, v1, v2, v3, rm) {}
   ieee_fma2t(const ieee_fma2t &ref)
     : ieee_fma_expr_methods(ref) {}
-
-  expr2tc value1;
-  expr2tc value2;
-  expr2tc value3;
-  expr2tc rounding_mode;
-
-  typedef esbmct::field_traits<expr2tc, ieee_fma2t, &ieee_fma2t::value1> value_1_field;
-  typedef esbmct::field_traits<expr2tc, ieee_fma2t, &ieee_fma2t::value2> value_2_field;
-  typedef esbmct::field_traits<expr2tc, ieee_fma2t, &ieee_fma2t::value3> value_3_field;
-  typedef esbmct::field_traits<expr2tc, ieee_fma2t, &ieee_fma2t::rounding_mode> rounding_mode_field;
-  typedef esbmct::expr2t_traits<value_1_field, value_2_field, value_3_field, rounding_mode_field> traits;
 
   static std::string field_names[esbmct::num_type_fields];
 };

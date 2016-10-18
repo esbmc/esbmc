@@ -2166,14 +2166,14 @@ migrate_expr_back(const expr2tc &ref)
   {
     const ieee_fma2t &ref2 = to_ieee_fma2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    exprt addval("ieee_fma", thetype);
-    addval.copy_to_operands(migrate_expr_back(ref2.value1),
-                            migrate_expr_back(ref2.value2),
-                            migrate_expr_back(ref2.value3));
+    exprt fmaval("ieee_fma", thetype);
+    fmaval.copy_to_operands(migrate_expr_back(ref2.value_1),
+                            migrate_expr_back(ref2.value_2),
+                            migrate_expr_back(ref2.value_3));
 
     // Add rounding mode
-    addval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
-    return addval;
+    fmaval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return fmaval;
   }
   case expr2t::modulus_id:
   {
