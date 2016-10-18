@@ -1287,10 +1287,6 @@ Function: operator ==
 
 bool operator ==(const ieee_floatt &a, const ieee_floatt &b)
 {
-  // NaNs are always equal
-  if(a.NaN_flag && b.NaN_flag)
-    return true;
-
   // If one is NaN, it's always false
   if(a.NaN_flag || b.NaN_flag)
     return false;
