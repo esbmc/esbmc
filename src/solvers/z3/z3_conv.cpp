@@ -869,6 +869,13 @@ smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
       return new_ast(ctx.fpa_mul(mrm->e, ms1->e, ms2->e), s);
     case expr2t::ieee_div_id:
       return new_ast(ctx.fpa_div(mrm->e, ms1->e, ms2->e), s);
+    case expr2t::ieee_fma_id:
+    {
+      smt_astt v3 = convert_ast(*expr->get_sub_expr(3));
+      const z3_smt_ast *mv3 = z3_smt_downcast(v3);
+
+      return new_ast(ctx.fpa_fma(mrm->e, ms1->e, ms2->e, mv3->e), s);
+    }
     default:
       break;
   }
