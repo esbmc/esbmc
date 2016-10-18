@@ -16,7 +16,7 @@ int main(void)
   double fma_result = fma(0.1, 10, -1);
   __VERIFIER_assert(fma_result == 0x1p-54);
 
-  __VERIFIER_assert(fma_result == expr_result);
+  __VERIFIER_assert(fma_result != expr_result);
 
   __VERIFIER_assert(isnan(fma(INFINITY, 10, -INFINITY)));
 }
