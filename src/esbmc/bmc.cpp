@@ -85,13 +85,16 @@ Function: bmct::successful_trace
 \*******************************************************************/
 
 void bmct::successful_trace(smt_convt &smt_conv __attribute__((unused)),
-                       symex_target_equationt &equation __attribute__((unused)))
+                            symex_target_equationt &equation __attribute__((unused)))
 {
+  if(options.get_bool_option("base-case"))
+  {
+    status("No bug has been found in the base case");
+    return ;
+  }
 
   goto_tracet goto_trace;
-
   std::string graphml_output_filename = options.get_option("witness-output");
-
   if(!graphml_output_filename.empty())
   {
     set_ui(ui_message_handlert::GRAPHML);
@@ -101,18 +104,17 @@ void bmct::successful_trace(smt_convt &smt_conv __attribute__((unused)),
   {
     case ui_message_handlert::GRAPHML:      
       /* TODO - implement a correctness witness */
-      // status("Building successful trace");
-      // build_goto_trace(equation, smt_conv, goto_trace);
-      // generate_goto_trace_in_graphml_format(
-      //   true,
-      //   graphml_output_filename,
-      //   ns,
-      //   goto_trace
-      // );
-      // std::cout
-      //   << "The correctness witness in GraphML format is available at: "
-      //   << options.get_option("witness-output")
-      //   << std::endl;
+      status("Building successful trace");
+      //build_goto_trace(equation, smt_conv, goto_trace);
+      generate_goto_trace_in_graphml_format(
+        true,
+        graphml_output_filename,
+        ns,
+        goto_trace
+      );
+      std::cout << "The correctness witness in GraphML format is available at: "
+                << options.get_option("witness-output")
+                << std::endl;
     break;
 
     case ui_message_handlert::OLD_GUI:
@@ -645,8 +647,8 @@ bool bmct::run_thread()
     if(result->remaining_claims==0)
     {
       /* TODO - implement a correctness witness */
-      // successful_trace(runtime_solver,*equation);
-      report_success();
+      successful_trace(*runtime_solver,*equation);
+      //report_success();
       return false;
     }
 
