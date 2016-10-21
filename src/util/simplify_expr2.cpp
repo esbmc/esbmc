@@ -2195,6 +2195,15 @@ simplify_floatbv_2ops(
   expr2tc simplied_side_1 = try_simplification(side_1);
   expr2tc simplied_side_2 = try_simplification(side_2);
 
+  // Try to handle NaN
+  if(is_constant_floatbv2t(simplied_side_1))
+    if(to_constant_floatbv2t(simplied_side_1).value.is_NaN())
+      return expr2tc(simplied_side_1->clone());
+
+  if(is_constant_floatbv2t(simplied_side_2))
+    if(to_constant_floatbv2t(simplied_side_2).value.is_NaN())
+      return expr2tc(simplied_side_2->clone());
+
   if (!is_constant_expr(simplied_side_1)
       || !is_constant_expr(simplied_side_2)
       || !is_constant_int2t(rounding_mode))
