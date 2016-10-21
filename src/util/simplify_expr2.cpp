@@ -19,6 +19,15 @@ expr2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 static expr2tc
+try_simplification(const expr2tc& expr)
+{
+  expr2tc to_simplify = expr->do_simplify();
+  if (is_nil_expr(to_simplify))
+    to_simplify = expr2tc(expr->clone());
+  return expr2tc(to_simplify->clone());
+}
+
+static expr2tc
 typecast_check_return(const type2tc &type, expr2tc &expr)
 {
   // If the expr is already nil, do nothing
@@ -28,29 +37,13 @@ typecast_check_return(const type2tc &type, expr2tc &expr)
   // Don't type cast from constant to pointer
   // TODO: check if this is right
   if(is_pointer_type(type) && is_number_type(expr))
-    return expr;
+    return try_simplification(expr);
 
   // Create a typecast of the result
   expr2tc typecast = expr2tc(new typecast2t(type, expr));
 
   // Try to simplify the typecast
-  expr2tc simpl_typecast_res = expr2tc(typecast->do_simplify());
-
-  // If we were able to simplify the typecast, return it
-  if(!is_nil_expr(simpl_typecast_res))
-    return expr2tc(simpl_typecast_res->clone());
-
-  // Otherwise, return the explicit typecast
-  return expr2tc(typecast->clone());
-}
-
-static expr2tc
-try_simplification(const expr2tc& expr)
-{
-  expr2tc to_simplify = expr2tc(expr->do_simplify());
-  if (is_nil_expr(to_simplify))
-    to_simplify = expr2tc(expr->clone());
-  return expr2tc(to_simplify->clone());
+  return try_simplification(typecast);
 }
 
 static void
