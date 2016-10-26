@@ -365,6 +365,7 @@ void generate_goto_trace_in_graphml_format(
     {
       /* common cases */
       std::string value_str = from_expr(ns, identifier, it->value);
+
       /* remove memory address */
       std::string::size_type findat = value_str.find("@", 0);
       if(findat != std::string::npos)
@@ -386,6 +387,12 @@ void generate_goto_trace_in_graphml_format(
         {
           value_str = value_str + "\"";
         }
+      }
+      /* check if it is nil whereas correctness witness */
+      std::string::size_type findnil = value_str.find("nil");
+      if (is_correctness && (findnil != std::string::npos))
+      {
+        value_str = from_expr(ns, "constant_value", it->rhs );
       }
       std::string assumption = lhs_str + " = " + value_str + ";";
       std::string::size_type findesbm = assumption.find("__ESBMC", 0);

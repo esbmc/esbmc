@@ -105,7 +105,7 @@ void bmct::successful_trace(smt_convt &smt_conv __attribute__((unused)),
     case ui_message_handlert::GRAPHML:      
       /* TODO - implement a correctness witness */
       status("Building successful trace");
-      //build_goto_trace(equation, smt_conv, goto_trace);
+      build_successful_goto_trace(equation, smt_conv, goto_trace);
       generate_goto_trace_in_graphml_format(
         true,
         graphml_output_filename,
