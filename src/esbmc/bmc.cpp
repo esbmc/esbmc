@@ -84,7 +84,7 @@ Function: bmct::successful_trace
 
 \*******************************************************************/
 
-void bmct::successful_trace(smt_convt &smt_conv __attribute__((unused)),
+void bmct::successful_trace(smt_convt &smt_conv ,
                             symex_target_equationt &equation __attribute__((unused)))
 {
   if(options.get_bool_option("base-case"))
