@@ -450,11 +450,19 @@ void create_graphml(boost::property_tree::ptree & graphml,
   graphml.add_child("graphml.key", key_returnFunction);
 }
 
-void create_graph(boost::property_tree::ptree & graph)
+void create_graph(boost::property_tree::ptree & graph, const bool is_correctness)
 {
   graph.add("<xmlattr>.edgedefault", "directed");
+  boost::property_tree::ptree data_witnesstype;
+  data_witnesstype.add("<xmlattr>.key", "witness-type");
+  data_witnesstype.put_value(is_correctness ? "correctness_witness" : "violation_witness");
+  graph.add_child("data", data_witnesstype);
   boost::property_tree::ptree data_sourcecodelang;
   data_sourcecodelang.add("<xmlattr>.key", "sourcecodelang");
   data_sourcecodelang.put_value("C");
   graph.add_child("data", data_sourcecodelang);
+  boost::property_tree::ptree data_producer;
+  data_producer.add("<xmlattr>.key", "producer");
+  data_producer.put_value("ESBMC " + std::string(ESBMC_VERSION));
+  graph.add_child("data", data_producer);
 }

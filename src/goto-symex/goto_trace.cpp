@@ -314,7 +314,7 @@ void generate_goto_trace_in_graphml_format(
 
     if(already_initialized == false)
     {
-      create_graph(graph);
+      create_graph(graph, is_correctness);
       boost::property_tree::ptree first_node;
       node_p first_node_p;
       first_node_p.isEntryNode = true;
