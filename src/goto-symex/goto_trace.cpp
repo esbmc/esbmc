@@ -465,6 +465,118 @@ void generate_goto_trace_in_graphml_format(
   boost::property_tree::write_xml(filename, graphml, std::locale(), settings);
 }
 
+void generate_successful_goto_trace_in_graphml_format(
+  std::string & filename,
+  const namespacet & ns,
+  const goto_tracet & goto_trace)
+{
+  boost::property_tree::ptree graphml;
+  boost::property_tree::ptree graph;
+  std::map<int, std::string> line_content_map;
+  std::vector<std::string> functions_control;
+  std::map<std::string, int> function_control_map;
+
+  bool already_initialized = false;
+  boost::property_tree::ptree last_created_node;
+  std::string last_function = "";
+  std::string last_filename = "";
+
+  for(goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
+      it != goto_trace.steps.end(); it++)
+  {
+    /** ignore internal calls and non assignments */
+    if(!(it->is_assignment() || it->is_assume() || it->is_assert()))
+    {
+      continue;
+    }
+
+    std::string filename = it->pc->location.get_file().as_string();
+
+    if(already_initialized == false)
+    {
+      create_graph(graph, true);
+      boost::property_tree::ptree first_node;
+      node_p first_node_p;
+      first_node_p.isEntryNode = true;
+      create_node(first_node, first_node_p);
+      graph.add_child("node", first_node);
+      last_created_node = first_node;
+      already_initialized = true;
+    }
+
+    /* creating nodes and edges */
+    boost::property_tree::ptree current_node;
+    node_p current_node_p;
+    create_node(current_node, current_node_p);
+    graph.add_child("node", current_node);
+
+    /* check if tokens already ok */
+    if (last_filename != filename)
+    {
+      last_filename = filename;
+      map_line_number_to_content(filename, line_content_map);
+    }
+    boost::property_tree::ptree current_edge;
+    edge_p current_edge_p;
+    current_edge_p.originFileName = filename;
+
+    if (it->is_assignment()){
+      /* assignment not required according spec 2017 */
+    }
+    else if (it->is_assume())
+    {
+      /* std::cout << "that is a assume" << std::endl; */
+    }
+    else if (it->is_assert())
+    {
+      /* std::cout << "that is a assert" << std::endl; */
+    }
+
+    /* check if has a line number (to get tokens) */
+	int line_number = std::atoi(it->pc->location.get_line().c_str());
+	if(line_number != 0)
+	{
+	  current_edge_p.startline = line_number;
+	  current_edge_p.endline = line_number;
+	}
+
+    /* check if it has entered or returned from a function */
+    std::string function_name = it->pc->location.get_function().c_str();
+    if(function_control_map.find(function_name) != function_control_map.end())
+    {
+      if ( function_control_map[function_name] == line_number )
+      {
+        current_edge_p.enterFunction = function_name;
+        last_function = function_name;
+      }else{
+    	current_edge_p.returnFromFunction = last_function;
+    	current_edge_p.enterFunction = function_name;
+      }
+    }else
+    {
+      function_control_map.insert(std::make_pair(function_name, line_number));
+      current_edge_p.enterFunction = function_name;
+      last_function = function_name;
+    }
+
+    /* including current node */
+    create_edge(current_edge, current_edge_p, last_created_node, current_node);
+    graph.add_child("edge", current_edge);
+    last_created_node = current_node;
+  }
+
+  /* write graphml */
+  create_graphml(graphml, last_filename);
+  graphml.add_child("graphml.graph", graph);
+
+#if (BOOST_VERSION >= 105700)
+  boost::property_tree::xml_writer_settings<std::string> settings('\t', 1);
+#else
+  boost::property_tree::xml_writer_settings<char> settings('\t', 1);
+#endif
+  boost::property_tree::write_xml(filename, graphml, std::locale(), settings);
+}
+
 void
 show_goto_trace(
   std::ostream &out, const namespacet &ns, const goto_tracet &goto_trace)

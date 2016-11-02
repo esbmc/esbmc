@@ -111,6 +111,11 @@ void generate_goto_trace_in_graphml_format(
   const namespacet & ns,
   const goto_tracet & goto_trace);
 
+void generate_successful_goto_trace_in_graphml_format(
+  std::string & filename,
+  const namespacet & ns,
+  const goto_tracet & goto_trace);
+
 void counterexample_value(
   std::ostream &out,
   const namespacet &ns,

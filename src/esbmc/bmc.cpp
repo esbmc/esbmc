@@ -105,8 +105,7 @@ void bmct::successful_trace(smt_convt &smt_conv ,
     case ui_message_handlert::GRAPHML:
       status("Building successful trace");
       build_successful_goto_trace(equation, smt_conv, goto_trace);
-      generate_goto_trace_in_graphml_format(
-        true,
+      generate_successful_goto_trace_in_graphml_format(
         graphml_output_filename,
         ns,
         goto_trace
