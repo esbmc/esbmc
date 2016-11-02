@@ -284,7 +284,6 @@ void generate_goto_trace_in_graphml_format(
   for(goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
       it != goto_trace.steps.end(); it++)
   {
-
     /* check if is an internal call */
     std::string::size_type find_bt =
       it->pc->location.to_string().find("built-in", 0);

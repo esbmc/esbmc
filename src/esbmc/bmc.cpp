@@ -102,8 +102,7 @@ void bmct::successful_trace(smt_convt &smt_conv ,
 
   switch(ui)
   {
-    case ui_message_handlert::GRAPHML:      
-      /* TODO - implement a correctness witness */
+    case ui_message_handlert::GRAPHML:
       status("Building successful trace");
       build_successful_goto_trace(equation, smt_conv, goto_trace);
       generate_goto_trace_in_graphml_format(
@@ -646,9 +645,7 @@ bool bmct::run_thread()
 
     if(result->remaining_claims==0)
     {
-      /* TODO - implement a correctness witness */
       successful_trace(*runtime_solver,*equation);
-      //report_success();
       return false;
     }
 
