@@ -531,3 +531,16 @@ void create_graph(boost::property_tree::ptree & graph, std::string & filename, c
   data_architecture.put_value("64bit");
   graph.add_child("data", data_architecture);
 }
+
+std::string w_string_replace (
+  std::string subject,
+  const std::string & search,
+  const std::string & replace)
+{
+  size_t pos = 0;
+  while ((pos = subject.find(search, pos)) != std::string::npos) {
+     subject.replace(pos, search.length(), replace);
+     pos += replace.length();
+  }
+  return subject;
+}

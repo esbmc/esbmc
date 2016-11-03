@@ -22,8 +22,11 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
+#include <boost/regex.hpp>
 
 #include "witnesses.h"
+#include <string>
+#include <iostream>
 
 void
 goto_tracet::output(
@@ -468,7 +471,7 @@ void generate_goto_trace_in_graphml_format(
 
 void generate_successful_goto_trace_in_graphml_format(
   std::string & filename,
-  const namespacet & ns,
+  const namespacet & ns __attribute__((unused)),
   const goto_tracet & goto_trace)
 {
   boost::property_tree::ptree graphml;
@@ -508,9 +511,6 @@ void generate_successful_goto_trace_in_graphml_format(
     /* creating nodes and edges */
     boost::property_tree::ptree current_node;
     node_p current_node_p;
-    create_node(current_node, current_node_p);
-    graph.add_child("node", current_node);
-
     /* check if tokens already ok */
     if (last_filename != filename)
     {
@@ -520,18 +520,6 @@ void generate_successful_goto_trace_in_graphml_format(
     boost::property_tree::ptree current_edge;
     edge_p current_edge_p;
     current_edge_p.originFileName = filename;
-
-    if (it->is_assignment()){
-      /* assignment not required according spec 2017 */
-    }
-    else if (it->is_assume())
-    {
-      /* std::cout << "that is a assume" << std::endl; */
-    }
-    else if (it->is_assert())
-    {
-      /* std::cout << "that is a assert" << std::endl; */
-    }
 
     /* check if has a line number (to get tokens) */
 	int line_number = std::atoi(it->pc->location.get_line().c_str());
@@ -560,6 +548,28 @@ void generate_successful_goto_trace_in_graphml_format(
 		last_function = function_name;
       }
     }
+
+    if (it->is_assignment()){
+      /* assignment not required according spec 2017 */
+    }
+    else if (it->is_assume())
+    {
+      std::string codeline = line_content_map[line_number];
+      codeline = w_string_replace(codeline, "__VERIFIER_assume", "");
+      codeline = w_string_replace(codeline, "__ESBMC_assume", "");
+      codeline = w_string_replace(codeline, "assume(", "");
+      codeline = w_string_replace(codeline, ";", "");
+      current_node_p.invariant = codeline;
+      current_node_p.invariantScope = function_name;
+    }
+    else if (it->is_assert())
+    {
+      /* std::cout << "that is a assert" << std::endl; */
+    }
+
+    /* current node */
+    create_node(current_node, current_node_p);
+    graph.add_child("node", current_node);
 
     /* including current node */
     create_edge(current_edge, current_edge_p, last_created_node, current_node);
