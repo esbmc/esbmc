@@ -26,6 +26,8 @@
 #include "witnesses.h"
 #include <iostream>
 
+extern std::string verification_file;
+
 void
 goto_tracet::output(
   const class namespacet &ns, std::ostream &out) const
@@ -468,7 +470,7 @@ void generate_goto_trace_in_graphml_format(
 }
 
 void generate_successful_goto_trace_in_graphml_format(
-  std::string & filename,
+  std::string & graphml_path,
   const namespacet & ns __attribute__((unused)),
   const goto_tracet & goto_trace)
 {
@@ -481,22 +483,22 @@ void generate_successful_goto_trace_in_graphml_format(
   bool already_initialized = false;
   boost::property_tree::ptree last_created_node;
   std::string last_function = "";
-  std::string last_filename = "";
+  std::string last_ver_file = "";
 
   for(goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
       it != goto_trace.steps.end(); it++)
   {
     /** ignore internal calls and non assignments */
     if(!(it->is_assignment() || it->is_assume() || it->is_assert()))
-    {
       continue;
-    }
 
-    std::string filename = it->pc->location.get_file().as_string();
+    std::string current_ver_file = it->pc->location.get_file().as_string();
+    if (verification_file.find(current_ver_file) != std::string::npos)
+      current_ver_file = verification_file;
 
     if(already_initialized == false)
     {
-      create_graph(graph, filename, true);
+      create_graph(graph, verification_file, true);
       boost::property_tree::ptree first_node;
       node_p first_node_p;
       first_node_p.isEntryNode = true;
@@ -510,14 +512,14 @@ void generate_successful_goto_trace_in_graphml_format(
     boost::property_tree::ptree current_node;
     node_p current_node_p;
     /* check if tokens already ok */
-    if (last_filename != filename)
+    if (last_ver_file != current_ver_file)
     {
-      last_filename = filename;
-      map_line_number_to_content(filename, line_content_map);
+      last_ver_file = current_ver_file;
+      map_line_number_to_content(current_ver_file, line_content_map);
     }
     boost::property_tree::ptree current_edge;
     edge_p current_edge_p;
-    current_edge_p.originFileName = filename;
+    current_edge_p.originFileName = current_ver_file;
 
     /* check if has a line number (to get tokens) */
     const int line_number = std::atoi(it->pc->location.get_line().c_str());
@@ -526,7 +528,7 @@ void generate_successful_goto_trace_in_graphml_format(
       current_edge_p.startline = line_number;
       current_edge_p.endline = line_number;
       int line_length = 0;
-      const int startoffset = count_characters_before_line(filename, line_number, line_length);
+      const int startoffset = count_characters_before_line(current_ver_file, line_number, line_length);
       current_edge_p.startoffset = startoffset;
       current_edge_p.endoffset = startoffset + line_length;
     }
@@ -585,7 +587,7 @@ void generate_successful_goto_trace_in_graphml_format(
   }
 
   /* write graphml */
-  create_graphml(graphml, last_filename);
+  create_graphml(graphml, verification_file);
   graphml.add_child("graphml.graph", graph);
 
 #if (BOOST_VERSION >= 105700)
@@ -593,7 +595,7 @@ void generate_successful_goto_trace_in_graphml_format(
 #else
   boost::property_tree::xml_writer_settings<char> settings('\t', 1);
 #endif
-  boost::property_tree::write_xml(filename, graphml, std::locale(), settings);
+  boost::property_tree::write_xml(graphml_path, graphml, std::locale(), settings);
 }
 
 void
