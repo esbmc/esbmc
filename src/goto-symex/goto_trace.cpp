@@ -22,10 +22,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
-#include <boost/regex.hpp>
 
 #include "witnesses.h"
-#include <string>
 #include <iostream>
 
 void
