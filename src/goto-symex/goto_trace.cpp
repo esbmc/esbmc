@@ -313,7 +313,8 @@ void generate_goto_trace_in_graphml_format(
 
     if(already_initialized == false)
     {
-      create_graph(graph, is_correctness);
+      std::string std = "";
+      create_graph(graph, std, is_correctness);
       boost::property_tree::ptree first_node;
       node_p first_node_p;
       first_node_p.isEntryNode = true;
@@ -494,7 +495,7 @@ void generate_successful_goto_trace_in_graphml_format(
 
     if(already_initialized == false)
     {
-      create_graph(graph, true);
+      create_graph(graph, filename, true);
       boost::property_tree::ptree first_node;
       node_p first_node_p;
       first_node_p.isEntryNode = true;
@@ -542,21 +543,22 @@ void generate_successful_goto_trace_in_graphml_format(
 
     /* check if it has entered or returned from a function */
     std::string function_name = it->pc->location.get_function().c_str();
-    if(function_control_map.find(function_name) != function_control_map.end())
+    if (last_function != function_name && !function_name.empty())
     {
-      if ( function_control_map[function_name] == line_number )
+      /* it is a new entry */
+      if (function_control_map.find(function_name) == function_control_map.end())
       {
+        function_control_map.insert(std::make_pair(function_name, line_number));
         current_edge_p.enterFunction = function_name;
         last_function = function_name;
-      }else{
-    	current_edge_p.returnFromFunction = last_function;
-    	current_edge_p.enterFunction = function_name;
       }
-    }else
-    {
-      function_control_map.insert(std::make_pair(function_name, line_number));
-      current_edge_p.enterFunction = function_name;
-      last_function = function_name;
+      else
+      {
+        /* it is backing from another function */
+		current_edge_p.returnFromFunction = last_function;
+		current_edge_p.enterFunction = function_name;
+		last_function = function_name;
+      }
     }
 
     /* including current node */

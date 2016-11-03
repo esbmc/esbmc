@@ -54,10 +54,6 @@ std::string execute_cmd(std::string command)
 {
   /* add ./ for linux execution */
   std::string initial = command.substr(0, 1);
-  if (initial != "./")
-  {
-    command = "./" + command;
-  }
   FILE* pipe = popen(command.c_str(), "r");
   if (!pipe)
     return "ERROR";
@@ -496,8 +492,11 @@ void create_graphml(boost::property_tree::ptree & graphml,
   graphml.add_child("graphml.key", key_returnFromFunction);
 }
 
-void create_graph(boost::property_tree::ptree & graph, const bool is_correctness)
+void create_graph(boost::property_tree::ptree & graph, std::string & filename, const bool is_correctness)
 {
+  std::string md5 = "";
+  if (!filename.empty())
+     md5 = execute_cmd("md5sum " + filename).substr(0, 32);
   graph.add("<xmlattr>.edgedefault", "directed");
   boost::property_tree::ptree data_witnesstype;
   data_witnesstype.add("<xmlattr>.key", "witness-type");
@@ -517,11 +516,11 @@ void create_graph(boost::property_tree::ptree & graph, const bool is_correctness
   graph.add_child("data", data_specification);
   boost::property_tree::ptree data_programfile;
   data_programfile.add("<xmlattr>.key", "programfile");
-  data_programfile.put_value("");
+  data_programfile.put_value(filename);
   graph.add_child("data", data_programfile);
   boost::property_tree::ptree data_programhash;
   data_programhash.add("<xmlattr>.key", "programhash");
-  data_programhash.put_value("");
+  data_programhash.put_value(md5);
   graph.add_child("data", data_programhash);
   boost::property_tree::ptree data_memorymodel;
   data_memorymodel.add("<xmlattr>.key", "memorymodel");
