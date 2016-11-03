@@ -15,6 +15,7 @@
 #include <boost/property_tree/string_path.hpp>
 #include <stdio.h>
 #include <fstream>
+#include <iostream>
 #include <iterator>
 #include <map>
 #include <string>
@@ -32,19 +33,24 @@ typedef struct node_props
   bool isViolationNode = false;
   bool isEntryNode = false;
   bool isSinkNode = false;
-  std::string invariant;
-  std::string invariantScope;
+  std::string invariant = "";
+  std::string invariantScope = "";
 } node_p;
 
 typedef struct edge_props
 {
   std::string assumption = "";
+  std::string assumptionScope = "";
+  std::string assumptionResultFunction = "";
   std::string sourcecode = "";
   int startline = -1;
   int endline = -1;
+  int startoffset = -1;
+  int endoffset = -1;
   std::string originFileName = "";
   std::string enterFunction = "";
   std::string returnFromFunction = "";
+
 } edge_p;
 
 int node_count;
@@ -206,8 +212,22 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
   {
     boost::property_tree::ptree data_endLine;
     data_endLine.add("<xmlattr>.key", "endline");
-    data_endLine.put_value(edge_props.startline);
+    data_endLine.put_value(edge_props.endline);
     edge.add_child("data", data_endLine);
+  }
+  if (edge_props.startoffset != -1)
+  {
+    boost::property_tree::ptree data_startoffset;
+    data_startoffset.add("<xmlattr>.key", "startoffset");
+    data_startoffset.put_value(edge_props.startoffset);
+    edge.add_child("data", data_startoffset);
+  }
+  if (edge_props.endoffset != -1)
+  {
+    boost::property_tree::ptree data_endoffset;
+    data_endoffset.add("<xmlattr>.key", "endoffset");
+    data_endoffset.put_value(edge_props.endoffset);
+    edge.add_child("data", data_endoffset);
   }
   if (!edge_props.returnFromFunction.empty())
   {
@@ -274,7 +294,7 @@ void create_graphml(boost::property_tree::ptree & graphml,
   graphml.add_child("graphml.key", key_programhash);
 
   boost::property_tree::ptree key_memorymodel;
-  key_memorymodel.add("<xmlattr>.id", "programhash");
+  key_memorymodel.add("<xmlattr>.id", "memorymodel");
   key_memorymodel.put(
     boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
     "memorymodel");
@@ -283,7 +303,6 @@ void create_graphml(boost::property_tree::ptree & graphml,
     "string");
   key_programhash.add("<xmlattr>.for", "graph");
   graphml.add_child("graphml.key", key_memorymodel);
-
 
   boost::property_tree::ptree key_witnessType;
   key_witnessType.add("<xmlattr>.id", "witness-type");
@@ -362,6 +381,28 @@ void create_graphml(boost::property_tree::ptree & graphml,
     "int");
   key_endline.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", key_endline);
+
+  boost::property_tree::ptree key_startoffset;
+  key_startoffset.add("<xmlattr>.id", "startoffset");
+  key_startoffset.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "startoffset");
+  key_startoffset.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "int");
+  key_startoffset.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_startoffset);
+
+  boost::property_tree::ptree key_endoffset;
+  key_endoffset.add("<xmlattr>.id", "endoffset");
+  key_endoffset.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "endoffset");
+  key_endoffset.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "int");
+  key_endoffset.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_endoffset);
 
   boost::property_tree::ptree key_originfile;
   key_originfile.add("<xmlattr>.id", "originfile");
@@ -532,7 +573,7 @@ void create_graph(boost::property_tree::ptree & graph, std::string & filename, c
   graph.add_child("data", data_architecture);
 }
 
-std::string w_string_replace (
+std::string w_string_replace(
   std::string subject,
   const std::string & search,
   const std::string & replace)
@@ -543,4 +584,28 @@ std::string w_string_replace (
      pos += replace.length();
   }
   return subject;
+}
+
+int count_characters_before_line(
+  const std::string & file_path,
+  const int line_number,
+  int & characters_in_the_line )
+{
+  std::string line;
+  std::ifstream stream (file_path);
+  int char_count = 0;
+  int line_count = 0;
+  characters_in_the_line = 0;
+  if (stream.is_open())
+  {
+    while(getline(stream, line) &&
+          line_count < line_number)
+    {
+      characters_in_the_line = line.length();
+      char_count += characters_in_the_line;
+      line_count++;
+    }
+  }
+  stream.close();
+  return char_count - characters_in_the_line;
 }

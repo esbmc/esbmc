@@ -520,12 +520,16 @@ void generate_successful_goto_trace_in_graphml_format(
     current_edge_p.originFileName = filename;
 
     /* check if has a line number (to get tokens) */
-	int line_number = std::atoi(it->pc->location.get_line().c_str());
-	if(line_number != 0)
-	{
-	  current_edge_p.startline = line_number;
-	  current_edge_p.endline = line_number;
-	}
+    const int line_number = std::atoi(it->pc->location.get_line().c_str());
+    if(line_number != 0)
+    {
+      current_edge_p.startline = line_number;
+      current_edge_p.endline = line_number;
+      int line_length = 0;
+      const int startoffset = count_characters_before_line(filename, line_number, line_length);
+      current_edge_p.startoffset = startoffset;
+      current_edge_p.endoffset = startoffset + line_length;
+    }
 
     /* check if it has entered or returned from a function */
     std::string function_name = it->pc->location.get_function().c_str();
@@ -553,12 +557,17 @@ void generate_successful_goto_trace_in_graphml_format(
     else if (it->is_assume())
     {
       std::string codeline = line_content_map[line_number];
-      codeline = w_string_replace(codeline, "__VERIFIER_assume", "");
-      codeline = w_string_replace(codeline, "__ESBMC_assume", "");
-      codeline = w_string_replace(codeline, "assume(", "");
-      codeline = w_string_replace(codeline, ";", "");
-      current_node_p.invariant = codeline;
-      current_node_p.invariantScope = function_name;
+      if ((codeline.find("__VERIFIER_assume") != std::string::npos ) ||
+          (codeline.find("__ESBMC_assume") != std::string::npos ) ||
+		  (codeline.find("assume") != std::string::npos))
+      {
+        codeline = w_string_replace(codeline, "__VERIFIER_assume", "");
+        codeline = w_string_replace(codeline, "__ESBMC_assume", "");
+        codeline = w_string_replace(codeline, "assume(", "");
+        codeline = w_string_replace(codeline, ";", "");
+        current_node_p.invariant = codeline;
+        current_node_p.invariantScope = function_name;
+      }
     }
     else if (it->is_assert())
     {
