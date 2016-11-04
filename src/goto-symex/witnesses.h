@@ -533,7 +533,11 @@ void create_graphml(boost::property_tree::ptree & graphml,
   graphml.add_child("graphml.key", key_returnFromFunction);
 }
 
-void create_graph(boost::property_tree::ptree & graph, std::string & filename, const bool is_correctness)
+void create_graph(
+  boost::property_tree::ptree & graph,
+  std::string & filename,
+  int & specification,
+  const bool is_correctness)
 {
   std::string md5 = "";
   if (!filename.empty())
@@ -553,7 +557,12 @@ void create_graph(boost::property_tree::ptree & graph, std::string & filename, c
   graph.add_child("data", data_producer);
   boost::property_tree::ptree data_specification;
   data_specification.add("<xmlattr>.key", "specification");
-  data_specification.put_value("");
+  if (specification == 1)
+    data_specification.put_value("LTL[(]G ! overflow");
+  else if (specification == 2)
+    data_specification.put_value("LTL[(]G (valid-free|valid-deref|valid-memtrack)");
+  else
+    data_specification.put_value("");
   graph.add_child("data", data_specification);
   boost::property_tree::ptree data_programfile;
   data_programfile.add("<xmlattr>.key", "programfile");

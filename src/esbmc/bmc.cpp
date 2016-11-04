@@ -95,6 +95,8 @@ void bmct::successful_trace(smt_convt &smt_conv ,
 
   goto_tracet goto_trace;
   std::string graphml_output_filename = options.get_option("witness-output");
+  int specification = 0;
+
   if(!graphml_output_filename.empty())
   {
     set_ui(ui_message_handlert::GRAPHML);
@@ -105,10 +107,13 @@ void bmct::successful_trace(smt_convt &smt_conv ,
     case ui_message_handlert::GRAPHML:
       status("Building successful trace");
       build_successful_goto_trace(equation, smt_conv, goto_trace);
+      specification += options.get_bool_option("overflow-check") ? 1 : 0;
+      specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
       generate_successful_goto_trace_in_graphml_format(
         graphml_output_filename,
         ns,
-        goto_trace
+        goto_trace,
+		specification
       );
       std::cout << "The correctness witness in GraphML format is available at: "
                 << options.get_option("witness-output")

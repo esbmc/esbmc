@@ -317,7 +317,8 @@ void generate_goto_trace_in_graphml_format(
     if(already_initialized == false)
     {
       std::string std = "";
-      create_graph(graph, std, is_correctness);
+      int spec = 0;
+      create_graph(graph, std, spec, is_correctness);
       boost::property_tree::ptree first_node;
       node_p first_node_p;
       first_node_p.isEntryNode = true;
@@ -472,7 +473,8 @@ void generate_goto_trace_in_graphml_format(
 void generate_successful_goto_trace_in_graphml_format(
   std::string & graphml_path,
   const namespacet & ns __attribute__((unused)),
-  const goto_tracet & goto_trace)
+  const goto_tracet & goto_trace,
+  int & specification)
 {
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
@@ -498,7 +500,7 @@ void generate_successful_goto_trace_in_graphml_format(
 
     if(already_initialized == false)
     {
-      create_graph(graph, verification_file, true);
+      create_graph(graph, verification_file, specification, true);
       boost::property_tree::ptree first_node;
       node_p first_node_p;
       first_node_p.isEntryNode = true;
