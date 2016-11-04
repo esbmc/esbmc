@@ -569,7 +569,7 @@ void create_graph(boost::property_tree::ptree & graph, std::string & filename, c
   graph.add_child("data", data_memorymodel);
   boost::property_tree::ptree data_architecture;
   data_architecture.add("<xmlattr>.key", "architecture");
-  data_architecture.put_value("64bit");
+  data_architecture.put_value(std::to_string(config.ansi_c.word_size) + "bit");
   graph.add_child("data", data_architecture);
 }
 
