@@ -2887,6 +2887,11 @@ std::string expr2ct::convert(
     return convert_function(src, "INVALID-POINTER", precedence=15);
   }
 
+  else if(src.id()=="invalid-object")
+  {
+    return "invalid-object";
+  }
+
   else if(src.id()=="NULL-object")
   {
     return "NULL-object";
