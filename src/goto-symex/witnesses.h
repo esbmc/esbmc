@@ -558,11 +558,11 @@ void create_graph(
   boost::property_tree::ptree data_specification;
   data_specification.add("<xmlattr>.key", "specification");
   if (specification == 1)
-    data_specification.put_value("LTL[(]G ! overflow");
+    data_specification.put_value("CHECK( init(main()), LTL(G ! overflow) )");
   else if (specification == 2)
-    data_specification.put_value("LTL[(]G (valid-free|valid-deref|valid-memtrack)");
+    data_specification.put_value("CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )");
   else
-    data_specification.put_value("");
+    data_specification.put_value("CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )");
   graph.add_child("data", data_specification);
   boost::property_tree::ptree data_programfile;
   data_programfile.add("<xmlattr>.key", "programfile");
