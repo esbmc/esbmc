@@ -260,150 +260,6 @@ void create_graphml(boost::property_tree::ptree & graphml,
   graphml.add("graphml.<xmlattr>.xmlns:xsi",
     "http://www.w3.org/2001/XMLSchema-instance");
 
-  boost::property_tree::ptree key_specification;
-  key_specification.add("<xmlattr>.id", "specification");
-  key_specification.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "specification");
-  key_specification.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_specification.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_specification);
-
-  boost::property_tree::ptree key_programfile;
-  key_programfile.add("<xmlattr>.id", "programfile");
-  key_programfile.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "programfile");
-  key_programfile.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_programfile.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_programfile);
-
-  boost::property_tree::ptree key_programhash;
-  key_programhash.add("<xmlattr>.id", "programhash");
-  key_programhash.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "programhash");
-  key_programhash.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_programhash.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_programhash);
-
-  boost::property_tree::ptree key_memorymodel;
-  key_memorymodel.add("<xmlattr>.id", "memorymodel");
-  key_memorymodel.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "memorymodel");
-  key_memorymodel.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_programhash.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_memorymodel);
-
-  boost::property_tree::ptree key_witnessType;
-  key_witnessType.add("<xmlattr>.id", "witness-type");
-  key_witnessType.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "witness-type");
-  key_witnessType.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_witnessType.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_witnessType);
-
-
-  boost::property_tree::ptree key_assumption;
-  key_assumption.add("<xmlattr>.id", "assumption");
-  key_assumption.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "assumption");
-  key_assumption.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_assumption.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_assumption);
-
-  boost::property_tree::ptree key_sourcecode;
-  key_sourcecode.add("<xmlattr>.id", "sourcecode");
-  key_sourcecode.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "sourcecode");
-  key_sourcecode.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_sourcecode.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_sourcecode);
-
-  boost::property_tree::ptree key_sourcecodelang;
-  key_sourcecodelang.add("<xmlattr>.id", "sourcecodelang");
-  key_sourcecodelang.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "sourcecodeLanguage");
-  key_sourcecodelang.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_sourcecodelang.add("<xmlattr>.for", "graph");
-  graphml.add_child("graphml.key", key_sourcecodelang);
-
-  boost::property_tree::ptree key_control;
-  key_control.add("<xmlattr>.id", "control");
-  key_control.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "control");
-  key_control.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "string");
-  key_control.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_control);
-
-  boost::property_tree::ptree key_startline;
-  key_startline.add("<xmlattr>.id", "startline");
-  key_startline.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "startline");
-  key_startline.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "int");
-  key_startline.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_startline);
-
-  boost::property_tree::ptree key_endline;
-  key_endline.add("<xmlattr>.id", "endline");
-  key_endline.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "endline");
-  key_endline.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "int");
-  key_endline.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_endline);
-
-  boost::property_tree::ptree key_startoffset;
-  key_startoffset.add("<xmlattr>.id", "startoffset");
-  key_startoffset.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "startoffset");
-  key_startoffset.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "int");
-  key_startoffset.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_startoffset);
-
-  boost::property_tree::ptree key_endoffset;
-  key_endoffset.add("<xmlattr>.id", "endoffset");
-  key_endoffset.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
-    "endoffset");
-  key_endoffset.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
-    "int");
-  key_endoffset.add("<xmlattr>.for", "edge");
-  graphml.add_child("graphml.key", key_endoffset);
-
   boost::property_tree::ptree key_originfile;
   key_originfile.add("<xmlattr>.id", "originfile");
   key_originfile.put(
@@ -457,7 +313,7 @@ void create_graphml(boost::property_tree::ptree & graphml,
   boost::property_tree::ptree key_frontier;
   key_frontier.add("<xmlattr>.id", "frontier");
   key_frontier.put(
-    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+  boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
     "isFrontierNode");
   key_frontier.put(
     boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
@@ -510,6 +366,160 @@ void create_graphml(boost::property_tree::ptree & graphml,
   key_sink.add_child("default", key_sink_default);
   graphml.add_child("graphml.key", key_sink);
 
+  boost::property_tree::ptree key_sourcecodelang;
+  key_sourcecodelang.add("<xmlattr>.id", "sourcecodelang");
+  key_sourcecodelang.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "sourcecodeLanguage");
+  key_sourcecodelang.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_sourcecodelang.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", key_sourcecodelang);
+
+  boost::property_tree::ptree key_programfile;
+  key_programfile.add("<xmlattr>.id", "programfile");
+  key_programfile.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "programfile");
+  key_programfile.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_programfile.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", key_programfile);
+
+  boost::property_tree::ptree key_programhash;
+  key_programhash.add("<xmlattr>.id", "programhash");
+  key_programhash.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "programhash");
+  key_programhash.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_programhash.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", key_programhash);
+
+  boost::property_tree::ptree key_specification;
+  key_specification.add("<xmlattr>.id", "specification");
+  key_specification.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "specification");
+  key_specification.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_specification.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", key_specification);
+
+  boost::property_tree::ptree key_memorymodel;
+  key_memorymodel.add("<xmlattr>.id", "memorymodel");
+  key_memorymodel.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "memoryModel");
+  key_memorymodel.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_programhash.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", key_memorymodel);
+
+  boost::property_tree::ptree key_architecture;
+  key_architecture.add("<xmlattr>.id", "architecture");
+  key_architecture.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "architecture");
+  key_architecture.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_programhash.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", key_architecture);
+
+  boost::property_tree::ptree key_producer;
+  key_producer.add("<xmlattr>.id", "producer");
+  key_producer.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "producer");
+  key_producer.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_programhash.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", key_producer);
+
+  boost::property_tree::ptree key_sourcecode;
+  key_sourcecode.add("<xmlattr>.id", "sourcecode");
+  key_sourcecode.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "sourcecode");
+  key_sourcecode.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_sourcecode.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_sourcecode);
+
+  boost::property_tree::ptree key_startline;
+  key_startline.add("<xmlattr>.id", "startline");
+  key_startline.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "startline");
+  key_startline.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "int");
+  key_startline.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_startline);
+
+  boost::property_tree::ptree key_startoffset;
+  key_startoffset.add("<xmlattr>.id", "startoffset");
+  key_startoffset.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "startoffset");
+  key_startoffset.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "int");
+  key_startoffset.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_startoffset);
+
+  boost::property_tree::ptree key_control;
+  key_control.add("<xmlattr>.id", "control");
+  key_control.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "control");
+  key_control.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_control.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_control);
+
+  boost::property_tree::ptree key_assumption;
+  key_assumption.add("<xmlattr>.id", "assumption");
+  key_assumption.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "assumption");
+  key_assumption.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_assumption.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_assumption);
+
+  boost::property_tree::ptree key_assumption_resultFunction;
+  key_assumption_resultFunction.add("<xmlattr>.id", "assumption.resultfunction");
+  key_assumption_resultFunction.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "assumption.resultfunction");
+  key_assumption_resultFunction.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_assumption_resultFunction.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_assumption_resultFunction);
+
+  boost::property_tree::ptree key_assumption_scope;
+  key_assumption_scope.add("<xmlattr>.id", "assumption.scope");
+  key_assumption_scope.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "assumption.scope");
+  key_assumption_scope.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_assumption_scope.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_assumption_scope);
+
   boost::property_tree::ptree key_enterFunction;
   key_enterFunction.add("<xmlattr>.id", "enterFunction");
   key_enterFunction.put(
@@ -531,6 +541,39 @@ void create_graphml(boost::property_tree::ptree & graphml,
     "string");
   key_returnFromFunction.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", key_returnFromFunction);
+
+  boost::property_tree::ptree key_endline;
+  key_endline.add("<xmlattr>.id", "endline");
+  key_endline.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "endline");
+  key_endline.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "int");
+  key_endline.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_endline);
+
+  boost::property_tree::ptree key_endoffset;
+  key_endoffset.add("<xmlattr>.id", "endoffset");
+  key_endoffset.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "endoffset");
+  key_endoffset.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "int");
+  key_endoffset.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_endoffset);
+
+  boost::property_tree::ptree key_witnessType;
+  key_witnessType.add("<xmlattr>.id", "witness-type");
+  key_witnessType.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "witness-type");
+  key_witnessType.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_witnessType.add("<xmlattr>.for", "graph");
+  graphml.add_child("graphml.key", key_witnessType);
 }
 
 void create_graph(
@@ -573,7 +616,7 @@ void create_graph(
   data_programhash.put_value(md5);
   graph.add_child("data", data_programhash);
   boost::property_tree::ptree data_memorymodel;
-  data_memorymodel.add("<xmlattr>.key", "memorymodel");
+  data_memorymodel.add("<xmlattr>.key", "memoryModel");
   data_memorymodel.put_value("precise");
   graph.add_child("data", data_memorymodel);
   boost::property_tree::ptree data_architecture;
