@@ -163,7 +163,7 @@ bool clang_c_convertert::get_decl(
       comp.name(name);
       comp.pretty_name(pretty_name);
 
-      if(fd.isBitField())
+      if(fd.isBitField() && !config.options.get_bool_option("no-bitfields"))
       {
         exprt width;
         if(get_expr(*fd.getBitWidth(), width))
