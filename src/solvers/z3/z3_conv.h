@@ -114,6 +114,8 @@ private:
   virtual const smt_ast *convert_array_of(smt_astt init_val,
                                           unsigned long domain_width);
 
+  virtual const smt_ast *overflow_arith(const expr2tc &expr);
+
   virtual void add_array_constraints_for_solving();
   virtual void add_tuple_constraints_for_solving();
   void push_array_ctx(void);
