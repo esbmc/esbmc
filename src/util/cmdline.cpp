@@ -13,6 +13,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "cmdline.h"
 
+std::string verification_file;
+
 cmdlinet::cmdlinet()
 {
 }
@@ -133,7 +135,10 @@ bool cmdlinet::parse(int argc, const char **argv, const struct opt_templ *opts)
   for(int i=1; i<argc; i++)
   {
     if(argv[i][0]!='-')
+    {
       args.push_back(argv[i]);
+      verification_file = argv[i];
+    }
     else
     {
       int optnr;

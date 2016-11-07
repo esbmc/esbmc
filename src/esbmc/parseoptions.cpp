@@ -179,27 +179,10 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.cmdline(cmdline);
 
   /* graphML generation options check */
-  if(cmdline.isset("witnesspath") && cmdline.isset("tokenizer"))
+  if(cmdline.isset("witness-output"))
   {
-    std::string tokenizer_path = cmdline.getval("tokenizer");
-    std::ifstream tfile(tokenizer_path);
-    if(!tfile)
-    {
-      std::cout << "The tokenizer path is invalid, check it and try again"
-          << std::endl;
-      exit(1);
-    }
-
-    options.set_option("witnesspath", cmdline.getval("witnesspath"));
+    options.set_option("witness-output", cmdline.getval("witness-output"));
     options.set_option("no-slice", true);
-    options.set_option("tokenizer", cmdline.getval("tokenizer"));
-  }
-  else if(cmdline.isset("witnesspath") && !cmdline.isset("tokenizer"))
-  {
-    std::cout
-        << "For graphML generation is necessary be set a tokenizer (use --tokenizer path)"
-        << std::endl;
-    exit(1);
   }
 
   if(cmdline.isset("git-hash"))
@@ -1957,9 +1940,7 @@ void cbmc_parseoptionst::help()
     " --show-goto-functions        show goto program\n"
     " --extended-try-analysis      check all the try block, even when an exception is throw\n"
     " --version                    show current ESBMC version and exit\n"
-    " --witnesspath filename       output counterexample in graphML format\n"
-    " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
-    "                              program for graphML generation\n"
+    " --witness-output <filename>  generate a verification result witness in GraphML format\n"
     " --clang-frontend             parse source files using clang (beta)\n\n"
     "BMC options\n"
     " --function name              set main function name\n"
@@ -1978,7 +1959,7 @@ void cbmc_parseoptionst::help()
     " --eager                      use eager instantiation\n"
     " --lazy                       use lazy instantiation (default)\n"
     " --smtlib                     use SMT lib format\n"
-    " --output Filename            output VCCs in SMT lib format to given file\n\n"
+    " --output <filename>          output VCCs in SMT lib format to given file\n\n"
     "Incremental SMT solving with Z3\n"
     " --smt-during-symex           enable incremental SMT solving (experimental)\n"
     " --smt-thread-guard           call the solver during thread exploration (experimental)\n"

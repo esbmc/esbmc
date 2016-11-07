@@ -74,6 +74,81 @@ void bmct::do_cbmc(smt_convt &solver, symex_target_equationt &equation)
 
 /*******************************************************************\
 
+Function: bmct::successful_trace
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void bmct::successful_trace(smt_convt &smt_conv ,
+                            symex_target_equationt &equation __attribute__((unused)))
+{
+  if(options.get_bool_option("base-case"))
+  {
+    status("No bug has been found in the base case");
+    return ;
+  }
+
+  goto_tracet goto_trace;
+  std::string graphml_output_filename = options.get_option("witness-output");
+  int specification = 0;
+
+  if(!graphml_output_filename.empty())
+  {
+    set_ui(ui_message_handlert::GRAPHML);
+  }
+
+  switch(ui)
+  {
+    case ui_message_handlert::GRAPHML:
+      status("Building successful trace");
+      build_successful_goto_trace(equation, smt_conv, goto_trace);
+      specification += options.get_bool_option("overflow-check") ? 1 : 0;
+      specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
+      generate_successful_goto_trace_in_graphml_format(
+        graphml_output_filename,
+        ns,
+        goto_trace,
+		specification
+      );
+      std::cout << "The correctness witness in GraphML format is available at: "
+                << options.get_option("witness-output")
+                << std::endl;
+    break;
+
+    case ui_message_handlert::OLD_GUI:
+      std::cout << "SUCCESS" << std::endl
+                << "Verification successful" << std::endl
+                << ""     << std::endl
+                << ""     << std::endl
+                << ""     << std::endl
+                << ""     << std::endl;
+    break;
+
+    case ui_message_handlert::PLAIN:
+    break;
+
+    case ui_message_handlert::XML_UI:
+    {
+      xmlt xml("cprover-status");
+      xml.data="SUCCESS";
+      std::cout << xml;
+      std::cout << std::endl;
+    }
+    break;
+
+    default:
+      assert(false);
+  }
+  status("VERIFICATION SUCCESSFUL");
+}
+
+/*******************************************************************\
+
 Function: bmct::error_trace
 
   Inputs:
@@ -92,34 +167,36 @@ void bmct::error_trace(smt_convt &smt_conv,
   goto_tracet goto_trace;
   build_goto_trace(equation, smt_conv, goto_trace);
 
-  std::string graphml_output_filename = options.get_option("witnesspath");
-  std::string tokenizer_path;
+  std::string graphml_output_filename = options.get_option("witness-output");
   if(!graphml_output_filename.empty())
   {
     set_ui(ui_message_handlert::GRAPHML);
-    tokenizer_path = options.get_option("tokenizer");
   }
 
   switch (ui)
   {
     case ui_message_handlert::GRAPHML:
-      std::cout << "The counterexample in GraphML format is available in: "
-               << options.get_option("witnesspath") << std::endl;
-
       generate_goto_trace_in_graphml_format(
-        tokenizer_path,
+    	false,
         graphml_output_filename,
         ns,
         goto_trace);
+      std::cout
+        << "The violation witness in GraphML format is available at: "
+        << options.get_option("witness-output")
+        << std::endl;
+      std::cout << std::endl << "Counterexample:" << std::endl;
+      show_goto_trace(std::cout, ns, goto_trace);
+    break;
 
     case ui_message_handlert::PLAIN:
       std::cout << std::endl << "Counterexample:" << std::endl;
       show_goto_trace(std::cout, ns, goto_trace);
-      break;
+    break;
 
     case ui_message_handlert::OLD_GUI:
       show_goto_trace_gui(std::cout, ns, goto_trace);
-      break;
+    break;
 
     case ui_message_handlert::XML_UI:
     {
@@ -210,19 +287,22 @@ void bmct::report_success()
 
   switch(ui)
   {
-  case ui_message_handlert::OLD_GUI:
-    std::cout << "SUCCESS" << std::endl
-              << "Verification successful" << std::endl
-              << ""     << std::endl
-              << ""     << std::endl
-              << ""     << std::endl
-              << ""     << std::endl;
+    case ui_message_handlert::OLD_GUI:
+      std::cout << "SUCCESS" << std::endl
+                << "Verification successful" << std::endl
+                << ""     << std::endl
+                << ""     << std::endl
+                << ""     << std::endl
+                << ""     << std::endl;
     break;
 
-  case ui_message_handlert::PLAIN:
+    case ui_message_handlert::PLAIN:
     break;
 
-  case ui_message_handlert::XML_UI:
+    case ui_message_handlert::GRAPHML:
+    break;
+
+    case ui_message_handlert::XML_UI:
     {
       xmlt xml("cprover-status");
       xml.data="SUCCESS";
@@ -231,8 +311,8 @@ void bmct::report_success()
     }
     break;
 
-  default:
-    assert(false);
+    default:
+      assert(false);
   }
 
 }
@@ -569,7 +649,7 @@ bool bmct::run_thread()
 
     if(result->remaining_claims==0)
     {
-      report_success();
+      successful_trace(*runtime_solver,*equation);
       return false;
     }
 
@@ -754,7 +834,9 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
   {
     case smt_convt::P_UNSATISFIABLE:
       if(!options.get_bool_option("base-case"))
-        report_success();
+      {
+        successful_trace(*solver, equation);
+      }
       else
         status("No bug has been found in the base case");
       return false;
@@ -778,15 +860,15 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
 
       return true;
 
-  // Return failure if we didn't actually check anything, we just emitted the
-  // test information to an SMTLIB formatted file. Causes esbmc to quit
-  // immediately (with no error reported)
-  case smt_convt::P_SMTLIB:
-    return true;
+    // Return failure if we didn't actually check anything, we just emitted the
+    // test information to an SMTLIB formatted file. Causes esbmc to quit
+    // immediately (with no error reported)
+    case smt_convt::P_SMTLIB:
+      return true;
 
-  default:
-    error("decision procedure failed");
-    return true;
+    default:
+      error("decision procedure failed");
+      return true;
   }
 }
 

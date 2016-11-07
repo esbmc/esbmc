@@ -15,9 +15,6 @@ BENCHMARK_FALSE_VALID_MEMTRACK=${PROPERTY_FORGOTTEN_MEMORY_TAG}
 BENCHMARK_FALSE_VALID_FREE=${PROPERTY_INVALID_FREE_TAG}
 BENCHMARK_FALSE_VALID_DEREF="(${PROPERTY_INVALID_POINTER_TAG}|${PROPERTY_ARRAY_BOUND_VIOLATED_TAG}|${PROPERTY_ARRAY_BOUND_VIOLATED_TAG2})"
 
-# Verification Witnesses tokenizer
-tokenizer_path=./tokenizer
-
 # Path to the ESBMC binary
 path_to_esbmc=./esbmc
 
@@ -73,7 +70,7 @@ fi
 
 # Add graphml informations
 TMPGRAPHML="error-witness.graphml"
-cmdline="$cmdline --witnesspath $TMPGRAPHML --tokenizer $tokenizer_path"
+cmdline="$cmdline --witness-output $TMPGRAPHML"
 
 if test $IS_OVERFLOW_BENCHMARK = 1; then
    cmdline="$cmdline --overflow-check "
