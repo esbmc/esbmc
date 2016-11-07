@@ -51,6 +51,7 @@ protected:
   int doit_k_induction_parallel();
 
   int doit_falsification();
+  int doit_incremental();
 
   int do_base_case(optionst &opts, goto_functionst &goto_functions, int k_step);
   int do_forward_condition(optionst &opts, goto_functionst &goto_functions, int k_step);

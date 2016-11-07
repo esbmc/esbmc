@@ -400,6 +400,9 @@ int cbmc_parseoptionst::doit()
   if(cmdline.isset("falsification"))
     return doit_falsification();
 
+  if(cmdline.isset("incremental-bmc"))
+    return doit_incremental();
+
   goto_functionst goto_functions;
 
   optionst opts;
@@ -1134,6 +1137,56 @@ int cbmc_parseoptionst::doit_falsification()
     std::cout << " ***\n";
 
     if(do_base_case(opts, goto_functions, k_step))
+      break;
+  }
+
+  status("Unable to prove or falsify the program, giving up.");
+  status("VERIFICATION UNKNOWN");
+
+  return 0;
+}
+
+int cbmc_parseoptionst::doit_incremental()
+{
+  // Generate goto functions for base case and forward condition
+  goto_functionst goto_functions;
+
+  optionst opts;
+  get_command_line_options(opts);
+
+  if(get_goto_program(opts, goto_functions))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions);
+    return 0;
+  }
+
+  if(set_claims(goto_functions))
+    return 7;
+
+  // Get max number of iterations
+  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+
+  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
+  if(cmdline.isset("unlimited-k-steps"))
+    max_k_step = UINT_MAX;
+
+  // Get the increment
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  {
+    std::cout << "\n*** Iteration number ";
+    std::cout << i2string((unsigned long) k_step);
+    std::cout << " ***\n";
+
+    if(do_base_case(opts, goto_functions, k_step))
+      break;
+
+    if(!do_forward_condition(opts, goto_functions, k_step))
       break;
   }
 
