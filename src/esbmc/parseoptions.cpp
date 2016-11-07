@@ -1057,7 +1057,7 @@ int cbmc_parseoptionst::doit_k_induction()
     std::cout << "*** Checking base case\n";
 
     if(do_base_case(opts, goto_functions, k_step))
-      break;
+      return true;
 
     std::cout << "\n*** K-Induction Loop Iteration ";
     std::cout << i2string((unsigned long) k_step);
@@ -1065,7 +1065,7 @@ int cbmc_parseoptionst::doit_k_induction()
     std::cout << "*** Checking forward condition\n";
 
     if(!do_forward_condition(opts, goto_functions, k_step))
-      break;
+      return false;
 
     std::cout << "\n*** K-Induction Loop Iteration ";
     std::cout << i2string((unsigned long) k_step);
@@ -1073,7 +1073,7 @@ int cbmc_parseoptionst::doit_k_induction()
     std::cout << "*** Checking inductive step\n";
 
     if(!do_inductive_step(opts, goto_functions, k_step))
-      break;
+      return false;
   }
 
   status("Unable to prove or falsify the program, giving up.");
@@ -1120,7 +1120,7 @@ int cbmc_parseoptionst::doit_falsification()
     std::cout << " ***\n";
 
     if(do_base_case(opts, goto_functions, k_step))
-      break;
+      return true;
   }
 
   status("Unable to prove or falsify the program, giving up.");
@@ -1167,10 +1167,10 @@ int cbmc_parseoptionst::doit_incremental()
     std::cout << " ***\n";
 
     if(do_base_case(opts, goto_functions, k_step))
-      break;
+      return true;
 
     if(!do_forward_condition(opts, goto_functions, k_step))
-      break;
+      return false;
   }
 
   status("Unable to prove or falsify the program, giving up.");
