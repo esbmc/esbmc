@@ -1077,27 +1077,13 @@ int cbmc_parseoptionst::doit_k_induction()
 
     if(!opts.get_bool_option("disable-forward-condition"))
     {
-      opts.set_option("base-case", false);
-      opts.set_option("forward-condition", true);
-      opts.set_option("inductive-step", false);
-
-      bmct bmc(goto_functions, opts, context, ui_message_handler);
-      set_verbosity_msg(bmc);
-
-      bmc.options.set_option("unwind", i2string(k_step));
-
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
+      std::cout << "\n*** K-Induction Loop Iteration ";
       std::cout << i2string((unsigned long) k_step);
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking forward condition" << std::endl;
+      std::cout << " ***\n";
+      std::cout << "*** Checking forward condition\n";
 
-      if(!do_bmc(bmc))
-      {
-        std::cout << std::endl << "Solution found by the forward condition; "
-            << "all states are reachable (k = " << k_step
-            << ")" << std::endl;
-        return false;
-      }
+      if(!do_forward_condition(opts, goto_functions, k_step))
+        break;
     }
 
     if(!opts.get_bool_option("disable-inductive-step"))
@@ -1211,6 +1197,28 @@ int cbmc_parseoptionst::do_base_case(
   }
 
   return false;
+}
+
+int cbmc_parseoptionst::do_forward_condition(
+  optionst &opts, goto_functionst &goto_functions, int k_step)
+{
+  opts.set_option("base-case", false);
+  opts.set_option("forward-condition", true);
+  opts.set_option("inductive-step", false);
+
+  bmct bmc(goto_functions, opts, context, ui_message_handler);
+  set_verbosity_msg(bmc);
+
+  bmc.options.set_option("unwind", i2string(k_step));
+
+  if(!do_bmc(bmc))
+  {
+    std::cout << "\nSolution found by the forward condition; "
+        << "all states are reachable (k = " << k_step << ")\n";
+    return false;
+  }
+
+  return true;
 }
 
 bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
