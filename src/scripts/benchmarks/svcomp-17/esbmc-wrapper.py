@@ -13,7 +13,7 @@ witness_path = "error-witness.graphml "
 esbmc_dargs = "--timeout 895s --memlimit 15g --no-div-by-zero-check "
 esbmc_dargs += "--force-malloc-success --context-bound 7 "
 esbmc_dargs += "--error-label ERROR "
-esbmc_dargs += "--witnesspath " + witness_path
+esbmc_dargs += "--witness-output " + witness_path
 
 # ESBMC specific commands: this is different for every submission
 esbmc_fp = "--floatbv --mathsat --no-bitfields "
@@ -142,7 +142,8 @@ if "VERIFICATION FAILED" in stdout:
     if memory_leak in stdout:
       print "FALSE_MEMTRACK"
       exit(0)
-"""
+
+  """
     if invalid_pointer in stdout:
       print "FALSE_DEREF"
       exit(0)
@@ -170,7 +171,8 @@ if "VERIFICATION FAILED" in stdout:
     if free_offset in stdout:
       print "FALSE_FREE"
       exit(0)
-"""
+  """
+
   if is_overflow:
     print "FALSE_OVERFLOW"
     exit(0)
