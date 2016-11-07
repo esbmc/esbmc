@@ -1065,35 +1065,29 @@ int cbmc_parseoptionst::doit_k_induction()
 
   for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    {
-      std::cout << "\n*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
-      std::cout << " ***\n";
-      std::cout << "*** Checking base case\n";
+    std::cout << "\n*** K-Induction Loop Iteration ";
+    std::cout << i2string((unsigned long) k_step);
+    std::cout << " ***\n";
+    std::cout << "*** Checking base case\n";
 
-      if(do_base_case(opts, goto_functions, k_step))
-        break;
-    }
+    if(do_base_case(opts, goto_functions, k_step))
+      break;
 
-    {
-      std::cout << "\n*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
-      std::cout << " ***\n";
-      std::cout << "*** Checking forward condition\n";
+    std::cout << "\n*** K-Induction Loop Iteration ";
+    std::cout << i2string((unsigned long) k_step);
+    std::cout << " ***\n";
+    std::cout << "*** Checking forward condition\n";
 
-      if(!do_forward_condition(opts, goto_functions, k_step))
-        break;
-    }
+    if(!do_forward_condition(opts, goto_functions, k_step))
+      break;
 
-    {
-      std::cout << "\n*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
-      std::cout << " ***\n";
-      std::cout << "*** Checking inductive step\n";
+    std::cout << "\n*** K-Induction Loop Iteration ";
+    std::cout << i2string((unsigned long) k_step);
+    std::cout << " ***\n";
+    std::cout << "*** Checking inductive step\n";
 
-      if(!do_inductive_step(opts, goto_functions, k_step))
-        break;
-    }
+    if(!do_inductive_step(opts, goto_functions, k_step))
+      break;
   }
 
   status("Unable to prove or falsify the program, giving up.");
@@ -1112,8 +1106,6 @@ int cbmc_parseoptionst::doit_falsification()
 
   if(get_goto_program(opts, goto_functions))
     return 6;
-
-  opts.set_option("base-case", true);
 
   if(cmdline.isset("show-claims"))
   {
