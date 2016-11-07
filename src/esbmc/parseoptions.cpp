@@ -1066,26 +1066,13 @@ int cbmc_parseoptionst::doit_k_induction()
   for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     {
-      opts.set_option("base-case", true);
-      opts.set_option("forward-condition", false);
-      opts.set_option("inductive-step", false);
-
-      bmct bmc(goto_functions, opts, context, ui_message_handler);
-      set_verbosity_msg(bmc);
-
-      bmc.options.set_option("unwind", i2string(k_step));
-
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
+      std::cout << "\n*** K-Induction Loop Iteration ";
       std::cout << i2string((unsigned long) k_step);
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking base case" << std::endl;
+      std::cout << " ***\n";
+      std::cout << "*** Checking base case\n";
 
-      if(do_bmc(bmc))
-      {
-        std::cout << std::endl << "Bug found by the base case (k = "
-            << k_step << ")" << std::endl;
-        return true;
-      }
+      if(do_base_case(opts, goto_functions, k_step))
+        break;
     }
 
     if(!opts.get_bool_option("disable-forward-condition"))
@@ -1191,31 +1178,39 @@ int cbmc_parseoptionst::doit_falsification()
 
   for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    opts.set_option("base-case", true);
-    opts.set_option("forward-condition", false);
-    opts.set_option("inductive-step", false);
-
-    bmct bmc(goto_functions, opts, context, ui_message_handler);
-    set_verbosity_msg(bmc);
-
-    bmc.options.set_option("unwind", i2string(k_step));
-
-    std::cout << std::endl << "*** Iteration number ";
+    std::cout << "\n*** Iteration number ";
     std::cout << i2string((unsigned long) k_step);
-    std::cout << " ***" << std::endl;
+    std::cout << " ***\n";
 
-    if(do_bmc(bmc))
-    {
-      std::cout << std::endl << "Bug found at k = "
-          << k_step << std::endl;
-      return true;
-    }
+    if(do_base_case(opts, goto_functions, k_step))
+      break;
   }
 
   status("Unable to prove or falsify the program, giving up.");
   status("VERIFICATION UNKNOWN");
 
   return 0;
+}
+
+int cbmc_parseoptionst::do_base_case(
+  optionst &opts, goto_functionst &goto_functions, int k_step)
+{
+  opts.set_option("base-case", true);
+  opts.set_option("forward-condition", false);
+  opts.set_option("inductive-step", false);
+
+  bmct bmc(goto_functions, opts, context, ui_message_handler);
+  set_verbosity_msg(bmc);
+
+  bmc.options.set_option("unwind", i2string(k_step));
+
+  if(do_bmc(bmc))
+  {
+    std::cout << "\nBug found at k = " << k_step << "\n";
+    return true;
+  }
+
+  return false;
 }
 
 bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)

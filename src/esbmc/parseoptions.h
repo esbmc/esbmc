@@ -52,6 +52,8 @@ protected:
 
   int doit_falsification();
 
+  int do_base_case(optionst &opts, goto_functionst &goto_functions, int k_step);
+
   bool read_goto_binary(goto_functionst &goto_functions);
 
   bool set_claims(goto_functionst &goto_functions);
