@@ -1086,40 +1086,14 @@ int cbmc_parseoptionst::doit_k_induction()
         break;
     }
 
-    if(!opts.get_bool_option("disable-inductive-step"))
     {
-      // Don't run inductive step for k_step == 1
-      if(k_step == 1)
-        continue;
-
-      opts.set_option("base-case", false);
-      opts.set_option("forward-condition", false);
-      opts.set_option("inductive-step", true);
-
-      bmct bmc(goto_functions, opts, context, ui_message_handler);
-      set_verbosity_msg(bmc);
-
-      bmc.options.set_option("unwind", i2string(k_step));
-
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
+      std::cout << "\n*** K-Induction Loop Iteration ";
       std::cout << i2string((unsigned long) k_step);
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking inductive step" << std::endl;
+      std::cout << " ***\n";
+      std::cout << "*** Checking inductive step\n";
 
-      try {
-        if(!do_bmc(bmc))
-        {
-          std::cout << std::endl << "Solution found by the inductive step "
-              << "(k = " << k_step << ")" << std::endl;
-          return false;
-        }
-      }
-      catch(...)
-      {
-        // If there is a dynamic allocation during goto symex, an
-        // exception will be thrown and the inductive step is disabled
-        continue;
-      }
+      if(!do_inductive_step(opts, goto_functions, k_step))
+        break;
     }
   }
 
@@ -1216,6 +1190,42 @@ int cbmc_parseoptionst::do_forward_condition(
     std::cout << "\nSolution found by the forward condition; "
         << "all states are reachable (k = " << k_step << ")\n";
     return false;
+  }
+
+  return true;
+}
+
+int cbmc_parseoptionst::do_inductive_step(
+  optionst &opts, goto_functionst &goto_functions, int k_step)
+{
+  // Don't run inductive step for k_step == 1
+  if(k_step == 1)
+    return true;
+
+  if(opts.get_bool_option("disable-inductive-step"))
+    return true;
+
+  opts.set_option("base-case", false);
+  opts.set_option("forward-condition", false);
+  opts.set_option("inductive-step", true);
+
+  bmct bmc(goto_functions, opts, context, ui_message_handler);
+  set_verbosity_msg(bmc);
+
+  bmc.options.set_option("unwind", i2string(k_step));
+
+  try {
+    if(!do_bmc(bmc))
+    {
+      std::cout << "\nSolution found by the inductive step "
+        << "(k = " << k_step << ")\n";
+      return false;
+    }
+  }
+  catch(...)
+  {
+    // If there is a dynamic allocation during goto symex, an
+    // exception will be thrown and the inductive step is disabled
   }
 
   return true;
