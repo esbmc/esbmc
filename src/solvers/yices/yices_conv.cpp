@@ -410,6 +410,12 @@ smt_astt yices_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   abort();
 }
 
+smt_astt yices_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  std::cerr << "Yices can't create floating point sorts" << std::endl;
+  abort();
+}
+
 smt_astt
 yices_convt::mk_smt_bool(bool val)
 {

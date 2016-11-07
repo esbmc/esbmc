@@ -192,6 +192,7 @@ enum smt_func_kind {
   SMT_FUNC_IS_INT,
 
   // floatbv operations
+  SMT_FUNC_FABS,
   SMT_FUNC_ISZERO,
   SMT_FUNC_ISNAN,
   SMT_FUNC_ISINF,
@@ -203,6 +204,7 @@ enum smt_func_kind {
   SMT_FUNC_IEEE_SUB,
   SMT_FUNC_IEEE_MUL,
   SMT_FUNC_IEEE_DIV,
+  SMT_FUNC_IEEE_FMA,
 
   SMT_FUNC_IEEE_RM_NE,
   SMT_FUNC_IEEE_RM_ZR,
@@ -657,6 +659,11 @@ public:
    *  @param cast the cast expression
    *  @return The newly created cast smt_ast. */
   virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast) = 0;
+
+  /** Calculate the nearby int from a floating point, considering the rounding mode
+   *  @param expr the nearby int expression
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) = 0;
 
   /** Convert the ieee arithmetic operations (add, sub, mul, div, mod)
    *  @param expr the arithmetic operations

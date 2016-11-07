@@ -1,0 +1,3 @@
+main.c
+--floatbv --clang-frontend --32
+^VERIFICATION SUCCESSFUL$

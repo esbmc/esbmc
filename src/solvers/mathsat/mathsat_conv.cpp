@@ -35,7 +35,7 @@ void print_mathsat_formula()
 {
   size_t num_of_asserted;
   msat_term * asserted_formulas =
-      msat_get_asserted_formulas(*_env, &num_of_asserted);
+   msat_get_asserted_formulas(*_env, &num_of_asserted);
 
   for (unsigned i=0; i< num_of_asserted; i++)
     std::cout << msat_to_smtlib2(*_env, asserted_formulas[i]) << "\n";
@@ -429,6 +429,9 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_ISZERO:
     r = msat_make_fp_iszero(env, args[0]->t);
     break;
+  case SMT_FUNC_FABS:
+    r = msat_make_fp_abs(env, args[0]->t);
+    break;
   case SMT_FUNC_ISNAN:
     r = msat_make_fp_isnan(env, args[0]->t);
     break;
@@ -619,7 +622,7 @@ smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
     s = mk_sort(SMT_SORT_BV);
 
     // Conversion from float to integers always truncate, so we assume
-    // the round mode to be toward infinity
+    // the round mode to be toward zero
     rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
     const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm_const);
 
@@ -682,10 +685,28 @@ smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
   return new mathsat_smt_ast(this, s, t);
 }
 
+smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  // Rounding mode symbol
+  smt_astt rm = convert_rounding_mode(expr.rounding_mode);
+  const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
+
+  smt_astt from = convert_ast(expr.from);
+  const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
+
+  // Conversion from float, using the correct rounding mode
+  msat_term t = msat_make_fp_round_to_int(env, mrm->t, mfrom->t);
+  check_msat_error(t);
+
+  smt_sortt s = convert_sort(expr.type);
+  return new mathsat_smt_ast(this, s, t);
+}
+
 smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol
-  smt_astt rm_const;
+  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(2));
+  const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
 
   // Sides
   smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
@@ -697,28 +718,23 @@ smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   msat_term t;
   switch (expr->expr_id) {
     case expr2t::ieee_add_id:
-    {
-      rm_const = convert_rounding_mode(to_ieee_add2t(expr).rounding_mode);
-      t = msat_make_fp_plus(env, mathsat_ast_downcast(rm_const)->t, ms1->t, ms2->t);
+      t = msat_make_fp_plus(env, mrm->t, ms1->t, ms2->t);
       break;
-    }
     case expr2t::ieee_sub_id:
-    {
-      rm_const = convert_rounding_mode(to_ieee_sub2t(expr).rounding_mode);
-      t = msat_make_fp_minus(env, mathsat_ast_downcast(rm_const)->t, ms1->t, ms2->t);
+      t = msat_make_fp_minus(env, mrm->t, ms1->t, ms2->t);
       break;
-    }
     case expr2t::ieee_mul_id:
-    {
-      rm_const = convert_rounding_mode(to_ieee_mul2t(expr).rounding_mode);
-      t = msat_make_fp_times(env, mathsat_ast_downcast(rm_const)->t, ms1->t, ms2->t);
+      t = msat_make_fp_times(env, mrm->t, ms1->t, ms2->t);
       break;
-    }
     case expr2t::ieee_div_id:
-    {
-      rm_const = convert_rounding_mode(to_ieee_div2t(expr).rounding_mode);
-      t = msat_make_fp_div(env, mathsat_ast_downcast(rm_const)->t, ms1->t, ms2->t);
+      t = msat_make_fp_div(env, mrm->t, ms1->t, ms2->t);
       break;
+    case expr2t::ieee_fma_id:
+    {
+      // Mathsat doesn't support fma for now, if we force
+      // the multiplication, it will provide the wrong answer
+      std::cerr << "Mathsat doesn't support the fused multiply-add "
+          "(fp.fma) operator" << std::endl;
     }
     default:
       abort();
@@ -771,6 +787,17 @@ mathsat_convt::mk_extract(const smt_ast *a, unsigned int high,
                           unsigned int low, const smt_sort *s)
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
+
+  // If it's a floatbv, convert it to bv
+  if(a->sort->id == SMT_SORT_FLOATBV)
+  {
+    msat_term t = msat_make_fp_as_ieeebv(env, mast->t);
+    check_msat_error(t);
+
+    smt_ast * bv = new mathsat_smt_ast(this, s, t);
+    mast = mathsat_ast_downcast(bv);
+  }
+
   msat_term t = msat_make_bv_extract(env, high, low, mast->t);
   check_msat_error(t);
 

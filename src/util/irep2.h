@@ -448,6 +448,7 @@ public:
     constant_array_of_id,
     symbol_id,
     typecast_id,
+    nearbyint_id,
     if_id,
     equality_id,
     notequal_id,
@@ -478,6 +479,7 @@ public:
     ieee_sub_id,
     ieee_mul_id,
     ieee_div_id,
+    ieee_fma_id,
     modulus_id,
     shl_id,
     ashr_id,
@@ -1913,6 +1915,7 @@ class constant_array2t;
 class constant_array_of2t;
 class symbol2t;
 class typecast2t;
+class nearbyint2t;
 class if2t;
 class equality2t;
 class notequal2t;
@@ -1994,6 +1997,7 @@ class ieee_add2t;
 class ieee_sub2t;
 class ieee_mul2t;
 class ieee_div2t;
+class ieee_fma2t;
 
 // Data definitions.
 
@@ -2355,6 +2359,29 @@ public:
   typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::side_2> side_2_field;
   typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::rounding_mode> rounding_mode_field;
   typedef esbmct::expr2t_traits<side_1_field, side_2_field, rounding_mode_field> traits;
+};
+
+class ieee_arith_3ops : public arith_ops
+{
+public:
+  ieee_arith_3ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
+                  const expr2tc &v2, const expr2tc &v3, const expr2tc &rm)
+    : arith_ops(t, id), value_1(v1), value_2(v2), rounding_mode(rm), value_3(v3) { }
+  ieee_arith_3ops(const ieee_arith_3ops &ref)
+    : arith_ops(ref), value_1(ref.value_1), value_2(ref.value_2),
+      rounding_mode(ref.rounding_mode), value_3(ref.value_3) { }
+
+  expr2tc value_1;
+  expr2tc value_2;
+  expr2tc rounding_mode;
+  expr2tc value_3;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_1> value_1_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_2> value_2_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::rounding_mode> rounding_mode_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_3> value_3_field;
+  typedef esbmct::expr2t_traits<value_1_field, value_2_field, rounding_mode_field, value_3_field> traits;
 };
 
 class same_object_data : public expr2t
@@ -2939,7 +2966,8 @@ irep_typedefs(constant_bool, constant_bool_data);
 irep_typedefs(constant_array_of, constant_array_of_data);
 irep_typedefs(constant_string, constant_string_data);
 irep_typedefs(symbol, symbol_data);
-irep_typedefs(typecast,typecast_data);
+irep_typedefs(nearbyint, typecast_data);
+irep_typedefs(typecast, typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
@@ -2970,6 +2998,7 @@ irep_typedefs(ieee_add, ieee_arith_2ops);
 irep_typedefs(ieee_sub, ieee_arith_2ops);
 irep_typedefs(ieee_mul, ieee_arith_2ops);
 irep_typedefs(ieee_div, ieee_arith_2ops);
+irep_typedefs(ieee_fma, ieee_arith_3ops);
 irep_typedefs(modulus, arith_2ops);
 irep_typedefs(shl, arith_2ops);
 irep_typedefs(ashr, arith_2ops);
@@ -3238,6 +3267,41 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Nearbyint expression.
+ *  Represents a rounding operation on a floatbv, we extend typecast as
+ *  it already have a field for the rounding mode
+ *  @extends typecast_data
+ */
+class nearbyint2t : public nearbyint_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type to round to
+   *  @param from Expression to round from.
+   *  @param rounding_mode Rounding mode, important only for floatbvs
+   */
+  nearbyint2t(const type2tc &type, const expr2tc &from, const expr2tc &rounding_mode)
+    : nearbyint_expr_methods(type, nearbyint_id, from, rounding_mode) { }
+
+  /** Primary constructor. This constructor defaults the rounding mode to
+   *  the c::__ESBMC_rounding_mode symbol
+   *  @param type Type to round to
+   *  @param from Expression to round from.
+   */
+  nearbyint2t(const type2tc &type, const expr2tc &from)
+    : nearbyint_expr_methods(type, nearbyint_id, from,
+        expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode")))
+  {
+  }
+
+  nearbyint2t(const nearbyint2t &ref)
+    : nearbyint_expr_methods(ref){}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 /** Typecast expression.
  *  Represents cast from contained expression 'from' to the type of this
  *  typecast.
@@ -3260,8 +3324,8 @@ public:
    *  @param from Expression to cast from.
    */
   typecast2t(const type2tc &type, const expr2tc &from)
-      : typecast_expr_methods(type, typecast_id, from,
-          expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode")))
+    : typecast_expr_methods(type, typecast_id, from,
+        expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode")))
   {
   }
 
@@ -3820,6 +3884,28 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** IEEE fused multiply-add operation. Computes (x*y) + z as if to infinite
+ *  precision and rounded only once to fit the result type. Must be
+ *  floatbvs types. Types of the 3 operands and expr type should match.
+ *  @extends ieee_arith_2ops */
+class ieee_fma2t : public ieee_fma_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param v3 Second operand.
+   *  @param rm rounding mode. */
+  ieee_fma2t(
+    const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &v3, const expr2tc &rm)
+    : ieee_fma_expr_methods(type, ieee_fma_id, v1, v2, v3, rm) {}
+  ieee_fma2t(const ieee_fma2t &ref)
+    : ieee_fma_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 /** Modulus operation. Takes modulus of first operand divided by 2nd operand.
  *  Should both be integer types. Types of both operands and expr type should
  *  match. @extends arith_2ops */
@@ -4116,6 +4202,8 @@ public:
                                  operand, bits) {}
   overflow_cast2t(const overflow_cast2t &ref)
     : overflow_cast_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4685,6 +4773,7 @@ expr_macros(constant_array);
 expr_macros(constant_array_of);
 expr_macros(symbol);
 expr_macros(typecast);
+expr_macros(nearbyint);
 expr_macros(if);
 expr_macros(equality);
 expr_macros(notequal);
@@ -4715,6 +4804,7 @@ expr_macros(ieee_add);
 expr_macros(ieee_sub);
 expr_macros(ieee_mul);
 expr_macros(ieee_div);
+expr_macros(ieee_fma);
 expr_macros(modulus);
 expr_macros(shl);
 expr_macros(ashr);

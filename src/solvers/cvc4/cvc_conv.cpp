@@ -349,6 +349,12 @@ smt_astt cvc_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   abort();
 }
 
+smt_astt cvc_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
+  abort();
+}
+
 smt_ast *
 cvc_convt::mk_smt_bool(bool val)
 {

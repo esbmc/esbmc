@@ -593,6 +593,13 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = mk_smt_bvfloat_arith_ops(expr);
     break;
   }
+  case expr2t::ieee_fma_id:
+  {
+    assert(is_floatbv_type(expr));
+    assert(expr->get_num_sub_exprs() == 4);
+    a = mk_smt_bvfloat_arith_ops(expr);
+    break;
+  }
   case expr2t::modulus_id:
   {
     assert(expr->get_num_sub_exprs() == 2);
@@ -678,6 +685,11 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::typecast_id:
   {
     a = convert_typecast(expr);
+    break;
+  }
+  case expr2t::nearbyint_id:
+  {
+    a = mk_smt_nearbyint_from_float(to_nearbyint2t(expr));
     break;
   }
   case expr2t::if_id:
@@ -873,13 +885,16 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (is_unsignedbv_type(abs.value)) {
       // No need to do anything.
       a = args[0];
+    } else if(is_floatbv_type(abs.value)) {
+      a = mk_func_app(sort, SMT_FUNC_FABS, &args[0], 1);
     } else {
-      // TODO: Shouldn't we create a zero constant of the same type of
-      // abs.value?
-      constant_int2tc zero(abs.value->type, BigInt(0));
+      expr2tc zero;
+      migrate_expr(gen_zero(migrate_type_back(abs.value->type)), zero);
+
       lessthan2tc lt(abs.value, zero);
-      sub2tc sub(abs.value->type, zero, abs.value);
-      if2tc ite(abs.type, lt, sub, abs.value);
+      neg2tc neg(abs.value->type, abs.value);
+      if2tc ite(abs.type, lt, neg, abs.value);
+
       a = convert_ast(ite);
     }
     break;
@@ -2195,6 +2210,7 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "int2real",
   "real2int",
   "is_int",
+  "fabs",
   "is_zero",
   "is_nan",
   "is_inf",

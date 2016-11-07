@@ -601,6 +601,8 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     return new_ast((asts[0]->e == asts[1]->e), s);
   case SMT_FUNC_NOTEQ:
     return new_ast((asts[0]->e != asts[1]->e), s);
+  case SMT_FUNC_FABS:
+    return new_ast(z3::to_expr(ctx, Z3_mk_fpa_abs(ctx, asts[0]->e)),s);
   case SMT_FUNC_ISNAN:
     return new_ast(z3::to_expr(ctx, Z3_mk_fpa_is_nan(ctx, asts[0]->e)),s);
   case SMT_FUNC_ISINF:
@@ -641,9 +643,16 @@ smt_astt
 z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
                      const smt_sort *s)
 {
+  const z3_smt_ast *za = z3_smt_downcast(a);
 
-  return new_ast(z3::to_expr(ctx, Z3_mk_extract(ctx, high, low,
-                                         z3_smt_downcast(a)->e)), s);
+  // If it's a floatbv, convert it to bv
+  if(a->sort->id == SMT_SORT_FLOATBV)
+  {
+    smt_ast * bv = new_ast(ctx.fpa_to_ieeebv(za->e), s);
+    za = z3_smt_downcast(bv);
+  }
+
+  return new_ast(z3::to_expr(ctx, Z3_mk_extract(ctx, high, low, za->e)), s);
 }
 
 smt_astt
@@ -746,7 +755,7 @@ smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
     s = mk_sort(SMT_SORT_BV);
 
     // Conversion from float to integers always truncate, so we assume
-    // the round mode to be toward infinity
+    // the round mode to be toward zero
     rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
     const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
@@ -755,7 +764,7 @@ smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
     s = mk_sort(SMT_SORT_BV);
 
     // Conversion from float to integers always truncate, so we assume
-    // the round mode to be toward infinity
+    // the round mode to be toward zero
     rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
     const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
@@ -821,6 +830,19 @@ smt_astt z3_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
   abort();
 }
 
+smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  // Rounding mode symbol
+  smt_astt rm = convert_rounding_mode(expr.rounding_mode);
+  const z3_smt_ast *mrm = z3_smt_downcast(rm);
+
+  smt_astt from = convert_ast(expr.from);
+  const z3_smt_ast *mfrom = z3_smt_downcast(from);
+
+  smt_sortt s = convert_sort(expr.type);
+  return new_ast(ctx.fpa_to_integral(mrm->e, mfrom->e), s);
+}
+
 smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol
@@ -847,6 +869,13 @@ smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
       return new_ast(ctx.fpa_mul(mrm->e, ms1->e, ms2->e), s);
     case expr2t::ieee_div_id:
       return new_ast(ctx.fpa_div(mrm->e, ms1->e, ms2->e), s);
+    case expr2t::ieee_fma_id:
+    {
+      smt_astt v3 = convert_ast(*expr->get_sub_expr(3));
+      const z3_smt_ast *mv3 = z3_smt_downcast(v3);
+
+      return new_ast(ctx.fpa_fma(mrm->e, ms1->e, ms2->e, mv3->e), s);
+    }
     default:
       break;
   }

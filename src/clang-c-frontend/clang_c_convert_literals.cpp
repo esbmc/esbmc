@@ -176,9 +176,7 @@ bool clang_c_convertert::convert_float_literal(
     }
     else if(val.isNaN())
     {
-      // Don't represent that on fixedbvs
-      std::cerr << "We can't build a NaN using fixedbv representation."
-        << "Use floatbvs instead" << std::endl;
+      value = 0;
     }
     else
     {

@@ -77,6 +77,7 @@ public:
   virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm);
   virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast);
   virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast);
+  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr);
   virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr);
   virtual smt_ast *mk_smt_bool(bool val);
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);

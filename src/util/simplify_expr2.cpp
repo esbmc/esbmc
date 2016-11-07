@@ -19,6 +19,15 @@ expr2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 static expr2tc
+try_simplification(const expr2tc& expr)
+{
+  expr2tc to_simplify = expr->do_simplify();
+  if (is_nil_expr(to_simplify))
+    to_simplify = expr2tc(expr->clone());
+  return expr2tc(to_simplify->clone());
+}
+
+static expr2tc
 typecast_check_return(const type2tc &type, expr2tc &expr)
 {
   // If the expr is already nil, do nothing
@@ -28,29 +37,13 @@ typecast_check_return(const type2tc &type, expr2tc &expr)
   // Don't type cast from constant to pointer
   // TODO: check if this is right
   if(is_pointer_type(type) && is_number_type(expr))
-    return expr;
+    return try_simplification(expr);
 
   // Create a typecast of the result
   expr2tc typecast = expr2tc(new typecast2t(type, expr));
 
   // Try to simplify the typecast
-  expr2tc simpl_typecast_res = expr2tc(typecast->do_simplify());
-
-  // If we were able to simplify the typecast, return it
-  if(!is_nil_expr(simpl_typecast_res))
-    return expr2tc(simpl_typecast_res->clone());
-
-  // Otherwise, return the explicit typecast
-  return expr2tc(typecast->clone());
-}
-
-static expr2tc
-try_simplification(const expr2tc& expr)
-{
-  expr2tc to_simplify = expr2tc(expr->do_simplify());
-  if (is_nil_expr(to_simplify))
-    to_simplify = expr2tc(expr->clone());
-  return expr2tc(to_simplify->clone());
+  return try_simplification(typecast);
 }
 
 static void
@@ -597,7 +590,7 @@ struct abstor
     // When we call BigInt/fixedbv/floatbv constructor
     // with no argument, it generates the zero equivalent
     if(to_constant(c).value > 0)
-      return expr2tc();
+      return expr2tc(c);
 
     to_constant(c).value = !to_constant(c).value;
     return expr2tc(c);
@@ -1552,6 +1545,16 @@ typecast2t::do_simplify(bool second) const
 }
 
 expr2tc
+nearbyint2t::do_simplify(bool second __attribute__((unused))) const
+{
+  expr2tc new_from = try_simplification(from);
+  if(new_from != from)
+    return new_from;
+
+  return expr2tc();
+}
+
+expr2tc
 address_of2t::do_simplify(bool second __attribute__((unused))) const
 {
 
@@ -1901,6 +1904,16 @@ if2t::do_simplify(bool second __attribute__((unused))) const
 }
 
 expr2tc
+overflow_cast2t::do_simplify(bool second __attribute__((unused))) const
+{
+  expr2tc new_operand = try_simplification(operand);
+  if(new_operand != operand)
+    return new_operand;
+
+  return expr2tc();
+}
+
+expr2tc
 overflow2t::do_simplify(bool second __attribute__((unused))) const
 {
   unsigned int num_const = 0;
@@ -2186,6 +2199,15 @@ simplify_floatbv_2ops(
   // Try to recursively simplify nested operations both sides, if any
   expr2tc simplied_side_1 = try_simplification(side_1);
   expr2tc simplied_side_2 = try_simplification(side_2);
+
+  // Try to handle NaN
+  if(is_constant_floatbv2t(simplied_side_1))
+    if(to_constant_floatbv2t(simplied_side_1).value.is_NaN())
+      return expr2tc(simplied_side_1->clone());
+
+  if(is_constant_floatbv2t(simplied_side_2))
+    if(to_constant_floatbv2t(simplied_side_2).value.is_NaN())
+      return expr2tc(simplied_side_2->clone());
 
   if (!is_constant_expr(simplied_side_1)
       || !is_constant_expr(simplied_side_2)

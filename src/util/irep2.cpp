@@ -524,6 +524,7 @@ static const char *expr_names[] = {
   "constant_array_of",
   "symbol",
   "typecast",
+  "nearbyint",
   "if",
   "equality",
   "notequal",
@@ -554,6 +555,7 @@ static const char *expr_names[] = {
   "ieee_sub",
   "ieee_mul",
   "ieee_div",
+  "ieee_fma",
   "modulus",
   "shl",
   "ashr",
@@ -2151,6 +2153,8 @@ std::string symbol2t::field_names [esbmct::num_type_fields]  =
 { "name", "renamelev", "level1_num", "level2_num", "thread_num", "node_num"};
 std::string typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "rounding_mode", "", "", "", ""};
+std::string nearbyint2t::field_names [esbmct::num_type_fields]  =
+{ "from", "rounding_mode", "", "", "", ""};
 std::string if2t::field_names [esbmct::num_type_fields]  =
 { "cond", "true_value", "false_value", "", ""};
 std::string equality2t::field_names [esbmct::num_type_fields]  =
@@ -2211,6 +2215,8 @@ std::string ieee_mul2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "rounding_mode", "", "", ""};
 std::string ieee_div2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "rounding_mode", "", "", ""};
+std::string ieee_fma2t::field_names [esbmct::num_type_fields]  =
+{ "value_1", "value_2", "value_3", "rounding_mode", "", ""};
 std::string modulus2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string shl2t::field_names [esbmct::num_type_fields]  =
@@ -2355,7 +2361,8 @@ irep_typedefs(constant_bool, constant_bool_data);
 irep_typedefs(constant_array_of, constant_array_of_data);
 irep_typedefs(constant_string, constant_string_data);
 irep_typedefs(symbol, symbol_data);
-irep_typedefs(typecast,typecast_data);
+irep_typedefs(nearbyint, typecast_data);
+irep_typedefs(typecast, typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
@@ -2386,6 +2393,7 @@ irep_typedefs(ieee_add, ieee_arith_2ops);
 irep_typedefs(ieee_sub, ieee_arith_2ops);
 irep_typedefs(ieee_mul, ieee_arith_2ops);
 irep_typedefs(ieee_div, ieee_arith_2ops);
+irep_typedefs(ieee_fma, ieee_arith_3ops);
 irep_typedefs(modulus, arith_2ops);
 irep_typedefs(shl, arith_2ops);
 irep_typedefs(ashr, arith_2ops);
