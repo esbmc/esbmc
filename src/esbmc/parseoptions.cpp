@@ -1075,7 +1075,6 @@ int cbmc_parseoptionst::doit_k_induction()
         break;
     }
 
-    if(!opts.get_bool_option("disable-forward-condition"))
     {
       std::cout << "\n*** K-Induction Loop Iteration ";
       std::cout << i2string((unsigned long) k_step);
@@ -1176,6 +1175,9 @@ int cbmc_parseoptionst::do_base_case(
 int cbmc_parseoptionst::do_forward_condition(
   optionst &opts, goto_functionst &goto_functions, int k_step)
 {
+  if(opts.get_bool_option("disable-forward-condition"))
+    return true;
+
   opts.set_option("base-case", false);
   opts.set_option("forward-condition", true);
   opts.set_option("inductive-step", false);
