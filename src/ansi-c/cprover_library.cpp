@@ -39,9 +39,16 @@ extern uint8_t clib64_buf[1];
 extern unsigned int clib32_buf_size;
 extern unsigned int clib64_buf_size;
 
-uint8_t *clib_ptrs[2][2] = {
+extern uint8_t clib32_fp_buf[1];
+extern uint8_t clib64_fp_buf[1];
+extern unsigned int clib32_fp_buf_size;
+extern unsigned int clib64_fp_buf_size;
+
+uint8_t *clib_ptrs[4][4] = {
 { &clib32_buf[0], ((&clib32_buf[0]) + clib32_buf_size)},
 { &clib64_buf[0], ((&clib64_buf[0]) + clib64_buf_size)},
+{ &clib32_fp_buf[0], ((&clib32_fp_buf[0]) + clib32_fp_buf_size)},
+{ &clib64_fp_buf[0], ((&clib64_fp_buf[0]) + clib64_fp_buf_size)},
 };
 }
 
@@ -147,13 +154,18 @@ void add_cprover_library(
   uint64_t size;
   int fd;
 
-  if(config.ansi_c.lib==configt::ansi_ct::LIB_NONE)
-    return;
-
   if (config.ansi_c.word_size == 32) {
-    this_clib_ptrs = &clib_ptrs[0][0];
+    if(config.ansi_c.use_fixed_for_float) {
+      this_clib_ptrs = &clib_ptrs[0][0];
+    } else {
+      this_clib_ptrs = &clib_ptrs[2][0];
+    }
   } else if (config.ansi_c.word_size == 64) {
-    this_clib_ptrs = &clib_ptrs[1][0];
+    if(config.ansi_c.use_fixed_for_float) {
+      this_clib_ptrs = &clib_ptrs[1][0];
+    } else {
+      this_clib_ptrs = &clib_ptrs[3][0];
+    }
   } else {
     if (config.ansi_c.word_size == 16) {
       std::cerr << "Warning: this version of ESBMC does not have a C library ";

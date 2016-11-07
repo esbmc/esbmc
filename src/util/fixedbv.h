@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_FIXEDBV_UTIL_H
 
 #include <mp_arith.h>
+#include <std_expr.h>
 #include <format_spec.h>
 
 class fixedbv_spect
@@ -20,13 +21,13 @@ public:
   fixedbv_spect():integer_bits(0), width(0)
   {
   }
-  
+
   fixedbv_spect(unsigned _width, unsigned _integer_bits):
     integer_bits(_integer_bits), width(_width)
   {
     assert(width >= integer_bits);
   }
-  
+
   fixedbv_spect(const class fixedbv_typet &type);
 
   inline unsigned get_fraction_bits() const
@@ -39,17 +40,17 @@ class fixedbvt
 {
 public:
   fixedbv_spect spec;
-  
+
   fixedbvt():v(0)
   {
   }
 
-  explicit fixedbvt(const class exprt &expr);
+  explicit fixedbvt(const constant_exprt &expr);
 
   void from_integer(const mp_integer &i);
   mp_integer to_integer() const; // this rounds to zero
-  void from_expr(const class exprt &expr);
-  exprt to_expr() const;
+  void from_expr(const constant_exprt &expr);
+  constant_exprt to_expr() const;
   void round(const fixedbv_spect &dest_spec);
 
   std::string to_ansi_c_string() const
@@ -64,21 +65,31 @@ public:
   {
     return v==0;
   }
-  
+
+  bool get_sign() const { return v.is_negative(); }
+  bool is_NaN() const { return false; } // Never true
+  bool is_infinity() const { return false; } // Never true
+  bool is_finite() const { return true; } // Always true
+  bool is_normal() const { return true; } // Always true?
+
   void negate();
 
   fixedbvt &operator /= (const fixedbvt &other);
   fixedbvt &operator *= (const fixedbvt &other);
   fixedbvt &operator += (const fixedbvt &other);
   fixedbvt &operator -= (const fixedbvt &other);
-  
+
+  fixedbvt &operator ! ();
+
   friend bool operator < (const fixedbvt &a, const fixedbvt &b) { return a.v<b.v; }
   friend bool operator <=(const fixedbvt &a, const fixedbvt &b) { return a.v<=b.v; }
   friend bool operator > (const fixedbvt &a, const fixedbvt &b) { return a.v>b.v; }
   friend bool operator >=(const fixedbvt &a, const fixedbvt &b) { return a.v>=b.v; }
   friend bool operator ==(const fixedbvt &a, const fixedbvt &b) { return a.v==b.v; }
   friend bool operator !=(const fixedbvt &a, const fixedbvt &b) { return a.v!=b.v; }
-  
+
+  friend bool operator > (const fixedbvt &a, int i);
+
   const mp_integer &get_value() const { return v; }
   void set_value(const mp_integer &_v) { v=_v; }
 

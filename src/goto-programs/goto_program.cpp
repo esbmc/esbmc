@@ -12,44 +12,48 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_program.h"
 
+void goto_programt::instructiont::dump() const
+{
+  output_instruction(namespacet(contextt()), "", std::cout);
+}
 
-std::ostream& goto_programt::output_instruction(
-  const class namespacet &ns,
-  const irep_idt &identifier,
+void goto_programt::instructiont::output_instruction(
+  const class namespacet& ns,
+  const irep_idt& identifier,
   std::ostream& out,
-  instructionst::const_iterator it,
   bool show_location,
   bool show_variables) const
 {
-  if (show_location) {
-  out << "        // " << it->location_number << " ";
+  if (show_location)
+  {
+    out << "        // " << location_number << " ";
 
-  if(!it->location.is_nil())
-    out << it->location.as_string();
-  else
-    out << "no location";
+    if(!location.is_nil())
+      out << location.as_string();
+    else
+      out << "no location";
 
-  out << "\n";
+    out << "\n";
   }
 
-  if(show_variables && !it->local_variables.empty())
+  if(show_variables && !local_variables.empty())
   {
     out << "        // Variables:";
     for(local_variablest::const_iterator
-        l_it=it->local_variables.begin();
-        l_it!=it->local_variables.end();
+        l_it = local_variables.begin();
+        l_it != local_variables.end();
         l_it++)
       out << " " << *l_it;
 
     out << std::endl;
   }
 
-  if(!it->labels.empty())
+  if(!labels.empty())
   {
     out << "        // Labels:";
     for(instructiont::labelst::const_iterator
-        l_it=it->labels.begin();
-        l_it!=it->labels.end();
+        l_it = labels.begin();
+        l_it != labels.end();
         l_it++)
     {
       out << " " << *l_it;
@@ -58,34 +62,34 @@ std::ostream& goto_programt::output_instruction(
     out << std::endl;
   }
 
-  if(it->is_target())
-    out << std::setw(6) << it->target_number << ": ";
+  if(is_target())
+    out << std::setw(6) << target_number << ": ";
   else
     out << "        ";
 
-  switch(it->type)
+  switch(type)
   {
   case NO_INSTRUCTION_TYPE:
     out << "NO INSTRUCTION TYPE SET" << std::endl;
     break;
 
   case GOTO:
-    if (!is_constant_bool2t(it->guard) ||
-        !to_constant_bool2t(it->guard).constant_value)
+    if (!is_constant_bool2t(guard) ||
+        !to_constant_bool2t(guard).value)
     {
       out << "IF "
-          << from_expr(ns, identifier, it->guard)
+          << from_expr(ns, identifier, guard)
           << " THEN ";
     }
 
     out << "GOTO ";
 
     for(instructiont::targetst::const_iterator
-        gt_it=it->targets.begin();
-        gt_it!=it->targets.end();
+        gt_it = targets.begin();
+        gt_it != targets.end();
         gt_it++)
     {
-      if(gt_it!=it->targets.begin()) out << ", ";
+      if(gt_it != targets.begin()) out << ", ";
       out << (*gt_it)->target_number;
     }
 
@@ -93,13 +97,13 @@ std::ostream& goto_programt::output_instruction(
     break;
 
   case FUNCTION_CALL:
-    out << "FUNCTION_CALL:  " << from_expr(ns, "", migrate_expr_back(it->code)) << std::endl;
+    out << "FUNCTION_CALL:  " << from_expr(ns, "", migrate_expr_back(code)) << std::endl;
     break;
 
   case RETURN:
     {
     std::string arg = "";
-    const code_return2t &ref = to_code_return2t(it->code);
+    const code_return2t &ref = to_code_return2t(code);
     if (!is_nil_expr(ref.operand))
       arg = from_expr(ns, "", ref.operand);
     out << "RETURN: " << arg << std::endl;
@@ -110,20 +114,20 @@ std::ostream& goto_programt::output_instruction(
   case DEAD:
   case OTHER:
   case ASSIGN:
-      out << from_expr(ns, identifier, it->code) << std::endl;
+      out << from_expr(ns, identifier, code) << std::endl;
     break;
 
   case ASSUME:
   case ASSERT:
-    if(it->is_assume())
+    if(is_assume())
       out << "ASSUME ";
     else
       out << "ASSERT ";
 
     {
-      out << from_expr(ns, identifier, it->guard);
+      out << from_expr(ns, identifier, guard);
 
-      const irep_idt &comment=it->location.comment();
+      const irep_idt &comment = location.comment();
       if(comment!="") out << " // " << comment;
     }
 
@@ -138,15 +142,11 @@ std::ostream& goto_programt::output_instruction(
     out << "END_FUNCTION" << std::endl;
     break;
 
-  case LOCATION:
-    out << "LOCATION" << std::endl;
-    break;
-
   case THROW:
     out << "THROW";
 
     {
-      const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(it->code);
+      const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(code);
       forall_names(it, throw_ref.exception_list) {
       	if(it != throw_ref.exception_list.begin()) out << ",";
         out << " " << *it;
@@ -164,16 +164,16 @@ std::ostream& goto_programt::output_instruction(
 
     {
       unsigned i=0;
-      const code_cpp_catch2t &catch_ref = to_code_cpp_catch2t(it->code);
-      assert(it->targets.size() == catch_ref.exception_list.size());
+      const code_cpp_catch2t &catch_ref = to_code_cpp_catch2t(code);
+      assert(targets.size() == catch_ref.exception_list.size());
 
       for(instructiont::targetst::const_iterator
-          gt_it=it->targets.begin();
-          gt_it!=it->targets.end();
+          gt_it = targets.begin();
+          gt_it != targets.end();
           gt_it++,
           i++)
       {
-        if(gt_it!=it->targets.begin()) out << ", ";
+        if(gt_it != targets.begin()) out << ", ";
         out << catch_ref.exception_list[i] << "->"
             << (*gt_it)->target_number;
       }
@@ -194,7 +194,7 @@ std::ostream& goto_programt::output_instruction(
     out << "THROW_DECL (";
 
     {
-      const code_cpp_throw_decl2t &ref = to_code_cpp_throw_decl2t(it->code);
+      const code_cpp_throw_decl2t &ref = to_code_cpp_throw_decl2t(code);
 
       for(unsigned int i=0; i < ref.exception_list.size(); ++i)
       {
@@ -210,10 +210,10 @@ std::ostream& goto_programt::output_instruction(
   case THROW_DECL_END:
     out << "THROW_DECL_END (";
 
-    if (!is_nil_expr(it->code))
+    if (!is_nil_expr(code))
     {
       const code_cpp_throw_decl_end2t &decl_end =
-        to_code_cpp_throw_decl_end2t(it->code);
+        to_code_cpp_throw_decl_end2t(code);
 
       forall_names(it, decl_end.exception_list)
       {
@@ -231,8 +231,6 @@ std::ostream& goto_programt::output_instruction(
   default:
     throw "unknown statement";
   }
-
-  return out;
 }
 
 bool operator<(const goto_programt::const_targett i1,
@@ -250,7 +248,10 @@ void goto_programt::compute_loop_numbers(unsigned int &num)
       it!=instructions.end();
       it++)
     if(it->is_backwards_goto())
-      it->loop_number=num++;
+    {
+      (*it->targets.begin())->loop_number = num;
+      it->loop_number = num++;
+    }
 }
 
 void goto_programt::get_successors(
@@ -348,7 +349,7 @@ std::ostream& goto_programt::output(
       it=instructions.begin();
       it!=instructions.end();
       it++)
-    output_instruction(ns, identifier, out, it);
+    it->output_instruction(ns, identifier, out);
 
   return out;
 }
@@ -475,7 +476,6 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case ASSERT: out << "ASSERT"; break;
   case OTHER: out << "OTHER"; break;
   case SKIP: out << "SKIP"; break;
-  case LOCATION: out << "LOCATION"; break;
   case END_FUNCTION: out << "END_FUNCTION"; break;
   case ATOMIC_BEGIN: out << "ATOMIC_BEGIN"; break;
   case ATOMIC_END: out << "ATOMIC_END"; break;
@@ -490,4 +490,9 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   }
 
   return out;
+}
+
+void goto_programt::dump() const
+{
+  output(namespacet(contextt()), "", std::cout);
 }

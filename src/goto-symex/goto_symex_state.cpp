@@ -50,7 +50,6 @@ goto_symex_statet::operator=(const goto_symex_statet &state)
   global_guard = state.global_guard;
   source = state.source;
   variable_instance_nums = state.variable_instance_nums;
-  unwind_map = state.unwind_map;
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
@@ -404,7 +403,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
 
   if (!thread_ended) {
     std::cout << spaces << "Next instruction to be executed:" << std::endl;
-    source.prog->output_instruction(ns, "", std::cout, source.pc, true, false);
+    source.pc->output_instruction(ns, "", std::cout);
   }
 
   return;

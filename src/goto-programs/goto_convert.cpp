@@ -436,11 +436,20 @@ void goto_convertt::convert_sideeffect(
 
     exprt rhs;
 
-    if(statement=="postincrement" ||
-       statement=="preincrement")
-      rhs.id("+");
+    if(statement == "postincrement" || statement == "preincrement")
+    {
+      if(expr.type().is_floatbv())
+        rhs.id("ieee_add");
+      else
+        rhs.id("+");
+    }
     else
-      rhs.id("-");
+    {
+      if(expr.type().is_floatbv())
+        rhs.id("ieee_sub");
+      else
+        rhs.id("-");
+    }
 
     const typet &op_type=ns.follow(expr.op0().type());
 
@@ -516,30 +525,45 @@ void goto_convertt::convert_sideeffect(
 
     exprt rhs;
 
-    if(statement=="assign+")
-      rhs.id("+");
-    else if(statement=="assign-")
-      rhs.id("-");
-    else if(statement=="assign*")
-      rhs.id("*");
-    else if(statement=="assign_div")
-      rhs.id("/");
-    else if(statement=="assign_mod")
+    if(statement == "assign+") {
+      if(expr.type().is_floatbv()) {
+        rhs.id("ieee_add");
+      } else {
+        rhs.id("+");
+      }
+    } else if(statement == "assign-") {
+      if(expr.type().is_floatbv()) {
+        rhs.id("ieee_sub");
+      } else {
+        rhs.id("-");
+      }
+    } else if(statement == "assign*") {
+      if(expr.type().is_floatbv()) {
+        rhs.id("ieee_mul");
+      } else {
+        rhs.id("*");
+      }
+    } else if(statement == "assign_div") {
+      if(expr.type().is_floatbv()) {
+        rhs.id("ieee_div");
+      } else {
+        rhs.id("/");
+      }
+    } else if(statement == "assign_mod") {
       rhs.id("mod");
-    else if(statement=="assign_shl")
+    } else if(statement == "assign_shl") {
       rhs.id("shl");
-    else if(statement=="assign_ashr")
+    } else if(statement == "assign_ashr") {
       rhs.id("ashr");
-    else if(statement=="assign_lshr")
+    } else if(statement == "assign_lshr") {
       rhs.id("lshr");
-    else if(statement=="assign_bitand")
+    } else if(statement == "assign_bitand") {
       rhs.id("bitand");
-    else if(statement=="assign_bitxor")
+    } else if(statement == "assign_bitxor") {
       rhs.id("bitxor");
-    else if(statement=="assign_bitor")
+    } else if(statement == "assign_bitor") {
       rhs.id("bitor");
-    else
-    {
+    } else {
       err_location(expr);
       str << statement << " not yet supproted";
       throw 0;
@@ -1714,7 +1738,7 @@ void goto_convertt::generate_ifthenelse(
      true_case.instructions.size()==1 &&
      true_case.instructions.back().is_goto() &&
      is_constant_bool2t(true_case.instructions.back().guard) &&
-     to_constant_bool2t(true_case.instructions.back().guard).constant_value)
+     to_constant_bool2t(true_case.instructions.back().guard).value)
   {
     migrate_expr(guard, true_case.instructions.back().guard);
     dest.destructive_append(true_case);

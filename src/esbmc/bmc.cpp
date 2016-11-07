@@ -306,28 +306,28 @@ void bmct::show_program(symex_target_equationt &equation)
   {
     std::cout << "// " << it->source.pc->location_number << " ";
     std::cout << it->source.pc->location.as_string() << "\n";
+    std::cout <<   "(" << count << ") ";
 
     std::string string_value;
 
     if(it->is_assignment())
     {
       languages.from_expr(migrate_expr_back(it->cond), string_value);
-      std::cout << "(" << count << ") " << string_value << "\n";
+      std::cout << string_value << "\n";
     }
     else if(it->is_assert())
     {
       languages.from_expr(migrate_expr_back(it->cond), string_value);
-      std::cout << "(" << count << ") " << "(assert)" << string_value << "\n";
+      std::cout << "(assert)" << string_value << "\n";
     }
     else if(it->is_assume())
     {
       languages.from_expr(migrate_expr_back(it->cond), string_value);
-      std::cout << "(" << count << ") " << "(assume)" << string_value << "\n";
+      std::cout << "(assume)" << string_value << "\n";
     }
     else if (it->is_renumber())
     {
-      std::cout << "(" << count << ") " << "renumber: " <<
-                   from_expr(ns, "", it->lhs) << "\n";
+      std::cout << "renumber: " << from_expr(ns, "", it->lhs) << "\n";
     }
 
     if(!migrate_expr_back(it->guard).is_true() && !print_guard)
@@ -485,20 +485,20 @@ bool bmct::run_thread()
   {
     message_streamt message_stream(*get_message_handler());
     message_stream.error(error_str);
-    return true;
+    abort();
   }
 
   catch(const char *error_str)
   {
     message_streamt message_stream(*get_message_handler());
     message_stream.error(error_str);
-    return true;
+    abort();
   }
 
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    return true;
+    abort();
   }
 
   fine_timet symex_stop = current_time();
@@ -601,19 +601,19 @@ bool bmct::run_thread()
   catch(std::string &error_str)
   {
     error(error_str);
-    return true;
+    abort();
   }
 
   catch(const char *error_str)
   {
     error(error_str);
-    return true;
+    abort();
   }
 
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    return true;
+    abort();
   }
 }
 
@@ -760,8 +760,8 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
       return false;
 
     case smt_convt::P_SATISFIABLE:
-      if (options.get_bool_option("inductive-step") &&
-    		  options.get_bool_option("show-counter-example"))
+      if (!options.get_bool_option("base-case") &&
+          options.get_bool_option("show-counter-example"))
       {
         error_trace(*solver, equation);
       }

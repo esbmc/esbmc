@@ -12,5 +12,5 @@ libutil_a_SOURCES = \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
       pointer_arithmetic.cpp signal_catcher.cpp irep2.cpp migrate.cpp \
       thread.cpp crypto_hash.cpp type_byte_size.cpp dcutil.cpp \
-      string_constant.cpp c_types.cpp
+      string_constant.cpp c_types.cpp ieee_float.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils

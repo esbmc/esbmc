@@ -220,15 +220,16 @@ execution_statet::symex_step(reachability_treet &art)
 #endif
   }
 
-  if (symex_trace) {
-    const goto_programt p_dummy;
-    goto_functionst::function_mapt::const_iterator it =
-      goto_functions.function_map.find(instruction.function);
-
-    const goto_programt &p_real = it->second.body;
-    const goto_programt &p = (it == goto_functions.function_map.end()) ? p_dummy : p_real;
-    p.output_instruction(ns, "", std::cout, state.source.pc, false, false);
+  // Don't convert if it's a inductive instruction and we are running the base
+  // case or forward condition
+  if((base_case || forward_condition) && instruction.inductive_step_instruction)
+  {
+    cur_state->source.pc++;
+    return;
   }
+
+  if (symex_trace)
+    state.source.pc->output_instruction(ns, "", std::cout, false);
 
   switch (instruction.type) {
     case END_FUNCTION:

@@ -136,6 +136,8 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "extern \"C\" void __ESBMC_atomic_begin();" << std::endl;
   out << "extern \"C\" void __ESBMC_atomic_end();" << std::endl;
 
+  out << "extern \"C\" int __ESBMC_rounding_mode = 0;" << std::endl;
+
   // __CPROVER namespace
   out << "namespace __CPROVER { }" << std::endl;
 

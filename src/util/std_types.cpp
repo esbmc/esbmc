@@ -1,6 +1,6 @@
 /*******************************************************************\
 
-Module: 
+Module:
 
 Author: Daniel Kroening, kroening@kroening.com
 
@@ -8,7 +8,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <stdlib.h>
 
+#include "arith_tools.h"
 #include "std_types.h"
+#include "std_expr.h"
 
 unsigned bv_typet::get_width() const
 {
@@ -86,7 +88,7 @@ bool struct_typet::is_prefix_of(const struct_typet &other) const
 
   if(ot_components.size()<
      tt_components.size())
-    return false; 
+    return false;
 
   componentst::const_iterator
     ot_it=ot_components.begin();
@@ -117,4 +119,162 @@ bool is_rvalue_reference(const typet &type)
 {
   return type.id()=="pointer" &&
          type.get_bool("#reference");
+}
+
+mp_integer signedbv_typet::smallest() const
+{
+  return -power(2, get_width()-1);
+}
+
+/*******************************************************************\
+
+Function: signedbv_typet::largest
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+mp_integer signedbv_typet::largest() const
+{
+  return power(2, get_width()-1)-1;
+}
+
+/*******************************************************************\
+
+Function: signedbv_typet::zero_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+constant_exprt signedbv_typet::zero_expr() const
+{
+  return to_constant_expr(from_integer(0, *this));
+}
+
+/*******************************************************************\
+
+Function: signedbv_typet::smallest_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+constant_exprt signedbv_typet::smallest_expr() const
+{
+  return to_constant_expr(from_integer(smallest(), *this));
+}
+
+/*******************************************************************\
+
+Function: signedbv_typet::largest_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+constant_exprt signedbv_typet::largest_expr() const
+{
+  return to_constant_expr(from_integer(largest(), *this));
+}
+
+/*******************************************************************\
+
+Function: unsignedbv_typet::smallest
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+mp_integer unsignedbv_typet::smallest() const
+{
+  return 0;
+}
+
+/*******************************************************************\
+
+Function: unsignedbv_typet::largest
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+mp_integer unsignedbv_typet::largest() const
+{
+  return power(2, get_width())-1;
+}
+
+/*******************************************************************\
+
+Function: unsignedbv_typet::zero_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+constant_exprt unsignedbv_typet::zero_expr() const
+{
+  return to_constant_expr(from_integer(0, *this));
+}
+
+/*******************************************************************\
+
+Function: unsignedbv_typet::smallest_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+constant_exprt unsignedbv_typet::smallest_expr() const
+{
+  return to_constant_expr(from_integer(smallest(), *this));
+}
+
+/*******************************************************************\
+
+Function: unsignedbv_typet::largest_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+constant_exprt unsignedbv_typet::largest_expr() const
+{
+  return to_constant_expr(from_integer(largest(), *this));
 }

@@ -15,57 +15,12 @@
 
 static unsigned int state_counter = 1;
 
-loopst::loop_varst global_vars;
-void add_global_vars(const exprt& expr)
-{
-  if (expr.is_symbol() && expr.type().id() != "code")
-  {
-    if(check_var_name(expr))
-      global_vars.insert(
-        std::pair<irep_idt, const exprt>(expr.identifier(), expr));
-  }
-  else
-  {
-    forall_operands(it, expr)
-      add_global_vars(*it);
-  }
-}
-
-void get_global_vars(contextt &context)
-{
-  context.foreach_operand(
-    [] (const symbolt& s)
-    {
-      if(s.static_lifetime && !s.type.is_pointer())
-      {
-        exprt sym_expr = symbol_expr(s);
-        if(s.value.id() == irep_idt("array_of"))
-          sym_expr.type() = s.value.type();
-        add_global_vars(sym_expr);
-      }
-    }
-  );
-}
-
-void dump_global_vars()
-{
-  std::cout << "Global variables:" << std::endl;
-
-  u_int i = 0;
-  for (std::pair<irep_idt, const exprt> expr : global_vars)
-    std::cout << ++i << ". \t" << "identifier: " << expr.first << std::endl
-    << " " << expr.second << std::endl << std::endl;
-  std::cout << std::endl;
-}
-
 void goto_k_induction(
   goto_functionst& goto_functions,
   contextt &context,
   optionst &options,
   message_handlert& message_handler)
 {
-  get_global_vars(context);
-
   Forall_goto_functions(it, goto_functions)
     if(it->second.body_available)
       goto_k_inductiont(
@@ -82,32 +37,21 @@ void goto_k_induction(
 void goto_k_inductiont::goto_k_induction()
 {
   // Full unwind the program
-  for(function_loopst::reverse_iterator
-    it = function_loops.rbegin();
-    it != function_loops.rend();
+  for(function_loopst::iterator
+    it = function_loops.begin();
+    it != function_loops.end();
     ++it)
   {
-    assert(!it->get_goto_program().empty());
+    // TODO: Can we check if the loop is infinite? If so, we should
+    // disable the forward condition
 
-    if(it->is_infinite_loop()
-       || (options.get_bool_option("k-induction-nondet-loops")
-           && it->is_nondet_loop()))
-    {
-      // Start the loop conversion
-      convert_infinite_loop(*it);
-    }
-    else
-    {
-      // Start the loop conversion
-      convert_finite_loop(*it);
-    }
+    // Start the loop conversion
+    convert_finite_loop(*it);
   }
 }
 
 void goto_k_inductiont::convert_finite_loop(loopst& loop)
 {
-  assert(!loop.get_goto_program().instructions.empty());
-
   // Get current loop head and loop exit
   goto_programt::targett loop_head = loop.get_original_loop_head();
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
@@ -118,31 +62,31 @@ void goto_k_inductiont::convert_finite_loop(loopst& loop)
   // If we didn't find a loop condition, don't change anything
   if(loop_cond.is_nil())
   {
-    std::cout << "**** WARNING: we couldn't find a loop condition for the "
+    std::cout << "**** WARNING: we couldn't find a loop condition for the"
               << " following loop, so we're not converting it."
               << std::endl << "Loop: ";
-    loop.output();
+    loop.dump();
     return;
   }
 
-  // Add global vars to loop map
-  loop.add_var_to_loop(global_vars);
-
-  // First, we need to fill the state member with the variables
+  // Fill the state member with the variables
   fill_state(loop);
+
+  // Assume the loop condition before go into the loop
+  assume_loop_cond_before_loop(loop_head, loop_cond);
 
   // Create the nondet assignments on the beginning of the loop
   make_nondet_assign(loop_head);
 
-  // Assume the loop condition before go into the loop
-  assume_loop_cond(loop_head, loop_cond);
+  // Get original head again
+  // Since we are using insert_swap to keep the targets, the
+  // original loop head as shifted to after the assume cond
+  while((++loop_head)->inductive_step_instruction);
 
-  // Duplicate the loop after loop_exit, but without the backward goto
-  duplicate_loop_body(loop_head, loop_exit, loop_cond);
-
-  // Convert assert into assumes on the original loop (don't touch the
-  // copy made on the last step)
-  convert_assert_to_assume(loop_head, loop_exit);
+  // Check if the loop exit needs to be updated
+  // We must point to the assume that was inserted in the previous
+  // transformation
+  adjust_loop_head_and_exit(loop_head, loop_exit);
 }
 
 void goto_k_inductiont::get_loop_cond(
@@ -180,13 +124,14 @@ void goto_k_inductiont::make_nondet_assign(goto_programt::targett& loop_head)
     exprt lhs_expr = state.components().at(j);
 
     code_assignt new_assign(lhs_expr, rhs_expr);
+    new_assign.location() = loop_head->location;
     copy(new_assign, ASSIGN, dest);
   }
 
-  goto_function.body.destructive_insert(loop_head, dest);
+  goto_function.body.insert_swap(loop_head, dest);
 }
 
-void goto_k_inductiont::assume_loop_cond(
+void goto_k_inductiont::assume_loop_cond_before_loop(
   goto_programt::targett& loop_head,
   exprt &loop_cond)
 {
@@ -197,24 +142,63 @@ void goto_k_inductiont::assume_loop_cond(
   else
     assume_cond(loop_cond, dest);
 
-  goto_function.body.destructive_insert(loop_head, dest);
+  goto_function.body.insert_swap(loop_head, dest);
 }
 
-void goto_k_inductiont::duplicate_loop_body(
-  goto_programt::targett& loop_head,
-  goto_programt::targett& _loop_exit,
+void goto_k_inductiont::assume_neg_loop_cond_after_loop(
+  goto_programt::targett& loop_exit,
   exprt& loop_cond)
 {
-  goto_programt::targett loop_exit = _loop_exit;
-  ++loop_exit;
+  goto_programt dest;
+
+  if(loop_cond.is_not())
+    assume_cond(gen_not(loop_cond.op0()), dest);
+  else
+    assume_cond(gen_not(loop_cond), dest);
+
+  goto_programt::targett _loop_exit = loop_exit;
+  ++_loop_exit;
+
+  goto_function.body.insert_swap(_loop_exit, dest);
+}
+
+void goto_k_inductiont::adjust_loop_head_and_exit(
+  goto_programt::targett& loop_head,
+  goto_programt::targett& loop_exit)
+{
+  loop_exit->targets.clear();
+  loop_exit->targets.push_front(loop_head);
+
+  goto_programt::targett _loop_exit = loop_exit;
+  ++_loop_exit;
+
+  // Zero means that the instruction was added during
+  // the k-induction transformation
+  if(_loop_exit->location_number == 0)
+  {
+    // Clear the target
+    loop_head->targets.clear();
+
+    // And set the target to be the newly inserted assume(cond)
+    loop_head->targets.push_front(_loop_exit);
+  }
+}
+
+// Duplicate the loop after loop_exit, but without the backward goto
+void goto_k_inductiont::duplicate_loop_body(
+  goto_programt::targett& loop_head,
+  goto_programt::targett& loop_exit)
+{
+  goto_programt::targett _loop_exit = loop_exit;
+  ++_loop_exit;
 
   // Iteration points will only be duplicated
   std::vector<goto_programt::targett> iteration_points;
   iteration_points.resize(2);
 
-  if(loop_exit != loop_head)
+  if(_loop_exit != loop_head)
   {
-    goto_programt::targett t_before=loop_exit;
+    goto_programt::targett t_before = _loop_exit;
     t_before--;
 
     if(t_before->is_goto() && is_true(t_before->guard))
@@ -224,33 +208,33 @@ void goto_k_inductiont::duplicate_loop_body(
     else
     {
       // guard against 'fall-out'
-      goto_programt::targett t_goto=goto_function.body.insert(loop_exit);
+      goto_programt::targett t_goto = goto_function.body.insert(_loop_exit);
 
-      t_goto->make_goto(loop_exit);
-      t_goto->location=loop_exit->location;
-      t_goto->function=loop_exit->function;
-      t_goto->guard=true_expr;
+      t_goto->make_goto(_loop_exit);
+      t_goto->location = _loop_exit->location;
+      t_goto->function = _loop_exit->function;
+      t_goto->guard = true_expr;
     }
   }
 
-  goto_programt::targett t_skip=goto_function.body.insert(loop_exit);
-  goto_programt::targett loop_iter=t_skip;
+  goto_programt::targett t_skip = goto_function.body.insert(_loop_exit);
+  goto_programt::targett loop_iter = t_skip;
 
   t_skip->make_skip();
-  t_skip->location=loop_head->location;
-  t_skip->function=loop_head->function;
+  t_skip->location = loop_head->location;
+  t_skip->function = loop_head->function;
 
   // record the exit point of first iteration
-  iteration_points[0]=loop_iter;
+  iteration_points[0] = loop_iter;
 
   // build a map for branch targets inside the loop
   std::map<goto_programt::targett, unsigned> target_map;
 
   {
-    unsigned count=0;
-    for(goto_programt::targett t=loop_head; t!=_loop_exit; t++)
+    unsigned count = 0;
+    for(goto_programt::targett t = loop_head; t != loop_exit; t++)
     {
-      assert(t!=goto_function.body.instructions.end());
+      assert(t != goto_function.body.instructions.end());
 
       // Don't copy instructions inserted by the inductive-step
       // transformations
@@ -261,79 +245,70 @@ void goto_k_inductiont::duplicate_loop_body(
     }
   }
 
-  // we make k-1 copies, to be inserted before loop_exit
+  // we make k-1 copies, to be inserted before _loop_exit
   goto_programt copies;
 
   // make a copy
   std::vector<goto_programt::targett> target_vector;
   target_vector.reserve(target_map.size());
 
-  for(goto_programt::targett t=loop_head;
-      t!=_loop_exit; t++)
+  for(goto_programt::targett t = loop_head; t != loop_exit; t++)
   {
-    assert(t!=goto_function.body.instructions.end());
+    assert(t != goto_function.body.instructions.end());
 
     // Don't copy instructions inserted by the inductive-step
     // transformations
     if(t->inductive_step_instruction)
       continue;
 
-    goto_programt::targett copied_t=copies.add_instruction();
-    *copied_t=*t;
+    goto_programt::targett copied_t = copies.add_instruction();
+    *copied_t = *t;
     target_vector.push_back(copied_t);
   }
 
   // record exit point of this copy
-  iteration_points[1]=target_vector.back();
+  iteration_points[1] = target_vector.back();
 
   // adjust the intra-loop branches
-  for(unsigned i=0; i<target_vector.size(); i++)
+  for(unsigned i=0; i < target_vector.size(); i++)
   {
-    goto_programt::targett t=target_vector[i];
+    goto_programt::targett t = target_vector[i];
 
     for(goto_programt::instructiont::targetst::iterator
-        t_it=t->targets.begin();
-        t_it!=t->targets.end();
+        t_it = t->targets.begin();
+        t_it != t->targets.end();
         t_it++)
     {
-      std::map<goto_programt::targett, unsigned>::const_iterator
-      m_it=target_map.find(*t_it);
+      std::map<goto_programt::targett, unsigned>::const_iterator m_it =
+        target_map.find(*t_it);
 
-      if(m_it!=target_map.end()) // intra-loop?
+      if(m_it != target_map.end()) // intra-loop?
       {
         assert(m_it->second < target_vector.size());
-        *t_it=target_vector[m_it->second];
+        *t_it = target_vector[m_it->second];
       }
     }
   }
 
-  assert(copies.instructions.size()==target_map.size());
-
-  // Assume the loop termination condition after the copy's exit
-  if(loop_cond.is_not())
-    assume_cond(loop_cond, copies);
-  else
-    assume_cond(gen_not(loop_cond), copies);
-
-  // now insert copies before loop_exit
-  goto_function.body.destructive_insert(loop_exit, copies);
+  // now insert copies before _loop_exit
+  goto_function.body.insert_swap(loop_exit, copies);
 
   // remove skips
   remove_skip(goto_function.body);
 }
 
+// Convert assert into assumes on the original loop (don't touch the
+// copy made on the last step)
 void goto_k_inductiont::convert_assert_to_assume(
   goto_programt::targett& loop_head,
-  goto_programt::targett& _loop_exit)
+  goto_programt::targett& loop_exit)
 {
-  for(goto_programt::targett t=loop_head; t!=_loop_exit; t++)
+  for(goto_programt::targett t=loop_head; t!=loop_exit; t++)
     if(t->is_assert()) t->type=ASSUME;
 }
 
 void goto_k_inductiont::convert_infinite_loop(loopst &loop)
 {
-  assert(!loop.get_goto_program().instructions.empty());
-
   // First, we need to fill the state member with the variables
   fill_state(loop);
 
@@ -365,9 +340,6 @@ void goto_k_inductiont::convert_infinite_loop(loopst &loop)
   // Assume states
   assume_state_vector(loop_exit);
 
-  // Flag this loop as converted
-  loop_exit->converted_loop = true;
-
   // We should clear the state by the end of the loop
   // This will be better encapsulated if we had an inductive step class
   // that inherit from loops where we could save all these information
@@ -379,9 +351,6 @@ void goto_k_inductiont::convert_infinite_loop(loopst &loop)
 
 void goto_k_inductiont::fill_state(loopst &loop)
 {
-  // Add global vars to loop map
-  loop.add_var_to_loop(global_vars);
-
   loopst::loop_varst loop_vars = loop.get_loop_vars();
 
   // State size will be the number of loop vars + global vars
@@ -723,7 +692,7 @@ void goto_k_inductiont::convert_instruction(
 
     // find code in function map
     goto_functionst::function_mapt::iterator it =
-        goto_functions.function_map.find(identifier);
+      goto_functions.function_map.find(identifier);
 
     if (it == goto_functions.function_map.end()) {
       std::cerr << "failed to find `" + id2string(identifier) +

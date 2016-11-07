@@ -38,6 +38,7 @@ protected:
   void div_by_zero_check(const exprt &expr, const guardt &guard);
   void pointer_rel_check(const exprt &expr, const guardt &guard);
   void overflow_check(const exprt &expr, const guardt &guard);
+  void float_overflow_check(const exprt &expr, const guardt &guard);
   void nan_check(const exprt &expr, const guardt &guard);
   std::string array_name(const exprt &expr);
 
@@ -71,13 +72,114 @@ void goto_checkt::div_by_zero_check(const exprt &expr, const guardt &guard)
       expr.find_location(), guard);
 }
 
-void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
+void goto_checkt::float_overflow_check(const exprt &expr, const guardt &guard)
 {
   if (!options.get_bool_option("overflow-check"))
     return;
 
   // first, check type
-  if (expr.type().id() != "signedbv")
+  if (!expr.type().is_floatbv())
+    return;
+
+  if(expr.is_typecast())
+  {
+    // Can overflow if casting from larger
+    // to smaller type.
+    assert(expr.operands().size()==1);
+
+    if(ns.follow(expr.op0().type()).is_typecast())
+    {
+      // float-to-float
+      unary_exprt op0_inf("isinf", expr.op0(), bool_typet());
+      unary_exprt new_inf("isinf", expr, bool_typet());
+
+      or_exprt overflow_check(op0_inf, not_exprt(new_inf));
+
+      add_guarded_claim(
+        overflow_check,
+        "arithmetic overflow on floating-point typecast",
+        "overflow",
+        expr.find_location(),
+        guard);
+    }
+    else
+    {
+      // non-float-to-float
+      unary_exprt new_inf("isinf", expr, bool_typet());
+
+      add_guarded_claim(
+        not_exprt(new_inf),
+        "arithmetic overflow on floating-point typecast",
+        "overflow",
+        expr.find_location(),
+        guard);
+    }
+  }
+  else if(expr.id()=="ieee_div")
+  {
+    assert(expr.operands().size()==2);
+
+    // Can overflow if dividing by something small
+    unary_exprt new_inf("isinf", expr, bool_typet());
+    unary_exprt op0_inf("isinf", expr.op0(), bool_typet());
+
+    or_exprt overflow_check(op0_inf, not_exprt(new_inf));
+
+    add_guarded_claim(
+        overflow_check,
+        "arithmetic overflow on floating-point division",
+        "overflow",
+        expr.find_location(),
+        guard);
+
+    return;
+  }
+  else if(expr.id()=="ieee_add" || expr.id()=="ieee_mul" || expr.id()=="ieee_sub")
+  {
+    if(expr.operands().size()==2)
+    {
+      // Can overflow
+      unary_exprt new_inf("isinf", expr, bool_typet());
+      unary_exprt op0_inf("isinf", expr.op0(), bool_typet());
+      unary_exprt op1_inf("isinf", expr.op1(), bool_typet());
+
+      or_exprt overflow_check(op0_inf, op1_inf, not_exprt(new_inf));
+
+      std::string kind=
+          expr.id()=="+"?"addition":
+          expr.id()=="-"?"subtraction":
+          expr.id()=="+"?"multiplication":"";
+
+      add_guarded_claim(
+          overflow_check,
+          "arithmetic overflow on floating-point "+kind,
+          "overflow",
+          expr.find_location(),
+          guard);
+
+      return;
+    }
+    else if(expr.operands().size()>=3)
+    {
+      assert(expr.id()!="-");
+
+      // break up
+      exprt tmp=make_binary(expr);
+      float_overflow_check(tmp, guard);
+      return;
+    }
+  }
+}
+
+void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
+{
+  if (!options.get_bool_option("overflow-check"))
+    return;
+
+  // First, check type.
+  const typet &type=ns.follow(expr.type());
+
+  if (!type.is_signedbv())
     return;
 
   // add overflow subgoal
@@ -85,7 +187,7 @@ void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
   exprt overflow("overflow-" + expr.id_string(), bool_typet());
   overflow.operands() = expr.operands();
 
-  if (expr.id() == "typecast")
+  if (expr.is_typecast())
   {
     if (expr.operands().size() != 1)
       throw "typecast takes one operand";
@@ -95,7 +197,7 @@ void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
     unsigned new_width = atoi(expr.type().width().c_str());
     unsigned old_width = atoi(old_type.width().c_str());
 
-    if (old_type.id() == "unsignedbv")
+    if (old_type.is_unsignedbv())
       new_width--;
     if (new_width >= old_width)
       return;
@@ -115,7 +217,7 @@ void goto_checkt::nan_check(const exprt &expr, const guardt &guard)
     return;
 
   // first, check type
-  if (expr.type().id() != "floatbv")
+  if (!expr.type().is_floatbv())
     return;
 
   if (expr.id() != "+" && expr.id() != "*" && expr.id() != "/"
@@ -178,7 +280,7 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
   if (options.get_bool_option("no-bounds-check"))
     return;
 
-  if (expr.id() != "index")
+  if (!expr.is_index())
     return;
 
   if (expr.operands().size() != 2)
@@ -220,11 +322,12 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
   std::string name = "array bounds violated: " + array_name(expr.op0());
   const exprt &index = expr.op1();
 
-  if (index.type().id() != "unsignedbv")
+  if (!index.type().is_unsignedbv())
   {
     // we undo typecasts to signedbv
-    if (index.id() == "typecast" && index.operands().size() == 1
-        && index.op0().type().id() == "unsignedbv")
+    if (index.is_typecast()
+        && index.operands().size() == 1
+        && index.op0().type().is_unsignedbv())
     {
       // ok
     }
@@ -267,8 +370,9 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
       if (inequality.op1().type() != inequality.op0().type())
         inequality.op1().make_typecast(inequality.op0().type());
 
-      add_guarded_claim(inequality, name + " upper bound", "array bounds",
-          expr.find_location(), guard);
+      add_guarded_claim(
+        inequality, name + " upper bound", "array bounds",
+        expr.find_location(), guard);
     }
   }
 }
@@ -319,15 +423,14 @@ void goto_checkt::add_guarded_claim(const exprt &_expr,
 
 void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
 {
-
   if (address)
   {
-    if (expr.id() == "dereference")
+    if (expr.is_dereference())
     {
       assert(expr.operands().size() == 1);
       check_rec(expr.op0(), guard, false);
     }
-    else if (expr.id() == "index")
+    else if (expr.is_index())
     {
       assert(expr.operands().size() == 2);
       check_rec(expr.op0(), guard, true);
@@ -347,7 +450,7 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
     check_rec(expr.op0(), guard, true);
     return;
   }
-  else if (expr.is_and() || expr.id() == "or")
+  else if (expr.is_and() || expr.is_or())
   {
     if (!expr.is_boolean())
       throw expr.id_string() + " must be Boolean, but got " + expr.pretty();
@@ -364,7 +467,7 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
 
       check_rec(op, guard, false);
 
-      if (expr.id() == "or")
+      if (expr.is_or())
       {
         exprt tmp(op);
         tmp.make_not();
@@ -424,51 +527,31 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
   forall_operands(it, expr)
     check_rec(*it, guard, false);
 
-  if (expr.id() == "index")
+  if (expr.is_index())
   {
     bounds_check(expr, guard);
   }
-  else if (expr.id() == "/")
+  else if (expr.id() == "+" || expr.id() == "-"
+    || expr.id() == "*" || expr.id() == "unary-"
+    || expr.id() == "/" || expr.id() == "mod"
+    || expr.is_typecast())
   {
-    div_by_zero_check(expr, guard);
-    if (expr.type().id() == "signedbv")
-    {
-      overflow_check(expr, guard);
-    }
-    else if (expr.type().id() == "floatbv")
-    {
-      nan_check(expr, guard);
-    }
-  }
-  else if (expr.id() == "+" || expr.id() == "-" || expr.id() == "*"
-      || expr.id() == "unary-" || expr.id() == "typecast")
-  {
+    if(expr.id() == "/" || expr.id() == "mod")
+      div_by_zero_check(expr, guard);
 
-    if (expr.type().id() == "signedbv")
-    {
-      overflow_check(expr, guard);
-    }
-    else if (expr.type().id() == "floatbv")
-    {
-      nan_check(expr, guard);
-    }
+    overflow_check(expr, guard);
+  }
+  else if (expr.id() == "ieee_add" || expr.id() == "ieee_sub"
+    || expr.id() == "ieee_mul" || expr.id() == "ieee_div"
+    || expr.is_typecast())
+  {
+    float_overflow_check(expr, guard);
+    nan_check(expr, guard);
   }
   else if (expr.id() == "<=" || expr.id() == "<" || expr.id() == ">="
       || expr.id() == ">")
   {
     pointer_rel_check(expr, guard);
-  }
-  else if (expr.id() == "mod")
-  {
-    div_by_zero_check(expr, guard);
-    if (expr.type().id() == "signedbv")
-    {
-      overflow_check(expr, guard);
-    }
-    else if (expr.type().id() == "floatbv")
-    {
-      nan_check(expr, guard);
-    }
   }
 }
 

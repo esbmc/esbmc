@@ -54,54 +54,131 @@ enum
 #endif
 #endif
 
-int abs(int i) { return __ESBMC_abs(i); }
-long int labs(long int i) { return __ESBMC_labs(i); }
-//double fabs(double d) { return __ESBMC_fabs(d); }
+double fabs(double x) { return (x < 0) ? -x : x; }
+
+double fmod(double a, double b) { return a - (b * (int)(a/b)); }
+
 long double fabsl(long double d) { return __ESBMC_fabsl(d); }
+
 float fabsf(float f) { return __ESBMC_fabsf(f); }
-int isfinite(double d) { return __ESBMC_isfinite(d); }
-int isinf(double d) { return __ESBMC_isinf(d); }
-int isnan(double d) { return __ESBMC_isnan(d); }
-int isnormal(double d) { return __ESBMC_isnormal(d); }
-int signbit(double d) { return __ESBMC_sign(d); }
 
-int __fpclassifyd(double d) {
-  if(__ESBMC_isnan(d)) return FP_NAN;
-  if(__ESBMC_isinf(d)) return FP_INFINITE;
-  if(d==0) return FP_ZERO;
-  if(__ESBMC_isnormal(d)) return FP_NORMAL;
-  return FP_SUBNORMAL;
+int isfinite(double d) { return __ESBMC_isfinited(d); }
+
+int __finite(double d) { return __ESBMC_isfinited(d); }
+
+int __finitef(float f) { return __ESBMC_isfinitef(f); }
+
+int __finitel(long double ld) { return __ESBMC_isfiniteld(ld); }
+
+inline int isinf(double d) { return __ESBMC_isinfd(d); }
+
+inline int __isinf(double d) { return __ESBMC_isinfd(d); }
+
+inline int isinff(float f) { return __ESBMC_isinff(f); }
+
+inline int __isinff(float f) { return __ESBMC_isinff(f); }
+
+inline int isinfl(long double ld) { return __ESBMC_isinfld(ld); }
+
+inline int __isinfl(long double ld) { return __ESBMC_isinfld(ld); }
+
+inline int isnan(double d) { return __ESBMC_isnand(d); }
+
+inline int __isnan(double d) { return __ESBMC_isnand(d); }
+
+inline int __isnanf(float f) { return __ESBMC_isnanf(f); }
+
+inline int isnanf(float f) { return __ESBMC_isnanf(f); }
+
+inline int isnanl(long double ld) { return __ESBMC_isnanld(ld); }
+
+inline int __isnanl(long double ld) { return __ESBMC_isnanld(ld); }
+
+inline int isnormal(double d) { return __ESBMC_isnormald(d); }
+
+inline int __isnormalf(float f) { return __ESBMC_isnormalf(f); }
+
+inline int _dsign(double d) { return __ESBMC_signd(d); }
+
+inline int _ldsign(long double ld) { return __ESBMC_signld(ld); }
+
+inline int _fdsign(float f) { return __ESBMC_signf(f); }
+
+inline int signbit(double d) { return __ESBMC_signd(d); }
+
+inline int __signbitd(double d) { return __ESBMC_signd(d); }
+
+inline int __signbitf(float f) { return __ESBMC_signf(f); }
+
+inline int __signbitl(long double ld) { return __ESBMC_signld(ld); }
+
+inline int __signbit(double d) { return __ESBMC_signd(d); }
+
+int abs(int i) { return __ESBMC_abs(i); }
+
+long int labs(long int i) { return __ESBMC_labs(i); }
+
+inline short _dclass(double d) {
+  __ESBMC_HIDE:
+  return __ESBMC_isnand(d)?FP_NAN:
+         __ESBMC_isinfd(d)?FP_INFINITE:
+         d==0?FP_ZERO:
+         __ESBMC_isnormald(d)?FP_NORMAL:
+         FP_SUBNORMAL;
 }
 
-int __fpclassifyf(float f) {
-  if(__ESBMC_isnan(f)) return FP_NAN;
-  if(__ESBMC_isinf(f)) return FP_INFINITE;
-  if(f==0) return FP_ZERO;
-  if(__ESBMC_isnormal(f)) return FP_NORMAL;
-  return FP_SUBNORMAL;
+inline short _ldclass(long double ld) {
+  __ESBMC_HIDE:
+  return __ESBMC_isnanld(ld)?FP_NAN:
+         __ESBMC_isinfld(ld)?FP_INFINITE:
+         ld==0?FP_ZERO:
+         __ESBMC_isnormalld(ld)?FP_NORMAL:
+         FP_SUBNORMAL;
 }
 
-int __fpclassify(double d) {
-  if(__ESBMC_isnan(d)) return FP_NAN;
-  if(__ESBMC_isinf(d)) return FP_INFINITE;
-  if(d==0) return FP_ZERO;
-  if(__ESBMC_isnormal(d)) return FP_NORMAL;
-  return FP_SUBNORMAL;
+inline short _fdclass(float f) {
+  __ESBMC_HIDE:
+  return __ESBMC_isnanf(f)?FP_NAN:
+         __ESBMC_isinff(f)?FP_INFINITE:
+         f==0?FP_ZERO:
+         __ESBMC_isnormalf(f)?FP_NORMAL:
+         FP_SUBNORMAL;
 }
 
-int fegetround() { return __ESBMC_rounding_mode; }
-
-int fesetround(int __rounding_direction) {
-  __ESBMC_rounding_mode=__rounding_direction;
-  return __ESBMC_rounding_mode;
+inline int __fpclassifyd(double d) {
+  __ESBMC_HIDE:
+  return __ESBMC_isnand(d)?FP_NAN:
+         __ESBMC_isinfd(d)?FP_INFINITE:
+         d==0?FP_ZERO:
+         __ESBMC_isnormald(d)?FP_NORMAL:
+         FP_SUBNORMAL;
 }
 
-double fabs(double x) {
-  return (x < 0) ? -x : x;
+inline int __fpclassifyl(long double f) {
+  __ESBMC_HIDE:
+  return __ESBMC_isnanld(f)?FP_NAN:
+         __ESBMC_isinfld(f)?FP_INFINITE:
+         f==0?FP_ZERO:
+         __ESBMC_isnormalld(f)?FP_NORMAL:
+         FP_SUBNORMAL;
 }
 
-double fmod(double a, double b) {
-  return a - (b * (int)(a/b));
+inline int __fpclassify(double d) {
+  __ESBMC_HIDE:
+  return __ESBMC_isnand(d)?FP_NAN:
+         __ESBMC_isinfd(d)?FP_INFINITE:
+         d==0?FP_ZERO:
+         __ESBMC_isnormald(d)?FP_NORMAL:
+         FP_SUBNORMAL;
+}
+
+inline int __fpclassifyf(float f) {
+  __ESBMC_HIDE:
+  return __ESBMC_isnanf(f)?FP_NAN:
+         __ESBMC_isinff(f)?FP_INFINITE:
+         f==0?FP_ZERO:
+         __ESBMC_isnormalf(f)?FP_NORMAL:
+         FP_SUBNORMAL;
 }
 
 double cos(double x)
@@ -142,7 +219,6 @@ double sqrt(double n)
   //double e = 1e-16;
   double e = 1;
   int i = 0;
-//  while(fabs(x - y) > e)
   while(i++ < 15) //Change this line to increase precision
   {
     x = (x + y)/2.0;
@@ -236,42 +312,42 @@ double sqrt(double n)
 #define EDOM 133        /* domain error (input argument inadmissable)   */
 #define ERANGE 134      /* range error (result too large or small)      */
 
-static double  p0 = -0.136887688941919269e2;
-static double  p1 = -0.205058551958616520e2;
-static double  p2 = -0.849462403513206835e1;
-static double  p3 = -0.837582993681500593e0;
-static double  q0 =  0.410663066825757813e2;
-static double  q1 =  0.861573495971302425e2;
-static double  q2 =  0.595784361425973445e2;
-static double  q3 =  0.150240011600285761e2;
-static double a[] = {
-    0.0,
-    0.523598775598298873,               /* pi / 6                       */
-    PI_BY_2,                            /* pi / 2                       */
-    1.047197551196597746                /* pi / 3                       */
-};
-
 #define CON1 0.267949192431122706       /* 2 - sqrt(3)                  */
 #define ROOT_3M1 0.732050807568877294   /* sqrt(3) - 1                  */
 static double _atan(double f, int n)
 {
-    double g, q, r;
+  double  p0 = -0.136887688941919269e2;
+  double  p1 = -0.205058551958616520e2;
+  double  p2 = -0.849462403513206835e1;
+  double  p3 = -0.837582993681500593e0;
+  double  q0 =  0.410663066825757813e2;
+  double  q1 =  0.861573495971302425e2;
+  double  q2 =  0.595784361425973445e2;
+  double  q3 =  0.150240011600285761e2;
 
-    if (f > CON1) {
-        f = (((ROOT_3M1 * f - 0.5) - 0.5) + f) / (ROOT_3 + f);
-        n++;
-    }
-    if (f > ROOT_EPS || f < -ROOT_EPS) {
-        g = f * f;
-        q = (((g + q3)*g + q2)*g + q1)*g + q0;
-        r = (((p3*g + p2)*g + p1)*g + p0)*g / q;
-        f = f + f * r;
-    }
-    if (n > 1)
-        f = -f;
-    return(f + a[n]);
+  double a[] = {
+      0.0,
+      0.523598775598298873,               /* pi / 6                       */
+      PI_BY_2,                            /* pi / 2                       */
+      1.047197551196597746                /* pi / 3                       */
+  };
+
+  double g, q, r;
+
+  if (f > CON1) {
+    f = (((ROOT_3M1 * f - 0.5) - 0.5) + f) / (ROOT_3 + f);
+    n++;
+  }
+  if (f > ROOT_EPS || f < -ROOT_EPS) {
+    g = f * f;
+    q = (((g + q3)*g + q2)*g + q1)*g + q0;
+    r = (((p3*g + p2)*g + p1)*g + p0)*g / q;
+    f = f + f * r;
+  }
+  if (n > 1)
+    f = -f;
+  return(f + a[n]);
 }
-
 
 double atan(double x)
 {
@@ -284,7 +360,6 @@ double atan(double x)
         a = _atan(a, 0);
     return(x < 0.0 ? -a : a);
 }
-
 
 double atan2(double v, double u)
 {

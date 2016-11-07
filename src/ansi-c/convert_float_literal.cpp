@@ -36,8 +36,9 @@ void convert_float_literal(
   mp_integer significand;
   mp_integer exponent;
   bool is_float, is_long;
+  unsigned base;
 
-  parse_float(src, significand, exponent, is_float, is_long);
+  parse_float(src, significand, exponent, base, is_float, is_long);
 
   dest=exprt("constant");
 
@@ -68,16 +69,42 @@ void convert_float_literal(
     mp_integer factor=mp_integer(1)<<fraction_bits;
     mp_integer value=significand*factor;
 
-    if(exponent<0)
-      value/=power(10, -exponent);
-    else
-      value*=power(10, exponent);
+    if(value!=0)
+    {
+      if(exponent<0)
+        value/=power(base, -exponent);
+      else
+      {
+        value*=power(base, exponent);
+
+        if(value>=power(2, width-1))
+        {
+          // saturate: use "biggest value"
+          value=power(2, width-1)-1;
+        }
+        else if(value<=-power(2, width-1)-1)
+        {
+          // saturate: use "smallest value"
+          value=-power(2, width-1);
+        }
+      }
+    }
 
     dest.value(integer2binary(value, width));
   }
   else
   {
-    std::cerr << "floatbv unsupported, sorry" << std::endl;
-    abort();
+    ieee_floatt a;
+
+    a.spec=to_floatbv_type(dest.type());
+
+    if(base==10)
+      a.from_base10(significand, exponent);
+    else if(base==2) // hex
+      a.build(significand, exponent);
+    else
+      assert(false);
+
+    dest.value(integer2binary(a.pack(), a.spec.width()));
   }
 }

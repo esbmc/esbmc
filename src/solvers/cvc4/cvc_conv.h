@@ -26,6 +26,7 @@ public:
   cvc_smt_ast(smt_convt *ctx, const smt_sort *_s, CVC4::Expr &_e)
     : smt_ast(ctx, _s), e(_e) { }
   virtual ~cvc_smt_ast() { }
+  virtual void dump() const { abort(); }
 
   CVC4::Expr e;
 };
@@ -50,6 +51,14 @@ public:
   virtual smt_ast *mk_smt_real(const std::string &str);
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
+  virtual smt_ast *mk_smt_bvfloat(const ieee_floatt &thereal,
+                                  unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm);
+  virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast);
+  virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast);
+  virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr);
   virtual smt_ast *mk_smt_bool(bool val);
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s,
