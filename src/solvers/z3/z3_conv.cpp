@@ -883,47 +883,6 @@ smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   abort();
 }
 
-const smt_ast* z3_convt::overflow_arith(const expr2tc& expr)
-{
-  const overflow2t &overflow = to_overflow2t(expr);
-  const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
-
-  const z3_smt_ast *side1 = z3_smt_downcast(convert_ast(opers.side_1));
-  const z3_smt_ast *side2 = z3_smt_downcast(convert_ast(opers.side_2));
-
-  // Guess whether we're performing a signed or unsigned comparison.
-  bool is_signed = (is_signedbv_type(opers.side_1) ||
-                    is_signedbv_type(opers.side_2));
-
-  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
-
-  const smt_ast *asts[2];
-  if (is_add2t(overflow.operand)) {
-    asts[0] =
-      new_ast(z3::to_expr(ctx, Z3_mk_bvadd_no_overflow(ctx, side1->e, side2->e, is_signed)), s);
-    asts[1] =
-      new_ast(z3::to_expr(ctx, Z3_mk_bvadd_no_underflow(ctx, side1->e, side2->e)), s);
-    return mk_func_app(s, SMT_FUNC_AND, asts, 2);
-  } else if (is_sub2t(overflow.operand)) {
-    asts[0] =
-      new_ast(z3::to_expr(ctx, Z3_mk_bvsub_no_underflow(ctx, side1->e, side2->e, is_signed)), s);
-    asts[1] =
-      new_ast(z3::to_expr(ctx, Z3_mk_bvsub_no_overflow(ctx, side1->e, side2->e)), s);
-    return mk_func_app(s, SMT_FUNC_AND, asts, 2);
-  } else if (is_mul2t(overflow.operand)) {
-    asts[0] =
-      new_ast(z3::to_expr(ctx, Z3_mk_bvmul_no_overflow(ctx, side1->e, side2->e, is_signed)), s);
-    asts[1] =
-      new_ast(z3::to_expr(ctx, Z3_mk_bvmul_no_underflow(ctx, side1->e, side2->e)), s);
-    return mk_func_app(s, SMT_FUNC_AND, asts, 2);
-  } else if (is_div2t(overflow.operand) || is_modulus2t(overflow.operand)) {
-    return new_ast(z3::to_expr(ctx, Z3_mk_bvsdiv_no_overflow(ctx, side1->e, side2->e)), s);
-  } else {
-    std::cerr << "Unexpected operand to overflow_arith2t irep" << std::endl;
-    abort();
-  }
-}
-
 smt_astt
 z3_convt::mk_smt_bool(bool val)
 {
