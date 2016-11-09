@@ -42,7 +42,6 @@ typedef struct edge_props
   std::string assumption = "";
   std::string assumptionScope = "";
   std::string assumptionResultFunction = "";
-  std::string sourcecode = "";
   int startline = -1;
   int endline = -1;
   int startoffset = -1;
@@ -50,7 +49,6 @@ typedef struct edge_props
   std::string originFileName = "";
   std::string enterFunction = "";
   std::string returnFromFunction = "";
-
 } edge_p;
 
 int node_count;
@@ -194,13 +192,6 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
   edge.add("<xmlattr>.id", "e" + std::to_string(edge_count++));
   edge.add("<xmlattr>.source", source.get<std::string>("<xmlattr>.id"));
   edge.add("<xmlattr>.target", target.get<std::string>("<xmlattr>.id"));
-  if (!edge_props.sourcecode.empty())
-  {
-    boost::property_tree::ptree data_sourcecode;
-    data_sourcecode.add("<xmlattr>.key", "sourcecode");
-    data_sourcecode.put_value(edge_props.sourcecode);
-    edge.add_child("data", data_sourcecode);
-  }
   if (edge_props.startline != -1)
   {
     boost::property_tree::ptree data_lineNumberInOrigin;
@@ -249,6 +240,13 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
     data_assumption.add("<xmlattr>.key", "assumption");
     data_assumption.put_value(edge_props.assumption);
     edge.add_child("data", data_assumption);
+  }
+  if (!edge_props.assumptionScope.empty())
+  {
+    boost::property_tree::ptree data_assumptionScope;
+    data_assumptionScope.add("<xmlattr>.key", "assumption.scope");
+    data_assumptionScope.put_value(edge_props.assumptionScope);
+    edge.add_child("data", data_assumptionScope);
   }
 }
 
@@ -497,6 +495,17 @@ void create_graphml(boost::property_tree::ptree & graphml,
     "string");
   key_assumption.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", key_assumption);
+
+  boost::property_tree::ptree key_assumptionScope;
+  key_assumptionScope.add("<xmlattr>.id", "assumption.scope");
+  key_assumptionScope.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "assumption");
+  key_assumptionScope.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_assumptionScope.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_assumptionScope);
 
   boost::property_tree::ptree key_assumption_resultFunction;
   key_assumption_resultFunction.add("<xmlattr>.id", "assumption.resultfunction");

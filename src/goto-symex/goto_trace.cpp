@@ -275,24 +275,25 @@ get_varname_from_guard (
   return varname;
 }
 
-void generate_goto_trace_in_graphml_format(
-  const bool is_correctness,
-  std::string & filename, const namespacet & ns,
-  const goto_tracet & goto_trace)
+void generate_goto_trace_in_violation_graphml_format(
+  std::string & graphml_path,
+  const namespacet & ns,
+  const goto_tracet & goto_trace,
+  int & specification)
 {
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
-  std::map<int, std::string> line_content_map;
+  std::map<std::string, int> function_control_map;
 
   bool already_initialized = false;
   boost::property_tree::ptree last_created_node;
   std::string last_function = "";
-  std::string last_filename = "";
+  std::string last_ver_filename = "";
 
   for(goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
       it != goto_trace.steps.end(); it++)
   {
-    /* check if is an internal call */
+    /* check if it is an internal call */
     std::string::size_type find_bt =
       it->pc->location.to_string().find("built-in", 0);
     std::string::size_type find_lib =
@@ -303,27 +304,24 @@ void generate_goto_trace_in_graphml_format(
     /** ignore internal calls and non assignments */
     if(!(it->type == goto_trace_stept::ASSIGNMENT)
         || (is_internal_call == true))
-    {
       continue;
-    }
 
     const irep_idt &identifier = to_symbol2t(it->lhs).get_symbol_name();
 
-    /* check if is a temporary assignment */
+    /* check if it is a temporary assignment */
     std::string id_str = id2string(identifier);
     std::string::size_type find_tmp = id_str.find("::$tmp::", 0);
     if(find_tmp != std::string::npos)
-    {
       continue;
-    }
 
-    std::string filename = it->pc->location.get_file().as_string();
+    std::string current_ver_file = it->pc->location.get_file().as_string();
+    if (verification_file.find(current_ver_file) != std::string::npos)
+      current_ver_file = verification_file;
 
     if(already_initialized == false)
     {
       std::string std = "";
-      int spec = 0;
-      create_graph(graph, std, spec, is_correctness);
+      create_graph(graph, std, specification, false);
       boost::property_tree::ptree first_node;
       node_p first_node_p;
       first_node_p.isEntryNode = true;
@@ -339,18 +337,41 @@ void generate_goto_trace_in_graphml_format(
     create_node(current_node, current_node_p);
     graph.add_child("node", current_node);
 
-    int line_number = std::atoi(
-        it->pc->location.get_line().as_string().c_str());
-
-    /* check if tokens already ok */
-    if (last_filename != filename)
-    {
-      last_filename = filename;
-      map_line_number_to_content(filename, line_content_map);
-    }
     boost::property_tree::ptree current_edge;
     edge_p current_edge_p;
-    current_edge_p.originFileName = filename;
+    current_edge_p.originFileName = current_ver_file;
+
+    /* check if it has a line number (getting tokens) */
+	const int line_number = std::atoi(it->pc->location.get_line().c_str());
+	if(line_number != 0)
+	{
+	  current_edge_p.startline = line_number;
+	  current_edge_p.endline = line_number;
+      int line_length = 0;
+	  const int startoffset = count_characters_before_line(current_ver_file, line_number, line_length);
+	  current_edge_p.startoffset = startoffset;
+	  current_edge_p.endoffset = startoffset + line_length;
+	}
+
+    /* check if it has entered or returned from a function */
+	std::string function_name = it->pc->location.get_function().c_str();
+	if (last_function != function_name && !function_name.empty())
+	{
+	  /* it is a new entry */
+	  if (function_control_map.find(function_name) == function_control_map.end())
+	  {
+		function_control_map.insert(std::make_pair(function_name, line_number));
+		current_edge_p.enterFunction = function_name;
+		last_function = function_name;
+	  }
+	  else
+	  {
+		/* it is backing from another function */
+		current_edge_p.returnFromFunction = last_function;
+		current_edge_p.enterFunction = function_name;
+		last_function = function_name;
+	  }
+	}
 
     /* adjusts assumptions */
     /* left hand */
@@ -360,14 +381,10 @@ void generate_goto_trace_in_graphml_format(
     lhs_str = split[0];
     std::string::size_type findamp = lhs_str.find("&", 0);
     if(findamp != std::string::npos)
-    {
       lhs_str = lhs_str.substr(0, findamp);
-    }
     std::string::size_type findds = lhs_str.find("$", 0);
     if(findds != std::string::npos)
-    {
       lhs_str = lhs_str.substr(0, findds);
-    }
 
     /* check if isn't in an array (modify assumptions) */
     if(it->lhs->type->type_id != it->lhs->type->array_id)
@@ -378,30 +395,18 @@ void generate_goto_trace_in_graphml_format(
       /* remove memory address */
       std::string::size_type findat = value_str.find("@", 0);
       if(findat != std::string::npos)
-      {
         value_str = value_str.substr(0, findat);
-      }
       /* remove float suffix */
       std::string::size_type findfs = value_str.find("f", 0);
       if(findfs != std::string::npos)
-      {
         value_str = value_str.substr(0, findfs);
-      }
       /* check if has a double &quote */
       std::string::size_type findq1 = value_str.find("\"", 0);
       if(findq1 != std::string::npos)
       {
         std::string::size_type findq2 = value_str.find("\"", findq1 + 1);
         if(findq2 == std::string::npos)
-        {
           value_str = value_str + "\"";
-        }
-      }
-      /* check if it is nil whereas correctness witness */
-      std::string::size_type findnil = value_str.find("nil");
-      if (is_correctness && (findnil != std::string::npos))
-      {
-        value_str = from_expr(ns, "constant_value", it->rhs );
       }
       std::string assumption = lhs_str + " = " + value_str + ";";
       std::string::size_type findesbm = assumption.find("__ESBMC", 0);
@@ -409,46 +414,23 @@ void generate_goto_trace_in_graphml_format(
       std::string::size_type findivo = assumption.find("invalid-object", 0);
       bool is_union = (it->rhs->type->type_id == it->rhs->type->union_id);
       bool is_struct = (it->rhs->type->type_id == it->rhs->type->struct_id);
-      /* TODO check if is an union, struct or dynamic attr.
-       * However, we need more details of the validation tools */
+      /* TODO check if it is an union, struct, or dynamic attr.
+       * However, we need more details about the validation tools */
       bool is_esbmc_or_dynamic = ((findesbm != std::string::npos)
           || (finddma != std::string::npos) || (findivo != std::string::npos)
           || is_union || is_struct);
-      if(is_esbmc_or_dynamic == false)
-      {
+      if(is_esbmc_or_dynamic == false){
         current_edge_p.assumption = assumption;
+        current_edge_p.assumptionScope = function_name;
       }
     }
 
-    /* check if entered in a function */
-    std::string function_name = it->pc->function.as_string();
-    size_t f = function_name.find("c::");
-    if(f == 0)
-    {
-      function_name.replace(f, std::string("c::").length(), "");
-    }
-    if(function_name != last_function)
-    {
-      current_edge_p.enterFunction = function_name;
-      last_function = function_name;
-    }
-
-    /* check if has a line number (to get tokens) */
-    if(line_number != 0)
-    {
-      current_edge_p.startline = line_number;
-      current_edge_p.endline = line_number;
-      if (line_content_map.size() != 0)
-      {
-        current_edge_p.sourcecode = line_content_map[line_number];
-      }
-    }
     create_edge(current_edge, current_edge_p, last_created_node, current_node);
     graph.add_child("edge", current_edge);
     last_created_node = current_node;
   }
 
-  if (already_initialized == true && !is_correctness){
+  if (already_initialized == true){
     /* violation node */
     boost::property_tree::ptree violation_node;
     node_p violation_node_p;
@@ -464,7 +446,7 @@ void generate_goto_trace_in_graphml_format(
   }
 
   /* write graphml */
-  create_graphml(graphml, last_filename);
+  create_graphml(graphml, verification_file);
   graphml.add_child("graphml.graph", graph);
 
 #if (BOOST_VERSION >= 105700)
@@ -472,10 +454,10 @@ void generate_goto_trace_in_graphml_format(
 #else
   boost::property_tree::xml_writer_settings<char> settings('\t', 1);
 #endif
-  boost::property_tree::write_xml(filename, graphml, std::locale(), settings);
+  boost::property_tree::write_xml(graphml_path, graphml, std::locale(), settings);
 }
 
-void generate_successful_goto_trace_in_graphml_format(
+void generate_goto_trace_in_correctness_graphml_format(
   std::string & graphml_path,
   const namespacet & ns __attribute__((unused)),
   const goto_tracet & goto_trace,
@@ -484,7 +466,6 @@ void generate_successful_goto_trace_in_graphml_format(
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
   std::map<int, std::string> line_content_map;
-  std::vector<std::string> functions_control;
   std::map<std::string, int> function_control_map;
 
   bool already_initialized = false;
@@ -518,7 +499,7 @@ void generate_successful_goto_trace_in_graphml_format(
     /* creating nodes and edges */
     boost::property_tree::ptree current_node;
     node_p current_node_p;
-    /* check if tokens already ok */
+    /* check if tokens are already ok */
     if (last_ver_file != current_ver_file)
     {
       last_ver_file = current_ver_file;
@@ -580,7 +561,7 @@ void generate_successful_goto_trace_in_graphml_format(
     }
     else if (it->is_assert())
     {
-      /* std::cout << "that is a assert" << std::endl; */
+      /* nothing to do here yet */
     }
 
     /* current node */

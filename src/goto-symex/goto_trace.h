@@ -105,13 +105,13 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
-void generate_goto_trace_in_graphml_format(
-  const bool is_correctness,
+void generate_goto_trace_in_violation_graphml_format(
   std::string & filename,
   const namespacet & ns,
-  const goto_tracet & goto_trace);
+  const goto_tracet & goto_trace,
+  int & specification);
 
-void generate_successful_goto_trace_in_graphml_format(
+void generate_goto_trace_in_correctness_graphml_format(
   std::string & filename,
   const namespacet & ns,
   const goto_tracet & goto_trace,
