@@ -292,7 +292,6 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       cur_state->current_name(goto_state, true_val);
       cur_state->current_name(false_val);
       rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
-      do_simplify(rhs);
     }
 
     expr2tc lhs;
