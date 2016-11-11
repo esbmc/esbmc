@@ -670,3 +670,17 @@ int count_characters_before_line(
   stream.close();
   return char_count - characters_in_the_line;
 }
+
+bool is_valid_witness_expr(
+    const namespacet &ns,
+	const irep_container<expr2t> & exp)
+{
+  languagest languages(ns, "C");
+  std::string value;
+  languages.from_expr(migrate_expr_back(exp), value);
+  return (value.find("__ESBMC") &
+    value.find("stdin")         &
+    value.find("stdout")        &
+    value.find("stderr")        &
+    value.find("sys_")) == std::string::npos;
+}

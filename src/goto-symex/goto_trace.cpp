@@ -10,6 +10,7 @@
 
 #include <assert.h>
 #include <string.h>
+#include <iostream>
 
 #include <ansi-c/printf_formatter.h>
 #include <langapi/language_util.h>
@@ -23,8 +24,8 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
 
+#include "langapi/languages.h"
 #include "witnesses.h"
-#include <iostream>
 
 extern std::string verification_file;
 
@@ -305,6 +306,10 @@ void generate_goto_trace_in_violation_graphml_format(
     if(!(it->type == goto_trace_stept::ASSIGNMENT)
         || (is_internal_call == true))
       continue;
+
+    /* checking other restrictions */
+    if (!is_valid_witness_expr(ns, it->lhs))
+	  continue;
 
     const irep_idt &identifier = to_symbol2t(it->lhs).get_symbol_name();
 
