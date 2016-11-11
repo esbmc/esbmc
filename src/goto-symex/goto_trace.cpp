@@ -320,8 +320,7 @@ void generate_goto_trace_in_violation_graphml_format(
 
     if(already_initialized == false)
     {
-      std::string std = "";
-      create_graph(graph, std, specification, false);
+      create_graph(graph, verification_file, specification, false);
       boost::property_tree::ptree first_node;
       node_p first_node_p;
       first_node_p.isEntryNode = true;

@@ -206,14 +206,14 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
     data_endLine.put_value(edge_props.endline);
     edge.add_child("data", data_endLine);
   }
-  if (edge_props.startoffset != -1)
+  if (edge_props.startoffset > 0)
   {
     boost::property_tree::ptree data_startoffset;
     data_startoffset.add("<xmlattr>.key", "startoffset");
     data_startoffset.put_value(edge_props.startoffset);
     edge.add_child("data", data_startoffset);
   }
-  if (edge_props.endoffset != -1)
+  if (edge_props.endoffset > 0)
   {
     boost::property_tree::ptree data_endoffset;
     data_endoffset.add("<xmlattr>.key", "endoffset");
