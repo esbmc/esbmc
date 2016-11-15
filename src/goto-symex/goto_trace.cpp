@@ -351,10 +351,11 @@ void generate_goto_trace_in_violation_graphml_format(
 	{
 	  current_edge_p.startline = line_number;
 	  current_edge_p.endline = line_number;
-      int line_length = 0;
-	  const int startoffset = count_characters_before_line(current_ver_file, line_number, line_length);
-	  current_edge_p.startoffset = startoffset;
-	  current_edge_p.endoffset = startoffset + line_length;
+	  int p_startoffset = 0;
+	  int p_endoffset = 0;
+	  get_offsets_for_line_using_wc(current_ver_file, line_number, p_startoffset, p_endoffset);
+	  current_edge_p.startoffset = p_startoffset;
+	  current_edge_p.endoffset = p_endoffset;
 	}
 
     /* check if it has entered or returned from a function */
@@ -412,7 +413,7 @@ void generate_goto_trace_in_violation_graphml_format(
         if(findq2 == std::string::npos)
           value_str = value_str + "\"";
       }
-      std::string assumption = lhs_str + " = " + value_str + ";";
+      std::string assumption = lhs_str + " == (" + value_str + ");";
       std::string::size_type findesbm = assumption.find("__ESBMC", 0);
       std::string::size_type finddma = assumption.find("&dynamic_", 0);
       std::string::size_type findivo = assumption.find("invalid-object", 0);
@@ -519,10 +520,11 @@ void generate_goto_trace_in_correctness_graphml_format(
     {
       current_edge_p.startline = line_number;
       current_edge_p.endline = line_number;
-      int line_length = 0;
-      const int startoffset = count_characters_before_line(current_ver_file, line_number, line_length);
-      current_edge_p.startoffset = startoffset;
-      current_edge_p.endoffset = startoffset + line_length;
+      int p_startoffset = 0;
+      int p_endoffset = 0;
+      get_offsets_for_line_using_wc(current_ver_file, line_number, p_startoffset, p_endoffset);
+      current_edge_p.startoffset = p_startoffset;
+      current_edge_p.endoffset = p_endoffset;
     }
 
     /* check if it has entered or returned from a function */

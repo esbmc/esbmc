@@ -671,6 +671,37 @@ int count_characters_before_line(
   return char_count - characters_in_the_line;
 }
 
+void get_offsets_for_line_using_wc(
+  const std::string & file_path,
+  const int line_number,
+  int & p_startoffset,
+  int & p_endoffset )
+{
+  unsigned int startoffset = 0;
+  unsigned int endoffset = 0;
+
+  try {
+    /* get the offsets */
+    startoffset = std::atoi(execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number - 1) + " | wc --chars").c_str());
+    endoffset = std::atoi(execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number) + " | wc --chars").c_str());
+    /* count the spaces in the beginning and append to the startoffset  */
+    std::string str_line = execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number) + " | tail -n 1 ");
+    unsigned int i=0;
+    for (i=0; i<str_line.length(); i++)
+    {
+      if (str_line.c_str()[i] == ' ')
+        startoffset++;
+      else
+        break;
+    }
+  } catch (const std::exception& e) {
+    /* nothing to do here */
+  }
+
+  p_startoffset = startoffset;
+  p_endoffset = endoffset;
+}
+
 bool is_valid_witness_expr(
     const namespacet &ns,
 	const irep_container<expr2t> & exp)
