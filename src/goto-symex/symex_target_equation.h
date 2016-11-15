@@ -53,7 +53,7 @@ public:
     const expr2tc &original_lhs,
     const expr2tc &rhs,
     const sourcet &source,
-    std::vector<dstring> stack_trace,
+    std::vector<stack_framet> stack_trace,
     assignment_typet assignment_type);
     
   // output
@@ -76,7 +76,7 @@ public:
     const expr2tc &guard,
     const expr2tc &cond,
     const std::string &msg,
-    std::vector<dstring> stack_trace,
+    std::vector<stack_framet> stack_trace,
     const sourcet &source);
 
   virtual void renumber(
@@ -95,11 +95,10 @@ public:
     sourcet source;
     goto_trace_stept::typet type;
 
-    // Vector of strings recording the stack state when this step was taken.
-    // This can potentially be optimised to the point where there's only one
-    // stack trace recorded per function activation record. Valid for assignment
-    // and assert steps only. In reverse order (most recent in idx 0).
-    std::vector<dstring> stack_trace;
+    // One stack trace recorded per function activation record. Valid for
+    // assignment and assert steps only. In reverse order (most recent in idx
+    // 0).
+    std::vector<stack_framet> stack_trace;
     
     bool is_assert() const     { return type==goto_trace_stept::ASSERT; }
     bool is_assume() const     { return type==goto_trace_stept::ASSUME; }

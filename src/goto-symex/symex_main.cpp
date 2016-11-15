@@ -377,7 +377,7 @@ goto_symext::finish_formula(void)
     cur_state->rename(eq);
     target->assertion(it->alloc_guard.as_expr(), eq,
                       "dereference failure: forgotten memory",
-                      std::vector<dstring>(), cur_state->source);
+                      std::vector<stack_framet>(), cur_state->source);
     total_claims++;
     remaining_claims++;
   }

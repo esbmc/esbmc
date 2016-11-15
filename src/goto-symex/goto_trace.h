@@ -21,6 +21,7 @@ Date: July 2005
 #include <map>
 
 #include <goto-programs/goto_program.h>
+#include <goto-symex/symex_target.h>
 
 class goto_trace_stept
 {
@@ -28,7 +29,7 @@ public:
   unsigned step_nr;
 
   // See SSA_stept.
-  std::vector<dstring> stack_trace;
+  std::vector<stack_framet> stack_trace;
 
   bool is_assignment() const { return type==ASSIGNMENT; }
   bool is_assume() const     { return type==ASSUME; }

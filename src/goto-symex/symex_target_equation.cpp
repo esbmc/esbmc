@@ -28,7 +28,7 @@ void symex_target_equationt::assignment(
   const expr2tc &original_lhs,
   const expr2tc &rhs,
   const sourcet &source,
-  std::vector<dstring> stack_trace,
+  std::vector<stack_framet> stack_trace,
   assignment_typet assignment_type)
 {
   assert(!is_nil_expr(lhs));
@@ -90,7 +90,7 @@ void symex_target_equationt::assertion(
   const expr2tc &guard,
   const expr2tc &cond,
   const std::string &msg,
-  std::vector<dstring> stack_trace,
+  std::vector<stack_framet> stack_trace,
   const sourcet &source)
 {
   SSA_steps.push_back(SSA_stept());

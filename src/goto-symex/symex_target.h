@@ -19,6 +19,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/goto_program.h>
 
+class stack_framet;
+
 class symex_targett
 {
 public:
@@ -52,7 +54,7 @@ public:
     const expr2tc &original_lhs,
     const expr2tc &rhs,
     const sourcet &source,
-    std::vector<dstring> stack_trace,
+    std::vector<stack_framet> stack_trace,
     assignment_typet assignment_type)=0;
 
   // record output
@@ -75,7 +77,7 @@ public:
     const expr2tc &guard,
     const expr2tc &cond,
     const std::string &msg,
-    std::vector<dstring> stack_trace,
+    std::vector<stack_framet> stack_trace,
     const sourcet &source)=0;
 
   // Renumber the pointer object of a given symbol
@@ -91,6 +93,24 @@ public:
 
   virtual void push_ctx(void) = 0;
   virtual void pop_ctx(void) = 0;
+};
+
+class stack_framet
+{
+public:
+  stack_framet(const irep_idt &func, const symex_targett::sourcet &__src)
+    : function(func), _src(__src), src(&_src) { }
+  stack_framet(const irep_idt &func)
+    : function(func), _src(), src(NULL) { }
+  stack_framet(const stack_framet &ref) {
+    *this = ref;
+    if (src != NULL)
+      src = &_src;
+  }
+
+  irep_idt function;
+  symex_targett::sourcet _src;
+  const symex_targett::sourcet *src;
 };
 
 bool operator < (

@@ -410,10 +410,10 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
   return;
 }
 
-std::vector<dstring>
-goto_symex_statet::gen_stack_trace(void) const
+std::vector<stack_framet>
+goto_symex_statet::gen_stack_trace() const
 {
-  std::vector<dstring> trace;
+  std::vector<stack_framet> trace;
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
 
@@ -427,12 +427,9 @@ goto_symex_statet::gen_stack_trace(void) const
       break;
     } else if (it->function_identifier == "c::main" &&
                src.pc->location == get_nil_irep()) {
-      trace.push_back("<main invocation>");
+      trace.push_back(stack_framet(it->function_identifier));
     } else {
-      std::string loc = it->function_identifier.as_string();
-      loc += " at " + src.pc->location.get_file().as_string();
-      loc += " line " + src.pc->location.get_line().as_string();
-      trace.push_back(loc);
+      trace.push_back(stack_framet(irep_idt(it->function_identifier), src));
     }
   }
 
