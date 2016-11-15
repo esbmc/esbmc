@@ -42,7 +42,6 @@ typedef struct edge_props
   std::string assumption = "";
   std::string assumptionScope = "";
   std::string assumptionResultFunction = "";
-  std::string sourcecode = "";
   int startline = -1;
   int endline = -1;
   int startoffset = -1;
@@ -50,7 +49,6 @@ typedef struct edge_props
   std::string originFileName = "";
   std::string enterFunction = "";
   std::string returnFromFunction = "";
-
 } edge_p;
 
 int node_count;
@@ -194,13 +192,6 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
   edge.add("<xmlattr>.id", "e" + std::to_string(edge_count++));
   edge.add("<xmlattr>.source", source.get<std::string>("<xmlattr>.id"));
   edge.add("<xmlattr>.target", target.get<std::string>("<xmlattr>.id"));
-  if (!edge_props.sourcecode.empty())
-  {
-    boost::property_tree::ptree data_sourcecode;
-    data_sourcecode.add("<xmlattr>.key", "sourcecode");
-    data_sourcecode.put_value(edge_props.sourcecode);
-    edge.add_child("data", data_sourcecode);
-  }
   if (edge_props.startline != -1)
   {
     boost::property_tree::ptree data_lineNumberInOrigin;
@@ -215,14 +206,14 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
     data_endLine.put_value(edge_props.endline);
     edge.add_child("data", data_endLine);
   }
-  if (edge_props.startoffset != -1)
+  if (edge_props.startoffset > 0)
   {
     boost::property_tree::ptree data_startoffset;
     data_startoffset.add("<xmlattr>.key", "startoffset");
     data_startoffset.put_value(edge_props.startoffset);
     edge.add_child("data", data_startoffset);
   }
-  if (edge_props.endoffset != -1)
+  if (edge_props.endoffset > 0)
   {
     boost::property_tree::ptree data_endoffset;
     data_endoffset.add("<xmlattr>.key", "endoffset");
@@ -249,6 +240,13 @@ void create_edge(boost::property_tree::ptree & edge, edge_p & edge_props,
     data_assumption.add("<xmlattr>.key", "assumption");
     data_assumption.put_value(edge_props.assumption);
     edge.add_child("data", data_assumption);
+  }
+  if (!edge_props.assumptionScope.empty())
+  {
+    boost::property_tree::ptree data_assumptionScope;
+    data_assumptionScope.add("<xmlattr>.key", "assumption.scope");
+    data_assumptionScope.put_value(edge_props.assumptionScope);
+    edge.add_child("data", data_assumptionScope);
   }
 }
 
@@ -498,6 +496,17 @@ void create_graphml(boost::property_tree::ptree & graphml,
   key_assumption.add("<xmlattr>.for", "edge");
   graphml.add_child("graphml.key", key_assumption);
 
+  boost::property_tree::ptree key_assumptionScope;
+  key_assumptionScope.add("<xmlattr>.id", "assumption.scope");
+  key_assumptionScope.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.name", '|'),
+    "assumption");
+  key_assumptionScope.put(
+    boost::property_tree::ptree::path_type("<xmlattr>|attr.type", '|'),
+    "string");
+  key_assumptionScope.add("<xmlattr>.for", "edge");
+  graphml.add_child("graphml.key", key_assumptionScope);
+
   boost::property_tree::ptree key_assumption_resultFunction;
   key_assumption_resultFunction.add("<xmlattr>.id", "assumption.resultfunction");
   key_assumption_resultFunction.put(
@@ -660,4 +669,49 @@ int count_characters_before_line(
   }
   stream.close();
   return char_count - characters_in_the_line;
+}
+
+void get_offsets_for_line_using_wc(
+  const std::string & file_path,
+  const int line_number,
+  int & p_startoffset,
+  int & p_endoffset )
+{
+  unsigned int startoffset = 0;
+  unsigned int endoffset = 0;
+
+  try {
+    /* get the offsets */
+    startoffset = std::atoi(execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number - 1) + " | wc --chars").c_str());
+    endoffset = std::atoi(execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number) + " | wc --chars").c_str());
+    /* count the spaces in the beginning and append to the startoffset  */
+    std::string str_line = execute_cmd("cat " + file_path + " | head -n " + std::to_string(line_number) + " | tail -n 1 ");
+    unsigned int i=0;
+    for (i=0; i<str_line.length(); i++)
+    {
+      if (str_line.c_str()[i] == ' ')
+        startoffset++;
+      else
+        break;
+    }
+  } catch (const std::exception& e) {
+    /* nothing to do here */
+  }
+
+  p_startoffset = startoffset;
+  p_endoffset = endoffset;
+}
+
+bool is_valid_witness_expr(
+    const namespacet &ns,
+	const irep_container<expr2t> & exp)
+{
+  languagest languages(ns, "C");
+  std::string value;
+  languages.from_expr(migrate_expr_back(exp), value);
+  return (value.find("__ESBMC") &
+    value.find("stdin")         &
+    value.find("stdout")        &
+    value.find("stderr")        &
+    value.find("sys_")) == std::string::npos;
 }

@@ -9,9 +9,9 @@ Author: Daniel Kroening
 \*******************************************************************/
 
 #include <assert.h>
-
 #include "build_goto_trace.h"
-#include "langapi/languages.h"
+
+extern bool is_valid_witness_expr(const namespacet & ns, const irep_container<expr2t> & exp);
 
 void build_goto_trace(
   const symex_target_equationt &target,
@@ -98,7 +98,7 @@ void build_successful_goto_trace(
       it!=target.SSA_steps.end(); it++)
   {
     if((it->is_assignment() || it->is_assert() || it->is_assume())
-       && (is_valid_correctness_SSA_step(smt_conv.ns, it)))
+      && (is_valid_witness_expr(smt_conv.ns, it->lhs)))
     {
       goto_trace.steps.push_back(goto_trace_stept());
       goto_trace_stept &goto_trace_step=goto_trace.steps.back();
@@ -114,18 +114,4 @@ void build_successful_goto_trace(
       goto_trace_step.stack_trace = it->stack_trace;
     }
   }
-}
-
-bool is_valid_correctness_SSA_step(
-    const namespacet &ns,
-    symex_target_equationt::SSA_stepst::const_iterator & step)
-{
-  languagest languages(ns, "C");
-  std::string value;
-  languages.from_expr(migrate_expr_back(step->cond), value);
-  return (value.find("__ESBMC") &
-    value.find("stdin")         &
-    value.find("stdout")        &
-    value.find("stderr")        &
-    value.find("sys_")) == std::string::npos;
 }
