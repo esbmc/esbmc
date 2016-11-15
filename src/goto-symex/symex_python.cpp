@@ -780,6 +780,12 @@ build_equation_class()
     .def("clear", &goto_tracet::clear)
     .def_readwrite("mode", &goto_tracet::mode)
     .add_property("steps", make_function(&get_goto_trace_steps));
+
+  class_<stack_framet>("stack_framet", no_init)
+    .def_readonly("function", &stack_framet::function)
+    .def_readonly("src", &stack_framet::src);
+  class_<std::vector<stack_framet> >("stack_frame_vec")
+    .def(vector_indexing_suite<std::vector<stack_framet> >());
 }
 
 // A function for trapping to python. Assumptions: it's in the context of

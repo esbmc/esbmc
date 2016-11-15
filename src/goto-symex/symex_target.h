@@ -108,6 +108,17 @@ public:
       src = &_src;
   }
 
+  bool operator==(const stack_framet &ref) {
+    if (function != ref.function)
+      return false;
+    else if (src == NULL && ref.src == src)
+      return true;
+    else if (src == NULL || ref.src == NULL)
+      return false;
+    else 
+      return src->pc->location == ref.src->pc->location;
+  }
+
   irep_idt function;
   symex_targett::sourcet _src;
   const symex_targett::sourcet *src;
