@@ -181,6 +181,7 @@ void bmct::error_trace(smt_convt &smt_conv,
       specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
       generate_goto_trace_in_violation_graphml_format(
         graphml_output_filename,
+        options.get_bool_option("witness-simple"),
         ns,
         goto_trace,
         specification);

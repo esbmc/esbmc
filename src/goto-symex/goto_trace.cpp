@@ -278,6 +278,7 @@ get_varname_from_guard (
 
 void generate_goto_trace_in_violation_graphml_format(
   std::string & graphml_path,
+  bool simple_mode,
   const namespacet & ns,
   const goto_tracet & goto_trace,
   int & specification)
@@ -350,12 +351,15 @@ void generate_goto_trace_in_violation_graphml_format(
 	if(line_number != 0)
 	{
 	  current_edge_p.startline = line_number;
-	  current_edge_p.endline = line_number;
-	  int p_startoffset = 0;
-	  int p_endoffset = 0;
-	  get_offsets_for_line_using_wc(current_ver_file, line_number, p_startoffset, p_endoffset);
-	  current_edge_p.startoffset = p_startoffset;
-	  current_edge_p.endoffset = p_endoffset;
+	  if (simple_mode == false)
+	  {
+	    current_edge_p.endline = line_number;
+	    int p_startoffset = 0;
+	    int p_endoffset = 0;
+	    get_offsets_for_line_using_wc(current_ver_file, line_number, p_startoffset, p_endoffset);
+	    current_edge_p.startoffset = p_startoffset;
+	    current_edge_p.endoffset = p_endoffset;
+	  }
 	}
 
     /* check if it has entered or returned from a function */
