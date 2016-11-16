@@ -590,6 +590,13 @@ void value_sett::get_value_set_rec(
       return;
     }
   }
+  else if (is_concat2t(expr))
+  {
+    const concat2t &ref = to_concat2t(expr);
+    get_value_set_rec(ref.side_1, dest, suffix, original_type);
+    get_value_set_rec(ref.side_2, dest, suffix, original_type);
+    return;
+  }
 
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
@@ -781,6 +788,13 @@ void value_sett::get_reference_set_rec(
       : objectt(false, 1);
 
     insert(dest, extract.source_value, o);
+    return;
+  }
+  else if (is_concat2t(expr))
+  {
+    const concat2t &concat = to_concat2t(expr);
+    get_reference_set_rec(concat.side_1, dest);
+    get_reference_set_rec(concat.side_2, dest);
     return;
   }
 
