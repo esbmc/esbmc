@@ -277,16 +277,16 @@ get_varname_from_guard (
 }
 
 void generate_goto_trace_in_violation_graphml_format(
-  std::string & graphml_path,
-  bool simple_mode,
+  std::string & witness_programfile __attribute__((unused)),
+  std::string & witness_output,
+  bool is_simplified_mode,
+  int & specification,
   const namespacet & ns,
-  const goto_tracet & goto_trace,
-  int & specification)
+  const goto_tracet & goto_trace)
 {
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
   std::map<std::string, int> function_control_map;
-
   bool already_initialized = false;
   boost::property_tree::ptree last_created_node;
   std::string last_function = "";
@@ -351,7 +351,7 @@ void generate_goto_trace_in_violation_graphml_format(
 	if(line_number != 0)
 	{
 	  current_edge_p.startline = line_number;
-	  if (simple_mode == false)
+	  if (is_simplified_mode == false)
 	  {
 	    current_edge_p.endline = line_number;
 	    int p_startoffset = 0;
@@ -463,7 +463,7 @@ void generate_goto_trace_in_violation_graphml_format(
 #else
   boost::property_tree::xml_writer_settings<char> settings('\t', 1);
 #endif
-  boost::property_tree::write_xml(graphml_path, graphml, std::locale(), settings);
+  boost::property_tree::write_xml(witness_output, graphml, std::locale(), settings);
 }
 
 void generate_goto_trace_in_correctness_graphml_format(
