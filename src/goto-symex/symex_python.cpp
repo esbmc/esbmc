@@ -156,6 +156,15 @@ goto_trace_2_text(goto_tracet &trace, const namespacet &ns)
   return ss.str();
 }
 
+static symex_targett::sourcet
+get_frame_source(const stack_framet &ref)
+{
+  if (ref.src)
+    return *ref.src;
+  else
+    throw "";
+}
+
 class dummy_symex_class { };
 void build_equation_class();
 
@@ -783,7 +792,7 @@ build_equation_class()
 
   class_<stack_framet>("stack_framet", no_init)
     .def_readonly("function", &stack_framet::function)
-    .def_readonly("src", &stack_framet::src);
+    .add_property("src", make_function(get_frame_source));
   class_<std::vector<stack_framet> >("stack_frame_vec")
     .def(vector_indexing_suite<std::vector<stack_framet> >());
 }
