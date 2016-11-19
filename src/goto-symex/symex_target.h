@@ -108,7 +108,7 @@ public:
       src = &_src;
   }
 
-  bool operator==(const stack_framet &ref) {
+  bool _cmp(const stack_framet &ref) const {
     if (function != ref.function)
       return false;
     else if (src == NULL && ref.src == src)
@@ -116,7 +116,7 @@ public:
     else if (src == NULL || ref.src == NULL)
       return false;
     else 
-      return src->pc->location == ref.src->pc->location;
+      return src->pc->location_number == ref.src->pc->location_number;
   }
 
   irep_idt function;
@@ -127,5 +127,12 @@ public:
 bool operator < (
   const symex_targett::sourcet &a,
   const symex_targett::sourcet &b);
+
+// Can't remember how to get address of operator== defined inside class
+inline bool operator==(const stack_framet &a, const stack_framet &b)
+{
+  return a._cmp(b);
+}
+
 
 #endif

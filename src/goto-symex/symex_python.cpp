@@ -707,6 +707,27 @@ get_goto_trace_steps(const goto_tracet &trace)
   return l;
 }
 
+static bool
+cmp_stack_frame_vec(const std::vector<stack_framet> &a, const std::vector<stack_framet> &b)
+{
+  // XXX Can't remember how to take pointer of real operator==
+  return a == b;
+}
+
+static bool
+ncmp_stack_frame_vec(const std::vector<stack_framet> &a, const std::vector<stack_framet> &b)
+{
+  // XXX Can't remember how to take pointer of real operator==
+  return a != b;
+}
+
+static bool
+ncmp_stack_frame(const stack_framet &a, const stack_framet &b)
+{
+  // XXX Can't remember how to take pointer of real operator==
+  return !(a == b);
+}
+
 void
 build_equation_class()
 {
@@ -806,11 +827,16 @@ build_equation_class()
     .def_readwrite("mode", &goto_tracet::mode)
     .add_property("steps", make_function(&get_goto_trace_steps));
 
+  bool (*cmp_stack_frame)(const stack_framet &, const stack_framet &) = &operator==;
   class_<stack_framet>("stack_framet", no_init)
     .def_readonly("function", &stack_framet::function)
-    .add_property("src", make_function(get_frame_source));
+    .add_property("src", make_function(get_frame_source))
+    .def("__eq__", cmp_stack_frame)
+    .def("__ne__", &ncmp_stack_frame);
   class_<std::vector<stack_framet> >("stack_frame_vec")
-    .def(vector_indexing_suite<std::vector<stack_framet> >());
+    .def(vector_indexing_suite<std::vector<stack_framet> >())
+    .def("__eq__", cmp_stack_frame_vec)
+    .def("__ne__", ncmp_stack_frame_vec);
 }
 
 // A function for trapping to python. Assumptions: it's in the context of
