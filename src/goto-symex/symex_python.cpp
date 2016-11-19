@@ -128,6 +128,20 @@ public:
   {
     Base::symex_step(art);
   }
+
+  boost::shared_ptr<execution_statet> clone(void) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("clone"))
+      return f();
+    else
+      return Base::clone();
+  }
+
+  boost::shared_ptr<execution_statet> default_clone() const
+  {
+    return Base::clone();
+  }
 };
 
 const value_sett &
@@ -529,13 +543,15 @@ build_goto_symex_classes()
       init<const goto_functionst &, const namespacet &, reachability_treet *,
       boost::shared_ptr<symex_targett>, contextt &,
       optionst &, message_handlert &>())
-    .def("symex_step", &goto_symext::symex_step, &ex_state_wrapper<dfs_execution_statet>::default_symex_step);
+    .def("symex_step", &goto_symext::symex_step, &ex_state_wrapper<dfs_execution_statet>::default_symex_step)
+    .def("clone", &dfs_execution_statet::clone, &ex_state_wrapper<dfs_execution_statet>::default_clone);
 
   class_<ex_state_wrapper<schedule_execution_statet>, bases<execution_statet>, boost::shared_ptr<ex_state_wrapper<schedule_execution_statet> > >("schedule_execution_state",
       init<const goto_functionst &, const namespacet &, reachability_treet *,
       boost::shared_ptr<symex_targett>, contextt &,
       optionst &, unsigned int *, unsigned int *, message_handlert &>())
-    .def("symex_step", &goto_symext::symex_step, &ex_state_wrapper<schedule_execution_statet>::default_symex_step);
+    .def("symex_step", &goto_symext::symex_step, &ex_state_wrapper<schedule_execution_statet>::default_symex_step)
+    .def("clone", &schedule_execution_statet::clone, &ex_state_wrapper<schedule_execution_statet>::clone);
 
   } // ex_state scope
 
