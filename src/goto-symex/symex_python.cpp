@@ -182,6 +182,102 @@ get_frame_source(const stack_framet &ref)
 class dummy_symex_class { };
 void build_equation_class();
 
+
+template <typename Base>
+class ste_wrapper : public Base, public boost::python::wrapper<Base>
+{
+public:
+  // Template forwarding constructor.
+  template <typename ...Args>
+  ste_wrapper(Args &...args) : Base(args...) { }
+
+  void symex_step(reachability_treet &art)
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("symex_step"))
+      f(art);
+    else
+      Base::symex_step(art);
+  }
+
+  void default_symex_step(reachability_treet &art)
+  {
+    Base::symex_step(art);
+  }
+
+  void assignment(
+    const expr2tc &guard,
+    const expr2tc &lhs,
+    const expr2tc &original_lhs,
+    const expr2tc &rhs,
+    const typename Base::sourcet &source,
+    std::vector<stack_framet> stack_trace,
+    typename Base::assignment_typet assignment_type)
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("assignment"))
+      f(guard, lhs, original_lhs, rhs, source, stack_trace, assignment_type);
+    else
+      Base::assignment(guard, lhs, original_lhs, rhs, source, stack_trace, assignment_type);
+  }
+
+  void default_assignment(
+    const expr2tc &guard,
+    const expr2tc &lhs,
+    const expr2tc &original_lhs,
+    const expr2tc &rhs,
+    const typename Base::sourcet &source,
+    std::vector<stack_framet> stack_trace,
+    typename Base::assignment_typet assignment_type)
+  {
+    Base::assignment(guard, lhs, original_lhs, rhs, source, stack_trace, assignment_type);
+  }
+
+  void assertion(
+    const expr2tc &guard,
+    const expr2tc &cond,
+    const std::string &msg,
+    std::vector<stack_framet> stack_trace,
+    const typename Base::sourcet &source)
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("assertion"))
+      f(guard, cond, msg, stack_trace, source);
+    else
+      Base::assertion(guard, cond, msg, stack_trace, source);
+  }
+
+  void default_assertion(
+    const expr2tc &guard,
+    const expr2tc &cond,
+    const std::string &msg,
+    std::vector<stack_framet> stack_trace,
+    const typename Base::sourcet &source)
+  {
+    Base::assertion(guard, cond, msg, stack_trace, source);
+  }
+
+  void assumption(
+    const expr2tc &guard,
+    const expr2tc &cond,
+    const typename Base::sourcet &source)
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("assumption"))
+      f(guard, cond, source);
+    else
+      Base::assumption(guard, cond, source);
+  }
+
+  void default_assumption(
+    const expr2tc &guard,
+    const expr2tc &cond,
+    const typename Base::sourcet &source)
+  {
+    Base::assumption(guard, cond, source);
+  }
+};
+
 void
 build_goto_symex_classes()
 {
@@ -781,10 +877,10 @@ build_equation_class()
     .def_readwrite("remaining_claims", &goto_symext::symex_resultt::remaining_claims);
 
   init<const namespacet &> eq_init;
-  class_<symex_target_equationt, boost::shared_ptr<symex_target_equationt>, bases<symex_targett> >("equation", eq_init)
-    .def("assignment", &symex_target_equationt::assignment)
-    .def("assumption", &symex_target_equationt::assumption)
-    .def("assertion", &symex_target_equationt::assertion)
+  class_<ste_wrapper<symex_target_equationt>, boost::shared_ptr<ste_wrapper<symex_target_equationt> >, bases<symex_targett> >("equation", eq_init)
+    .def("assignment", &symex_target_equationt::assignment, &ste_wrapper<symex_target_equationt>::default_assignment)
+    .def("assumption", &symex_target_equationt::assumption, &ste_wrapper<symex_target_equationt>::default_assumption)
+    .def("assertion", &symex_target_equationt::assertion, &ste_wrapper<symex_target_equationt>::default_assertion)
     .def("renumber", &symex_target_equationt::renumber)
     .def("convert", &symex_target_equationt::convert)
     .def("clear", &symex_target_equationt::clear)
