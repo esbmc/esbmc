@@ -276,6 +276,26 @@ public:
   {
     Base::assumption(guard, cond, source);
   }
+
+  // NB: if you override anything, but not clone, then those overrides will
+  // magically disappear upon cloning, because the ste object was cloned but
+  // not the containing python object.
+  boost::shared_ptr<symex_targett> clone(void) const
+  {
+    using namespace boost::python;
+    if (override f = this->get_override("clone"))
+     return  f();
+    else
+      // The returned object is _not_ an ste_wrapper. Which is the right
+      // behaviour: otherwise we'd have two c++ objs reffing the python obj
+      return Base::clone();
+  }
+
+  boost::shared_ptr<symex_targett> default_clone(void) const
+  {
+    // See above
+    return Base::clone();
+  }
 };
 
 void
@@ -877,7 +897,9 @@ build_equation_class()
     .def_readwrite("remaining_claims", &goto_symext::symex_resultt::remaining_claims);
 
   init<const namespacet &> eq_init;
+  init<const ste_wrapper<symex_target_equationt> &> cpy_init;
   class_<ste_wrapper<symex_target_equationt>, boost::shared_ptr<ste_wrapper<symex_target_equationt> >, bases<symex_targett> >("equation", eq_init)
+    .def(cpy_init)
     .def("assignment", &symex_target_equationt::assignment, &ste_wrapper<symex_target_equationt>::default_assignment)
     .def("assumption", &symex_target_equationt::assumption, &ste_wrapper<symex_target_equationt>::default_assumption)
     .def("assertion", &symex_target_equationt::assertion, &ste_wrapper<symex_target_equationt>::default_assertion)
@@ -885,7 +907,7 @@ build_equation_class()
     .def("convert", &symex_target_equationt::convert)
     .def("clear", &symex_target_equationt::clear)
     .def("check_for_dups", &symex_target_equationt::check_for_duplicate_assigns)
-    .def("clone", &symex_target_equationt::clone)
+    .def("clone", &symex_target_equationt::clone, &ste_wrapper<symex_target_equationt>::default_clone)
     .def("clear_assertions", &symex_target_equationt::clear_assertions)
     // It's way too sketchy to give python direct access to SSA_steps: we're not
     // going to convert all steps by value to python objects, and
