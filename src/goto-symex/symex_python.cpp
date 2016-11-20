@@ -849,6 +849,10 @@ build_equation_class()
 {
   using namespace boost::python;
 
+  enum_<symex_targett::assignment_typet>("assignment_type")
+    .value("STATE", symex_targett::assignment_typet::STATE)
+    .value("HIDDEN", symex_targett::assignment_typet::HIDDEN);
+
   // In theory, we could filter these depending on the respective types of
   // different ssa steps being converted to python, but it seems pointless
   // to expose that to python without also replicating it in C++.
