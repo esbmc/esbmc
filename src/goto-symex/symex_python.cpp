@@ -766,6 +766,12 @@ pop_insn(symex_target_equationt *eq)
   return;
 }
 
+static symex_target_equationt::SSA_stept
+peek_insn(symex_target_equationt *eq)
+{
+  return eq->SSA_steps.back();
+}
+
 static unsigned int
 get_pc(const symex_targett::sourcet &src)
 {
@@ -922,7 +928,8 @@ build_equation_class()
     // one and filter insns from the old to the new.
     .def("get_insns", &get_insns)
     .def("append_insn", &append_insn)
-    .def("pop_back", &pop_insn);
+    .def("pop_back", &pop_insn)
+    .def("peek_back", &peek_insn);
 
   enum_<goto_trace_stept::typet>("symex_step_type")
     .value("ASSIGN", goto_trace_stept::ASSIGNMENT)
