@@ -279,7 +279,7 @@ get_varname_from_guard (
 void generate_goto_trace_in_violation_graphml_format(
   std::string & witness_programfile __attribute__((unused)),
   std::string & witness_output,
-  bool is_simplified_mode,
+  bool is_detailed_mode,
   int & specification,
   const namespacet & ns,
   const goto_tracet & goto_trace)
@@ -351,7 +351,7 @@ void generate_goto_trace_in_violation_graphml_format(
 	if(line_number != 0)
 	{
 	  current_edge_p.startline = line_number;
-	  if (is_simplified_mode == false)
+	  if (is_detailed_mode)
 	  {
 	    current_edge_p.endline = line_number;
 	    int p_startoffset = 0;

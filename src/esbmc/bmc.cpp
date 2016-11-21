@@ -183,7 +183,7 @@ void bmct::error_trace(smt_convt &smt_conv,
       generate_goto_trace_in_violation_graphml_format(
         programfile,
         witness_output,
-        options.get_bool_option("witness-simplified"),
+        options.get_bool_option("witness-detailed"),
         specification,
         ns,
         goto_trace

@@ -185,8 +185,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-slice", true);
   }
 
-  if(cmdline.isset("witness-simplified"))
-    options.set_option("witness-simplified", true);
+  if(cmdline.isset("witness-detailed"))
+    options.set_option("witness-detailed", true);
 
   if(cmdline.isset("witness-programfile"))
     options.set_option("witness-programfile", cmdline.getval("witness-programfile"));

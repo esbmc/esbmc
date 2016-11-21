@@ -22,7 +22,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"smt",			switc,		""	},
 { 0,	"outfile",		string,		""	},
 { 0,	"witness-output",	string,		""	},
-{ 0,	"witness-simplified",	switc,		""	},
+{ 0,	"witness-detailed",	switc,		""	},
 { 0,	"witness-programfile",	string,		""	},
 { 0,	"no-pointer-check",	switc,		""	},
 { 0,	"document-subgoals",	switc,		""	},
