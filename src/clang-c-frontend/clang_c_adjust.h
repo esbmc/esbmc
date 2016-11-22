@@ -36,8 +36,6 @@ class clang_c_adjust
     void adjust_symbol(symbolt &symbol);
     void adjust_type(typet &type);
 
-    void adjust_builtin(symbolt& symbol);
-
     void adjust_expr(exprt &expr);
     void adjust_expr_main(exprt &expr);
 

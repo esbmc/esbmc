@@ -20,6 +20,8 @@
 
 #include "typecast.h"
 
+#include <clang/AST/Attr.h>
+
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit> > &_ASTs)
@@ -375,6 +377,17 @@ bool clang_c_convertert::get_var(
   typet t;
   if(get_type(vd.getType(), t))
     return true;
+
+  // Check if we annotated it to be have an infinity size
+  for(auto attr : vd.getAttrs())
+  {
+    if (!llvm::isa<clang::AnnotateAttr>(attr))
+      continue;
+
+    const auto *a = llvm::cast<clang::AnnotateAttr>(attr);
+    if(a->getAnnotation().str() == "__ESBMC_inf_size")
+      t.size(exprt("infinity", uint_type()));
+  }
 
   std::string identifier;
   get_var_name(vd, identifier);

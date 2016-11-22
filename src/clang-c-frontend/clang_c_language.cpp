@@ -210,15 +210,20 @@ void clang_c_languaget::internal_additions()
     "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
 
     // malloc
-    // This will be set to infinity size array at clang_c_adjust
-    // TODO: We definitely need a better solution for this
     "__attribute__((used))\n"
+    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
     "_Bool __ESBMC_alloc[1];\n"
+
     "__attribute__((used))\n"
+    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
     "_Bool __ESBMC_deallocated[1];\n"
+
     "__attribute__((used))\n"
+    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
     "_Bool __ESBMC_is_dynamic[1];\n"
+
     "__attribute__((used))\n"
+    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
     "unsigned long __ESBMC_alloc_size[1];\n"
 
     "__attribute__((used))\n"

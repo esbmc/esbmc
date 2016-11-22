@@ -37,38 +37,10 @@ bool clang_c_adjust::adjust()
     if(symbol.is_type)
       continue;
 
-    if(has_prefix(symbol.name.as_string(), std::string(CPROVER_PREFIX)))
-    {
-      adjust_builtin(symbol);
-    }
-    else
-    {
-      adjust_symbol(symbol);
-    }
+    adjust_symbol(symbol);
   }
 
   return false;
-}
-
-
-void clang_c_adjust::adjust_builtin(symbolt& symbol)
-{
-  const std::string &identifier = symbol.name.as_string();
-
-  // TODO: find a better solution for this
-  if(has_prefix(identifier, std::string(CPROVER_PREFIX "alloc"))
-     || has_prefix(identifier, std::string(CPROVER_PREFIX "deallocated"))
-     || has_prefix(identifier, std::string(CPROVER_PREFIX "is_dynamic"))
-     || has_prefix(identifier, std::string(CPROVER_PREFIX "alloc_size"))
-     || has_prefix(identifier, std::string(CPROVER_PREFIX "pthread_thread_running"))
-     || has_prefix(identifier, std::string(CPROVER_PREFIX "pthread_thread_ended"))
-     || has_prefix(identifier, std::string(CPROVER_PREFIX "pthread_end_value")))
-  {
-    exprt expr=exprt("infinity", uint_type());
-
-    symbol.type.size(expr);
-    symbol.value.type().size(expr);
-  }
 }
 
 void clang_c_adjust::adjust_symbol(symbolt& symbol)
