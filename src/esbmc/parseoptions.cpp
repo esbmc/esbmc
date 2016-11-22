@@ -185,6 +185,12 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-slice", true);
   }
 
+  if(cmdline.isset("witness-detailed"))
+    options.set_option("witness-detailed", true);
+
+  if(cmdline.isset("witness-programfile"))
+    options.set_option("witness-programfile", cmdline.getval("witness-programfile"));
+
   if(cmdline.isset("git-hash"))
   {
     std::cout << version_string << std::endl;

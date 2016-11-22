@@ -591,9 +591,9 @@ void create_graph(
   int & specification,
   const bool is_correctness)
 {
-  std::string md5 = "";
+  std::string hash = "";
   if (!filename.empty())
-     md5 = execute_cmd("md5sum " + filename).substr(0, 32);
+    hash = execute_cmd("sha1sum " + filename).substr(0, 40);
   graph.add("<xmlattr>.edgedefault", "directed");
   boost::property_tree::ptree data_witnesstype;
   data_witnesstype.add("<xmlattr>.key", "witness-type");
@@ -622,7 +622,7 @@ void create_graph(
   graph.add_child("data", data_programfile);
   boost::property_tree::ptree data_programhash;
   data_programhash.add("<xmlattr>.key", "programhash");
-  data_programhash.put_value(md5);
+  data_programhash.put_value(hash);
   graph.add_child("data", data_programhash);
   boost::property_tree::ptree data_memorymodel;
   data_memorymodel.add("<xmlattr>.key", "memoryModel");

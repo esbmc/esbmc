@@ -168,8 +168,9 @@ void bmct::error_trace(smt_convt &smt_conv,
   int specification = 0;
   build_goto_trace(equation, smt_conv, goto_trace);
 
-  std::string graphml_output_filename = options.get_option("witness-output");
-  if(!graphml_output_filename.empty())
+  std::string witness_output = options.get_option("witness-output");
+  std::string programfile = options.get_option("witness-programfile");
+  if(!witness_output.empty())
   {
     set_ui(ui_message_handlert::GRAPHML);
   }
@@ -180,10 +181,13 @@ void bmct::error_trace(smt_convt &smt_conv,
       specification += options.get_bool_option("overflow-check") ? 1 : 0;
       specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
       generate_goto_trace_in_violation_graphml_format(
-        graphml_output_filename,
+        programfile,
+        witness_output,
+        options.get_bool_option("witness-detailed"),
+        specification,
         ns,
-        goto_trace,
-        specification);
+        goto_trace
+      );
       std::cout
         << "The violation witness in GraphML format is available at: "
         << options.get_option("witness-output")
