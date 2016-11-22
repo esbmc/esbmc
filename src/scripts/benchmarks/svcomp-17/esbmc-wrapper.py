@@ -12,7 +12,6 @@ witness_path = "error-witness.graphml "
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--timeout 895s --memlimit 15g --no-div-by-zero-check "
 esbmc_dargs += "--force-malloc-success --context-bound 7 "
-esbmc_dargs += "--error-label ERROR "
 esbmc_dargs += "--witness-output " + witness_path
 
 # ESBMC specific commands: this is different for every submission
@@ -94,7 +93,7 @@ if is_overflow:
 elif is_memsafety:
   command_line += "--memory-leak-check "
 elif is_reachability:
-  command_line += "--no-pointer-check --no-bounds-check --clang-frontend "
+  command_line += "--no-pointer-check --no-bounds-check --clang-frontend --error-label ERROR "
 
 # Call ESBMC
 command_line += benchmark
@@ -130,7 +129,7 @@ access_out = "dereference failure: Access to object out of bounds"
 bounds_violated = "dereference failure: array bounds violated"
 dereference_null = "dereference failure: NULL pointer"
 invalid_object = "dereference failure: invalidated dynamic object"
-bounds_violated = "array bounds violated: array "
+bounds_violated = "array bounds violated"
 free_offset = "Operand of free must have zero pointer offset"
 
 if "VERIFICATION FAILED" in stdout:
@@ -143,7 +142,6 @@ if "VERIFICATION FAILED" in stdout:
       print "FALSE_MEMTRACK"
       exit(0)
 
-  """
     if invalid_pointer in stdout:
       print "FALSE_DEREF"
       exit(0)
@@ -152,15 +150,7 @@ if "VERIFICATION FAILED" in stdout:
       print "FALSE_DEREF"
       exit(0)
 
-    if access_out in stdout:
-      print "FALSE_DEREF"
-      exit(0)
-
     if dereference_null in stdout:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if invalid_object in stdout:
       print "FALSE_DEREF"
       exit(0)
 
@@ -171,7 +161,6 @@ if "VERIFICATION FAILED" in stdout:
     if free_offset in stdout:
       print "FALSE_FREE"
       exit(0)
-  """
 
   if is_overflow:
     print "FALSE_OVERFLOW"
