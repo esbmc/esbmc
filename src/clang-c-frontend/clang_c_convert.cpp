@@ -253,12 +253,6 @@ bool clang_c_convertert::get_decl(
     case clang::Decl::Typedef:
       break;
 
-    case clang::Decl::Namespace:
-    case clang::Decl::TypeAlias:
-    case clang::Decl::FileScopeAsm:
-    case clang::Decl::Block:
-    case clang::Decl::Captured:
-    case clang::Decl::Import:
     default:
       std::cerr << "**** ERROR: ";
       std::cerr << "Unrecognized / unimplemented clang declaration "
@@ -1984,19 +1978,6 @@ bool clang_c_convertert::get_expr(
       new_expr = code_skipt();
       break;
 
-    // No idea when these AST is created
-    case clang::Stmt::ImaginaryLiteralClass:
-    case clang::Stmt::ShuffleVectorExprClass:
-    case clang::Stmt::ConvertVectorExprClass:
-    case clang::Stmt::ChooseExprClass:
-    case clang::Stmt::DesignatedInitExprClass:
-    case clang::Stmt::ParenListExprClass:
-    case clang::Stmt::ExtVectorElementExprClass:
-    case clang::Stmt::BlockExprClass:
-    case clang::Stmt::AsTypeExprClass:
-    case clang::Stmt::PseudoObjectExprClass:
-    case clang::Stmt::AtomicExprClass:
-    case clang::Stmt::AttributedStmtClass:
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
