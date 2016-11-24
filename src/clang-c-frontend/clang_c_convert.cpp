@@ -858,10 +858,10 @@ bool clang_c_convertert::get_type(
 
     case clang::Type::Record:
     {
-      const clang::RecordDecl &tag =
+      const clang::RecordDecl &rd =
         *(static_cast<const clang::RecordType &>(the_type)).getDecl();
 
-      if(tag.isClass())
+      if(rd.isClass())
       {
         std::cerr << "Class Type is not supported yet" << std::endl;
         return true;
@@ -869,7 +869,7 @@ bool clang_c_convertert::get_type(
 
       // Search for the type on the type map
       type_mapt::iterator it;
-      if(search_add_type_map(tag, it))
+      if(search_add_type_map(rd, it))
         return true;
 
       symbolt &s = *context.find_symbol(it->second);
@@ -1314,7 +1314,8 @@ bool clang_c_convertert::get_expr(
       call.function() = callee_expr;
       call.type() = type;
 
-      for (const clang::Expr *arg : function_call.arguments()) {
+      for (const clang::Expr *arg : function_call.arguments())
+      {
         exprt single_arg;
         if(get_expr(*arg, single_arg))
           return true;
@@ -1593,7 +1594,7 @@ bool clang_c_convertert::get_expr(
       for (clang::DeclGroupRef::const_iterator
         it = declgroup.begin();
         it != declgroup.end();
-        it++)
+        ++it)
       {
         exprt single_decl;
         if(get_decl(**it, single_decl))
