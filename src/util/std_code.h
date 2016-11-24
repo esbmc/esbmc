@@ -797,6 +797,13 @@ public:
     op1().id("arguments");
   }
 
+  side_effect_expr_function_callt(const typet &_type)
+    : side_effect_exprt("function_call", _type)
+  {
+    operands().resize(2);
+    op1().id("arguments");
+  }
+
   exprt &function()
   {
     return op0();
