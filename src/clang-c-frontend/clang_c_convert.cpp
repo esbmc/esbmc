@@ -30,8 +30,6 @@ clang_c_convertert::clang_c_convertert(
     ns(context),
     ASTs(_ASTs),
     current_scope_var_num(1),
-    anon_var_counter(0),
-    anon_tag_counter(0),
     sm(nullptr),
     current_functionDecl(nullptr)
 {
@@ -152,24 +150,10 @@ bool clang_c_convertert::get_decl(
       if(get_type(fd.getType(), t))
         return true;
 
-      struct_union_typet::componentt comp;
-      comp.type() = t;
+      std::string name;
+      get_field_name(fd, name);
 
-      std::string name, pretty_name;
-      if((t.is_struct() || t.is_union()) && fd.getName().str().empty())
-      {
-        name = to_struct_union_type(t).tag().as_string();
-        pretty_name = "#anon" + i2string(anon_tag_counter++);
-      }
-      else
-      {
-        get_field_name(fd, name);
-        pretty_name = name;
-      }
-
-      comp.name(name);
-      comp.pretty_name(pretty_name);
-
+      struct_union_typet::componentt comp(name, name, t);
       if(fd.isBitField() && !config.options.get_bool_option("no-bitfields"))
       {
         exprt width;
@@ -192,9 +176,10 @@ bool clang_c_convertert::get_decl(
       if(get_type(fd.getType(), t))
         return true;
 
-      struct_union_typet::componentt comp(fd.getName().str(), t);
-      comp.set_pretty_name(fd.getName().str());
+      std::string name;
+      get_field_name(*fd.getAnonField(), name);
 
+      struct_union_typet::componentt comp(name, name, t);
       if(fd.getAnonField()->isBitField())
       {
         exprt width;
@@ -2445,7 +2430,19 @@ void clang_c_convertert::get_field_name(
   name = fd.getName().str();
 
   if(name.empty())
-    name += "#anon" + i2string(anon_var_counter++);
+  {
+    typet t;
+    get_type(fd.getType(), t);
+
+    if(fd.isBitField())
+    {
+      exprt width;
+      get_expr(*fd.getBitWidth(), width);
+      t.width(width.cformat());
+    }
+
+    name = "anon::" + type2name(t);
+  }
 }
 
 void clang_c_convertert::get_var_name(
@@ -2505,32 +2502,42 @@ void clang_c_convertert::get_function_name(
 }
 
 bool clang_c_convertert::get_tag_name(
-  const clang::RecordDecl& recordd,
-  std::string &identifier)
+  const clang::RecordDecl& rd,
+  std::string &name)
 {
-  if(recordd.getName().str().empty())
+  name = rd.getName().str();
+  if(!name.empty())
+    return false;
+
+  // Try to get the name from typedef (if one exists)
+  if (const clang::TagDecl *tag = llvm::dyn_cast<clang::TagDecl>(&rd))
   {
-    clang::RecordDecl *record_def = recordd.getDefinition();
-
-    struct_union_typet t;
-    if(recordd.isStruct())
-      t = struct_typet();
-    else if(recordd.isUnion())
-      t = union_typet();
-    else
-      // This should never be reached
-      abort();
-
-    if(get_struct_union_class_fields(*record_def, t))
-      return true;
-
-    identifier += "#anon#" + type2name(t);
+    if (const clang::TypedefNameDecl *tnd = rd.getTypedefNameForAnonDecl())
+    {
+      name = tnd->getName().str();
+      return false;
+    }
+    else if (tag->getIdentifier())
+    {
+      name = tag->getName().str();
+      return false;
+    }
   }
+
+  struct_union_typet t;
+  if(rd.isStruct())
+    t = struct_typet();
+  else if(rd.isUnion())
+    t = union_typet();
   else
-  {
-    identifier += recordd.getName().str();
-  }
+    // This should never be reached
+    abort();
 
+  clang::RecordDecl *record_def = rd.getDefinition();
+  if(get_struct_union_class_fields(*record_def, t))
+    return true;
+
+  name = "anon::" + type2name(t);
   return false;
 }
 

@@ -36,8 +36,6 @@ private:
   std::vector<std::unique_ptr<clang::ASTUnit> > &ASTs;
 
   unsigned int current_scope_var_num;
-  unsigned int anon_var_counter;
-  unsigned int anon_tag_counter;
 
   clang::SourceManager *sm;
 
