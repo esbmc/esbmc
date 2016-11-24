@@ -141,6 +141,11 @@ typet wchar_type()
   return signedbv_typet(config.ansi_c.int_width);
 }
 
+typet unsigned_wchar_type()
+{
+  return unsignedbv_typet(config.ansi_c.int_width);
+}
+
 type2tc char_type2()
 {
   if (config.ansi_c.char_is_unsigned)
