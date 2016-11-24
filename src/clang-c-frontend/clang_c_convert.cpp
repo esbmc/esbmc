@@ -355,17 +355,29 @@ bool clang_c_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &recordd,
   struct_union_typet &type)
 {
-  for(const auto &decl : recordd.decls())
+  // First, parse the fields
+  for(const auto &field : recordd.fields())
   {
     struct_typet::componentt comp;
-    if(get_decl(*decl, comp))
+    if(get_decl(*field, comp))
       return true;
 
-    // If we are parsing a field declaration, add it to the components
-    if(decl->getKind() == clang::Decl::Field)
-      type.components().push_back(comp);
+    // Don't add fields that have global storage (e.g., static)
+    if(const clang::VarDecl* nd = llvm::dyn_cast<clang::VarDecl>(field))
+      if(nd->hasGlobalStorage())
+        continue;
+
+    type.components().push_back(comp);
   }
 
+  return false;
+}
+
+bool clang_c_convertert::get_struct_union_class_methods(
+  const clang::RecordDecl &recordd,
+  struct_union_typet &type)
+{
+  // We don't add methods to the struct in C
   return false;
 }
 
