@@ -945,7 +945,12 @@ bool clang_c_convertert::get_builtin_type(
     case clang::BuiltinType::Char_U:
     case clang::BuiltinType::UChar:
       new_type = unsigned_char_type();
-      c_type = "unsigned char";
+      c_type = "unsigned_char";
+      break;
+
+    case clang::BuiltinType::WChar_U:
+      new_type = unsigned_wchar_type();
+      c_type = "unsigned_wchar_t";
       break;
 
     case clang::BuiltinType::Char16:
@@ -958,58 +963,55 @@ bool clang_c_convertert::get_builtin_type(
       c_type = "char32_t";
       break;
 
-    case clang::BuiltinType::Char_S:
-    case clang::BuiltinType::SChar:
-      new_type = signed_char_type();
-      c_type = "signed char";
-      break;
-
     case clang::BuiltinType::UShort:
       new_type = unsigned_short_int_type();
-      c_type = "unsigned short";
+      c_type = "unsigned_short";
       break;
 
     case clang::BuiltinType::UInt:
       new_type = uint_type();
-      c_type = "unsigned int";
+      c_type = "unsigned_int";
       break;
 
     case clang::BuiltinType::ULong:
       new_type = long_uint_type();
-      c_type = "unsigned long";
+      c_type = "unsigned_long";
       break;
 
     case clang::BuiltinType::ULongLong:
       new_type = long_long_uint_type();
-      c_type = "unsigned long long";
+      c_type = "unsigned_long_long";
       break;
 
-    case clang::BuiltinType::Int128:
-    case clang::BuiltinType::UInt128:
-      // Various simplification / big-int related things use uint64_t's...
-      std::cerr << "ESBMC currently does not support integers bigger "
-                    "than 64 bits" << std::endl;
-      bt.dump();
-      return true;
+    case clang::BuiltinType::Char_S:
+    case clang::BuiltinType::SChar:
+      new_type = signed_char_type();
+      c_type = "signed_char";
+      break;
+
+    case clang::BuiltinType::WChar_S:
+      new_type = wchar_type();
+      c_type = "wchar_t";
+      break;
 
     case clang::BuiltinType::Short:
       new_type = signed_short_int_type();
-      c_type = "signed short";
+      c_type = "signed_short";
       break;
 
     case clang::BuiltinType::Int:
       new_type = int_type();
-      c_type = "signed int";
+      c_type = "signed_int";
       break;
 
     case clang::BuiltinType::Long:
       new_type = long_int_type();
-      c_type = "signed long";
+      c_type = "signed_long";
       break;
 
     case clang::BuiltinType::LongLong:
       new_type = long_long_int_type();
-      c_type = "signed long long";
+      c_type = "signed_long_long";
       break;
 
     case clang::BuiltinType::Float:
@@ -1024,8 +1026,16 @@ bool clang_c_convertert::get_builtin_type(
 
     case clang::BuiltinType::LongDouble:
       new_type = long_double_type();
-      c_type = "long double";
+      c_type = "long_double";
       break;
+
+    case clang::BuiltinType::Int128:
+    case clang::BuiltinType::UInt128:
+      // Various simplification / big-int related things use uint64_t's...
+      std::cerr << "ESBMC currently does not support integers bigger "
+                << "than 64 bits" << std::endl;
+      bt.dump();
+      return true;
 
     default:
       std::cerr << "Unrecognized clang builtin type "
@@ -1035,7 +1045,7 @@ bool clang_c_convertert::get_builtin_type(
       return true;
   }
 
-  new_type.set("#c_type", c_type);
+  new_type.set("#cpp_type", c_type);
   return false;
 }
 
