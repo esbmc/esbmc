@@ -97,16 +97,10 @@ std::string type2name(const typet &type)
   {
     if(type.id()=="struct") result +="ST";
     if(type.id()=="union") result +="UN";
-    const struct_typet &t = to_struct_type(type);
-    const struct_typet::componentst &components = t.components();
+
     result+='[';
-    for(struct_typet::componentst::const_iterator it = components.begin();
-        it!=components.end();
-        it++)
-    {
-      result+=type2name(it->type());
-      result+="'" + it->name().as_string() + "'|";
-    }
+    for(auto it : to_struct_type(type).components())
+      result+=type2name(it.type()) + "'" + it.name().as_string() + "'|";
     result.resize(result.size()-1);
     result+=']';
   }
