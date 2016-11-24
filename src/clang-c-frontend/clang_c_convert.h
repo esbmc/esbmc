@@ -77,8 +77,16 @@ private:
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
+  bool get_struct_union_class_methods(
+    const clang::RecordDecl &recordd,
+    struct_union_typet &type);
+
   bool get_type(
-    const clang::QualType &the_type,
+    const clang::QualType &type,
+    typet &new_type);
+
+  bool get_type(
+    const clang::Type &the_type,
     typet &new_type);
 
   bool get_builtin_type(

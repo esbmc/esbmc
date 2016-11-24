@@ -635,7 +635,25 @@ bool clang_c_convertert::get_type(
   typet &new_type)
 {
   const clang::Type &the_type = *q_type.getTypePtrOrNull();
+  if(get_type(the_type, new_type))
+    return true;
 
+  if(q_type.isConstQualified())
+    new_type.cmt_constant(true);
+
+  if(q_type.isVolatileQualified())
+    new_type.cmt_volatile(true);
+
+  if(q_type.isRestrictQualified())
+    new_type.restricted(true);
+
+  return false;
+}
+
+bool clang_c_convertert::get_type(
+  const clang::Type &the_type,
+  typet &new_type)
+{
   switch (the_type.getTypeClass())
   {
     // Builtin types like integer
@@ -791,6 +809,10 @@ bool clang_c_convertert::get_type(
         type.arguments().push_back(param_type);
       }
 
+      // Apparently, if the type has no arguments, we assume ellipsis
+      if(!type.arguments().size() || func.isVariadic())
+        type.make_ellipsis();
+
       new_type = type;
       break;
     }
@@ -810,6 +832,10 @@ bool clang_c_convertert::get_type(
         return true;
 
       type.return_type() = return_type;
+
+      // Apparently, if the type has no arguments, we assume ellipsis
+      if(!type.arguments().size())
+        type.make_ellipsis();
 
       new_type = type;
       break;
@@ -918,9 +944,6 @@ bool clang_c_convertert::get_type(
       the_type.dump();
       return true;
   }
-
-  if(q_type.isConstQualified())
-    new_type.cmt_constant(true);
 
   return false;
 }
