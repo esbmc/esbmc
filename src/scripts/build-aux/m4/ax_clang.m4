@@ -119,104 +119,18 @@ AC_DEFUN([AX_CLANG],
         AC_MSG_RESULT(yes)
     fi
 
-    AC_MSG_CHECKING(if we can find libclangTooling)
-    if ls "$clang_libs_path/libclangTooling"* >/dev/null 2>&1 ; then
-         clang_LIBS="-lclangTooling"
-         AC_MSG_RESULT(yes)
+    dnl Look for clang libs
+    clanglibs="Tooling Driver Frontend Parse Serialization Sema Analysis Edit Lex AST Basic"
+    for lib in $clanglibs ; do
+        AC_MSG_CHECKING(if we can find libclang$lib)
+        if ls "$clang_libs_path/libclang$lib"* >/dev/null 2>&1 ; then
+	 clang_LIBS="$clang_LIBS -lclang$lib"
+	 AC_MSG_RESULT(yes)
     else
-         AC_MSG_NOTICE([Can't find libclangTooling])
-         ifelse([$3], , :, [$3])
+	 AC_MSG_NOTICE([Can't find libclang$lib])
+	 ifelse([$3], , :, [$3])
     fi
-
-    AC_MSG_CHECKING(if we can find libclangDriver)
-    if ls "$clang_libs_path/libclangDriver"* >/dev/null 2>&1 ; then
-         clang_LIBS="$clang_LIBS -lclangDriver"
-         AC_MSG_RESULT(yes)
-    else
-         AC_MSG_NOTICE([Can't find libclangDriver])
-         ifelse([$3], , :, [$3])
-    fi
-
-    AC_MSG_CHECKING(if we can find libclangFrontend)
-    if ls "$clang_libs_path/libclangFrontend"* >/dev/null 2>&1 ; then
-         clang_LIBS="$clang_LIBS -lclangFrontend"
-         AC_MSG_RESULT(yes)
-    else
-         AC_MSG_NOTICE([Can't find libclangFrontend])
-         ifelse([$3], , :, [$3])
-    fi
-
-    AC_MSG_CHECKING(if we can find libclangParse)
-    if ls "$clang_libs_path/libclangParse"* >/dev/null 2>&1 ; then
-         clang_LIBS="$clang_LIBS -lclangParse"
-         AC_MSG_RESULT(yes)
-    else
-         AC_MSG_NOTICE([Can't find libclangParse])
-         ifelse([$3], , :, [$3])
-    fi
-
-    AC_MSG_CHECKING(if we can find libclangSerialization)
-    if ls "$clang_libs_path/libclangSerialization"* >/dev/null 2>&1 ; then
-         clang_LIBS="$clang_LIBS -lclangSerialization"
-         AC_MSG_RESULT(yes)
-    else
-         AC_MSG_NOTICE([Can't find libclangSerialization])
-         ifelse([$3], , :, [$3])
-    fi
-
-    AC_MSG_CHECKING(if we can find libclangSema)
-    if ls "$clang_libs_path/libclangSema"* >/dev/null 2>&1 ; then
-         clang_LIBS="$clang_LIBS -lclangSema"
-         AC_MSG_RESULT(yes)
-    else
-         AC_MSG_NOTICE([Can't find libclangSema])
-         ifelse([$3], , :, [$3])
-    fi
-
-    AC_MSG_CHECKING(if we can find libclangAnalysis)
-    if ls "$clang_libs_path/libclangAnalysis"* >/dev/null 2>&1 ; then
-         clang_LIBS="$clang_LIBS -lclangAnalysis"
-         AC_MSG_RESULT(yes)
-    else
-         AC_MSG_NOTICE([Can't find libclangAnalysis])
-         ifelse([$3], , :, [$3])
-    fi
-
-    AC_MSG_CHECKING(if we can find libclangEdit)
-    if ls "$clang_libs_path/libclangEdit"* >/dev/null 2>&1 ; then
-         clang_LIBS="$clang_LIBS -lclangEdit"
-         AC_MSG_RESULT(yes)
-    else
-         AC_MSG_NOTICE([Can't find libclangEdit])
-         ifelse([$3], , :, [$3])
-    fi
-
-    AC_MSG_CHECKING(if we can find libclangLex)
-    if ls "$clang_libs_path/libclangLex"* >/dev/null 2>&1 ; then
-         clang_LIBS="$clang_LIBS -lclangLex"
-         AC_MSG_RESULT(yes)
-    else
-         AC_MSG_NOTICE([Can't find libclangLex])
-         ifelse([$3], , :, [$3])
-    fi
-
-    AC_MSG_CHECKING(if we can find clangAST)
-    if ls "$clang_libs_path/libclangAST"* >/dev/null 2>&1 ; then
-         clang_LIBS="$clang_LIBS -lclangAST"
-         AC_MSG_RESULT(yes)
-    else
-         AC_MSG_NOTICE([Can't find libclangAST])
-         ifelse([$3], , :, [$3])
-    fi
-
-    AC_MSG_CHECKING(if we can find libclangBasic)
-    if ls "$clang_libs_path/libclangBasic"* >/dev/null 2>&1 ; then
-         clang_LIBS="$clang_LIBS -lclangBasic"
-         AC_MSG_RESULT(yes)
-    else
-         AC_MSG_NOTICE([Can't find libclangBasic])
-         ifelse([$3], , :, [$3])
-    fi
+    done
 
     clang_CPPFLAGS="-I$clang_includes_path"
     clang_LDFLAGS="-L$clang_libs_path"
