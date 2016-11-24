@@ -2204,6 +2204,10 @@ bool clang_c_convertert::get_unary_operator_expr(
       new_expr = exprt("dereference", uniop_type);
       break;
 
+    case clang::UO_Extension:
+      new_expr.swap(unary_sub);
+      return false;
+
     default:
       std::cerr << "Conversion of unsupported clang unary operator: \"";
       std::cerr << clang::UnaryOperator::getOpcodeStr(uniop.getOpcode()).str()
