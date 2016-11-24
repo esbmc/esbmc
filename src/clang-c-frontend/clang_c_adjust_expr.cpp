@@ -53,20 +53,9 @@ void clang_c_adjust::adjust_symbol(symbolt& symbol)
 
 void clang_c_adjust::adjust_expr(exprt& expr)
 {
-  if(expr.id()=="sideeffect" &&
-     expr.statement()=="function_call")
-  {
-    // don't do function operand
-    assert(expr.operands().size()==2);
-
-    adjust_expr(expr.op1()); // arguments
-  }
-  else
-  {
-    // fist do sub-nodes
-    Forall_operands(it, expr)
-      adjust_expr(*it);
-  }
+  // fist do sub-nodes
+  Forall_operands(it, expr)
+    adjust_expr(*it);
 
   // now do case-split
   adjust_expr_main(expr);
@@ -202,10 +191,7 @@ void clang_c_adjust::adjust_symbol(exprt& expr)
   symbolt* s = context.find_symbol(identifier);
 
   if(s == nullptr)
-  {
-    std::cout << "failed to find symbol `" << identifier << "'" << std::endl;
-    abort();
-  }
+    return;
 
   // found it
   const symbolt &symbol = *s;
@@ -617,18 +603,14 @@ void clang_c_adjust::adjust_side_effect_function_call(
     }
   }
 
-  adjust_expr(f_op);
-
   // do implicit dereference
-  if(f_op.is_address_of() &&
-     f_op.implicit() &&
-     f_op.operands().size()==1)
+  if(f_op.is_address_of() && f_op.implicit() && (f_op.operands().size() == 1))
   {
     exprt tmp;
     tmp.swap(f_op.op0());
     f_op.swap(tmp);
   }
-  else
+  else if(f_op.type().is_pointer())
   {
     exprt tmp("dereference", f_op.type().subtype());
     tmp.implicit(true);
@@ -643,15 +625,13 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
   for(unsigned i=0; i<arguments.size(); i++)
   {
-    exprt &op=arguments[i];
+    exprt &op = arguments[i];
+    adjust_expr(op);
 
     if(i<argument_types.size())
     {
-      const code_typet::argumentt &argument_type=
-        argument_types[i];
-
-      const typet &op_type=argument_type.type();
-
+      const code_typet::argumentt &argument_type = argument_types[i];
+      const typet &op_type = argument_type.type();
       gen_typecast(ns, op, op_type);
     }
     else

@@ -1247,9 +1247,9 @@ bool clang_c_convertert::get_expr(
       break;
     }
 
-    // A function call expr. The symbol may be undefined so we create it here
-    // This should be moved to a step after the conversion. The conversion
-    // step should only convert the code
+    // A function call expr
+    // It can be undefined here, the symbol will be added in
+    // adjust_expr::adjust_side_effect_function_call
     case clang::Stmt::CallExprClass:
     {
       const clang::CallExpr &function_call =
