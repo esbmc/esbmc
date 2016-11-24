@@ -1405,6 +1405,18 @@ bool clang_c_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::GNUNullExprClass:
+    {
+      const clang::GNUNullExpr &gnun =
+        static_cast<const clang::GNUNullExpr&>(stmt);
+
+      typet t;
+      if(get_type(gnun.getType(), t))
+        return true;
+
+      new_expr = gen_zero(t);
+      break;
+    }
     // Casts expression:
     // Implicit: float f = 1; equivalent to float f = (float) 1;
     // CStyle: int a = (int) 3.0;
@@ -1977,7 +1989,6 @@ bool clang_c_convertert::get_expr(
     case clang::Stmt::ShuffleVectorExprClass:
     case clang::Stmt::ConvertVectorExprClass:
     case clang::Stmt::ChooseExprClass:
-    case clang::Stmt::GNUNullExprClass:
     case clang::Stmt::DesignatedInitExprClass:
     case clang::Stmt::ParenListExprClass:
     case clang::Stmt::ExtVectorElementExprClass:
