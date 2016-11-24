@@ -134,7 +134,12 @@ bool clang_c_convertert::get_decl(
     {
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
-      return get_function(fd);
+
+      // We can safely ignore any expr generated when parsing C code
+      // In C++ mode, methods are initially parsed as function and
+      // need to be added to the class scope
+      exprt dummy;
+      return get_function(fd, dummy);
     }
 
     // Field inside a struct/union
@@ -222,7 +227,7 @@ bool clang_c_convertert::get_decl(
 
       for(auto decl : tu.decls())
       {
-        // This is a global declaration (varible, function, struct, etc)
+        // This is a global declaration (variable, function, struct, etc)
         // We don't need the exprt, it will be automatically added to the
         // context
         exprt dummy_decl;
@@ -461,7 +466,8 @@ bool clang_c_convertert::get_var(
 }
 
 bool clang_c_convertert::get_function(
-  const clang::FunctionDecl &fd)
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
 {
   // Don't convert if clang thinks that the functions was implicitly converted
   if(fd.isImplicit())
@@ -1731,8 +1737,12 @@ bool clang_c_convertert::get_expr(
       const clang::IfStmt &ifstmt =
         static_cast<const clang::IfStmt &>(stmt);
 
+      const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = ifstmt.getCond();
+
       exprt cond;
-      if(get_expr(*ifstmt.getCond(), cond))
+      if(get_expr(*cond_expr, cond))
         return true;
 
       exprt then;
@@ -1766,8 +1776,12 @@ bool clang_c_convertert::get_expr(
       const clang::SwitchStmt &switch_stmt =
         static_cast<const clang::SwitchStmt &>(stmt);
 
-      exprt value;
-      if(get_expr(*switch_stmt.getCond(), value))
+      const clang::Stmt *cond_expr = switch_stmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = switch_stmt.getCond();
+
+      exprt cond;
+      if(get_expr(*cond_expr, cond))
         return true;
 
       codet body;
@@ -1775,7 +1789,7 @@ bool clang_c_convertert::get_expr(
         return true;
 
       code_switcht switch_code;
-      switch_code.value() = value;
+      switch_code.value() = cond;
       switch_code.body() = body;
 
       new_expr = switch_code;
@@ -1789,8 +1803,12 @@ bool clang_c_convertert::get_expr(
       const clang::WhileStmt &while_stmt =
         static_cast<const clang::WhileStmt &>(stmt);
 
+      const clang::Stmt *cond_expr = while_stmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = while_stmt.getCond();
+
       exprt cond;
-      if(get_expr(*while_stmt.getCond(), cond))
+      if(get_expr(*cond_expr, cond))
         return true;
 
       codet body = code_skipt();
@@ -1848,11 +1866,13 @@ bool clang_c_convertert::get_expr(
           return true;
 
       convert_expression_to_code(init);
+      const clang::Stmt *cond_expr = for_stmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = for_stmt.getCond();
 
       exprt cond = true_exprt();
-      const clang::Stmt *cond_stmt = for_stmt.getCond();
-      if(cond_stmt)
-        if(get_expr(*cond_stmt, cond))
+      if(cond_expr)
+        if(get_expr(*cond_expr, cond))
           return true;
 
       codet inc = code_skipt();
@@ -2069,6 +2089,7 @@ bool clang_c_convertert::get_decl_ref(
   new_expr.identifier(identifier);
   new_expr.cmt_lvalue(true);
 
+  // Remove c:: or cpp::
   if(identifier.find_last_of("::") != std::string::npos)
     new_expr.name(identifier.substr(identifier.find_last_of("::")+1));
   else
