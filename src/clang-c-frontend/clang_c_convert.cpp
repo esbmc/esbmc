@@ -938,6 +938,16 @@ bool clang_c_convertert::get_type(
       break;
     }
 
+    case clang::Type::Decltype:
+    {
+      const clang::DecltypeType &dt =
+        static_cast<const clang::DecltypeType &>(the_type);
+
+      if(get_type(dt.getUnderlyingType(), new_type))
+        return true;
+
+      break;
+    }
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
