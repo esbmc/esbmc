@@ -67,17 +67,9 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   {
     adjust_side_effect(to_side_effect_expr(expr));
   }
-  else if(expr.id() == "constant")
-  {
-  }
   else if(expr.id() == "symbol")
   {
     adjust_symbol(expr);
-  }
-  else if(expr.id() == "unary+"
-          || expr.id() == "unary-"
-          || expr.id() == "bitnot")
-  {
   }
   else if(expr.id() == "not")
   {
@@ -112,9 +104,6 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   {
     adjust_index(to_index_expr(expr));
   }
-  else if(expr.id() == "typecast")
-  {
-  }
   else if(expr.id() == "sizeof")
   {
     adjust_sizeof(expr);
@@ -146,40 +135,6 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   else if(expr.is_code())
   {
     adjust_code(to_code(expr));
-  }
-  else if(expr.id() == "builtin_offsetof")
-  {
-  }
-  else if(expr.id() == "string-constant")
-  {
-  }
-  else if(expr.id() == "arguments")
-  {
-  }
-  else if(expr.id() == "union")
-  {
-  }
-  else if(expr.id() == "struct")
-  {
-  }
-  else if(expr.id() == "nil")
-  {
-  }
-  else if(expr.id() == "array_of")
-  {
-  }
-  else if(expr.id()=="ieee_add" ||
-          expr.id()=="ieee_sub" ||
-          expr.id()=="ieee_mul" ||
-          expr.id()=="ieee_div")
-  {
-  }
-  else
-  {
-    std::cout << "Unexpected expression: " << expr.id().as_string()
-              << std::endl;
-    expr.dump();
-    abort();
   }
 }
 

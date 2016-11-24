@@ -25,13 +25,6 @@ void clang_c_adjust::adjust_code(codet& code)
   {
     adjust_expression(code);
   }
-  else if(statement=="label")
-  {
-  }
-  else if(statement=="block" ||
-          statement=="decl-block")
-  {
-  }
   else if(statement=="ifthenelse")
   {
     adjust_ifthenelse(code);
@@ -53,36 +46,9 @@ void clang_c_adjust::adjust_code(codet& code)
   {
     adjust_assign(code);
   }
-  else if(statement=="return")
-  {
-  }
-  else if(statement=="break")
-  {
-  }
-  else if(statement=="goto")
-  {
-  }
-  else if(statement=="continue")
-  {
-  }
   else if(statement=="decl")
   {
     adjust_decl(code);
-  }
-  else if(statement=="skip")
-  {
-  }
-  else if(statement=="asm")
-  {
-  }
-  else if(statement=="function_call")
-  {
-  }
-  else
-  {
-    std::cout << "Unexpected codet: " << statement << std::endl;
-    code.dump();
-    abort();
   }
 }
 
