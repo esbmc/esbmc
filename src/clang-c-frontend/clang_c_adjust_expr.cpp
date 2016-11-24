@@ -18,6 +18,12 @@
 
 #include "typecast.h"
 
+clang_c_adjust::clang_c_adjust(contextt &_context)
+  : context(_context),
+    ns(namespacet(context))
+{
+}
+
 bool clang_c_adjust::adjust()
 {
   // warning! hash-table iterators are not stable
@@ -204,7 +210,7 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt& expr)
   else
   {
     std::cout << "unknown side effect: " << statement;
-    std::cout << "at " << expr.location() << std::endl;
+    std::cout << " at " << expr.location() << std::endl;
     abort();
   }
 }
@@ -395,8 +401,7 @@ void clang_c_adjust::adjust_dereference(exprt& deref)
 
   const typet op_type=ns.follow(op.type());
 
-  if(op_type.is_array() ||
-     op_type.id()=="incomplete_array")
+  if(op_type.is_array())
   {
     // *a is the same as a[0]
     deref.id("index");
@@ -546,8 +551,11 @@ void clang_c_adjust::adjust_side_effect_function_call(
       new_symbol.base_name=f_op.name();
       new_symbol.location=expr.location();
       new_symbol.type=f_op.type();
-      new_symbol.type.incomplete(true);
       new_symbol.mode="C";
+
+      // Adjust type
+      to_code_type(new_symbol.type).make_ellipsis();
+      to_code_type(f_op.type()).make_ellipsis();
 
       symbolt *symbol_ptr;
       bool res = context.move(new_symbol, symbol_ptr);
@@ -574,6 +582,15 @@ void clang_c_adjust::adjust_side_effect_function_call(
     f_op.swap(tmp);
   }
 
+  adjust_function_call_arguments(expr);
+
+  do_special_functions(expr);
+}
+
+void clang_c_adjust::adjust_function_call_arguments(
+    side_effect_expr_function_callt &expr)
+{
+  exprt &f_op=expr.function();
   const code_typet &code_type = to_code_type(f_op.type());
   exprt::operandst &arguments = expr.arguments();
   const code_typet::argumentst &argument_types = code_type.arguments();
@@ -594,12 +611,10 @@ void clang_c_adjust::adjust_side_effect_function_call(
       // don't know type, just do standard conversion
 
       const typet &type = ns.follow(op.type());
-      if(type.is_array() || type.id()=="incomplete_array")
+      if(type.is_array())
         gen_typecast(ns, op, pointer_typet(empty_typet()));
     }
   }
-
-  do_special_functions(expr);
 }
 
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
