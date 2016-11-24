@@ -64,10 +64,33 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     }
   }
 
-  if (new_guard_false) {
+  goto_programt::const_targett goto_target =
+    instruction.targets.front();
 
+  bool forward =
+    cur_state->source.pc->location_number <
+    goto_target->location_number;
+
+  // Check if we are inside a loop, during inductive step
+  if(inductive_step && (instruction.loop_number != 0))
+  {
+    // We just entered the loop, save the loop number
+    if(forward)
+      loop_numbers.push(instruction.loop_number);
+    else
+    {
+      // We are leaving the loop, remove from stack
+      assert(instruction.loop_number == loop_numbers.top());
+      loop_numbers.pop();
+    }
+  }
+
+  statet::framet &frame=cur_state->top();
+  if (new_guard_false)
+  {
     // reset unwinding counter
-    cur_state->unwind_map[cur_state->source] = 0;
+    if(instruction.is_backwards_goto())
+      frame.loop_iterations[instruction.loop_number] = 0;
 
     // next instruction
     cur_state->source.pc++;
@@ -81,25 +104,17 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   if (instruction.targets.size() != 1)
     throw "no support for non-deterministic gotos";
 
-  goto_programt::const_targett goto_target =
-    instruction.targets.front();
-
-  bool forward =
-    cur_state->source.pc->location_number <
-    goto_target->location_number;
-
-  if (!forward) { // backwards?
-    unsigned unwind;
-
-    unwind = cur_state->unwind_map[cur_state->source];
+  // backwards?
+  if (!forward)
+  {
+    unsigned &unwind = frame.loop_iterations[instruction.loop_number];
     unwind++;
-    cur_state->unwind_map[cur_state->source] = unwind;
 
     if (get_unwind(cur_state->source, unwind)) {
       loop_bound_exceeded(new_guard);
 
       // reset unwinding
-      cur_state->unwind_map[cur_state->source] = 0;
+      unwind = 0;
 
       // next instruction
       cur_state->source.pc++;
@@ -277,7 +292,6 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       cur_state->current_name(goto_state, true_val);
       cur_state->current_name(false_val);
       rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
-      do_simplify(rhs);
     }
 
     expr2tc lhs;
@@ -313,12 +327,6 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
 
   if (base_case || inductive_step)
   {
-    const goto_programt::instructiont &instruction = *cur_state->source.pc;
-
-    // If the loop was not converted by the k-induction, don't add the assume
-    if(inductive_step and !instruction.converted_loop)
-      return;
-
     // generate unwinding assumption
     expr2tc guarded_expr=negated_cond;
     cur_state->guard.guard_expr(guarded_expr);

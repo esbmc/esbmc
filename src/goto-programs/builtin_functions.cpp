@@ -267,17 +267,6 @@ void goto_convertt::do_malloc(
   goto_programt &dest)
 {
   do_mem(true, lhs, function, arguments, dest);
-
-  if((options.get_bool_option("k-induction")
-      || (options.get_bool_option("k-induction-parallel")
-          && options.get_bool_option("inductive-step")))
-      && !options.get_bool_option("disable-inductive-step"))
-  {
-    std::cout << "**** WARNING: this program contains dynamic memory allocation,"
-        << " so we are not applying the inductive step to this program!"
-        << std::endl;
-    options.set_option("disable-inductive-step", true);
-  }
 }
 
 void goto_convertt::do_cpp_new(

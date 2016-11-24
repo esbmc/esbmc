@@ -31,7 +31,7 @@ expr2tc abstract_domain_baset::get_guard(
     expr2tc tmp = not2tc(from->guard);
     return tmp;
   }
-  
+
   return from->guard;
 }
 
@@ -43,12 +43,12 @@ expr2tc abstract_domain_baset::get_return_lhs(locationt to) const
 
   if(to->is_end_function())
     return expr2tc();
-  
+
   // must be the function call
   assert(to->is_function_call());
 
   const code_function_call2t &code = to_code_function_call2t(to->code);
-  
+
   return code.ret;
 }
 
@@ -96,7 +96,7 @@ void static_analysis_baset::output(
 
     get_state(i_it).output(ns, out);
     out << std::endl;
-    goto_program.output_instruction(ns, identifier, out, i_it);
+    i_it->output_instruction(ns, identifier, out);
     out << std::endl;
   }
 }
@@ -140,11 +140,11 @@ void static_analysis_baset::update(
     if(!has_location(i_it))
     {
       generate_state(i_it);
-      
+
       if(!first)
         merge(get_state(i_it), get_state(previous));
     }
-    
+
     first=false;
     previous=i_it;
   }
@@ -154,11 +154,11 @@ static_analysis_baset::locationt static_analysis_baset::get_next(
   working_sett &working_set)
 {
   assert(!working_set.empty());
-  
+
   working_sett::iterator i=working_set.begin();
   locationt l=i->second;
   working_set.erase(i);
-    
+
   return l;
 }
 
@@ -168,19 +168,19 @@ bool static_analysis_baset::fixedpoint(
 {
   if(goto_program.instructions.empty())
     return false;
-  
+
   working_sett working_set;
 
   put_in_working_set(
     working_set,
     goto_program.instructions.begin());
-    
+
   bool new_data=false;
 
   while(!working_set.empty())
   {
     locationt l=get_next(working_set);
-    
+
     if(visit(l, working_set, goto_program, goto_functions))
       new_data=true;
   }
@@ -199,7 +199,7 @@ bool static_analysis_baset::visit(
   statet &current=get_state(l);
 
   current.seen=true;
-  
+
   goto_programt::const_targetst successors;
 
   goto_program.get_successors(l, successors);
@@ -215,7 +215,7 @@ bool static_analysis_baset::visit(
       continue;
 
     std::unique_ptr<statet> tmp_state(make_temporary_state(current));
-  
+
     statet &new_values=*tmp_state;
 
     // Do we want to pull new variables into the new state when tracking?
@@ -240,19 +240,19 @@ bool static_analysis_baset::visit(
     }
     else
       new_values.transform(ns, l, to_l);
-    
+
     statet &other=get_state(to_l);
 
     bool have_new_values=
       merge(other, new_values, merge_new_vals);
-  
+
     if(have_new_values)
       new_data=true;
-  
+
     if(have_new_values || !other.seen)
       put_in_working_set(working_set, to_l);
   }
-  
+
   return new_data;
 }
 
@@ -267,16 +267,16 @@ void static_analysis_baset::do_function_call(
 
   if(!goto_function.body_available)
     return; // do nothing
-    
+
   assert(!goto_function.body.instructions.empty());
 
   {
     // get the state at the beginning of the function
     locationt l_begin=goto_function.body.instructions.begin();
-    
+
     // do the edge from the call site to the beginning of the function
-    new_state.transform(ns, l_call, l_begin);  
-    
+    new_state.transform(ns, l_call, l_begin);
+
     statet &begin_state=get_state(l_begin);
 
     bool new_data=false;
@@ -321,7 +321,7 @@ void static_analysis_baset::do_function_call(
     // call site
     merge(new_state, end_of_function);
   }
-}    
+}
 
 void static_analysis_baset::do_function_call_rec(
   locationt l_call,
@@ -333,7 +333,7 @@ void static_analysis_baset::do_function_call_rec(
   if (is_symbol2t(function))
   {
     irep_idt identifier = to_symbol2t(function).get_symbol_name();
-    
+
     if(recursion_set.find(identifier)!=recursion_set.end())
     {
       // recursion detected!
@@ -341,27 +341,27 @@ void static_analysis_baset::do_function_call_rec(
     }
     else
       recursion_set.insert(identifier);
-      
+
     goto_functionst::function_mapt::const_iterator it=
       goto_functions.function_map.find(identifier);
-      
+
     if(it==goto_functions.function_map.end())
       throw "failed to find function "+id2string(identifier);
-    
+
     do_function_call(
       l_call,
       goto_functions,
       it,
       arguments,
       new_state);
-    
+
     recursion_set.erase(identifier);
   }
   else if (is_if2t(function))
   {
     const if2t ifval = to_if2t(function);
     std::unique_ptr<statet> n2(make_temporary_state(new_state));
-    
+
     do_function_call_rec(
       l_call,
       ifval.true_value,
@@ -375,7 +375,7 @@ void static_analysis_baset::do_function_call_rec(
       arguments,
       *n2,
       goto_functions);
-      
+
     merge(new_state, *n2);
   }
   else if (is_dereference2t(function))

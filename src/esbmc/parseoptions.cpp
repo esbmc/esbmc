@@ -66,11 +66,7 @@ extern "C" {
 #include <signal.h>
 #include <sys/wait.h>
 
-// Pipe for communication between processes
-int commPipe[2];
-
 enum PROCESS_TYPE { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP, PARENT };
-PROCESS_TYPE process_type = PARENT;
 
 struct resultt
 {
@@ -183,28 +179,17 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.cmdline(cmdline);
 
   /* graphML generation options check */
-  if(cmdline.isset("witnesspath") && cmdline.isset("tokenizer"))
+  if(cmdline.isset("witness-output"))
   {
-    std::string tokenizer_path = cmdline.getval("tokenizer");
-    std::ifstream tfile(tokenizer_path);
-    if(!tfile)
-    {
-      std::cout << "The tokenizer path is invalid, check it and try again"
-          << std::endl;
-      exit(1);
-    }
-
-    options.set_option("witnesspath", cmdline.getval("witnesspath"));
+    options.set_option("witness-output", cmdline.getval("witness-output"));
     options.set_option("no-slice", true);
-    options.set_option("tokenizer", cmdline.getval("tokenizer"));
   }
-  else if(cmdline.isset("witnesspath") && !cmdline.isset("tokenizer"))
-  {
-    std::cout
-        << "For graphML generation is necessary be set a tokenizer (use --tokenizer path)"
-        << std::endl;
-    exit(1);
-  }
+
+  if(cmdline.isset("witness-detailed"))
+    options.set_option("witness-detailed", true);
+
+  if(cmdline.isset("witness-programfile"))
+    options.set_option("witness-programfile", cmdline.getval("witness-programfile"));
 
   if(cmdline.isset("git-hash"))
   {
@@ -404,6 +389,9 @@ int cbmc_parseoptionst::doit()
   if(cmdline.isset("falsification"))
     return doit_falsification();
 
+  if(cmdline.isset("incremental-bmc"))
+    return doit_incremental();
+
   goto_functionst goto_functions;
 
   optionst opts;
@@ -429,7 +417,7 @@ int cbmc_parseoptionst::doit()
     set_verbosity_msg(bmc);
     res = do_bmc(bmc);
   }
-  catch(int)
+  catch(...)
   {
     status("Unable to prove or falsify the program, giving up.");
     status("VERIFICATION UNKNOWN");
@@ -440,11 +428,26 @@ int cbmc_parseoptionst::doit()
 
 int cbmc_parseoptionst::doit_k_induction_parallel()
 {
-  if(pipe(commPipe))
+  // Pipes for communication between processes
+  int forward_pipe[2], backward_pipe[2];
+
+  // Process type
+  PROCESS_TYPE process_type = PARENT;
+
+  if(pipe(forward_pipe))
   {
     status("\nPipe Creation Failed, giving up.");
     _exit(1);
   }
+
+  if(pipe(backward_pipe))
+  {
+    status("\nPipe Creation Failed, giving up.");
+    _exit(1);
+  }
+
+  /* Set file descriptor non-blocking */
+  fcntl(backward_pipe[0], F_SETFL, fcntl(backward_pipe[0], F_GETFL) | O_NONBLOCK);
 
   pid_t children_pid[3];
   short num_p = 0;
@@ -473,19 +476,21 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
     }
   }
 
-  goto_functionst goto_functions;
-  optionst opts;
-
   if(process_type == PARENT && num_p != 3)
   {
     std::cerr << "Child processes were not created sucessfully." << std::endl;
     abort();
   }
 
-  get_command_line_options(opts);
+  goto_functionst goto_functions;
+  optionst opts;
 
-  if((process_type != PARENT) && (process_type != INDUCTIVE_STEP))
+  if(process_type != PARENT)
   {
+    // Get full set of options
+    get_command_line_options(opts);
+
+    // Generate goto functions and set claims
     if(get_goto_program(opts, goto_functions))
       return 6;
 
@@ -500,29 +505,35 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       return 7;
   }
 
-  // do actual BMC
-  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+  // Get max number of iterations
+  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+
+  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
   if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = -1;
+    max_k_step = UINT_MAX;
+
+  // Get the increment
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
   // All processes were created successfully
   switch(process_type)
   {
     case PARENT:
     {
-      close(commPipe[1]);
+      // Communication to child processes
+      close(forward_pipe[1]);
+      close(backward_pipe[0]);
 
       struct resultt a_result;
       bool bc_finished = false, fc_finished = false, is_finished = false;
-      u_int bc_solution = -1, fc_solution = -1, is_solution = -1;
+      u_int bc_solution = max_k_step, fc_solution = max_k_step, is_solution = max_k_step;
 
-      // Keep reading untill we find an answer
+      // Keep reading until we find an answer
       while(!(bc_finished && fc_finished && is_finished))
       {
         // Perform read and interpret the number of bytes read
-        int read_size;
-        if((read_size = read(commPipe[0], &a_result, sizeof(resultt)))
-            != sizeof(resultt))
+        int read_size = read(forward_pipe[0], &a_result, sizeof(resultt));
+        if(read_size != sizeof(resultt))
         {
           if(read_size == 0)
           {
@@ -540,8 +551,10 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
         }
 
-        // Eventually checks on each step
-        if(!bc_finished && (bc_solution == (u_int) -1))
+        // Eventually the parent process will check if the child process is alive
+
+        // Check base case process
+        if(!bc_finished)
         {
           int status;
           pid_t result = waitpid(children_pid[0], &status, WNOHANG);
@@ -563,7 +576,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
         }
 
-        if(!fc_finished && (fc_solution == (u_int) -1))
+        // Check forward condition process
+        if(!fc_finished)
         {
           int status;
           pid_t result = waitpid(children_pid[1], &status, WNOHANG);
@@ -585,7 +599,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           }
         }
 
-        if(!is_finished && (is_solution == (u_int) -1))
+        // Check inductive step process
+        if(!is_finished)
         {
           int status;
           pid_t result = waitpid(children_pid[2], &status, WNOHANG);
@@ -606,10 +621,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
               bc_finished = fc_finished = true;
           }
         }
-
-        // Ignore zero sized messages
-        if(read_size == 0)
-          continue;
 
         switch(a_result.type)
         {
@@ -636,59 +647,91 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
         // If either the base case found a bug or the forward condition
         // finds a solution, present the result
-        if(bc_finished && (bc_solution != 0) && (bc_solution != (u_int) -1))
+        if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
           break;
 
-        if(fc_finished && (fc_solution != 0) && (fc_solution != (u_int) -1))
-          break;
+        // If the either the forward condition or inductive step finds a
+        // solution, first check if base case couldn't find a bug in that code,
+        // if there is no bug, inductive step can present the result
 
-        // If the inductive step finds a solution, first check if base case
-        // couldn't find a bug in that code, if there is no bug, inductive
-        // step can present the result
+        if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
+        {
+          // If base case finished, then we can present the result
+          if(bc_finished)
+            break;
 
-        // TODO: This needs improvement as it can lead to unsound verification.
-        // The inductive step show only prove a program when the base case did
-        // not find a bug for the same k step inductive proved. Since there is
-        // no communication about the verification process of each step, there
-        // is no guarantee that base case didn't find a bug for that step. It
-        // may yet to run bmc that deep! But since usually the base is faster
-        // than inductive step, this might not be a problem. A solution for
-        // this situation is sound kind of message from the parent process to
-        // the base case, asking about it's current k step, if bigger than
-        // is_solution, we can say for sure that the program is correct
-        if(is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
-          break;
+          // Otherwise, ask base case for a solution
+
+          // Struct to keep the result
+          struct resultt r = { process_type, 0 };
+
+          r.k = fc_solution;
+
+          // Write result
+          u_int len = write(backward_pipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
+          (void)len; //ndebug
+        }
+
+        if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
+        {
+          // If base case finished, then we can present the result
+          if(bc_finished)
+            break;
+
+          // Otherwise, ask base case for a solution
+
+          // Struct to keep the result
+          struct resultt r = { process_type, 0 };
+
+          r.k = is_solution;
+
+          // Write result
+          u_int len = write(backward_pipe[1], &r, sizeof(r));
+          assert(len == sizeof(r) && "short write");
+          (void)len; //ndebug
+        }
       }
 
       for(short i = 0; i < 3; ++i)
         kill(children_pid[i], SIGKILL);
 
       // Check if a solution was found by the base case
-      if(bc_finished && (bc_solution != 0) && (bc_solution != (u_int) -1))
+      if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))
       {
-        std::cout << std::endl << "Solution found by the base case " << "(k = "
+        std::cout << std::endl << "Bug found by the base case (k = "
             << bc_solution << ")" << std::endl;
         std::cout << "VERIFICATION FAILED" << std::endl;
         return true;
       }
 
       // Check if a solution was found by the forward condition
-      if(fc_finished && (fc_solution != 0) && (fc_solution != (u_int) -1))
+      if(fc_finished && (fc_solution != 0) && (fc_solution != max_k_step))
       {
-        std::cout << std::endl << "Solution found by the forward condition "
-            << "(k = " << fc_solution << ")" << std::endl;
-        std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
-        return false;
+        // We should only present the result if the base case finished
+        // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
+        if(bc_finished && (bc_solution != max_k_step))
+        {
+          std::cout << std::endl << "Solution found by the forward condition; "
+              << "all states are reachable (k = " << fc_solution
+              << ")" << std::endl;
+          std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          return false;
+        }
       }
 
-      // Check if a solution was found by the inductive step and
-      // the base case didn't find a bug
-      if(is_finished && (is_solution != 0) && (is_solution != (u_int) -1))
+      // Check if a solution was found by the inductive step
+      if(is_finished && (is_solution != 0) && (is_solution != max_k_step))
       {
-        std::cout << std::endl << "Solution found by the inductive step "
-            << "(k = " << is_solution << ")" << std::endl;
-        std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
-        return false;
+        // We should only present the result if the base case finished
+        // and haven't crashed (if it crashed, bc_solution will be UINT_MAX
+        if(bc_finished && (bc_solution != max_k_step))
+        {
+          std::cout << std::endl << "Solution found by the inductive step "
+              << "(k = " << is_solution << ")" << std::endl;
+          std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          return false;
+        }
       }
 
       // Couldn't find a bug or a proof for the current deepth
@@ -699,46 +742,106 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
     case BASE_CASE:
     {
+      // Set that we are running base case
+      opts.set_option("base-case", true);
+      opts.set_option("forward-condition", false);
+      opts.set_option("inductive-step", false);
+
       // Start communication to the parent process
-      close(commPipe[0]);
+      close(forward_pipe[0]);
+      close(backward_pipe[1]);
 
       // Struct to keep the result
       struct resultt r = { process_type, 0 };
 
-      // Set that we are running base case
-      opts.set_option("base-case", true);
-
       // Run bmc and only send results in two occasions:
       // 1. A bug was found, we send the step where it was found
       // 2. It couldn't find a bug
-      for(u_int k_step = 1; k_step <= max_k_step; ++k_step)
+      for(u_int k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
       {
         bmct bmc(goto_functions, opts, context, ui_message_handler);
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        bool res = do_bmc(bmc);
 
-        // Send information to parent if a bug was found
+        std::cout << std::endl << "*** K-Induction Loop Iteration ";
+        std::cout << i2string((unsigned long) k_step);
+        std::cout << " ***" << std::endl;
+        std::cout << "*** Checking base case" << std::endl;
+
+        // If an exception was thrown, we should abort the process
+        bool res = true;
+        try {
+          res = do_bmc(bmc);
+        }
+        catch(...)
+        {
+          break;
+        }
+
+        // Send information to parent if no bug was found
         if(res)
         {
           r.k = k_step;
 
           // Write result
-          u_int len = write(commPipe[1], &r, sizeof(r));
+          u_int len = write(forward_pipe[1], &r, sizeof(r));
           assert(len == sizeof(r) && "short write");
           (void)len; //ndebug
 
           std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
 
-          return res;
+          return 1;
+        }
+
+        // Check if the parent process is asking questions
+
+        // Perform read and interpret the number of bytes read
+        struct resultt a_result;
+        int read_size = read(backward_pipe[0], &a_result, sizeof(resultt));
+        if(read_size != sizeof(resultt))
+        {
+          if(read_size == 0)
+          {
+            // Client hung up; continue on, but don't interpret the result.
+            continue;
+          }
+          else if (read_size == -1 && errno == EAGAIN)
+          {
+            // No data available yet
+            continue;
+          }
+          else
+          {
+            // Invalid size read.
+            std::cerr << "Short read communicating with kinduction parent"
+                << std::endl;
+            std::cerr << "Size " << read_size << ", expected "
+                << sizeof(resultt) << std::endl;
+            abort();
+          }
+        }
+
+        // We only receive messages from the parent
+        assert(a_result.type == PARENT);
+
+        // If the value being asked is greater or equal the current step,
+        // then we can stop the base case. It can be equal, because we
+        // have just checked the current value of k
+
+        if(a_result.k >= k_step)
+          break;
+        else
+        {
+          // Otherwise, we just need to check the base case for k = a_result.k
+          k_step = max_k_step = a_result.k;
         }
       }
 
       // Send information to parent that a bug was not found
       r.k = 0;
 
-      u_int len = write(commPipe[1], &r, sizeof(r));
+      u_int len = write(forward_pipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
       (void)len; //ndebug
 
@@ -756,25 +859,45 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
     case FORWARD_CONDITION:
     {
+      // Set that we are running forward condition
+      opts.set_option("base-case", false);
+      opts.set_option("forward-condition", true);
+      opts.set_option("inductive-step", false);
+
       // Start communication to the parent process
-      close(commPipe[0]);
+      close(forward_pipe[0]);
+      close(backward_pipe[1]);
 
       // Struct to keep the result
       struct resultt r = { process_type, 0 };
 
-      // Set that we are running forward condition
-      opts.set_option("forward-condition", true);
-
       // Run bmc and only send results in two occasions:
       // 1. A proof was found, we send the step where it was found
       // 2. It couldn't find a proof
-      for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
+      for(u_int k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
       {
+        if(opts.get_bool_option("disable-forward-condition"))
+          break;
+
         bmct bmc(goto_functions, opts, context, ui_message_handler);
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        bool res = do_bmc(bmc);
+
+        std::cout << std::endl << "*** K-Induction Loop Iteration ";
+        std::cout << i2string((unsigned long) k_step);
+        std::cout << " ***" << std::endl;
+        std::cout << "*** Checking forward condition" << std::endl;
+
+        // If an exception was thrown, we should abort the process
+        bool res = true;
+        try {
+          res = do_bmc(bmc);
+        }
+        catch(...)
+        {
+          break;
+        }
 
         // Send information to parent if no bug was found
         if(!res)
@@ -782,20 +905,20 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           r.k = k_step;
 
           // Write result
-          u_int len = write(commPipe[1], &r, sizeof(r));
+          u_int len = write(forward_pipe[1], &r, sizeof(r));
           assert(len == sizeof(r) && "short write");
           (void)len; //ndebug
 
           std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
 
-          return res;
+          return 0;
         }
       }
 
       // Send information to parent that it couldn't prove the code
       r.k = 0;
 
-      u_int len = write(commPipe[1], &r, sizeof(r));
+      u_int len = write(forward_pipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
       (void)len; //ndebug
 
@@ -813,11 +936,10 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
     case INDUCTIVE_STEP:
     {
-      // Start communication to the parent process
-      close(commPipe[0]);
-
-      // Struct to keep the result
-      struct resultt r = { process_type, 0 };
+      // Set that we are running inductive step
+      opts.set_option("base-case", false);
+      opts.set_option("forward-condition", false);
+      opts.set_option("inductive-step", true);
 
       // This will be changed to true if the code contains:
       // 1. Dynamic allocated memory
@@ -825,40 +947,34 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // 3. Recursion (during inlining)
       opts.set_option("disable-inductive-step", false);
 
-      // Set that we are running inductive step
-      opts.set_option("inductive-step", true);
+      // Start communication to the parent process
+      close(forward_pipe[0]);
+      close(backward_pipe[1]);
 
-      if(get_goto_program(opts, goto_functions))
-        return 6;
-
-      if(cmdline.isset("show-claims"))
-      {
-        const namespacet ns(context);
-        show_claims(ns, get_ui(), goto_functions);
-        return 0;
-      }
-
-      if(set_claims(goto_functions))
-        return 7;
+      // Struct to keep the result
+      struct resultt r = { process_type, 0 };
 
       // Run bmc and only send results in two occasions:
       // 1. A proof was found, we send the step where it was found
       // 2. It couldn't find a proof
-      for(u_int k_step = 2; k_step <= max_k_step; ++k_step)
+      for(u_int k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
       {
         bmct bmc(goto_functions, opts, context, ui_message_handler);
         set_verbosity_msg(bmc);
 
         bmc.options.set_option("unwind", i2string(k_step));
-        bool res = true;
 
-        // if there is multithreaded code, an exception will be thrown
-        // this will catch it and send the message to the parent process
-        // to stop verification
+        std::cout << std::endl << "*** K-Induction Loop Iteration ";
+        std::cout << i2string((unsigned long) k_step+1);
+        std::cout << " ***" << std::endl;
+        std::cout << "*** Checking inductive step" << std::endl;
+
+        // If an exception was thrown, we should abort the process
+        bool res = true;
         try {
           res = do_bmc(bmc);
         }
-        catch(int)
+        catch(...)
         {
           break;
         }
@@ -869,7 +985,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
           r.k = k_step;
 
           // Write result
-          u_int len = write(commPipe[1], &r, sizeof(r));
+          u_int len = write(forward_pipe[1], &r, sizeof(r));
           assert(len == sizeof(r) && "short write");
           (void)len; //ndebug
 
@@ -882,7 +998,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent that it couldn't prove the code
       r.k = 0;
 
-      u_int len = write(commPipe[1], &r, sizeof(r));
+      u_int len = write(forward_pipe[1], &r, sizeof(r));
       assert(len == sizeof(r) && "short write");
       (void)len; //ndebug
 
@@ -910,8 +1026,7 @@ int cbmc_parseoptionst::doit_k_induction()
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 
-  // Generate goto functions for base case and forward condition
-  status("\n*** Generating Base Case and Forward Condition ***");
+  // Generate goto functions
   goto_functionst goto_functions;
 
   optionst opts;
@@ -930,146 +1045,42 @@ int cbmc_parseoptionst::doit_k_induction()
   if(set_claims(goto_functions))
     return 7;
 
-  goto_functionst *inductive_goto_functions = nullptr;
+  // Get max number of iterations
+  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
-  // Check if the inductive step was disabled
-  if(!opts.get_bool_option("disable-inductive-step"))
-  {
-    status("\n*** Generating Inductive Step ***");
-
-    // This will be changed to true if the code contains:
-    // 1. Dynamic allocated memory (during goto conversion)
-    // 2. Multithreaded code (during symbolic execution)
-    opts.set_option("disable-inductive-step", false);
-
-    // Generate goto functions for inductive step
-    // We'll clean the context so there is no function name clash
-    // It will generate the same context + inductive step's variables
-    context.clear();
-
-    inductive_goto_functions = new goto_functionst;
-    opts.set_option("inductive-step", true);
-
-    if(get_goto_program(opts, *inductive_goto_functions))
-      return 6;
-
-    if(cmdline.isset("show-claims"))
-    {
-      const namespacet ns(context);
-      show_claims(ns, get_ui(), *inductive_goto_functions);
-      return 0;
-    }
-
-    if(set_claims(*inductive_goto_functions))
-      return 7;
-  }
-
-  bool res = 0;
-  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
   if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = -1;
+    max_k_step = UINT_MAX;
 
-  u_int k_step = 1;
-  do
+  // Get the increment
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    {
-      opts.set_option("base-case", true);
-      opts.set_option("forward-condition", false);
-      opts.set_option("inductive-step", false);
+    std::cout << "\n*** K-Induction Loop Iteration ";
+    std::cout << i2string((unsigned long) k_step);
+    std::cout << " ***\n";
+    std::cout << "*** Checking base case\n";
 
-      bmct bmc(goto_functions, opts, context, ui_message_handler);
-      set_verbosity_msg(bmc);
+    if(do_base_case(opts, goto_functions, k_step))
+      return true;
 
-      bmc.options.set_option("unwind", i2string(k_step));
+    std::cout << "\n*** K-Induction Loop Iteration ";
+    std::cout << i2string((unsigned long) k_step);
+    std::cout << " ***\n";
+    std::cout << "*** Checking forward condition\n";
 
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking base case" << std::endl;
+    if(!do_forward_condition(opts, goto_functions, k_step))
+      return false;
 
-      res = do_bmc(bmc);
+    std::cout << "\n*** K-Induction Loop Iteration ";
+    std::cout << i2string((unsigned long) k_step);
+    std::cout << " ***\n";
+    std::cout << "*** Checking inductive step\n";
 
-      // If it was disabled during symbolic execution,
-      // remember to clean the inductive goto instructions
-      if(opts.get_bool_option("disable-inductive-step")
-         && inductive_goto_functions != nullptr)
-      {
-        delete inductive_goto_functions;
-        inductive_goto_functions = nullptr;
-      }
-
-      if(res)
-        return res;
-    }
-
-    ++k_step;
-
-    {
-      opts.set_option("base-case", false);
-      opts.set_option("forward-condition", true);
-      opts.set_option("inductive-step", false);
-
-      bmct bmc(goto_functions, opts, context, ui_message_handler);
-      set_verbosity_msg(bmc);
-
-      bmc.options.set_option("unwind", i2string(k_step));
-
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking forward condition" << std::endl;
-
-      // If it was disabled during symbolic execution,
-      // remember to clean the inductive goto instructions
-      if(opts.get_bool_option("disable-inductive-step")
-         && inductive_goto_functions != nullptr)
-      {
-        delete inductive_goto_functions;
-        inductive_goto_functions = nullptr;
-      }
-
-      res = do_bmc(bmc);
-
-      if(!res)
-        return res;
-    }
-
-    if(!opts.get_bool_option("disable-inductive-step"))
-    {
-      opts.set_option("base-case", false);
-      opts.set_option("forward-condition", false);
-      opts.set_option("inductive-step", true);
-
-      bmct bmc(*inductive_goto_functions, opts, context, ui_message_handler);
-      set_verbosity_msg(bmc);
-
-      bmc.options.set_option("unwind", i2string(k_step));
-
-      std::cout << std::endl << "*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
-      std::cout << " ***" << std::endl;
-      std::cout << "*** Checking inductive step" << std::endl;
-
-      try {
-        res = do_bmc(bmc);
-      }
-      catch(int)
-      {
-      }
-
-      // If the inductive step was disabled during symex,
-      // remember to free the inductive goto instructions
-      if(bmc.options.get_bool_option("disable-inductive-step"))
-      {
-        delete inductive_goto_functions;
-        inductive_goto_functions = nullptr;
-        continue;
-      }
-
-      if(!res)
-        return res;
-    }
-  } while(k_step <= max_k_step);
+    if(!do_inductive_step(opts, goto_functions, k_step))
+      return false;
+  }
 
   status("Unable to prove or falsify the program, giving up.");
   status("VERIFICATION UNKNOWN");
@@ -1088,7 +1099,52 @@ int cbmc_parseoptionst::doit_falsification()
   if(get_goto_program(opts, goto_functions))
     return 6;
 
-  opts.set_option("base-case", true);
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions);
+    return 0;
+  }
+
+  if(set_claims(goto_functions))
+    return 7;
+
+  // Get max number of iterations
+  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+
+  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
+  if(cmdline.isset("unlimited-k-steps"))
+    max_k_step = UINT_MAX;
+
+  // Get the increment
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  {
+    std::cout << "\n*** Iteration number ";
+    std::cout << i2string((unsigned long) k_step);
+    std::cout << " ***\n";
+
+    if(do_base_case(opts, goto_functions, k_step))
+      return true;
+  }
+
+  status("Unable to prove or falsify the program, giving up.");
+  status("VERIFICATION UNKNOWN");
+
+  return 0;
+}
+
+int cbmc_parseoptionst::doit_incremental()
+{
+  // Generate goto functions for base case and forward condition
+  goto_functionst goto_functions;
+
+  optionst opts;
+  get_command_line_options(opts);
+
+  if(get_goto_program(opts, goto_functions))
+    return 6;
 
   if(cmdline.isset("show-claims"))
   {
@@ -1101,37 +1157,114 @@ int cbmc_parseoptionst::doit_falsification()
     return 7;
 
   // Get max number of iterations
-  u_int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+  u_int max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+
+  // The option unlimited-k-steps set the max number of iterations to UINT_MAX
   if(cmdline.isset("unlimited-k-steps"))
-    max_k_step = -1;
+    max_k_step = UINT_MAX;
 
-  for(unsigned long k_step = 1; k_step <= max_k_step; k_step++)
+  // Get the increment
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
-    opts.set_option("base-case", true);
-    opts.set_option("forward-condition", false);
-    opts.set_option("inductive-step", false);
-
-    bmct bmc(goto_functions, opts, context, ui_message_handler);
-    set_verbosity_msg(bmc);
-
-    bmc.options.set_option("unwind", i2string(k_step));
-
-    std::cout << std::endl << "*** Iteration number ";
+    std::cout << "\n*** Iteration number ";
     std::cout << i2string((unsigned long) k_step);
-    std::cout << " ***" << std::endl;
+    std::cout << " ***\n";
 
-    if(do_bmc(bmc))
-    {
-      std::cout << std::endl << "Bug found at k = "
-          << k_step << std::endl;
+    if(do_base_case(opts, goto_functions, k_step))
       return true;
-    }
+
+    if(!do_forward_condition(opts, goto_functions, k_step))
+      return false;
   }
 
   status("Unable to prove or falsify the program, giving up.");
   status("VERIFICATION UNKNOWN");
 
   return 0;
+}
+
+int cbmc_parseoptionst::do_base_case(
+  optionst &opts, goto_functionst &goto_functions, int k_step)
+{
+  opts.set_option("base-case", true);
+  opts.set_option("forward-condition", false);
+  opts.set_option("inductive-step", false);
+
+  bmct bmc(goto_functions, opts, context, ui_message_handler);
+  set_verbosity_msg(bmc);
+
+  bmc.options.set_option("unwind", i2string(k_step));
+
+  if(do_bmc(bmc))
+  {
+    std::cout << "\nBug found at k = " << k_step << "\n";
+    return true;
+  }
+
+  return false;
+}
+
+int cbmc_parseoptionst::do_forward_condition(
+  optionst &opts, goto_functionst &goto_functions, int k_step)
+{
+  if(opts.get_bool_option("disable-forward-condition"))
+    return true;
+
+  opts.set_option("base-case", false);
+  opts.set_option("forward-condition", true);
+  opts.set_option("inductive-step", false);
+
+  bmct bmc(goto_functions, opts, context, ui_message_handler);
+  set_verbosity_msg(bmc);
+
+  bmc.options.set_option("unwind", i2string(k_step));
+
+  if(!do_bmc(bmc))
+  {
+    std::cout << "\nSolution found by the forward condition; "
+        << "all states are reachable (k = " << k_step << ")\n";
+    return false;
+  }
+
+  return true;
+}
+
+int cbmc_parseoptionst::do_inductive_step(
+  optionst &opts, goto_functionst &goto_functions, int k_step)
+{
+  // Don't run inductive step for k_step == 1
+  if(k_step == 1)
+    return true;
+
+  if(opts.get_bool_option("disable-inductive-step"))
+    return true;
+
+  opts.set_option("base-case", false);
+  opts.set_option("forward-condition", false);
+  opts.set_option("inductive-step", true);
+
+  bmct bmc(goto_functions, opts, context, ui_message_handler);
+  set_verbosity_msg(bmc);
+
+  bmc.options.set_option("unwind", i2string(k_step));
+
+  try {
+    if(!do_bmc(bmc))
+    {
+      std::cout << "\nSolution found by the inductive step "
+        << "(k = " << k_step << ")\n";
+      return false;
+    }
+  }
+  catch(...)
+  {
+    // If there is a dynamic allocation during goto symex, an
+    // exception will be thrown and the inductive step is disabled
+  }
+
+  return true;
 }
 
 bool cbmc_parseoptionst::set_claims(goto_functionst &goto_functions)
@@ -1259,7 +1392,7 @@ bool cbmc_parseoptionst::get_goto_program(
     return true;
   }
 
-  catch(int)
+  catch(...)
   {
     return true;
   }
@@ -1306,7 +1439,7 @@ void cbmc_parseoptionst::preprocessing()
     std::cout << "Out of memory" << std::endl;
   }
 
-  catch(int)
+  catch(...)
   {
   }
 }
@@ -1567,7 +1700,7 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
       }
 
       if (print_insn)
-        fit->second.body.output_instruction(ns, pit->function, std::cout, pit, true, false);
+        pit->output_instruction(ns, pit->function, std::cout);
     }
   }
 
@@ -1612,7 +1745,8 @@ bool cbmc_parseoptionst::process_goto_program(
     }
 
     if(cmdline.isset("inductive-step")
-       || options.get_bool_option("inductive-step"))
+       || cmdline.isset("k-induction")
+       || cmdline.isset("k-induction-parallel"))
     {
       // If the inductive step was disabled during the conversion,
       // there is no point spending time trying to convert it,
@@ -1626,15 +1760,12 @@ bool cbmc_parseoptionst::process_goto_program(
         options,
         ui_message_handler);
 
-      // If the inductive step was not enable, which means that the code
-      // does not have any infinite loop, disable inductive step
-      if(options.get_bool_option("disable-inductive-step"))
+      // Warn the user if the forward condition was disabled
+      if(options.get_bool_option("disable-forward-condition"))
       {
-        std::cout << "**** WARNING: this program does not contain neither infinite "
-                  << "loops nor nondet loops,  so we are not applying the inductive"
-                  << "step to this program!"
-                  << std::endl;
-        return false;
+        std::cout << "**** WARNING: this program contains infinite loops, "
+            << "so we are not applying the forward condition!"
+            << std::endl;
       }
     }
 
@@ -1745,14 +1876,14 @@ bool cbmc_parseoptionst::process_goto_program(
     return true;
   }
 
-  catch(int)
-  {
-    return true;
-  }
-
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
+    return true;
+  }
+
+  catch(...)
+  {
     return true;
   }
 
@@ -1815,9 +1946,7 @@ void cbmc_parseoptionst::help()
     " --show-goto-functions        show goto program\n"
     " --extended-try-analysis      check all the try block, even when an exception is throw\n"
     " --version                    show current ESBMC version and exit\n"
-    " --witnesspath filename       output counterexample in graphML format\n"
-    " --tokenizer path             set tokenizer to produce token-normalizated format of the\n"
-    "                              program for graphML generation\n"
+    " --witness-output <filename>  generate a verification result witness in GraphML format\n"
     " --clang-frontend             parse source files using clang (beta)\n\n"
     "BMC options\n"
     " --function name              set main function name\n"
@@ -1836,7 +1965,7 @@ void cbmc_parseoptionst::help()
     " --eager                      use eager instantiation\n"
     " --lazy                       use lazy instantiation (default)\n"
     " --smtlib                     use SMT lib format\n"
-    " --output Filename            output VCCs in SMT lib format to given file\n\n"
+    " --output <filename>          output VCCs in SMT lib format to given file\n\n"
     "Incremental SMT solving with Z3\n"
     " --smt-during-symex           enable incremental SMT solving (experimental)\n"
     " --smt-thread-guard           call the solver during thread exploration (experimental)\n"
@@ -1860,8 +1989,9 @@ void cbmc_parseoptionst::help()
     " --k-induction-parallel       prove by k-induction, running each step on a separate\n"
     "                              process\n"
     " --constrain-all-states       remove all redundant states in the inductive step\n"
-    " --k-step nr                  set max k-step (default is 50) \n"
-    " --unlimited-k-steps          set max k-step to 4,294,967,295\n\n"
+    " --k-step nr                  set k increment (default is 1)\n"
+    " --max-k-step nr              set max number of iteration (default is 50)\n"
+    " --unlimited-k-steps          set max number of iteration to UINT_MAX\n\n"
     "Scheduling approaches\n"
     " --schedule                   use schedule recording approach \n"
     " --round-robin                use the round robin scheduling approach\n"

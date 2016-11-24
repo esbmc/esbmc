@@ -3,9 +3,6 @@
 # Path to the ESBMC binary
 path_to_esbmc=./esbmc
 
-# Verification Witnesses tokenizer
-tokenizer_path=./tokenizer
-
 # Global command line, common to all (normal) tests.
 global_cmd_line="--64 -DLDV_ERROR=ERROR -Dassert=notassert -D_Bool=int --no-bounds-check --no-pointer-check --error-label ERROR --no-div-by-zero-check --no-assertions --quiet --context-bound 4 --force-malloc-success --boolector"
 
@@ -74,7 +71,7 @@ fi
 
 # Add graphml informations
 TMPGRAPHML="./witness.graphml"
-cmdline="$cmdline --witnesspath $TMPGRAPHML --tokenizer $tokenizer_path"
+cmdline="$cmdline --witness-output $TMPGRAPHML"
 
 # Drop all output into a temporary file,
 TMPFILE=`mktemp`

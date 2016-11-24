@@ -670,33 +670,7 @@ Function: c_typecheck_baset::make_index_type
 
 void c_typecheck_baset::make_index_type(exprt &expr)
 {
-  const typet &full_type=follow(expr.type());
-
-  if(full_type.is_bool())
-  {
-    expr.make_typecast(index_type());
-  }
-  else if(full_type.id()=="unsignedbv")
-  {
-    unsigned width=bv_width(expr.type());
-
-    if(width!=config.ansi_c.int_width)
-      expr.make_typecast(uint_type());
-  }
-  else if(full_type.id()=="signedbv" ||
-          full_type.id()=="c_enum" ||
-          full_type.id()=="incomplete_c_enum")
-  {
-    if(full_type!=index_type())
-      expr.make_typecast(index_type());
-  }
-  else
-  {
-    err_location(expr);
-    str << "expected integer type, but got `"
-        << to_string(full_type) << "'";
-    throw 0;
-  }
+  implicit_typecast(expr, index_type());
 }
 
 /*******************************************************************\

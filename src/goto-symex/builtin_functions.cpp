@@ -45,16 +45,6 @@ goto_symext::symex_alloca(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
-  if(options.get_bool_option("inductive-step")
-     && !options.get_bool_option("disable-inductive-step"))
-  {
-    std::cout << "**** WARNING: this program contains dynamic memory allocation,"
-        << " so we are not applying the inductive step to this program!"
-        << std::endl;
-    options.set_option("disable-inductive-step", true);
-    throw 0;
-  }
-
   return symex_mem(false, lhs, code);
 }
 
@@ -570,16 +560,6 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
-  if(options.get_bool_option("inductive-step")
-     && !options.get_bool_option("disable-inductive-step"))
-  {
-    std::cout << "**** WARNING: this program is multithreaded,"
-        << " so we are not applying the inductive step to this program!"
-        << std::endl;
-    options.set_option("disable-inductive-step", true);
-    throw 0;
-  }
-
   // As an argument, we expect the address of a symbol.
   const expr2tc &addr = call.operands[0];
   assert(is_address_of2t(addr));

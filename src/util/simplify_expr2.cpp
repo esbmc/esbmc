@@ -874,6 +874,11 @@ expr2tc
 not2t::do_simplify(bool second __attribute__((unused))) const
 {
   expr2tc simp = try_simplification(value);
+
+  if (is_not2t(simp))
+    // These negate.
+    return to_not2t(simp).value;
+
   if (!is_constant_bool2t(simp))
     return expr2tc();
 
@@ -1901,80 +1906,13 @@ if2t::do_simplify(bool second __attribute__((unused))) const
 expr2tc
 overflow_cast2t::do_simplify(bool second __attribute__((unused))) const
 {
-  expr2tc new_operand = try_simplification(operand);
-  if(new_operand != operand)
-    return new_operand;
-
   return expr2tc();
 }
 
 expr2tc
 overflow2t::do_simplify(bool second __attribute__((unused))) const
 {
-  unsigned int num_const = 0;
-  bool simplified = false;
-
-  // Non constant expression. We can't just simplify the operand, because it has
-  // to remain the operation we expect (i.e., add2t shouldn't distribute itself)
-  // so simplify its operands right here.
-  if (second)
-    return expr2tc();
-
-  expr2tc new_operand = operand->clone();
-  new_operand.get()->Foreach_operand([this, &simplified, &num_const] (expr2tc &e) {
-      expr2tc tmp = (*e).simplify();
-      if (!is_nil_expr(tmp)) {
-        e = tmp;
-        simplified = true;
-      }
-
-      if (is_constant_expr(e))
-        num_const++;
-    }
-  );
-
-  // If we don't have two constant operands, we can't simplify this expression.
-  // We also don't want the underlying addition / whatever to become
-  // distributed, so if the sub expressions are simplifiable, return a new
-  // overflow with simplified subexprs, but no distribution.
-  // The 'simplified' test guards against a continuous chain of simplifying the
-  // same overflow expression over and over again.
-  if (num_const != 2) {
-    if (simplified)
-      return expr2tc(new overflow2t(new_operand));
-    else
-      return expr2tc();
-  }
-
-  // Can only simplify ints
-  if (!is_bv_type(new_operand))
-    return expr2tc(new overflow2t(new_operand));
-
-  // We can simplify that expression, so do it. And how do we detect overflows?
-  // Perform the operation twice, once with a small type, one with huge, and
-  // see if they differ. Max we can do is 64 bits, so if the expression already
-  // has that size, give up.
-  if (new_operand->type->get_width() == 64)
-    return expr2tc();
-
-  expr2tc simpl_op = new_operand->simplify();
-  assert(is_constant_expr(simpl_op));
-  expr2tc op_with_big_type = new_operand->clone();
-  op_with_big_type.get()->type = (is_signedbv_type(new_operand))
-                                 ? type_pool.get_int(64)
-                                 : type_pool.get_uint(64);
-  op_with_big_type = op_with_big_type->simplify();
-
-  // Now ensure they're the same.
-  equality2t eq(simpl_op, op_with_big_type);
-  expr2tc tmp = eq.simplify();
-
-  // And the inversion of that is the result of this overflow operation (i.e.
-  // if not equal, then overflow).
-  tmp = expr2tc(new not2t(tmp));
-  tmp = tmp->simplify();
-  assert(!is_nil_expr(tmp) && is_constant_bool2t(tmp));
-  return tmp;
+  return expr2tc();
 }
 
 // Heavily inspired by cbmc's simplify_exprt::objects_equal_address_of

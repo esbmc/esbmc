@@ -176,8 +176,10 @@ void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
   if (!options.get_bool_option("overflow-check"))
     return;
 
-  // first, check type
-  if (!expr.type().is_signedbv())
+  // First, check type.
+  const typet &type=ns.follow(expr.type());
+
+  if (!type.is_signedbv())
     return;
 
   // add overflow subgoal
@@ -185,7 +187,7 @@ void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
   exprt overflow("overflow-" + expr.id_string(), bool_typet());
   overflow.operands() = expr.operands();
 
-  if (expr.id() == "typecast")
+  if (expr.is_typecast())
   {
     if (expr.operands().size() != 1)
       throw "typecast takes one operand";
@@ -195,7 +197,7 @@ void goto_checkt::overflow_check(const exprt &expr, const guardt &guard)
     unsigned new_width = atoi(expr.type().width().c_str());
     unsigned old_width = atoi(old_type.width().c_str());
 
-    if (old_type.id() == "unsignedbv")
+    if (old_type.is_unsignedbv())
       new_width--;
     if (new_width >= old_width)
       return;
@@ -278,7 +280,7 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
   if (options.get_bool_option("no-bounds-check"))
     return;
 
-  if (expr.id() != "index")
+  if (!expr.is_index())
     return;
 
   if (expr.operands().size() != 2)
@@ -320,11 +322,12 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
   std::string name = "array bounds violated: " + array_name(expr.op0());
   const exprt &index = expr.op1();
 
-  if (index.type().id() != "unsignedbv")
+  if (!index.type().is_unsignedbv())
   {
     // we undo typecasts to signedbv
-    if (index.id() == "typecast" && index.operands().size() == 1
-        && index.op0().type().id() == "unsignedbv")
+    if (index.is_typecast()
+        && index.operands().size() == 1
+        && index.op0().type().is_unsignedbv())
     {
       // ok
     }
@@ -367,8 +370,9 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
       if (inequality.op1().type() != inequality.op0().type())
         inequality.op1().make_typecast(inequality.op0().type());
 
-      add_guarded_claim(inequality, name + " upper bound", "array bounds",
-          expr.find_location(), guard);
+      add_guarded_claim(
+        inequality, name + " upper bound", "array bounds",
+        expr.find_location(), guard);
     }
   }
 }

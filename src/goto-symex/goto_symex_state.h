@@ -192,6 +192,12 @@ public:
      *  already seen names in a function for making that decision. */
     declaration_historyt declaration_history;
 
+    /** Record of how many loop unwinds we've performed. For each target in the
+     *  program that contains a loop, record how many times we've unwound round
+     *  it. */
+    typedef hash_map_cont<unsigned, unsigned> loop_iterationst;
+    loop_iterationst loop_iterations;
+
     framet(unsigned int thread_id) :
       return_value(expr2tc())
     {
@@ -424,10 +430,6 @@ public:
    *  for each function invocation, but the existance of decl insns makes l1
    *  re-naming out of step with function invocations. */
   std::map<irep_idt, unsigned> variable_instance_nums;
-  /** Record of how many loop unwinds we've performed. For each target in the
-   *  program that contains a loop, record how many times we've unwound round
-   *  it. */
-  std::map<symex_targett::sourcet, unsigned> unwind_map;
   /** Record of how many times we've unwound function recursion. */
   std::map<irep_idt, unsigned> function_unwind;
 

@@ -26,9 +26,9 @@ _Bool __ESBMC_pthread_thread_running[1];
 _Bool __ESBMC_pthread_thread_ended[1];
 void *__ESBMC_pthread_end_values[1];
 
-unsigned int num_total_threads = 0;
-unsigned int num_threads_running = 0;
-unsigned int blocked_threads_count = 0;
+unsigned int __ESBMC_num_total_threads = 0;
+unsigned int __ESBMC_num_threads_running = 0;
+unsigned int __ESBMC_blocked_threads_count = 0;
 
 pthread_t __ESBMC_get_thread_id(void);
 
@@ -41,8 +41,8 @@ void
 pthread_start_main_hook(void)
 {
   __ESBMC_atomic_begin();
-  num_total_threads++;
-  num_threads_running++;
+  __ESBMC_num_total_threads++;
+  __ESBMC_num_threads_running++;
   __ESBMC_atomic_end();
 }
 
@@ -54,7 +54,7 @@ pthread_end_main_hook(void)
   // to generate context switches as a result. So, end the main thread in an
   // atomic state, which will prevent everything but the final from-main switch.
   __ESBMC_atomic_begin();
-  num_threads_running--;
+  __ESBMC_num_threads_running--;
 }
 
 void
@@ -74,11 +74,11 @@ pthread_trampoline(void)
   threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[threadid] = exit_val;
   __ESBMC_pthread_thread_ended[threadid] = 1;
-  num_threads_running--;
+  __ESBMC_num_threads_running--;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
-  __ESBMC_assume(blocked_threads_count == 0);
+  __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end(); // Never reached; doesn't matter.
   return;
@@ -97,8 +97,8 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
 
   __ESBMC_atomic_begin();
   thread_id = __ESBMC_spawn_thread(pthread_trampoline);
-  num_total_threads++;
-  num_threads_running++;
+  __ESBMC_num_total_threads++;
+  __ESBMC_num_threads_running++;
   __ESBMC_pthread_thread_running[thread_id] = 1;
   __ESBMC_pthread_thread_ended[thread_id] = 0;
   __ESBMC_pthread_end_values[thread_id] = NULL;
@@ -120,11 +120,11 @@ pthread_exit(void *retval)
   unsigned int threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[threadid] = retval;
   __ESBMC_pthread_thread_ended[threadid] = 1;
-  num_threads_running--;
+  __ESBMC_num_threads_running--;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
-  __ESBMC_assume(blocked_threads_count == 0);
+  __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
 }
@@ -146,9 +146,9 @@ pthread_join_switch(pthread_t thread, void **retval)
   // elsewhere.
   _Bool ended = __ESBMC_pthread_thread_ended[thread];
   if (!ended) {
-    blocked_threads_count++;
+    __ESBMC_blocked_threads_count++;
     // If there are now no more threads unblocked, croak.
-    __ESBMC_assert(blocked_threads_count != num_threads_running,
+    __ESBMC_assert(__ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
                    "Deadlocked state in pthread_join");
   }
 
@@ -254,9 +254,9 @@ pthread_mutex_lock_check(pthread_mutex_t *mutex)
     __ESBMC_mutex_lock_field(*mutex) = 1;
   } else {
     // Deadlock foo
-    blocked_threads_count++;
+    __ESBMC_blocked_threads_count++;
     // No more threads to run -> croak.
-    __ESBMC_assert(blocked_threads_count != num_threads_running,
+    __ESBMC_assert(__ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
                    "Deadlocked state in pthread_mutex_lock");
   }
 
@@ -412,9 +412,9 @@ do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
   // Technically in the gap below, we are blocked. So mark ourselves thus. If
   // all other threads are (or become) blocked, then deadlock occurred, which
   // this helps detect.
-  blocked_threads_count++;
+  __ESBMC_blocked_threads_count++;
   // No more threads to run -> croak.
-  __ESBMC_assert(blocked_threads_count != num_threads_running,
+  __ESBMC_assert(__ESBMC_blocked_threads_count != __ESBMC_num_threads_running,
                  "Deadlocked state in pthread_mutex_lock");
 
   __ESBMC_atomic_end();
@@ -433,7 +433,7 @@ do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
   // reachable, it'll be found by the context switch earlier in this function.
   __ESBMC_assume(signalled);
   // We're no longer blocked.
-  blocked_threads_count--;
+  __ESBMC_blocked_threads_count--;
 
   __ESBMC_atomic_end();
 
