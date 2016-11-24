@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#ifndef CPROVER_CPP_LANGUAGE_H
-#define CPROVER_CPP_LANGUAGE_H
+#ifndef CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
+#define CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 
 #include <language.h>
 
