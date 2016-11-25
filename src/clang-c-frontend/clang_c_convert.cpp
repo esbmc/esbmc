@@ -150,10 +150,10 @@ bool clang_c_convertert::get_decl(
       if(get_type(fd.getType(), t))
         return true;
 
-      std::string name;
-      get_field_name(fd, name);
+      std::string name, pretty_name;
+      get_field_name(fd, name, pretty_name);
 
-      struct_union_typet::componentt comp(name, name, t);
+      struct_union_typet::componentt comp(name, pretty_name, t);
       if(fd.isBitField() && !config.options.get_bool_option("no-bitfields"))
       {
         exprt width;
@@ -176,10 +176,10 @@ bool clang_c_convertert::get_decl(
       if(get_type(fd.getType(), t))
         return true;
 
-      std::string name;
-      get_field_name(*fd.getAnonField(), name);
+      std::string name, pretty_name;
+      get_field_name(*fd.getAnonField(), name, pretty_name);
 
-      struct_union_typet::componentt comp(name, name, t);
+      struct_union_typet::componentt comp(name, pretty_name, t);
       if(fd.getAnonField()->isBitField())
       {
         exprt width;
@@ -2425,9 +2425,10 @@ void clang_c_convertert::get_default_symbol(
 
 void clang_c_convertert::get_field_name(
   const clang::FieldDecl& fd,
-  std::string &name)
+  std::string &name,
+  std::string &pretty_name)
 {
-  name = fd.getName().str();
+  name = pretty_name = fd.getName().str();
 
   if(name.empty())
   {
@@ -2441,7 +2442,8 @@ void clang_c_convertert::get_field_name(
       t.width(width.cformat());
     }
 
-    name = "anon::" + type2name(t);
+    name = type2name(t);
+    pretty_name = "anon";
   }
 }
 
@@ -2537,7 +2539,7 @@ bool clang_c_convertert::get_tag_name(
   if(get_struct_union_class_fields(*record_def, t))
     return true;
 
-  name = "anon::" + type2name(t);
+  name = type2name(t);
   return false;
 }
 

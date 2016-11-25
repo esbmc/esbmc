@@ -126,7 +126,8 @@ private:
 
   void get_field_name(
     const clang::FieldDecl &fd,
-    std::string &name);
+    std::string &name,
+    std::string &pretty_name);
 
   void get_var_name(
     const clang::VarDecl &vd,
