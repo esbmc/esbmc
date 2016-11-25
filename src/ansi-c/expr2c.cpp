@@ -1524,7 +1524,7 @@ std::string expr2ct::convert_struct(
   bool newline=false;
   unsigned last_size=0;
 
-  forall_irep(c_it, components)
+  for(auto c_it : components)
   {
     if(o_it->type().is_code())
       continue;
@@ -1552,7 +1552,7 @@ std::string expr2ct::convert_struct(
       newline=false;
 
     dest+=".";
-    dest+=c_it->name().as_string();
+    dest+=c_it.pretty_name().as_string();
     dest+="=";
     dest+=tmp;
 
