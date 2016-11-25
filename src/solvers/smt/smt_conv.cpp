@@ -80,7 +80,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   names.push_back(irep_idt("pointer_object"));
   names.push_back(irep_idt("pointer_offset"));
 
-  struct_type2t *tmp = new struct_type2t(members, names, "pointer_struct");
+  struct_type2t *tmp = new struct_type2t(members, names, names, "pointer_struct");
   pointer_type_data = tmp;
   pointer_struct = type2tc(tmp);
 
@@ -96,7 +96,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   names.push_back(irep_idt("start"));
   names.push_back(irep_idt("end"));
-  tmp = new struct_type2t(members, names, "addr_space_type");
+  tmp = new struct_type2t(members, names, names, "addr_space_type");
   addr_space_type_data = tmp;
   addr_space_type = type2tc(tmp);
 

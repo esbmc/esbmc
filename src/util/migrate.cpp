@@ -121,6 +121,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
   } else if (type.id() == typet::t_struct) {
     std::vector<type2tc> members;
     std::vector<irep_idt> names;
+    std::vector<irep_idt> pretty_names;
     const struct_typet &strct = to_struct_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
@@ -146,17 +147,19 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
 
       members.push_back(ref);
       names.push_back(it->get(typet::a_name));
+      pretty_names.push_back(it->get(typet::a_pretty_name));
     }
 
     irep_idt name = type.get("tag");
     if (name.as_string() == "")
       name = type.get("name"); // C++
 
-    struct_type2t *s = new struct_type2t(members, names, name);
+    struct_type2t *s = new struct_type2t(members, names, pretty_names, name);
     new_type_ref = type2tc(s);
   } else if (type.id() == typet::t_union) {
     std::vector<type2tc> members;
     std::vector<irep_idt> names;
+    std::vector<irep_idt> pretty_names;
     const struct_union_typet &strct = to_union_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
@@ -167,11 +170,12 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
 
       members.push_back(ref);
       names.push_back(it->get(typet::a_name));
+      pretty_names.push_back(it->get(typet::a_pretty_name));
     }
 
     irep_idt name = type.get("tag");
     assert(name.as_string() != "");
-    union_type2t *u = new union_type2t(members, names, name);
+    union_type2t *u = new union_type2t(members, names, pretty_names, name);
     new_type_ref = type2tc(u);
   } else if (type.id() == typet::t_fixedbv) {
     unsigned int width_bits = to_fixedbv_type(type).get_width();
@@ -1627,7 +1631,7 @@ migrate_type_back(const type2tc &ref)
       component.id("component");
       component.type() = migrate_type_back(*it);
       component.set_name(irep_idt(ref2.member_names[idx]));
-      component.pretty_name(irep_idt(ref2.member_names[idx]));
+      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
       comps.push_back(component);
       idx++;
     }
@@ -1649,7 +1653,7 @@ migrate_type_back(const type2tc &ref)
       component.id("component");
       component.type() = migrate_type_back(*it);
       component.set_name(irep_idt(ref2.member_names[idx]));
-      component.pretty_name(irep_idt(ref2.member_names[idx]));
+      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
       comps.push_back(component);
       idx++;
     }
