@@ -356,9 +356,9 @@ void generate_goto_trace_in_violation_graphml_format(
 	  if (use_program_file)
 	  {
 	    int relative_line_number = 0;
-        get_relative_line(current_ver_file, line_number, witness_programfile, relative_line_number);
-        current_ver_file = program_file;
-        line_number = relative_line_number;
+	    get_relative_line_in_programfile(current_ver_file, line_number, witness_programfile, relative_line_number);
+	    current_ver_file = program_file;
+	    line_number = relative_line_number;
 	  }
 	  current_edge_p.startline = line_number;
 	  if (is_detailed_mode)
