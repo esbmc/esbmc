@@ -477,10 +477,12 @@ void generate_goto_trace_in_violation_graphml_format(
 }
 
 void generate_goto_trace_in_correctness_graphml_format(
-  std::string & graphml_path,
-  const namespacet & ns __attribute__((unused)),
-  const goto_tracet & goto_trace,
-  int & specification)
+  std::string & witness_programfile __attribute__((unused)),
+  std::string & witness_output,
+  bool is_detailed_mode,
+  int & specification,
+  const namespacet & ns,
+  const goto_tracet & goto_trace)
 {
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
@@ -492,10 +494,30 @@ void generate_goto_trace_in_correctness_graphml_format(
   std::string last_function = "";
   std::string last_ver_file = "";
 
+  bool use_program_file = !witness_programfile.empty();
+  std::string program_file = use_program_file ? witness_programfile : verification_file;
+
   for(goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
       it != goto_trace.steps.end(); it++)
   {
+    /* check if it is an internal call */
+    std::string::size_type find_bt =
+      it->pc->location.to_string().find("built-in", 0);
+    std::string::size_type find_lib =
+      it->pc->location.to_string().find("library", 0);
+    bool is_internal_call = (find_bt != std::string::npos)
+        || (find_lib != std::string::npos);
+
     /** ignore internal calls and non assignments */
+    if(!(it->type == goto_trace_stept::ASSIGNMENT)
+        || (is_internal_call == true))
+      continue;
+
+    /* checking other restrictions */
+    if (!is_valid_witness_expr(ns, it->lhs))
+	  continue;
+
+	/** ignore internal calls and non assignments */
     if(!(it->is_assignment() || it->is_assume() || it->is_assert()))
       continue;
 
@@ -505,7 +527,7 @@ void generate_goto_trace_in_correctness_graphml_format(
 
     if(already_initialized == false)
     {
-      create_graph(graph, verification_file, specification, true);
+      create_graph(graph, program_file, specification, true);
       boost::property_tree::ptree first_node;
       node_p first_node_p;
       first_node_p.isEntryNode = true;
@@ -529,16 +551,26 @@ void generate_goto_trace_in_correctness_graphml_format(
     current_edge_p.originFileName = current_ver_file;
 
     /* check if has a line number (to get tokens) */
-    const int line_number = std::atoi(it->pc->location.get_line().c_str());
+    int line_number = std::atoi(it->pc->location.get_line().c_str());
     if(line_number != 0)
     {
+      if (use_program_file)
+      {
+        int relative_line_number = 0;
+        get_relative_line_in_programfile(current_ver_file, line_number, witness_programfile, relative_line_number);
+        current_ver_file = program_file;
+        line_number = relative_line_number;
+      }
       current_edge_p.startline = line_number;
-      current_edge_p.endline = line_number;
-      int p_startoffset = 0;
-      int p_endoffset = 0;
-      get_offsets_for_line_using_wc(current_ver_file, line_number, p_startoffset, p_endoffset);
-      current_edge_p.startoffset = p_startoffset;
-      current_edge_p.endoffset = p_endoffset;
+      if (is_detailed_mode)
+      {
+        current_edge_p.endline = line_number;
+        int p_startoffset = 0;
+        int p_endoffset = 0;
+        get_offsets_for_line_using_wc(current_ver_file, line_number, p_startoffset, p_endoffset);
+        current_edge_p.startoffset = p_startoffset;
+        current_edge_p.endoffset = p_endoffset;
+      }
     }
 
     /* check if it has entered or returned from a function */
@@ -603,7 +635,7 @@ void generate_goto_trace_in_correctness_graphml_format(
 #else
   boost::property_tree::xml_writer_settings<char> settings('\t', 1);
 #endif
-  boost::property_tree::write_xml(graphml_path, graphml, std::locale(), settings);
+  boost::property_tree::write_xml(witness_output, graphml, std::locale(), settings);
 }
 
 void
