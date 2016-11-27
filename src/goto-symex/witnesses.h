@@ -715,3 +715,43 @@ bool is_valid_witness_expr(
     value.find("stderr")        &
     value.find("sys_")) == std::string::npos;
 }
+
+void get_relative_line(
+  const std::string relative_file_path,
+  const int relative_line_number,
+  const std::string program_file_path,
+  int & programfile_line_number)
+{
+  /* check if it is necessary to get the relative line */
+  if (relative_file_path == program_file_path)
+  {
+	programfile_line_number = relative_line_number;
+    return;
+  }
+  std::string line;
+  std::string relative_content;
+  std::ifstream stream_relative (relative_file_path);
+  std::ifstream stream_programfile (program_file_path);
+  int line_count = 0;
+  /* get the relative content */
+  if (stream_relative.is_open())
+  {
+	while(getline(stream_relative, line) &&
+		  line_count < relative_line_number)
+	{
+	  line_count++;
+	}
+	relative_content = line;
+  }
+  /* file for the line in the programfile */
+  line_count = 0;
+  if (stream_programfile.is_open())
+  {
+    while(getline(stream_programfile, line) &&
+  	  line != relative_content)
+    {
+      line_count++;
+    }
+  }
+  programfile_line_number = line_count;
+}
