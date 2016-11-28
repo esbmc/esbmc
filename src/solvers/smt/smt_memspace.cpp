@@ -436,41 +436,23 @@ smt_convt::convert_addr_of(const expr2tc &expr)
   std::string symbol_name, out;
 
   if (is_index2t(obj.ptr_obj)) {
-    const index2t &idx = to_index2t(obj.ptr_obj);
+    // This might be a composite index/member/blah chain
+    expr2tc offs = compute_pointer_offset(obj.ptr_obj);
+    expr2tc base = get_base_object(obj.ptr_obj);
 
-    if (!is_string_type(idx.source_value)) {
-      const array_type2t &arr = to_array_type(idx.source_value->type);
-
-      // Pick pointer-to array subtype; need to make pointer arith work.
-      address_of2tc addrof(arr.subtype, idx.source_value);
-      add2tc plus(addrof->type, addrof, idx.index);
-      return convert_ast(plus);
-    } else {
-      // Strings; convert with slightly different types.
-      type2tc stringtype(new unsignedbv_type2t(8));
-      address_of2tc addrof(stringtype, idx.source_value);
-      add2tc plus(addrof->type, addrof, idx.index);
-      return convert_ast(plus);
-    }
+    address_of2tc addrof(obj.type, base);
+    smt_astt a = convert_ast(addrof);
+    return a->update(this, convert_ast(offs), 1);
   } else if (is_member2t(obj.ptr_obj)) {
-    const member2t &memb = to_member2t(obj.ptr_obj);
+    expr2tc offs = compute_pointer_offset(obj.ptr_obj);
+    expr2tc base = get_base_object(obj.ptr_obj);
 
-    int64_t offs;
-    if (is_struct_type(memb.source_value)) {
-      const struct_type2t &type = to_struct_type(memb.source_value->type);
-      offs = member_offset(type, memb.member).to_long();
-    } else {
-      offs = 0; // Offset is always zero for unions.
-    }
-
-    address_of2tc addr(type2tc(new pointer_type2t(memb.source_value->type)),
-                       memb.source_value);
+    address_of2tc addr(obj.type, base);
 
     smt_astt a = convert_ast(addr);
 
     // Update pointer offset to offset to that field.
-    constant_int2tc offset(machine_ptr, BigInt(offs));
-    return a->update(this, convert_ast(offset), 1);
+    return a->update(this, convert_ast(offs), 1);
   } else if (is_symbol2t(obj.ptr_obj)) {
     const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
     return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name());
