@@ -205,6 +205,13 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     cur_state->rename(arguments[i]);
   }
 
+  // Rename the return value to level1, identifying the data object / storage
+  // to which the return value should be written. This is important in the case
+  // of recursion, in which case the lexical variable (level0) has multiple
+  // live instances.
+  expr2tc ret_value = call.ret;
+  cur_state->rename_address(ret_value);
+
   // increase unwinding counter
   unwinding_counter++;
 
@@ -236,7 +243,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   argument_assignments(to_code_type(tmp_type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
-  frame.return_value = call.ret;
+  frame.return_value = ret_value;
   frame.function_identifier = identifier;
 
   cur_state->source.is_set = true;

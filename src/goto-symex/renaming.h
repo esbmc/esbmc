@@ -261,6 +261,14 @@ namespace renaming {
     unsigned current_number(const expr2tc &sym) const;
     unsigned current_number(const name_record &rec) const;
 
+    // static method to rename a (l0) variable to the l1 number record specified
+    // in the given name_record. The use case for this is phi_function, where
+    // we have a handle on name_record's identifying the storage variable that
+    // we want to assign to, but lack the ability to address it as a symbol.
+    // In that case (or any similar) we need a facility independent of a
+    // specific level2t object.
+    static void rename_to_record(expr2tc &sym, const name_record &rec);
+
     level2t() { };
     virtual ~level2t() { };
     virtual std::shared_ptr<level2t> clone(void) const = 0;

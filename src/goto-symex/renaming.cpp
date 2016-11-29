@@ -306,3 +306,16 @@ renaming::level2t::make_assignment(expr2tc &lhs_symbol,
 
   entry.constant = const_value;
 }
+
+void renaming::level2t::rename_to_record(expr2tc &expr, const name_record &rec)
+{
+  assert(expr->expr_id == expr2t::symbol_id);
+  symbol2t &sym = to_symbol2t(expr);
+  assert(sym.thename == rec.base_name);
+  assert(sym.rlevel == symbol2t::level0);
+
+  sym.level1_num = rec.l1_num;
+  sym.thread_num = rec.t_num;
+  sym.rlevel = rec.lev;
+  return;
+}

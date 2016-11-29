@@ -289,14 +289,28 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
       symbol2tc true_val(type, symbol.name);
       symbol2tc false_val(type, symbol.name);
-      cur_state->current_name(goto_state, true_val);
-      cur_state->current_name(false_val);
+
+      // Semi-manually rename these symbols: we may be referring to an l1
+      // variable not in the current scope, thus we need to directly specify
+      // which l1 variable we're dealing with.
+      renaming::level2t::rename_to_record(true_val, *it);
+      renaming::level2t::rename_to_record(false_val, *it);
+
+      // Manually rename those l1 variables to level2 under the two different
+      // level2 objects.
+      goto_state.level2.rename(true_val);
+      cur_state->level2.rename(false_val);
+
       rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
     }
 
     expr2tc lhs;
     migrate_expr(symbol_expr(symbol), lhs);
     expr2tc new_lhs = lhs;
+
+    // Again, specifiy which l1 data object we're going to make the assignment
+    // to.
+    renaming::level2t::rename_to_record(new_lhs, *it);
 
     cur_state->assignment(new_lhs, rhs, false);
 
