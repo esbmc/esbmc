@@ -904,8 +904,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     const lessthan2t &lt = to_lessthan2t(expr);
-    assert(lt.side_1->type == lt.side_2->type);
-
     // Pointer relation:
     if (is_pointer_type(lt.side_1)) {
       a = convert_ptr_cmp(lt.side_1, lt.side_2, expr);
@@ -925,8 +923,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     const lessthanequal2t &lte = to_lessthanequal2t(expr);
-    assert(lte.side_1->type == lte.side_2->type);
-
     // Pointer relation:
     if (is_pointer_type(lte.side_1)) {
       a = convert_ptr_cmp(lte.side_1, lte.side_2, expr);
@@ -946,8 +942,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     const greaterthan2t &gt = to_greaterthan2t(expr);
-    assert(gt.side_1->type == gt.side_2->type);
-
     // Pointer relation:
     if (is_pointer_type(gt.side_1)) {
       a = convert_ptr_cmp(gt.side_1, gt.side_2, expr);
@@ -967,8 +961,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     const greaterthanequal2t &gte = to_greaterthanequal2t(expr);
-    assert(gte.side_1->type == gte.side_2->type);
-
     // Pointer relation:
     if (is_pointer_type(gte.side_1)) {
       a = convert_ptr_cmp(gte.side_1, gte.side_2, expr);
