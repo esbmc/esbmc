@@ -92,6 +92,7 @@ goto_symext::symex_step(reachability_treet & art)
   // actually do instruction
   switch (instruction.type) {
   case SKIP:
+  case LOCATION:
     // really ignore
     cur_state->source.pc++;
     break;

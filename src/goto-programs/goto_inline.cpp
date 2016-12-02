@@ -278,7 +278,7 @@ void goto_inlinet::expand_function_call(
     tmp2.copy_from(f.body);
 
     assert(tmp2.instructions.back().is_end_function());
-    tmp2.instructions.back().type=SKIP;
+    tmp2.instructions.back().type=LOCATION;
 
     replace_return(tmp2, lhs, constrain);
 
@@ -313,7 +313,7 @@ void goto_inlinet::expand_function_call(
     goto_inline_rec(tmp, full);
 
     // set up location instruction for function call
-    target->type=SKIP;
+    target->type=LOCATION;
     target->code = expr2tc();
 
     goto_programt::targett next_target(target);
@@ -368,7 +368,7 @@ void goto_inlinet::expand_function_call(
     }
 
     // now just kill call
-    target->type=SKIP;
+    target->type=LOCATION;
     target->code = expr2tc();
     target++;
 
