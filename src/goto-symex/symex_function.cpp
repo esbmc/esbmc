@@ -210,7 +210,8 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   // of recursion, in which case the lexical variable (level0) has multiple
   // live instances.
   expr2tc ret_value = call.ret;
-  cur_state->rename_address(ret_value);
+  if (!is_nil_expr(ret_value) && !is_empty_type(ret_value->type))
+    cur_state->rename_address(ret_value);
 
   // increase unwinding counter
   unwinding_counter++;

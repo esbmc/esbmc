@@ -298,8 +298,8 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
       // Manually rename those l1 variables to level2 under the two different
       // level2 objects.
-      goto_state.level2.rename(true_val);
-      cur_state->level2.rename(false_val);
+      goto_state.level2.get_ident_name(true_val);
+      cur_state->level2.get_ident_name(false_val);
 
       rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
     }
