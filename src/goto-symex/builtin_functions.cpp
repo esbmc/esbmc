@@ -243,7 +243,8 @@ void goto_symext::symex_free(const expr2tc &expr)
   guardt guard;
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  pointer_object2tc ptr_obj(pointer_type2(), code.operand);
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
+  dereference(ptr_obj, false);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
