@@ -90,17 +90,6 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
     return false;
   }
 
-  // eliminate typecasts from NULL
-  if(expr.type().id()=="pointer" &&
-     expr.op0().is_constant() &&
-     expr.op0().value().as_string()=="NULL")
-  {
-    exprt tmp=expr.op0();
-    tmp.type()=expr.type();
-    expr.swap(tmp);
-    return false;
-  }
-
   // eliminate duplicate pointer typecasts
   if(expr.type().id()=="pointer" &&
      expr.op0().id()=="typecast" &&

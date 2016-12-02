@@ -1458,15 +1458,6 @@ typecast2t::do_simplify(bool second) const
     expr2tc noteq = expr2tc(new not2t(eq));
     return noteq;
   }
-  else if (is_symbol2t(simp)
-           && to_symbol2t(simp).thename == "NULL"
-           && is_pointer_type(type))
-  {
-    // Casts of null can operate on null directly. So long as we're casting it
-    // to a pointer. Code like 32_floppy casts it to an int though; were we to
-    // simplify that away, we end up with type errors.
-    return simp;
-  }
   else if (is_pointer_type(type) && is_pointer_type(simp))
   {
     // Casting from one pointer to another is meaningless... except when there's
