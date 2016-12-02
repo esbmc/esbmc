@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void goto_programt::instructiont::dump() const
 {
-  output_instruction(namespacet(contextt()), "", std::cout);
+  output_instruction(*migrate_namespace_lookup, "", std::cout);
 }
 
 void goto_programt::instructiont::output_instruction(
@@ -494,5 +494,5 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
 
 void goto_programt::dump() const
 {
-  output(namespacet(contextt()), "", std::cout);
+  output(*migrate_namespace_lookup, "", std::cout);
 }
