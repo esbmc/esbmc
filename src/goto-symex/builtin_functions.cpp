@@ -132,15 +132,16 @@ goto_symext::symex_mem(
   }
 
   expr2tc rhs = rhs_addrof;
-
   expr2tc ptr_rhs = rhs;
+  guardt alloc_guard = cur_state->guard;
 
   if (!options.get_bool_option("force-malloc-success")) {
     symbol2tc null_sym(rhs->type, "NULL");
     sideeffect2tc choice(get_bool_type(), expr2tc(), expr2tc(), std::vector<expr2tc>(), type2tc(), sideeffect2t::nondet);
+    replace_nondet(choice);
 
     rhs = if2tc(rhs->type, choice, rhs, null_sym);
-    replace_nondet(rhs);
+    alloc_guard.add(choice);
 
     ptr_rhs = rhs;
   }
@@ -157,7 +158,7 @@ goto_symext::symex_mem(
   pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard, !is_malloc));
+  dynamic_memory.push_back(allocated_obj(rhs_copy, alloc_guard, !is_malloc));
 
   return rhs_addrof->ptr_obj;
 }
