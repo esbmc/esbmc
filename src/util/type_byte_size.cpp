@@ -90,6 +90,16 @@ member_offset(const struct_type2t &type, const irep_idt &member)
 }
 
 mp_integer
+type_byte_size_default(const type2t &type, mp_integer defaultval)
+{
+  try {
+    return type_byte_size(type);
+  } catch (array_type2t::dyn_sized_array_excp *e) {
+    return defaultval;
+  }
+}
+
+mp_integer
 type_byte_size(const type2t &type)
 {
 

@@ -654,10 +654,14 @@ void value_sett::get_reference_set_rec(
     // Compute the offset introduced by this index.
     mp_integer index_offset;
     bool has_const_index_offset = false;
-    if (is_constant_int2t(index.index)) {
-      index_offset = to_constant_int2t(index.index).value *
-                         type_byte_size(*index.type);
-      has_const_index_offset = true;
+    try {
+      if (is_constant_int2t(index.index)) {
+        index_offset = to_constant_int2t(index.index).value *
+                           type_byte_size(*index.type);
+        has_const_index_offset = true;
+      }
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      // Not a constant index offset then.
     }
 
     object_mapt array_references;
@@ -689,7 +693,8 @@ void value_sett::get_reference_set_rec(
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
           const array_type2t &a = to_array_type(index.source_value->type);
-          mp_integer m = type_byte_size(a);
+
+          mp_integer m = type_byte_size_default(a, 1);
 
           // This index operation, whatever the offset, will always multiply
           // by the size of the element type.

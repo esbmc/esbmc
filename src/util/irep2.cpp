@@ -442,6 +442,8 @@ expr2t::hash(crypto_hash &hash) const
 expr2tc
 expr2t::simplify(void) const
 {
+  try {
+
   // Corner case! Don't even try to simplify address of's operands, might end up
   // taking the address of some /completely/ arbitary pice of data, by
   // simplifiying an index to its data, discarding the symbol.
@@ -510,6 +512,14 @@ expr2t::simplify(void) const
     return new_us;
   else
     return tmp;
+
+  } catch (array_type2t::dyn_sized_array_excp *e) {
+    // Pretty much anything in any expression could be fouled up by there
+    // being a dynamically sized array somewhere in there. In this circumstance,
+    // don't even attempt partial simpilfication. We'd probably have to double
+    // the size of simplification code in that case.
+    return expr2tc();
+  }
 }
 
 static const char *expr_names[] = {
