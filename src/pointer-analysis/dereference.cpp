@@ -601,16 +601,7 @@ dereferencet::build_reference_to(
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {
-    // constraint that it actually is an invalid pointer
-
-    invalid_pointer2tc invalid_pointer_expr(deref_expr);
-
-    // produce new guard
-
-    guardt tmp_guard(guard);
-    tmp_guard.move(invalid_pointer_expr);
-    dereference_failure("pointer dereference", "invalid pointer", tmp_guard);
-
+    deref_invalid_ptr(deref_expr, guard, mode);
     return value;
   }
 
@@ -710,6 +701,25 @@ dereferencet::build_reference_to(
   build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment);
 
   return value;
+}
+
+void
+dereferencet::deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode)
+{
+  // constraint that it actually is an invalid pointer
+
+  invalid_pointer2tc invalid_pointer_expr(deref_expr);
+
+  // produce new guard
+
+  guardt tmp_guard(guard);
+  tmp_guard.move(invalid_pointer_expr);
+
+  // Adjust error message depending on the context
+  std::string foo =
+    (mode == FREE) ? "invalid pointer freed" : "invalid pointer";
+
+  dereference_failure("pointer dereference", foo, tmp_guard);
 }
 
 /************************** Rereference building code *************************/

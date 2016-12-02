@@ -362,6 +362,8 @@ private:
     const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
 
+  void deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode);
+
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(const expr2tc &expr, const expr2tc &offset,
                     const type2tc &type, const guardt &guard);
