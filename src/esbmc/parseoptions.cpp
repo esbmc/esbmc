@@ -411,18 +411,12 @@ int cbmc_parseoptionst::doit()
     return 7;
 
   bool res = false;
-  try {
-    // do actual BMC
-    bmct bmc(goto_functions, opts, context, ui_message_handler);
-    set_verbosity_msg(bmc);
-    res = do_bmc(bmc);
-  }
-  catch(...)
-  {
-    status("Unable to prove or falsify the program, giving up.");
-    status("VERIFICATION UNKNOWN");
-    return 0;
-  }
+
+  // do actual BMC
+  bmct bmc(goto_functions, opts, context, ui_message_handler);
+  set_verbosity_msg(bmc);
+  res = do_bmc(bmc);
+
   return res;
 }
 
