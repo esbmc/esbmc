@@ -101,9 +101,9 @@ void ansi_c_convertt::convert_expr(exprt &expr)
   {
     if(expr.operands().size()==0)
     {
-      typet type=static_cast<const typet &>(expr.sizeof_type());
+      typet type=static_cast<const typet &>(expr.c_sizeof_type());
       convert_type(type);
-      expr.sizeof_type(type);
+      expr.c_sizeof_type(type);
     }
   }
   else if(expr.id()=="builtin_va_arg")

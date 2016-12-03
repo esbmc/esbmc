@@ -514,10 +514,9 @@ void clang_c_adjust::adjust_dereference(exprt& deref)
 void clang_c_adjust::adjust_sizeof(exprt& expr)
 {
   typet type;
-
   if(expr.operands().size()==0)
   {
-    type = ((typet &)expr.sizeof_type());
+    type = ((typet &)expr.c_sizeof_type());
     adjust_type(type);
   }
   else if(expr.operands().size()==1)
@@ -540,7 +539,7 @@ void clang_c_adjust::adjust_sizeof(exprt& expr)
   }
 
   new_expr.swap(expr);
-  expr.cmt_c_sizeof_type(type);
+  expr.c_sizeof_type(type);
 }
 
 void clang_c_adjust::adjust_type(typet &type)

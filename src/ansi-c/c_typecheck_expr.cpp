@@ -501,7 +501,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 
   if(expr.operands().size()==0)
   {
-    type = ((typet &)expr.sizeof_type());
+    type = ((typet &)expr.c_sizeof_type());
     typecheck_type(type);
   }
   else if(expr.operands().size()==1)
@@ -528,7 +528,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 
   new_expr.swap(expr);
 
-  expr.cmt_c_sizeof_type(type);
+  expr.c_sizeof_type(type);
 }
 
 /*******************************************************************\
