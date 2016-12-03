@@ -1196,10 +1196,13 @@ bool clang_c_convertert::get_expr(
       const clang::UnaryExprOrTypeTraitExpr &unary =
         static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
 
-      // Use clang to calculate sizeof/alignof
-      llvm::APSInt val;
-      if(unary.EvaluateAsInt(val, *ASTContext))
+      // Use clang to calculate alignof
+      if(unary.getKind() == clang::UETT_AlignOf)
       {
+        llvm::APSInt val;
+        if(unary.EvaluateAsInt(val, *ASTContext))
+          return true;
+
         new_expr =
           constant_exprt(
             integer2binary(val.getZExtValue(), bv_width(uint_type())),
