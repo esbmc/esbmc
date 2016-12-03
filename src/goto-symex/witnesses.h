@@ -13,6 +13,7 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/ptree_fwd.hpp>
 #include <boost/property_tree/string_path.hpp>
+#include <openssl/sha.h>
 #include <stdio.h>
 #include <fstream>
 #include <iostream>
@@ -85,6 +86,36 @@ void write_file(std::string path, std::string content)
   std::ofstream out(path.c_str());
   out << content;
   out.close();
+}
+
+#define SHA1_DIGEST_LENGTH 20
+int generate_sha1_hash_for_file(const char * path, char output[40])
+{
+  FILE * file = fopen(path, "rb");
+
+  if(!file)
+    return -1;
+
+  unsigned char hash[SHA1_DIGEST_LENGTH];
+  SHA_CTX sha1;
+  SHA1_Init(&sha1);
+  const int bufSize = 32768;
+  char * buffer = (char *) malloc(bufSize);
+  if(!buffer)
+    return -1;
+
+  int bytesRead = 0;
+  while((bytesRead = fread(buffer, 1, bufSize, file)))
+    SHA1_Update(&sha1, buffer, bytesRead);
+  SHA1_Final(hash, &sha1);
+
+  int i = 0;
+  for(i = 0; i < SHA1_DIGEST_LENGTH; i++)
+    sprintf(output + (i * 2), "%02x", hash[i]);
+
+  fclose(file);
+  free(buffer);
+  return 0;
 }
 
 void generate_tokens(std::string tokenized_line,
@@ -591,9 +622,10 @@ void create_graph(
   int & specification,
   const bool is_correctness)
 {
-  std::string hash = "";
+  char hash[40];
   if (!filename.empty())
-    hash = execute_cmd("sha1sum " + filename).substr(0, 40);
+    generate_sha1_hash_for_file(filename.c_str(), hash);
+
   graph.add("<xmlattr>.edgedefault", "directed");
   boost::property_tree::ptree data_witnesstype;
   data_witnesstype.add("<xmlattr>.key", "witness-type");
