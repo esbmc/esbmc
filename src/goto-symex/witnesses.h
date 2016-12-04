@@ -13,13 +13,74 @@
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/ptree_fwd.hpp>
 #include <boost/property_tree/string_path.hpp>
-#include <openssl/sha.h>
 #include <stdio.h>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <map>
 #include <string>
+
+#include <ac_config.h>
+
+#ifndef HAVE_OPENSSL
+
+extern "C" {
+  #include <dlfcn.h>
+  #include <openssl/sha.h>
+}
+
+#define SHA1_DIGEST_LENGTH 20
+int generate_sha1_hash_for_file(const char * path, char output[40])
+{
+  FILE * file = fopen(path, "rb");
+
+  if(!file)
+    return -1;
+
+  void *ssl_lib;
+  long (*ssleay)(void);
+
+  ssl_lib = dlopen("libcrypto.so", RTLD_LAZY);
+  if (ssl_lib == NULL)
+    throw "Couldn't open OpenSSL crypto library - can't hash state";
+
+  ssleay = (long (*)(void)) dlsym(ssl_lib, "SSLeay");
+  // Check for version 0.9.8 - I believe this is the first release with SHA256.
+  if (ssleay() < 0x000908000)
+    throw "OpenSSL >= 0.9.8 required for program hashing";
+
+  int (*sha_init)(SHA256_CTX *c) = 0;
+  int (*sha_update)(SHA256_CTX *c, const void *data, size_t len) = 0;
+  int (*sha_final)(unsigned char *md, SHA256_CTX *c) = 0;
+
+  sha_init = (int (*) (SHA256_CTX *c)) dlsym(ssl_lib, "SHA256_Init");
+  sha_update = (int (*) (SHA256_CTX *c, const void *data, size_t len))
+               dlsym(ssl_lib, "SHA256_Update");
+  sha_final = (int (*) (unsigned char *md, SHA256_CTX *c))
+               dlsym(ssl_lib, "SHA256_Final");
+
+  unsigned char hash[SHA1_DIGEST_LENGTH];
+  SHA256_CTX sha1;
+  sha_init(&sha1);
+  const int bufSize = 32768;
+  char * buffer = (char *) alloca(bufSize);
+  if(!buffer)
+    return -1;
+
+  int bytesRead = 0;
+  while((bytesRead = fread(buffer, 1, bufSize, file)))
+	  sha_update(&sha1, buffer, bytesRead);
+  sha_final(hash, &sha1);
+
+  int i = 0;
+  for(i = 0; i < SHA1_DIGEST_LENGTH; i++)
+    sprintf(output + (i * 2), "%02x", hash[i]);
+
+  fclose(file);
+  return 0;
+}
+
+#endif /* !NO_OPENSSL */
 
 typedef struct graph_props
 {
@@ -86,36 +147,6 @@ void write_file(std::string path, std::string content)
   std::ofstream out(path.c_str());
   out << content;
   out.close();
-}
-
-#define SHA1_DIGEST_LENGTH 20
-int generate_sha1_hash_for_file(const char * path, char output[40])
-{
-  FILE * file = fopen(path, "rb");
-
-  if(!file)
-    return -1;
-
-  unsigned char hash[SHA1_DIGEST_LENGTH];
-  SHA_CTX sha1;
-  SHA1_Init(&sha1);
-  const int bufSize = 32768;
-  char * buffer = (char *) malloc(bufSize);
-  if(!buffer)
-    return -1;
-
-  int bytesRead = 0;
-  while((bytesRead = fread(buffer, 1, bufSize, file)))
-    SHA1_Update(&sha1, buffer, bytesRead);
-  SHA1_Final(hash, &sha1);
-
-  int i = 0;
-  for(i = 0; i < SHA1_DIGEST_LENGTH; i++)
-    sprintf(output + (i * 2), "%02x", hash[i]);
-
-  fclose(file);
-  free(buffer);
-  return 0;
 }
 
 void generate_tokens(std::string tokenized_line,
