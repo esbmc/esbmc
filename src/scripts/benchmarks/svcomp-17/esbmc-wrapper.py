@@ -10,16 +10,16 @@ esbmc_path = "./esbmc "
 witness_path = "error-witness.graphml "
 
 # ESBMC default commands: this is the same for every submission
-esbmc_dargs = "--timeout 895s --memlimit 15g --no-div-by-zero-check "
-esbmc_dargs += "--force-malloc-success --context-bound 7 "
+esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
+esbmc_dargs += "--clang-frontend "
 esbmc_dargs += "--witness-output " + witness_path
 
 # ESBMC specific commands: this is different for every submission
-esbmc_fp = "--floatbv --mathsat --no-bitfields "
-esbmc_kind = "--k-induction-parallel --unlimited-k-steps --floatbv "
-esbmc_falsi = "--falsification --unlimited-k-steps --floatbv --z3 "
-esbmc_fixed = "--unroll-loops --unwind 128 --no-unwinding-assertions --boolector "
-esbmc_incr = "--incremental-bmc --unlimited-k-steps --floatbv --z3 "
+esbmc_fp    = "--floatbv --mathsat --no-bitfields "
+esbmc_kind  = "--floatbv --unlimited-k-steps --z3 --k-induction-parallel "
+esbmc_falsi = "--floatbv --unlimited-k-steps --z3 --falsification "
+esbmc_incr  = "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
+esbmc_fixed = "--unwind 128 --no-unwinding-assertions --boolector "
 
 command_line = esbmc_path + esbmc_dargs
 
@@ -30,7 +30,7 @@ parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choic
 parser.add_argument("-v", "--version", help="Prints ESBMC's version", action='store_true')
 parser.add_argument("-p", "--propertyfile", help="Path to the property file")
 parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
-parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "fp", "falsi", "incr", "fixed"], default="fp")
+parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "fp", "falsi", "incr", "fixed"], default="incr")
 
 args = parser.parse_args()
 
@@ -46,6 +46,10 @@ if version == True:
 
 if property_file is None:
   print "Please, specify a property file"
+  exit(1)
+
+if benchmark is None:
+  print "Please, specify a benchmark to verify"
   exit(1)
 
 # Add arch
@@ -89,11 +93,11 @@ else:
   exit(1)
 
 if is_overflow:
-  command_line += "--overflow-check --clang-frontend "
+  command_line += "--overflow-check "
 elif is_memsafety:
   command_line += "--memory-leak-check "
 elif is_reachability:
-  command_line += "--no-pointer-check --no-bounds-check --clang-frontend --error-label ERROR "
+  command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
 
 # Call ESBMC
 command_line += benchmark
@@ -126,9 +130,10 @@ if "Timed out" in stdout:
 memory_leak = "dereference failure: forgotten memory"
 invalid_pointer = "dereference failure: invalid pointer"
 access_out = "dereference failure: Access to object out of bounds"
-bounds_violated = "dereference failure: array bounds violated"
 dereference_null = "dereference failure: NULL pointer"
 invalid_object = "dereference failure: invalidated dynamic object"
+invalid_pointer_free = "dereference failure: invalid pointer freed"
+free_error = "dereference failure: free() of non-dynamic memory"
 bounds_violated = "array bounds violated"
 free_offset = "Operand of free must have zero pointer offset"
 
@@ -142,15 +147,27 @@ if "VERIFICATION FAILED" in stdout:
       print "FALSE_MEMTRACK"
       exit(0)
 
+    if invalid_pointer_free in stdout:
+      print "FALSE_FREE"
+      exit(0)
+
     if invalid_pointer in stdout:
       print "FALSE_DEREF"
       exit(0)
 
-    if bounds_violated in stdout:
+    if dereference_null in stdout:
       print "FALSE_DEREF"
       exit(0)
 
-    if dereference_null in stdout:
+    if free_error in stdout:
+      print "FALSE_FREE"
+      exit(0)
+
+    if access_out in stdout:
+      print "FALSE_DEREF"
+      exit(0)
+
+    if invalid_object in stdout:
       print "FALSE_DEREF"
       exit(0)
 
