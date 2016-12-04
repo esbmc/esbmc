@@ -64,7 +64,7 @@ int generate_sha1_hash_for_file(const char * path, std::string & output)
   sha_init(&sha1);
   const int bufSize = 32768;
   char * buffer = (char *) alloca(bufSize);
-  char * output_hex_hash = (char *) malloc(sizeof(char) * SHA1_DIGEST_LENGTH * 2);
+  char * output_hex_hash = (char *) alloca(sizeof(char) * SHA1_DIGEST_LENGTH * 2);
   if(!buffer || !output_hex_hash)
     return -1;
 
