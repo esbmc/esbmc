@@ -20,6 +20,70 @@
 #include <map>
 #include <string>
 
+#include <ac_config.h>
+
+#ifndef HAVE_OPENSSL
+
+extern "C" {
+  #include <dlfcn.h>
+  #include <openssl/sha.h>
+}
+
+#define SHA1_DIGEST_LENGTH 20
+int generate_sha1_hash_for_file(const char * path, std::string & output)
+{
+  FILE * file = fopen(path, "rb");
+
+  if(!file)
+    return -1;
+
+  void *ssl_lib;
+  long (*ssleay)(void);
+
+  ssl_lib = dlopen("libcrypto.so", RTLD_LAZY);
+  if (ssl_lib == NULL)
+    throw "Couldn't open OpenSSL crypto library - can't hash state";
+
+  ssleay = (long (*)(void)) dlsym(ssl_lib, "SSLeay");
+  // Check for version 0.9.8 - I believe this is the first release with SHA.
+  if (ssleay() < 0x000908000)
+    throw "OpenSSL >= 0.9.8 required for program hashing";
+
+  int (*sha_init)(SHA_CTX *c) = 0;
+  int (*sha_update)(SHA_CTX *c, const void *data, size_t len) = 0;
+  int (*sha_final)(unsigned char *md, SHA_CTX *c) = 0;
+
+  sha_init = (int (*) (SHA_CTX *c)) dlsym(ssl_lib, "SHA_Init");
+  sha_update = (int (*) (SHA_CTX *c, const void *data, size_t len))
+               dlsym(ssl_lib, "SHA1_Update");
+  sha_final = (int (*) (unsigned char *md, SHA_CTX *c))
+               dlsym(ssl_lib, "SHA1_Final");
+
+  unsigned char hash[SHA1_DIGEST_LENGTH];
+  SHA_CTX sha1;
+  sha_init(&sha1);
+  const int bufSize = 32768;
+  char * buffer = (char *) alloca(bufSize);
+  char * output_hex_hash = (char *) alloca(sizeof(char) * SHA1_DIGEST_LENGTH * 2);
+  if(!buffer || !output_hex_hash)
+    return -1;
+
+  int bytesRead = 0;
+  while((bytesRead = fread(buffer, 1, bufSize, file)))
+	  sha_update(&sha1, buffer, bytesRead);
+
+  sha_final(hash, &sha1);
+  int i = 0;
+  for(i = 0; i < SHA1_DIGEST_LENGTH; i++)
+    sprintf(output_hex_hash + (i * 2), "%02x", hash[i]);
+
+  output.append(output_hex_hash);
+  fclose(file);
+  return 0;
+}
+
+#endif /* !NO_OPENSSL */
+
 typedef struct graph_props
 {
   std::string sourcecodeLanguage;
@@ -591,9 +655,10 @@ void create_graph(
   int & specification,
   const bool is_correctness)
 {
-  std::string hash = "";
+  std::string hash;
   if (!filename.empty())
-    hash = execute_cmd("sha1sum " + filename).substr(0, 40);
+    generate_sha1_hash_for_file(filename.c_str(), hash);
+
   graph.add("<xmlattr>.edgedefault", "directed");
   boost::property_tree::ptree data_witnesstype;
   data_witnesstype.add("<xmlattr>.key", "witness-type");
@@ -714,4 +779,44 @@ bool is_valid_witness_expr(
     value.find("stdout")        &
     value.find("stderr")        &
     value.find("sys_")) == std::string::npos;
+}
+
+void get_relative_line_in_programfile(
+  const std::string relative_file_path,
+  const int relative_line_number,
+  const std::string program_file_path,
+  int & programfile_line_number)
+{
+  /* check if it is necessary to get the relative line */
+  if (relative_file_path == program_file_path)
+  {
+	programfile_line_number = relative_line_number;
+    return;
+  }
+  std::string line;
+  std::string relative_content;
+  std::ifstream stream_relative (relative_file_path);
+  std::ifstream stream_programfile (program_file_path);
+  int line_count = 0;
+  /* get the relative content */
+  if (stream_relative.is_open())
+  {
+	while(getline(stream_relative, line) &&
+		  line_count < relative_line_number)
+	{
+	  relative_content = line;
+	  line_count++;
+	}
+  }
+  /* file for the line in the programfile */
+  line_count = 0;
+  if (stream_programfile.is_open())
+  {
+    while(getline(stream_programfile, line) &&
+  	  line != relative_content)
+    {
+      line_count++;
+    }
+  }
+  programfile_line_number = line_count;
 }
