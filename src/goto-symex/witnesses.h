@@ -30,7 +30,7 @@ extern "C" {
 }
 
 #define SHA1_DIGEST_LENGTH 20
-int generate_sha1_hash_for_file(const char * path, char output[40])
+int generate_sha1_hash_for_file(const char * path, std::string & output)
 {
   FILE * file = fopen(path, "rb");
 
@@ -45,37 +45,39 @@ int generate_sha1_hash_for_file(const char * path, char output[40])
     throw "Couldn't open OpenSSL crypto library - can't hash state";
 
   ssleay = (long (*)(void)) dlsym(ssl_lib, "SSLeay");
-  // Check for version 0.9.8 - I believe this is the first release with SHA256.
+  // Check for version 0.9.8 - I believe this is the first release with SHA.
   if (ssleay() < 0x000908000)
     throw "OpenSSL >= 0.9.8 required for program hashing";
 
-  int (*sha_init)(SHA256_CTX *c) = 0;
-  int (*sha_update)(SHA256_CTX *c, const void *data, size_t len) = 0;
-  int (*sha_final)(unsigned char *md, SHA256_CTX *c) = 0;
+  int (*sha_init)(SHA_CTX *c) = 0;
+  int (*sha_update)(SHA_CTX *c, const void *data, size_t len) = 0;
+  int (*sha_final)(unsigned char *md, SHA_CTX *c) = 0;
 
-  sha_init = (int (*) (SHA256_CTX *c)) dlsym(ssl_lib, "SHA256_Init");
-  sha_update = (int (*) (SHA256_CTX *c, const void *data, size_t len))
-               dlsym(ssl_lib, "SHA256_Update");
-  sha_final = (int (*) (unsigned char *md, SHA256_CTX *c))
-               dlsym(ssl_lib, "SHA256_Final");
+  sha_init = (int (*) (SHA_CTX *c)) dlsym(ssl_lib, "SHA_Init");
+  sha_update = (int (*) (SHA_CTX *c, const void *data, size_t len))
+               dlsym(ssl_lib, "SHA1_Update");
+  sha_final = (int (*) (unsigned char *md, SHA_CTX *c))
+               dlsym(ssl_lib, "SHA1_Final");
 
   unsigned char hash[SHA1_DIGEST_LENGTH];
-  SHA256_CTX sha1;
+  SHA_CTX sha1;
   sha_init(&sha1);
   const int bufSize = 32768;
   char * buffer = (char *) alloca(bufSize);
-  if(!buffer)
+  char * output_hex_hash = (char *) malloc(sizeof(char) * SHA1_DIGEST_LENGTH * 2);
+  if(!buffer || !output_hex_hash)
     return -1;
 
   int bytesRead = 0;
   while((bytesRead = fread(buffer, 1, bufSize, file)))
 	  sha_update(&sha1, buffer, bytesRead);
-  sha_final(hash, &sha1);
 
+  sha_final(hash, &sha1);
   int i = 0;
   for(i = 0; i < SHA1_DIGEST_LENGTH; i++)
-    sprintf(output + (i * 2), "%02x", hash[i]);
+    sprintf(output_hex_hash + (i * 2), "%02x", hash[i]);
 
+  output.append(output_hex_hash);
   fclose(file);
   return 0;
 }
@@ -653,7 +655,7 @@ void create_graph(
   int & specification,
   const bool is_correctness)
 {
-  char hash[40];
+  std::string hash;
   if (!filename.empty())
     generate_sha1_hash_for_file(filename.c_str(), hash);
 
