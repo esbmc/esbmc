@@ -1624,8 +1624,10 @@ void dereferencet::valid_check(
 
       guardt tmp_guard(guard);
       tmp_guard.move(not_valid_expr);
-      dereference_failure("pointer dereference", "invalidated dynamic object",
-                          tmp_guard);
+
+      std::string foo =
+        (mode == FREE) ? "invalidated dynamic object freed" : "invalidated dynamic object";
+      dereference_failure("pointer dereference", foo, tmp_guard);
     } else {
       // Not dynamic; if we're in free mode, that's an error.
       if(mode==FREE)
