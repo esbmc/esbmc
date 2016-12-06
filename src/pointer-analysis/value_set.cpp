@@ -1306,6 +1306,24 @@ write_object_map(value_sett::object_mapt &map, const value_sett::object_map_dt &
   map.write() = value;
 }
 
+// Wrap call to get_value_set to just return a python list: otherwise we wind
+// up having the caller spuriously allocate a value_setst::valuest, which is
+// a list.
+boost::python::object
+get_value_set_wrapper(value_sett &vs, const expr2tc &expr)
+{
+  using namespace boost::python;
+  value_setst::valuest v;
+  vs.get_value_set(expr, v);
+  // Convert resulting list to a python list
+
+  list l;
+  for (const expr2tc &e : v)
+    l.append(e);
+
+  return l;
+}
+
 void
 build_value_set_classes()
 {
@@ -1315,8 +1333,6 @@ build_value_set_classes()
     &value_sett::insert;
   bool (value_sett::*insert_expr)(value_sett::object_mapt &, const expr2tc &, const mp_integer &) const =
     &value_sett::insert;
-  void (value_sett::*get_value_set)(const expr2tc &, value_setst::valuest &) const =
-    &value_sett::get_value_set;
   value_sett::entryt &(value_sett::*get_entry)(const value_sett::entryt &) =
     &value_sett::get_entry;
   value_sett::entryt &(value_sett::*get_entry_named)(const std::string &, const std::string &) =
@@ -1339,7 +1355,7 @@ build_value_set_classes()
     .def("insert", insert)
     .def("insert_expr", insert_expr)
     .def("erase", &value_sett::erase)
-    .def("get_value_set", get_value_set)
+    .def("get_value_set", get_value_set_wrapper)
     .def("clear", &value_sett::clear)
     .def("del_var", &value_sett::del_var)
     .def("get_entry", get_entry, return_internal_reference<>())
