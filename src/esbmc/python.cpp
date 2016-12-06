@@ -254,11 +254,21 @@ kill_esbmc_process(void)
 // return something2tc's. And we can't register the something2tc constructor
 // as a simple function. So we get this:
 template <typename Result, typename Source>
-Result
+object
 downcast_vehicle(const Source &contained)
 {
   // Just construct a new container around this.
-  return Result(contained);
+  return object(Result(contained));
+}
+
+// Specialise for not2tc: because of the built-in ambiguity inre whether not2tc
+// constructs a new not2t object, or copies one, we actually use not2tc in a
+// useful manner here. So engage in type mangling.
+template <>
+object
+downcast_vehicle<not2tc, expr2tc>(const expr2tc &contained)
+{
+  return object(reinterpret_cast<const not2tc &>(contained));
 }
 
 object
