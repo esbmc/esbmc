@@ -8,7 +8,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"no-inlining",		switc,		""	},
 { 0,  "full-inlining",    switc,    ""  },
 { 0,	"program-only",		switc,		""	},
-{ 0,  "no-guard-printing",   switc,    ""  },
+{ 0,  "dump-guards",   switc,    ""  },
 { 0,	"program-too",		switc,		""	},
 { 0,	"function",		string,		""	},
 { 0,	"preprocess",		switc,		""	},

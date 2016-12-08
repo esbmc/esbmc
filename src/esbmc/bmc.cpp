@@ -387,7 +387,7 @@ void bmct::show_program(symex_target_equationt &equation)
 
   std::cout << "\n" << "Program constraints:" << "\n";
 
-  bool print_guard = config.options.get_bool_option("no-guard-printing");
+  bool print_guard = config.options.get_bool_option("dump-guards");
 
   for(symex_target_equationt::SSA_stepst::const_iterator
       it=equation.SSA_steps.begin();
@@ -419,7 +419,7 @@ void bmct::show_program(symex_target_equationt &equation)
       std::cout << "renumber: " << from_expr(ns, "", it->lhs) << "\n";
     }
 
-    if(!migrate_expr_back(it->guard).is_true() && !print_guard)
+    if(!migrate_expr_back(it->guard).is_true() && print_guard)
     {
       languages.from_expr(migrate_expr_back(it->guard), string_value);
       std::cout << std::string(i2string(count).size()+3, ' ');

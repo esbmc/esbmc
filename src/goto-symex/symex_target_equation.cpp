@@ -270,7 +270,7 @@ void symex_target_equationt::SSA_stept::output(
   if(is_assert())
     out << comment << std::endl;
 
-  if(!config.options.get_bool_option("no-guard-printing"))
+  if(config.options.get_bool_option("dump-guards"))
     out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << std::endl;
 }
 
