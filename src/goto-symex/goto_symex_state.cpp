@@ -80,10 +80,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if (is_nil_expr(expr)) {
     return true; // It's fine to constant propagate something that's absent.
-  } else if (is_constant_expr(expr)) {
-    return true;
-  }
-  else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
+  } else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
   {
     // Null is also essentially a constant.
     return true;
@@ -149,6 +146,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return false;
 
     return constant_propagation(*e);
+  } else if (is_constant_expr(expr)) {
+    return true;
   }
 
   /* No difference
