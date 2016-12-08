@@ -10,6 +10,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"program-only",		switc,		""	},
 { 0,  "dump-guards",   switc,    ""  },
 { 0,	"program-too",		switc,		""	},
+{ 0,	"simple-ssa-printing",		switc,		""	},
 { 0,	"function",		string,		""	},
 { 0,	"preprocess",		switc,		""	},
 { 0,	"no-simplify",		switc,		""	},

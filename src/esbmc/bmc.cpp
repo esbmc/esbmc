@@ -388,13 +388,17 @@ void bmct::show_program(symex_target_equationt &equation)
   std::cout << "\n" << "Program constraints:" << "\n";
 
   bool print_guard = config.options.get_bool_option("dump-guards");
+  bool sparse = config.options.get_bool_option("simple-ssa-printing");
 
   for(symex_target_equationt::SSA_stepst::const_iterator
       it=equation.SSA_steps.begin();
       it!=equation.SSA_steps.end(); it++)
   {
-    std::cout << "// " << it->source.pc->location_number << " ";
-    std::cout << it->source.pc->location.as_string() << "\n";
+    if (!sparse) {
+      std::cout << "// " << it->source.pc->location_number << " ";
+      std::cout << it->source.pc->location.as_string() << "\n";
+    }
+
     std::cout <<   "(" << count << ") ";
 
     std::string string_value;
@@ -426,7 +430,9 @@ void bmct::show_program(symex_target_equationt &equation)
       std::cout << "guard: " << string_value << "\n";
     }
 
-    std::cout << "\n";
+    if (!sparse) {
+      std::cout << "\n";
+    }
 
     count++;
   }
