@@ -77,6 +77,11 @@ AC_CHECK_LIB([gmp], [__gmpz_cmp],
     [AC_MSG_WARN([No libgmp found: various solvers require it])], []
 )
 
+AC_CHECK_LIB([crypto], [SHA1_Init],
+    [AS_VAR_APPEND(LIBS, " -lcrypto")],
+    [AC_MSG_WARN([No libgmp found: various solvers require it])], []
+)
+
 # Define what to do when clang is enabled
 m4_define(ESBMC_ENABLE_CLANG, [
   AX_CLANG(3.8.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
