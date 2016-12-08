@@ -1765,20 +1765,20 @@ bool cbmc_parseoptionst::process_goto_program(
 
     goto_check(ns, options, goto_functions);
 
+    // show it?
+    if(cmdline.isset("show-goto-value-sets"))
+    {
+      value_set_analysist value_set_analysis(ns);
+      value_set_analysis(goto_functions);
+      show_value_sets(get_ui(), goto_functions, value_set_analysis);
+      return true;
+    }
+
 #if 0
     // This disabled code used to run the pointer static analysis and produce
     // pointer assertions appropriately. Disabled now that assertions are all
     // performed at symex time.
     status("Pointer Analysis");
-    value_set_analysist value_set_analysis(ns);
-    value_set_analysis(goto_functions);
-
-    // show it?
-    if(cmdline.isset("show-value-sets"))
-    {
-      show_value_sets(get_ui(), goto_functions, value_set_analysis);
-      return true;
-    }
 
     status("Adding Pointer Checks");
 

@@ -228,7 +228,13 @@ execution_statet::symex_step(reachability_treet &art)
     return;
   }
 
-  if (symex_trace)
+  if(options.get_bool_option("show-symex-value-sets"))
+  {
+    std::cout << '\n';
+    state.value_set.dump();
+  }
+
+  if (symex_trace || options.get_bool_option("show-symex-value-sets"))
     state.source.pc->output_instruction(ns, "", std::cout, false);
 
   switch (instruction.type) {
