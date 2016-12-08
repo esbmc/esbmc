@@ -237,7 +237,8 @@ z3_convt::convert_struct_type(const std::vector<type2tc> &members,
        it != members.end(); it++, mname++, i++)
   {
     proj_names[i] = z3::symbol(ctx, mname->as_string().c_str());
-    convert_type(*it, proj_types[i]);
+    const z3_smt_sort* tmp = z3_sort_downcast(convert_sort(*it));
+    proj_types[i] = tmp->s;
   }
 
   // Unpack pointers from Z3++ objects.
