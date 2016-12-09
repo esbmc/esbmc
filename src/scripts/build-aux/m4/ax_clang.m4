@@ -29,13 +29,7 @@ AC_DEFUN([AX_CLANG],
                 [ac_clang_lib_path=""]
         )
 
-    clang_lib_version_req=ifelse([$1], ,3.8.0,$1)
-    clang_lib_version_req_shorten=`expr $clang_lib_version_req : '\([[0-9]]*\.[[0-9]]*\)'`
-    clang_lib_version_req_major=`expr $clang_lib_version_req : '\([[0-9]]*\)'`
-    clang_lib_version_req_minor=`expr $clang_lib_version_req : '[[0-9]]*\.\([[0-9]]*\)'`
-    
-    WANT_clang_VERSION=`expr $clang_lib_version_req_major \* 100000 \+  $clang_lib_version_req_minor \* 100`
-    AC_MSG_CHECKING(for clang >= $clang_lib_version_req)
+    AC_MSG_CHECKING(for clang >= $1)
     succeeded=no
 
     dnl On 64-bit systems check for system libraries in both lib64 and lib.
