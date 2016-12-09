@@ -785,8 +785,9 @@ void get_relative_line_in_programfile(
 	  line_count++;
 	}
   }
+
   /* file for the line in the programfile */
-  line_count = 0;
+  line_count = 1;
   if (stream_programfile.is_open())
   {
     while(getline(stream_programfile, line) &&
