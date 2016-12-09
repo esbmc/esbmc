@@ -269,15 +269,6 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     // changed!
     const symbolt &symbol = ns.lookup(it->base_name);
 
-    // If this is a dynamic object, and one of the SSA numbers is zero, then
-    // we allocated it down one of these paths but not the other. A phi merge
-    // will achieve nothing (only the value on the allocating path is
-    // meaningful), so discard this.
-    if (has_prefix(symbol.name.as_string(),"symex_dynamic::") && (
-          goto_state.level2.current_number(*it) == 0 ||
-          cur_state->level2.current_number(*it) == 0))
-      continue;
-
     type2tc type;
     typet old_type = symbol.type;
     migrate_type(symbol.type, type);
