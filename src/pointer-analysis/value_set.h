@@ -60,7 +60,7 @@ class value_sett
 public:
   /** Primary constructor. Does approximately nothing non-standard. */
   value_sett(const namespacet &_ns):location_number(0), ns(_ns),
-    xchg_name("value_sett::__ESBMC_xchg_ptr")
+    xchg_name("value_sett::__ESBMC_xchg_ptr"), xchg_num(0)
   {
   }
 
@@ -68,7 +68,8 @@ public:
     location_number(ref.location_number),
     values(ref.values),
     ns(ref.ns),
-    xchg_name("value_sett::__ESBMC_xchg_ptr")
+    xchg_name("value_sett::__ESBMC_xchg_ptr"),
+    xchg_num(0)
   {
   }
 
@@ -77,6 +78,7 @@ public:
     location_number = ref.location_number;
     values = ref.values;
     xchg_name = ref.xchg_name;
+    xchg_num = ref.xchg_num;
     // No need to copy ns, it should be the same in all contexts.
     return *this;
   }
@@ -601,6 +603,7 @@ public:
   const namespacet &ns;
 
   irep_idt xchg_name;
+  unsigned long xchg_num;
 };
 
 #endif

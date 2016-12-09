@@ -823,8 +823,9 @@ void value_sett::assign(
     // then assign back.
     const if2t &ifref = to_if2t(rhs);
 
-    // Build a sym specific to this type
-    symbol2tc xchg_sym(lhs->type, xchg_name, symbol2t::level1_global, 0, 0, 0, 0);
+    // Build a sym specific to this type. Give l1 number to guard against
+    // recursively entering this code path
+    symbol2tc xchg_sym(lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
 
     assign(xchg_sym, ifref.true_value, false);
     assign(xchg_sym, ifref.false_value, true);
