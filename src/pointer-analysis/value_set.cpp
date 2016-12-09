@@ -819,10 +819,18 @@ void value_sett::assign(
   if (is_if2t(rhs))
   {
     // If the rhs could be either side of this if, perform the assigment of
-    // either side.
+    // either side. In case it refers to itself, assign to a temporary first,
+    // then assign back.
     const if2t &ifref = to_if2t(rhs);
-    assign(lhs, ifref.true_value, add_to_sets);
-    assign(lhs, ifref.false_value, true);
+
+    // Build a sym specific to this type
+    symbol2tc xchg_sym(lhs->type, xchg_name, symbol2t::level1_global, 0, 0, 0, 0);
+
+    assign(xchg_sym, ifref.true_value, false);
+    assign(xchg_sym, ifref.false_value, true);
+    assign(lhs, xchg_sym, add_to_sets);
+
+    erase(xchg_name.as_string());
     return;
   }
 
