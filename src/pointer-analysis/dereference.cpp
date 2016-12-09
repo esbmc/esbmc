@@ -615,7 +615,7 @@ dereferencet::build_reference_to(
   const expr2tc &root_object = o.get_root_object();
   const expr2tc &object = o.object;
 
-  if (is_null_object2t(root_object))
+  if (is_null_object2t(root_object) && mode != FREE && mode != INTERNAL)
   {
     type2tc nullptrtype = type2tc(new pointer_type2t(type));
     symbol2tc null_ptr(nullptrtype, "NULL");
@@ -629,6 +629,9 @@ dereferencet::build_reference_to(
 
     // Don't build a reference to this. You can't actually access NULL, and the
     // solver will only get confused.
+    return value;
+  } else if (is_null_object2t(root_object) && (mode == FREE || mode == INTERNAL)) {
+    // Freeing NULL is completely legit according to C
     return value;
   }
 
