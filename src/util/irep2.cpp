@@ -2206,7 +2206,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
 
   // Certain irep names collide with python keywords. Mark those as illegal,
   // and append an underscore behind them.
-  std::vector<std::string> illegal_names = {"not", "or", "and"};
+  std::vector<std::string> illegal_names = {"not", "or", "and", "with"};
 
   const char *basename = base_to_names<typename traits::base2t>::names[id];
   std::string basename_str(basename);
