@@ -157,6 +157,7 @@ pretty_print_func(unsigned int indent, std::string ident, T obj)
 
 /*************************** Base type2t definitions **************************/
 
+static std::vector<std::string> illegal_python_names = {"not", "or", "and", "with"};
 
 static const char *type_names[] = {
   "bool",
@@ -895,6 +896,19 @@ public:
   }
 };
 
+template <typename T>
+void
+filter_illegal_python_names(T enumids, const char *str, expr2t::expr_ids id)
+{
+  std::string filtered_pyname = std::string(str);
+
+  if (std::find(illegal_python_names.begin(), illegal_python_names.end(), filtered_pyname) != illegal_python_names.end())
+    filtered_pyname.append("_");
+
+  enumids.value(filtered_pyname.c_str(), id);
+  return;
+}
+
 void
 build_base_expr2t_python_class(void)
 {
@@ -908,11 +922,12 @@ build_base_expr2t_python_class(void)
   // None converter
   esbmc_python_cvt<expr2tc, char, true, true, false, none_to_irep2tc<expr2tc> >();
 
-  enum_<expr2t::expr_ids>("expr_ids")
-#define hahatemporary(r, data, elem) .value(BOOST_PP_STRINGIZE(elem), expr2t::BOOST_PP_CAT(elem,_id))
+  {
+  enum_<expr2t::expr_ids> enumids("expr_ids");
+#define hahatemporary(r, data, elem) filter_illegal_python_names(enumids, BOOST_PP_STRINGIZE(elem), expr2t::BOOST_PP_CAT(elem,_id));
 BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_EXPRS)
 #undef hahatemporary
-  ;
+  }
 
   // Register some additional enumerations. These should be inside the relevant
   // expr classes... but I don't think we can get a handle on the class_
@@ -2206,11 +2221,9 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
 
   // Certain irep names collide with python keywords. Mark those as illegal,
   // and append an underscore behind them.
-  std::vector<std::string> illegal_names = {"not", "or", "and", "with"};
-
   const char *basename = base_to_names<typename traits::base2t>::names[id];
   std::string basename_str(basename);
-  if (std::find(illegal_names.begin(), illegal_names.end(), basename_str) != illegal_names.end())
+  if (std::find(illegal_python_names.begin(), illegal_python_names.end(), basename_str) != illegal_python_names.end())
     basename_str.append("_");
 
   class_<derived, bases<base2t>, container, boost::noncopyable>
