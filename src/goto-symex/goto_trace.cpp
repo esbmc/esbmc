@@ -336,13 +336,7 @@ void generate_goto_trace_in_violation_graphml_format(
     if (verification_file.find(current_ver_file) != std::string::npos)
       current_ver_file = verification_file;
 
-    /* creating nodes and edges */
-    boost::property_tree::ptree current_node;
-    node_p current_node_p;
-    create_node(current_node, current_node_p);
-    graph.add_child("node", current_node);
-
-    boost::property_tree::ptree current_edge;
+    /* creating edge */
     edge_p current_edge_p;
     current_edge_p.originFileName = current_ver_file;
 
@@ -441,6 +435,17 @@ void generate_goto_trace_in_violation_graphml_format(
       }
     }
 
+    /* skip no assumption edges (avoid problems with equivalence) */
+    if (use_program_file && current_edge_p.assumption.length() == 0){
+    	continue;
+    }
+
+    /* creating node and edge */
+    boost::property_tree::ptree current_node;
+    node_p current_node_p;
+    create_node(current_node, current_node_p);
+    graph.add_child("node", current_node);
+    boost::property_tree::ptree current_edge;
     create_edge(current_edge, current_edge_p, last_created_node, current_node);
     graph.add_child("edge", current_edge);
     last_created_node = current_node;
