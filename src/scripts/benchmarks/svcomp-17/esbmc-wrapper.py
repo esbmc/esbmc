@@ -132,6 +132,7 @@ invalid_pointer = "dereference failure: invalid pointer"
 access_out = "dereference failure: Access to object out of bounds"
 dereference_null = "dereference failure: NULL pointer"
 invalid_object = "dereference failure: invalidated dynamic object"
+invalid_object_free = "dereference failure: invalidated dynamic object freed"
 invalid_pointer_free = "dereference failure: invalid pointer freed"
 free_error = "dereference failure: free() of non-dynamic memory"
 bounds_violated = "array bounds violated"
@@ -148,6 +149,10 @@ if "VERIFICATION FAILED" in stdout:
       exit(0)
 
     if invalid_pointer_free in stdout:
+      print "FALSE_FREE"
+      exit(0)
+
+    if invalid_object_free in stdout:
       print "FALSE_FREE"
       exit(0)
 
