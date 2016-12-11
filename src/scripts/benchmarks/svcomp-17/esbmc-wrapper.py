@@ -19,7 +19,7 @@ esbmc_fp    = "--floatbv --mathsat --no-bitfields "
 esbmc_kind  = "--floatbv --unlimited-k-steps --z3 --k-induction-parallel "
 esbmc_falsi = "--floatbv --unlimited-k-steps --z3 --falsification "
 esbmc_incr  = "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
-esbmc_fixed = "--unwind 128 --no-unwinding-assertions --boolector "
+esbmc_fixed = "--unroll-loops --unwind 160 --no-unwinding-assertions --boolector "
 
 command_line = esbmc_path + esbmc_dargs
 
