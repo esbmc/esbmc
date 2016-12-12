@@ -137,7 +137,7 @@ esbmc_dargs += "--clang-frontend "
 esbmc_dargs += "--witness-output " + witness_path
 
 # ESBMC specific commands: this is different for every submission
-esbmc_fp    = "--floatbv --mathsat --no-bitfields --unwind 1 --no-unwinding-assertions "
+esbmc_fp    = "--floatbv --mathsat --no-bitfields "
 esbmc_kind  = "--floatbv --unlimited-k-steps --z3 --k-induction-parallel "
 esbmc_falsi = "--floatbv --unlimited-k-steps --z3 --falsification "
 esbmc_incr  = "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
@@ -224,10 +224,22 @@ elif is_reachability:
   command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
 
 # Call ESBMC
-output = run_esbmc(command_line)
+if strategy == "fp":
+  output = run_esbmc(command_line + "--unwind 1 --no-unwinding-assertions ")
+else:
+  output = run_esbmc(command_line)
 
 # Parse output
 result = parse_result(output)
+
+# Before presenting the result, we need to double check the floating point results
+# because it ran with a tiny bound.
+if strategy == "fp":
+  # But only check successful results, any other case is fine
+  if result == Result.success:
+    output = run_esbmc(command_line + " --timeout 20s ") # Run unbounded + timeout
+    result = parse_result(output)
+
 result_string = get_result_string(result)
 
 print result_string
