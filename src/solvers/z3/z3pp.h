@@ -331,6 +331,7 @@ namespace z3 {
         expr fpa_div(z3::expr rm, z3::expr s1, z3::expr s2);
         expr fpa_fma(z3::expr rm, z3::expr v1, z3::expr v2, z3::expr v3);
 
+        expr fpa_from_bv(z3::expr t, sort sort);
         expr fpa_to_ieeebv(z3::expr fp);
 
         expr string_val(char const* s);
@@ -2275,6 +2276,13 @@ namespace z3 {
     expr context::fpa_fma(z3::expr rm, z3::expr v1, z3::expr v2, z3::expr v3)
     {
       Z3_ast r = Z3_mk_fpa_fma(m_ctx, rm, v1, v2, v3);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_from_bv(z3::expr t, sort sort)
+    {
+      Z3_ast r = Z3_mk_fpa_to_fp_bv(m_ctx, t, sort);
       check_error();
       return expr(*this, r);
     }
