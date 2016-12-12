@@ -74,6 +74,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
              goto_program, 0);
 
   threads_state.push_back(state);
+  preserved_paths.push_back(std::list<std::pair<unsigned int, goto_statet> >());
   cur_state = &threads_state.front();
   cur_state->global_guard.make_true();
   cur_state->global_guard.add(get_guard_identifier());
@@ -99,6 +100,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   cswitch_forced = false;
   active_thread = 0;
   last_active_thread = 0;
+  last_insn = NULL;
   node_count = 0;
   nondet_count = 0;
   DFS_traversed.reserve(1);
@@ -140,10 +142,12 @@ execution_statet::operator=(const execution_statet &ex)
   //state_level2 = ex.state_level2;
 
   threads_state = ex.threads_state;
+  preserved_paths = ex.preserved_paths;
   atomic_numbers = ex.atomic_numbers;
   DFS_traversed = ex.DFS_traversed;
   thread_start_data = ex.thread_start_data;
   last_active_thread = ex.last_active_thread;
+  last_insn = ex.last_insn;
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
   nondet_count = ex.nondet_count;
@@ -207,6 +211,7 @@ execution_statet::symex_step(reachability_treet &art)
 
   statet &state = get_active_state();
   const goto_programt::instructiont &instruction = *state.source.pc;
+  last_insn = &instruction;
 
   merge_gotos();
 
@@ -560,6 +565,7 @@ execution_statet::add_thread(const goto_programt *prog)
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
+  preserved_paths.push_back(std::list<std::pair<unsigned int, goto_statet> >());
   atomic_numbers.push_back(0);
 
   if (DFS_traversed.size() <= new_state.source.thread_nr) {

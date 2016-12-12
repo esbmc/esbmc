@@ -57,6 +57,8 @@ class reachability_treet;
 class execution_statet : public goto_symext
 {
   public: class ex_state_level2t; // Forward dec
+  // Convenience typedef
+  typedef goto_symex_statet::goto_statet goto_statet;
 
   public:
   /**
@@ -515,6 +517,13 @@ class execution_statet : public goto_symext
   /** Stack of thread states. The index into this vector is the thread ID of
    *  the goto_symex_statet at that location */
   std::vector<goto_symex_statet> threads_state;
+  /** Preserved paths. After switching out of a thread, only the paths active
+   *  at the time the switch occurred are allowed to live, and are stored
+   *  here. Format is: for each thread, a list of paths, which are made up
+   *  of an insn number where the path merges and it's goto_statet when we
+   *  switched away. Preserved paths can only be in the top() frame.  */
+  std::vector<std::list<std::pair<unsigned int, goto_statet> > >
+    preserved_paths;
   /** Atomic section count. Every time an atomic begin is executed, the
    *  atomic_number corresponding to the thread is incremented, allowing nested
    *  atomic begins and ends. A nonzero atomic number for a thread means that
@@ -531,6 +540,8 @@ class execution_statet : public goto_symext
   std::vector<expr2tc> thread_start_data;
   /** Last active thread's ID. */
   unsigned int last_active_thread;
+  /** Last executed insn -- sometimes necessary for analysis. */
+  const goto_programt::instructiont *last_insn;
   /** Global L2 state of this execution_statet. It's also copied as a reference
    *  into each threads own state. */
   std::shared_ptr<ex_state_level2t> state_level2;
