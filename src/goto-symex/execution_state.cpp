@@ -583,9 +583,9 @@ execution_statet::restore_last_paths(void)
     const auto &gs = p.second;
 
     // Create a fresh new goto_statet to be merged in at the target insn
+    assert(cur_state->top().goto_state_map[loc].size() == 0);
     cur_state->top().goto_state_map[loc].push_back(goto_statet(*cur_state));
     // Get ref to it
-    assert(cur_state->top().goto_state_map[loc].size() == 0);
     auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
 
     // Proceed to fill new_gs with old data. Ideally this would be a method...
