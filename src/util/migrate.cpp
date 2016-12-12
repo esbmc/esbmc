@@ -712,6 +712,15 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     typecast2t *t = new typecast2t(type, old_expr, rounding_mode);
     new_expr_ref = expr2tc(t);
+  } else if (expr.id() == "bitcast") {
+    assert(expr.op0().id_string() != "");
+    migrate_type(expr.type(), type);
+
+    expr2tc old_expr;
+    migrate_expr(expr.op0(), old_expr);
+
+    bitcast2t *t = new bitcast2t(type, old_expr);
+    new_expr_ref = expr2tc(t);
   } else if (expr.id() == "nearbyint") {
     assert(expr.op0().id_string() != "");
     migrate_type(expr.type(), type);
@@ -2672,6 +2681,14 @@ migrate_expr_back(const expr2tc &ref)
     exprt back("concat", migrate_type_back(ref2.type));
     back.copy_to_operands(migrate_expr_back(ref2.side_1));
     back.copy_to_operands(migrate_expr_back(ref2.side_2));
+    return back;
+  }
+  case expr2t::bitcast_id:
+  {
+    const bitcast2t &ref2 = to_bitcast2t(ref);
+    exprt back("bitcast", migrate_type_back(ref2.type));
+    back.copy_to_operands(migrate_expr_back(ref2.from));
+    back.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
     return back;
   }
   default:
