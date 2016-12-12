@@ -1165,6 +1165,36 @@ smt_convt::convert_ast(const expr2tc &expr)
             SMT_FUNC_XOR});
     break;
   }
+  case expr2t::bitcast_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+    const bitcast2t &cast = to_bitcast2t(expr);
+    assert(is_scalar_type(cast.type) && is_scalar_type(cast.from));
+
+    // As it stands, the only circusmtance where bitcast can make a difference
+    // is where we're casting to or from a float, where casting by value means
+    // something different. Filter that case out, pass everything else to normal
+    // cast.
+    bool to_float = is_floatbv_type(cast.type);
+    bool from_float = is_floatbv_type(cast.from);
+
+    if ((to_float && !from_float) || (!to_float && from_float)) {
+      smt_func_kind k;
+
+      if (to_float)
+        k = SMT_FUNC_BV2FLOAT;
+      else
+        k = SMT_FUNC_FLOAT2BV;
+
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{k, k, k, k, k});
+    } else {
+      // Cast by value is fine
+      typecast2tc tcast(cast.type, cast.from);
+      a = convert_ast(tcast);
+    }
+    break;
+  }
   default:
     std::cerr << "Couldn't convert expression in unrecognized format"
               << std::endl;

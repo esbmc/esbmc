@@ -534,6 +534,7 @@ static const char *expr_names[] = {
   "constant_array_of",
   "symbol",
   "typecast",
+  "bitcast",
   "nearbyint",
   "if",
   "equality",
@@ -2163,6 +2164,8 @@ std::string symbol2t::field_names [esbmct::num_type_fields]  =
 { "name", "renamelev", "level1_num", "level2_num", "thread_num", "node_num"};
 std::string typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "rounding_mode", "", "", "", ""};
+std::string bitcast2t::field_names [esbmct::num_type_fields]  =
+{ "from", "rounding_mode", "", "", "", ""};
 std::string nearbyint2t::field_names [esbmct::num_type_fields]  =
 { "from", "rounding_mode", "", "", "", ""};
 std::string if2t::field_names [esbmct::num_type_fields]  =
@@ -2469,6 +2472,7 @@ expr_typedefs1(constant_string, constant_string_data);
 expr_typedefs6(symbol, symbol_data);
 expr_typedefs2(nearbyint, typecast_data);
 expr_typedefs2(typecast,typecast_data);
+expr_typedefs2(bitcast,typecast_data);
 expr_typedefs3(if, if_data);
 expr_typedefs2(equality, relation_data);
 expr_typedefs2(notequal, relation_data);

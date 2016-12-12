@@ -225,7 +225,7 @@ void goto_symext::symex_assign_rec(
     symex_assign_member(lhs, rhs, guard);
   } else if (is_if2t(lhs)) {
     symex_assign_if(lhs, rhs, guard);
-  } else if (is_typecast2t(lhs)) {
+  } else if (is_typecast2t(lhs) || is_bitcast2t(lhs)) {
     symex_assign_typecast(lhs, rhs, guard);
    } else if (is_constant_string2t(lhs) ||
            is_null_object2t(lhs))
@@ -308,9 +308,14 @@ void goto_symext::symex_assign_typecast(
 {
   // these may come from dereferencing on the lhs
 
-  const typecast2t &cast = to_typecast2t(lhs);
+  const typecast_data &cast = dynamic_cast<const typecast_data&>(*lhs.get());
   expr2tc rhs_typecasted = rhs;
-  rhs_typecasted = typecast2tc(cast.from->type, rhs);
+  if (is_typecast2t(lhs)) {
+    rhs_typecasted = typecast2tc(cast.from->type, rhs);
+  } else {
+    assert(is_bitcast2t(lhs));
+    rhs_typecasted = bitcast2tc(cast.from->type, rhs);
+  }
 
   symex_assign_rec(cast.from, rhs_typecasted, guard);
 }

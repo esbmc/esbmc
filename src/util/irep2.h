@@ -448,6 +448,7 @@ public:
     constant_array_of_id,
     symbol_id,
     typecast_id,
+    bitcast_id,
     nearbyint_id,
     if_id,
     equality_id,
@@ -1915,6 +1916,7 @@ class constant_array2t;
 class constant_array_of2t;
 class symbol2t;
 class typecast2t;
+class bitcast2t;
 class nearbyint2t;
 class if2t;
 class equality2t;
@@ -2968,6 +2970,7 @@ irep_typedefs(constant_string, constant_string_data);
 irep_typedefs(symbol, symbol_data);
 irep_typedefs(nearbyint, typecast_data);
 irep_typedefs(typecast, typecast_data);
+irep_typedefs(bitcast, typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
@@ -3332,6 +3335,33 @@ public:
   typecast2t(const typecast2t &ref)
     : typecast_expr_methods(ref){}
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Bitcast expression.
+ *  Represents cast from contained expression 'from' to the type of this
+ *  typecast... but where the cast is performed at a 'bit representation' level.
+ *  That is: the 'from' field is not interpreted by its logical value, but
+ *  instead by the corresponding bit representation. The prime example of this
+ *  is bitcasting floats: if one typecasted them to integers, they would be
+ *  rounded; bitcasting them produces the bit-representation of the float, as
+ *  an integer value.
+ *  @extends typecast_data
+ */
+class bitcast2t : public bitcast_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type to bitcast to
+   *  @param from Expression to cast from.
+   */
+  bitcast2t(const type2tc &type, const expr2tc &from)
+    : bitcast_expr_methods(type, bitcast_id, from, expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"))) { }
+
+  bitcast2t(const bitcast2t &ref)
+    : bitcast_expr_methods(ref){}
+  // No simplification at this time
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4773,6 +4803,7 @@ expr_macros(constant_array);
 expr_macros(constant_array_of);
 expr_macros(symbol);
 expr_macros(typecast);
+expr_macros(bitcast);
 expr_macros(nearbyint);
 expr_macros(if);
 expr_macros(equality);

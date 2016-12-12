@@ -973,7 +973,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     // Offset is zero, and we select the entire contents of the field. We may
     // need to perform a cast though.
     if (!base_type_eq(value->type, type, ns)) {
-      value = typecast2tc(type, value);
+      value = bitcast2tc(type, value);
     }
   } else if (value->type->get_width() < type->get_width()) {
     // Oversized read -> give up, rely on dereference failure
@@ -1121,7 +1121,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       // XXX endian?
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
       if (!base_type_eq(field->type, type, ns))
-        field = typecast2tc(type, field);
+        field = bitcast2tc(type, field);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     } else {
       // Not fully aligned; devolve to byte extract.
@@ -1175,9 +1175,9 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     return;
   }
 
-  // Ensure we're dealing with a BV.
-  if (!is_number_type(value->type)) {
-    value = typecast2tc(get_uint_type(value->type->get_width()), value);
+  // Ensure we're dealing with a BV. A floatbv is not a bv!
+  if (!is_bv_type(value->type) && !is_fixedbv_type(value->type)) {
+    value = bitcast2tc(get_uint_type(value->type->get_width()), value);
   }
 
   expr2tc *bytes =
@@ -1579,10 +1579,10 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
     }
   }
 
-  // That's going to come out as a bitvector;
+  // That's going to come out as a bitvector; cast by bit-representation
   if (type != accuml->type) {
     //assert(type->get_width() == accuml->type->get_width());
-    accuml = typecast2tc(type, accuml);
+    accuml = bitcast2tc(type, accuml);
   }
 
   value = accuml;

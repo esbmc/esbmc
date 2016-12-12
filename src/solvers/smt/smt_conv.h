@@ -210,6 +210,9 @@ enum smt_func_kind {
   SMT_FUNC_IEEE_RM_ZR,
   SMT_FUNC_IEEE_RM_PI,
   SMT_FUNC_IEEE_RM_MI,
+
+  SMT_FUNC_BV2FLOAT,
+  SMT_FUNC_FLOAT2BV,
 };
 
 /** Class that will hold information about which operation
