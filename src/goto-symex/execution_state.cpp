@@ -472,6 +472,90 @@ execution_statet::update_after_switch_point(void)
   cswitch_forced = false;
 }
 
+void
+execution_statet::preserve_last_paths(void)
+{
+  // Examine the current execution state and the last insn, deciding which paths
+  // are going to be preserved after this context switch. The current
+  // instruction and guard are guaranteed (unless the guard is false), but if
+  // we switched on a GOTO instruction, we may have forked. In that case we
+  // need to find the branch that was generated there.
+
+  auto &pp = preserved_paths[last_active_thread];
+  auto &ls = threads_state[last_active_thread];
+  assert(pp.size() == 0 && "Unmerged preserved paths in ex_state");
+  assert(last_insn != NULL && "Last insn unset in preserve_last_paths");
+
+  // Add the current path to the set of paths to be preserved. Don't do this
+  // if the current guard is false, though.
+  if (!ls.guard.is_false())
+    pp.push_back(std::make_pair(ls.source.pc->location_number, goto_statet(ls)));
+
+  // Now then -- was it a goto? And did we actually branch to it? Detect this
+  // by examining how the guard has changed: if there's no change, then the
+  // GOTO condition must have evaluated to false.
+  bool no_branch = (pre_goto_guard == ls.guard);
+  if (last_insn->type == GOTO && !no_branch) {
+
+    // We know where it branched to: fetch a reference to the list of all states
+    // to be merged in there
+    assert(last_insn->targets.size() == 1);
+    auto target_insn_it = *last_insn->targets.begin();
+    auto it = ls.top().goto_state_map.find(target_insn_it);
+    assert(it != ls.top().goto_state_map.end() &&
+        "Nonexistant preserved-path target?");
+    auto &statelist = it->second;
+
+    // There may be multiple paths in the map to be merged at that location,
+    // for example if it's the loop end. Detect two circumstances: first where
+    // the guard of the to-be-merged state is identical to the pre-goto guard,
+    // meaning that the GOTO we executed had an unconditionally-true guard.
+    // Second where the current-path guard plus the to-be-merged guard is equal
+    // to the pre-goto guard: in that case, these can only be the two descendent
+    // paths from the pre-goto state.
+    const goto_statet *tomerge = NULL;
+    for (const goto_statet &gs : statelist) {
+      bool merge = false;
+
+      if (gs.guard == pre_goto_guard) {
+        merge = true;
+      } else {
+        guardt tmp(ls.guard);
+        tmp |= gs.guard;
+        if (tmp == pre_goto_guard)
+          merge = true;
+      }
+
+      // Select merging this goto_statet with a sanity check
+      if (merge) {
+        assert(tomerge == NULL && "Multiple branching to-preserve paths?");
+        tomerge = &gs;
+      }
+    }
+
+    // We _must_ have found a path to merge, or the current-state guard would
+    // have matched pre_goto_guard earlier
+    assert(tomerge != NULL);
+
+    // Alas, copies.
+    pp.push_back(std::make_pair(target_insn_it->location_number, goto_statet(*tomerge)));
+  }
+
+  // We must have picked up at least one path to merge
+  assert(pp.size() != 0 && "No paths to preserve on ctx switch?");
+  return;
+}
+
+void
+execution_statet::cull_last_paths(void)
+{
+}
+
+void
+execution_statet::restore_last_paths(void)
+{
+}
+
 bool
 execution_statet::is_cur_state_guard_false(void)
 {
