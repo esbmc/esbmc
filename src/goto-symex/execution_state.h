@@ -526,7 +526,7 @@ class execution_statet : public goto_symext
    *  here. Format is: for each thread, a list of paths, which are made up
    *  of an insn number where the path merges and it's goto_statet when we
    *  switched away. Preserved paths can only be in the top() frame.  */
-  std::vector<std::list<std::pair<unsigned int, goto_statet> > >
+  std::vector<std::list<std::pair<goto_programt::const_targett, goto_statet> > >
     preserved_paths;
   /** Atomic section count. Every time an atomic begin is executed, the
    *  atomic_number corresponding to the thread is incremented, allowing nested

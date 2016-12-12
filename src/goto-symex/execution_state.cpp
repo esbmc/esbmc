@@ -74,7 +74,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
              goto_program, 0);
 
   threads_state.push_back(state);
-  preserved_paths.push_back(std::list<std::pair<unsigned int, goto_statet> >());
+  preserved_paths.push_back(std::list<std::pair<goto_programt::const_targett, goto_statet> >());
   cur_state = &threads_state.front();
   cur_state->global_guard.make_true();
   cur_state->global_guard.add(get_guard_identifier());
@@ -489,7 +489,7 @@ execution_statet::preserve_last_paths(void)
   // Add the current path to the set of paths to be preserved. Don't do this
   // if the current guard is false, though.
   if (!ls.guard.is_false())
-    pp.push_back(std::make_pair(ls.source.pc->location_number, goto_statet(ls)));
+    pp.push_back(std::make_pair(ls.source.pc, goto_statet(ls)));
 
   // Now then -- was it a goto? And did we actually branch to it? Detect this
   // by examining how the guard has changed: if there's no change, then the
@@ -538,7 +538,7 @@ execution_statet::preserve_last_paths(void)
     assert(tomerge != NULL);
 
     // Alas, copies.
-    pp.push_back(std::make_pair(target_insn_it->location_number, goto_statet(*tomerge)));
+    pp.push_back(std::make_pair(target_insn_it, goto_statet(*tomerge)));
   }
 
   // We must have picked up at least one path to merge
@@ -661,7 +661,7 @@ execution_statet::add_thread(const goto_programt *prog)
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
-  preserved_paths.push_back(std::list<std::pair<unsigned int, goto_statet> >());
+  preserved_paths.push_back(std::list<std::pair<goto_programt::const_targett, goto_statet> >());
   atomic_numbers.push_back(0);
 
   if (DFS_traversed.size() <= new_state.source.thread_nr) {
