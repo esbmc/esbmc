@@ -479,6 +479,11 @@ execution_statet::update_after_switch_point(void)
 void
 execution_statet::preserve_last_paths(void)
 {
+  // If the thread terminated, there are no paths to preserve: this is the final
+  // switching away.
+  if (threads_state[last_active_thread].thread_ended)
+    return;
+
   // Examine the current execution state and the last insn, deciding which paths
   // are going to be preserved after this context switch. The current
   // instruction and guard are guaranteed (unless the guard is false), but if
