@@ -547,8 +547,20 @@ execution_statet::preserve_last_paths(void)
 }
 
 void
-execution_statet::cull_last_paths(void)
+execution_statet::cull_all_paths(void)
 {
+  // Walk through _all_ symbolic paths in the program and wipe them out.
+  // Current path is easy: set the guard to false. phi_function will overwrite
+  // any different valuation left in the l2 map.
+  cur_state->guard.make_false();
+
+  // This completely removes all symbolic paths that were going to be merged
+  // back in at some point in the future.
+  for (auto &frame : cur_state->call_stack) {
+    frame.goto_state_map.clear();
+  }
+
+  return;
 }
 
 void

@@ -393,7 +393,7 @@ class execution_statet : public goto_symext
   void update_after_switch_point(void);
 
   void preserve_last_paths(void);
-  void cull_last_paths(void);
+  void cull_all_paths(void);
   void restore_last_paths(void);
 
   /**
