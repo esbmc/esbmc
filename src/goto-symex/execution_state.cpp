@@ -286,7 +286,7 @@ execution_statet::symex_step(reachability_treet &art)
 void
 execution_statet::symex_assign(const expr2tc &code)
 {
-  pre_goto_guard = expr2tc();
+  pre_goto_guard = guardt();
 
   goto_symext::symex_assign(code);
 
@@ -299,7 +299,7 @@ execution_statet::symex_assign(const expr2tc &code)
 void
 execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
-  pre_goto_guard = expr2tc();
+  pre_goto_guard = guardt();
 
   goto_symext::claim(expr, msg);
 
@@ -312,7 +312,7 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 void
 execution_statet::symex_goto(const expr2tc &old_guard)
 {
-  pre_goto_guard = threads_state[active_thread].guard.as_expr();
+  pre_goto_guard = threads_state[active_thread].guard;
 
   goto_symext::symex_goto(old_guard);
 
@@ -328,7 +328,7 @@ execution_statet::symex_goto(const expr2tc &old_guard)
 void
 execution_statet::assume(const expr2tc &assumption)
 {
-  pre_goto_guard = expr2tc();
+  pre_goto_guard = guardt();
 
   goto_symext::assume(assumption);
 
@@ -509,8 +509,8 @@ execution_statet::execute_guard(void)
   // pre-goto thread guard that we stored at that time. This is so that the
   // thread we context switch to gets the guard of that context switch happening
   // rather than the guard of either branch of the GOTO.
-  if (!is_nil_expr(pre_goto_guard))
-    parent_guard = pre_goto_guard;
+  if (!pre_goto_guard.empty())
+    parent_guard = pre_goto_guard.as_expr();
   else
     parent_guard = threads_state[last_active_thread].guard.as_expr();
 

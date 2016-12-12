@@ -556,7 +556,7 @@ class execution_statet : public goto_symext
   /** State guard prior to a GOTO instruction causing a cswitch. Any thread
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */
-  expr2tc pre_goto_guard;
+  guardt pre_goto_guard;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */
