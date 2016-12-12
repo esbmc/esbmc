@@ -695,7 +695,8 @@ execution_statet::add_thread(const goto_programt *prog)
   new_state.initialize(prog->instructions.begin(), prog->instructions.end(),
                       prog, threads_state.size());
 
-  new_state.source.thread_nr = threads_state.size();
+  unsigned int thread_nr = threads_state.size();
+  new_state.source.thread_nr = thread_nr;
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
@@ -727,6 +728,11 @@ execution_statet::add_thread(const goto_programt *prog)
   dependancy_chain.push_back(std::vector<int>());
   for (unsigned int i = 0; i < dependancy_chain.size(); i++)
     dependancy_chain.back().push_back(0);
+
+  // While we've recorded the new thread as starting in the designated program,
+  // it might not run immediately, thus must have it's path preserved:
+  preserved_paths[thread_nr].push_back(std::make_pair(prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
+
 
   return threads_state.size() - 1; // thread ID, zero based
 }
