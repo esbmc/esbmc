@@ -470,6 +470,10 @@ execution_statet::update_after_switch_point(void)
   thread_last_writes[active_thread].clear();
 
   cswitch_forced = false;
+
+  preserve_last_paths();
+  cull_all_paths();
+  restore_last_paths();
 }
 
 void
