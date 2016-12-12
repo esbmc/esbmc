@@ -5,6 +5,17 @@ import argparse
 import shlex
 import subprocess
 
+class Result:
+  err_timeout = 1
+  err_unwinding_assertion = 2
+  success = 3
+  fail_deref = 4
+  fail_memtrack = 5
+  fail_free = 6
+  fail_reach = 7
+  fail_overflow = 8
+  unknown = 9
+
 # Function to run esbmc
 def run_esbmc(command_line):
   print "Verifying with ESBMC "
@@ -15,12 +26,106 @@ def run_esbmc(command_line):
   p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   (stdout, stderr) = p.communicate()
 
-  """ DEBUG output
   print stdout
+  """ DEBUG output
   print stderr
   """
 
   return stdout
+
+def parse_result(output):
+
+  # Parse output
+  if "Timed out" in output:
+    return Result.err_timeout
+
+  # Error messages:
+  memory_leak = "dereference failure: forgotten memory"
+  invalid_pointer = "dereference failure: invalid pointer"
+  access_out = "dereference failure: Access to object out of bounds"
+  dereference_null = "dereference failure: NULL pointer"
+  invalid_object = "dereference failure: invalidated dynamic object"
+  invalid_object_free = "dereference failure: invalidated dynamic object freed"
+  invalid_pointer_free = "dereference failure: invalid pointer freed"
+  free_error = "dereference failure: free() of non-dynamic memory"
+  bounds_violated = "array bounds violated"
+  free_offset = "Operand of free must have zero pointer offset"
+
+  if "VERIFICATION FAILED" in output:
+    if "unwinding assertion loop" in output:
+      return Result.err_unwinding_assertion;
+
+    if is_memsafety:
+      if memory_leak in output:
+        return Result.fail_memtrack
+
+      if invalid_pointer_free in output:
+        return Result.fail_free
+
+      if invalid_object_free in output:
+        return Result.fail_free
+
+      if invalid_pointer in output:
+        return Result.fail_deref
+
+      if dereference_null in output:
+        return Result.fail_deref
+
+      if free_error in output:
+        return Result.fail_free
+
+      if access_out in output:
+        return Result.fail_deref
+
+      if invalid_object in output:
+        return Result.fail_deref
+
+      if bounds_violated in output:
+        return Result.fail_deref
+
+      if free_offset in output:
+        return Result.fail_free
+
+    if is_overflow:
+      return Result.fail_overflow
+
+    if is_reachability:
+      return Result.fail_reach
+
+  if "VERIFICATION SUCCESSFUL" in output:
+    return Result.success
+
+  return Result.unknown
+
+def get_result_string(result):
+  if result == Result.err_timeout:
+    return "Timed out"
+
+  if result == Result.err_unwinding_assertion:
+    return "Unknown"
+
+  if result == Result.fail_memtrack:
+    return "FALSE_MEMTRACK"
+
+  if result == Result.fail_free:
+    return "FALSE_FREE"
+
+  if result == Result.fail_deref:
+    return "FALSE_DEREF"
+
+  if result == Result.fail_overflow:
+    return "FALSE_OVERFLOW"
+
+  if result == Result.fail_reach:
+    return "FALSE_REACH"
+
+  if result == Result.success:
+    return "TRUE"
+
+  if result == Result.unknown:
+    return "Unknown"
+
+  exit(0)
 
 # strings
 esbmc_path = "./esbmc "
@@ -68,6 +173,8 @@ if property_file is None:
 if benchmark is None:
   print "Please, specify a benchmark to verify"
   exit(1)
+
+command_line += benchmark + " "
 
 # Add arch
 if arch == 32:
@@ -117,83 +224,11 @@ elif is_reachability:
   command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
 
 # Call ESBMC
-command_line += benchmark
-
 output = run_esbmc(command_line)
 
 # Parse output
-if "Timed out" in output:
-  print "Timed out"
-  exit(1)
+result = parse_result(output)
+result_string = get_result_string(result)
 
-# Error messages:
-memory_leak = "dereference failure: forgotten memory"
-invalid_pointer = "dereference failure: invalid pointer"
-access_out = "dereference failure: Access to object out of bounds"
-dereference_null = "dereference failure: NULL pointer"
-invalid_object = "dereference failure: invalidated dynamic object"
-invalid_object_free = "dereference failure: invalidated dynamic object freed"
-invalid_pointer_free = "dereference failure: invalid pointer freed"
-free_error = "dereference failure: free() of non-dynamic memory"
-bounds_violated = "array bounds violated"
-free_offset = "Operand of free must have zero pointer offset"
+print result_string
 
-if "VERIFICATION FAILED" in output:
-  if "unwinding assertion loop" in output:
-    print "UNKNOWN"
-    exit(1)
-
-  if is_memsafety:
-    if memory_leak in output:
-      print "FALSE_MEMTRACK"
-      exit(0)
-
-    if invalid_pointer_free in output:
-      print "FALSE_FREE"
-      exit(0)
-
-    if invalid_object_free in output:
-      print "FALSE_FREE"
-      exit(0)
-
-    if invalid_pointer in output:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if dereference_null in output:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if free_error in output:
-      print "FALSE_FREE"
-      exit(0)
-
-    if access_out in output:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if invalid_object in output:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if bounds_violated in output:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if free_offset in output:
-      print "FALSE_FREE"
-      exit(0)
-
-  if is_overflow:
-    print "FALSE_OVERFLOW"
-    exit(0)
-
-  if is_reachability:
-    print "FALSE"
-    exit(0)
-
-if "VERIFICATION SUCCESSFUL" in output:
-  print "TRUE"
-  exit(0)
-
-print "UNKNOWN"
