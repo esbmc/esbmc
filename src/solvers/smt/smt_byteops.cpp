@@ -1,14 +1,14 @@
 #include "smt_conv.h"
 
-smt_astt 
+smt_astt
 smt_convt::convert_byte_extract(const expr2tc &expr)
 {
   const byte_extract2t &data = to_byte_extract2t(expr);
   expr2tc source = data.source_value;
   unsigned int src_width = source->type->get_width();
 
-  if (!is_number_type(source))
-    source = typecast2tc(get_uint_type(src_width), source);
+  if (!is_bv_type(source->type) && !is_fixedbv_type(source->type))
+    source = bitcast2tc(get_uint_type(src_width), source);
 
   assert(is_scalar_type(data.source_value) && "Byte extract now only works on "
          "scalar variables");
@@ -69,7 +69,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
   }
 }
 
-smt_astt 
+smt_astt
 smt_convt::convert_byte_update(const expr2tc &expr)
 {
   const byte_update2t &data = to_byte_update2t(expr);
@@ -78,15 +78,15 @@ smt_convt::convert_byte_update(const expr2tc &expr)
          "scalar variables now");
   assert(data.type == data.source_value->type);
 
-  if (!is_number_type(data.type)) {
+  if (!is_bv_type(data.type) && !is_fixedbv_type(data.type)) {
     // This is a pointer or a bool, or something. We don't want to handle
     // casting of it in the body of this function, so wrap it up as a bitvector
     // and re-apply.
     type2tc bit_type = get_uint_type(data.type->get_width());
-    typecast2tc src_obj(bit_type, data.source_value);
+    bitcast2tc src_obj(bit_type, data.source_value);
     byte_update2tc new_update(bit_type, src_obj, data.source_offset,
         data.update_value, data.big_endian);
-    typecast2tc cast_back(data.type, new_update);
+    bitcast2tc cast_back(data.type, new_update);
     return convert_ast(cast_back);
   }
 
