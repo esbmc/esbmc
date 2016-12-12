@@ -566,6 +566,35 @@ execution_statet::cull_all_paths(void)
 void
 execution_statet::restore_last_paths(void)
 {
+  // For each preserved path: create a fresh new goto_statet with data values
+  // created from the present values of l2-renaming and value set, as we
+  // (presumably) switch back in from a different thread. Then schedule the
+  // states to be merged in at their original locations.
+  // Given that we're discarding a lot of data here this could all be more
+  // efficient, but it's what we've got.
+
+  auto &list = preserved_paths[active_thread];
+  for (const auto &p : list) {
+    const auto &loc = p.first;
+    const auto &gs = p.second;
+
+    // Create a fresh new goto_statet to be merged in at the target insn
+    cur_state->top().goto_state_map[loc].push_back(goto_statet(*cur_state));
+    // Get ref to it
+    assert(cur_state->top().goto_state_map[loc].size() == 0);
+    auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
+
+    // Proceed to fill new_gs with old data. Ideally this would be a method...
+    new_gs.depth = gs.depth;
+    new_gs.guard = gs.guard;
+    assert(new_gs.thread_id == gs.thread_id);
+
+    // And that is it!
+  }
+
+  list.clear();
+
+  return;
 }
 
 bool
