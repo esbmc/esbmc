@@ -5,6 +5,23 @@ import argparse
 import shlex
 import subprocess
 
+# Function to run esbmc
+def run_esbmc(command_line):
+  print "Verifying with ESBMC "
+  print "Command: " + command_line
+
+  args = shlex.split(command_line)
+
+  p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  (stdout, stderr) = p.communicate()
+
+  """ DEBUG output
+  print stdout
+  print stderr
+  """
+
+  return stdout
+
 # strings
 esbmc_path = "./esbmc "
 witness_path = "error-witness.graphml "
@@ -15,7 +32,7 @@ esbmc_dargs += "--clang-frontend "
 esbmc_dargs += "--witness-output " + witness_path
 
 # ESBMC specific commands: this is different for every submission
-esbmc_fp    = "--floatbv --mathsat --no-bitfields "
+esbmc_fp    = "--floatbv --mathsat --no-bitfields --unwind 1 --no-unwinding-assertions "
 esbmc_kind  = "--floatbv --unlimited-k-steps --z3 --k-induction-parallel "
 esbmc_falsi = "--floatbv --unlimited-k-steps --z3 --falsification "
 esbmc_incr  = "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
@@ -102,27 +119,10 @@ elif is_reachability:
 # Call ESBMC
 command_line += benchmark
 
-print "Verifying with ESBMC "
-print "Command: " + command_line
-
-args = shlex.split(command_line)
-
-p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-(stdout, stderr) = p.communicate()
-
-""" DEBUG output
-print stdout
-print stderr
-
-print "\n~~~~~~~~~~~~~~~~"
-stdout_split = stdout.split('\n')
-for i in range(1, 10):
-  print stdout_split[len(stdout_split) -(10-i)]
-print "~~~~~~~~~~~~~~~~\n"
-"""
+output = run_esbmc(command_line)
 
 # Parse output
-if "Timed out" in stdout:
+if "Timed out" in output:
   print "Timed out"
   exit(1)
 
@@ -138,49 +138,49 @@ free_error = "dereference failure: free() of non-dynamic memory"
 bounds_violated = "array bounds violated"
 free_offset = "Operand of free must have zero pointer offset"
 
-if "VERIFICATION FAILED" in stdout:
-  if "unwinding assertion loop" in stdout:
+if "VERIFICATION FAILED" in output:
+  if "unwinding assertion loop" in output:
     print "UNKNOWN"
     exit(1)
 
   if is_memsafety:
-    if memory_leak in stdout:
+    if memory_leak in output:
       print "FALSE_MEMTRACK"
       exit(0)
 
-    if invalid_pointer_free in stdout:
+    if invalid_pointer_free in output:
       print "FALSE_FREE"
       exit(0)
 
-    if invalid_object_free in stdout:
+    if invalid_object_free in output:
       print "FALSE_FREE"
       exit(0)
 
-    if invalid_pointer in stdout:
+    if invalid_pointer in output:
       print "FALSE_DEREF"
       exit(0)
 
-    if dereference_null in stdout:
+    if dereference_null in output:
       print "FALSE_DEREF"
       exit(0)
 
-    if free_error in stdout:
+    if free_error in output:
       print "FALSE_FREE"
       exit(0)
 
-    if access_out in stdout:
+    if access_out in output:
       print "FALSE_DEREF"
       exit(0)
 
-    if invalid_object in stdout:
+    if invalid_object in output:
       print "FALSE_DEREF"
       exit(0)
 
-    if bounds_violated in stdout:
+    if bounds_violated in output:
       print "FALSE_DEREF"
       exit(0)
 
-    if free_offset in stdout:
+    if free_offset in output:
       print "FALSE_FREE"
       exit(0)
 
@@ -192,7 +192,7 @@ if "VERIFICATION FAILED" in stdout:
     print "FALSE"
     exit(0)
 
-if "VERIFICATION SUCCESSFUL" in stdout:
+if "VERIFICATION SUCCESSFUL" in output:
   print "TRUE"
   exit(0)
 
