@@ -162,3 +162,10 @@ guardt::dump(void) const
   std::cout << *this;
   return;
 }
+
+bool
+operator == (const guardt &g1, const guardt &g2)
+{
+  // Very simple: the guard list should be identical.
+  return g1.guard_list == g2.guard_list;
+}
