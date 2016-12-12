@@ -238,9 +238,10 @@ if strategy == "fp":
   # But only check successful results, any other case is fine
   if result == Result.success:
     output = run_esbmc(command_line + " --timeout 20s ") # Run unbounded + timeout
-    result = parse_result(output)
 
-result_string = get_result_string(result)
+    # If the result is false, we'll keep it
+    if parse_result(output) == Result.fail_reach:
+      result = Result.fail_reach
 
-print result_string
+print get_result_string(result)
 
