@@ -368,6 +368,38 @@ std::string expr2ct::convert_typecast(
   return dest;
 }
 
+std::string expr2ct::convert_bitcast(
+  const exprt &src,
+  unsigned &precedence)
+{
+  precedence=14;
+
+  if(src.id() == "bitcast" && src.operands().size()!=1)
+    return convert_norep(src, precedence);
+
+  // some special cases
+
+  const typet &type=ns.follow(src.type());
+
+  if(type.id()=="pointer" &&
+     ns.follow(type.subtype()).id()=="empty" && // to (void *)?
+     src.op0().is_zero())
+    return "NULL";
+
+  std::string dest="(BITCAST:"+convert(type)+")";
+
+  std::string tmp=convert(src.op0(), precedence);
+
+  if(src.op0().id()=="member" ||
+     src.op0().id()=="constant" ||
+     src.op0().id()=="symbol") // better fix precedence
+    dest+=tmp;
+  else
+    dest+='('+tmp+')';
+
+  return dest;
+}
+
 /*******************************************************************\
 
 Function: expr2ct::convert_implicit_address_of
@@ -3241,6 +3273,9 @@ std::string expr2ct::convert(
 
   else if(src.id()=="typecast")
     return convert_typecast(src, precedence);
+
+  else if(src.id()=="bitcast")
+    return convert_bitcast(src, precedence);
 
   else if(src.id()=="implicit_address_of")
     return convert_implicit_address_of(src, precedence);
