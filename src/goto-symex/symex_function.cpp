@@ -31,6 +31,9 @@ goto_symext::get_unwind_recursion(
 
   if (unwind != 0)
   {
+    if(options.get_bool_option("abort-on-recursion"))
+      abort();
+
     const symbolt &symbol = ns.lookup(identifier);
 
     std::string msg = "Unwinding recursion " + id2string(symbol.display_name())
