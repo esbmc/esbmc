@@ -16,6 +16,20 @@ class Result:
   fail_overflow = 8
   unknown = 9
 
+  @staticmethod
+  def is_fail(res):
+    if res == Result.fail_deref:
+      return True
+    if res == Result.fail_free:
+      return True
+    if res == Result.fail_memtrack:
+      return True
+    if res == Result.fail_overflow:
+      return True
+    if res == Result.fail_reach:
+      return True
+    return False
+
 class Property:
   reach = 1
   memory = 2
