@@ -369,6 +369,13 @@ void value_sett::get_value_set_rec(
     get_value_set_rec(cast.from, dest, suffix, original_type);
     return;
   }
+  else if (is_bitcast2t(expr))
+  {
+    // Bitcasts are just typecasts with additional semantics
+    const bitcast2t &cast = to_bitcast2t(expr);
+    get_value_set_rec(cast.from, dest, suffix, original_type);
+    return;
+  }
   else if (is_add2t(expr) || is_sub2t(expr))
   {
     // Consider pointer arithmetic. This takes takes the form of finding the
@@ -592,9 +599,7 @@ void value_sett::get_value_set_rec(
   }
   else if (is_concat2t(expr))
   {
-    const concat2t &ref = to_concat2t(expr);
-    get_value_set_rec(ref.side_1, dest, suffix, original_type);
-    get_value_set_rec(ref.side_2, dest, suffix, original_type);
+    get_byte_stitching_value_set(expr, dest, suffix, original_type);
     return;
   }
 
@@ -602,6 +607,30 @@ void value_sett::get_value_set_rec(
   // expression evaluates to. So just record it as being unknown.
   unknown2tc tmp(original_type);
   insert(dest, tmp, mp_integer(0));
+}
+
+void
+value_sett::get_byte_stitching_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const
+{
+
+  if (is_concat2t(expr)) {
+    const concat2t &ref = to_concat2t(expr);
+
+    get_byte_stitching_value_set(ref.side_1, dest, suffix, original_type);
+    get_byte_stitching_value_set(ref.side_2, dest, suffix, original_type);
+  } else if (is_lshr2t(expr)) {
+    const lshr2t &ref = to_lshr2t(expr);
+
+    get_byte_stitching_value_set(ref.side_1, dest, suffix, original_type);
+  } else {
+    get_value_set_rec(expr, dest, suffix, original_type);
+  }
+
+  return;
 }
 
 void value_sett::get_reference_set(

@@ -534,6 +534,15 @@ protected:
     const std::string &suffix,
     const type2tc &original_type) const;
 
+  // Like get_value_set_rec, but dedicated to walking through the ireps that
+  // are produced by pointer deref byte stitching
+  void get_byte_stitching_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
+
   /** Internal get_value_set method. Just the same as the other get_value_set
    *  method, but collects into an object_mapt instead of a list of exprs.
    *  @param expr The expression to evaluate the value set of.
