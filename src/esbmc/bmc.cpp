@@ -93,14 +93,15 @@ void bmct::successful_trace(smt_convt &smt_conv ,
     return ;
   }
 
+  if(options.get_bool_option("result-only"))
+    return;
+
   goto_tracet goto_trace;
   std::string witness_output = options.get_option("witness-output");
   std::string programfile = options.get_option("witness-programfile");
   int specification = 0;
   if(!witness_output.empty())
-  {
     set_ui(ui_message_handlert::GRAPHML);
-  }
 
   switch(ui)
   {
@@ -146,7 +147,6 @@ void bmct::successful_trace(smt_convt &smt_conv ,
     default:
       assert(false);
   }
-  status("VERIFICATION SUCCESSFUL");
 }
 
 /*******************************************************************\
@@ -164,6 +164,9 @@ Function: bmct::error_trace
 void bmct::error_trace(smt_convt &smt_conv,
                        symex_target_equationt &equation)
 {
+  if(options.get_bool_option("result-only"))
+    return;
+
   status("Building error trace");
 
   goto_tracet goto_trace;
@@ -665,6 +668,7 @@ bool bmct::run_thread()
     if(result->remaining_claims==0)
     {
       successful_trace(*runtime_solver,*equation);
+      report_success();
       return false;
     }
 
@@ -851,6 +855,7 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
       if(!options.get_bool_option("base-case"))
       {
         successful_trace(*solver, equation);
+        report_success();
       }
       else
         status("No bug has been found in the base case");

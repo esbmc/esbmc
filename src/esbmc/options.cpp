@@ -48,6 +48,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,  "show-parse-tree",  switc,    ""  },
 { 0,	"show-goto-functions",	switc,		""	},
 { 0,	"show-counter-example",	switc,		""	},
+{ 0,  "result-only", switc,    ""  },
 { 0,	"show-goto-value-sets",	switc,		""	},
 { 0,  "show-symex-value-sets",  switc,    ""  },
 { 0,	"show-loops",		switc,		""	},
