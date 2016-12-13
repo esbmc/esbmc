@@ -183,7 +183,7 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   if prop == Property.overflow:
     command_line += "--overflow-check -D__VERIFIER_error=ESBMC_error --result-only "
   elif prop == Property.memory:
-    command_line += "--memory-leak-check --result-only "
+    command_line += "--memory-leak-check "
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
 
