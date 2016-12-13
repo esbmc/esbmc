@@ -16,6 +16,12 @@ class Result:
   fail_overflow = 8
   unknown = 9
 
+class Property:
+  reach = 1
+  memory = 2
+  overflow = 3
+  termination = 4
+
 # Function to run esbmc
 def run_esbmc(command_line):
   print "Verifying with ESBMC "
@@ -136,14 +142,40 @@ esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
 esbmc_dargs += "--clang-frontend "
 esbmc_dargs += "--witness-output " + witness_path
 
-# ESBMC specific commands: this is different for every submission
-esbmc_fp    = "--floatbv --mathsat --no-bitfields "
-esbmc_kind  = "--floatbv --unlimited-k-steps --z3 --k-induction-parallel "
-esbmc_falsi = "--floatbv --unlimited-k-steps --z3 --falsification "
-esbmc_incr  = "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
-esbmc_fixed = "--unroll-loops --unwind 160 --no-unwinding-assertions --boolector "
+def get_command_line(strategy, prop, arch, benchmark):
+  command_line = esbmc_path + esbmc_dargs
 
-command_line = esbmc_path + esbmc_dargs
+  # Add strategy
+  if strategy == "kinduction":
+    command_line += "--floatbv --unlimited-k-steps --z3 --k-induction-parallel "
+  elif strategy == "fp":
+    command_line += "--floatbv --mathsat --no-bitfields "
+  elif strategy == "falsi":
+    command_line += "--floatbv --unlimited-k-steps --z3 --falsification "
+  elif strategy == "incr":
+    command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
+  elif strategy == "fixed":
+    command_line += "--unroll-loops --unwind 160 --no-unwinding-assertions --boolector "
+  else:
+    print "Unknown strategy"
+    exit(1)
+
+  # Add arch
+  if arch == 32:
+    command_line += "--32 "
+  else:
+    command_line += "--64 "
+
+  if prop == Property.overflow:
+    command_line += "--overflow-check -D__VERIFIER_error=ESBMC_error "
+  elif prop == Property.memory:
+    command_line += "--memory-leak-check "
+  elif prop == Property.reach:
+    command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
+
+  # Benchmark
+  command_line += benchmark
+  return command_line
 
 # Options
 
@@ -174,54 +206,24 @@ if benchmark is None:
   print "Please, specify a benchmark to verify"
   exit(1)
 
-command_line += benchmark + " "
-
-# Add arch
-if arch == 32:
-  command_line += "--32 "
-else:
-  command_line += "--64 "
-
-# Add strategy
-if strategy == "kinduction":
-  command_line += esbmc_kind
-elif strategy == "fp":
-  command_line += esbmc_fp
-elif strategy == "falsi":
-  command_line += esbmc_falsi
-elif strategy == "incr":
-  command_line += esbmc_incr
-elif strategy == "fixed":
-  command_line += esbmc_fixed
-else:
-  print "Unknown strategy"
-  exit(1)
-
 # Parse property files
-is_memsafety = False
-is_overflow = False
-is_reachability = False
+category_property = 0;
 
 f = open(property_file, 'r')
 property_file_content = f.read()
 
 if "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
-  is_memsafety = True
+  category_property = Property.memory
 elif "CHECK( init(main()), LTL(G ! overflow) )" in property_file_content:
-  is_overflow = True
+  category_property = Property.overflow
 elif "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )" in property_file_content:
-  is_reachability = True
+  category_property = Property.reach
 else:
   # We don't support termination
   print "Unsupported Property"
   exit(1)
 
-if is_overflow:
-  command_line += "--overflow-check "
-elif is_memsafety:
-  command_line += "--memory-leak-check "
-elif is_reachability:
-  command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
+command_line = get_command_line(strategy, category_property, arch, benchmark)
 
 # Call ESBMC
 if strategy == "fp":
