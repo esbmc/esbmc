@@ -551,7 +551,22 @@ execution_statet::preserve_last_paths(void)
   }
 
   // We must have picked up at least one path to merge
-  assert(pp.size() != 0 && "No paths to preserve on ctx switch?");
+  if (pp.size() == 0) {
+    // Even better: if the guard is now false, and we're context switching away,
+    // then something like assume(0) occurred: no paths can continue in this
+    // thread from this point. And anything we context switch to will get a
+    // false guard too and thus expire.
+    // Ideally at this point we would bail and return our formula to the RT
+    // class, but that code is way too fragile. Instead, continue with an ended
+    // thread that infects all other threads with it's false guard until we
+    // complete.
+    // It's unclear how to distinguish this case from an error in this code
+    // here.
+    // XXX methodise this
+    threads_state[last_active_thread].thread_ended = true;
+    atomic_numbers[last_active_thread] = 0;
+  }
+
   return;
 }
 
