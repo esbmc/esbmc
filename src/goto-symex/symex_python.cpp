@@ -303,21 +303,24 @@ build_goto_symex_classes()
 {
   using namespace boost::python;
 
-  auto symex = class_<dummy_symex_class>("symex");
+  object symex(handle<>(borrowed(PyImport_AddModule("esbmc.symex"))));
   scope quux = symex;
 
-  symex.def("slice", &::slice);
-  symex.staticmethod("slice");
-  symex.def("simple_slice", &::simple_slice);
-  symex.staticmethod("simple_slice");
-  symex.def("build_goto_trace", &build_goto_trace);
-  symex.staticmethod("build_goto_trace");
+  object esbmc_module(handle<>(borrowed(PyImport_AddModule("esbmc"))));
+  esbmc_module.attr("symex") = symex;
+
+  symex.attr("slice") = make_function(&::slice);
+  symex.attr("simple_slice") = make_function(&::simple_slice);
+  symex.attr("build_goto_trace") = make_function(&build_goto_trace);
 
   build_equation_class();
 
   {
     using namespace renaming;
-    scope foo = class_<dummy_renaming_class>("renaming");
+    object renam(handle<>(borrowed(PyImport_AddModule("esbmc.symex.renaming"))));
+    scope corge = renam;
+
+    symex.attr("renaming") = renam;
 
     void (renaming_levelt::*get_original_name)(expr2tc &expr) const = &renaming_levelt::get_original_name;
     void (renaming_levelt::*get_original_name_lev)(expr2tc &expr, symbol2t::renaming_level lev) const = &renaming_levelt::get_original_name;

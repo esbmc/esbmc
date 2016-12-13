@@ -559,11 +559,14 @@ build_smt_conv_python_class(void)
 {
   using namespace boost::python;
 
-  scope solve = class_<dummy_solver_class>("solve")
-    .def("downcast_sort", &downcast_sort)
-    .def("downcast_ast", &downcast_ast)
-    .staticmethod("downcast_sort")
-    .staticmethod("downcast_ast");
+  object solve(handle<>(borrowed(PyImport_AddModule("esbmc.solve"))));
+  scope quux = solve;
+
+  object esbmc_module(handle<>(borrowed(PyImport_AddModule("esbmc"))));
+  esbmc_module.attr("solve") = solve;
+
+  solve.attr("downcast_sort") = make_function(&downcast_sort);
+  solve.attr("downcast_ast") = make_function(&downcast_ast);
 
   // It would appear people _do_ want to write sovlers from python.
 

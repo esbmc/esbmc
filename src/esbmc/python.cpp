@@ -311,13 +311,15 @@ BOOST_PYTHON_MODULE(esbmc)
 
   // Namespace into types and exprs.
   {
-    auto types = class_<dummy_type_class>("type");
+    object types(handle<>(borrowed(PyImport_AddModule("esbmc.type"))));
     scope quux = types;
+
+    object esbmc_module(handle<>(borrowed(PyImport_AddModule("esbmc"))));
+    esbmc_module.attr("type") = types;
 
     build_base_type2t_python_class();
 
-    types.def("is_nil_type", &is_nil_type);
-    types.staticmethod("is_nil_type");
+    types.attr("is_nil_type") = make_function(&is_nil_type);
 
     // In this scope, define the old irep types to
     class_<typet>("typet", no_init);
@@ -337,11 +339,13 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_TYPE_DOWNCASTING, foo, ESBMC_LIST_OF_TYPES)
   }
 
   {
-    auto exprs = class_<dummy_expr_class>("expr");
+    object exprs(handle<>(borrowed(PyImport_AddModule("esbmc.expr"))));
     scope quux = exprs;
 
-    exprs.def("is_nil_expr", &is_nil_expr);
-    exprs.staticmethod("is_nil_expr");
+    object esbmc_module(handle<>(borrowed(PyImport_AddModule("esbmc"))));
+    esbmc_module.attr("expr") = exprs;
+
+    exprs.attr("is_nil_expr") = make_function(&is_nil_expr);
 
     // Define old expr class too
     class_<exprt>("exprt", no_init);

@@ -96,7 +96,11 @@ build_goto_func_class()
 {
   using namespace boost::python;
 
-  scope types = class_<dummy_goto_class>("goto_programs");
+  object progs(handle<>(borrowed(PyImport_AddModule("esbmc.goto_programs"))));
+  scope quux = progs;
+
+  object esbmc_module(handle<>(borrowed(PyImport_AddModule("esbmc"))));
+  esbmc_module.attr("goto_programs") = progs;
 
   // Register relevant portions of goto functions / programs structure.
   class_<goto_functionst::function_mapt>("function_mapt")
