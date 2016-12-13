@@ -142,19 +142,19 @@ esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
 esbmc_dargs += "--clang-frontend "
 esbmc_dargs += "--witness-output " + witness_path
 
-def get_command_line(strategy, prop, arch, benchmark):
+def get_command_line(strat, prop, arch, benchmark):
   command_line = esbmc_path + esbmc_dargs
 
   # Add strategy
-  if strategy == "kinduction":
+  if strat == "kinduction":
     command_line += "--floatbv --unlimited-k-steps --z3 --k-induction-parallel "
-  elif strategy == "fp":
+  elif strat == "fp":
     command_line += "--floatbv --mathsat --no-bitfields "
-  elif strategy == "falsi":
+  elif strat == "falsi":
     command_line += "--floatbv --unlimited-k-steps --z3 --falsification "
-  elif strategy == "incr":
+  elif strat == "incr":
     command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
-  elif strategy == "fixed":
+  elif strat == "fixed":
     command_line += "--unroll-loops --unwind 160 --no-unwinding-assertions --boolector "
   else:
     print "Unknown strategy"
@@ -207,11 +207,10 @@ if benchmark is None:
   exit(1)
 
 # Parse property files
-category_property = 0;
-
 f = open(property_file, 'r')
 property_file_content = f.read()
 
+category_property = 0
 if "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
   category_property = Property.memory
 elif "CHECK( init(main()), LTL(G ! overflow) )" in property_file_content:
