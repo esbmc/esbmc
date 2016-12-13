@@ -471,9 +471,16 @@ execution_statet::update_after_switch_point(void)
 
   cswitch_forced = false;
 
-  preserve_last_paths();
-  cull_all_paths();
-  restore_last_paths();
+  // If we've context switched, then wipe out all symbolic paths in the source
+  // thread that didn't context switch, otherwise they'll observe other thread
+  // PCs advancing with no change in state. However if we've hit a context
+  // switch point and _not_ switched, don't wipe those symbolic paths, they
+  // need to be preserved in at least one interleaving.
+  if (last_active_thread != active_thread) {
+    preserve_last_paths();
+    cull_all_paths();
+    restore_last_paths();
+  }
 }
 
 void
