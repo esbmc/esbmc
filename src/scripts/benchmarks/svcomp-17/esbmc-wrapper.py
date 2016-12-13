@@ -53,7 +53,7 @@ def run_esbmc(command_line):
 
   return stdout
 
-def parse_result(output):
+def parse_result(output, prop):
 
   # Parse output
   if "Timed out" in output:
@@ -75,7 +75,7 @@ def parse_result(output):
     if "unwinding assertion loop" in output:
       return Result.err_unwinding_assertion;
 
-    if is_memsafety:
+    if prop == Property.memory:
       if memory_leak in output:
         return Result.fail_memtrack
 
@@ -106,10 +106,10 @@ def parse_result(output):
       if free_offset in output:
         return Result.fail_free
 
-    if is_overflow:
+    if prop == Property.overflow:
       return Result.fail_overflow
 
-    if is_reachability:
+    if prop == Property.reach:
       return Result.fail_reach
 
   if "VERIFICATION SUCCESSFUL" in output:
@@ -156,7 +156,7 @@ esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
 esbmc_dargs += "--clang-frontend "
 esbmc_dargs += "--witness-output " + witness_path
 
-def get_command_line(strat, prop, arch, benchmark):
+def get_command_line(strat, prop, arch, benchmark, first_go):
   command_line = esbmc_path + esbmc_dargs
 
   # Add strategy
@@ -169,7 +169,7 @@ def get_command_line(strat, prop, arch, benchmark):
   elif strat == "incr":
     command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
   elif strat == "fixed":
-    command_line += "--unroll-loops --unwind 160 --no-unwinding-assertions --boolector "
+    command_line += "--unroll-loops --no-unwinding-assertions --boolector "
   else:
     print "Unknown strategy"
     exit(1)
@@ -181,15 +181,42 @@ def get_command_line(strat, prop, arch, benchmark):
     command_line += "--64 "
 
   if prop == Property.overflow:
-    command_line += "--overflow-check -D__VERIFIER_error=ESBMC_error "
+    command_line += "--overflow-check -D__VERIFIER_error=ESBMC_error --result-only "
   elif prop == Property.memory:
-    command_line += "--memory-leak-check "
+    command_line += "--memory-leak-check --result-only "
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
+
+  # Special handling when first verifying the program
+  if strat == "fp":
+    if first_go:  # The first go when verifying floating points will run with bound 1
+      command_line += "--unwind 1 --no-unwinding-assertions "
+    else: # second go is with timeout 20s
+      command_line += "--timeout 20s "
+
+  if strat == "fixed":
+    if prop == Property.overflow:
+      if first_go:  # The first go when verifying floating points will run with bound 1
+        command_line += "--unwind 1 --no-unwinding-assertions "
+      else:  # second go is with huge unwind
+        command_line += "--unwind 32778 --no-unwinding-assertions --timeout 10s --abort-on-recursion "
+    else:
+      command_line += "--unwind 160 "
 
   # Benchmark
   command_line += benchmark
   return command_line
+
+def needs_second_go(strat, prop, result):
+  # We only double check correct results
+  if result == Result.success:
+    if strat == "fp":
+      return True
+
+    if strat == "fixed" and prop == Property.overflow:
+      return True
+
+  return False
 
 # Options
 
@@ -236,27 +263,23 @@ else:
   print "Unsupported Property"
   exit(1)
 
-command_line = get_command_line(strategy, category_property, arch, benchmark)
+# Get command line
+command_line = get_command_line(strategy, category_property, arch, benchmark, True)
 
 # Call ESBMC
-if strategy == "fp":
-  output = run_esbmc(command_line + "--unwind 1 --no-unwinding-assertions ")
-else:
-  output = run_esbmc(command_line)
+output = run_esbmc(command_line)
 
 # Parse output
-result = parse_result(output)
+result = parse_result(output, category_property)
 
-# Before presenting the result, we need to double check the floating point results
-# because it ran with a tiny bound.
-if strategy == "fp":
-  # But only check successful results, any other case is fine
-  if result == Result.success:
-    output = run_esbmc(command_line + " --timeout 20s ") # Run unbounded + timeout
+# Check if it needs a second go:
+if needs_second_go(strategy, category_property, result):
+  command_line = get_command_line(strategy, category_property, arch, benchmark, False)
+  output = run_esbmc(command_line)
 
-    # If the result is false, we'll keep it
-    if parse_result(output) == Result.fail_reach:
-      result = Result.fail_reach
+  # If the result is false, we'll keep it
+  if Result.is_fail(parse_result(output, category_property)):
+    result = parse_result(output, category_property)
 
 print get_result_string(result)
 
