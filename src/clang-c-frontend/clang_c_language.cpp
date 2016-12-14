@@ -101,6 +101,10 @@ void clang_c_languaget::build_compiler_string(
   // which allow us to perform transformations using -D
   compiler_string.push_back("-x");
   compiler_string.push_back("c");
+
+  // Add -Wunknown-attributes, preprocessed files with GCC generate a bunch
+  // of __leaf__ attributes that we don't care about
+  compiler_string.push_back("-Wno-unknown-attributes");
 }
 
 bool clang_c_languaget::parse(
