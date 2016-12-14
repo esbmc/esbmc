@@ -465,28 +465,50 @@ void goto_symext::symex_assign_concat(
   assert(cat.type->get_width() > 8);
   assert(is_scalar_type(rhs));
 
-  // Ensure we're dealing with a bitvector.
-  if (!is_bv_type(rhs))
-    rhs = typecast2tc(get_uint_type(rhs->type->get_width()), rhs);
+  // Second attempt at this code: byte stitching guarantees that all the concats
+  // occur in one large grouping. Produce a list of them.
+  std::list<expr2tc> operand_list;
+  expr2tc cur_concat = lhs;
+  while (is_concat2t(cur_concat)) {
+    const concat2t &cat2 = to_concat2t(cur_concat);
+    operand_list.push_back(cat2.side_2);
+    cur_concat = cat2.side_1;
+  }
 
-  // Right. To split this up, work out the size that should be being assigned
-  // to each part of the contact, and cut up the rhs appropriately.
-  unsigned int side1_size = cat.side_1->type->get_width();
-  unsigned int side2_size = cat.side_2->type->get_width();
+  // Add final operand to list
+  operand_list.push_back(cur_concat);
 
-  // Position to split it is side2_size bits up from the zero position. Now,
-  // perform this split.
-  // Side2 rhs takes the lower bits, so just downcast the rhs to that num of bit
-  expr2tc side2_rhs = typecast2tc(get_uint_type(side2_size), rhs);
-  // Side1 needs to have that number of lower bits clipped off.
-  expr2tc shift_dist = gen_uint(rhs->type, side2_size);
-  expr2tc side1_rhs = lshr2tc(rhs->type, rhs, shift_dist);
-  // Now downcast it to the desired number of bits.
-  side1_rhs = typecast2tc(get_uint_type(side1_size), side1_rhs);
+  for (const auto &foo : operand_list)
+    assert(foo->type->get_width() == 8);
+  assert((operand_list.size() * 8) == cat.type->get_width());
 
-  // And now, perform the new assignments.
-  symex_assign_rec(cat.side_1, side1_rhs, guard);
-  symex_assign_rec(cat.side_2, side2_rhs, guard);
+  bool is_big_endian =
+      (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+
+  // Pin one set of rhs version numbers: if we assign part of a value to itself,
+  // it'll change during the assignment
+  cur_state->rename(rhs);
+
+  // Produce a corresponding set of byte extracts from the rhs value. Note that
+  // the byte offset is always the same no matter endianness here, any byte
+  // order flipping is handled at the smt layer.
+  std::list<expr2tc> extracts;
+  for (unsigned int i = 0; i < operand_list.size(); i++) {
+    byte_extract2tc byte(get_uint_type(8), rhs, gen_ulong(i), is_big_endian);
+    extracts.push_back(byte);
+  }
+
+  // Now proceed to pair them up
+  assert(extracts.size() == operand_list.size());
+  auto lhs_it = operand_list.begin();
+  auto rhs_it = extracts.begin();
+  while (lhs_it != operand_list.end()) {
+    symex_assign_rec(*lhs_it, *rhs_it, guard);
+    lhs_it++;
+    rhs_it++;
+  }
+
+  return;
 }
 
 void goto_symext::replace_nondet(expr2tc &expr)
