@@ -200,7 +200,7 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
       if first_go:  # The first go when verifying floating points will run with bound 1
         command_line += "--unwind 1 --no-unwinding-assertions "
       else:  # second go is with huge unwind
-        command_line += "--unwind 32778 --no-unwinding-assertions --timeout 10s --abort-on-recursion "
+        command_line += "--unwind 32778 --no-unwinding-assertions --timeout 20s --abort-on-recursion "
     else:
       command_line += "--unwind 160 "
 
