@@ -5,6 +5,148 @@ import argparse
 import shlex
 import subprocess
 
+class Result:
+  err_timeout = 1
+  err_unwinding_assertion = 2
+  success = 3
+  fail_deref = 4
+  fail_memtrack = 5
+  fail_free = 6
+  fail_reach = 7
+  fail_overflow = 8
+  unknown = 9
+
+  @staticmethod
+  def is_fail(res):
+    if res == Result.fail_deref:
+      return True
+    if res == Result.fail_free:
+      return True
+    if res == Result.fail_memtrack:
+      return True
+    if res == Result.fail_overflow:
+      return True
+    if res == Result.fail_reach:
+      return True
+    return False
+
+class Property:
+  reach = 1
+  memory = 2
+  overflow = 3
+  termination = 4
+
+# Function to run esbmc
+def run_esbmc(command_line):
+  print "Verifying with ESBMC "
+  print "Command: " + command_line
+
+  args = shlex.split(command_line)
+
+  p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  (stdout, stderr) = p.communicate()
+
+  print stdout
+  """ DEBUG output
+  print stderr
+  """
+
+  return stdout
+
+def parse_result(output, prop):
+
+  # Parse output
+  if "Timed out" in output:
+    return Result.err_timeout
+
+  # Error messages:
+  memory_leak = "dereference failure: forgotten memory"
+  invalid_pointer = "dereference failure: invalid pointer"
+  access_out = "dereference failure: Access to object out of bounds"
+  dereference_null = "dereference failure: NULL pointer"
+  invalid_object = "dereference failure: invalidated dynamic object"
+  invalid_object_free = "dereference failure: invalidated dynamic object freed"
+  invalid_pointer_free = "dereference failure: invalid pointer freed"
+  free_error = "dereference failure: free() of non-dynamic memory"
+  bounds_violated = "array bounds violated"
+  free_offset = "Operand of free must have zero pointer offset"
+
+  if "VERIFICATION FAILED" in output:
+    if "unwinding assertion loop" in output:
+      return Result.err_unwinding_assertion;
+
+    if prop == Property.memory:
+      if memory_leak in output:
+        return Result.fail_memtrack
+
+      if invalid_pointer_free in output:
+        return Result.fail_free
+
+      if invalid_object_free in output:
+        return Result.fail_free
+
+      if invalid_pointer in output:
+        return Result.fail_deref
+
+      if dereference_null in output:
+        return Result.fail_deref
+
+      if free_error in output:
+        return Result.fail_free
+
+      if access_out in output:
+        return Result.fail_deref
+
+      if invalid_object in output:
+        return Result.fail_deref
+
+      if bounds_violated in output:
+        return Result.fail_deref
+
+      if free_offset in output:
+        return Result.fail_free
+
+    if prop == Property.overflow:
+      return Result.fail_overflow
+
+    if prop == Property.reach:
+      return Result.fail_reach
+
+  if "VERIFICATION SUCCESSFUL" in output:
+    return Result.success
+
+  return Result.unknown
+
+def get_result_string(result):
+  if result == Result.err_timeout:
+    return "Timed out"
+
+  if result == Result.err_unwinding_assertion:
+    return "Unknown"
+
+  if result == Result.fail_memtrack:
+    return "FALSE_MEMTRACK"
+
+  if result == Result.fail_free:
+    return "FALSE_FREE"
+
+  if result == Result.fail_deref:
+    return "FALSE_DEREF"
+
+  if result == Result.fail_overflow:
+    return "FALSE_OVERFLOW"
+
+  if result == Result.fail_reach:
+    return "FALSE_REACH"
+
+  if result == Result.success:
+    return "TRUE"
+
+  if result == Result.unknown:
+    return "Unknown"
+
+  exit(0)
+
 # strings
 esbmc_path = "./esbmc "
 witness_path = "error-witness.graphml "
@@ -14,14 +156,67 @@ esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
 esbmc_dargs += "--clang-frontend "
 esbmc_dargs += "--witness-output " + witness_path
 
-# ESBMC specific commands: this is different for every submission
-esbmc_fp    = "--floatbv --mathsat --no-bitfields "
-esbmc_kind  = "--floatbv --unlimited-k-steps --z3 --k-induction-parallel "
-esbmc_falsi = "--floatbv --unlimited-k-steps --z3 --falsification "
-esbmc_incr  = "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
-esbmc_fixed = "--unroll-loops --unwind 160 --no-unwinding-assertions --boolector "
+def get_command_line(strat, prop, arch, benchmark, first_go):
+  command_line = esbmc_path + esbmc_dargs
 
-command_line = esbmc_path + esbmc_dargs
+  # Add strategy
+  if strat == "kinduction":
+    command_line += "--floatbv --unlimited-k-steps --z3 --k-induction-parallel "
+  elif strat == "fp":
+    command_line += "--floatbv --mathsat --no-bitfields "
+  elif strat == "falsi":
+    command_line += "--floatbv --unlimited-k-steps --z3 --falsification "
+  elif strat == "incr":
+    command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
+  elif strat == "fixed":
+    command_line += "--unroll-loops --no-unwinding-assertions --boolector "
+  else:
+    print "Unknown strategy"
+    exit(1)
+
+  # Add arch
+  if arch == 32:
+    command_line += "--32 "
+  else:
+    command_line += "--64 "
+
+  if prop == Property.overflow:
+    command_line += "--overflow-check -D__VERIFIER_error=ESBMC_error --result-only "
+  elif prop == Property.memory:
+    command_line += "--memory-leak-check -D__VERIFIER_error=ESBMC_error "
+  elif prop == Property.reach:
+    command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
+
+  # Special handling when first verifying the program
+  if strat == "fp":
+    if first_go:  # The first go when verifying floating points will run with bound 1
+      command_line += "--unwind 1 --no-unwinding-assertions "
+    else: # second go is with timeout 20s
+      command_line += "--timeout 20s "
+
+  if strat == "fixed":
+    if prop == Property.overflow:
+      if first_go:  # The first go when verifying floating points will run with bound 1
+        command_line += "--unwind 1 --no-unwinding-assertions "
+      else:  # second go is with huge unwind
+        command_line += "--unwind 32778 --no-unwinding-assertions --timeout 10s --abort-on-recursion "
+    else:
+      command_line += "--unwind 160 "
+
+  # Benchmark
+  command_line += benchmark
+  return command_line
+
+def needs_second_go(strat, prop, result):
+  # We only double check correct results
+  if result == Result.success:
+    if strat == "fp":
+      return True
+
+    if strat == "fixed" and prop == Property.overflow:
+      return True
+
+  return False
 
 # Options
 
@@ -52,148 +247,39 @@ if benchmark is None:
   print "Please, specify a benchmark to verify"
   exit(1)
 
-# Add arch
-if arch == 32:
-  command_line += "--32 "
-else:
-  command_line += "--64 "
-
-# Add strategy
-if strategy == "kinduction":
-  command_line += esbmc_kind
-elif strategy == "fp":
-  command_line += esbmc_fp
-elif strategy == "falsi":
-  command_line += esbmc_falsi
-elif strategy == "incr":
-  command_line += esbmc_incr
-elif strategy == "fixed":
-  command_line += esbmc_fixed
-else:
-  print "Unknown strategy"
-  exit(1)
-
 # Parse property files
-is_memsafety = False
-is_overflow = False
-is_reachability = False
-
 f = open(property_file, 'r')
 property_file_content = f.read()
 
+category_property = 0
 if "CHECK( init(main()), LTL(G valid-free) )" in property_file_content:
-  is_memsafety = True
+  category_property = Property.memory
 elif "CHECK( init(main()), LTL(G ! overflow) )" in property_file_content:
-  is_overflow = True
+  category_property = Property.overflow
 elif "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )" in property_file_content:
-  is_reachability = True
+  category_property = Property.reach
 else:
   # We don't support termination
   print "Unsupported Property"
   exit(1)
 
-if is_overflow:
-  command_line += "--overflow-check "
-elif is_memsafety:
-  command_line += "--memory-leak-check "
-elif is_reachability:
-  command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
+# Get command line
+command_line = get_command_line(strategy, category_property, arch, benchmark, True)
 
 # Call ESBMC
-command_line += benchmark
-
-print "Verifying with ESBMC "
-print "Command: " + command_line
-
-args = shlex.split(command_line)
-
-p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-(stdout, stderr) = p.communicate()
-
-""" DEBUG output
-print stdout
-print stderr
-
-print "\n~~~~~~~~~~~~~~~~"
-stdout_split = stdout.split('\n')
-for i in range(1, 10):
-  print stdout_split[len(stdout_split) -(10-i)]
-print "~~~~~~~~~~~~~~~~\n"
-"""
+output = run_esbmc(command_line)
 
 # Parse output
-if "Timed out" in stdout:
-  print "Timed out"
-  exit(1)
+result = parse_result(output, category_property)
 
-# Error messages:
-memory_leak = "dereference failure: forgotten memory"
-invalid_pointer = "dereference failure: invalid pointer"
-access_out = "dereference failure: Access to object out of bounds"
-dereference_null = "dereference failure: NULL pointer"
-invalid_object = "dereference failure: invalidated dynamic object"
-invalid_object_free = "dereference failure: invalidated dynamic object freed"
-invalid_pointer_free = "dereference failure: invalid pointer freed"
-free_error = "dereference failure: free() of non-dynamic memory"
-bounds_violated = "array bounds violated"
-free_offset = "Operand of free must have zero pointer offset"
+# Check if it needs a second go:
+if needs_second_go(strategy, category_property, result):
+  command_line = get_command_line(strategy, category_property, arch, benchmark, False)
+  output = run_esbmc(command_line)
 
-if "VERIFICATION FAILED" in stdout:
-  if "unwinding assertion loop" in stdout:
-    print "UNKNOWN"
-    exit(1)
+  # If the result is false, we'll keep it
+  if Result.is_fail(parse_result(output, category_property)):
+    result = parse_result(output, category_property)
 
-  if is_memsafety:
-    if memory_leak in stdout:
-      print "FALSE_MEMTRACK"
-      exit(0)
+print get_result_string(result)
 
-    if invalid_pointer_free in stdout:
-      print "FALSE_FREE"
-      exit(0)
-
-    if invalid_object_free in stdout:
-      print "FALSE_FREE"
-      exit(0)
-
-    if invalid_pointer in stdout:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if dereference_null in stdout:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if free_error in stdout:
-      print "FALSE_FREE"
-      exit(0)
-
-    if access_out in stdout:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if invalid_object in stdout:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if bounds_violated in stdout:
-      print "FALSE_DEREF"
-      exit(0)
-
-    if free_offset in stdout:
-      print "FALSE_FREE"
-      exit(0)
-
-  if is_overflow:
-    print "FALSE_OVERFLOW"
-    exit(0)
-
-  if is_reachability:
-    print "FALSE"
-    exit(0)
-
-if "VERIFICATION SUCCESSFUL" in stdout:
-  print "TRUE"
-  exit(0)
-
-print "UNKNOWN"

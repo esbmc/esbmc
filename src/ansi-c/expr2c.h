@@ -51,6 +51,9 @@ protected:
   std::string convert_typecast(
     const exprt &src, unsigned &precedence);
 
+  std::string convert_bitcast(
+    const exprt &src, unsigned &precedence);
+
   std::string convert_implicit_address_of(
     const exprt &src, unsigned &precedence);
 

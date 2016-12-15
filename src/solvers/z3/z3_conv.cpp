@@ -634,6 +634,10 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     return new_ast(z3::to_expr(ctx, Z3_mk_int2real(ctx, asts[0]->e)), s);
   case SMT_FUNC_IS_INT:
     return new_ast(z3::to_expr(ctx, Z3_mk_is_int(ctx, asts[0]->e)), s);
+  case SMT_FUNC_BV2FLOAT:
+    return new_ast(ctx.fpa_from_bv(asts[0]->e, z3_sort_downcast(s)->s), s);
+  case SMT_FUNC_FLOAT2BV:
+    return new_ast(ctx.fpa_to_ieeebv(asts[0]->e), s);
   default:
     std::cerr << "Unhandled SMT func in z3 conversion" << std::endl;
     abort();
