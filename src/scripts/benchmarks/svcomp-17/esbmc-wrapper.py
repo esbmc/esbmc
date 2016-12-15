@@ -149,15 +149,16 @@ def get_result_string(result):
 
 # strings
 esbmc_path = "./esbmc "
-witness_path = "error-witness.graphml "
 
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
 esbmc_dargs += "--clang-frontend "
-esbmc_dargs += "--witness-output " + witness_path
 
 def get_command_line(strat, prop, arch, benchmark, first_go):
   command_line = esbmc_path + esbmc_dargs
+
+  # Add witness arg
+  command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
 
   # Add strategy
   if strat == "kinduction":
