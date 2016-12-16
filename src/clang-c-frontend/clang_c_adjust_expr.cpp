@@ -173,6 +173,7 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   }
   else if(expr.id() == "comma")
   {
+    adjust_comma(expr);
   }
   else if(expr.id() == "if")
   {
@@ -1202,6 +1203,15 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
     symbolt *envp_new_symbol;
     context.move(envp_symbol, envp_new_symbol);
   }
+}
+
+void clang_c_adjust::adjust_comma(exprt& expr)
+{
+  expr.type() = expr.op1().type();
+
+  // make this an l-value if the last operand is one
+  if(expr.op1().cmt_lvalue())
+    expr.cmt_lvalue(true);
 }
 
 void clang_c_adjust::make_index_type(exprt& expr)

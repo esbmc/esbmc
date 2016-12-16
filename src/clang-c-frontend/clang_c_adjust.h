@@ -57,6 +57,7 @@ class clang_c_adjust
     void adjust_sizeof(exprt &expr);
     void adjust_side_effect(side_effect_exprt &expr);
     void adjust_symbol(exprt &expr);
+    void adjust_comma(exprt &expr);
 
     void adjust_code(codet &code);
     void adjust_expression(codet &code);
