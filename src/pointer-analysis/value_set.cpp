@@ -626,6 +626,10 @@ value_sett::get_byte_stitching_value_set(
     const lshr2t &ref = to_lshr2t(expr);
 
     get_byte_stitching_value_set(ref.side_1, dest, suffix, original_type);
+  } else if (is_byte_extract2t(expr)) {
+    const byte_extract2t &ref = to_byte_extract2t(expr);
+    // XXX XXX XXX this knackers offsets
+    get_value_set_rec(ref.source_value, dest, suffix, original_type);
   } else {
     get_value_set_rec(expr, dest, suffix, original_type);
   }
