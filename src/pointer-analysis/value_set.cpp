@@ -860,7 +860,7 @@ void value_sett::assign(
     assign(xchg_sym, ifref.false_value, true);
     assign(lhs, xchg_sym, add_to_sets);
 
-    erase(xchg_name.as_string());
+    erase(xchg_sym->get_symbol_name());
     return;
   }
 
