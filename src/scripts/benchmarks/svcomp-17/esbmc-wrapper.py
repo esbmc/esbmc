@@ -334,6 +334,16 @@ output = run_esbmc(esbmc_command_line)
 # Parse output
 result = parse_result(output, category_property)
 
+# Check if it needs a second go:
+if needs_second_go(strategy, category_property, result):
+  esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
+  output = run_esbmc(esbmc_command_line)
+
+  # If the result is false, we'll keep it
+  new_result = parse_result(output, category_property)
+  if Result.is_fail(new_result):
+    result = new_result
+
 # Check if we're going to validate the results
 if needs_validation(strategy, category_property, result):
   cpa_command_line = get_cpa_command_line(property_file, benchmark)
@@ -344,15 +354,6 @@ if needs_validation(strategy, category_property, result):
   # we return FALSE
   if parse_cpa_result(output) == Result.success:
     result = Result.unknown
-
-# Check if it needs a second go:
-if needs_second_go(strategy, category_property, result):
-  esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
-  output = run_esbmc(esbmc_command_line)
-
-  # If the result is false, we'll keep it
-  if Result.is_fail(parse_result(output, category_property)):
-    result = parse_result(output, category_property)
 
 print get_result_string(result)
 
