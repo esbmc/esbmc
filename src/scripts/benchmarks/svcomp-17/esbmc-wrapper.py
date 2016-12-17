@@ -4,6 +4,10 @@ import os
 import argparse
 import shlex
 import subprocess
+import time
+
+# Start time for this script
+start_time = time.time()
 
 class Result:
   err_timeout = 1
@@ -37,26 +41,26 @@ class Property:
   termination = 4
 
 # Function to run esbmc
-def run_esbmc(command_line):
+def run_esbmc(cmd_line):
   print "Verifying with ESBMC "
-  print "Command: " + command_line
+  print "Command: " + cmd_line
 
-  args = shlex.split(command_line)
+  the_args = shlex.split(cmd_line)
 
-  p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+  p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
   (stdout, stderr) = p.communicate()
 
-  print stdout
   """ DEBUG output
+  print stdout
   print stderr
   """
 
   return stdout
 
-def parse_result(output, prop):
+def parse_result(the_output, prop):
 
   # Parse output
-  if "Timed out" in output:
+  if "Timed out" in the_output:
     return Result.err_timeout
 
   # Error messages:
@@ -71,39 +75,39 @@ def parse_result(output, prop):
   bounds_violated = "array bounds violated"
   free_offset = "Operand of free must have zero pointer offset"
 
-  if "VERIFICATION FAILED" in output:
-    if "unwinding assertion loop" in output:
-      return Result.err_unwinding_assertion;
+  if "VERIFICATION FAILED" in the_output:
+    if "unwinding assertion loop" in the_output:
+      return Result.err_unwinding_assertion
 
     if prop == Property.memory:
-      if memory_leak in output:
+      if memory_leak in the_output:
         return Result.fail_memtrack
 
-      if invalid_pointer_free in output:
+      if invalid_pointer_free in the_output:
         return Result.fail_free
 
-      if invalid_object_free in output:
+      if invalid_object_free in the_output:
         return Result.fail_free
 
-      if invalid_pointer in output:
+      if invalid_pointer in the_output:
         return Result.fail_deref
 
-      if dereference_null in output:
+      if dereference_null in the_output:
         return Result.fail_deref
 
-      if free_error in output:
+      if free_error in the_output:
         return Result.fail_free
 
-      if access_out in output:
+      if access_out in the_output:
         return Result.fail_deref
 
-      if invalid_object in output:
+      if invalid_object in the_output:
         return Result.fail_deref
 
-      if bounds_violated in output:
+      if bounds_violated in the_output:
         return Result.fail_deref
 
-      if free_offset in output:
+      if free_offset in the_output:
         return Result.fail_free
 
     if prop == Property.overflow:
@@ -112,37 +116,37 @@ def parse_result(output, prop):
     if prop == Property.reach:
       return Result.fail_reach
 
-  if "VERIFICATION SUCCESSFUL" in output:
+  if "VERIFICATION SUCCESSFUL" in the_output:
     return Result.success
 
   return Result.unknown
 
-def get_result_string(result):
-  if result == Result.err_timeout:
+def get_result_string(the_result):
+  if the_result == Result.err_timeout:
     return "Timed out"
 
-  if result == Result.err_unwinding_assertion:
+  if the_result == Result.err_unwinding_assertion:
     return "Unknown"
 
-  if result == Result.fail_memtrack:
+  if the_result == Result.fail_memtrack:
     return "FALSE_MEMTRACK"
 
-  if result == Result.fail_free:
+  if the_result == Result.fail_free:
     return "FALSE_FREE"
 
-  if result == Result.fail_deref:
+  if the_result == Result.fail_deref:
     return "FALSE_DEREF"
 
-  if result == Result.fail_overflow:
+  if the_result == Result.fail_overflow:
     return "FALSE_OVERFLOW"
 
-  if result == Result.fail_reach:
+  if the_result == Result.fail_reach:
     return "FALSE_REACH"
 
-  if result == Result.success:
+  if the_result == Result.success:
     return "TRUE"
 
-  if result == Result.unknown:
+  if the_result == Result.unknown:
     return "Unknown"
 
   exit(0)
@@ -219,6 +223,63 @@ def needs_second_go(strat, prop, result):
 
   return False
 
+def needs_validation(strat, prop, result):
+  # We only validate for fixed + reachability + false result
+  if result == Result.fail_reach and strat == "fixed" and prop == Property.reach:
+    return True
+
+def get_cpa_command_line(prop, benchmark):
+  command_line = "./scripts/cpa.sh -witness-validation "
+  command_line += "-spec ../" + os.path.basename(benchmark) + ".graphml "
+  command_line += " -spec " + prop + " "
+  command_line += benchmark
+  return command_line
+
+def run_cpa(cmd_line):
+  # Save current dir
+  cwd = os.getcwd()
+
+  # Change to CPA's dir
+  os.chdir(cwd + "/cpachecker/")
+
+  # Checking if there is still enough time available
+  elapsed_time = (int) (round(time.time() - start_time))
+  remaining_time = 895 - elapsed_time
+
+  # The default result is to confirm the witness
+  stdout = "VERIFICATION RESULT: FALSE"
+
+  if (remaining_time > 0):
+    # Update CPA with timeout
+    cmd_line += " -timelimit " + str(remaining_time) + "s"
+
+    print "Verifying with CPA "
+    print "Command: " + cmd_line
+
+    the_args = shlex.split(cmd_line)
+
+    p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    (stdout, stderr) = p.communicate()
+
+    """ DEBUG output
+    print stdout
+    print stderr
+    """
+
+  # restore dir
+  os.chdir(cwd)
+
+  return stdout
+
+def parse_cpa_result(result):
+  if "Verification result: FALSE" in result:
+    return Result.fail_reach
+
+  if "Verification result: TRUE" in result:
+    return Result.success
+
+  return Result.unknown
+
 # Options
 
 parser = argparse.ArgumentParser()
@@ -236,7 +297,7 @@ property_file = args.propertyfile
 benchmark = args.benchmark
 strategy = args.strategy
 
-if version == True:
+if version:
   os.system(esbmc_path + "--version")
   exit(0)
 
@@ -265,18 +326,29 @@ else:
   exit(1)
 
 # Get command line
-command_line = get_command_line(strategy, category_property, arch, benchmark, True)
+esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, True)
 
 # Call ESBMC
-output = run_esbmc(command_line)
+output = run_esbmc(esbmc_command_line)
 
 # Parse output
 result = parse_result(output, category_property)
 
+# Check if we're going to validate the results
+if needs_validation(strategy, category_property, result):
+  cpa_command_line = get_cpa_command_line(property_file, benchmark)
+  output = run_cpa(cpa_command_line)
+
+  # If we found a property violation but CPA said that the path is not reachable
+  # we ignore the result and present UNKNOWN. If CPA fails or confirms the result
+  # we return FALSE
+  if parse_cpa_result(output) == Result.success:
+    result = Result.unknown
+
 # Check if it needs a second go:
 if needs_second_go(strategy, category_property, result):
-  command_line = get_command_line(strategy, category_property, arch, benchmark, False)
-  output = run_esbmc(command_line)
+  esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
+  output = run_esbmc(esbmc_command_line)
 
   # If the result is false, we'll keep it
   if Result.is_fail(parse_result(output, category_property)):
