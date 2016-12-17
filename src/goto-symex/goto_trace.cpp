@@ -284,6 +284,9 @@ void generate_goto_trace_in_violation_graphml_format(
   const namespacet & ns,
   const goto_tracet & goto_trace)
 {
+  // Remove timeout when building witness
+  alarm(0);
+
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
   std::map<std::string, int> function_control_map;
