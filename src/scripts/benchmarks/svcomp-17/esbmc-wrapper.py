@@ -166,7 +166,7 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
 
   # Add strategy
   if strat == "kinduction":
-    command_line += "--floatbv --unlimited-k-steps --z3 --k-induction-parallel "
+    command_line += "--floatbv --unlimited-k-steps --z3 --k-induction "
   elif strat == "fp":
     command_line += "--floatbv --mathsat --no-bitfields "
   elif strat == "falsi":
