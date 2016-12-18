@@ -5,6 +5,7 @@ import argparse
 import shlex
 import subprocess
 import time
+import sys
 
 # Start time for this script
 start_time = time.time()
@@ -236,38 +237,41 @@ def get_cpa_command_line(prop, benchmark):
   return command_line
 
 def run_cpa(cmd_line):
-  # Save current dir
-  cwd = os.getcwd()
-
-  # Change to CPA's dir
-  os.chdir(cwd + "/cpachecker/")
-
-  # Checking if there is still enough time available
-  elapsed_time = (int) (round(time.time() - start_time))
-  remaining_time = 895 - elapsed_time
-
   # The default result is to confirm the witness
   stdout = "VERIFICATION RESULT: FALSE"
 
-  if (remaining_time > 0):
-    # Update CPA with timeout
-    cmd_line += " -timelimit " + str(remaining_time) + "s"
+  try:
+    # Save current dir
+    cwd = os.getcwd()
 
-    print "Verifying with CPA "
-    print "Command: " + cmd_line
+    # Change to CPA's dir
+    os.chdir("./cpachecker/")
 
-    the_args = shlex.split(cmd_line)
+    # Checking if there is still enough time available
+    elapsed_time = (int) (round(time.time() - start_time))
+    remaining_time = 895 - elapsed_time
 
-    p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    (stdout, stderr) = p.communicate()
+    if (remaining_time > 0):
+      # Update CPA with timeout
+      cmd_line += " -timelimit " + str(remaining_time) + "s"
 
-    """ DEBUG output
-    print stdout
-    print stderr
-    """
+      print "Verifying with CPA "
+      print "Command: " + cmd_line
 
-  # restore dir
-  os.chdir(cwd)
+      the_args = shlex.split(cmd_line)
+
+      p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      (stdout, stderr) = p.communicate()
+
+      """ DEBUG output
+      print stdout
+      print stderr
+      """
+
+    # restore dir
+    os.chdir(cwd)
+  except:
+    print("Unexpected error:", sys.exc_info()[0])
 
   return stdout
 
