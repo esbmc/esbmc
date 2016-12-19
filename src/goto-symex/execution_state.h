@@ -57,6 +57,8 @@ class reachability_treet;
 class execution_statet : public goto_symext
 {
   public: class ex_state_level2t; // Forward dec
+  // Convenience typedef
+  typedef goto_symex_statet::goto_statet goto_statet;
 
   public:
   /**
@@ -390,6 +392,10 @@ class execution_statet : public goto_symext
    */
   void update_after_switch_point(void);
 
+  void preserve_last_paths(void);
+  void cull_all_paths(void);
+  void restore_last_paths(void);
+
   /**
    *  Analyze the contents of an assignment for threading.
    *  If the assignment touches any kind of shared state, we track the accessed
@@ -515,6 +521,13 @@ class execution_statet : public goto_symext
   /** Stack of thread states. The index into this vector is the thread ID of
    *  the goto_symex_statet at that location */
   std::vector<goto_symex_statet> threads_state;
+  /** Preserved paths. After switching out of a thread, only the paths active
+   *  at the time the switch occurred are allowed to live, and are stored
+   *  here. Format is: for each thread, a list of paths, which are made up
+   *  of an insn number where the path merges and it's goto_statet when we
+   *  switched away. Preserved paths can only be in the top() frame.  */
+  std::vector<std::list<std::pair<goto_programt::const_targett, goto_statet> > >
+    preserved_paths;
   /** Atomic section count. Every time an atomic begin is executed, the
    *  atomic_number corresponding to the thread is incremented, allowing nested
    *  atomic begins and ends. A nonzero atomic number for a thread means that
@@ -531,6 +544,8 @@ class execution_statet : public goto_symext
   std::vector<expr2tc> thread_start_data;
   /** Last active thread's ID. */
   unsigned int last_active_thread;
+  /** Last executed insn -- sometimes necessary for analysis. */
+  const goto_programt::instructiont *last_insn;
   /** Global L2 state of this execution_statet. It's also copied as a reference
    *  into each threads own state. */
   std::shared_ptr<ex_state_level2t> state_level2;
@@ -556,7 +571,7 @@ class execution_statet : public goto_symext
   /** State guard prior to a GOTO instruction causing a cswitch. Any thread
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */
-  expr2tc pre_goto_guard;
+  guardt pre_goto_guard;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */
