@@ -133,7 +133,32 @@ void clang_c_adjust::adjust_expr(exprt& expr)
   {
     adjust_code(to_code(expr));
   }
+  else if(expr.is_typecast())
+  {
+    // Check first operand
+    adjust_expr(expr.op0());
+  }
   else if(expr.id() == "array_of")
+  {
+  }
+  else if(expr.is_constant())
+  {
+  }
+  else if(expr.id()=="ieee_add" ||
+          expr.id()=="ieee_sub" ||
+          expr.id()=="ieee_mul" ||
+          expr.id()=="ieee_div")
+  {
+  }
+  else if(expr.is_struct())
+  {
+  }
+  else if(expr.is_union())
+  {
+  }
+  else if(expr.id() == "unary+" ||
+          expr.id() == "unary-" ||
+          expr.id() == "bitnot")
   {
   }
   else
