@@ -65,11 +65,14 @@ set_instructions(goto_programt &prog, boost::python::object o)
   return;
 }
 
+extern namespacet *pythonctx_ns;
+
 std::string
 prog_to_string(const goto_programt &prog)
 {
   std::stringstream ss;
-  prog.output(ss);
+  assert(pythonctx_ns != NULL);
+  prog.output(*pythonctx_ns, "*", ss);
   return ss.str();
 }
 

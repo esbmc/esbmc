@@ -59,7 +59,7 @@ class dummy_symex_class { };
 static bool python_module_engaged = false;
 // Parseoptions instance representing an esbmc process
 static cbmc_parseoptionst *po = NULL;
-static namespacet *ns = NULL;
+namespacet *pythonctx_ns = NULL;
 // Type pool needs to live as long as the process.
 static type_poolt *tp = NULL;
 
@@ -207,11 +207,11 @@ init_esbmc_process(boost::python::object o)
     return object();
   }
 
-  ns = new namespacet(po->context);
+  pythonctx_ns = new namespacet(po->context);
 
   // Convert return values to python objects (TM). Wrap into a PyObject, stuff
   // in handle, transfer to object.
-  object nso(ns);
+  object nso(pythonctx_ns);
   // Config options are global. Woo.
   auto opt_ptr = &config.options;
   object opts(opt_ptr);
@@ -233,12 +233,12 @@ kill_esbmc_process(void)
     // Nope
     return;
 
-  assert(po != NULL && ns != NULL && tp != NULL);
+  assert(po != NULL && pythonctx_ns != NULL && tp != NULL);
 
   // It's the users problem if they haven't actually cleaned up their python
   // references.
-  delete ns;
-  ns = NULL;
+  delete pythonctx_ns;
+  pythonctx_ns = NULL;
   delete po;
   po = NULL;
   delete tp;
