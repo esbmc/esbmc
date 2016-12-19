@@ -59,16 +59,6 @@ void clang_c_adjust::adjust_symbol(symbolt& symbol)
 
 void clang_c_adjust::adjust_expr(exprt& expr)
 {
-  // fist do sub-nodes
-  Forall_operands(it, expr)
-    adjust_expr(*it);
-
-  // now do case-split
-  adjust_expr_main(expr);
-}
-
-void clang_c_adjust::adjust_expr_main(exprt& expr)
-{
   if(expr.id() == "sideeffect")
   {
     adjust_side_effect(to_side_effect_expr(expr));
@@ -141,6 +131,13 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   else if(expr.is_code())
   {
     adjust_code(to_code(expr));
+  }
+  else
+  {
+    std::cout << "Unexpected expression: " << expr.id().as_string()
+                    << std::endl;
+    expr.dump();
+    abort();
   }
 }
 

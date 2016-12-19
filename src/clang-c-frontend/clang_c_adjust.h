@@ -30,7 +30,6 @@ class clang_c_adjust
     void adjust_type(typet &type);
 
     void adjust_expr(exprt &expr);
-    void adjust_expr_main(exprt &expr);
 
     void adjust_side_effect_assignment(exprt &expr);
     void adjust_side_effect_function_call(
