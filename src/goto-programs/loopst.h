@@ -13,14 +13,12 @@
 class loopst
 {
 public:
-  loopst(contextt &_context, goto_programt _goto_program) :
-    context(_context),
-    goto_program(_goto_program)
+  loopst(contextt &_context) :
+    context(_context)
   {}
 
   typedef std::map<irep_idt, const exprt> loop_varst;
 
-  goto_programt& get_goto_program();
   loop_varst &get_loop_vars();
 
   goto_programt::targett get_original_loop_exit() const;
@@ -36,16 +34,27 @@ public:
   bool is_infinite_loop();
   bool is_nondet_loop();
 
-  void output(std::ostream &out = std::cout);
+  void dump();
   void dump_loop_vars();
+
+  std::size_t get_size() const
+  {
+    return size;
+  }
+
+  void set_size(std::size_t size)
+  {
+    this->size = size;
+  }
 
 protected:
   contextt &context;
-  goto_programt goto_program;
   loop_varst loop_vars;
 
   goto_programt::targett original_loop_head;
   goto_programt::targett original_loop_exit;
+
+  std::size_t size;
 
 private:
   bool check_nondet(exprt &guard);

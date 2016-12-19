@@ -216,7 +216,7 @@ void goto_functionst::compute_target_numbers()
 
 void goto_functionst::compute_loop_numbers()
 {
-  unsigned int num = 0;
+  unsigned int num = 1;
   for(typename function_mapt::iterator
       it=function_map.begin();
       it!=function_map.end();

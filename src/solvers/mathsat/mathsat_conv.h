@@ -30,6 +30,7 @@ public:
   mathsat_smt_ast(smt_convt *ctx, const smt_sort *_s, msat_term _t)
     : smt_ast(ctx, _s), t(_t) { }
   virtual ~mathsat_smt_ast() { }
+  virtual void dump() const;
 
   msat_term t;
 };
@@ -54,6 +55,15 @@ public:
   virtual smt_ast *mk_smt_real(const std::string &str);
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
+  virtual smt_ast *mk_smt_bvfloat(const ieee_floatt &thereal,
+                                  unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm);
+  virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast);
+  virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast);
+  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr);
+  virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr);
   virtual smt_ast *mk_smt_bool(bool val);
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s,
@@ -76,6 +86,9 @@ public:
   virtual void add_array_constraints_for_solving();
   void push_array_ctx(void);
   void pop_array_ctx(void);
+
+  size_t get_exp_width(smt_sortt sort);
+  size_t get_mant_width(smt_sortt sort);
 
   // MathSAT data.
   msat_config cfg;

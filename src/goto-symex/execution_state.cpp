@@ -28,6 +28,7 @@
 #include "config.h"
 
 unsigned int execution_statet::node_count = 0;
+unsigned int execution_statet::dynamic_counter = 0;
 std::map<expr2tc, std::list<unsigned int>> vars_map;
 std::map<expr2tc, bool> is_global;
 
@@ -102,7 +103,6 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   last_active_thread = 0;
   node_count = 0;
   nondet_count = 0;
-  dynamic_counter = 0;
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
   check_ltl = false;
@@ -149,7 +149,6 @@ execution_statet::operator=(const execution_statet &ex)
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
   nondet_count = ex.nondet_count;
-  dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
   interleaving_unviable = ex.interleaving_unviable;
@@ -231,15 +230,22 @@ execution_statet::symex_step(reachability_treet &art)
 #endif
   }
 
-  if (symex_trace) {
-    const goto_programt p_dummy;
-    goto_functionst::function_mapt::const_iterator it =
-      goto_functions.function_map.find(instruction.function);
-
-    const goto_programt &p_real = it->second.body;
-    const goto_programt &p = (it == goto_functions.function_map.end()) ? p_dummy : p_real;
-    p.output_instruction(ns, "", std::cout, state.source.pc, false, false);
+  // Don't convert if it's a inductive instruction and we are running the base
+  // case or forward condition
+  if((base_case || forward_condition) && instruction.inductive_step_instruction)
+  {
+    cur_state->source.pc++;
+    return;
   }
+
+  if(options.get_bool_option("show-symex-value-sets"))
+  {
+    std::cout << '\n';
+    state.value_set.dump();
+  }
+
+  if (symex_trace || options.get_bool_option("show-symex-value-sets"))
+    state.source.pc->output_instruction(ns, "", std::cout, false);
 
   switch (instruction.type) {
     case END_FUNCTION:

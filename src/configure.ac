@@ -79,12 +79,17 @@ AC_CHECK_LIB([gmp], [__gmpz_cmp],
     [AC_MSG_WARN([No libgmp found: various solvers require it])], []
 )
 
+AC_CHECK_LIB([crypto], [SHA1_Init],
+    [AS_VAR_APPEND(LIBS, " -lcrypto")],
+    [AC_MSG_WARN([No libgmp found: various solvers require it])], []
+)
+
 # Define what to do when clang is enabled
 m4_define(ESBMC_ENABLE_CLANG, [
-  AX_CLANG(3.8.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
-  AX_LLVM(,[AC_MSG_FAILURE(LLVM is required.)])
+  AX_CLANG(3.9.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
+  AX_LLVM(,[AC_MSG_FAILURE(Cannot find llvm dir, please pass it in --with-llvm argument)])
   AC_SUBST([ESBMC_CLANG_SUBDIRS], " clang-c-frontend clang-cpp-frontend ")
-  AC_SUBST([ESBMC_CLANG_ARCHIVES], "  ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ")
+  AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ../clang-c-frontend/headers/libclangheaders.la")
   ])
 
 AC_ARG_ENABLE(clang, [AS_HELP_STRING([--disable-clang], Build ESBMC without clang. (On by default))],
@@ -487,9 +492,7 @@ AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 AC_SUBST([ESBMC_SOLVER_LIBS], "$ESBMC_SOLVER_LIBS")
 
-AC_SUBST([C2GOTO_LIBS], "$C2GOTO_LIBS")
-
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-cpp-frontend/Makefile esbmc/Makefile solvers/solver_config.h])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-cpp-frontend/Makefile esbmc/Makefile solvers/solver_config.h])
 AC_OUTPUT
 
 AS_ECHO(["----------------------------------------"])

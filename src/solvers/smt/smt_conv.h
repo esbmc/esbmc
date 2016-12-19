@@ -32,7 +32,7 @@
  *
  *  The conceptual data flow is that an SSA program held by
  *  symex_target_equationt is converted into a series of boolean propositions
- *  in some kind of solver context, the handle to which are objects of class 
+ *  in some kind of solver context, the handle to which are objects of class
  *  smt_ast. These are then asserted as appropriate (or conjoined or
  *  disjuncted), after which the solver may be asked whether the formula is
  *  or not. If it is, the value of symbols in the formula may be retrieved
@@ -102,9 +102,9 @@ enum smt_sort_kind {
   SMT_SORT_BOOL = 16,
   SMT_SORT_STRUCT = 32,
   SMT_SORT_UNION = 64, // Contencious
+  SMT_SORT_FLOATBV = 128,
+  SMT_SORT_FLOATBV_RM = 256
 };
-
-#define SMT_SORT_ALLINTS (SMT_SORT_INT | SMT_SORT_REAL | SMT_SORT_BV)
 
 /** Identifiers for SMT functions.
  *  Each SMT function gets a unique identifier, representing its interpretation
@@ -120,8 +120,8 @@ enum smt_sort_kind {
  */
 enum smt_func_kind {
   // Terminals
-  SMT_FUNC_HACKS = 0, // indicate the solver /has/ to use the temp expr.
-  SMT_FUNC_INVALID = 1, // For conversion lookup table only
+  SMT_FUNC_INVALID = 0, // For conversion lookup table only
+  SMT_FUNC_HACKS = 1, // indicate the solver /has/ to use the temp expr.
   SMT_FUNC_INT = 2,
   SMT_FUNC_BOOL,
   SMT_FUNC_BVINT,
@@ -190,6 +190,40 @@ enum smt_func_kind {
   SMT_FUNC_INT2REAL,
   SMT_FUNC_REAL2INT,
   SMT_FUNC_IS_INT,
+
+  // floatbv operations
+  SMT_FUNC_FABS,
+  SMT_FUNC_ISZERO,
+  SMT_FUNC_ISNAN,
+  SMT_FUNC_ISINF,
+  SMT_FUNC_ISNORMAL,
+  SMT_FUNC_ISNEG,
+  SMT_FUNC_ISPOS,
+  SMT_FUNC_IEEE_EQ,
+  SMT_FUNC_IEEE_ADD,
+  SMT_FUNC_IEEE_SUB,
+  SMT_FUNC_IEEE_MUL,
+  SMT_FUNC_IEEE_DIV,
+  SMT_FUNC_IEEE_FMA,
+
+  SMT_FUNC_IEEE_RM_NE,
+  SMT_FUNC_IEEE_RM_ZR,
+  SMT_FUNC_IEEE_RM_PI,
+  SMT_FUNC_IEEE_RM_MI,
+
+  SMT_FUNC_BV2FLOAT,
+  SMT_FUNC_FLOAT2BV,
+};
+
+/** Class that will hold information about which operation
+ *  will be applied for a particular type
+ */
+struct expr_op_convert {
+  smt_func_kind int_encoding_func;
+  smt_func_kind signedbv_func;
+  smt_func_kind unsignedbv_func;
+  smt_func_kind fixedbv_func;
+  smt_func_kind floatbv_func;
 };
 
 /** A class for storing an SMT sort.
@@ -323,6 +357,8 @@ public:
    *  @param elem Struct index to project.
    *  @return AST representing the chosen element / element-array */
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+
+  virtual void dump() const = 0;
 };
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
@@ -412,6 +448,21 @@ public:
    *  @return The resulting handle to the SMT value. */
   smt_astt convert_ast(const expr2tc &expr);
 
+  /** Interface to specifig SMT conversion.
+   *  Takes one expression, and converts it into the underlying SMT solver,
+   *  depending on the type of the expression.
+   *
+   *  @param expr The expression to convert into the SMT solver
+   *  @param type The expression's type
+   *  @param args The expression's args
+   *  @param ops The operations for each sort type
+   *  @return The resulting handle to the SMT value. */
+  smt_astt convert_ast(
+    const expr2tc &expr,
+    const type2tc &type,
+    smt_astt const *args,
+    struct expr_op_convert ops);
+
   void convert_assign(const expr2tc &expr);
 
   /** Make an n-ary 'or' function application.
@@ -433,7 +484,7 @@ public:
    *  @return The inverted piece of AST. */
   smt_astt invert_ast(smt_astt a);
 
-  /** Create an ipmlication between two smt_ast's. 
+  /** Create an ipmlication between two smt_ast's.
    *  @param a The ast that implies the truth of the other. Boolean.
    *  @param b The ast whos truth is implied. Boolean.
    *  @return The resulting piece of AST. */
@@ -576,6 +627,52 @@ public:
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w) = 0;
 
+  /** Create a floating point bitvector
+   *  @param thereal the ieee float number
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_bvfloat(const ieee_floatt &thereal,
+                                  unsigned ew, unsigned sw) = 0;
+
+  /** Create a NaN floating point bitvector
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw) = 0;
+
+  /** Create a (+/-)inf floating point bitvector
+   *  @param sgn Whether this bitvector is negative or positive.
+   *  @param ew Exponent width, in bits, of the bitvector to create.
+   *  @param sw Significand width, in bits, of the bitvector to create.
+   *  @return The newly created terminal smt_ast of this bitvector. */
+  virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw) = 0;
+
+  /** Create a rounding mode to be used by floating point cast and arith ops
+   *  @param rm the kind of rounding mode
+   *  @return The newly created rounding mode smt_ast. */
+  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm) = 0;
+
+  /** Typecast from a floating point
+   *  @param cast the cast expression
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast) = 0;
+
+  /** Typecast to a floating point
+   *  @param cast the cast expression
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast) = 0;
+
+  /** Calculate the nearby int from a floating point, considering the rounding mode
+   *  @param expr the nearby int expression
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) = 0;
+
+  /** Convert the ieee arithmetic operations (add, sub, mul, div, mod)
+   *  @param expr the arithmetic operations
+   *  @return The newly created cast smt_ast. */
+  virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr) = 0;
+
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.
    *  @return The newly created terminal smt_ast of this boolean. */
@@ -707,7 +804,7 @@ public:
    *  a struct, for example). */
   smt_astt convert_addr_of(const expr2tc &expr);
   /** Handle union/struct based corner cases for member2tc expressions */
-  smt_astt convert_member(const expr2tc &expr, smt_astt src);
+  smt_astt convert_member(const expr2tc &expr);
   /** Convert an identifier to a pointer. When given the name of a variable
    *  that we want to take the address of, this inspects our current tracking
    *  of addresses / variables, and returns a pointer for the given symbol.
@@ -733,8 +830,20 @@ public:
   /** Identical to convert_sign_ext, but extends AST with zeros */
   smt_astt convert_zero_ext(smt_astt a, smt_sortt s,
                                   unsigned int topwidth);
-  /** Checks for equality with NaN representation. Nto sure if this works. */
-  smt_astt convert_is_nan(const expr2tc &expr, smt_astt oper);
+  /** Checks for equality with NaN representation. */
+  smt_astt convert_is_nan(const expr2tc &expr);
+  /** Checks for equality with inf representation. */
+  smt_astt convert_is_inf(const expr2tc &expr);
+  /** Checks for equality with normal representation. */
+  smt_astt convert_is_normal(const expr2tc &expr);
+  /** Checks for equality with finite representation. */
+  smt_astt convert_is_finite(const expr2tc &expr);
+  /** Converts signbit representation. */
+  smt_astt convert_signbit(const expr2tc &expr);
+  /** Converts rounding mode for ieee fp operations. */
+  smt_astt convert_rounding_mode(const expr2tc& expr);
+  /** Converts equality between two floatbvs. */
+  smt_astt convert_ieee_equal(const expr2tc &expr);
   /** Convert a byte_extract2tc, pulling a byte from the byte representation
    *  of some piece of data. */
   smt_astt convert_byte_extract(const expr2tc &expr);
@@ -785,7 +894,7 @@ public:
   smt_astt convert_typecast_from_ptr(const typecast2t &cast);
   /** Typecast structs to other structs */
   smt_astt convert_typecast_to_struct(const typecast2t &cast);
-  /** Despatch a typecast expression to a more specific typecast mkethod */
+  /** Despatch a typecast expression to a more specific typecast method */
   smt_astt convert_typecast(const expr2tc &expr);
   /** Round a real to an integer; not straightforwards at all. */
   smt_astt round_real_to_int(smt_astt a);
@@ -902,14 +1011,6 @@ public:
 
   typedef hash_map_cont<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
 
-  struct expr_op_convert {
-    smt_func_kind int_mode_func;
-    smt_func_kind bv_mode_func_signed;
-    smt_func_kind bv_mode_func_unsigned;
-    unsigned int args;
-    unsigned long permitted_sorts;
-  };
-
   // Members
   /** Number of un-popped context pushes encountered so far. */
   unsigned int ctx_level;
@@ -997,15 +1098,6 @@ public:
   // up to 2^64.
   smt_astt int_shift_op_array;
 
-  /** Table containing information about how to handle expressions to convert
-   *  them to SMT. There are various options -- convert all the operands and
-   *  pass straight down to smt_convt::mk_func_app with a corresponding SMT
-   *  function id (depending on the integer encoding mode). Alternately, it
-   *  might be a terminal. Alternately, a special case may be required, and
-   *  that special case may only be required for certain types of operands.
-   *
-   *  There are a /lot/ of special cases. */
-  static const expr_op_convert smt_convert_table[expr2t::end_expr_id];
   /** Mapping of SMT function IDs to their names. XXX, incorrect size. */
   static const std::string smt_func_name_table[expr2t::end_expr_id];
 };

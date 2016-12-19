@@ -29,9 +29,7 @@ void *calloc(size_t nmemb, size_t size)
   __ESBMC_HIDE:;
   size_t total_size=nmemb*size;
   void *res = malloc(total_size);
-  // there should be memset here
-  //char *p=res;
-  //for(int i=0; i<total_size; i++) p[i]=0;
+  memset(res, 0, total_size);
   return res;
 }
 

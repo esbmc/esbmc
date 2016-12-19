@@ -174,15 +174,16 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     union_type2t *u = new union_type2t(members, names, name);
     new_type_ref = type2tc(u);
   } else if (type.id() == typet::t_fixedbv) {
-    std::string fract = type.get_string(typet::a_width);
-    assert(fract != "");
-    unsigned int frac_bits = strtol(fract.c_str(), NULL, 10);
+    unsigned int width_bits = to_fixedbv_type(type).get_width();
+    unsigned int int_bits =  to_fixedbv_type(type).get_integer_bits();
 
-    std::string ints = type.get_string(typet::a_integer_bits);
-    assert(ints != "");
-    unsigned int int_bits = strtol(ints.c_str(), NULL, 10);
+    fixedbv_type2t *f = new fixedbv_type2t(width_bits, int_bits);
+    new_type_ref = type2tc(f);
+  } else if (type.id() == typet::t_floatbv) {
+    unsigned int frac_bits = to_floatbv_type(type).get_f();
+    unsigned int expo_bits = to_floatbv_type(type).get_e();
 
-    fixedbv_type2t *f = new fixedbv_type2t(frac_bits, int_bits);
+    floatbv_type2t *f = new floatbv_type2t(frac_bits, expo_bits);
     new_type_ref = type2tc(f);
   } else if (type.id() == typet::t_code) {
     const code_typet &ref = static_cast<const code_typet &>(type);
@@ -305,6 +306,8 @@ migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns,
     new_type_ref = type_pool.get_union(type);
   } else if (type.id() == typet::t_fixedbv) {
     new_type_ref = type_pool.get_fixedbv(type);
+  } else if (type.id() == typet::t_floatbv) {
+    new_type_ref = type_pool.get_floatbv(type);
   } else if (type.id() == typet::t_code) {
     new_type_ref = type_pool.get_code(type);
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
@@ -343,10 +346,10 @@ decide_on_expr_type(const exprt &side1, const exprt &side2)
   else if (side2.type().id() == typet::t_pointer)
     return side2.type();
 
-  // Then, fixedbv's take precedence.
-  if (side1.type().id() == typet::t_fixedbv)
+  // Then, fixedbv's/floatbv's take precedence.
+  if ((side1.type().id() == typet::t_fixedbv) || side1.type().id() == typet::t_floatbv)
     return side1.type();
-  if (side2.type().id() == typet::t_fixedbv)
+  if ((side2.type().id() == typet::t_fixedbv) || side2.type().id() == typet::t_floatbv)
     return side2.type();
 
   // If one operand is bool, return the other, as that's either bool or will
@@ -558,7 +561,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
 
     // Iterate over each field and flatten to bytes
     const constant_int2t &intref = to_constant_int2t(arraytype.array_size);
-    for (unsigned long i = 0; i < intref.constant_value.to_uint64(); i++) {
+    for (unsigned long i = 0; i < intref.value.to_uint64(); i++) {
       index2tc idx(arraytype.subtype, new_expr, gen_ulong(i));
       flatten_to_bytes(migrate_expr_back(idx), bytes);
     }
@@ -640,9 +643,13 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == "nondet_symbol") {
     migrate_type(expr.type(), type);
     new_expr_ref = symbol2tc(type, "nondet$" + expr.identifier().as_string());
-  } else if (expr.id() == irept::id_constant && expr.type().id() != typet::t_pointer &&
-             expr.type().id() != typet::t_bool && expr.type().id() != "c_enum" &&
-             expr.type().id() != typet::t_fixedbv && expr.type().id() != typet::t_array) {
+  } else if (expr.id() == irept::id_constant
+             && expr.type().id() != typet::t_pointer
+             && expr.type().id() != typet::t_bool
+             && expr.type().id() != "c_enum"
+             && expr.type().id() != typet::t_fixedbv
+             && expr.type().id() != typet::t_floatbv
+             && expr.type().id() != typet::t_array) {
     migrate_type(expr.type(), type);
 
     bool is_signed = false;
@@ -676,19 +683,61 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_fixedbv) {
     migrate_type(expr.type(), type);
 
-    fixedbvt bv(expr);
+    fixedbvt bv(to_constant_expr(expr));
 
     expr2t *new_expr = new constant_fixedbv2t(type, bv);
     new_expr_ref = expr2tc(new_expr);
-  } else if (expr.id() == exprt::typecast) {
-    assert(expr.op0().id_string() != "");
-    expr2tc old_expr;
-
+  } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_floatbv) {
     migrate_type(expr.type(), type);
 
+    ieee_floatt bv(to_constant_expr(expr));
+
+    expr2t *new_expr = new constant_floatbv2t(type, bv);
+    new_expr_ref = expr2tc(new_expr);
+  } else if (expr.id() == exprt::typecast) {
+    assert(expr.op0().id_string() != "");
+    migrate_type(expr.type(), type);
+
+    expr2tc old_expr;
     migrate_expr(expr.op0(), old_expr);
 
-    typecast2t *t = new typecast2t(type, old_expr);
+    // Default to rounding mode symbol
+    expr2tc rounding_mode =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rounding_mode);
+
+    typecast2t *t = new typecast2t(type, old_expr, rounding_mode);
+    new_expr_ref = expr2tc(t);
+  } else if (expr.id() == "bitcast") {
+    assert(expr.op0().id_string() != "");
+    migrate_type(expr.type(), type);
+
+    expr2tc old_expr;
+    migrate_expr(expr.op0(), old_expr);
+
+    bitcast2t *t = new bitcast2t(type, old_expr);
+    new_expr_ref = expr2tc(t);
+  } else if (expr.id() == "nearbyint") {
+    assert(expr.op0().id_string() != "");
+    migrate_type(expr.type(), type);
+
+    expr2tc old_expr;
+    migrate_expr(expr.op0(), old_expr);
+
+    // Default to rounding mode symbol
+    expr2tc rounding_mode =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rounding_mode);
+
+    nearbyint2t *t = new nearbyint2t(type, old_expr, rounding_mode);
     new_expr_ref = expr2tc(t);
   } else if (expr.id() == typet::t_struct) {
     migrate_type(expr.type(), type);
@@ -765,7 +814,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     notequal2t *n = new notequal2t(side1, side2);
     new_expr_ref = expr2tc(n);
-   } else if (expr.id() == exprt::i_lt) {
+  } else if (expr.id() == exprt::i_lt) {
     expr2tc side1, side2;
 
     convert_operand_pair(expr, side1, side2);
@@ -1008,6 +1057,110 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     div2t *d = new div2t(type, side1, side2);
     new_expr_ref = expr2tc(d);
+  } else if (expr.id() == "ieee_add") {
+    migrate_type(expr.type(), type);
+
+    if (expr.operands().size() > 2) {
+      splice_expr(expr, new_expr_ref);
+      return;
+    }
+
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
+
+    ieee_add2t *a = new ieee_add2t(type, side1, side2, rm);
+    new_expr_ref = expr2tc(a);
+  } else if (expr.id() == "ieee_sub") {
+    migrate_type(expr.type(), type);
+
+    if (expr.operands().size() > 2) {
+      splice_expr(expr, new_expr_ref);
+      return;
+    }
+
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
+
+    ieee_sub2t *s = new ieee_sub2t(type, side1, side2, rm);
+    new_expr_ref = expr2tc(s);
+  } else if (expr.id() == "ieee_mul") {
+    migrate_type(expr.type(), type);
+
+    if (expr.operands().size() > 2) {
+      splice_expr(expr, new_expr_ref);
+      return;
+    }
+
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
+
+    ieee_mul2t *s = new ieee_mul2t(type, side1, side2, rm);
+    new_expr_ref = expr2tc(s);
+  } else if (expr.id() == "ieee_div") {
+    migrate_type(expr.type(), type);
+
+    assert(expr.operands().size() == 2);
+
+    expr2tc side1, side2;
+    convert_operand_pair(expr, side1, side2);
+
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
+
+    ieee_div2t *d = new ieee_div2t(type, side1, side2, rm);
+    new_expr_ref = expr2tc(d);
+  } else if (expr.id() == "ieee_fma") {
+    migrate_type(expr.type(), type);
+
+    expr2tc v1, v2, v3;
+    migrate_expr(expr.op0(), v1);
+    migrate_expr(expr.op1(), v2);
+    migrate_expr(expr.op2(), v3);
+
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
+
+    ieee_fma2t *a = new ieee_fma2t(type, v1, v2, v3, rm);
+    new_expr_ref = expr2tc(a);
   } else if (expr.id() == exprt::mod) {
     migrate_type(expr.type(), type);
 
@@ -1226,7 +1379,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     bool invalid = false;
     bool unknown = false;
     if (is_constant_bool2t(op1)) {
-      invalid = to_constant_bool2t(op1).constant_value;
+      invalid = to_constant_bool2t(op1).value;
     } else {
       assert(expr.op1().id() == "unknown");
       unknown = true;
@@ -1411,13 +1564,29 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     new_expr_ref = expr2tc(new code_cpp_throw_decl2t(expr_list));
   } else if (expr.id() == "isinf") {
-    expr2tc op;
-    migrate_expr(expr.op0(), op);
-    new_expr_ref = isinf2tc(op);
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    isinf2t *n = new isinf2t(theval);
+    new_expr_ref = expr2tc(n);
   } else if (expr.id() == "isnormal") {
-    expr2tc op;
-    migrate_expr(expr.op0(), op);
-    new_expr_ref = isnormal2tc(op);
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    isnormal2t *n = new isnormal2t(theval);
+    new_expr_ref = expr2tc(n);
+  } else if (expr.id() == "isfinite") {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    isfinite2t *n = new isfinite2t(theval);
+    new_expr_ref = expr2tc(n);
+  } else if (expr.id() == "signbit") {
+    expr2tc theval;
+    migrate_expr(expr.op0(), theval);
+
+    signbit2t *n = new signbit2t(theval);
+    new_expr_ref = expr2tc(n);
   } else if (expr.id() ==  "concat") {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
@@ -1551,9 +1720,18 @@ migrate_type_back(const type2tc &ref)
 
     fixedbv_typet thetype;
     thetype.set_integer_bits(ref2.integer_bits);
-    thetype.set("width", ref2.width);
+    thetype.set_width(ref2.width);
     return thetype;
     }
+  case type2t::floatbv_id:
+  {
+    const floatbv_type2t &ref2 = to_floatbv_type(ref);
+
+    floatbv_typet thetype;
+    thetype.set_f(ref2.fraction);
+    thetype.set_width(ref2.get_width());
+    return thetype;
+  }
   case type2t::string_id:
     return string_typet();
   case type2t::cpp_name_id:
@@ -1601,7 +1779,7 @@ migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     constant_exprt theexpr(thetype);
     unsigned int width = atoi(thetype.width().as_string().c_str());
-    theexpr.set_value(integer2binary(ref2.constant_value, width));
+    theexpr.set_value(integer2binary(ref2.value, width));
     return theexpr;
   }
   case expr2t::constant_fixedbv_id:
@@ -1618,10 +1796,16 @@ migrate_expr_back(const expr2tc &ref)
 
     return tmp.to_expr();
   }
+  case expr2t::constant_floatbv_id:
+  {
+    const constant_floatbv2t &ref2 = to_constant_floatbv2t(ref);
+    ieee_floatt tmp = ref2.value;
+    return tmp.to_expr();
+  }
   case expr2t::constant_bool_id:
   {
     const constant_bool2t &ref2 = to_constant_bool2t(ref);
-    if (ref2.constant_value)
+    if (ref2.value)
       return true_exprt();
     else
       return false_exprt();
@@ -1708,7 +1892,20 @@ migrate_expr_back(const expr2tc &ref)
   {
     const typecast2t &ref2 = to_typecast2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    return typecast_exprt(migrate_expr_back(ref2.from), thetype);
+
+    typecast_exprt new_expr(migrate_expr_back(ref2.from), thetype);
+    new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return new_expr;
+  }
+  case expr2t::nearbyint_id:
+  {
+    const nearbyint2t &ref2 = to_nearbyint2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+
+    exprt new_expr("nearbyint", thetype);
+    new_expr.copy_to_operands(migrate_expr_back(ref2.from));
+    new_expr.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return new_expr;
   }
   case expr2t::if_id:
   {
@@ -1925,6 +2122,67 @@ migrate_expr_back(const expr2tc &ref)
     divval.copy_to_operands(migrate_expr_back(ref2.side_1),
                             migrate_expr_back(ref2.side_2));
     return divval;
+  }
+  case expr2t::ieee_add_id:
+  {
+    const ieee_add2t &ref2 = to_ieee_add2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt addval("ieee_add", thetype);
+    addval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_2));
+
+    // Add rounding mode
+    addval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return addval;
+  }
+  case expr2t::ieee_sub_id:
+  {
+    const ieee_sub2t &ref2 = to_ieee_sub2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt subval("ieee_sub", thetype);
+    subval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_2));
+
+    // Add rounding mode
+    subval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return subval;
+  }
+  case expr2t::ieee_mul_id:
+  {
+    const ieee_mul2t &ref2 = to_ieee_mul2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt mulval("ieee_mul", thetype);
+    mulval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_2));
+
+    // Add rounding mode
+    mulval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return mulval;
+  }
+  case expr2t::ieee_div_id:
+  {
+    const ieee_div2t &ref2 = to_ieee_div2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt divval("ieee_div", thetype);
+    divval.copy_to_operands(migrate_expr_back(ref2.side_1),
+                            migrate_expr_back(ref2.side_2));
+
+    // Add rounding mode
+    divval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return divval;
+  }
+  case expr2t::ieee_fma_id:
+  {
+    const ieee_fma2t &ref2 = to_ieee_fma2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt fmaval("ieee_fma", thetype);
+    fmaval.copy_to_operands(migrate_expr_back(ref2.value_1),
+                            migrate_expr_back(ref2.value_2),
+                            migrate_expr_back(ref2.value_3));
+
+    // Add rounding mode
+    fmaval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return fmaval;
   }
   case expr2t::modulus_id:
   {
@@ -2403,12 +2661,34 @@ migrate_expr_back(const expr2tc &ref)
     back.copy_to_operands(migrate_expr_back(ref2.value));
     return back;
   }
+  case expr2t::isfinite_id:
+  {
+    const isfinite2t &ref2 = to_isfinite2t(ref);
+    exprt back("isfinite", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
+  }
+  case expr2t::signbit_id:
+  {
+    const signbit2t &ref2 = to_signbit2t(ref);
+    exprt back("signbit", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
+  }
   case expr2t::concat_id:
   {
     const concat2t &ref2 = to_concat2t(ref);
     exprt back("concat", migrate_type_back(ref2.type));
     back.copy_to_operands(migrate_expr_back(ref2.side_1));
     back.copy_to_operands(migrate_expr_back(ref2.side_2));
+    return back;
+  }
+  case expr2t::bitcast_id:
+  {
+    const bitcast2t &ref2 = to_bitcast2t(ref);
+    exprt back("bitcast", migrate_type_back(ref2.type));
+    back.copy_to_operands(migrate_expr_back(ref2.from));
+    back.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
     return back;
   }
   default:

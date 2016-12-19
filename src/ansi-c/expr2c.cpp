@@ -200,6 +200,8 @@ std::string expr2ct::convert_rec(
       return q+"float";
     else if(width==config.ansi_c.double_width)
       return q+"double";
+    else if(width==config.ansi_c.long_double_width)
+      return q+"long double";
   }
   else if(src.id()=="struct" ||
           src.id()=="incomplete_struct")
@@ -340,7 +342,7 @@ std::string expr2ct::convert_typecast(
 {
   precedence=14;
 
-  if(src.operands().size()!=1)
+  if(src.id() == "typecast" && src.operands().size()!=1)
     return convert_norep(src, precedence);
 
   // some special cases
@@ -353,6 +355,38 @@ std::string expr2ct::convert_typecast(
     return "NULL";
 
   std::string dest="("+convert(type)+")";
+
+  std::string tmp=convert(src.op0(), precedence);
+
+  if(src.op0().id()=="member" ||
+     src.op0().id()=="constant" ||
+     src.op0().id()=="symbol") // better fix precedence
+    dest+=tmp;
+  else
+    dest+='('+tmp+')';
+
+  return dest;
+}
+
+std::string expr2ct::convert_bitcast(
+  const exprt &src,
+  unsigned &precedence)
+{
+  precedence=14;
+
+  if(src.id() == "bitcast" && src.operands().size()!=1)
+    return convert_norep(src, precedence);
+
+  // some special cases
+
+  const typet &type=ns.follow(src.type());
+
+  if(type.id()=="pointer" &&
+     ns.follow(type.subtype()).id()=="empty" && // to (void *)?
+     src.op0().is_zero())
+    return "NULL";
+
+  std::string dest="(BITCAST:"+convert(type)+")";
 
   std::string tmp=convert(src.op0(), precedence);
 
@@ -1408,12 +1442,19 @@ std::string expr2ct::convert_constant(
   }
   else if(type.id()=="floatbv")
   {
-    std::cerr << "floatbv unsupported, sorry" << std::endl;
-    abort();
+    dest=ieee_floatt(to_constant_expr(src)).to_ansi_c_string();
+
+    if(dest!="" && isdigit(dest[dest.size()-1]))
+    {
+      if(src.type()==float_type())
+        dest+="f";
+      else if(src.type()==double_type())
+        dest+="l";
+    }
   }
   else if(type.id()=="fixedbv")
   {
-    dest=fixedbvt(src).to_ansi_c_string();
+    dest=fixedbvt(to_constant_expr(src)).to_ansi_c_string();
 
     if(dest!="" && isdigit(dest[dest.size()-1]))
     {
@@ -2878,6 +2919,11 @@ std::string expr2ct::convert(
     return convert_function(src, "INVALID-POINTER", precedence=15);
   }
 
+  else if(src.id()=="invalid-object")
+  {
+    return "invalid-object";
+  }
+
   else if(src.id()=="NULL-object")
   {
     return "NULL-object";
@@ -2986,6 +3032,16 @@ std::string expr2ct::convert(
   else if(src.id()=="isnormal")
   {
     return convert_function(src, "isnormal", precedence=15);
+  }
+
+  else if(src.id()=="signbit")
+  {
+    return convert_function(src, "signbit", precedence=15);
+  }
+
+  else if(src.id()=="nearbyint")
+  {
+    return convert_function(src, "nearbyint", precedence=15);
   }
 
   else if(src.id()=="builtin_va_arg")
@@ -3113,14 +3169,20 @@ std::string expr2ct::convert(
   else if(src.id()=="=")
     return convert_binary(src, "==", precedence=9, true);
 
-  else if(src.id()=="ieee_float_equal")
-    return convert_function(src, "IEEE_FLOAT_EQUAL", precedence=15);
+  else if(src.id()=="ieee_add")
+    return convert_function(src, "IEEE_ADD", precedence=15);
+
+  else if(src.id()=="ieee_sub")
+    return convert_function(src, "IEEE_SUB", precedence=15);
+
+  else if(src.id()=="ieee_mul")
+    return convert_function(src, "IEEE_MUL", precedence=15);
+
+  else if(src.id()=="ieee_div")
+    return convert_function(src, "IEEE_DIV", precedence=15);
 
   else if(src.id()=="width")
     return convert_function(src, "WIDTH", precedence=15);
-
-  else if(src.id()=="ieee_float_notequal")
-    return convert_function(src, "IEEE_FLOAT_NOTEQUAL", precedence=15);
 
   else if(src.id()=="byte_update_little_endian")
     return convert_function(src, "BYTE_UPDATE_LITTLE_ENDIAN", precedence=15);
@@ -3211,6 +3273,9 @@ std::string expr2ct::convert(
 
   else if(src.id()=="typecast")
     return convert_typecast(src, precedence);
+
+  else if(src.id()=="bitcast")
+    return convert_bitcast(src, precedence);
 
   else if(src.id()=="implicit_address_of")
     return convert_implicit_address_of(src, precedence);

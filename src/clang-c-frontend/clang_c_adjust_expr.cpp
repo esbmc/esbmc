@@ -173,6 +173,7 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   }
   else if(expr.id() == "comma")
   {
+    adjust_comma(expr);
   }
   else if(expr.id() == "if")
   {
@@ -204,6 +205,12 @@ void clang_c_adjust::adjust_expr_main(exprt& expr)
   {
   }
   else if(expr.id() == "array_of")
+  {
+  }
+  else if(expr.id()=="ieee_add" ||
+          expr.id()=="ieee_sub" ||
+          expr.id()=="ieee_mul" ||
+          expr.id()=="ieee_div")
   {
   }
   else
@@ -349,6 +356,9 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt& expr)
 //        typecheck_expr_pointer_arithmetic(expr);
         return;
       }
+
+      adjust_float_arith(expr);
+      return;
     }
   }
 }
@@ -401,42 +411,31 @@ void clang_c_adjust::adjust_expr_rel(exprt& expr)
   exprt &op0=expr.op0();
   exprt &op1=expr.op1();
 
-  const typet o_type0=op0.type();
-  const typet o_type1=op1.type();
-
-  if(expr.id()=="=" || expr.id()=="notequal")
-  {
-    if(o_type0==o_type1)
-    {
-      if(!o_type0.is_array())
-      {
-        adjust_float_rel(expr);
-        return; // no promotion necessary
-      }
-    }
-  }
-
   gen_typecast_arithmetic(ns, op0, op1);
 }
 
-void clang_c_adjust::adjust_float_rel(exprt& expr)
+void clang_c_adjust::adjust_float_arith(exprt &expr)
 {
   // equality and disequality on float is not mathematical equality!
   assert(expr.operands().size()==2);
 
-  if(!expr.op0().is_symbol())
-    return;
-
-  if(!expr.op1().is_symbol())
-    return;
-
-  if(!expr.op0().type().is_fixedbv())
-    return;
-
-  if(expr.id()=="=" and (expr.op0() == expr.op1()))
+  if(ns.follow(expr.type()).is_floatbv())
   {
-    expr.id("notequal");
-    expr.op1() = side_effect_expr_nondett(expr.op0().type());
+    // And change id
+    if(expr.id() == "+") {
+      expr.id("ieee_add");
+    } else if(expr.id() == "-") {
+      expr.id("ieee_sub");
+    } else if(expr.id() == "*") {
+      expr.id("ieee_mul");
+    } else if(expr.id()=="/") {
+      expr.id("ieee_div");
+    }
+
+    // Add rounding mode
+    expr.set(
+      "rounding_mode",
+      symbol_exprt(CPROVER_PREFIX "rounding_mode", int_type()));
   }
 }
 
@@ -516,10 +515,9 @@ void clang_c_adjust::adjust_dereference(exprt& deref)
 void clang_c_adjust::adjust_sizeof(exprt& expr)
 {
   typet type;
-
   if(expr.operands().size()==0)
   {
-    type = ((typet &)expr.sizeof_type());
+    type = ((typet &)expr.c_sizeof_type());
     adjust_type(type);
   }
   else if(expr.operands().size()==1)
@@ -542,7 +540,7 @@ void clang_c_adjust::adjust_sizeof(exprt& expr)
   }
 
   new_expr.swap(expr);
-  expr.cmt_c_sizeof_type(type);
+  expr.c_sizeof_type(type);
 }
 
 void clang_c_adjust::adjust_type(typet &type)
@@ -700,9 +698,10 @@ void clang_c_adjust::adjust_side_effect_function_call(
 void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 {
   const exprt &f_op = expr.function();
+  const locationt location = expr.location();
 
   // some built-in functions
-  if(f_op.id() == "symbol")
+  if(f_op.is_symbol())
   {
     const irep_idt &identifier = to_symbol_expr(f_op).get_identifier();
 
@@ -718,47 +717,6 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       exprt same_object_expr("same-object", bool_typet());
       same_object_expr.operands() = expr.arguments();
       expr.swap(same_object_expr);
-    }
-    else if(identifier == CPROVER_PREFIX "buffer_size")
-    {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "buffer_size expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
-      exprt buffer_size_expr("buffer_size", uint_type());
-      buffer_size_expr.operands() = expr.arguments();
-      expr.swap(buffer_size_expr);
-    }
-    else if(identifier == CPROVER_PREFIX "is_zero_string")
-    {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "is_zero_string expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
-      exprt is_zero_string_expr("is_zero_string", bool_typet());
-      is_zero_string_expr.operands() = expr.arguments();
-      is_zero_string_expr.cmt_lvalue(true); // make it an lvalue
-      expr.swap(is_zero_string_expr);
-    }
-    else if(identifier == CPROVER_PREFIX "zero_string_length")
-    {
-      if(expr.arguments().size() != 1)
-      {
-        std::cout << "zero_string_length expects one operand" << std::endl;
-        expr.dump();
-        abort();
-      }
-
-      exprt zero_string_length_expr("zero_string_length", uint_type());
-      zero_string_length_expr.operands() = expr.arguments();
-      zero_string_length_expr.cmt_lvalue(true); // make it an lvalue
-      expr.swap(zero_string_length_expr);
     }
     else if(identifier == CPROVER_PREFIX "POINTER_OFFSET")
     {
@@ -786,7 +744,10 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       pointer_object_expr.operands() = expr.arguments();
       expr.swap(pointer_object_expr);
     }
-    else if(identifier == CPROVER_PREFIX "isnan")
+    else if(identifier==CPROVER_PREFIX "isnanf" ||
+            identifier==CPROVER_PREFIX "isnand" ||
+            identifier==CPROVER_PREFIX "isnanld" ||
+            identifier=="c::__builtin_isnan")
     {
       if(expr.arguments().size() != 1)
       {
@@ -799,7 +760,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       isnan_expr.operands() = expr.arguments();
       expr.swap(isnan_expr);
     }
-    else if(identifier == CPROVER_PREFIX "isfinite")
+    else if(identifier==CPROVER_PREFIX "isfinitef" ||
+            identifier==CPROVER_PREFIX "isfinited" ||
+            identifier==CPROVER_PREFIX "isfiniteld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -812,10 +775,70 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       isfinite_expr.operands() = expr.arguments();
       expr.swap(isfinite_expr);
     }
-    else if(identifier == CPROVER_PREFIX "abs"
-        || identifier == CPROVER_PREFIX "fabs"
-        || identifier == CPROVER_PREFIX "fabsf"
-        || identifier == CPROVER_PREFIX "fabsl")
+    else if(identifier==CPROVER_PREFIX "inff" ||
+            identifier==CPROVER_PREFIX "inf" ||
+            identifier==CPROVER_PREFIX "infld" ||
+            identifier=="c::__builtin_inff" ||
+            identifier=="c::__builtin_inf" ||
+            identifier=="c::__builtin_infld" ||
+            identifier=="c::__builtin_huge_valf" ||
+            identifier=="c::__builtin_huge_val" ||
+            identifier=="c::__builtin_huge_vall")
+    {
+      typet t = expr.type();
+
+      constant_exprt infl_expr;
+      if(config.ansi_c.use_fixed_for_float)
+      {
+        // We saturate to the biggest value
+         mp_integer value = power(2, bv_width(t) - 1) - 1;
+         infl_expr =
+           constant_exprt(
+             integer2binary(value, bv_width(t)),
+             integer2string(value, 10),
+             t);
+      }
+      else
+      {
+        infl_expr = ieee_floatt::plus_infinity(
+          ieee_float_spect(to_floatbv_type(t))).to_expr();
+      }
+
+      expr.swap(infl_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "nanf" ||
+            identifier==CPROVER_PREFIX "nan" ||
+            identifier==CPROVER_PREFIX "nanld" ||
+            identifier=="c::__builtin_nanf" ||
+            identifier=="c::__builtin_nan" ||
+            identifier=="c::__builtin_nanl")
+    {
+      typet t = expr.type();
+
+      constant_exprt nan_expr;
+      if(config.ansi_c.use_fixed_for_float)
+      {
+        mp_integer value = 0;
+        nan_expr =
+          constant_exprt(
+            integer2binary(value, bv_width(t)),
+            integer2string(value, 10),
+            t);
+      }
+      else
+      {
+        nan_expr = ieee_floatt::NaN(
+          ieee_float_spect(to_floatbv_type(t))).to_expr();
+      }
+
+      expr.swap(nan_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "abs" ||
+            identifier==CPROVER_PREFIX "labs" ||
+            identifier==CPROVER_PREFIX "llabs" ||
+            identifier==CPROVER_PREFIX "fabsd" ||
+            identifier==CPROVER_PREFIX "fabsf" ||
+            identifier==CPROVER_PREFIX "fabsld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -828,7 +851,14 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       abs_expr.operands() = expr.arguments();
       expr.swap(abs_expr);
     }
-    else if(identifier == CPROVER_PREFIX "isinf")
+    else if(identifier==CPROVER_PREFIX "isinf" ||
+            identifier==CPROVER_PREFIX "isinff" ||
+            identifier==CPROVER_PREFIX "isinfd" ||
+            identifier==CPROVER_PREFIX "isinfld" ||
+            identifier=="c::__builtin_isinf" ||
+            identifier=="c::__builtin_isinff" ||
+            identifier=="c::__builtin_isinfd"||
+            identifier=="c::__builtin_isinfld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -841,7 +871,12 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       isinf_expr.operands() = expr.arguments();
       expr.swap(isinf_expr);
     }
-    else if(identifier == CPROVER_PREFIX "isnormal")
+    else if(identifier==CPROVER_PREFIX "isnormalf" ||
+            identifier==CPROVER_PREFIX "isnormald" ||
+            identifier==CPROVER_PREFIX "isnormalld" ||
+            identifier=="c::__builtin_isnormalf" ||
+            identifier=="c::__builtin_isnormald" ||
+            identifier=="c::__builtin_isnormalld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -854,7 +889,12 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       isnormal_expr.operands() = expr.arguments();
       expr.swap(isnormal_expr);
     }
-    else if(identifier == CPROVER_PREFIX "sign")
+    else if(identifier==CPROVER_PREFIX "signf" ||
+            identifier==CPROVER_PREFIX "signd" ||
+            identifier==CPROVER_PREFIX "signld" ||
+            identifier=="c::__builtin_signbit" ||
+            identifier=="c::__builtin_signbitf" ||
+            identifier=="c::__builtin_signbitl")
     {
       if(expr.arguments().size() != 1)
       {
@@ -863,11 +903,159 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
         abort();
       }
 
-      exprt sign_expr("sign", bool_typet());
+      exprt sign_expr("signbit", int_type());
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
     }
+    else if(identifier == "c::__builtin_expect")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_expect expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt tmp = expr.arguments()[0];
+      expr.swap(tmp);
+    }
+    else if(identifier == "c::__builtin_isgreater")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_isgreater expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op(">", bool_typet());
+      op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      expr.swap(op);
+    }
+    else if(identifier == "c::__builtin_isgreaterequal")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_isgreaterequal expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op(">=", bool_typet());
+      op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      expr.swap(op);
+    }
+    else if(identifier == "c::__builtin_isless")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_isless expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op("<", bool_typet());
+      op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      expr.swap(op);
+    }
+    else if(identifier == "c::__builtin_islessequal")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_islessequal expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op("<=", bool_typet());
+      op.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      expr.swap(op);
+    }
+    else if(identifier == "c::__builtin_islessgreater")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_islessgreater expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op1("<", bool_typet());
+      op1.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      exprt op2(">", bool_typet());
+      op2.copy_to_operands(expr.arguments()[0], expr.arguments()[1]);
+
+      exprt op("or", bool_typet());
+      op.copy_to_operands(op1, op2);
+
+      expr.swap(op);
+    }
+    else if(identifier == "c::__builtin_isunordered")
+    {
+      // this is a gcc extension to provide branch prediction
+      if(expr.arguments().size() != 2)
+      {
+        std::cout <<  "__builtin_islessequal expects two arguments" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt op1("isnan", bool_typet());
+      op1.copy_to_operands(expr.arguments()[0]);
+
+      exprt op2("isnan", bool_typet());
+      op2.copy_to_operands(expr.arguments()[1]);
+
+      exprt op("or", bool_typet());
+      op.copy_to_operands(op1, op2);
+
+      expr.swap(op);
+    }
+    else if(identifier==CPROVER_PREFIX "nearbyintf" ||
+            identifier==CPROVER_PREFIX "nearbyintd" ||
+            identifier==CPROVER_PREFIX "nearbyintld")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "nearbyint expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt new_expr("nearbyint", expr.type());
+      new_expr.operands() = expr.arguments();
+      expr.swap(new_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "fmaf" ||
+            identifier==CPROVER_PREFIX "fmad" ||
+            identifier==CPROVER_PREFIX "fmald")
+    {
+      if(expr.arguments().size() != 3)
+      {
+        std::cout << "fma expects three operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt new_expr("ieee_fma", expr.type());
+      new_expr.operands() = expr.arguments();
+      expr.swap(new_expr);
+    }
   }
+
+  // Restore location
+  expr.location() = location;
 }
 
 void clang_c_adjust::adjust_side_effect_statement_expression(
@@ -1017,32 +1205,16 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
   }
 }
 
+void clang_c_adjust::adjust_comma(exprt& expr)
+{
+  expr.type() = expr.op1().type();
+
+  // make this an l-value if the last operand is one
+  if(expr.op1().cmt_lvalue())
+    expr.cmt_lvalue(true);
+}
+
 void clang_c_adjust::make_index_type(exprt& expr)
 {
-  const typet &full_type = ns.follow(expr.type());
-
-  if(full_type.is_bool())
-  {
-    expr.make_typecast(index_type());
-  }
-  else if(full_type.id() == "unsignedbv")
-  {
-    unsigned width = bv_width(expr.type());
-
-    if(width != config.ansi_c.int_width)
-      expr.make_typecast(uint_type());
-  }
-  else if(full_type.id() == "signedbv"
-          || full_type.id() == "c_enum"
-          || full_type.id() == "incomplete_c_enum")
-  {
-    if(full_type != index_type())
-      expr.make_typecast(index_type());
-  }
-  else
-  {
-    std::cerr << "expected integer type, but got `"
-        << full_type.name().as_string() << "'" << std::endl;
-    abort();
-  }
+  gen_typecast(ns, expr, index_type());
 }

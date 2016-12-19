@@ -1,0 +1,3 @@
+time_var_mutex.c
+--deadlock-check
+^VERIFICATION SUCCESSFUL$

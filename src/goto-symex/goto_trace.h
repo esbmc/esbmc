@@ -106,9 +106,19 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
-void generate_goto_trace_in_graphml_format(
-  std::string & tokenizer_path,
-  std::string & filename,
+void generate_goto_trace_in_violation_graphml_format(
+  std::string & witness_programfile,
+  std::string & witness_output,
+  bool is_detailed_mode,
+  int & specification,
+  const namespacet & ns,
+  const goto_tracet & goto_trace);
+
+void generate_goto_trace_in_correctness_graphml_format(
+  std::string & witness_programfile,
+  std::string & witness_output,
+  bool is_detailed_mode,
+  int & specification,
   const namespacet & ns,
   const goto_tracet & goto_trace);
 

@@ -601,16 +601,7 @@ dereferencet::build_reference_to(
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {
-    // constraint that it actually is an invalid pointer
-
-    invalid_pointer2tc invalid_pointer_expr(deref_expr);
-
-    // produce new guard
-
-    guardt tmp_guard(guard);
-    tmp_guard.move(invalid_pointer_expr);
-    dereference_failure("pointer dereference", "invalid pointer", tmp_guard);
-
+    deref_invalid_ptr(deref_expr, guard, mode);
     return value;
   }
 
@@ -624,7 +615,7 @@ dereferencet::build_reference_to(
   const expr2tc &root_object = o.get_root_object();
   const expr2tc &object = o.object;
 
-  if (is_null_object2t(root_object))
+  if (is_null_object2t(root_object) && mode != FREE && mode != INTERNAL)
   {
     type2tc nullptrtype = type2tc(new pointer_type2t(type));
     symbol2tc null_ptr(nullptrtype, "NULL");
@@ -638,6 +629,9 @@ dereferencet::build_reference_to(
 
     // Don't build a reference to this. You can't actually access NULL, and the
     // solver will only get confused.
+    return value;
+  } else if (is_null_object2t(root_object) && (mode == FREE || mode == INTERNAL)) {
+    // Freeing NULL is completely legit according to C
     return value;
   }
 
@@ -710,6 +704,25 @@ dereferencet::build_reference_to(
   build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment);
 
   return value;
+}
+
+void
+dereferencet::deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode)
+{
+  // constraint that it actually is an invalid pointer
+
+  invalid_pointer2tc invalid_pointer_expr(deref_expr);
+
+  // produce new guard
+
+  guardt tmp_guard(guard);
+  tmp_guard.move(invalid_pointer_expr);
+
+  // Adjust error message depending on the context
+  std::string foo =
+    (mode == FREE) ? "invalid pointer freed" : "invalid pointer";
+
+  dereference_failure("pointer dereference", foo, tmp_guard);
 }
 
 /************************** Rereference building code *************************/
@@ -912,7 +925,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
   bool is_correctly_aligned = false;
   if (is_const_offset) {
     // Constant offset is aligned with array boundaries?
-    uint64_t offs = to_constant_int2t(offset).constant_value.to_ulong();
+    uint64_t offs = to_constant_int2t(offset).value.to_ulong();
     is_correctly_aligned = ((offs % subtype_size) == 0);
   } else {
     // Dyn offset -- is alignment guarantee strong enough?
@@ -955,12 +968,12 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   // We're accessing some kind of scalar type; might be a valid, correct
   // access, or we might need to be byte extracting it.
 
-  if (theint.constant_value == 0 &&
+  if (theint.value == 0 &&
       value->type->get_width() == type->get_width()) {
     // Offset is zero, and we select the entire contents of the field. We may
     // need to perform a cast though.
     if (!base_type_eq(value->type, type, ns)) {
-      value = typecast2tc(type, value);
+      value = bitcast2tc(type, value);
     }
   } else if (value->type->get_width() < type->get_width()) {
     // Oversized read -> give up, rely on dereference failure
@@ -981,7 +994,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 {
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
-  const mp_integer int_offset = to_constant_int2t(offset).constant_value;
+  const mp_integer int_offset = to_constant_int2t(offset).value;
   mp_integer access_size = type_byte_size(*type.get());
 
   unsigned int i = 0;
@@ -1108,7 +1121,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       // XXX endian?
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
       if (!base_type_eq(field->type, type, ns))
-        field = typecast2tc(type, field);
+        field = bitcast2tc(type, field);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     } else {
       // Not fully aligned; devolve to byte extract.
@@ -1162,9 +1175,9 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     return;
   }
 
-  // Ensure we're dealing with a BV.
-  if (!is_number_type(value->type)) {
-    value = typecast2tc(get_uint_type(value->type->get_width()), value);
+  // Ensure we're dealing with a BV. A floatbv is not a bv!
+  if (!is_bv_type(value->type) && !is_fixedbv_type(value->type)) {
+    value = bitcast2tc(get_uint_type(value->type->get_width()), value);
   }
 
   expr2tc *bytes =
@@ -1232,7 +1245,7 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
   std::vector<expr2tc> fields;
   assert(is_struct_type(type));
   const struct_type2t &structtype = to_struct_type(type);
-  uint64_t struct_offset = intref.constant_value.to_uint64();
+  uint64_t struct_offset = intref.value.to_uint64();
   forall_types(it, structtype.members) {
     const type2tc &target_type = *it;
     expr2tc target = value; // The byte array;
@@ -1263,7 +1276,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
     //   a) it's a misaligned access, which is an error
     //   b) there's a struct within a struct here that we should recurse into.
 
-    if (intref.constant_value == 0) {
+    if (intref.value == 0) {
       // Success?
       if (dereference_type_compare(value, type)) {
         // Good, just return this expression.
@@ -1284,11 +1297,11 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
       mp_integer size = type_byte_size(*(*it).get());
 
       if (!is_scalar_type(*it) &&
-            intref.constant_value >= offs &&
-            intref.constant_value < (offs + size)) {
+            intref.value >= offs &&
+            intref.value < (offs + size)) {
         // It's this field. Don't make a decision about whether it's correct
         // or not, recurse to make that happen.
-        mp_integer new_offs = intref.constant_value - offs;
+        mp_integer new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_ulong());
         value = member2tc(*it, value, struct_type.member_names[i]);
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
@@ -1409,8 +1422,10 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     unsigned int i = 0;
     forall_types(it, struct_type.members) {
       // Quickly skip over scalar subtypes.
-      if (is_scalar_type(*it))
+      if (is_scalar_type(*it)) {
+        i++;
         continue;
+      }
 
       mp_integer memb_offs = member_offset(struct_type,
                                       struct_type.member_names[i]);
@@ -1564,10 +1579,10 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
     }
   }
 
-  // That's going to come out as a bitvector;
+  // That's going to come out as a bitvector; cast by bit-representation
   if (type != accuml->type) {
     //assert(type->get_width() == accuml->type->get_width());
-    accuml = typecast2tc(type, accuml);
+    accuml = bitcast2tc(type, accuml);
   }
 
   value = accuml;
@@ -1612,8 +1627,10 @@ void dereferencet::valid_check(
 
       guardt tmp_guard(guard);
       tmp_guard.move(not_valid_expr);
-      dereference_failure("pointer dereference", "invalidated dynamic object",
-                          tmp_guard);
+
+      std::string foo =
+        (mode == FREE) ? "invalidated dynamic object freed" : "invalidated dynamic object";
+      dereference_failure("pointer dereference", foo, tmp_guard);
     } else {
       // Not dynamic; if we're in free mode, that's an error.
       if(mode==FREE)

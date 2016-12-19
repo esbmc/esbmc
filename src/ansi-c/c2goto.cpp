@@ -20,6 +20,7 @@ const struct opt_templ c2goto_options[] = {
 { 0,	"16",		switc,		"" },
 { 0,	"32",		switc,		"" },
 { 0,	"64",		switc,		"" },
+{ 0,  "floatbv",   switc,    "" },
 { 0,	"output",	string,		"" },
 { 'I',	"",		string,		"" },
 { 'D',	"",		string,		"" },
@@ -82,5 +83,6 @@ const mode_table_et mode_table[] =
 #ifndef WITHOUT_CLANG
   LANGAPI_HAVE_MODE_CLANG_CPP,
 #endif
+  LANGAPI_HAVE_MODE_CPP,
   LANGAPI_HAVE_MODE_END
 };

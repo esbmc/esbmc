@@ -1,1513 +1,341 @@
 #include "clang_c_language.h"
 
+struct hooked_header {
+  const char *basename;
+  char *textstart;
+  unsigned int *textsize;
+};
+
+extern "C" {
+  extern char clang_Intrin_buf[];
+  extern unsigned int clang_Intrin_buf_size;
+
+  extern char clang___clang_cuda_cmath_buf[];
+  extern unsigned int clang___clang_cuda_cmath_buf_size;
+
+  extern char clang___clang_cuda_intrinsics_buf[];
+  extern unsigned int clang___clang_cuda_intrinsics_buf_size;
+
+  extern char clang___clang_cuda_math_forward_declares_buf[];
+  extern unsigned int clang___clang_cuda_math_forward_declares_buf_size;
+
+  extern char clang___clang_cuda_runtime_wrapper_buf[];
+  extern unsigned int clang___clang_cuda_runtime_wrapper_buf_size;
+
+  extern char clang___stddef_max_align_t_buf[];
+  extern unsigned int clang___stddef_max_align_t_buf_size;
+
+  extern char clang___wmmintrin_aes_buf[];
+  extern unsigned int clang___wmmintrin_aes_buf_size;
+
+  extern char clang___wmmintrin_pclmul_buf[];
+  extern unsigned int clang___wmmintrin_pclmul_buf_size;
+
+  extern char clang_adxintrin_buf[];
+  extern unsigned int clang_adxintrin_buf_size;
+
+  extern char clang_ammintrin_buf[];
+  extern unsigned int clang_ammintrin_buf_size;
+
+  extern char clang_arm_acle_buf[];
+  extern unsigned int clang_arm_acle_buf_size;
+
+  extern char clang_bmi2intrin_buf[];
+  extern unsigned int clang_bmi2intrin_buf_size;
+
+  extern char clang_bmiintrin_buf[];
+  extern unsigned int clang_bmiintrin_buf_size;
+
+  extern char clang_clflushoptintrin_buf[];
+  extern unsigned int clang_clflushoptintrin_buf_size;
+
+  extern char clang_cpuid_buf[];
+  extern unsigned int clang_cpuid_buf_size;
+
+  extern char clang_cuda_builtin_vars_buf[];
+  extern unsigned int clang_cuda_builtin_vars_buf_size;
+
+  extern char clang_emmintrin_buf[];
+  extern unsigned int clang_emmintrin_buf_size;
+
+  extern char clang_f16cintrin_buf[];
+  extern unsigned int clang_f16cintrin_buf_size;
+
+  extern char clang_float_buf[];
+  extern unsigned int clang_float_buf_size;
+
+  extern char clang_fma4intrin_buf[];
+  extern unsigned int clang_fma4intrin_buf_size;
+
+  extern char clang_fmaintrin_buf[];
+  extern unsigned int clang_fmaintrin_buf_size;
+
+  extern char clang_fxsrintrin_buf[];
+  extern unsigned int clang_fxsrintrin_buf_size;
+
+  extern char clang_htmintrin_buf[];
+  extern unsigned int clang_htmintrin_buf_size;
+
+  extern char clang_htmxlintrin_buf[];
+  extern unsigned int clang_htmxlintrin_buf_size;
+
+  extern char clang_ia32intrin_buf[];
+  extern unsigned int clang_ia32intrin_buf_size;
+
+  extern char clang_immintrin_buf[];
+  extern unsigned int clang_immintrin_buf_size;
+
+  extern char clang_intrin_buf[];
+  extern unsigned int clang_intrin_buf_size;
+
+  extern char clang_inttypes_buf[];
+  extern unsigned int clang_inttypes_buf_size;
+
+  extern char clang_iso646_buf[];
+  extern unsigned int clang_iso646_buf_size;
+
+  extern char clang_limits_buf[];
+  extern unsigned int clang_limits_buf_size;
+
+  extern char clang_lzcntintrin_buf[];
+  extern unsigned int clang_lzcntintrin_buf_size;
+
+  extern char clang_mm3dnow_buf[];
+  extern unsigned int clang_mm3dnow_buf_size;
+
+  extern char clang_mm_malloc_buf[];
+  extern unsigned int clang_mm_malloc_buf_size;
+
+  extern char clang_mmintrin_buf[];
+  extern unsigned int clang_mmintrin_buf_size;
+
+  extern char clang_mwaitxintrin_buf[];
+  extern unsigned int clang_mwaitxintrin_buf_size;
+
+  extern char clang_nmmintrin_buf[];
+  extern unsigned int clang_nmmintrin_buf_size;
+
+  extern char clang_omp_buf[];
+  extern unsigned int clang_omp_buf_size;
+
+  extern char clang_opencl_c_buf[];
+  extern unsigned int clang_opencl_c_buf_size;
+
+  extern char clang_pkuintrin_buf[];
+  extern unsigned int clang_pkuintrin_buf_size;
+
+  extern char clang_pmmintrin_buf[];
+  extern unsigned int clang_pmmintrin_buf_size;
+
+  extern char clang_popcntintrin_buf[];
+  extern unsigned int clang_popcntintrin_buf_size;
+
+  extern char clang_prfchwintrin_buf[];
+  extern unsigned int clang_prfchwintrin_buf_size;
+
+  extern char clang_rdseedintrin_buf[];
+  extern unsigned int clang_rdseedintrin_buf_size;
+
+  extern char clang_rtmintrin_buf[];
+  extern unsigned int clang_rtmintrin_buf_size;
+
+  extern char clang_s390intrin_buf[];
+  extern unsigned int clang_s390intrin_buf_size;
+
+  extern char clang_shaintrin_buf[];
+  extern unsigned int clang_shaintrin_buf_size;
+
+  extern char clang_smmintrin_buf[];
+  extern unsigned int clang_smmintrin_buf_size;
+
+  extern char clang_stdalign_buf[];
+  extern unsigned int clang_stdalign_buf_size;
+
+  extern char clang_stdarg_buf[];
+  extern unsigned int clang_stdarg_buf_size;
+
+  extern char clang_stdatomic_buf[];
+  extern unsigned int clang_stdatomic_buf_size;
+
+  extern char clang_stdbool_buf[];
+  extern unsigned int clang_stdbool_buf_size;
+
+  extern char clang_stddef_buf[];
+  extern unsigned int clang_stddef_buf_size;
+
+  extern char clang_stdint_buf[];
+  extern unsigned int clang_stdint_buf_size;
+
+  extern char clang_stdnoreturn_buf[];
+  extern unsigned int clang_stdnoreturn_buf_size;
+
+  extern char clang_tbmintrin_buf[];
+  extern unsigned int clang_tbmintrin_buf_size;
+
+  extern char clang_tgmath_buf[];
+  extern unsigned int clang_tgmath_buf_size;
+
+  extern char clang_tmmintrin_buf[];
+  extern unsigned int clang_tmmintrin_buf_size;
+
+  extern char clang_unwind_buf[];
+  extern unsigned int clang_unwind_buf_size;
+
+  extern char clang_vadefs_buf[];
+  extern unsigned int clang_vadefs_buf_size;
+
+  extern char clang_varargs_buf[];
+  extern unsigned int clang_varargs_buf_size;
+
+  extern char clang_wmmintrin_buf[];
+  extern unsigned int clang_wmmintrin_buf_size;
+
+  extern char clang_x86intrin_buf[];
+  extern unsigned int clang_x86intrin_buf_size;
+
+  extern char clang_xmmintrin_buf[];
+  extern unsigned int clang_xmmintrin_buf_size;
+
+  extern char clang_xopintrin_buf[];
+  extern unsigned int clang_xopintrin_buf_size;
+
+  extern char clang_xsavecintrin_buf[];
+  extern unsigned int clang_xsavecintrin_buf_size;
+
+  extern char clang_xsaveintrin_buf[];
+  extern unsigned int clang_xsaveintrin_buf_size;
+
+  extern char clang_xsaveoptintrin_buf[];
+  extern unsigned int clang_xsaveoptintrin_buf_size;
+
+  extern char clang_xsavesintrin_buf[];
+  extern unsigned int clang_xsavesintrin_buf_size;
+
+  extern char clang_xtestintrin_buf[];
+  extern unsigned int clang_xtestintrin_buf_size;
+
+  extern char clang_allocator_interface_buf[];
+  extern unsigned int clang_allocator_interface_buf_size;
+
+  extern char clang_asan_interface_buf[];
+  extern unsigned int clang_asan_interface_buf_size;
+
+  extern char clang_common_interface_defs_buf[];
+  extern unsigned int clang_common_interface_defs_buf_size;
+
+  extern char clang_coverage_interface_buf[];
+  extern unsigned int clang_coverage_interface_buf_size;
+
+  extern char clang_dfsan_interface_buf[];
+  extern unsigned int clang_dfsan_interface_buf_size;
+
+  extern char clang_esan_interface_buf[];
+  extern unsigned int clang_esan_interface_buf_size;
+
+  extern char clang_linux_syscall_hooks_buf[];
+  extern unsigned int clang_linux_syscall_hooks_buf_size;
+
+  extern char clang_lsan_interface_buf[];
+  extern unsigned int clang_lsan_interface_buf_size;
+
+  extern char clang_msan_interface_buf[];
+  extern unsigned int clang_msan_interface_buf_size;
+
+  extern char clang_tsan_interface_atomic_buf[];
+  extern unsigned int clang_tsan_interface_atomic_buf_size;
+
+  struct hooked_header clang_headers[] = {
+    { "Intrin.h", clang_Intrin_buf, &clang_Intrin_buf_size},
+    { "__clang_cuda_cmath.h", clang___clang_cuda_cmath_buf, &clang___clang_cuda_cmath_buf_size},
+    { "__clang_cuda_intrinsics.h", clang___clang_cuda_intrinsics_buf, &clang___clang_cuda_intrinsics_buf_size},
+    { "__clang_cuda_math_forward_declares.h", clang___clang_cuda_math_forward_declares_buf, &clang___clang_cuda_math_forward_declares_buf_size},
+    { "__clang_cuda_runtime_wrapper.h", clang___clang_cuda_runtime_wrapper_buf, &clang___clang_cuda_runtime_wrapper_buf_size},
+    { "__stddef_max_align_t.h", clang___stddef_max_align_t_buf, &clang___stddef_max_align_t_buf_size},
+    { "__wmmintrin_aes.h", clang___wmmintrin_aes_buf, &clang___wmmintrin_aes_buf_size},
+    { "__wmmintrin_pclmul.h", clang___wmmintrin_pclmul_buf, &clang___wmmintrin_pclmul_buf_size},
+    { "adxintrin.h", clang_adxintrin_buf, &clang_adxintrin_buf_size},
+    { "ammintrin.h", clang_ammintrin_buf, &clang_ammintrin_buf_size},
+    { "arm_acle.h", clang_arm_acle_buf, &clang_arm_acle_buf_size},
+    { "bmi2intrin.h", clang_bmi2intrin_buf, &clang_bmi2intrin_buf_size},
+    { "bmiintrin.h", clang_bmiintrin_buf, &clang_bmiintrin_buf_size},
+    { "clflushoptintrin.h", clang_clflushoptintrin_buf, &clang_clflushoptintrin_buf_size},
+    { "cpuid.h", clang_cpuid_buf, &clang_cpuid_buf_size},
+    { "cuda_builtin_vars.h", clang_cuda_builtin_vars_buf, &clang_cuda_builtin_vars_buf_size},
+    { "emmintrin.h", clang_emmintrin_buf, &clang_emmintrin_buf_size},
+    { "f16cintrin.h", clang_f16cintrin_buf, &clang_f16cintrin_buf_size},
+    { "float.h", clang_float_buf, &clang_float_buf_size},
+    { "fma4intrin.h", clang_fma4intrin_buf, &clang_fma4intrin_buf_size},
+    { "fmaintrin.h", clang_fmaintrin_buf, &clang_fmaintrin_buf_size},
+    { "fxsrintrin.h", clang_fxsrintrin_buf, &clang_fxsrintrin_buf_size},
+    { "htmintrin.h", clang_htmintrin_buf, &clang_htmintrin_buf_size},
+    { "htmxlintrin.h", clang_htmxlintrin_buf, &clang_htmxlintrin_buf_size},
+    { "ia32intrin.h", clang_ia32intrin_buf, &clang_ia32intrin_buf_size},
+    { "immintrin.h", clang_immintrin_buf, &clang_immintrin_buf_size},
+    { "intrin.h", clang_intrin_buf, &clang_intrin_buf_size},
+    { "inttypes.h", clang_inttypes_buf, &clang_inttypes_buf_size},
+    { "iso646.h", clang_iso646_buf, &clang_iso646_buf_size},
+    { "limits.h", clang_limits_buf, &clang_limits_buf_size},
+    { "lzcntintrin.h", clang_lzcntintrin_buf, &clang_lzcntintrin_buf_size},
+    { "mm3dnow.h", clang_mm3dnow_buf, &clang_mm3dnow_buf_size},
+    { "mm_malloc.h", clang_mm_malloc_buf, &clang_mm_malloc_buf_size},
+    { "mmintrin.h", clang_mmintrin_buf, &clang_mmintrin_buf_size},
+    { "mwaitxintrin.h", clang_mwaitxintrin_buf, &clang_mwaitxintrin_buf_size},
+    { "nmmintrin.h", clang_nmmintrin_buf, &clang_nmmintrin_buf_size},
+    { "omp.h", clang_omp_buf, &clang_omp_buf_size},
+    { "opencl-c.h", clang_opencl_c_buf, &clang_opencl_c_buf_size},
+    { "pkuintrin.h", clang_pkuintrin_buf, &clang_pkuintrin_buf_size},
+    { "pmmintrin.h", clang_pmmintrin_buf, &clang_pmmintrin_buf_size},
+    { "popcntintrin.h", clang_popcntintrin_buf, &clang_popcntintrin_buf_size},
+    { "prfchwintrin.h", clang_prfchwintrin_buf, &clang_prfchwintrin_buf_size},
+    { "rdseedintrin.h", clang_rdseedintrin_buf, &clang_rdseedintrin_buf_size},
+    { "rtmintrin.h", clang_rtmintrin_buf, &clang_rtmintrin_buf_size},
+    { "s390intrin.h", clang_s390intrin_buf, &clang_s390intrin_buf_size},
+    { "shaintrin.h", clang_shaintrin_buf, &clang_shaintrin_buf_size},
+    { "smmintrin.h", clang_smmintrin_buf, &clang_smmintrin_buf_size},
+    { "stdalign.h", clang_stdalign_buf, &clang_stdalign_buf_size},
+    { "stdarg.h", clang_stdarg_buf, &clang_stdarg_buf_size},
+    { "stdatomic.h", clang_stdatomic_buf, &clang_stdatomic_buf_size},
+    { "stdbool.h", clang_stdbool_buf, &clang_stdbool_buf_size},
+    { "stddef.h", clang_stddef_buf, &clang_stddef_buf_size},
+    { "stdint.h", clang_stdint_buf, &clang_stdint_buf_size},
+    { "stdnoreturn.h", clang_stdnoreturn_buf, &clang_stdnoreturn_buf_size},
+    { "tbmintrin.h", clang_tbmintrin_buf, &clang_tbmintrin_buf_size},
+    { "tgmath.h", clang_tgmath_buf, &clang_tgmath_buf_size},
+    { "tmmintrin.h", clang_tmmintrin_buf, &clang_tmmintrin_buf_size},
+    { "unwind.h", clang_unwind_buf, &clang_unwind_buf_size},
+    { "vadefs.h", clang_vadefs_buf, &clang_vadefs_buf_size},
+    { "varargs.h", clang_varargs_buf, &clang_varargs_buf_size},
+    { "wmmintrin.h", clang_wmmintrin_buf, &clang_wmmintrin_buf_size},
+    { "x86intrin.h", clang_x86intrin_buf, &clang_x86intrin_buf_size},
+    { "xmmintrin.h", clang_xmmintrin_buf, &clang_xmmintrin_buf_size},
+    { "xopintrin.h", clang_xopintrin_buf, &clang_xopintrin_buf_size},
+    { "xsavecintrin.h", clang_xsavecintrin_buf, &clang_xsavecintrin_buf_size},
+    { "xsaveintrin.h", clang_xsaveintrin_buf, &clang_xsaveintrin_buf_size},
+    { "xsaveoptintrin.h", clang_xsaveoptintrin_buf, &clang_xsaveoptintrin_buf_size},
+    { "xsavesintrin.h", clang_xsavesintrin_buf, &clang_xsavesintrin_buf_size},
+    { "xtestintrin.h", clang_xtestintrin_buf, &clang_xtestintrin_buf_size},
+
+    // Sanitizer headers, do we really need them?
+    { "allocator_interface.h", clang_allocator_interface_buf, &clang_allocator_interface_buf_size},
+    { "asan_interface.h", clang_asan_interface_buf, &clang_asan_interface_buf_size},
+    { "common_interface_defs.h", clang_common_interface_defs_buf, &clang_common_interface_defs_buf_size},
+    { "coverage_interface.h", clang_coverage_interface_buf, &clang_coverage_interface_buf_size},
+    { "dfsan_interface.h", clang_dfsan_interface_buf, &clang_dfsan_interface_buf_size},
+    { "esan_interface.h", clang_esan_interface_buf, &clang_esan_interface_buf_size},
+    { "linux_syscall_hooks.h", clang_linux_syscall_hooks_buf, &clang_linux_syscall_hooks_buf_size},
+    { "lsan_interface.h", clang_lsan_interface_buf, &clang_lsan_interface_buf_size},
+    { "msan_interface.h", clang_msan_interface_buf, &clang_msan_interface_buf_size},
+    { "tsan_interface_atomic.h", clang_tsan_interface_atomic_buf, &clang_tsan_interface_atomic_buf_size},
+
+    { NULL, NULL, NULL}
+  };
+}
+
 void clang_c_languaget::add_clang_headers()
 {
-  clang_headers_name.push_back("stdalign.h");
-  clang_headers_content.push_back(
-  "/*===---- stdalign.h - Standard header for alignment ------------------------===\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  " *===-----------------------------------------------------------------------===\n"
-  " */\n"
-  "\n"
-  "#ifndef __STDALIGN_H\n"
-  "#define __STDALIGN_H\n"
-  "\n"
-  "#ifndef __cplusplus\n"
-  "#define alignas _Alignas\n"
-  "#define alignof _Alignof\n"
-  "#endif\n"
-  "\n"
-  "#define __alignas_is_defined 1\n"
-  "#define __alignof_is_defined 1\n"
-  "\n"
-  "#endif /* __STDALIGN_H */\n"
-  );
-
-  clang_headers_name.push_back("__stddef_max_align_t.h");
-  clang_headers_content.push_back(
-  "/*===---- __stddef_max_align_t.h - Definition of max_align_t for modules ---===\n"
-  " *\n"
-  " * Copyright (c) 2014 Chandler Carruth\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  " *===-----------------------------------------------------------------------===\n"
-  " */\n"
-  "\n"
-  "#ifndef __CLANG_MAX_ALIGN_T_DEFINED\n"
-  "#define __CLANG_MAX_ALIGN_T_DEFINED\n"
-  "\n"
-  "#if defined(_MSC_VER)\n"
-  "typedef double max_align_t;\n"
-  "#elif defined(__APPLE__)\n"
-  "typedef long double max_align_t;\n"
-  "#else\n"
-  "// Define 'max_align_t' to match the GCC definition.\n"
-  "typedef struct {\n"
-  "  long long __clang_max_align_nonce1\n"
-  "      __attribute__((__aligned__(__alignof__(long long))));\n"
-  "  long double __clang_max_align_nonce2\n"
-  "      __attribute__((__aligned__(__alignof__(long double))));\n"
-  "} max_align_t;\n"
-  "#endif\n"
-  "\n"
-  "#endif\n"
-  );
-
-  clang_headers_name.push_back("stdint.h");
-  clang_headers_content.push_back(
-  "/*===---- stdint.h - Standard header for sized integer types --------------===*\\n"
-  " *\n"
-  " * Copyright (c) 2009 Chris Lattner\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  "\\*===----------------------------------------------------------------------===*/\n"
-  "\n"
-  "#ifndef __CLANG_STDINT_H\n"
-  "#define __CLANG_STDINT_H\n"
-  "\n"
-  "/* If we're hosted, fall back to the system's stdint.h, which might have\n"
-  " * additional definitions.\n"
-  " */\n"
-  "#if __STDC_HOSTED__ && __has_include_next(<stdint.h>)\n"
-  "\n"
-  "// C99 7.18.3 Limits of other integer types\n"
-  "//\n"
-  "//  Footnote 219, 220: C++ implementations should define these macros only when\n"
-  "//  __STDC_LIMIT_MACROS is defined before <stdint.h> is included.\n"
-  "//\n"
-  "//  Footnote 222: C++ implementations should define these macros only when\n"
-  "//  __STDC_CONSTANT_MACROS is defined before <stdint.h> is included.\n"
-  "//\n"
-  "// C++11 [cstdint.syn]p2:\n"
-  "//\n"
-  "//  The macros defined by <cstdint> are provided unconditionally. In particular,\n"
-  "//  the symbols __STDC_LIMIT_MACROS and __STDC_CONSTANT_MACROS (mentioned in\n"
-  "//  footnotes 219, 220, and 222 in the C standard) play no role in C++.\n"
-  "//\n"
-  "// C11 removed the problematic footnotes.\n"
-  "//\n"
-  "// Work around this inconsistency by always defining those macros in C++ mode,\n"
-  "// so that a C library implementation which follows the C99 standard can be\n"
-  "// used in C++.\n"
-  "# ifdef __cplusplus\n"
-  "#  if !defined(__STDC_LIMIT_MACROS)\n"
-  "#   define __STDC_LIMIT_MACROS\n"
-  "#   define __STDC_LIMIT_MACROS_DEFINED_BY_CLANG\n"
-  "#  endif\n"
-  "#  if !defined(__STDC_CONSTANT_MACROS)\n"
-  "#   define __STDC_CONSTANT_MACROS\n"
-  "#   define __STDC_CONSTANT_MACROS_DEFINED_BY_CLANG\n"
-  "#  endif\n"
-  "# endif\n"
-  "\n"
-  "# include_next <stdint.h>\n"
-  "\n"
-  "# ifdef __STDC_LIMIT_MACROS_DEFINED_BY_CLANG\n"
-  "#  undef __STDC_LIMIT_MACROS\n"
-  "#  undef __STDC_LIMIT_MACROS_DEFINED_BY_CLANG\n"
-  "# endif\n"
-  "# ifdef __STDC_CONSTANT_MACROS_DEFINED_BY_CLANG\n"
-  "#  undef __STDC_CONSTANT_MACROS\n"
-  "#  undef __STDC_CONSTANT_MACROS_DEFINED_BY_CLANG\n"
-  "# endif\n"
-  "\n"
-  "#else\n"
-  "\n"
-  "/* C99 7.18.1.1 Exact-width integer types.\n"
-  " * C99 7.18.1.2 Minimum-width integer types.\n"
-  " * C99 7.18.1.3 Fastest minimum-width integer types.\n"
-  " *\n"
-  " * The standard requires that exact-width type be defined for 8-, 16-, 32-, and\n"
-  " * 64-bit types if they are implemented. Other exact width types are optional.\n"
-  " * This implementation defines an exact-width types for every integer width\n"
-  " * that is represented in the standard integer types.\n"
-  " *\n"
-  " * The standard also requires minimum-width types be defined for 8-, 16-, 32-,\n"
-  " * and 64-bit widths regardless of whether there are corresponding exact-width\n"
-  " * types.\n"
-  " *\n"
-  " * To accommodate targets that are missing types that are exactly 8, 16, 32, or\n"
-  " * 64 bits wide, this implementation takes an approach of cascading\n"
-  " * redefintions, redefining __int_leastN_t to successively smaller exact-width\n"
-  " * types. It is therefore important that the types are defined in order of\n"
-  " * descending widths.\n"
-  " *\n"
-  " * We currently assume that the minimum-width types and the fastest\n"
-  " * minimum-width types are the same. This is allowed by the standard, but is\n"
-  " * suboptimal.\n"
-  " *\n"
-  " * In violation of the standard, some targets do not implement a type that is\n"
-  " * wide enough to represent all of the required widths (8-, 16-, 32-, 64-bit).\n"
-  " * To accommodate these targets, a required minimum-width type is only\n"
-  " * defined if there exists an exact-width type of equal or greater width.\n"
-  " */\n"
-  "\n"
-  "#ifdef __INT64_TYPE__\n"
-  "# ifndef __int8_t_defined /* glibc sys/types.h also defines int64_t*/\n"
-  "typedef __INT64_TYPE__ int64_t;\n"
-  "# endif /* __int8_t_defined */\n"
-  "typedef __UINT64_TYPE__ uint64_t;\n"
-  "# define __int_least64_t int64_t\n"
-  "# define __uint_least64_t uint64_t\n"
-  "# define __int_least32_t int64_t\n"
-  "# define __uint_least32_t uint64_t\n"
-  "# define __int_least16_t int64_t\n"
-  "# define __uint_least16_t uint64_t\n"
-  "# define __int_least8_t int64_t\n"
-  "# define __uint_least8_t uint64_t\n"
-  "#endif /* __INT64_TYPE__ */\n"
-  "\n"
-  "#ifdef __int_least64_t\n"
-  "typedef __int_least64_t int_least64_t;\n"
-  "typedef __uint_least64_t uint_least64_t;\n"
-  "typedef __int_least64_t int_fast64_t;\n"
-  "typedef __uint_least64_t uint_fast64_t;\n"
-  "#endif /* __int_least64_t */\n"
-  "\n"
-  "#ifdef __INT56_TYPE__\n"
-  "typedef __INT56_TYPE__ int56_t;\n"
-  "typedef __UINT56_TYPE__ uint56_t;\n"
-  "typedef int56_t int_least56_t;\n"
-  "typedef uint56_t uint_least56_t;\n"
-  "typedef int56_t int_fast56_t;\n"
-  "typedef uint56_t uint_fast56_t;\n"
-  "# define __int_least32_t int56_t\n"
-  "# define __uint_least32_t uint56_t\n"
-  "# define __int_least16_t int56_t\n"
-  "# define __uint_least16_t uint56_t\n"
-  "# define __int_least8_t int56_t\n"
-  "# define __uint_least8_t uint56_t\n"
-  "#endif /* __INT56_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT48_TYPE__\n"
-  "typedef __INT48_TYPE__ int48_t;\n"
-  "typedef __UINT48_TYPE__ uint48_t;\n"
-  "typedef int48_t int_least48_t;\n"
-  "typedef uint48_t uint_least48_t;\n"
-  "typedef int48_t int_fast48_t;\n"
-  "typedef uint48_t uint_fast48_t;\n"
-  "# define __int_least32_t int48_t\n"
-  "# define __uint_least32_t uint48_t\n"
-  "# define __int_least16_t int48_t\n"
-  "# define __uint_least16_t uint48_t\n"
-  "# define __int_least8_t int48_t\n"
-  "# define __uint_least8_t uint48_t\n"
-  "#endif /* __INT48_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT40_TYPE__\n"
-  "typedef __INT40_TYPE__ int40_t;\n"
-  "typedef __UINT40_TYPE__ uint40_t;\n"
-  "typedef int40_t int_least40_t;\n"
-  "typedef uint40_t uint_least40_t;\n"
-  "typedef int40_t int_fast40_t;\n"
-  "typedef uint40_t uint_fast40_t;\n"
-  "# define __int_least32_t int40_t\n"
-  "# define __uint_least32_t uint40_t\n"
-  "# define __int_least16_t int40_t\n"
-  "# define __uint_least16_t uint40_t\n"
-  "# define __int_least8_t int40_t\n"
-  "# define __uint_least8_t uint40_t\n"
-  "#endif /* __INT40_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT32_TYPE__\n"
-  "\n"
-  "# ifndef __int8_t_defined /* glibc sys/types.h also defines int32_t*/\n"
-  "typedef __INT32_TYPE__ int32_t;\n"
-  "# endif /* __int8_t_defined */\n"
-  "\n"
-  "# ifndef __uint32_t_defined  /* more glibc compatibility */\n"
-  "# define __uint32_t_defined\n"
-  "typedef __UINT32_TYPE__ uint32_t;\n"
-  "# endif /* __uint32_t_defined */\n"
-  "\n"
-  "# define __int_least32_t int32_t\n"
-  "# define __uint_least32_t uint32_t\n"
-  "# define __int_least16_t int32_t\n"
-  "# define __uint_least16_t uint32_t\n"
-  "# define __int_least8_t int32_t\n"
-  "# define __uint_least8_t uint32_t\n"
-  "#endif /* __INT32_TYPE__ */\n"
-  "\n"
-  "#ifdef __int_least32_t\n"
-  "typedef __int_least32_t int_least32_t;\n"
-  "typedef __uint_least32_t uint_least32_t;\n"
-  "typedef __int_least32_t int_fast32_t;\n"
-  "typedef __uint_least32_t uint_fast32_t;\n"
-  "#endif /* __int_least32_t */\n"
-  "\n"
-  "#ifdef __INT24_TYPE__\n"
-  "typedef __INT24_TYPE__ int24_t;\n"
-  "typedef __UINT24_TYPE__ uint24_t;\n"
-  "typedef int24_t int_least24_t;\n"
-  "typedef uint24_t uint_least24_t;\n"
-  "typedef int24_t int_fast24_t;\n"
-  "typedef uint24_t uint_fast24_t;\n"
-  "# define __int_least16_t int24_t\n"
-  "# define __uint_least16_t uint24_t\n"
-  "# define __int_least8_t int24_t\n"
-  "# define __uint_least8_t uint24_t\n"
-  "#endif /* __INT24_TYPE__ */\n"
-  "\n"
-  "#ifdef __INT16_TYPE__\n"
-  "#ifndef __int8_t_defined /* glibc sys/types.h also defines int16_t*/\n"
-  "typedef __INT16_TYPE__ int16_t;\n"
-  "#endif /* __int8_t_defined */\n"
-  "typedef __UINT16_TYPE__ uint16_t;\n"
-  "# define __int_least16_t int16_t\n"
-  "# define __uint_least16_t uint16_t\n"
-  "# define __int_least8_t int16_t\n"
-  "# define __uint_least8_t uint16_t\n"
-  "#endif /* __INT16_TYPE__ */\n"
-  "\n"
-  "#ifdef __int_least16_t\n"
-  "typedef __int_least16_t int_least16_t;\n"
-  "typedef __uint_least16_t uint_least16_t;\n"
-  "typedef __int_least16_t int_fast16_t;\n"
-  "typedef __uint_least16_t uint_fast16_t;\n"
-  "#endif /* __int_least16_t */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT8_TYPE__\n"
-  "#ifndef __int8_t_defined  /* glibc sys/types.h also defines int8_t*/\n"
-  "typedef __INT8_TYPE__ int8_t;\n"
-  "#endif /* __int8_t_defined */\n"
-  "typedef __UINT8_TYPE__ uint8_t;\n"
-  "# define __int_least8_t int8_t\n"
-  "# define __uint_least8_t uint8_t\n"
-  "#endif /* __INT8_TYPE__ */\n"
-  "\n"
-  "#ifdef __int_least8_t\n"
-  "typedef __int_least8_t int_least8_t;\n"
-  "typedef __uint_least8_t uint_least8_t;\n"
-  "typedef __int_least8_t int_fast8_t;\n"
-  "typedef __uint_least8_t uint_fast8_t;\n"
-  "#endif /* __int_least8_t */\n"
-  "\n"
-  "/* prevent glibc sys/types.h from defining conflicting types */\n"
-  "#ifndef __int8_t_defined\n"
-  "# define __int8_t_defined\n"
-  "#endif /* __int8_t_defined */\n"
-  "\n"
-  "/* C99 7.18.1.4 Integer types capable of holding object pointers.\n"
-  " */\n"
-  "#define __stdint_join3(a,b,c) a ## b ## c\n"
-  "\n"
-  "#define  __intn_t(n) __stdint_join3( int, n, _t)\n"
-  "#define __uintn_t(n) __stdint_join3(uint, n, _t)\n"
-  "\n"
-  "#ifndef _INTPTR_T\n"
-  "#ifndef __intptr_t_defined\n"
-  "typedef  __intn_t(__INTPTR_WIDTH__)  intptr_t;\n"
-  "#define __intptr_t_defined\n"
-  "#define _INTPTR_T\n"
-  "#endif\n"
-  "#endif\n"
-  "\n"
-  "#ifndef _UINTPTR_T\n"
-  "typedef __uintn_t(__INTPTR_WIDTH__) uintptr_t;\n"
-  "#define _UINTPTR_T\n"
-  "#endif\n"
-  "\n"
-  "/* C99 7.18.1.5 Greatest-width integer types.\n"
-  " */\n"
-  "typedef __INTMAX_TYPE__  intmax_t;\n"
-  "typedef __UINTMAX_TYPE__ uintmax_t;\n"
-  "\n"
-  "/* C99 7.18.4 Macros for minimum-width integer constants.\n"
-  " *\n"
-  " * The standard requires that integer constant macros be defined for all the\n"
-  " * minimum-width types defined above. As 8-, 16-, 32-, and 64-bit minimum-width\n"
-  " * types are required, the corresponding integer constant macros are defined\n"
-  " * here. This implementation also defines minimum-width types for every other\n"
-  " * integer width that the target implements, so corresponding macros are\n"
-  " * defined below, too.\n"
-  " *\n"
-  " * These macros are defined using the same successive-shrinking approach as\n"
-  " * the type definitions above. It is likewise important that macros are defined\n"
-  " * in order of decending width.\n"
-  " *\n"
-  " * Note that C++ should not check __STDC_CONSTANT_MACROS here, contrary to the\n"
-  " * claims of the C standard (see C++ 18.3.1p2, [cstdint.syn]).\n"
-  " */\n"
-  "\n"
-  "#define __int_c_join(a, b) a ## b\n"
-  "#define __int_c(v, suffix) __int_c_join(v, suffix)\n"
-  "#define __uint_c(v, suffix) __int_c_join(v##U, suffix)\n"
-  "\n"
-  "\n"
-  "#ifdef __INT64_TYPE__\n"
-  "# ifdef __INT64_C_SUFFIX__\n"
-  "#  define __int64_c_suffix __INT64_C_SUFFIX__\n"
-  "#  define __int32_c_suffix __INT64_C_SUFFIX__\n"
-  "#  define __int16_c_suffix __INT64_C_SUFFIX__\n"
-  "#  define  __int8_c_suffix __INT64_C_SUFFIX__\n"
-  "# else\n"
-  "#  undef __int64_c_suffix\n"
-  "#  undef __int32_c_suffix\n"
-  "#  undef __int16_c_suffix\n"
-  "#  undef  __int8_c_suffix\n"
-  "# endif /* __INT64_C_SUFFIX__ */\n"
-  "#endif /* __INT64_TYPE__ */\n"
-  "\n"
-  "#ifdef __int_least64_t\n"
-  "# ifdef __int64_c_suffix\n"
-  "#  define INT64_C(v) __int_c(v, __int64_c_suffix)\n"
-  "#  define UINT64_C(v) __uint_c(v, __int64_c_suffix)\n"
-  "# else\n"
-  "#  define INT64_C(v) v\n"
-  "#  define UINT64_C(v) v ## U\n"
-  "# endif /* __int64_c_suffix */\n"
-  "#endif /* __int_least64_t */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT56_TYPE__\n"
-  "# ifdef __INT56_C_SUFFIX__\n"
-  "#  define INT56_C(v) __int_c(v, __INT56_C_SUFFIX__)\n"
-  "#  define UINT56_C(v) __uint_c(v, __INT56_C_SUFFIX__)\n"
-  "#  define __int32_c_suffix __INT56_C_SUFFIX__\n"
-  "#  define __int16_c_suffix __INT56_C_SUFFIX__\n"
-  "#  define __int8_c_suffix  __INT56_C_SUFFIX__\n"
-  "# else\n"
-  "#  define INT56_C(v) v\n"
-  "#  define UINT56_C(v) v ## U\n"
-  "#  undef __int32_c_suffix\n"
-  "#  undef __int16_c_suffix\n"
-  "#  undef  __int8_c_suffix\n"
-  "# endif /* __INT56_C_SUFFIX__ */\n"
-  "#endif /* __INT56_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT48_TYPE__\n"
-  "# ifdef __INT48_C_SUFFIX__\n"
-  "#  define INT48_C(v) __int_c(v, __INT48_C_SUFFIX__)\n"
-  "#  define UINT48_C(v) __uint_c(v, __INT48_C_SUFFIX__)\n"
-  "#  define __int32_c_suffix __INT48_C_SUFFIX__\n"
-  "#  define __int16_c_suffix __INT48_C_SUFFIX__\n"
-  "#  define __int8_c_suffix  __INT48_C_SUFFIX__\n"
-  "# else\n"
-  "#  define INT48_C(v) v\n"
-  "#  define UINT48_C(v) v ## U\n"
-  "#  undef __int32_c_suffix\n"
-  "#  undef __int16_c_suffix\n"
-  "#  undef  __int8_c_suffix\n"
-  "# endif /* __INT48_C_SUFFIX__ */\n"
-  "#endif /* __INT48_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT40_TYPE__\n"
-  "# ifdef __INT40_C_SUFFIX__\n"
-  "#  define INT40_C(v) __int_c(v, __INT40_C_SUFFIX__)\n"
-  "#  define UINT40_C(v) __uint_c(v, __INT40_C_SUFFIX__)\n"
-  "#  define __int32_c_suffix __INT40_C_SUFFIX__\n"
-  "#  define __int16_c_suffix __INT40_C_SUFFIX__\n"
-  "#  define __int8_c_suffix  __INT40_C_SUFFIX__\n"
-  "# else\n"
-  "#  define INT40_C(v) v\n"
-  "#  define UINT40_C(v) v ## U\n"
-  "#  undef __int32_c_suffix\n"
-  "#  undef __int16_c_suffix\n"
-  "#  undef  __int8_c_suffix\n"
-  "# endif /* __INT40_C_SUFFIX__ */\n"
-  "#endif /* __INT40_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT32_TYPE__\n"
-  "# ifdef __INT32_C_SUFFIX__\n"
-  "#  define __int32_c_suffix __INT32_C_SUFFIX__\n"
-  "#  define __int16_c_suffix __INT32_C_SUFFIX__\n"
-  "#  define __int8_c_suffix  __INT32_C_SUFFIX__\n"
-  "#else\n"
-  "#  undef __int32_c_suffix\n"
-  "#  undef __int16_c_suffix\n"
-  "#  undef  __int8_c_suffix\n"
-  "# endif /* __INT32_C_SUFFIX__ */\n"
-  "#endif /* __INT32_TYPE__ */\n"
-  "\n"
-  "#ifdef __int_least32_t\n"
-  "# ifdef __int32_c_suffix\n"
-  "#  define INT32_C(v) __int_c(v, __int32_c_suffix)\n"
-  "#  define UINT32_C(v) __uint_c(v, __int32_c_suffix)\n"
-  "# else\n"
-  "#  define INT32_C(v) v\n"
-  "#  define UINT32_C(v) v ## U\n"
-  "# endif /* __int32_c_suffix */\n"
-  "#endif /* __int_least32_t */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT24_TYPE__\n"
-  "# ifdef __INT24_C_SUFFIX__\n"
-  "#  define INT24_C(v) __int_c(v, __INT24_C_SUFFIX__)\n"
-  "#  define UINT24_C(v) __uint_c(v, __INT24_C_SUFFIX__)\n"
-  "#  define __int16_c_suffix __INT24_C_SUFFIX__\n"
-  "#  define __int8_c_suffix  __INT24_C_SUFFIX__\n"
-  "# else\n"
-  "#  define INT24_C(v) v\n"
-  "#  define UINT24_C(v) v ## U\n"
-  "#  undef __int16_c_suffix\n"
-  "#  undef  __int8_c_suffix\n"
-  "# endif /* __INT24_C_SUFFIX__ */\n"
-  "#endif /* __INT24_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT16_TYPE__\n"
-  "# ifdef __INT16_C_SUFFIX__\n"
-  "#  define __int16_c_suffix __INT16_C_SUFFIX__\n"
-  "#  define __int8_c_suffix  __INT16_C_SUFFIX__\n"
-  "#else\n"
-  "#  undef __int16_c_suffix\n"
-  "#  undef  __int8_c_suffix\n"
-  "# endif /* __INT16_C_SUFFIX__ */\n"
-  "#endif /* __INT16_TYPE__ */\n"
-  "\n"
-  "#ifdef __int_least16_t\n"
-  "# ifdef __int16_c_suffix\n"
-  "#  define INT16_C(v) __int_c(v, __int16_c_suffix)\n"
-  "#  define UINT16_C(v) __uint_c(v, __int16_c_suffix)\n"
-  "# else\n"
-  "#  define INT16_C(v) v\n"
-  "#  define UINT16_C(v) v ## U\n"
-  "# endif /* __int16_c_suffix */\n"
-  "#endif /* __int_least16_t */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT8_TYPE__\n"
-  "# ifdef __INT8_C_SUFFIX__\n"
-  "#  define __int8_c_suffix __INT8_C_SUFFIX__\n"
-  "#else\n"
-  "#  undef  __int8_c_suffix\n"
-  "# endif /* __INT8_C_SUFFIX__ */\n"
-  "#endif /* __INT8_TYPE__ */\n"
-  "\n"
-  "#ifdef __int_least8_t\n"
-  "# ifdef __int8_c_suffix\n"
-  "#  define INT8_C(v) __int_c(v, __int8_c_suffix)\n"
-  "#  define UINT8_C(v) __uint_c(v, __int8_c_suffix)\n"
-  "# else\n"
-  "#  define INT8_C(v) v\n"
-  "#  define UINT8_C(v) v ## U\n"
-  "# endif /* __int8_c_suffix */\n"
-  "#endif /* __int_least8_t */\n"
-  "\n"
-  "\n"
-  "/* C99 7.18.2.1 Limits of exact-width integer types.\n"
-  " * C99 7.18.2.2 Limits of minimum-width integer types.\n"
-  " * C99 7.18.2.3 Limits of fastest minimum-width integer types.\n"
-  " *\n"
-  " * The presence of limit macros are completely optional in C99.  This\n"
-  " * implementation defines limits for all of the types (exact- and\n"
-  " * minimum-width) that it defines above, using the limits of the minimum-width\n"
-  " * type for any types that do not have exact-width representations.\n"
-  " *\n"
-  " * As in the type definitions, this section takes an approach of\n"
-  " * successive-shrinking to determine which limits to use for the standard (8,\n"
-  " * 16, 32, 64) bit widths when they don't have exact representations. It is\n"
-  " * therefore important that the defintions be kept in order of decending\n"
-  " * widths.\n"
-  " *\n"
-  " * Note that C++ should not check __STDC_LIMIT_MACROS here, contrary to the\n"
-  " * claims of the C standard (see C++ 18.3.1p2, [cstdint.syn]).\n"
-  " */\n"
-  "\n"
-  "#ifdef __INT64_TYPE__\n"
-  "# define INT64_MAX           INT64_C( 9223372036854775807)\n"
-  "# define INT64_MIN         (-INT64_C( 9223372036854775807)-1)\n"
-  "# define UINT64_MAX         UINT64_C(18446744073709551615)\n"
-  "# define __INT_LEAST64_MIN   INT64_MIN\n"
-  "# define __INT_LEAST64_MAX   INT64_MAX\n"
-  "# define __UINT_LEAST64_MAX UINT64_MAX\n"
-  "# define __INT_LEAST32_MIN   INT64_MIN\n"
-  "# define __INT_LEAST32_MAX   INT64_MAX\n"
-  "# define __UINT_LEAST32_MAX UINT64_MAX\n"
-  "# define __INT_LEAST16_MIN   INT64_MIN\n"
-  "# define __INT_LEAST16_MAX   INT64_MAX\n"
-  "# define __UINT_LEAST16_MAX UINT64_MAX\n"
-  "# define __INT_LEAST8_MIN    INT64_MIN\n"
-  "# define __INT_LEAST8_MAX    INT64_MAX\n"
-  "# define __UINT_LEAST8_MAX  UINT64_MAX\n"
-  "#endif /* __INT64_TYPE__ */\n"
-  "\n"
-  "#ifdef __INT_LEAST64_MIN\n"
-  "# define INT_LEAST64_MIN   __INT_LEAST64_MIN\n"
-  "# define INT_LEAST64_MAX   __INT_LEAST64_MAX\n"
-  "# define UINT_LEAST64_MAX __UINT_LEAST64_MAX\n"
-  "# define INT_FAST64_MIN    __INT_LEAST64_MIN\n"
-  "# define INT_FAST64_MAX    __INT_LEAST64_MAX\n"
-  "# define UINT_FAST64_MAX  __UINT_LEAST64_MAX\n"
-  "#endif /* __INT_LEAST64_MIN */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT56_TYPE__\n"
-  "# define INT56_MAX           INT56_C(36028797018963967)\n"
-  "# define INT56_MIN         (-INT56_C(36028797018963967)-1)\n"
-  "# define UINT56_MAX         UINT56_C(72057594037927935)\n"
-  "# define INT_LEAST56_MIN     INT56_MIN\n"
-  "# define INT_LEAST56_MAX     INT56_MAX\n"
-  "# define UINT_LEAST56_MAX   UINT56_MAX\n"
-  "# define INT_FAST56_MIN      INT56_MIN\n"
-  "# define INT_FAST56_MAX      INT56_MAX\n"
-  "# define UINT_FAST56_MAX    UINT56_MAX\n"
-  "# define __INT_LEAST32_MIN   INT56_MIN\n"
-  "# define __INT_LEAST32_MAX   INT56_MAX\n"
-  "# define __UINT_LEAST32_MAX UINT56_MAX\n"
-  "# define __INT_LEAST16_MIN   INT56_MIN\n"
-  "# define __INT_LEAST16_MAX   INT56_MAX\n"
-  "# define __UINT_LEAST16_MAX UINT56_MAX\n"
-  "# define __INT_LEAST8_MIN    INT56_MIN\n"
-  "# define __INT_LEAST8_MAX    INT56_MAX\n"
-  "# define __UINT_LEAST8_MAX  UINT56_MAX\n"
-  "#endif /* __INT56_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT48_TYPE__\n"
-  "# define INT48_MAX           INT48_C(140737488355327)\n"
-  "# define INT48_MIN         (-INT48_C(140737488355327)-1)\n"
-  "# define UINT48_MAX         UINT48_C(281474976710655)\n"
-  "# define INT_LEAST48_MIN     INT48_MIN\n"
-  "# define INT_LEAST48_MAX     INT48_MAX\n"
-  "# define UINT_LEAST48_MAX   UINT48_MAX\n"
-  "# define INT_FAST48_MIN      INT48_MIN\n"
-  "# define INT_FAST48_MAX      INT48_MAX\n"
-  "# define UINT_FAST48_MAX    UINT48_MAX\n"
-  "# define __INT_LEAST32_MIN   INT48_MIN\n"
-  "# define __INT_LEAST32_MAX   INT48_MAX\n"
-  "# define __UINT_LEAST32_MAX UINT48_MAX\n"
-  "# define __INT_LEAST16_MIN   INT48_MIN\n"
-  "# define __INT_LEAST16_MAX   INT48_MAX\n"
-  "# define __UINT_LEAST16_MAX UINT48_MAX\n"
-  "# define __INT_LEAST8_MIN    INT48_MIN\n"
-  "# define __INT_LEAST8_MAX    INT48_MAX\n"
-  "# define __UINT_LEAST8_MAX  UINT48_MAX\n"
-  "#endif /* __INT48_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT40_TYPE__\n"
-  "# define INT40_MAX           INT40_C(549755813887)\n"
-  "# define INT40_MIN         (-INT40_C(549755813887)-1)\n"
-  "# define UINT40_MAX         UINT40_C(1099511627775)\n"
-  "# define INT_LEAST40_MIN     INT40_MIN\n"
-  "# define INT_LEAST40_MAX     INT40_MAX\n"
-  "# define UINT_LEAST40_MAX   UINT40_MAX\n"
-  "# define INT_FAST40_MIN      INT40_MIN\n"
-  "# define INT_FAST40_MAX      INT40_MAX\n"
-  "# define UINT_FAST40_MAX    UINT40_MAX\n"
-  "# define __INT_LEAST32_MIN   INT40_MIN\n"
-  "# define __INT_LEAST32_MAX   INT40_MAX\n"
-  "# define __UINT_LEAST32_MAX UINT40_MAX\n"
-  "# define __INT_LEAST16_MIN   INT40_MIN\n"
-  "# define __INT_LEAST16_MAX   INT40_MAX\n"
-  "# define __UINT_LEAST16_MAX UINT40_MAX\n"
-  "# define __INT_LEAST8_MIN    INT40_MIN\n"
-  "# define __INT_LEAST8_MAX    INT40_MAX\n"
-  "# define __UINT_LEAST8_MAX  UINT40_MAX\n"
-  "#endif /* __INT40_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT32_TYPE__\n"
-  "# define INT32_MAX           INT32_C(2147483647)\n"
-  "# define INT32_MIN         (-INT32_C(2147483647)-1)\n"
-  "# define UINT32_MAX         UINT32_C(4294967295)\n"
-  "# define __INT_LEAST32_MIN   INT32_MIN\n"
-  "# define __INT_LEAST32_MAX   INT32_MAX\n"
-  "# define __UINT_LEAST32_MAX UINT32_MAX\n"
-  "# define __INT_LEAST16_MIN   INT32_MIN\n"
-  "# define __INT_LEAST16_MAX   INT32_MAX\n"
-  "# define __UINT_LEAST16_MAX UINT32_MAX\n"
-  "# define __INT_LEAST8_MIN    INT32_MIN\n"
-  "# define __INT_LEAST8_MAX    INT32_MAX\n"
-  "# define __UINT_LEAST8_MAX  UINT32_MAX\n"
-  "#endif /* __INT32_TYPE__ */\n"
-  "\n"
-  "#ifdef __INT_LEAST32_MIN\n"
-  "# define INT_LEAST32_MIN   __INT_LEAST32_MIN\n"
-  "# define INT_LEAST32_MAX   __INT_LEAST32_MAX\n"
-  "# define UINT_LEAST32_MAX __UINT_LEAST32_MAX\n"
-  "# define INT_FAST32_MIN    __INT_LEAST32_MIN\n"
-  "# define INT_FAST32_MAX    __INT_LEAST32_MAX\n"
-  "# define UINT_FAST32_MAX  __UINT_LEAST32_MAX\n"
-  "#endif /* __INT_LEAST32_MIN */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT24_TYPE__\n"
-  "# define INT24_MAX           INT24_C(8388607)\n"
-  "# define INT24_MIN         (-INT24_C(8388607)-1)\n"
-  "# define UINT24_MAX         UINT24_C(16777215)\n"
-  "# define INT_LEAST24_MIN     INT24_MIN\n"
-  "# define INT_LEAST24_MAX     INT24_MAX\n"
-  "# define UINT_LEAST24_MAX   UINT24_MAX\n"
-  "# define INT_FAST24_MIN      INT24_MIN\n"
-  "# define INT_FAST24_MAX      INT24_MAX\n"
-  "# define UINT_FAST24_MAX    UINT24_MAX\n"
-  "# define __INT_LEAST16_MIN   INT24_MIN\n"
-  "# define __INT_LEAST16_MAX   INT24_MAX\n"
-  "# define __UINT_LEAST16_MAX UINT24_MAX\n"
-  "# define __INT_LEAST8_MIN    INT24_MIN\n"
-  "# define __INT_LEAST8_MAX    INT24_MAX\n"
-  "# define __UINT_LEAST8_MAX  UINT24_MAX\n"
-  "#endif /* __INT24_TYPE__ */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT16_TYPE__\n"
-  "#define INT16_MAX            INT16_C(32767)\n"
-  "#define INT16_MIN          (-INT16_C(32767)-1)\n"
-  "#define UINT16_MAX          UINT16_C(65535)\n"
-  "# define __INT_LEAST16_MIN   INT16_MIN\n"
-  "# define __INT_LEAST16_MAX   INT16_MAX\n"
-  "# define __UINT_LEAST16_MAX UINT16_MAX\n"
-  "# define __INT_LEAST8_MIN    INT16_MIN\n"
-  "# define __INT_LEAST8_MAX    INT16_MAX\n"
-  "# define __UINT_LEAST8_MAX  UINT16_MAX\n"
-  "#endif /* __INT16_TYPE__ */\n"
-  "\n"
-  "#ifdef __INT_LEAST16_MIN\n"
-  "# define INT_LEAST16_MIN   __INT_LEAST16_MIN\n"
-  "# define INT_LEAST16_MAX   __INT_LEAST16_MAX\n"
-  "# define UINT_LEAST16_MAX __UINT_LEAST16_MAX\n"
-  "# define INT_FAST16_MIN    __INT_LEAST16_MIN\n"
-  "# define INT_FAST16_MAX    __INT_LEAST16_MAX\n"
-  "# define UINT_FAST16_MAX  __UINT_LEAST16_MAX\n"
-  "#endif /* __INT_LEAST16_MIN */\n"
-  "\n"
-  "\n"
-  "#ifdef __INT8_TYPE__\n"
-  "# define INT8_MAX            INT8_C(127)\n"
-  "# define INT8_MIN          (-INT8_C(127)-1)\n"
-  "# define UINT8_MAX          UINT8_C(255)\n"
-  "# define __INT_LEAST8_MIN    INT8_MIN\n"
-  "# define __INT_LEAST8_MAX    INT8_MAX\n"
-  "# define __UINT_LEAST8_MAX  UINT8_MAX\n"
-  "#endif /* __INT8_TYPE__ */\n"
-  "\n"
-  "#ifdef __INT_LEAST8_MIN\n"
-  "# define INT_LEAST8_MIN   __INT_LEAST8_MIN\n"
-  "# define INT_LEAST8_MAX   __INT_LEAST8_MAX\n"
-  "# define UINT_LEAST8_MAX __UINT_LEAST8_MAX\n"
-  "# define INT_FAST8_MIN    __INT_LEAST8_MIN\n"
-  "# define INT_FAST8_MAX    __INT_LEAST8_MAX\n"
-  "# define UINT_FAST8_MAX  __UINT_LEAST8_MAX\n"
-  "#endif /* __INT_LEAST8_MIN */\n"
-  "\n"
-  "/* Some utility macros */\n"
-  "#define  __INTN_MIN(n)  __stdint_join3( INT, n, _MIN)\n"
-  "#define  __INTN_MAX(n)  __stdint_join3( INT, n, _MAX)\n"
-  "#define __UINTN_MAX(n)  __stdint_join3(UINT, n, _MAX)\n"
-  "#define  __INTN_C(n, v) __stdint_join3( INT, n, _C(v))\n"
-  "#define __UINTN_C(n, v) __stdint_join3(UINT, n, _C(v))\n"
-  "\n"
-  "/* C99 7.18.2.4 Limits of integer types capable of holding object pointers. */\n"
-  "/* C99 7.18.3 Limits of other integer types. */\n"
-  "\n"
-  "#define  INTPTR_MIN  __INTN_MIN(__INTPTR_WIDTH__)\n"
-  "#define  INTPTR_MAX  __INTN_MAX(__INTPTR_WIDTH__)\n"
-  "#define UINTPTR_MAX __UINTN_MAX(__INTPTR_WIDTH__)\n"
-  "#define PTRDIFF_MIN  __INTN_MIN(__PTRDIFF_WIDTH__)\n"
-  "#define PTRDIFF_MAX  __INTN_MAX(__PTRDIFF_WIDTH__)\n"
-  "#define    SIZE_MAX __UINTN_MAX(__SIZE_WIDTH__)\n"
-  "\n"
-  "/* ISO9899:2011 7.20 (C11 Annex K): Define RSIZE_MAX if __STDC_WANT_LIB_EXT1__\n"
-  " * is enabled. */\n"
-  "#if defined(__STDC_WANT_LIB_EXT1__) && __STDC_WANT_LIB_EXT1__ >= 1\n"
-  "#define   RSIZE_MAX            (SIZE_MAX >> 1)\n"
-  "#endif\n"
-  "\n"
-  "/* C99 7.18.2.5 Limits of greatest-width integer types. */\n"
-  "#define INTMAX_MIN   __INTN_MIN(__INTMAX_WIDTH__)\n"
-  "#define INTMAX_MAX   __INTN_MAX(__INTMAX_WIDTH__)\n"
-  "#define UINTMAX_MAX __UINTN_MAX(__INTMAX_WIDTH__)\n"
-  "\n"
-  "/* C99 7.18.3 Limits of other integer types. */\n"
-  "#define SIG_ATOMIC_MIN __INTN_MIN(__SIG_ATOMIC_WIDTH__)\n"
-  "#define SIG_ATOMIC_MAX __INTN_MAX(__SIG_ATOMIC_WIDTH__)\n"
-  "#ifdef __WINT_UNSIGNED__\n"
-  "# define WINT_MIN       __UINTN_C(__WINT_WIDTH__, 0)\n"
-  "# define WINT_MAX       __UINTN_MAX(__WINT_WIDTH__)\n"
-  "#else\n"
-  "# define WINT_MIN       __INTN_MIN(__WINT_WIDTH__)\n"
-  "# define WINT_MAX       __INTN_MAX(__WINT_WIDTH__)\n"
-  "#endif\n"
-  "\n"
-  "#ifndef WCHAR_MAX\n"
-  "# define WCHAR_MAX __WCHAR_MAX__\n"
-  "#endif\n"
-  "#ifndef WCHAR_MIN\n"
-  "# if __WCHAR_MAX__ == __INTN_MAX(__WCHAR_WIDTH__)\n"
-  "#  define WCHAR_MIN __INTN_MIN(__WCHAR_WIDTH__)\n"
-  "# else\n"
-  "#  define WCHAR_MIN __UINTN_C(__WCHAR_WIDTH__, 0)\n"
-  "# endif\n"
-  "#endif\n"
-  "\n"
-  "/* 7.18.4.2 Macros for greatest-width integer constants. */\n"
-  "#define INTMAX_C(v)   __INTN_C(__INTMAX_WIDTH__, v)\n"
-  "#define UINTMAX_C(v) __UINTN_C(__INTMAX_WIDTH__, v)\n"
-  "\n"
-  "#endif /* __STDC_HOSTED__ */\n"
-  "#endif /* __CLANG_STDINT_H */\n"
-  );
-
-  clang_headers_name.push_back("stdarg.h");
-  clang_headers_content.push_back(
-  "/*===---- stdarg.h - Variable argument handling ----------------------------===\n"
-  " *\n"
-  " * Copyright (c) 2008 Eli Friedman\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  " *===-----------------------------------------------------------------------===\n"
-  " */\n"
-  "\n"
-  "#ifndef __STDARG_H\n"
-  "#define __STDARG_H\n"
-  "\n"
-  "#ifndef _VA_LIST\n"
-  "typedef __builtin_va_list va_list;\n"
-  "#define _VA_LIST\n"
-  "#endif\n"
-  "#define va_start(ap, param) __builtin_va_start(ap, param)\n"
-  "#define va_end(ap)          __builtin_va_end(ap)\n"
-  "#define va_arg(ap, type)    __builtin_va_arg(ap, type)\n"
-  "\n"
-  "/* GCC always defines __va_copy, but does not define va_copy unless in c99 mode\n"
-  " * or -ansi is not specified, since it was not part of C90.\n"
-  " */\n"
-  "#define __va_copy(d,s) __builtin_va_copy(d,s)\n"
-  "\n"
-  "#if __STDC_VERSION__ >= 199901L || __cplusplus >= 201103L || !defined(__STRICT_ANSI__)\n"
-  "#define va_copy(dest, src)  __builtin_va_copy(dest, src)\n"
-  "#endif\n"
-  "\n"
-  "/* Hack required to make standard headers work, at least on Ubuntu */\n"
-  "#ifndef __GNUC_VA_LIST\n"
-  "#define __GNUC_VA_LIST 1\n"
-  "#endif\n"
-  "typedef __builtin_va_list __gnuc_va_list;\n"
-  "\n"
-  "#endif /* __STDARG_H */\n"
-  );
-
-  clang_headers_name.push_back("inttypes.h");
-  clang_headers_content.push_back(
-  "/*===---- inttypes.h - Standard header for integer printf macros ----------===*\\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  "\\*===----------------------------------------------------------------------===*/\n"
-  "\n"
-  "#ifndef __CLANG_INTTYPES_H\n"
-  "#define __CLANG_INTTYPES_H\n"
-  "\n"
-  "#include_next <inttypes.h>\n"
-  "\n"
-  "#if defined(_MSC_VER) && _MSC_VER < 1900\n"
-  "/* MSVC headers define int32_t as int, but PRIx32 as \"lx\" instead of \"x\".\n"
-  " * This triggers format warnings, so fix it up here. */\n"
-  "#undef PRId32\n"
-  "#undef PRIdLEAST32\n"
-  "#undef PRIdFAST32\n"
-  "#undef PRIi32\n"
-  "#undef PRIiLEAST32\n"
-  "#undef PRIiFAST32\n"
-  "#undef PRIo32\n"
-  "#undef PRIoLEAST32\n"
-  "#undef PRIoFAST32\n"
-  "#undef PRIu32\n"
-  "#undef PRIuLEAST32\n"
-  "#undef PRIuFAST32\n"
-  "#undef PRIx32\n"
-  "#undef PRIxLEAST32\n"
-  "#undef PRIxFAST32\n"
-  "#undef PRIX32\n"
-  "#undef PRIXLEAST32\n"
-  "#undef PRIXFAST32\n"
-  "\n"
-  "#undef SCNd32\n"
-  "#undef SCNdLEAST32\n"
-  "#undef SCNdFAST32\n"
-  "#undef SCNi32\n"
-  "#undef SCNiLEAST32\n"
-  "#undef SCNiFAST32\n"
-  "#undef SCNo32\n"
-  "#undef SCNoLEAST32\n"
-  "#undef SCNoFAST32\n"
-  "#undef SCNu32\n"
-  "#undef SCNuLEAST32\n"
-  "#undef SCNuFAST32\n"
-  "#undef SCNx32\n"
-  "#undef SCNxLEAST32\n"
-  "#undef SCNxFAST32\n"
-  "\n"
-  "#define PRId32 \"d\"\n"
-  "#define PRIdLEAST32 \"d\"\n"
-  "#define PRIdFAST32 \"d\"\n"
-  "#define PRIi32 \"i\"\n"
-  "#define PRIiLEAST32 \"i\"\n"
-  "#define PRIiFAST32 \"i\"\n"
-  "#define PRIo32 \"o\"\n"
-  "#define PRIoLEAST32 \"o\"\n"
-  "#define PRIoFAST32 \"o\"\n"
-  "#define PRIu32 \"u\"\n"
-  "#define PRIuLEAST32 \"u\"\n"
-  "#define PRIuFAST32 \"u\"\n"
-  "#define PRIx32 \"x\"\n"
-  "#define PRIxLEAST32 \"x\"\n"
-  "#define PRIxFAST32 \"x\"\n"
-  "#define PRIX32 \"X\"\n"
-  "#define PRIXLEAST32 \"X\"\n"
-  "#define PRIXFAST32 \"X\"\n"
-  "\n"
-  "#define SCNd32 \"d\"\n"
-  "#define SCNdLEAST32 \"d\"\n"
-  "#define SCNdFAST32 \"d\"\n"
-  "#define SCNi32 \"i\"\n"
-  "#define SCNiLEAST32 \"i\"\n"
-  "#define SCNiFAST32 \"i\"\n"
-  "#define SCNo32 \"o\"\n"
-  "#define SCNoLEAST32 \"o\"\n"
-  "#define SCNoFAST32 \"o\"\n"
-  "#define SCNu32 \"u\"\n"
-  "#define SCNuLEAST32 \"u\"\n"
-  "#define SCNuFAST32 \"u\"\n"
-  "#define SCNx32 \"x\"\n"
-  "#define SCNxLEAST32 \"x\"\n"
-  "#define SCNxFAST32 \"x\"\n"
-  "#endif\n"
-  "\n"
-  "#endif /* __CLANG_INTTYPES_H */\n"
-  );
-
-  clang_headers_name.push_back("varargs.h");
-  clang_headers_content.push_back(
-  "/*===---- varargs.h - Variable argument handling -------------------------------------===\n"
-  "*\n"
-  "* Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  "* of this software and associated documentation files (the \"Software\"), to deal\n"
-  "* in the Software without restriction, including without limitation the rights\n"
-  "* to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  "* copies of the Software, and to permit persons to whom the Software is\n"
-  "* furnished to do so, subject to the following conditions:\n"
-  "*\n"
-  "* The above copyright notice and this permission notice shall be included in\n"
-  "* all copies or substantial portions of the Software.\n"
-  "*\n"
-  "* THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  "* IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  "* FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  "* AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  "* LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  "* OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  "* THE SOFTWARE.\n"
-  "*\n"
-  "*===-----------------------------------------------------------------------===\n"
-  "*/\n"
-  "#ifndef __VARARGS_H\n"
-  "#define __VARARGS_H\n"
-  "  #error \"Please use <stdarg.h> instead of <varargs.h>\"\n"
-  "#endif\n"
-  );
-
-  clang_headers_name.push_back("stdnoreturn.h");
-  clang_headers_content.push_back(
-  "/*===---- stdnoreturn.h - Standard header for noreturn macro ---------------===\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  " *===-----------------------------------------------------------------------===\n"
-  " */\n"
-  "\n"
-  "#ifndef __STDNORETURN_H\n"
-  "#define __STDNORETURN_H\n"
-  "\n"
-  "#define noreturn _Noreturn\n"
-  "#define __noreturn_is_defined 1\n"
-  "\n"
-  "#endif /* __STDNORETURN_H */\n"
-  );
-
-  clang_headers_name.push_back("float.h");
-  clang_headers_content.push_back(
-  "/*===---- float.h - Characteristics of floating point types ----------------===\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  " *===-----------------------------------------------------------------------===\n"
-  " */\n"
-  "\n"
-  "#ifndef __FLOAT_H\n"
-  "#define __FLOAT_H\n"
-  "\n"
-  "/* If we're on MinGW, fall back to the system's float.h, which might have\n"
-  " * additional definitions provided for Windows.\n"
-  " * For more details see http://msdn.microsoft.com/en-us/library/y0ybw9fy.aspx\n"
-  " */\n"
-  "#if (defined(__MINGW32__) || defined(_MSC_VER)) && __STDC_HOSTED__ &&"
-  "    __has_include_next(<float.h>)\n"
-  "#  include_next <float.h>\n"
-  "\n"
-  "/* Undefine anything that we'll be redefining below. */\n"
-  "#  undef FLT_EVAL_METHOD\n"
-  "#  undef FLT_ROUNDS\n"
-  "#  undef FLT_RADIX\n"
-  "#  undef FLT_MANT_DIG\n"
-  "#  undef DBL_MANT_DIG\n"
-  "#  undef LDBL_MANT_DIG\n"
-  "#  undef DECIMAL_DIG\n"
-  "#  undef FLT_DIG\n"
-  "#  undef DBL_DIG\n"
-  "#  undef LDBL_DIG\n"
-  "#  undef FLT_MIN_EXP\n"
-  "#  undef DBL_MIN_EXP\n"
-  "#  undef LDBL_MIN_EXP\n"
-  "#  undef FLT_MIN_10_EXP\n"
-  "#  undef DBL_MIN_10_EXP\n"
-  "#  undef LDBL_MIN_10_EXP\n"
-  "#  undef FLT_MAX_EXP\n"
-  "#  undef DBL_MAX_EXP\n"
-  "#  undef LDBL_MAX_EXP\n"
-  "#  undef FLT_MAX_10_EXP\n"
-  "#  undef DBL_MAX_10_EXP\n"
-  "#  undef LDBL_MAX_10_EXP\n"
-  "#  undef FLT_MAX\n"
-  "#  undef DBL_MAX\n"
-  "#  undef LDBL_MAX\n"
-  "#  undef FLT_EPSILON\n"
-  "#  undef DBL_EPSILON\n"
-  "#  undef LDBL_EPSILON\n"
-  "#  undef FLT_MIN\n"
-  "#  undef DBL_MIN\n"
-  "#  undef LDBL_MIN\n"
-  "#  if __STDC_VERSION__ >= 201112L || !defined(__STRICT_ANSI__)\n"
-  "#    undef FLT_TRUE_MIN\n"
-  "#    undef DBL_TRUE_MIN\n"
-  "#    undef LDBL_TRUE_MIN\n"
-  "#  endif\n"
-  "#endif\n"
-  "\n"
-  "/* Characteristics of floating point types, C99 5.2.4.2.2 */\n"
-  "\n"
-  "#define FLT_EVAL_METHOD __FLT_EVAL_METHOD__\n"
-  "#define FLT_ROUNDS (__builtin_flt_rounds())\n"
-  "#define FLT_RADIX __FLT_RADIX__\n"
-  "\n"
-  "#define FLT_MANT_DIG __FLT_MANT_DIG__\n"
-  "#define DBL_MANT_DIG __DBL_MANT_DIG__\n"
-  "#define LDBL_MANT_DIG __LDBL_MANT_DIG__\n"
-  "\n"
-  "#define DECIMAL_DIG __DECIMAL_DIG__\n"
-  "\n"
-  "#define FLT_DIG __FLT_DIG__\n"
-  "#define DBL_DIG __DBL_DIG__\n"
-  "#define LDBL_DIG __LDBL_DIG__\n"
-  "\n"
-  "#define FLT_MIN_EXP __FLT_MIN_EXP__\n"
-  "#define DBL_MIN_EXP __DBL_MIN_EXP__\n"
-  "#define LDBL_MIN_EXP __LDBL_MIN_EXP__\n"
-  "\n"
-  "#define FLT_MIN_10_EXP __FLT_MIN_10_EXP__\n"
-  "#define DBL_MIN_10_EXP __DBL_MIN_10_EXP__\n"
-  "#define LDBL_MIN_10_EXP __LDBL_MIN_10_EXP__\n"
-  "\n"
-  "#define FLT_MAX_EXP __FLT_MAX_EXP__\n"
-  "#define DBL_MAX_EXP __DBL_MAX_EXP__\n"
-  "#define LDBL_MAX_EXP __LDBL_MAX_EXP__\n"
-  "\n"
-  "#define FLT_MAX_10_EXP __FLT_MAX_10_EXP__\n"
-  "#define DBL_MAX_10_EXP __DBL_MAX_10_EXP__\n"
-  "#define LDBL_MAX_10_EXP __LDBL_MAX_10_EXP__\n"
-  "\n"
-  "#define FLT_MAX __FLT_MAX__\n"
-  "#define DBL_MAX __DBL_MAX__\n"
-  "#define LDBL_MAX __LDBL_MAX__\n"
-  "\n"
-  "#define FLT_EPSILON __FLT_EPSILON__\n"
-  "#define DBL_EPSILON __DBL_EPSILON__\n"
-  "#define LDBL_EPSILON __LDBL_EPSILON__\n"
-  "\n"
-  "#define FLT_MIN __FLT_MIN__\n"
-  "#define DBL_MIN __DBL_MIN__\n"
-  "#define LDBL_MIN __LDBL_MIN__\n"
-  "\n"
-  "#if __STDC_VERSION__ >= 201112L || !defined(__STRICT_ANSI__)\n"
-  "#  define FLT_TRUE_MIN __FLT_DENORM_MIN__\n"
-  "#  define DBL_TRUE_MIN __DBL_DENORM_MIN__\n"
-  "#  define LDBL_TRUE_MIN __LDBL_DENORM_MIN__\n"
-  "#endif\n"
-  "\n"
-  "#endif /* __FLOAT_H */\n"
-  );
-
-  clang_headers_name.push_back("limits.h");
-  clang_headers_content.push_back(
-  "/*===---- limits.h - Standard header for integer sizes --------------------===*\\n"
-  " *\n"
-  " * Copyright (c) 2009 Chris Lattner\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  "\\*===----------------------------------------------------------------------===*/\n"
-  "\n"
-  "#ifndef __CLANG_LIMITS_H\n"
-  "#define __CLANG_LIMITS_H\n"
-  "\n"
-  "/* The system's limits.h may, in turn, try to #include_next GCC's limits.h.\n"
-  "   Avert this #include_next madness. */\n"
-  "#if defined __GNUC__ && !defined _GCC_LIMITS_H_\n"
-  "#define _GCC_LIMITS_H_\n"
-  "#endif\n"
-  "\n"
-  "/* System headers include a number of constants from POSIX in <limits.h>.\n"
-  "   Include it if we're hosted. */\n"
-  "#if __STDC_HOSTED__ && __has_include_next(<limits.h>)\n"
-  "#include_next <limits.h>\n"
-  "#endif\n"
-  "\n"
-  "/* Many system headers try to \"help us out\" by defining these.  No really, we\n"
-  "   know how big each datatype is. */\n"
-  "#undef  SCHAR_MIN\n"
-  "#undef  SCHAR_MAX\n"
-  "#undef  UCHAR_MAX\n"
-  "#undef  SHRT_MIN\n"
-  "#undef  SHRT_MAX\n"
-  "#undef  USHRT_MAX\n"
-  "#undef  INT_MIN\n"
-  "#undef  INT_MAX\n"
-  "#undef  UINT_MAX\n"
-  "#undef  LONG_MIN\n"
-  "#undef  LONG_MAX\n"
-  "#undef  ULONG_MAX\n"
-  "\n"
-  "#undef  CHAR_BIT\n"
-  "#undef  CHAR_MIN\n"
-  "#undef  CHAR_MAX\n"
-  "\n"
-  "/* C90/99 5.2.4.2.1 */\n"
-  "#define SCHAR_MAX __SCHAR_MAX__\n"
-  "#define SHRT_MAX  __SHRT_MAX__\n"
-  "#define INT_MAX   __INT_MAX__\n"
-  "#define LONG_MAX  __LONG_MAX__\n"
-  "\n"
-  "#define SCHAR_MIN (-__SCHAR_MAX__-1)\n"
-  "#define SHRT_MIN  (-__SHRT_MAX__ -1)\n"
-  "#define INT_MIN   (-__INT_MAX__  -1)\n"
-  "#define LONG_MIN  (-__LONG_MAX__ -1L)\n"
-  "\n"
-  "#define UCHAR_MAX (__SCHAR_MAX__*2  +1)\n"
-  "#define USHRT_MAX (__SHRT_MAX__ *2  +1)\n"
-  "#define UINT_MAX  (__INT_MAX__  *2U +1U)\n"
-  "#define ULONG_MAX (__LONG_MAX__ *2UL+1UL)\n"
-  "\n"
-  "#ifndef MB_LEN_MAX\n"
-  "#define MB_LEN_MAX 1\n"
-  "#endif\n"
-  "\n"
-  "#define CHAR_BIT  __CHAR_BIT__\n"
-  "\n"
-  "#ifdef __CHAR_UNSIGNED__  /* -funsigned-char */\n"
-  "#define CHAR_MIN 0\n"
-  "#define CHAR_MAX UCHAR_MAX\n"
-  "#else\n"
-  "#define CHAR_MIN SCHAR_MIN\n"
-  "#define CHAR_MAX __SCHAR_MAX__\n"
-  "#endif\n"
-  "\n"
-  "/* C99 5.2.4.2.1: Added long long.\n"
-  "   C++11 18.3.3.2: same contents as the Standard C Library header <limits.h>.\n"
-  " */\n"
-  "#if __STDC_VERSION__ >= 199901L || __cplusplus >= 201103L\n"
-  "\n"
-  "#undef  LLONG_MIN\n"
-  "#undef  LLONG_MAX\n"
-  "#undef  ULLONG_MAX\n"
-  "\n"
-  "#define LLONG_MAX  __LONG_LONG_MAX__\n"
-  "#define LLONG_MIN  (-__LONG_LONG_MAX__-1LL)\n"
-  "#define ULLONG_MAX (__LONG_LONG_MAX__*2ULL+1ULL)\n"
-  "#endif\n"
-  "\n"
-  "/* LONG_LONG_MIN/LONG_LONG_MAX/ULONG_LONG_MAX are a GNU extension.  It's too bad\n"
-  "   that we don't have something like #pragma poison that could be used to\n"
-  "   deprecate a macro - the code should just use LLONG_MAX and friends.\n"
-  " */\n"
-  "#if defined(__GNU_LIBRARY__) ? defined(__USE_GNU) : !defined(__STRICT_ANSI__)\n"
-  "\n"
-  "#undef   LONG_LONG_MIN\n"
-  "#undef   LONG_LONG_MAX\n"
-  "#undef   ULONG_LONG_MAX\n"
-  "\n"
-  "#define LONG_LONG_MAX  __LONG_LONG_MAX__\n"
-  "#define LONG_LONG_MIN  (-__LONG_LONG_MAX__-1LL)\n"
-  "#define ULONG_LONG_MAX (__LONG_LONG_MAX__*2ULL+1ULL)\n"
-  "#endif\n"
-  "\n"
-  "#endif /* __CLANG_LIMITS_H */\n"
-  );
-
-  clang_headers_name.push_back("stdbool.h");
-  clang_headers_content.push_back(
-  "/*===---- stdbool.h - Standard header for booleans -------------------------===\n"
-  " *\n"
-  " * Copyright (c) 2008 Eli Friedman\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  " *===-----------------------------------------------------------------------===\n"
-  " */\n"
-  "\n"
-  "#ifndef __STDBOOL_H\n"
-  "#define __STDBOOL_H\n"
-  "\n"
-  "/* Don't define bool, true, and false in C++, except as a GNU extension. */\n"
-  "#ifndef __cplusplus\n"
-  "#define bool _Bool\n"
-  "#define true 1\n"
-  "#define false 0\n"
-  "#elif defined(__GNUC__) && !defined(__STRICT_ANSI__)\n"
-  "/* Define _Bool, bool, false, true as a GNU extension. */\n"
-  "#define _Bool bool\n"
-  "#define bool  bool\n"
-  "#define false false\n"
-  "#define true  true\n"
-  "#endif\n"
-  "\n"
-  "#define __bool_true_false_are_defined 1\n"
-  "\n"
-  "#endif /* __STDBOOL_H */\n"
-  );
-
-  clang_headers_name.push_back("stddef.h");
-  clang_headers_content.push_back(
-  "/*===---- stddef.h - Basic type definitions --------------------------------===\n"
-  " *\n"
-  " * Copyright (c) 2008 Eli Friedman\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  " *===-----------------------------------------------------------------------===\n"
-  " */\n"
-  "\n"
-  "#if !defined(__STDDEF_H) || defined(__need_ptrdiff_t) ||                       "
-  "    defined(__need_size_t) || defined(__need_wchar_t) ||                       "
-  "    defined(__need_NULL) || defined(__need_wint_t)\n"
-  "\n"
-  "#if !defined(__need_ptrdiff_t) && !defined(__need_size_t) &&                   "
-  "    !defined(__need_wchar_t) && !defined(__need_NULL) &&                       "
-  "    !defined(__need_wint_t)\n"
-  "/* Always define miscellaneous pieces when modules are available. */\n"
-  "#if !__has_feature(modules)\n"
-  "#define __STDDEF_H\n"
-  "#endif\n"
-  "#define __need_ptrdiff_t\n"
-  "#define __need_size_t\n"
-  "#define __need_wchar_t\n"
-  "#define __need_NULL\n"
-  "#define __need_STDDEF_H_misc\n"
-  "/* __need_wint_t is intentionally not defined here. */\n"
-  "#endif\n"
-  "\n"
-  "#if defined(__need_ptrdiff_t)\n"
-  "#if !defined(_PTRDIFF_T) || __has_feature(modules)\n"
-  "/* Always define ptrdiff_t when modules are available. */\n"
-  "#if !__has_feature(modules)\n"
-  "#define _PTRDIFF_T\n"
-  "#endif\n"
-  "typedef __PTRDIFF_TYPE__ ptrdiff_t;\n"
-  "#endif\n"
-  "#undef __need_ptrdiff_t\n"
-  "#endif /* defined(__need_ptrdiff_t) */\n"
-  "\n"
-  "#if defined(__need_size_t)\n"
-  "#if !defined(_SIZE_T) || __has_feature(modules)\n"
-  "/* Always define size_t when modules are available. */\n"
-  "#if !__has_feature(modules)\n"
-  "#define _SIZE_T\n"
-  "#endif\n"
-  "typedef __SIZE_TYPE__ size_t;\n"
-  "#endif\n"
-  "#undef __need_size_t\n"
-  "#endif /*defined(__need_size_t) */\n"
-  "\n"
-  "#if defined(__need_STDDEF_H_misc)\n"
-  "/* ISO9899:2011 7.20 (C11 Annex K): Define rsize_t if __STDC_WANT_LIB_EXT1__ is\n"
-  " * enabled. */\n"
-  "#if (defined(__STDC_WANT_LIB_EXT1__) && __STDC_WANT_LIB_EXT1__ >= 1 && "
-  "     !defined(_RSIZE_T)) || __has_feature(modules)\n"
-  "/* Always define rsize_t when modules are available. */\n"
-  "#if !__has_feature(modules)\n"
-  "#define _RSIZE_T\n"
-  "#endif\n"
-  "typedef __SIZE_TYPE__ rsize_t;\n"
-  "#endif\n"
-  "#endif /* defined(__need_STDDEF_H_misc) */\n"
-  "\n"
-  "#if defined(__need_wchar_t)\n"
-  "#ifndef __cplusplus\n"
-  "/* Always define wchar_t when modules are available. */\n"
-  "#if !defined(_WCHAR_T) || __has_feature(modules)\n"
-  "#if !__has_feature(modules)\n"
-  "#define _WCHAR_T\n"
-  "#if defined(_MSC_EXTENSIONS)\n"
-  "#define _WCHAR_T_DEFINED\n"
-  "#endif\n"
-  "#endif\n"
-  "typedef __WCHAR_TYPE__ wchar_t;\n"
-  "#endif\n"
-  "#endif\n"
-  "#undef __need_wchar_t\n"
-  "#endif /* defined(__need_wchar_t) */\n"
-  "\n"
-  "#if defined(__need_NULL)\n"
-  "#undef NULL\n"
-  "#ifdef __cplusplus\n"
-  "#  if !defined(__MINGW32__) && !defined(_MSC_VER)\n"
-  "#    define NULL __null\n"
-  "#  else\n"
-  "#    define NULL 0\n"
-  "#  endif\n"
-  "#else\n"
-  "#  define NULL ((void*)0)\n"
-  "#endif\n"
-  "#ifdef __cplusplus\n"
-  "#if defined(_MSC_EXTENSIONS) && defined(_NATIVE_NULLPTR_SUPPORTED)\n"
-  "namespace std { typedef decltype(nullptr) nullptr_t; }\n"
-  "using ::std::nullptr_t;\n"
-  "#endif\n"
-  "#endif\n"
-  "#undef __need_NULL\n"
-  "#endif /* defined(__need_NULL) */\n"
-  "\n"
-  "#if defined(__need_STDDEF_H_misc)\n"
-  "#if __STDC_VERSION__ >= 201112L || __cplusplus >= 201103L\n"
-  "#include \"__stddef_max_align_t.h\"\n"
-  "#endif\n"
-  "#define offsetof(t, d) __builtin_offsetof(t, d)\n"
-  "#undef __need_STDDEF_H_misc\n"
-  "#endif  /* defined(__need_STDDEF_H_misc) */\n"
-  "\n"
-  "/* Some C libraries expect to see a wint_t here. Others (notably MinGW) will use\n"
-  "__WINT_TYPE__ directly; accommodate both by requiring __need_wint_t */\n"
-  "#if defined(__need_wint_t)\n"
-  "/* Always define wint_t when modules are available. */\n"
-  "#if !defined(_WINT_T) || __has_feature(modules)\n"
-  "#if !__has_feature(modules)\n"
-  "#define _WINT_T\n"
-  "#endif\n"
-  "typedef __WINT_TYPE__ wint_t;\n"
-  "#endif\n"
-  "#undef __need_wint_t\n"
-  "#endif /* __need_wint_t */\n"
-  "\n"
-  "#endif\n"
-  );
-
-  clang_headers_name.push_back("iso646.h");
-  clang_headers_content.push_back(
-  "/*===---- iso646.h - Standard header for alternate spellings of operators---===\n"
-  " *\n"
-  " * Copyright (c) 2008 Eli Friedman\n"
-  " *\n"
-  " * Permission is hereby granted, free of charge, to any person obtaining a copy\n"
-  " * of this software and associated documentation files (the \"Software\"), to deal\n"
-  " * in the Software without restriction, including without limitation the rights\n"
-  " * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n"
-  " * copies of the Software, and to permit persons to whom the Software is\n"
-  " * furnished to do so, subject to the following conditions:\n"
-  " *\n"
-  " * The above copyright notice and this permission notice shall be included in\n"
-  " * all copies or substantial portions of the Software.\n"
-  " *\n"
-  " * THE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n"
-  " * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n"
-  " * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n"
-  " * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n"
-  " * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n"
-  " * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\n"
-  " * THE SOFTWARE.\n"
-  " *\n"
-  " *===-----------------------------------------------------------------------===\n"
-  " */\n"
-  "\n"
-  "#ifndef __ISO646_H\n"
-  "#define __ISO646_H\n"
-  "\n"
-  "#ifndef __cplusplus\n"
-  "#define and    &&\n"
-  "#define and_eq &=\n"
-  "#define bitand &\n"
-  "#define bitor  |\n"
-  "#define compl  ~\n"
-  "#define not    !\n"
-  "#define not_eq !=\n"
-  "#define or     ||\n"
-  "#define or_eq  |=\n"
-  "#define xor    ^\n"
-  "#define xor_eq ^=\n"
-  "#endif\n"
-  "\n"
-  "#endif /* __ISO646_H */\n"
-  );
+  struct hooked_header *h;
+  for (h = &clang_headers[0]; h->basename != NULL; h++) {
+    clang_headers_name.emplace_back(h->basename);
+    clang_headers_content.emplace_back(h->textstart, *h->textsize);
+  }
 }

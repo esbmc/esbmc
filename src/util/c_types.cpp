@@ -22,13 +22,14 @@ typet build_float_type(unsigned width)
   }
   else
   {
-    floatbv_typet result=floatbv_typet();
+    floatbv_typet result;
     result.set_width(width);
 
     switch(width)
     {
     case 32: result.set_f(23); break;
     case 64: result.set_f(52); break;
+    case 128: result.set_f(112); break;
     default: assert(false);
     }
 

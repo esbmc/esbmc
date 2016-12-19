@@ -123,6 +123,8 @@ protected:
 
   virtual void error_trace(
     smt_convt &smt_conv, symex_target_equationt &equation);
+  virtual void successful_trace(
+    smt_convt &smt_conv, symex_target_equationt &equation);
     bool run_thread();
     int ltl_run_thread(symex_target_equationt *equation);
 };

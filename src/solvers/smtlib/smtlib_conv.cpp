@@ -730,6 +730,56 @@ smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 }
 
 smt_ast *
+smtlib_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
+                             unsigned ew, unsigned sw)
+{
+  std::cerr << "Can't create floating points on smtlib yet" << std::endl;
+  abort();
+}
+
+smt_astt smtlib_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+{
+  std::cerr << "Can't create NaNs on smtlib yet" << std::endl;
+  abort();
+}
+
+smt_astt smtlib_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  std::cerr << "Can't create Infs on smtlib yet" << std::endl;
+  abort();
+}
+
+smt_astt smtlib_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+{
+  std::cerr << "Can't create rounding modes on smtlib yet" << std::endl;
+  abort();
+}
+
+smt_astt smtlib_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
+{
+  std::cerr << "Can't cast floating point on smtlib yet" << std::endl;
+  abort();
+}
+
+smt_astt smtlib_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
+{
+  std::cerr << "Can't cast floating point on smtlib yet" << std::endl;
+  abort();
+}
+
+smt_astt smtlib_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
+{
+  std::cerr << "Can't create floating point arith op on smtlib yet" << std::endl;
+  abort();
+}
+
+smt_astt smtlib_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  std::cerr << "Can't create floating point nearbyint expression on smtlibt yet" << std::endl;
+  abort();
+}
+
+smt_ast *
 smtlib_convt::mk_smt_bool(bool val)
 {
   smtlib_smt_ast *a =

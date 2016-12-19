@@ -739,6 +739,11 @@ public:
     copy_to_operands(op0, op1);
   }
 
+  or_exprt(const exprt &op0, const exprt &op1, const exprt &op2):exprt(exprt::i_or, typet("bool"))
+  {
+    copy_to_operands(op0, op1, op2);
+  }
+
   or_exprt(const exprt::operandst &op):exprt(exprt::i_or, typet("bool"))
   {
     if(op.empty())
@@ -999,11 +1004,11 @@ public:
 class constant_exprt:public exprt
 {
 public:
-  constant_exprt():exprt(exprt::constant)
+  inline constant_exprt():exprt(exprt::constant)
   {
   }
 
-  explicit constant_exprt(const typet &type):exprt(exprt::constant, type)
+  inline explicit constant_exprt(const typet &type):exprt(exprt::constant, type)
   {
   }
 
@@ -1017,18 +1022,45 @@ public:
     set_value(_value);
   }
 
-  const irep_idt &get_value() const
+  inline const irep_idt &get_value() const
   {
     return get("value");
   }
 
-  void set_value(const irep_idt &value)
+  inline void set_value(const irep_idt &value)
   {
     set("value", value);
   }
 
 };
 
+/*! \brief Cast a generic exprt to a \ref constant_exprt
+ *
+ * This is an unchecked conversion. \a expr must be known to be \ref
+ * constant_exprt.
+ *
+ * \param expr Source expression
+ * \return Object of type \ref constant_exprt
+ *
+ * \ingroup gr_std_expr
+*/
+inline const constant_exprt &to_constant_expr(const exprt &expr)
+{
+  assert(expr.id()==exprt::constant);
+  return static_cast<const constant_exprt &>(expr);
+}
+
+/*! \copydoc to_constant_expr(const exprt &)
+ * \ingroup gr_std_expr
+*/
+inline constant_exprt &to_constant_expr(exprt &expr)
+{
+  assert(expr.id()==exprt::constant);
+  return static_cast<constant_exprt &>(expr);
+}
+
+/*! \brief The boolean constant true
+*/
 class true_exprt:public constant_exprt
 {
 public:

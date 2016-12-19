@@ -912,7 +912,7 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
 
   exprt &sizeof_expr=static_cast<exprt &>(expr.add("sizeof"));
   sizeof_expr=c_sizeof(expr.type().subtype(), *this);
-  sizeof_expr.add("#c_sizeof_type")=expr.type().subtype();
+  sizeof_expr.c_sizeof_type(expr.type().subtype());
 }
 
 /*******************************************************************\

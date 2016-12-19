@@ -163,7 +163,7 @@ bool clang_c_convertert::get_decl(
       comp.name(name);
       comp.pretty_name(pretty_name);
 
-      if(fd.isBitField())
+      if(fd.isBitField() && !config.options.get_bool_option("no-bitfields"))
       {
         exprt width;
         if(get_expr(*fd.getBitWidth(), width))
@@ -508,7 +508,7 @@ bool clang_c_convertert::get_function(
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
-  for (const auto &pdecl : fd.params())
+  for (const auto &pdecl : fd.parameters())
   {
     code_typet::argumentt param;
     if(get_function_params(*pdecl, param))
@@ -1174,7 +1174,14 @@ bool clang_c_convertert::get_expr(
 
       // Use clang to calculate offsetof
       llvm::APSInt val;
-      assert(offset.EvaluateAsInt(val, *ASTContext));
+      bool res = offset.EvaluateAsInt(val, *ASTContext);
+      if(!res)
+      {
+        std::cerr << "Clang could not calculate offset"
+                  << std::endl;
+        offset.dumpColor();
+        return true;
+      }
 
       new_expr =
         constant_exprt(
@@ -1189,10 +1196,13 @@ bool clang_c_convertert::get_expr(
       const clang::UnaryExprOrTypeTraitExpr &unary =
         static_cast<const clang::UnaryExprOrTypeTraitExpr &>(stmt);
 
-      // Use clang to calculate sizeof/alignof
-      llvm::APSInt val;
-      if(unary.EvaluateAsInt(val, *ASTContext))
+      // Use clang to calculate alignof
+      if(unary.getKind() == clang::UETT_AlignOf)
       {
+        llvm::APSInt val;
+        if(unary.EvaluateAsInt(val, *ASTContext))
+          return true;
+
         new_expr =
           constant_exprt(
             integer2binary(val.getZExtValue(), bv_width(uint_type())),
@@ -2130,78 +2140,102 @@ bool clang_c_convertert::get_binary_operator_expr(
   const clang::BinaryOperator& binop,
   exprt& new_expr)
 {
+  exprt lhs;
+  if(get_expr(*binop.getLHS(), lhs))
+    return true;
+
+  exprt rhs;
+  if(get_expr(*binop.getRHS(), rhs))
+    return true;
+
+  typet t;
+  if(get_type(binop.getType(), t))
+    return true;
+
   switch(binop.getOpcode())
   {
     case clang::BO_Add:
-      new_expr = exprt("+");
+      if(t.is_floatbv())
+        new_expr = exprt("ieee_add", t);
+      else
+        new_expr = exprt("+", t);
       break;
 
     case clang::BO_Sub:
-      new_expr = exprt("-");
+      if(t.is_floatbv())
+        new_expr = exprt("ieee_sub", t);
+      else
+        new_expr = exprt("-", t);
       break;
 
     case clang::BO_Mul:
-      new_expr = exprt("*");
+      if(t.is_floatbv())
+        new_expr = exprt("ieee_mul", t);
+      else
+        new_expr = exprt("*", t);
       break;
 
     case clang::BO_Div:
-      new_expr = exprt("/");
+      if(t.is_floatbv())
+        new_expr = exprt("ieee_div", t);
+      else
+        new_expr = exprt("/", t);
       break;
 
     case clang::BO_Shl:
-      new_expr = exprt("shl");
+      new_expr = exprt("shl", t);
       break;
 
     case clang::BO_Shr:
-      new_expr = exprt("shr");
+      new_expr = exprt("shr", t);
       break;
 
     case clang::BO_Rem:
-      new_expr = exprt("mod");
+      new_expr = exprt("mod", t);
       break;
 
     case clang::BO_And:
-      new_expr = exprt("bitand");
+      new_expr = exprt("bitand", t);
       break;
 
     case clang::BO_Xor:
-      new_expr = exprt("bitxor");
+      new_expr = exprt("bitxor", t);
       break;
 
     case clang::BO_Or:
-      new_expr = exprt("bitor");
+      new_expr = exprt("bitor", t);
       break;
 
     case clang::BO_LT:
-      new_expr = exprt("<");
+      new_expr = exprt("<", t);
       break;
 
     case clang::BO_GT:
-      new_expr = exprt(">");
+      new_expr = exprt(">", t);
       break;
 
     case clang::BO_LE:
-      new_expr = exprt("<=");
+      new_expr = exprt("<=", t);
       break;
 
     case clang::BO_GE:
-      new_expr = exprt(">=");
+      new_expr = exprt(">=", t);
       break;
 
     case clang::BO_EQ:
-      new_expr = exprt("=");
+      new_expr = exprt("=", t);
       break;
 
     case clang::BO_NE:
-      new_expr = exprt("notequal");
+      new_expr = exprt("notequal", t);
       break;
 
     case clang::BO_LAnd:
-      new_expr = exprt("and");
+      new_expr = exprt("and", t);
       break;
 
     case clang::BO_LOr:
-      new_expr = exprt("or");
+      new_expr = exprt("or", t);
       break;
 
     case clang::BO_Assign:
@@ -2209,11 +2243,11 @@ bool clang_c_convertert::get_binary_operator_expr(
       // and the copy_to_operands method call at the end of
       // this method will put lhs and rhs in positions 2 and 3,
       // instead of 0 and 1 :/
-      new_expr = side_effect_exprt("assign");
+      new_expr = side_effect_exprt("assign", t);
       break;
 
     case clang::BO_Comma:
-      new_expr = exprt("comma");
+      new_expr = exprt("comma", t);
       break;
 
     default:
@@ -2223,17 +2257,6 @@ bool clang_c_convertert::get_binary_operator_expr(
       return get_compound_assign_expr(compop, new_expr);
     }
   }
-
-  exprt lhs;
-  if(get_expr(*binop.getLHS(), lhs))
-    return true;
-
-  exprt rhs;
-  if(get_expr(*binop.getRHS(), rhs))
-    return true;
-
-  if(get_type(binop.getType(), new_expr.type()))
-    return true;
 
   new_expr.copy_to_operands(lhs, rhs);
   return false;

@@ -236,6 +236,9 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_BOOL:
     s = new smt_sort(k);
     break;
+  case SMT_SORT_FLOATBV:
+    std::cerr << "Boolector can't create floating point sorts" << std::endl;
+    abort();
   default:
     std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
     abort();
@@ -255,6 +258,58 @@ smt_ast *
 boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 {
   std::cerr << "Boolector can't create Real sorts" << std::endl;
+  abort();
+}
+
+smt_ast *
+boolector_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
+                                unsigned ew, unsigned sw)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt
+boolector_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt
+boolector_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt boolector_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt boolector_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt boolector_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt boolector_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
+  abort();
+}
+
+smt_astt boolector_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
+{
+  std::cerr << "Boolector can't create floating point sorts" << std::endl;
   abort();
 }
 

@@ -1,3 +1,3 @@
 test.c
-account.c --no-slice --context-switch 1
+account.c --no-slice --context-bound 1 --depth 150
 ^VERIFICATION FAILED$

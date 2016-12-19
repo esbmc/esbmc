@@ -5,6 +5,7 @@
 #include <base_type.h>
 #include <arith_tools.h>
 #include <c_types.h>
+#include <expr_util.h>
 
 #include "smt_conv.h"
 #include <solvers/prop/literal.h>
@@ -328,6 +329,57 @@ smt_convt::convert_assign(const expr2tc &expr)
 }
 
 smt_astt
+smt_convt::convert_ast(
+  const expr2tc &expr,
+  const type2tc &type,
+  smt_astt const *args,
+  struct expr_op_convert ops)
+{
+  // Convert type
+  smt_sortt sort = convert_sort(expr->type);
+
+  // Call mk_func_app for each type
+  smt_astt a;
+
+  unsigned size = expr->get_num_sub_exprs();
+
+  if (int_encoding || is_bool_type(type))
+  {
+    assert(ops.int_encoding_func);
+    a = mk_func_app(sort, ops.int_encoding_func, args, size);
+  }
+  else if (is_signedbv_type(type))
+  {
+    assert(ops.signedbv_func);
+    a = mk_func_app(sort, ops.signedbv_func, args, size);
+  }
+  else if (is_unsignedbv_type(type))
+  {
+    assert(ops.unsignedbv_func);
+    a = mk_func_app(sort, ops.unsignedbv_func, args, size);
+  }
+  else if (is_fixedbv_type(type))
+  {
+    assert(ops.fixedbv_func);
+    a = mk_func_app(sort, ops.fixedbv_func, args, size);
+  }
+  else if (is_floatbv_type(type))
+  {
+    assert(ops.floatbv_func);
+    a = mk_func_app(sort, ops.floatbv_func, args, size);
+  }
+  else
+  {
+    abort();
+  }
+
+  struct smt_cache_entryt entry = { expr, a, ctx_level };
+  smt_cache.insert(entry);
+
+  return a;
+}
+
+smt_astt
 smt_convt::convert_ast(const expr2tc &expr)
 {
   // Variable length array; constant array's and so forth can have hundreds
@@ -335,92 +387,41 @@ smt_convt::convert_ast(const expr2tc &expr)
   smt_astt args[expr->get_num_sub_exprs()];
   smt_sortt sort;
   smt_astt a;
-  unsigned int used_sorts = 0;
-  bool seen_signed_operand = false;
-  bool make_ints_reals = false;
-  bool special_cases = true;
 
   smt_cachet::const_iterator cache_result = smt_cache.find(expr);
   if (cache_result != smt_cache.end())
     return (cache_result->ast);
 
-  // Second fail -- comparisons are turning up in 01_cbmc_abs1 that compare
-  // ints and reals, which is invalid. So convert ints up to reals.
-  if (int_encoding && expr->get_num_sub_exprs() >= 2 &&
-                      (is_fixedbv_type((*expr->get_sub_expr(0))->type) ||
-                       is_fixedbv_type((*expr->get_sub_expr(1))->type))) {
-    make_ints_reals = true;
-  }
-
   unsigned int i = 0;
 
-  // FIXME: turn this into a lookup table
-  if (is_constant_array2t(expr) || is_with2t(expr) || is_index2t(expr) ||
-      is_address_of2t(expr) ||
-      (is_equality2t(expr) && is_array_type(to_equality2t(expr).side_1->type)))
-    // Nope; needs special handling
-    goto nocvt;
-  special_cases = false;
+  switch (expr->expr_id) {
+    case expr2t::with_id:
+    case expr2t::constant_array_id:
+    case expr2t::constant_array_of_id:
+    case expr2t::index_id:
+    case expr2t::address_of_id:
+      break; // Don't convert their operands
 
-  // Convert /all the arguments/. Via magical delegates.
-  expr->foreach_operand(
-      [this, &args, &i, &used_sorts, &seen_signed_operand, make_ints_reals]
-      (const expr2tc &e)
-    {
-    args[i] = convert_ast(e);
+    case expr2t::equality_id:
+      if(is_array_type(to_equality2t(expr).side_1->type))
+        break;
 
-    if (make_ints_reals && args[i]->sort->id == SMT_SORT_INT) {
-      args[i] = mk_func_app(mk_sort(SMT_SORT_REAL), SMT_FUNC_INT2REAL, args[i]);
-    }
-
-    used_sorts |= args[i]->sort->id;
-    i++;
-    if (is_signedbv_type(e) || is_fixedbv_type(e))
-      seen_signed_operand = true;
-    }
-  );
-nocvt:
+    default:
+      // Convert /all the arguments/. Via magical delegates.
+      expr->foreach_operand(
+        [this, &args, &i](const expr2tc &e)
+        {
+          args[i++] = convert_ast(e);
+        }
+      );
+  }
 
   sort = convert_sort(expr->type);
 
-  const expr_op_convert *cvt = &smt_convert_table[expr->expr_id];
-
-  // Irritating special case: if we're selecting a bool out of an array, and
-  // we're in QF_AUFBV mode, do special handling.
-  if ((!int_encoding && is_index2t(expr) && is_bool_type(expr->type) &&
-       !array_api->supports_bools_in_arrays) ||
-       special_cases)
-    goto expr_handle_table;
-
-  if ((int_encoding && cvt->int_mode_func > SMT_FUNC_INVALID) ||
-      (!int_encoding && cvt->bv_mode_func_signed > SMT_FUNC_INVALID)) {
-    assert(cvt->args == i);
-    // An obvious check, but catches cases where we add a field to a future expr
-    // and then fail to update the SMT layer, leading to an ignored field.
-
-    // Now check sort types.
-    if ((used_sorts | cvt->permitted_sorts) == cvt->permitted_sorts) {
-      // Matches; we can just convert this.
-      smt_func_kind k = (int_encoding) ? cvt->int_mode_func
-                      : (seen_signed_operand)
-                          ? cvt->bv_mode_func_signed
-                          : cvt->bv_mode_func_unsigned;
-      a = mk_func_app(sort, k, &args[0], cvt->args);
-      goto done;
-    }
-  }
-
-  if ((int_encoding && cvt->int_mode_func == SMT_FUNC_INVALID) ||
-      (!int_encoding && cvt->bv_mode_func_signed == SMT_FUNC_INVALID)) {
-    std::cerr << "Invalid expression " << get_expr_id(expr) << " for encoding "
-      << "mode discovered, refusing to convert to SMT" << std::endl;
-    abort();
-  }
-
-expr_handle_table:
   switch (expr->expr_id) {
   case expr2t::constant_int_id:
   case expr2t::constant_fixedbv_id:
+  case expr2t::constant_floatbv_id:
   case expr2t::constant_bool_id:
   case expr2t::symbol_id:
     a = convert_terminal(expr);
@@ -477,62 +478,139 @@ expr_handle_table:
     break;
   }
   case expr2t::add_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const add2t &add = to_add2t(expr);
+    if(is_pointer_type(expr->type)
+       || is_pointer_type(add.side_1)
+       || is_pointer_type(add.side_2)) {
+      a = convert_pointer_arith(expr, expr->type);
+    } else {
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{
+              SMT_FUNC_ADD,
+              SMT_FUNC_BVADD,
+              SMT_FUNC_BVADD,
+              SMT_FUNC_BVADD,
+              SMT_FUNC_INVALID});
+    }
+    break;
+  }
   case expr2t::sub_id:
   {
-    a = convert_pointer_arith(expr, expr->type);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const sub2t &sub = to_sub2t(expr);
+    if(is_pointer_type(expr->type)
+       || is_pointer_type(sub.side_1)
+       || is_pointer_type(sub.side_2)) {
+      a = convert_pointer_arith(expr, expr->type);
+    } else {
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{
+              SMT_FUNC_SUB,
+              SMT_FUNC_BVSUB,
+              SMT_FUNC_BVSUB,
+              SMT_FUNC_BVSUB,
+              SMT_FUNC_INVALID});
+    }
     break;
   }
   case expr2t::mul_id:
   {
-    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
 
-    // Handle BV mode multiplies: for normal integers multiply normally, for
-    // fixedbv apply hacks.
-    if (is_fixedbv_type(expr)) {
-      const mul2t &mul = to_mul2t(expr);
-      const fixedbv_type2t &fbvt = to_fixedbv_type(mul.type);
+    // Fixedbvs are handled separately
+    if(is_fixedbv_type(expr) && !int_encoding) {
+      auto mul = to_mul2t(expr);
+      auto fbvt = to_fixedbv_type(mul.type);
+
       unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
       unsigned int topbit = mul.side_1->type->get_width();
+
       smt_sortt s1 = convert_sort(mul.side_1->type);
       smt_sortt s2 = convert_sort(mul.side_2->type);
-      args[0] = convert_sign_ext(args[0], s1, topbit, fraction_bits);
-      args[1] = convert_sign_ext(args[1], s2, topbit, fraction_bits);
+
+      args[0] = convert_sign_ext(convert_ast(mul.side_1), s1, topbit, fraction_bits);
+      args[1] = convert_sign_ext(convert_ast(mul.side_2), s2, topbit, fraction_bits);
+
+      smt_sortt sort = convert_sort(expr->type);
       a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort);
     } else {
-      assert(is_bv_type(expr));
-      a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{
+              SMT_FUNC_MUL,
+              SMT_FUNC_BVMUL,
+              SMT_FUNC_BVMUL,
+              SMT_FUNC_INVALID,
+              SMT_FUNC_INVALID});
     }
     break;
   }
   case expr2t::div_id:
   {
-    // Handle BV mode divisions. Similar arrangement to multiplies.
-    if (int_encoding) {
-      a = mk_func_app(sort, SMT_FUNC_DIV, args, 2);
-    } else if (is_fixedbv_type(expr)) {
-      const div2t &div = to_div2t(expr);
-      fixedbvt fbt(migrate_expr_back(expr));
+    assert(expr->get_num_sub_exprs() == 2);
 
-      unsigned int fraction_bits = fbt.spec.get_fraction_bits();
-      unsigned int topbit2 = div.side_2->type->get_width();
+    // Fixedbvs are handled separately
+    if(is_fixedbv_type(expr) && !int_encoding) {
+      auto div = to_div2t(expr);
+      auto fbvt = to_fixedbv_type(div.type);
+
+      unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
+      unsigned int topbit = div.side_2->type->get_width();
+
       smt_sortt s2 = convert_sort(div.side_2->type);
+      args[1] = convert_sign_ext(convert_ast(div.side_2), s2, topbit, fraction_bits);
 
-      args[1] = convert_sign_ext(args[1], s2, topbit2,fraction_bits);
       smt_astt zero = mk_smt_bvint(BigInt(0), false, fraction_bits);
-      smt_astt op0 = args[0];
+      smt_astt op0 = convert_ast(div.side_1);
+
       args[0] = mk_func_app(s2, SMT_FUNC_CONCAT, op0, zero);
 
       // Sorts.
       a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2);
-      a = mk_extract(a, fbt.spec.width - 1, 0, s2);
+      a = mk_extract(a, fbvt.width - 1, 0, s2);
     } else {
-      assert(is_bv_type(expr));
-      smt_func_kind k = (seen_signed_operand)
-              ? cvt->bv_mode_func_signed
-              : cvt->bv_mode_func_unsigned;
-      a = mk_func_app(sort, k, args, 2);
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{
+              SMT_FUNC_DIV,
+              SMT_FUNC_BVSDIV,
+              SMT_FUNC_BVUDIV,
+              SMT_FUNC_INVALID,
+              SMT_FUNC_INVALID});
     }
+    break;
+  }
+  case expr2t::ieee_add_id:
+  case expr2t::ieee_sub_id:
+  case expr2t::ieee_mul_id:
+  case expr2t::ieee_div_id:
+  {
+    assert(is_floatbv_type(expr));
+    assert(expr->get_num_sub_exprs() == 3);
+    a = mk_smt_bvfloat_arith_ops(expr);
+    break;
+  }
+  case expr2t::ieee_fma_id:
+  {
+    assert(is_floatbv_type(expr));
+    assert(expr->get_num_sub_exprs() == 4);
+    a = mk_smt_bvfloat_arith_ops(expr);
+    break;
+  }
+  case expr2t::modulus_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_MOD,
+            SMT_FUNC_BVSMOD,
+            SMT_FUNC_BVUMOD,
+            SMT_FUNC_BVSMOD,  // TODO: is this right?
+            SMT_FUNC_INVALID});
     break;
   }
   case expr2t::index_id:
@@ -566,11 +644,14 @@ expr_handle_table:
   }
   case expr2t::member_id:
   {
-    a = convert_member(expr, args[0]);
+    assert(expr->get_num_sub_exprs() == 1);
+    a = convert_member(expr);
     break;
   }
   case expr2t::same_object_id:
   {
+    assert(expr->get_num_sub_exprs() == 2);
+
     // Two projects, then comparison.
     args[0] = args[0]->project(this, 0);
     args[1] = args[1]->project(this, 0);
@@ -606,6 +687,11 @@ expr_handle_table:
     a = convert_typecast(expr);
     break;
   }
+  case expr2t::nearbyint_id:
+  {
+    a = mk_smt_nearbyint_from_float(to_nearbyint2t(expr));
+    break;
+  }
   case expr2t::if_id:
   {
     // Only attempt to handle struct.s
@@ -618,7 +704,32 @@ expr_handle_table:
   }
   case expr2t::isnan_id:
   {
-    a = convert_is_nan(expr, args[0]);
+    assert(expr->get_num_sub_exprs() == 1);
+    a = convert_is_nan(expr);
+    break;
+  }
+  case expr2t::isinf_id:
+  {
+    assert(expr->get_num_sub_exprs() == 1);
+    a = convert_is_inf(expr);
+    break;
+  }
+  case expr2t::isnormal_id:
+  {
+    assert(expr->get_num_sub_exprs() == 1);
+    a = convert_is_normal(expr);
+    break;
+  }
+  case expr2t::isfinite_id:
+  {
+    assert(expr->get_num_sub_exprs() == 1);
+    a = convert_is_finite(expr);
+    break;
+  }
+  case expr2t::signbit_id:
+  {
+    assert(expr->get_num_sub_exprs() == 1);
+    a = convert_signbit(expr);
     break;
   }
   case expr2t::overflow_id:
@@ -653,14 +764,33 @@ expr_handle_table:
   }
   case expr2t::equality_id:
   {
-    const equality2t &eq = to_equality2t(expr);
-    smt_astt b = convert_ast(eq.side_1);
-    smt_astt c = convert_ast(eq.side_2);
-    a = b->eq(this, c);
+    expr2tc side1 = *expr->get_sub_expr(0);
+    expr2tc side2 = *expr->get_sub_expr(1);
+
+    if(is_floatbv_type(side1) && is_floatbv_type(side2))
+      a = convert_ieee_equal(expr);
+    else
+      a = args[0]->eq(this, args[1]);
+    break;
+  }
+  case expr2t::notequal_id:
+  {
+    // Handle all kinds of structs by inverted equality. The only that's really
+    // going to turn up is pointers though.
+    assert(expr->get_num_sub_exprs() == 2);
+
+    expr2tc side1 = *expr->get_sub_expr(0);
+    expr2tc side2 = *expr->get_sub_expr(1);
+    if(is_floatbv_type(side1) && is_floatbv_type(side2))
+      a = convert_ieee_equal(expr);
+    else
+      a = args[0]->eq(this, args[1]);
+    a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
     break;
   }
   case expr2t::shl_id:
   {
+    assert(expr->get_num_sub_exprs() == 2);
     const shl2t &shl = to_shl2t(expr);
 
     if (shl.side_1->type->get_width() != shl.side_2->type->get_width()) {
@@ -677,12 +807,19 @@ expr_handle_table:
       args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_MUL, &args[0], 2);
     } else {
-      a = mk_func_app(sort, SMT_FUNC_BVSHL, &args[0], 2);
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{
+              SMT_FUNC_INVALID,
+              SMT_FUNC_BVSHL,
+              SMT_FUNC_BVSHL,
+              SMT_FUNC_BVSHL,
+              SMT_FUNC_INVALID});
     }
     break;
   }
   case expr2t::ashr_id:
   {
+    assert(expr->get_num_sub_exprs() == 2);
     const ashr2t &ashr = to_ashr2t(expr);
 
     if (ashr.side_1->type->get_width() != ashr.side_2->type->get_width()) {
@@ -699,12 +836,20 @@ expr_handle_table:
       args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
-      a = mk_func_app(sort, SMT_FUNC_BVASHR, &args[0], 2);
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{
+              SMT_FUNC_INVALID,
+              SMT_FUNC_BVASHR,
+              SMT_FUNC_BVASHR,
+              SMT_FUNC_BVASHR,
+              SMT_FUNC_INVALID});
     }
     break;
   }
   case expr2t::lshr_id:
   {
+    assert(expr->get_num_sub_exprs() == 2);
+
     // Like ashr. Haven't got around to cleaning this up yet.
     const lshr2t &lshr = to_lshr2t(expr);
 
@@ -722,56 +867,111 @@ expr_handle_table:
       args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
-      a = mk_func_app(sort, SMT_FUNC_BVLSHR, &args[0], 2);
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{
+              SMT_FUNC_INVALID,
+              SMT_FUNC_BVLSHR,
+              SMT_FUNC_BVLSHR,
+              SMT_FUNC_BVLSHR,
+              SMT_FUNC_INVALID});
     }
-    break;
-  }
-  case expr2t::notequal_id:
-  {
-    // Handle all kinds of structs by inverted equality. The only that's really
-    // going to turn up is pointers though.
-    a = args[0]->eq(this, args[1]);
-    a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
     break;
   }
   case expr2t::abs_id:
   {
+    assert(expr->get_num_sub_exprs() == 1);
+
     const abs2t &abs = to_abs2t(expr);
     if (is_unsignedbv_type(abs.value)) {
       // No need to do anything.
       a = args[0];
+    } else if(is_floatbv_type(abs.value)) {
+      a = mk_func_app(sort, SMT_FUNC_FABS, &args[0], 1);
     } else {
-      constant_int2tc zero(abs.value->type, BigInt(0));
+      expr2tc zero;
+      migrate_expr(gen_zero(migrate_type_back(abs.value->type)), zero);
+
       lessthan2tc lt(abs.value, zero);
-      sub2tc sub(abs.value->type, zero, abs.value);
-      if2tc ite(abs.type, lt, sub, abs.value);
+      neg2tc neg(abs.value->type, abs.value);
+      if2tc ite(abs.type, lt, neg, abs.value);
+
       a = convert_ast(ite);
     }
     break;
   }
   case expr2t::lessthan_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const lessthan2t &lt = to_lessthan2t(expr);
+    // Pointer relation:
+    if (is_pointer_type(lt.side_1)) {
+      a = convert_ptr_cmp(lt.side_1, lt.side_2, expr);
+    } else {
+      a = convert_ast(expr, lt.side_1->type, args,
+            expr_op_convert{
+              SMT_FUNC_LT,
+              SMT_FUNC_BVSLT,
+              SMT_FUNC_BVULT,
+              SMT_FUNC_BVSLT,
+              SMT_FUNC_LT});
+    }
+    break;
+  }
   case expr2t::lessthanequal_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const lessthanequal2t &lte = to_lessthanequal2t(expr);
+    // Pointer relation:
+    if (is_pointer_type(lte.side_1)) {
+      a = convert_ptr_cmp(lte.side_1, lte.side_2, expr);
+    } else {
+      a = convert_ast(expr, lte.side_1->type, args,
+            expr_op_convert{
+              SMT_FUNC_LTE,
+              SMT_FUNC_BVSLTE,
+              SMT_FUNC_BVULTE,
+              SMT_FUNC_BVSLTE,
+              SMT_FUNC_LTE});
+    }
+    break;
+  }
   case expr2t::greaterthan_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const greaterthan2t &gt = to_greaterthan2t(expr);
+    // Pointer relation:
+    if (is_pointer_type(gt.side_1)) {
+      a = convert_ptr_cmp(gt.side_1, gt.side_2, expr);
+    } else {
+      a = convert_ast(expr, gt.side_1->type, args,
+            expr_op_convert{
+              SMT_FUNC_GT,
+              SMT_FUNC_BVSGT,
+              SMT_FUNC_BVUGT,
+              SMT_FUNC_BVSGT,
+              SMT_FUNC_GT});
+    }
+    break;
+  }
   case expr2t::greaterthanequal_id:
   {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    const greaterthanequal2t &gte = to_greaterthanequal2t(expr);
     // Pointer relation:
-    const expr2tc &side1 = *expr->get_sub_expr(0);
-    const expr2tc &side2 = *expr->get_sub_expr(1);
-    if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
-      a = convert_ptr_cmp(side1, side2, expr);
+    if (is_pointer_type(gte.side_1)) {
+      a = convert_ptr_cmp(gte.side_1, gte.side_2, expr);
     } else {
-      // One operand isn't a pointer; go the slow way, with typecasts.
-      type2tc inttype = machine_ptr;
-      expr2tc cast1 = (!is_unsignedbv_type(side1))
-        ? typecast2tc(inttype, side1)
-        : side1;
-      expr2tc cast2 = (!is_unsignedbv_type(side2))
-        ? typecast2tc(inttype, side2)
-        : side2;
-      expr2tc new_expr = expr;
-      *new_expr.get()->get_sub_expr_nc(0) = cast1;
-      *new_expr.get()->get_sub_expr_nc(1) = cast2;
-      a = convert_ast(new_expr);
+      a = convert_ast(expr, gte.side_1->type, args,
+            expr_op_convert{
+              SMT_FUNC_GTE,
+              SMT_FUNC_BVSGTE,
+              SMT_FUNC_BVUGTE,
+              SMT_FUNC_BVSGTE,
+              SMT_FUNC_GTE});
     }
     break;
   }
@@ -780,14 +980,219 @@ expr_handle_table:
     assert(!int_encoding && "Concatonate encountered in integer mode; "
            "unimplemented (and funky)");
     const concat2t &cat = to_concat2t(expr);
-    args[0] = convert_ast(cat.side_1);
-    args[1] = convert_ast(cat.side_2);
 
     unsigned long accuml_side =
       cat.side_1->type->get_width() + cat.side_2->type->get_width();
     smt_sortt s = mk_sort(SMT_SORT_BV, accuml_side, false);
     a = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 
+    break;
+  }
+  case expr2t::implies_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_IMPLIES,
+            SMT_FUNC_IMPLIES,
+            SMT_FUNC_IMPLIES,
+            SMT_FUNC_IMPLIES,
+            SMT_FUNC_IMPLIES});
+    break;
+  }
+  case expr2t::bitand_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVAND,
+            SMT_FUNC_BVAND,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
+    break;
+  }
+  case expr2t::bitor_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVOR,
+            SMT_FUNC_BVOR,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
+    break;
+  }
+  case expr2t::bitxor_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVXOR,
+            SMT_FUNC_BVXOR,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
+    break;
+  }
+  case expr2t::bitnand_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVNAND,
+            SMT_FUNC_BVNAND,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
+    break;
+  }
+  case expr2t::bitnor_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVNOR,
+            SMT_FUNC_BVNOR,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
+    break;
+  }
+  case expr2t::bitnxor_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVNXOR,
+            SMT_FUNC_BVNXOR,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
+    break;
+  }
+  case expr2t::bitnot_id:
+  {
+    assert(!int_encoding);
+    assert(expr->get_num_sub_exprs() == 1);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_INVALID,
+            SMT_FUNC_BVNOT,
+            SMT_FUNC_BVNOT,
+            SMT_FUNC_INVALID,
+            SMT_FUNC_INVALID});
+    break;
+  }
+  case expr2t::not_id:
+  {
+    assert(sort->id == SMT_SORT_BOOL);
+    assert(expr->get_num_sub_exprs() == 1);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_NOT,
+            SMT_FUNC_NOT,
+            SMT_FUNC_NOT,
+            SMT_FUNC_NOT,
+            SMT_FUNC_NOT});
+    break;
+  }
+  case expr2t::neg_id:
+  {
+    assert(expr->get_num_sub_exprs() == 1);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_NEG,
+            SMT_FUNC_BVNEG,
+            SMT_FUNC_BVNEG,
+            SMT_FUNC_BVNEG,
+            SMT_FUNC_NEG});
+    break;
+  }
+  case expr2t::and_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_AND,
+            SMT_FUNC_AND,
+            SMT_FUNC_AND,
+            SMT_FUNC_AND,
+            SMT_FUNC_AND});
+    break;
+  }
+  case expr2t::or_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_OR,
+            SMT_FUNC_OR,
+            SMT_FUNC_OR,
+            SMT_FUNC_OR,
+            SMT_FUNC_OR});
+    break;
+  }
+  case expr2t::xor_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+
+    a = convert_ast(expr, expr->type, args,
+          expr_op_convert{
+            SMT_FUNC_XOR,
+            SMT_FUNC_XOR,
+            SMT_FUNC_XOR,
+            SMT_FUNC_XOR,
+            SMT_FUNC_XOR});
+    break;
+  }
+  case expr2t::bitcast_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+    const bitcast2t &cast = to_bitcast2t(expr);
+    assert(is_scalar_type(cast.type) && is_scalar_type(cast.from));
+
+    // As it stands, the only circusmtance where bitcast can make a difference
+    // is where we're casting to or from a float, where casting by value means
+    // something different. Filter that case out, pass everything else to normal
+    // cast.
+    bool to_float = is_floatbv_type(cast.type);
+    bool from_float = is_floatbv_type(cast.from);
+
+    if ((to_float && !from_float) || (!to_float && from_float)) {
+      smt_func_kind k;
+
+      if (to_float)
+        k = SMT_FUNC_BV2FLOAT;
+      else
+        k = SMT_FUNC_FLOAT2BV;
+
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{k, k, k, k, k});
+    } else {
+      // Cast by value is fine
+      typecast2tc tcast(cast.type, cast.from);
+      a = convert_ast(tcast);
+    }
     break;
   }
   default:
@@ -797,7 +1202,6 @@ expr_handle_table:
     abort();
   }
 
-done:
   struct smt_cache_entryt entry = { expr, a, ctx_level };
   smt_cache.insert(entry);
 
@@ -850,6 +1254,16 @@ smt_convt::convert_sort(const type2tc &type)
       result = mk_sort(SMT_SORT_BV, width, false);
   }
   break;
+  case type2t::floatbv_id:
+  {
+    unsigned int fraw = to_floatbv_type(type).fraction;
+    unsigned int expw = to_floatbv_type(type).exponent;
+    if (int_encoding)
+      result = mk_sort(SMT_SORT_REAL);
+    else
+      result = mk_sort(SMT_SORT_FLOATBV, expw, fraw);
+  }
+  break;
   case type2t::string_id:
   {
     const string_type2t &str_type = to_string_type(type);
@@ -892,9 +1306,6 @@ smt_convt::convert_sort(const type2tc &type)
     result = mk_sort(SMT_SORT_ARRAY, d, r);
     break;
   }
-  case type2t::cpp_name_id:
-  case type2t::symbol_id:
-  case type2t::empty_id:
   default:
     std::cerr << "Unexpected type ID " << get_type_id(type);
     std::cerr << " reached SMT conversion" << std::endl;
@@ -947,9 +1358,9 @@ smt_convt::convert_terminal(const expr2tc &expr)
     const constant_int2t &theint = to_constant_int2t(expr);
     unsigned int width = expr->type->get_width();
     if (int_encoding)
-      return mk_smt_int(theint.constant_value, sign);
+      return mk_smt_int(theint.value, sign);
     else
-      return mk_smt_bvint(theint.constant_value, sign, width);
+      return mk_smt_bvint(theint.value, sign, width);
   }
   case expr2t::constant_fixedbv_id:
   {
@@ -978,10 +1389,31 @@ smt_convt::convert_terminal(const expr2tc &expr)
       return mk_smt_bvint(mp_integer(fin), false, bitwidth);
     }
   }
+  case expr2t::constant_floatbv_id:
+  {
+    const constant_floatbv2t &thereal = to_constant_floatbv2t(expr);
+    if (int_encoding) {
+      std::string val = thereal.value.to_expr().value().as_string();
+      std::string result = fixed_point(val, thereal.value.spec.width());
+      return mk_smt_real(result);
+    } else {
+
+      unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
+      unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
+      if(thereal.value.is_NaN())
+        return mk_smt_bvfloat_nan(exponent_width, fraction_width);
+
+      bool sign = thereal.value.get_sign();
+      if(thereal.value.is_infinity())
+        return mk_smt_bvfloat_inf(sign, exponent_width, fraction_width);
+
+      return mk_smt_bvfloat(thereal.value, exponent_width, fraction_width);
+    }
+  }
   case expr2t::constant_bool_id:
   {
     const constant_bool2t &thebool = to_constant_bool2t(expr);
-    return mk_smt_bool(thebool.constant_value);
+    return mk_smt_bool(thebool.value);
   }
   case expr2t::symbol_id:
   {
@@ -1049,32 +1481,169 @@ smt_convt::mk_fresh(smt_sortt s, const std::string &tag,
 }
 
 smt_astt
-smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
+smt_convt::convert_is_nan(const expr2tc &expr)
 {
   const isnan2t &isnan = to_isnan2t(expr);
+
+  // Anything other than floats will never be NaNs
+  if(!is_floatbv_type(isnan.value))
+    return mk_smt_bool(false);
+
+  smt_sortt bs = boolean_sort;
+  smt_astt operand = convert_ast(isnan.value);
+  return mk_func_app(bs, SMT_FUNC_ISNAN, operand);
+}
+
+smt_astt smt_convt::convert_is_inf(const expr2tc& expr)
+{
+  const isinf2t &isinf = to_isinf2t(expr);
+
+  // Anything other than floats will never be infs
+  if(!is_floatbv_type(isinf.value))
+    return mk_smt_bool(false);
+
+  smt_sortt bs = boolean_sort;
+  smt_astt operand = convert_ast(isinf.value);
+  return mk_func_app(bs, SMT_FUNC_ISINF, operand);
+}
+
+smt_astt smt_convt::convert_is_normal(const expr2tc& expr)
+{
+  const isnormal2t &isnormal = to_isnormal2t(expr);
+
+  // Anything other than floats will always be normal
+  if(!is_floatbv_type(isnormal.value))
+    return mk_smt_bool(true);
+
+  smt_sortt bs = boolean_sort;
+  smt_astt operand = convert_ast(isnormal.value);
+  return mk_func_app(bs, SMT_FUNC_ISNORMAL, operand);
+}
+
+smt_astt smt_convt::convert_is_finite(const expr2tc& expr)
+{
+  const isfinite2t &isfinite = to_isfinite2t(expr);
+
+  // Anything other than floats will always be finite
+  if(!is_floatbv_type(isfinite.value))
+    return mk_smt_bool(true);
+
   smt_sortt bs = boolean_sort;
 
-  // Assumes operand is fixedbv.
-  assert(is_fixedbv_type(isnan.value));
-  unsigned width = isnan.value->type->get_width();
+  // isfinite = !(isinf || isnan)
+  auto is_inf = expr2tc(new isinf2t(isfinite.value->clone()));
+  smt_astt isinf = convert_is_inf(is_inf);
 
-  smt_astt t = mk_smt_bool(true);
-  smt_astt f = mk_smt_bool(false);
+  auto is_nan = expr2tc(new isnan2t(isfinite.value->clone()));
+  smt_astt isnan = convert_is_nan(is_nan);
 
-  if (int_encoding) {
-    smt_astt asint = round_real_to_int(operand);
-    smt_astt zero = mk_smt_int(BigInt(0), false);
-    smt_astt gte = mk_func_app(bs, SMT_FUNC_GTE, asint, zero);
-    return mk_func_app(bs, SMT_FUNC_ITE, gte, t, f);
-  } else {
-    smt_astt zero =  mk_smt_bvint(BigInt(0), false, width);
-    smt_astt gte = mk_func_app(bs, SMT_FUNC_GTE, operand, zero);
-    return mk_func_app(bs, SMT_FUNC_ITE, gte, t, f);
+  smt_astt or_op = mk_func_app(bs, SMT_FUNC_OR, isinf, isnan);
+  return mk_func_app(bs, SMT_FUNC_NOT, or_op);
+}
+
+smt_astt smt_convt::convert_signbit(const expr2tc& expr)
+{
+  const signbit2t &signbit = to_signbit2t(expr);
+
+  // Since we can't extract the top bit, from the fpbv, we'll
+  // convert it to return if(is_neg) ? 1 : 0;
+  auto value = convert_ast(signbit.value);
+  auto sort = convert_sort(signbit.type);
+
+  // Create is_neg
+  // For fixedbvs, we check if it's < 0
+  smt_astt is_neg;
+  if(!config.ansi_c.use_fixed_for_float && !int_encoding)
+    is_neg = mk_func_app(boolean_sort, SMT_FUNC_ISNEG, value);
+  else
+  {
+    expr2tc zero_expr;
+    migrate_expr(gen_zero(migrate_type_back(signbit.value->type)), zero_expr);
+
+    is_neg = mk_func_app(boolean_sort, SMT_FUNC_LT, value, convert_ast(zero_expr));
   }
+
+  expr2tc zero_expr;
+  migrate_expr(gen_zero(migrate_type_back(signbit.type)), zero_expr);
+
+  expr2tc one_expr;
+  migrate_expr(gen_one(migrate_type_back(signbit.type)), one_expr);
+
+  // If it's true, return 1. Return 0, othewise.
+  return mk_func_app(
+    sort, SMT_FUNC_ITE, is_neg, convert_ast(one_expr), convert_ast(zero_expr));
 }
 
 smt_astt
-smt_convt::convert_member(const expr2tc &expr, smt_astt src)
+smt_convt::convert_ieee_equal(const expr2tc &expr)
+{
+  smt_sortt bs = boolean_sort;
+  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
+  smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
+
+  return mk_func_app(bs, SMT_FUNC_IEEE_EQ, s1, s2);
+}
+
+smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
+{
+  // Easy case, we know the rounding mode
+  if(is_constant_int2t(expr))
+  {
+    ieee_floatt::rounding_modet rm =
+      static_cast<ieee_floatt::rounding_modet>
+        (to_constant_int2t(expr).value.to_int64());
+    return mk_smt_bvfloat_rm(rm);
+  }
+
+  assert(is_symbol2t(expr));
+
+  // Bad, we have to select given the result of c::__ESBMC_rounding_mode:
+  // 0 is round to Nearest/even
+  // 1 is round to -oo
+  // 2 is round to +oo
+  // 3 is round to zero
+
+  smt_sortt bs = boolean_sort;
+
+  smt_astt symbol = convert_ast(expr);
+
+  smt_astt is_eq_zero =
+    mk_func_app(bs, SMT_FUNC_EQ, symbol,
+      mk_smt_bvint(BigInt(0), false, get_int32_type()->get_width()));
+
+  smt_astt is_eq_one =
+    mk_func_app(bs, SMT_FUNC_EQ, symbol,
+      mk_smt_bvint(BigInt(1), false, get_int32_type()->get_width()));
+
+  smt_astt is_eq_two =
+    mk_func_app(bs, SMT_FUNC_EQ, symbol,
+      mk_smt_bvint(BigInt(2), false, get_int32_type()->get_width()));
+
+  smt_astt ne = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt mi = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_MINUS_INF);
+  smt_astt pi = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_PLUS_INF);
+  smt_astt ze = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+
+  smt_astt ite2 =
+    mk_func_app(
+      mk_sort(SMT_SORT_FLOATBV_RM),
+      SMT_FUNC_ITE, is_eq_two, pi, ze);
+
+  smt_astt ite1 =
+    mk_func_app(
+      mk_sort(SMT_SORT_FLOATBV_RM),
+      SMT_FUNC_ITE, is_eq_one, mi, ite2);
+
+  smt_astt ite0 =
+    mk_func_app(
+      mk_sort(SMT_SORT_FLOATBV_RM),
+      SMT_FUNC_ITE, is_eq_zero, ne, ite1);
+
+  return ite0;
+}
+
+smt_astt
+smt_convt::convert_member(const expr2tc &expr)
 {
   const member2t &member = to_member2t(expr);
   unsigned int idx = -1;
@@ -1083,6 +1652,7 @@ smt_convt::convert_member(const expr2tc &expr, smt_astt src)
          is_pointer_type(member.source_value));
   idx = get_member_name_field(member.source_value->type, member.member);
 
+  smt_astt src = convert_ast(member.source_value);
   return src->project(this, idx);
 }
 
@@ -1265,7 +1835,7 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
   // machine word size.
   if (!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size)) {
     constant_int2tc thesize = arr.array_size;
-    return size_to_bit_width(thesize->constant_value.to_ulong());
+    return size_to_bit_width(thesize->value.to_ulong());
   } else {
     return config.ansi_c.word_size;
   }
@@ -1602,100 +2172,6 @@ smt_convt::get_fixed_point(const unsigned width, std::string value) const
   return value;
 }
 
-
-const smt_convt::expr_op_convert
-smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const int
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const fixedbv
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const bool
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const string
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const struct
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const union
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const array
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const array_of
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //symbol
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //typecast
-{ SMT_FUNC_ITE, SMT_FUNC_ITE, SMT_FUNC_ITE, 3, SMT_SORT_ALLINTS | SMT_SORT_BOOL },  //if
-{ SMT_FUNC_EQ, SMT_FUNC_EQ, SMT_FUNC_EQ, 2, SMT_SORT_ALLINTS | SMT_SORT_BOOL},  //equality
-{ SMT_FUNC_NOTEQ, SMT_FUNC_NOTEQ, SMT_FUNC_NOTEQ, 2, SMT_SORT_ALLINTS | SMT_SORT_BOOL},  //notequal
-{ SMT_FUNC_LT, SMT_FUNC_BVSLT, SMT_FUNC_BVULT, 2, SMT_SORT_ALLINTS},  //lt
-{ SMT_FUNC_GT, SMT_FUNC_BVSGT, SMT_FUNC_BVUGT, 2, SMT_SORT_ALLINTS},  //gt
-{ SMT_FUNC_LTE, SMT_FUNC_BVSLTE, SMT_FUNC_BVULTE, 2, SMT_SORT_ALLINTS},  //lte
-{ SMT_FUNC_GTE, SMT_FUNC_BVSGTE, SMT_FUNC_BVUGTE, 2, SMT_SORT_ALLINTS},  //gte
-{ SMT_FUNC_NOT, SMT_FUNC_NOT, SMT_FUNC_NOT, 1, SMT_SORT_BOOL},  //not
-{ SMT_FUNC_AND, SMT_FUNC_AND, SMT_FUNC_AND, 2, SMT_SORT_BOOL},  //and
-{ SMT_FUNC_OR, SMT_FUNC_OR, SMT_FUNC_OR, 2, SMT_SORT_BOOL},  //or
-{ SMT_FUNC_XOR, SMT_FUNC_XOR, SMT_FUNC_XOR, 2, SMT_SORT_BOOL},  //xor
-{ SMT_FUNC_IMPLIES, SMT_FUNC_IMPLIES, SMT_FUNC_IMPLIES, 2, SMT_SORT_BOOL},//impl
-{ SMT_FUNC_INVALID, SMT_FUNC_BVAND, SMT_FUNC_BVAND, 2, SMT_SORT_BV},  //bitand
-{ SMT_FUNC_INVALID, SMT_FUNC_BVOR, SMT_FUNC_BVOR, 2, SMT_SORT_BV},  //bitor
-{ SMT_FUNC_INVALID, SMT_FUNC_BVXOR, SMT_FUNC_BVXOR, 2, SMT_SORT_BV},  //bitxor
-{ SMT_FUNC_INVALID, SMT_FUNC_BVNAND, SMT_FUNC_BVNAND, 2, SMT_SORT_BV},//bitnand
-{ SMT_FUNC_INVALID, SMT_FUNC_BVNOR, SMT_FUNC_BVNOR, 2, SMT_SORT_BV},  //bitnor
-{ SMT_FUNC_INVALID, SMT_FUNC_BVNXOR, SMT_FUNC_BVNXOR, 2, SMT_SORT_BV}, //bitnxor
-{ SMT_FUNC_INVALID, SMT_FUNC_BVNOT, SMT_FUNC_BVNOT, 1, SMT_SORT_BV},  //bitnot
-  // See comment below about shifts
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0}, // lshl
-{ SMT_FUNC_NEG, SMT_FUNC_BVNEG, SMT_FUNC_BVNEG, 1, SMT_SORT_ALLINTS},  //neg
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //abs
-{ SMT_FUNC_ADD, SMT_FUNC_BVADD, SMT_FUNC_BVADD, 2, SMT_SORT_ALLINTS},//add
-{ SMT_FUNC_SUB, SMT_FUNC_BVSUB, SMT_FUNC_BVSUB, 2, SMT_SORT_ALLINTS},//sub
-{ SMT_FUNC_MUL, SMT_FUNC_BVMUL, SMT_FUNC_BVMUL, 2, SMT_SORT_INT | SMT_SORT_REAL },//mul
-{ SMT_FUNC_DIV, SMT_FUNC_BVSDIV, SMT_FUNC_BVUDIV, 2, SMT_SORT_INT | SMT_SORT_REAL },//div
-{ SMT_FUNC_MOD, SMT_FUNC_BVSMOD, SMT_FUNC_BVUMOD, 2, SMT_SORT_BV | SMT_SORT_INT},//mod
-// Error: C frontend doesn't upcast the 2nd operand to shift to the 1st operands
-// bit width. Therefore this doesn't work. Fall back to backup method.
-//{ SMT_FUNC_INVALID, SMT_FUNC_BVASHR, SMT_FUNC_BVASHR, 2, SMT_SORT_BV},  //ashr
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0}, // shl
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //ashr
-
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //dyn_obj_id
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //same_obj_id
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //ptr_offs
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //ptr_obj
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //addr_of
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //byte_extract
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //byte_update
-{ SMT_FUNC_STORE, SMT_FUNC_STORE, SMT_FUNC_STORE, 3, 0},  //with
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //member
-{ SMT_FUNC_SELECT, SMT_FUNC_SELECT, SMT_FUNC_SELECT, 2, 0},  //index
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //isnan
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //overflow
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //overflow_cast
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //overflow_neg
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //unknown
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //invalid
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //null_obj
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //deref
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //valid_obj
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //deallocated
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //dyn_size
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //sideeffect
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_block
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_assign
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_init
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_decl
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_printf
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_expr
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_return
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_skip
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_free
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_goto
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //obj_desc
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_func_call
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_comma
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //invalid_ptr
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //code_asm
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_del_arr
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_del_id
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_catch
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_throw
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_throw_dec
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //isinf
-{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //isnormal
-{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //concat
-};
-
 const std::string
 smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "hack_func_id",
@@ -1756,7 +2232,24 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "extract",
   "int2real",
   "real2int",
-  "is_int"
+  "is_int",
+  "fabs",
+  "is_zero",
+  "is_nan",
+  "is_inf",
+  "is_normal",
+  "is_neg",
+  "is_pos",
+  "ieee_eq",
+  "ieee_neq",
+  "ieee_add",
+  "ieee_sub",
+  "ieee_mul",
+  "ieee_div",
+  "ieee_rm_ne",
+  "ieee_rm_zr",
+  "ieee_rm_pi",
+  "ieee_rm_mi",
 };
 
 // Debris from prop_convt: to be reorganized.
@@ -1789,7 +2282,7 @@ smt_convt::get(const expr2tc &expr)
       return tmp;
 
     const constant_int2t &intval = to_constant_int2t(tmp);
-    uint64_t val = intval.constant_value.to_ulong();
+    uint64_t val = intval.value.to_ulong();
     std::stringstream ss;
     ss << val;
     constant_exprt value_expr(migrate_type_back(expr->type));
@@ -1797,6 +2290,14 @@ smt_convt::get(const expr2tc &expr)
     fixedbvt fbv;
     fbv.from_expr(value_expr);
     return constant_fixedbv2tc(expr->type, fbv);
+  }
+  case type2t::floatbv_id:
+  {
+    expr2tc tmp = get_bv(expr->type, convert_ast(expr));
+    if (is_nil_expr(tmp))
+      return expr2tc();
+
+    return tmp;
   }
   case type2t::array_id:
     return get_array(convert_ast(expr), expr->type);
@@ -1874,7 +2375,7 @@ smt_convt::array_create(const expr2tc &expr)
   }
 
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
-  uint64_t sz = thesize.constant_value.to_ulong();
+  uint64_t sz = thesize.value.to_ulong();
 
   assert(is_constant_array2t(expr));
   const constant_array2t &array = to_constant_array2t(expr);
@@ -1930,7 +2431,7 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
       // Duplicate contents repeatedly.
       assert(is_constant_int2t(arrtype.array_size) &&
           "Cannot have complex nondet-sized array_of initializers");
-      const BigInt &size = to_constant_int2t(arrtype.array_size).constant_value;
+      const BigInt &size = to_constant_int2t(arrtype.array_size).value;
 
       std::vector<expr2tc> new_contents;
       for (uint64_t i = 0; i < size.to_uint64(); i++)

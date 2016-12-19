@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "format_constant.h"
 #include "arith_tools.h"
 #include "fixedbv.h"
+#include "ieee_float.h"
 
 std::string format_constantt::operator()(const exprt &expr)
 {
@@ -26,12 +27,11 @@ std::string format_constantt::operator()(const exprt &expr)
     }
     else if(expr.type().id()=="fixedbv")
     {
-      return fixedbvt(expr).format(*this);
+      return fixedbvt(to_constant_expr(expr)).format(*this);
     }
     else if(expr.type().id()=="floatbv")
     {
-      std::cerr << "floatbv unsupported, sorry" << std::endl;
-      abort();
+      return ieee_floatt(to_constant_expr(expr)).format(*this);
     }
   }
   else if(expr.id()=="string-constant")

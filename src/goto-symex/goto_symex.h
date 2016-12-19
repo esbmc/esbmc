@@ -197,6 +197,16 @@ protected:
   void symex_other(void);
 
   /**
+   *  Interpret an ASSUME instruction.
+   */
+  void symex_assume(void);
+
+  /**
+   *  Interpret an ASSERT instruction.
+   */
+  void symex_assert(void);
+
+  /**
    *  Perform an assertion.
    *  Encodes an assertion that the expression claimed is always true. This
    *  adds the requirement that the current state guard is true as well.
@@ -616,6 +626,8 @@ protected:
    */
   irep_idt guard_identifier_s;
 
+  /** Loop numbers. */
+  std::stack<unsigned> loop_numbers;
   /** Number of assertions executed. */
   unsigned total_claims;
   /** Number of assertions remaining to be discharged. */

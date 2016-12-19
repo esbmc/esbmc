@@ -9,8 +9,9 @@ Author: Daniel Kroening
 \*******************************************************************/
 
 #include <assert.h>
-
 #include "build_goto_trace.h"
+
+extern bool is_valid_witness_expr(const namespacet & ns, const irep_container<expr2t> & exp);
 
 void build_goto_trace(
   const symex_target_equationt &target,
@@ -24,6 +25,7 @@ void build_goto_trace(
       it!=target.SSA_steps.end();
       it++)
   {
+
     const symex_target_equationt::SSA_stept &SSA_step=*it;
     tvt result;
     result=smt_conv.l_get(SSA_step.guard_ast);
@@ -85,3 +87,31 @@ void build_goto_trace(
   }
 }
 
+void build_successful_goto_trace(
+    const symex_target_equationt &target,
+    smt_convt &smt_conv,
+    goto_tracet &goto_trace)
+{
+  unsigned step_nr=0;
+  for(symex_target_equationt::SSA_stepst::const_iterator
+      it=target.SSA_steps.begin();
+      it!=target.SSA_steps.end(); it++)
+  {
+    if((it->is_assignment() || it->is_assert() || it->is_assume())
+      && (is_valid_witness_expr(smt_conv.ns, it->lhs)))
+    {
+      goto_trace.steps.push_back(goto_trace_stept());
+      goto_trace_stept &goto_trace_step=goto_trace.steps.back();
+      goto_trace_step.thread_nr=it->source.thread_nr;
+      goto_trace_step.lhs=it->lhs;
+      goto_trace_step.rhs=it->rhs;
+      goto_trace_step.pc=it->source.pc;
+      goto_trace_step.comment=it->comment;
+      goto_trace_step.original_lhs=it->original_lhs;
+      goto_trace_step.type=it->type;
+      goto_trace_step.step_nr=step_nr;
+      goto_trace_step.format_string=it->format_string;
+      goto_trace_step.stack_trace = it->stack_trace;
+    }
+  }
+}

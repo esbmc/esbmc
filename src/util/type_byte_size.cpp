@@ -90,6 +90,16 @@ member_offset(const struct_type2t &type, const irep_idt &member)
 }
 
 mp_integer
+type_byte_size_default(const type2t &type, mp_integer defaultval)
+{
+  try {
+    return type_byte_size(type);
+  } catch (array_type2t::dyn_sized_array_excp *e) {
+    return defaultval;
+  }
+}
+
+mp_integer
 type_byte_size(const type2t &type)
 {
 
@@ -114,6 +124,7 @@ type_byte_size(const type2t &type)
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
+  case type2t::floatbv_id:
     return mp_integer(type.get_width() / 8);
   case type2t::pointer_id:
     return mp_integer(config.ansi_c.pointer_width / 8);
@@ -147,7 +158,7 @@ type_byte_size(const type2t &type)
     }
 
     const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
-    return subsize * arrsize_int.constant_value;
+    return subsize * arrsize_int.value;
   }
   case type2t::struct_id:
   {
@@ -231,7 +242,7 @@ compute_pointer_offset(const expr2tc &expr)
     if (is_constant_int2t(index.index)) {
       const constant_int2t &index_val = to_constant_int2t(index.index);
       result =
-        gen_ulong(BigInt(sub_size * index_val.constant_value).to_ulong());
+        gen_ulong(BigInt(sub_size * index_val.value).to_ulong());
     } else {
       // Non constant, create multiply.
       // Index operand needs to be the bitwidth of a 'long'.

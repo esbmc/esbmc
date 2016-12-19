@@ -22,6 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "expr_util.h"
 #include "std_expr.h"
 #include "fixedbv.h"
+#include "ieee_float.h"
 
 //#define USE_CACHE
 
@@ -39,12 +40,11 @@ public:
     exprt, exprt, irep_hash> containert;
   #endif
 
-  containert container_normal, container_address_of;
+  containert container_normal;
 
-  containert &container(simplify_exprt::modet mode)
+  containert &container()
   {
-    return mode==simplify_exprt::NORMAL?
-      container_normal:container_address_of;
+    return container_normal;
   }
 };
 
@@ -63,7 +63,7 @@ Function: simplify_exprt::simplify_typecast
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
+bool simplify_exprt::simplify_typecast(exprt &expr)
 {
   if(expr.operands().size()!=1) return true;
 
@@ -83,21 +83,10 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
     equality.location()=expr.location();
     equality.lhs()=expr.op0();
     equality.rhs()=gen_zero(expr.op0().type());
-    simplify_node(equality, mode);
+    simplify_node(equality);
     equality.make_not();
-    simplify_node(equality, mode);
+    simplify_node(equality);
     expr.swap(equality);
-    return false;
-  }
-
-  // eliminate typecasts from NULL
-  if(expr.type().id()=="pointer" &&
-     expr.op0().is_constant() &&
-     expr.op0().value().as_string()=="NULL")
-  {
-    exprt tmp=expr.op0();
-    tmp.type()=expr.type();
-    expr.swap(tmp);
     return false;
   }
 
@@ -111,7 +100,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
     tmp.swap(expr.op0().op0());
     expr.op0().swap(tmp);
     // recursive call
-    simplify_node(expr, mode);
+    simplify_node(expr);
     return false;
   }
 
@@ -239,8 +228,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
       if(expr_type_id=="fixedbv")
       {
         // int to float
-        const fixedbv_typet &f_expr_type=
-          to_fixedbv_type(expr.type());
+        const fixedbv_typet &f_expr_type = to_fixedbv_type(expr.type());
 
         fixedbvt f;
         f.spec=f_expr_type;
@@ -252,8 +240,15 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
 
       if(expr_type_id=="floatbv")
       {
-        std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-        abort();
+        // int to float
+        const floatbv_typet &f_expr_type = to_floatbv_type(expr.type());
+
+        ieee_floatt f;
+        f.spec=f_expr_type;
+        f.from_integer(int_value);
+        expr=f.to_expr();
+
+        return false;
       }
     }
     else if(op_type_id=="fixedbv")
@@ -262,14 +257,14 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
          expr_type_id=="signedbv")
       {
         // cast from float to int
-        fixedbvt f(expr.op0());
+        fixedbvt f(to_constant_expr(expr.op0()));
         expr=from_integer(f.to_integer(), expr.type());
         return false;
       }
       else if(expr_type_id=="fixedbv")
       {
         // float to double or double to float
-        fixedbvt f(expr.op0());
+        fixedbvt f(to_constant_expr(expr.op0()));
         f.round(to_fixedbv_type(expr.type()));
         expr=f.to_expr();
         return false;
@@ -277,8 +272,22 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
     }
     else if(op_type_id=="floatbv")
     {
-      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-      abort();
+      if(expr_type_id=="unsignedbv" ||
+          expr_type_id=="signedbv")
+      {
+        // cast from float to int
+        ieee_floatt f(to_constant_expr(expr.op0()));
+        expr=from_integer(f.to_integer(), expr.type());
+        return false;
+      }
+      else if(expr_type_id=="floatbv")
+      {
+        // float to double or double to float
+        ieee_floatt f(to_constant_expr(expr.op0()));
+        f.change_spec(to_floatbv_type(expr.type()));
+        expr=f.to_expr();
+        return false;
+      }
     }
     else if(op_type_id=="bv")
     {
@@ -323,7 +332,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr, modet mode)
     Forall_operands(it, new_expr)
     {
       it->make_typecast(expr.type());
-      simplify_rec(*it, mode); // recursive call
+      simplify_rec(*it); // recursive call
     }
 
     expr.swap(new_expr);
@@ -459,7 +468,7 @@ exprt simplify_exprt::pointer_offset(
     if(result.type()!=type)
     {
       result.make_typecast(type);
-      simplify_typecast(result, NORMAL);
+      simplify_typecast(result);
     }
 
     return result;
@@ -509,7 +518,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
     // first see if that is zero
     exprt ptr_off("pointer_offset", expr.type());
     ptr_off.copy_to_operands(ptr.op0());
-    simplify_node(ptr_off, NORMAL);
+    simplify_node(ptr_off);
 
     if(ptr_off.is_zero())
     {
@@ -534,7 +543,7 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
     {
       exprt ptr_off("pointer_offset", expr.type());
       ptr_off.copy_to_operands(ptr_expr.front());
-      simplify_node(ptr_off, NORMAL);
+      simplify_node(ptr_off);
 
       if(int_expr.empty())
         expr=ptr_off;
@@ -553,11 +562,11 @@ bool simplify_exprt::simplify_pointer_offset(exprt &expr)
           if(it->type()!=expr.type())
           {
             expr.operands().back().make_typecast(expr.type());
-            simplify_node(expr.operands().back(), NORMAL);
+            simplify_node(expr.operands().back());
           }
         }
 
-        simplify_node(expr, NORMAL);
+        simplify_node(expr);
       }
       return false;
     }
@@ -692,8 +701,8 @@ bool simplify_exprt::simplify_division(exprt &expr)
      expr.type()!=expr.op1().type())
     return true;
 
-  if(expr.type().id()=="signedbv" ||
-     expr.type().id()=="unsignedbv" ||
+  if(expr.type().is_signedbv() ||
+     expr.type().is_unsignedbv() ||
      expr.type().id()=="natural" ||
      expr.type().id()=="integer")
   {
@@ -717,20 +726,6 @@ bool simplify_exprt::simplify_division(exprt &expr)
 
     if(ok0 && ok1)
     {
-      #if 0
-      if(int_value0==int_value1)
-      {
-        expr.make_one();
-        return false;
-      }
-      else if(int_value0>=0 && int_value1>=0 &&
-              int_value0<int_value1)
-      {
-        expr=gen_zero(expr.type());
-        return false;
-      }
-      #endif
-
       mp_integer result=int_value0/int_value1;
       exprt tmp=from_integer(result, expr.type());
 
@@ -741,11 +736,10 @@ bool simplify_exprt::simplify_division(exprt &expr)
       }
     }
   }
-  else if(expr.type().id()=="fixedbv")
+  else if(expr.type().is_fixedbv())
   {
     // division by one?
-    if(expr.op1().is_constant() &&
-       expr.op1().is_one())
+    if(expr.op1().is_constant() && expr.op1().is_one())
     {
       exprt tmp;
       tmp.swap(expr.op0());
@@ -753,11 +747,10 @@ bool simplify_exprt::simplify_division(exprt &expr)
       return false;
     }
 
-    if(expr.op0().is_constant() &&
-       expr.op1().is_constant())
+    if(expr.op0().is_constant() && expr.op1().is_constant())
     {
-      fixedbvt f0(expr.op0());
-      fixedbvt f1(expr.op1());
+      fixedbvt f0(to_constant_expr(expr.op0()));
+      fixedbvt f1(to_constant_expr(expr.op1()));
       if(!f1.is_zero())
       {
         f0/=f1;
@@ -766,12 +759,30 @@ bool simplify_exprt::simplify_division(exprt &expr)
       }
     }
   }
-  else if(expr.type().id()=="floatbv")
+  else if(expr.type().is_floatbv())
   {
-      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-      abort();
-  }
+    // division by one?
+    if(expr.op1().is_constant() && expr.op1().is_one())
+    {
+      exprt tmp;
+      tmp.swap(expr.op0());
+      expr.swap(tmp);
+      return false;
+    }
 
+    if(expr.op0().is_constant() && expr.op1().is_constant())
+    {
+      ieee_floatt f0(to_constant_expr(expr.op0()));
+      ieee_floatt f1(to_constant_expr(expr.op1()));
+
+      if(!f1.is_zero())
+      {
+        f0/=f1;
+        expr=f0.to_expr();
+        return false;
+      }
+    }
+  }
   return true;
 }
 
@@ -795,8 +806,8 @@ bool simplify_exprt::simplify_modulo(exprt &expr)
   if(expr.operands().size()!=2)
     return true;
 
-  if(expr.type().id()=="signedbv" ||
-     expr.type().id()=="unsignedbv" ||
+  if(expr.type().is_signedbv() ||
+     expr.type().is_unsignedbv() ||
      expr.type().id()=="natural" ||
      expr.type().id()=="integer")
   {
@@ -849,7 +860,7 @@ Function: simplify_exprt::simplify_addition_substraction
 \*******************************************************************/
 
 bool simplify_exprt::simplify_addition_substraction(
-  exprt &expr, modet mode)
+  exprt &expr)
 {
   if(!is_number(expr.type()) &&
      expr.type().id()!="pointer")
@@ -947,7 +958,7 @@ bool simplify_exprt::simplify_addition_substraction(
 
     exprt an_add("+", expr.type());
     an_add.operands() = subtrahends;
-    simplify_rec(an_add, mode);
+    simplify_rec(an_add);
 
     // We should now have a list of operands, one of which might be constant. If
     // the minuend is constant, and a subtracting operand is constant, perform
@@ -1487,8 +1498,7 @@ Function: simplify_exprt::simplify_if_branch
 bool simplify_exprt::simplify_if_branch(
   exprt &trueexpr,
   exprt &falseexpr,
-  const exprt &cond,
-  modet mode)
+  const exprt &cond)
 {
   bool tresult = true;
   bool fresult = true;
@@ -1509,8 +1519,8 @@ bool simplify_exprt::simplify_if_branch(
     fresult = simplify_if_recursive(falseexpr, cond, false) && fresult;
   }
 
-  if(!tresult) simplify_rec(trueexpr, mode);
-  if(!fresult) simplify_rec(falseexpr, mode);
+  if(!tresult) simplify_rec(trueexpr);
+  if(!fresult) simplify_rec(falseexpr);
 
   return tresult && fresult;
 }
@@ -1527,7 +1537,7 @@ Function: simplify_exprt::simplify_if_cond
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_if_cond(exprt &expr, modet mode)
+bool simplify_exprt::simplify_if_cond(exprt &expr)
 {
   bool result = true;
   bool tmp = false;
@@ -1554,7 +1564,7 @@ bool simplify_exprt::simplify_if_cond(exprt &expr, modet mode)
       }
     }
 
-    if(!tmp) simplify_rec(expr, mode);
+    if(!tmp) simplify_rec(expr);
 
     result = tmp && result;
   }
@@ -1672,7 +1682,7 @@ Function: simplify_exprt::simplify_boolean
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_not(exprt &expr, modet mode)
+bool simplify_exprt::simplify_not(exprt &expr)
 {
   if(expr.operands().size()!=1) return true;
 
@@ -1711,7 +1721,7 @@ bool simplify_exprt::simplify_not(exprt &expr, modet mode)
     Forall_operands(it, expr)
     {
       it->make_not();
-      simplify_node(*it, mode);
+      simplify_node(*it);
     }
 
     expr.id(expr.is_and()?"or":"and");
@@ -1734,7 +1744,7 @@ Function: simplify_exprt::simplify_boolean
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
+bool simplify_exprt::simplify_boolean(exprt &expr)
 {
   if(!expr.has_operands()) return true;
 
@@ -1753,8 +1763,8 @@ bool simplify_exprt::simplify_boolean(exprt &expr, modet mode)
 
     expr.id("or");
     expr.op0().make_not();
-    simplify_node(expr.op0(), mode);
-    simplify_node(expr, mode);
+    simplify_node(expr.op0());
+    simplify_node(expr);
     return false;
   }
   else if(expr.id()=="<=>")
@@ -2000,7 +2010,7 @@ Function: simplify_exprt::simplify_inequality
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
+bool simplify_exprt::simplify_inequality(exprt &expr)
 {
   exprt::operandst &operands=expr.operands();
 
@@ -2037,8 +2047,8 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
     }
     else if(expr.op0().type().id()=="fixedbv")
     {
-      fixedbvt f0(expr.op0());
-      fixedbvt f1(expr.op1());
+      fixedbvt f0(to_constant_expr(expr.op0()));
+      fixedbvt f1(to_constant_expr(expr.op1()));
 
       if(expr.id()=="notequal")
         expr.make_bool(f0!=f1);
@@ -2059,8 +2069,25 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
     }
     else if(expr.op0().type().id()=="floatbv")
     {
-      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-      abort();
+      ieee_floatt f0(to_constant_expr(expr.op0()));
+      ieee_floatt f1(to_constant_expr(expr.op1()));
+
+      if(expr.id()=="notequal")
+        expr.make_bool(f0!=f1);
+      else if(expr.id()=="=")
+        expr.make_bool(f0==f1);
+      else if(expr.id()==">=")
+        expr.make_bool(f0>=f1);
+      else if(expr.id()=="<=")
+        expr.make_bool(f0<=f1);
+      else if(expr.id()==">")
+        expr.make_bool(f0>f1);
+      else if(expr.id()=="<")
+        expr.make_bool(f0<f1);
+      else
+        assert(false);
+
+      return false;
     }
     else
     {
@@ -2105,15 +2132,15 @@ bool simplify_exprt::simplify_inequality(exprt &expr, modet mode)
 
     expr.op0().swap(expr.op1());
 
-    simplify_inequality_constant(expr, mode);
+    simplify_inequality_constant(expr);
     return false;
   }
   else if(op1_is_const)
   {
-    return simplify_inequality_constant(expr, mode);
+    return simplify_inequality_constant(expr);
   }
   else
-    return simplify_inequality_not_constant(expr, mode);
+    return simplify_inequality_not_constant(expr);
 
   assert(false);
   return false;
@@ -2182,7 +2209,7 @@ Function: simplify_exprt::simplify_inequality_not_constant
 \*******************************************************************/
 
 bool simplify_exprt::simplify_inequality_not_constant(
-  exprt &expr, modet mode)
+  exprt &expr)
 {
   exprt::operandst &operands=expr.operands();
 
@@ -2190,9 +2217,9 @@ bool simplify_exprt::simplify_inequality_not_constant(
   if(expr.id()=="notequal")
   {
     expr.id("=");
-    simplify_inequality_not_constant(expr, mode);
+    simplify_inequality_not_constant(expr);
     expr.make_not();
-    simplify_not(expr, mode);
+    simplify_not(expr);
     return false;
   }
   else if(expr.id()==">")
@@ -2200,17 +2227,17 @@ bool simplify_exprt::simplify_inequality_not_constant(
     expr.id(">=");
     // swap operands
     expr.op0().swap(expr.op1());
-    simplify_inequality_not_constant(expr, mode);
+    simplify_inequality_not_constant(expr);
     expr.make_not();
-    simplify_not(expr, mode);
+    simplify_not(expr);
     return false;
   }
   else if(expr.id()=="<")
   {
     expr.id(">=");
-    simplify_inequality_not_constant(expr, mode);
+    simplify_inequality_not_constant(expr);
     expr.make_not();
-    simplify_not(expr, mode);
+    simplify_not(expr);
     return false;
   }
   else if(expr.id()=="<=")
@@ -2218,7 +2245,7 @@ bool simplify_exprt::simplify_inequality_not_constant(
     expr.id(">=");
     // swap operands
     expr.op0().swap(expr.op1());
-    simplify_inequality_not_constant(expr, mode);
+    simplify_inequality_not_constant(expr);
     return false;
   }
 
@@ -2288,9 +2315,9 @@ bool simplify_exprt::simplify_inequality_not_constant(
     if(!eliminate_common_addends(expr.op0(), expr.op1()))
     {
       // remove zeros
-      simplify_node(expr.op0(), mode);
-      simplify_node(expr.op1(), mode);
-      simplify_inequality(expr, mode);
+      simplify_node(expr.op0());
+      simplify_node(expr.op1());
+      simplify_inequality(expr);
       return false;
     }
 
@@ -2310,8 +2337,7 @@ Function: simplify_exprt::simplify_inequality_constant
 \*******************************************************************/
 
 bool simplify_exprt::simplify_inequality_constant(
-  exprt &expr,
-  modet mode)
+  exprt &expr)
 {
   assert(expr.op1().is_constant());
 
@@ -2351,8 +2377,8 @@ bool simplify_exprt::simplify_inequality_constant(
         i-=constant;
         expr.op1()=from_integer(i, expr.op1().type());
 
-        simplify_addition_substraction(expr.op0(), mode);
-        simplify_inequality(expr, mode);
+        simplify_addition_substraction(expr.op0());
+        simplify_inequality(expr);
         return false;
       }
     }
@@ -2424,7 +2450,7 @@ Function: simplify_exprt::simplify_relation
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
+bool simplify_exprt::simplify_relation(exprt &expr)
 {
   bool result=true;
 
@@ -2460,7 +2486,7 @@ bool simplify_exprt::simplify_relation(exprt &expr, modet mode)
   if(expr.id()=="="  || expr.id()=="notequal" ||
      expr.id()==">=" || expr.id()=="<=" ||
      expr.id()==">"  || expr.id()=="<")
-    result=simplify_inequality(expr, mode) && result;
+    result=simplify_inequality(expr) && result;
 
   return result;
 }
@@ -2477,10 +2503,57 @@ Function: simplify_exprt::simplify_ieee_float_relation
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_ieee_float_relation(exprt &expr __attribute__((unused)))
+bool simplify_exprt::simplify_ieee_float_relation(exprt &expr)
 {
-  std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-  abort();
+  exprt::operandst &operands=expr.operands();
+
+  if(!expr.type().is_bool()) return true;
+
+  if(operands.size()!=2) return true;
+
+  // types must match
+  if(expr.op0().type()!=expr.op1().type())
+    return true;
+
+  if(expr.op0().type().id()!="floatbv")
+    return true;
+
+  // first see if we compare to a constant
+
+  if(expr.op0().is_constant() && expr.op1().is_constant())
+  {
+    ieee_floatt f0(to_constant_expr(expr.op0()));
+    ieee_floatt f1(to_constant_expr(expr.op1()));
+
+    if(expr.id()=="ieee_float_notequal")
+      expr.make_bool((f0 != f1));
+    else if(expr.id()=="ieee_float_equal")
+      expr.make_bool((f0 == f1));
+    else
+      assert(false);
+
+    return false;
+  }
+
+  if(expr.op0()==expr.op1())
+  {
+    // x!=x is the same as saying isnan(op)
+    exprt isnan("isnan", bool_typet());
+    isnan.copy_to_operands(expr.op0());
+
+    if(expr.id()=="ieee_float_notequal")
+    {
+    }
+    else if(expr.id()=="ieee_float_equal")
+      isnan.make_not();
+    else
+      assert(false);
+
+    expr.swap(isnan);
+    return false;
+  }
+
+  return true;
 }
 
 /*******************************************************************\
@@ -2548,7 +2621,7 @@ bool simplify_exprt::simplify_with(exprt &expr)
         if(!expr.op2().is_constant())
           break;
 
-        expr.op0().operands()[integer2long(i)].swap(expr.op2());
+        expr.op0().operands()[i.to_ulong()].swap(expr.op2());
 
         expr.operands().erase(++expr.operands().begin());
         expr.operands().erase(++expr.operands().begin());
@@ -2581,7 +2654,7 @@ Function: simplify_exprt::simplify_index
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
+bool simplify_exprt::simplify_index(index_exprt &expr)
 {
   if(expr.operands().size()!=2) return true;
 
@@ -2608,14 +2681,14 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
       if(equality_expr.lhs().type()!=equality_expr.rhs().type())
         equality_expr.rhs().make_typecast(equality_expr.lhs().type());
 
-      simplify_relation(equality_expr, mode);
+      simplify_relation(equality_expr);
 
       index_exprt new_index_expr;
       new_index_expr.type()=expr.type();
       new_index_expr.array()=with_expr.op0();
       new_index_expr.index()=expr.op1();
 
-      simplify_index(new_index_expr, mode); // recursive call
+      simplify_index(new_index_expr); // recursive call
 
       exprt if_expr("if", expr.type());
       if_expr.reserve_operands(3);
@@ -2633,50 +2706,44 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
   else if(expr.op0().id()=="constant" ||
           expr.op0().is_array())
   {
-    if(mode==NORMAL)
-    {
-      mp_integer i;
+    mp_integer i;
 
-      if(to_integer(expr.op1(), i))
-      {
-      }
-      else if(i<0 || i>=expr.op0().operands().size())
-      {
-        // out of bounds
-      }
-      else
-      {
-        // ok
-        exprt tmp;
-        tmp.swap(expr.op0().operands()[integer2long(i)]);
-        expr.swap(tmp);
-        return false;
-      }
+    if(to_integer(expr.op1(), i))
+    {
+    }
+    else if(i<0 || i>=expr.op0().operands().size())
+    {
+      // out of bounds
+    }
+    else
+    {
+      // ok
+      exprt tmp;
+      tmp.swap(expr.op0().operands()[i.to_ulong()]);
+      expr.swap(tmp);
+      return false;
     }
   }
   else if(expr.op0().id()=="string-constant")
   {
-    if(mode==NORMAL)
+    mp_integer i;
+
+    const irep_idt &value=expr.op0().value();
+
+    if(to_integer(expr.op1(), i))
     {
-      mp_integer i;
-
-      const irep_idt &value=expr.op0().value();
-
-      if(to_integer(expr.op1(), i))
-      {
-      }
-      else if(i<0 || i>value.size())
-      {
-        // out of bounds
-      }
-      else
-      {
-        // terminating zero?
-        char v=(i==value.size())?0:value[integer2long(i)];
-        exprt tmp=from_integer(v, expr.type());
-        expr.swap(tmp);
-        return false;
-      }
+    }
+    else if(i<0 || i>value.size())
+    {
+      // out of bounds
+    }
+    else
+    {
+      // terminating zero?
+      char v=(i==value.size())?0:value[i.to_ulong()];
+      exprt tmp=from_integer(v, expr.type());
+      expr.swap(tmp);
+      return false;
     }
   }
   else if(expr.op0().id()=="array_of")
@@ -3127,8 +3194,10 @@ Function:
 bool simplify_exprt::simplify_unary_minus(exprt &expr)
 {
 
-  if (config.options.get_bool_option("int-encoding") &&
-      expr.type().id() != "fixedbv" && expr.type().id() != "signedbv")
+  if (config.options.get_bool_option("int-encoding")
+      && !expr.type().is_fixedbv()
+      && !expr.type().is_floatbv()
+      && !expr.type().is_signedbv())
     // Never simplify a unary minus if we're using integer encoding. The SMT
     // solver is going to have its own negative representation, and this
     // conflicts with the current irep representation of binary-in-a-string.
@@ -3162,6 +3231,7 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
 
   if(operand.id()=="unary-")
   {
+    // cancel out "-(-x)" to "x"
     if(operand.operands().size()!=1)
       return true;
 
@@ -3173,12 +3243,9 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
     expr.swap(tmp);
     return false;
   }
-  else if(operand.id()=="constant")
+  else if(operand.is_constant())
   {
-    const irep_idt &type_id=expr.type().id();
-    if(type_id=="integer" ||
-       type_id=="signedbv" ||
-       type_id=="unsignedbv")
+    if(expr.type().is_signedbv() || expr.type().is_unsignedbv())
     {
       mp_integer int_value;
 
@@ -3194,17 +3261,19 @@ bool simplify_exprt::simplify_unary_minus(exprt &expr)
 
       return false;
     }
-    else if(type_id=="fixedbv")
+    else if(expr.type().is_fixedbv())
     {
-      fixedbvt f(expr.op0());
+      fixedbvt f(to_constant_expr(expr.op0()));
       f.negate();
       expr=f.to_expr();
       return false;
     }
-    else if(type_id=="floatbv")
+    else if(expr.type().is_floatbv())
     {
-      std::cerr << "floatbv currently unsupported, sorry" << std::endl;
-      abort();
+      ieee_floatt f(to_constant_expr(expr.op0()));
+      f.negate();
+      expr=f.to_expr();
+      return false;
     }
   }
 
@@ -3223,7 +3292,7 @@ Function: simplify_exprt::simplify_node
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_node(exprt &expr, modet mode)
+bool simplify_exprt::simplify_node(exprt &expr)
 {
   if(!expr.has_operands()) return true;
 
@@ -3232,17 +3301,17 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   result=sort_and_join(expr) && result;
 
   if(expr.id()=="typecast")
-    result=simplify_typecast(expr, mode) && result;
+    result=simplify_typecast(expr) && result;
   else if(expr.id()=="=" || expr.id()=="notequal" ||
           expr.id()==">" || expr.id()=="<" ||
           expr.id()==">=" || expr.id()=="<=")
-    result=simplify_relation(expr, mode) && result;
+    result=simplify_relation(expr) && result;
   else if(expr.id()=="if")
     result=simplify_if(expr) && result;
   else if(expr.id()=="with")
     result=simplify_with(expr) && result;
   else if(expr.id()=="index")
-    result=simplify_index(to_index_expr(expr), mode) && result;
+    result=simplify_index(to_index_expr(expr)) && result;
   else if(expr.id()=="member")
     result=simplify_member(to_member_expr(expr)) && result;
   else if(expr.id()=="pointer_object")
@@ -3274,17 +3343,17 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
   else if(expr.id()=="ashr" || expr.id()=="lshr" || expr.id()=="shl")
     result=simplify_shifts(expr) && result;
   else if(expr.id()=="+" || expr.id()=="-")
-    result=simplify_addition_substraction(expr, mode) && result;
+    result=simplify_addition_substraction(expr) && result;
   else if(expr.id()=="*")
     result=simplify_multiplication(expr) && result;
   else if(expr.id()=="unary-")
     result=simplify_unary_minus(expr) && result;
   else if(expr.id()=="not")
-    result=simplify_not(expr, mode) && result;
+    result=simplify_not(expr) && result;
   else if(expr.id()=="=>"  || expr.id()=="<=>" ||
           expr.id()=="or"  || expr.id()=="xor" ||
           expr.is_and())
-    result=simplify_boolean(expr, mode) && result;
+    result=simplify_boolean(expr) && result;
   else if(expr.id()=="comma")
   {
     if(expr.operands().size()!=0)
@@ -3322,13 +3391,13 @@ Function: simplify_exprt::simplify
 
 \*******************************************************************/
 
-bool simplify_exprt::simplify_rec(exprt &expr, modet mode)
+bool simplify_exprt::simplify_rec(exprt &expr)
 {
   // look up in cache
 
   #ifdef USE_CACHE
   std::pair<simplify_expr_cachet::containert::iterator, bool>
-    cache_result=simplify_expr_cache.container(mode).
+    cache_result=simplify_expr_cache.container().
       insert(std::pair<exprt, exprt>(expr, exprt()));
 
   if(!cache_result.second) // found!
@@ -3344,17 +3413,14 @@ bool simplify_exprt::simplify_rec(exprt &expr, modet mode)
   #endif
 
   bool result=true;
-  modet sub_mode=mode;
 
-  if(expr.is_address_of())
-    sub_mode=ADDRESS_OF;
 
   if(expr.has_operands())
     Forall_operands(it, expr)
-      if(!simplify_rec(*it, sub_mode)) // recursive call
+      if(!simplify_rec(*it)) // recursive call
         result=false;
 
-  if(!simplify_node(expr, mode)) result=false;
+  if(!simplify_node(expr)) result=false;
 
   #ifdef USE_CACHE
   // save in cache

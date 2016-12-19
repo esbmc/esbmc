@@ -50,7 +50,6 @@ goto_symex_statet::operator=(const goto_symex_statet &state)
   global_guard = state.global_guard;
   source = state.source;
   variable_instance_nums = state.variable_instance_nums;
-  unwind_map = state.unwind_map;
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
@@ -81,10 +80,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if (is_nil_expr(expr)) {
     return true; // It's fine to constant propagate something that's absent.
-  } else if (is_constant_expr(expr)) {
-    return true;
-  }
-  else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
+  } else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
   {
     // Null is also essentially a constant.
     return true;
@@ -150,6 +146,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return false;
 
     return constant_propagation(*e);
+  } else if (is_constant_expr(expr)) {
+    return true;
   }
 
   /* No difference
@@ -404,7 +402,7 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
 
   if (!thread_ended) {
     std::cout << spaces << "Next instruction to be executed:" << std::endl;
-    source.prog->output_instruction(ns, "", std::cout, source.pc, true, false);
+    source.pc->output_instruction(ns, "", std::cout);
   }
 
   return;

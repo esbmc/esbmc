@@ -1,5 +1,3 @@
 main.cpp
 Bicycle.cpp Display.cpp EmbeddedPC.cpp Thread.cpp --unwind 2 --no-unwinding-assertions -I ~/libraries/ --no-pointer-check
 ^VERIFICATION SUCCESSFUL$
---
-^VERIFICATION FAILURE$

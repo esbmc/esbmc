@@ -31,15 +31,8 @@ goto_symext::get_unwind_recursion(
 
   if (unwind != 0)
   {
-    if(options.get_bool_option("inductive-step")
-       && !options.get_bool_option("disable-inductive-step"))
-    {
-      std::cout << "**** WARNING: this program contains recursive function calls,"
-          << " so we are not applying the inductive step to this program!"
-          << std::endl;
-      options.set_option("disable-inductive-step", true);
-      throw 0;
-    }
+    if(options.get_bool_option("abort-on-recursion"))
+      abort();
 
     const symbolt &symbol = ns.lookup(identifier);
 
@@ -215,6 +208,14 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     cur_state->rename(arguments[i]);
   }
 
+  // Rename the return value to level1, identifying the data object / storage
+  // to which the return value should be written. This is important in the case
+  // of recursion, in which case the lexical variable (level0) has multiple
+  // live instances.
+  expr2tc ret_value = call.ret;
+  if (!is_nil_expr(ret_value) && !is_empty_type(ret_value->type))
+    cur_state->rename_address(ret_value);
+
   // increase unwinding counter
   unwinding_counter++;
 
@@ -246,7 +247,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   argument_assignments(to_code_type(tmp_type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
-  frame.return_value = call.ret;
+  frame.return_value = ret_value;
   frame.function_identifier = identifier;
 
   cur_state->source.is_set = true;

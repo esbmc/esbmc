@@ -56,6 +56,7 @@
 
 #define ESBMC_LIST_OF_EXPRS BOOST_PP_LIST_CONS(constant_int,\
   BOOST_PP_LIST_CONS(constant_fixedbv,\
+  BOOST_PP_LIST_CONS(constant_floatbv,\
   BOOST_PP_LIST_CONS(constant_bool,\
   BOOST_PP_LIST_CONS(constant_string,\
   BOOST_PP_LIST_CONS(constant_struct,\
@@ -64,6 +65,8 @@
   BOOST_PP_LIST_CONS(constant_array_of,\
   BOOST_PP_LIST_CONS(symbol,\
   BOOST_PP_LIST_CONS(typecast,\
+  BOOST_PP_LIST_CONS(bitcast,\
+  BOOST_PP_LIST_CONS(nearbyint,\
   BOOST_PP_LIST_CONS(if,\
   BOOST_PP_LIST_CONS(equality,\
   BOOST_PP_LIST_CONS(notequal,\
@@ -90,6 +93,11 @@
   BOOST_PP_LIST_CONS(sub,\
   BOOST_PP_LIST_CONS(mul,\
   BOOST_PP_LIST_CONS(div,\
+  BOOST_PP_LIST_CONS(ieee_add,\
+  BOOST_PP_LIST_CONS(ieee_sub,\
+  BOOST_PP_LIST_CONS(ieee_mul,\
+  BOOST_PP_LIST_CONS(ieee_div,\
+  BOOST_PP_LIST_CONS(ieee_fma,\
   BOOST_PP_LIST_CONS(modulus,\
   BOOST_PP_LIST_CONS(shl,\
   BOOST_PP_LIST_CONS(ashr,\
@@ -138,8 +146,10 @@
   BOOST_PP_LIST_CONS(code_cpp_throw_decl_end,\
   BOOST_PP_LIST_CONS(isinf,\
   BOOST_PP_LIST_CONS(isnormal,\
+  BOOST_PP_LIST_CONS(isfinite,\
+  BOOST_PP_LIST_CONS(signbit,\
   BOOST_PP_LIST_CONS(concat, BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))\
-))))))))))))))))))))))))))))))))))))))))))))))))))))))
+))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 #define ESBMC_LIST_OF_TYPES BOOST_PP_LIST_CONS(bool,\
 BOOST_PP_LIST_CONS(empty,\
@@ -373,6 +383,7 @@ public:
     unsignedbv_id,
     signedbv_id,
     fixedbv_id,
+    floatbv_id,
     string_id,
     cpp_name_id,
     end_type_id
@@ -581,7 +592,7 @@ public:
    */
   enum expr_ids {
     // Boost preprocessor magic: enumerate over each expression and pump out
-    // a foo_id enum element
+    // a foo_id enum element. See list of ireps at top of file.
 #define _ESBMC_IREP2_EXPRID_ENUM(r, data, elem) BOOST_PP_CAT(elem,_id),
 BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPRID_ENUM, foo, ESBMC_LIST_OF_EXPRS)
     end_expr_id
@@ -1216,6 +1227,8 @@ namespace esbmct {
     {
       // No result, so desired must exceed the number of idx's
       assert(cur_idx >= desired);
+      (void)cur_idx;
+      (void)desired;
       return NULL;
     }
 
@@ -1223,6 +1236,8 @@ namespace esbmct {
     {
       // See above
       assert(cur_idx >= desired);
+      (void)cur_idx;
+      (void)desired;
       return NULL;
     }
 
@@ -1434,6 +1449,7 @@ class code_type2t;
 class array_type2t;
 class pointer_type2t;
 class fixedbv_type2t;
+class floatbv_type2t;
 class string_type2t;
 class cpp_name_type2t;
 
@@ -1585,6 +1601,23 @@ public:
   typedef esbmct::type2t_traits<width_field, integer_bits_field> traits;
 };
 
+class floatbv_data : public type2t
+{
+public:
+  floatbv_data(type2t::type_ids id, unsigned int f, unsigned int e)
+    : type2t(id), fraction(f), exponent(e) { }
+  floatbv_data(const floatbv_data &ref)
+    : type2t(ref), fraction(ref.fraction), exponent(ref.exponent) { }
+
+  unsigned int fraction;
+  unsigned int exponent;
+
+// Type mangling:
+  typedef esbmct::field_traits<unsigned int, floatbv_data, &floatbv_data::fraction> fraction_field;
+  typedef esbmct::field_traits<unsigned int, floatbv_data, &floatbv_data::exponent> exponent_field;
+  typedef esbmct::type2t_traits<fraction_field, exponent_field> traits;
+};
+
 class string_data : public type2t
 {
 public:
@@ -1620,7 +1653,6 @@ public:
 
 // Then give them a typedef name
 
-
 #define irep_typedefs(basename, superclass) \
   typedef esbmct::something2tc<type2t, basename##_type2t,\
                               type2t::basename##_id, const type2t::type_ids,\
@@ -1639,6 +1671,7 @@ irep_typedefs(code, code_data)
 irep_typedefs(array, array_data)
 irep_typedefs(pointer, pointer_data)
 irep_typedefs(fixedbv, fixedbv_data)
+irep_typedefs(floatbv, floatbv_data)
 irep_typedefs(string, string_data)
 irep_typedefs(cpp_name, cpp_name_data)
 #undef irep_typedefs
@@ -1873,6 +1906,28 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Floating-point bitvector type.
+ *  Contains a spec for a floating point number -- this is the equivalent of a
+ *  ieee_float_spect in the old irep situation. Stores how bits are distributed
+ *  over fraction bits and exponent bits.
+ *  @extend floatbv_type_methods
+ */
+class floatbv_type2t : public floatbv_type_methods
+{
+public:
+  /** Primary constructor.
+   *  @param fraction Number of fraction bits in this type of floatbv
+   *  @param exponent Number of exponent bits in this type of floatbv
+   */
+  floatbv_type2t(unsigned int fraction, unsigned int exponent)
+    : floatbv_type_methods(floatbv_id, fraction, exponent) { }
+  floatbv_type2t(const floatbv_type2t &ref)
+    : floatbv_type_methods(ref) { }
+  virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 /** String type class.
  *  Slightly artificial as original irep had no type for this; Represents the
  *  type of a string constant. Because it needs a bit width, we also store the
@@ -1940,6 +1995,7 @@ type_macros(pointer);
 type_macros(unsignedbv);
 type_macros(signedbv);
 type_macros(fixedbv);
+type_macros(floatbv);
 type_macros(string);
 type_macros(cpp_name);
 #undef type_macros
@@ -1951,14 +2007,26 @@ type_macros(cpp_name);
 inline bool is_bv_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id); }
+
 inline bool is_bv_type(const expr2tc &e)
 { return is_bv_type(e->type); }
 
-/** Test whether type is a number type - bv or fixedbv. */
-inline bool is_number_type(const type2tc &t) \
+/** Test whether type is a float/double. */
+inline bool is_fractional_type(const type2tc &t) \
+{ return (t->type_id == type2t::fixedbv_id ||
+          t->type_id == type2t::floatbv_id); }
+
+inline bool is_fractional_type(const expr2tc &e)
+{ return is_bv_type(e->type); }
+
+/** Test whether type is a number type - bv, fixedbv or floatbv. */
+inline bool is_number_type(const type2tc &t)
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id ||
-          t->type_id == type2t::fixedbv_id); }
+          t->type_id == type2t::fixedbv_id ||
+          t->type_id == type2t::floatbv_id ||
+          t->type_id == type2t::bool_id); }
+
 inline bool is_number_type(const expr2tc &e)
 { return is_number_type(e->type); }
 
@@ -2009,6 +2077,7 @@ public:
   std::map<typet, type2tc> unsignedbv_map;
   std::map<typet, type2tc> signedbv_map;
   std::map<typet, type2tc> fixedbv_map;
+  std::map<typet, type2tc> floatbv_map;
   std::map<typet, type2tc> string_map;
   std::map<typet, type2tc> symbol_map;
   std::map<typet, type2tc> code_map;
@@ -2031,6 +2100,7 @@ public:
   const type2tc &get_unsignedbv(const typet &val);
   const type2tc &get_signedbv(const typet &val);
   const type2tc &get_fixedbv(const typet &val);
+  const type2tc &get_floatbv(const typet &val);
   const type2tc &get_string(const typet &val);
   const type2tc &get_symbol(const typet &val);
   const type2tc &get_code(const typet &val);
@@ -2070,15 +2140,15 @@ class constant_int_data : public constant2t
 {
 public:
   constant_int_data(const type2tc &t, expr2t::expr_ids id, const BigInt &bint)
-    : constant2t(t, id), constant_value(bint) { }
+    : constant2t(t, id), value(bint) { }
   constant_int_data(const constant_int_data &ref)
-    : constant2t(ref), constant_value(ref.constant_value) { }
+    : constant2t(ref), value(ref.value) { }
 
-  BigInt constant_value;
+  BigInt value;
 
 // Type mangling:
-  typedef esbmct::field_traits<BigInt, constant_int_data, &constant_int_data::constant_value> constant_value_field;
-  typedef esbmct::expr2t_traits<constant_value_field> traits;
+  typedef esbmct::field_traits<BigInt, constant_int_data, &constant_int_data::value> value_field;
+  typedef esbmct::expr2t_traits<value_field> traits;
 };
 
 class constant_fixedbv_data : public constant2t
@@ -2094,6 +2164,22 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value> value_field;
+  typedef esbmct::expr2t_traits<value_field> traits;
+};
+
+class constant_floatbv_data : public constant2t
+{
+public:
+  constant_floatbv_data(const type2tc &t, expr2t::expr_ids id,
+                        const ieee_floatt &ieeebv)
+    : constant2t(t, id), value(ieeebv) { }
+  constant_floatbv_data(const constant_floatbv_data &ref)
+    : constant2t(ref), value(ref.value) { }
+
+  ieee_floatt value;
+
+// Type mangling:
+  typedef esbmct::field_traits<ieee_floatt, constant_floatbv_data, &constant_floatbv_data::value> value_field;
   typedef esbmct::expr2t_traits<value_field> traits;
 };
 
@@ -2117,15 +2203,15 @@ class constant_bool_data : public constant2t
 {
 public:
   constant_bool_data(const type2tc &t, expr2t::expr_ids id, bool value)
-    : constant2t(t, id), constant_value(value) { }
+    : constant2t(t, id), value(value) { }
   constant_bool_data(const constant_bool_data &ref)
-    : constant2t(ref), constant_value(ref.constant_value) { }
+    : constant2t(ref), value(ref.value) { }
 
-  bool constant_value;
+  bool value;
 
 // Type mangling:
-  typedef esbmct::field_traits<bool, constant_bool_data, &constant_bool_data::constant_value> constant_value_field;
-  typedef esbmct::expr2t_traits_notype<constant_value_field> traits;
+  typedef esbmct::field_traits<bool, constant_bool_data, &constant_bool_data::value> value_field;
+  typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
 class constant_array_of_data : public constant2t
@@ -2204,16 +2290,18 @@ public:
 class typecast_data : public expr2t
 {
 public:
-  typecast_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
-    : expr2t(t, id), from(v) { }
+  typecast_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v, const expr2tc &r)
+    : expr2t(t, id), from(v), rounding_mode(r) { }
   typecast_data(const typecast_data &ref)
-    : expr2t(ref), from(ref.from) { }
+    : expr2t(ref), from(ref.from), rounding_mode(ref.rounding_mode) { }
 
   expr2tc from;
+  expr2tc rounding_mode;
 
 // Type mangling:
   typedef esbmct::field_traits<expr2tc, typecast_data, &typecast_data::from> from_field;
-  typedef esbmct::expr2t_traits<from_field> traits;
+  typedef esbmct::field_traits<expr2tc, typecast_data, &typecast_data::rounding_mode> rounding_mode_field;
+  typedef esbmct::expr2t_traits<from_field, rounding_mode_field> traits;
 };
 
 class if_data : public expr2t
@@ -2363,19 +2451,6 @@ public:
   typedef esbmct::expr2t_traits<value_field> traits;
 };
 
-class isinf_data : public arith_1op
-{
-public:
-  isinf_data(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v)
-    : arith_1op(t, id, v) { }
-  isinf_data(const isinf_data &ref)
-    : arith_1op(ref) { }
-
-// Type mangling:
-  typedef esbmct::field_traits<expr2tc, arith_1op, &arith_1op::value> value_field;
-  typedef esbmct::expr2t_traits_always_construct<value_field> traits;
-};
-
 class arith_2ops : public arith_ops
 {
 public:
@@ -2392,6 +2467,49 @@ public:
   typedef esbmct::field_traits<expr2tc, arith_2ops, &arith_2ops::side_1> side_1_field;
   typedef esbmct::field_traits<expr2tc, arith_2ops, &arith_2ops::side_2> side_2_field;
   typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
+};
+
+class ieee_arith_2ops : public arith_ops
+{
+public:
+  ieee_arith_2ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
+                  const expr2tc &v2, const expr2tc &rm)
+    : arith_ops(t, id), side_1(v1), side_2(v2), rounding_mode(rm) { }
+  ieee_arith_2ops(const ieee_arith_2ops &ref)
+    : arith_ops(ref), side_1(ref.side_1), side_2(ref.side_2), rounding_mode(ref.rounding_mode) { }
+
+  expr2tc side_1;
+  expr2tc side_2;
+  expr2tc rounding_mode;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::side_1> side_1_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::side_2> side_2_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::rounding_mode> rounding_mode_field;
+  typedef esbmct::expr2t_traits<side_1_field, side_2_field, rounding_mode_field> traits;
+};
+
+class ieee_arith_3ops : public arith_ops
+{
+public:
+  ieee_arith_3ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
+                  const expr2tc &v2, const expr2tc &v3, const expr2tc &rm)
+    : arith_ops(t, id), value_1(v1), value_2(v2), rounding_mode(rm), value_3(v3) { }
+  ieee_arith_3ops(const ieee_arith_3ops &ref)
+    : arith_ops(ref), value_1(ref.value_1), value_2(ref.value_2),
+      rounding_mode(ref.rounding_mode), value_3(ref.value_3) { }
+
+  expr2tc value_1;
+  expr2tc value_2;
+  expr2tc rounding_mode;
+  expr2tc value_3;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_1> value_1_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_2> value_2_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::rounding_mode> rounding_mode_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_3> value_3_field;
+  typedef esbmct::expr2t_traits<value_1_field, value_2_field, rounding_mode_field, value_3_field> traits;
 };
 
 class same_object_data : public expr2t
@@ -2577,21 +2695,6 @@ public:
 // Type mangling:
   typedef esbmct::field_traits<expr2tc, string_ops, &string_ops::string> string_field;
   typedef esbmct::expr2t_traits<string_field> traits;
-};
-
-class isnan_data : public expr2t
-{
-public:
-  isnan_data(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &in)
-    : expr2t(t, id), value(in) { }
-  isnan_data(const isnan_data &ref)
-    : expr2t(ref), value(ref.value) { }
-
-  expr2tc value;
-
-// Type mangling:
-  typedef esbmct::field_traits<expr2tc, isnan_data, &isnan_data::value> value_field;
-  typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
 class overflow_ops : public expr2t
@@ -2992,6 +3095,7 @@ public:
 // object isn't regular: the data class depends on /what/ the expression /is/.
 irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);
+irep_typedefs(constant_floatbv, constant_floatbv_data);
 irep_typedefs(constant_struct, constant_datatype_data);
 irep_typedefs(constant_union, constant_datatype_data);
 irep_typedefs(constant_array, constant_datatype_data);
@@ -2999,7 +3103,9 @@ irep_typedefs(constant_bool, constant_bool_data);
 irep_typedefs(constant_array_of, constant_array_of_data);
 irep_typedefs(constant_string, constant_string_data);
 irep_typedefs(symbol, symbol_data);
-irep_typedefs(typecast,typecast_data);
+irep_typedefs(nearbyint, typecast_data);
+irep_typedefs(typecast, typecast_data);
+irep_typedefs(bitcast, typecast_data);
 irep_typedefs(if, if_data);
 irep_typedefs(equality, relation_data);
 irep_typedefs(notequal, relation_data);
@@ -3026,6 +3132,11 @@ irep_typedefs(add, arith_2ops);
 irep_typedefs(sub, arith_2ops);
 irep_typedefs(mul, arith_2ops);
 irep_typedefs(div, arith_2ops);
+irep_typedefs(ieee_add, ieee_arith_2ops);
+irep_typedefs(ieee_sub, ieee_arith_2ops);
+irep_typedefs(ieee_mul, ieee_arith_2ops);
+irep_typedefs(ieee_div, ieee_arith_2ops);
+irep_typedefs(ieee_fma, ieee_arith_3ops);
 irep_typedefs(modulus, arith_2ops);
 irep_typedefs(shl, arith_2ops);
 irep_typedefs(ashr, arith_2ops);
@@ -3038,7 +3149,7 @@ irep_typedefs(byte_update, byte_update_data);
 irep_typedefs(with, with_data);
 irep_typedefs(member, member_data);
 irep_typedefs(index, index_data);
-irep_typedefs(isnan, isnan_data);
+irep_typedefs(isnan, arith_1op);
 irep_typedefs(overflow, overflow_ops);
 irep_typedefs(overflow_cast, overflow_cast_data);
 irep_typedefs(overflow_neg, overflow_ops);
@@ -3072,8 +3183,10 @@ irep_typedefs(code_cpp_catch, code_cpp_catch_data);
 irep_typedefs(code_cpp_throw, code_cpp_throw_data);
 irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data);
 irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
-irep_typedefs(isinf, isinf_data);
-irep_typedefs(isnormal, isinf_data); // Ho hum
+irep_typedefs(isinf, arith_1op);
+irep_typedefs(isnormal, arith_1op);
+irep_typedefs(isfinite, arith_1op);
+irep_typedefs(signbit, arith_1op);
 irep_typedefs(concat, bit_2ops);
 
 /** Constant integer class.
@@ -3118,6 +3231,25 @@ public:
     : constant_fixedbv_expr_methods(type, constant_fixedbv_id, value) { }
   constant_fixedbv2t(const constant_fixedbv2t &ref)
     : constant_fixedbv_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Constant floatbv class. Records a floating-point number,
+ *  Stored in a ieee_floatt.
+ *  @extends constant_floatbv_data
+ */
+class constant_floatbv2t : public constant_floatbv_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expression.
+   *  @param value ieee_floatt object containing number we'll be operating on
+   */
+  constant_floatbv2t(const type2tc &type, const ieee_floatt &value)
+    : constant_floatbv_expr_methods(type, constant_floatbv_id, value) { }
+  constant_floatbv2t(const constant_floatbv2t &ref)
+    : constant_floatbv_expr_methods(ref) { }
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -3273,6 +3405,41 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Nearbyint expression.
+ *  Represents a rounding operation on a floatbv, we extend typecast as
+ *  it already have a field for the rounding mode
+ *  @extends typecast_data
+ */
+class nearbyint2t : public nearbyint_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type to round to
+   *  @param from Expression to round from.
+   *  @param rounding_mode Rounding mode, important only for floatbvs
+   */
+  nearbyint2t(const type2tc &type, const expr2tc &from, const expr2tc &rounding_mode)
+    : nearbyint_expr_methods(type, nearbyint_id, from, rounding_mode) { }
+
+  /** Primary constructor. This constructor defaults the rounding mode to
+   *  the c::__ESBMC_rounding_mode symbol
+   *  @param type Type to round to
+   *  @param from Expression to round from.
+   */
+  nearbyint2t(const type2tc &type, const expr2tc &from)
+    : nearbyint_expr_methods(type, nearbyint_id, from,
+        expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode")))
+  {
+  }
+
+  nearbyint2t(const nearbyint2t &ref)
+    : nearbyint_expr_methods(ref){}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 /** Typecast expression.
  *  Represents cast from contained expression 'from' to the type of this
  *  typecast.
@@ -3284,12 +3451,52 @@ public:
   /** Primary constructor.
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
+   *  @param rounding_mode Rounding mode, important only for floatbvs
+   */
+  typecast2t(const type2tc &type, const expr2tc &from, const expr2tc &rounding_mode)
+    : typecast_expr_methods(type, typecast_id, from, rounding_mode) { }
+
+  /** Primary constructor. This constructor defaults the rounding mode to
+   *  the c::__ESBMC_rounding_mode symbol
+   *  @param type Type to typecast to
+   *  @param from Expression to cast from.
    */
   typecast2t(const type2tc &type, const expr2tc &from)
-    : typecast_expr_methods(type, typecast_id, from) { }
+    : typecast_expr_methods(type, typecast_id, from,
+        expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode")))
+  {
+  }
+
   typecast2t(const typecast2t &ref)
     : typecast_expr_methods(ref){}
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** Bitcast expression.
+ *  Represents cast from contained expression 'from' to the type of this
+ *  typecast... but where the cast is performed at a 'bit representation' level.
+ *  That is: the 'from' field is not interpreted by its logical value, but
+ *  instead by the corresponding bit representation. The prime example of this
+ *  is bitcasting floats: if one typecasted them to integers, they would be
+ *  rounded; bitcasting them produces the bit-representation of the float, as
+ *  an integer value.
+ *  @extends typecast_data
+ */
+class bitcast2t : public bitcast_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type to bitcast to
+   *  @param from Expression to cast from.
+   */
+  bitcast2t(const type2tc &type, const expr2tc &from)
+    : bitcast_expr_methods(type, bitcast_id, from, expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"))) { }
+
+  bitcast2t(const bitcast2t &ref)
+    : bitcast_expr_methods(ref){}
+  // No simplification at this time
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -3603,7 +3810,7 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Bit nxor operation. Invert bits in bitvector operand. Operand must have the
+/** Bit not operation. Invert bits in bitvector operand. Operand must have the
  *  same type as this expr. @extends bitnot_data */
 class bitnot2t : public bitnot_expr_methods
 {
@@ -3612,6 +3819,8 @@ public:
    *  @param type Type of this expr.
    *  @param v Value to invert */
   bitnot2t(const type2tc &type, const expr2tc &v)
+    : bitnot_expr_methods(type, bitnot_id, v) {}
+  bitnot2t(const type2tc &type, const expr2tc &v, const expr2tc& __attribute__((unused)))
     : bitnot_expr_methods(type, bitnot_id, v) {}
   bitnot2t(const bitnot2t &ref)
     : bitnot_expr_methods(ref) {}
@@ -3672,6 +3881,8 @@ public:
     : abs_expr_methods(type, abs_id, val) {}
   abs2t(const abs2t &ref)
     : abs_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -3751,6 +3962,111 @@ public:
     : div_expr_methods(ref) {}
 
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE Addition operation. Adds two floatbvs together.
+ *  Types of both operands and expr type should match. @extends ieee_arith_2ops */
+class ieee_add2t : public ieee_add_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param rm rounding mode. */
+  ieee_add2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
+    : ieee_add_expr_methods(type, ieee_add_id, v1, v2, rm) {}
+  ieee_add2t(const ieee_add2t &ref)
+    : ieee_add_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE subtraction operation. Subtracts second operand from first operand. Must both
+ *  be floatbvs types. Types of both operands and expr type should match.
+ *  @extends ieee_arith_2ops */
+class ieee_sub2t : public ieee_sub_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param rm rounding mode. */
+  ieee_sub2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
+    : ieee_sub_expr_methods(type, ieee_sub_id, v1, v2, rm) {}
+  ieee_sub2t(const ieee_sub2t &ref)
+    : ieee_sub_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE multiplication operation. Multiplies the two operands. Must both be floatbvs
+ *  types. Types of both operands and expr type should match.
+ *  @extends ieee_arith_2ops */
+class ieee_mul2t : public ieee_mul_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param rm rounding mode. */
+ ieee_mul2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
+    : ieee_mul_expr_methods(type, ieee_mul_id, v1, v2, rm) {}
+  ieee_mul2t(const ieee_mul2t &ref)
+    : ieee_mul_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE division operation. Divides first operand by second operand. Must both be
+ *  floatbvs types. Types of both operands and expr type should match.
+ *  @extends ieee_arith_2ops */
+class ieee_div2t : public ieee_div_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param rm rounding mode. */
+  ieee_div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &rm)
+    : ieee_div_expr_methods(type, ieee_div_id, v1, v2, rm) {}
+  ieee_div2t(const ieee_div2t &ref)
+    : ieee_div_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE fused multiply-add operation. Computes (x*y) + z as if to infinite
+ *  precision and rounded only once to fit the result type. Must be
+ *  floatbvs types. Types of the 3 operands and expr type should match.
+ *  @extends ieee_arith_2ops */
+class ieee_fma2t : public ieee_fma_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param v3 Second operand.
+   *  @param rm rounding mode. */
+  ieee_fma2t(
+    const type2tc &type, const expr2tc &v1, const expr2tc &v2, const expr2tc &v3, const expr2tc &rm)
+    : ieee_fma_expr_methods(type, ieee_fma_id, v1, v2, v3, rm) {}
+  ieee_fma2t(const ieee_fma2t &ref)
+    : ieee_fma_expr_methods(ref) {}
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -3938,7 +4254,7 @@ public:
 };
 
 /** With operation. Updates either an array or a struct/union with a new element
- *  or member. Expression value is the arary or struct/union with the updated
+ *  or member. Expression value is the array or struct/union with the updated
  *  value. Ideally in the future this will become two operations, one for arrays
  *  and one for structs/unions. @extends with_data */
 class with2t : public with_expr_methods
@@ -3968,7 +4284,7 @@ public:
   /** Primary constructor.
    *  @param type Type of extracted member.
    *  @param source Data structure to extract from.
-   *  @param memb ΩName of member to extract.  */
+   *  @param memb Name of member to extract.  */
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : member_expr_methods(type, member_id, source, memb) {}
   member2t(const member2t &ref)
@@ -4008,6 +4324,8 @@ public:
     : isnan_expr_methods(type_pool.get_bool(), isnan_id, value) {}
   isnan2t(const isnan2t &ref)
     : isnan_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4049,6 +4367,8 @@ public:
                                  operand, bits) {}
   overflow_cast2t(const overflow_cast2t &ref)
     : overflow_cast_expr_methods(ref) {}
+
+  virtual expr2tc do_simplify(bool second) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4480,6 +4800,8 @@ public:
   isinf2t(const isinf2t &ref)
     : isinf_expr_methods(ref) { }
 
+  virtual expr2tc do_simplify(bool second) const;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 
@@ -4490,6 +4812,34 @@ public:
     : isnormal_expr_methods(type_pool.get_bool(), isnormal_id, val) { }
   isnormal2t(const isnormal2t &ref)
     : isnormal_expr_methods(ref) { }
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isfinite2t : public isfinite_expr_methods
+{
+public:
+  isfinite2t(const expr2tc &val)
+    : isfinite_expr_methods(type_pool.get_bool(), isfinite_id, val) { }
+  isfinite2t(const isfinite2t &ref)
+    : isfinite_expr_methods(ref) { }
+
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class signbit2t : public signbit_expr_methods
+{
+public:
+  signbit2t(const expr2tc &val)
+    : signbit_expr_methods(type_pool.get_int32(), signbit_id, val) { }
+  signbit2t(const signbit2t &ref)
+    : signbit_expr_methods(ref) { }
+
+  virtual expr2tc do_simplify(bool second) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4630,6 +4980,7 @@ inline bool is_constant_expr(const expr2tc &t)
 {
   return t->expr_id == expr2t::constant_int_id ||
          t->expr_id == expr2t::constant_fixedbv_id ||
+         t->expr_id == expr2t::constant_floatbv_id ||
          t->expr_id == expr2t::constant_bool_id ||
          t->expr_id == expr2t::constant_string_id ||
          t->expr_id == expr2t::constant_struct_id ||
@@ -4648,6 +4999,17 @@ inline bool is_structure_type(const expr2tc &e)
   return is_structure_type(e->type);
 }
 
+inline bool is_arith_type(const expr2tc &t)
+{
+  return t->expr_id == expr2t::neg_id ||
+         t->expr_id == expr2t::abs_id ||
+         t->expr_id == expr2t::add_id ||
+         t->expr_id == expr2t::sub_id ||
+         t->expr_id == expr2t::mul_id ||
+         t->expr_id == expr2t::modulus_id ||
+         t->expr_id == expr2t::div_id;
+}
+
 /** Test if expr is true. First checks whether the expr is a constant bool, and
  *  then whether it's true-valued. If these are both true, return true,
  *  otherwise return false.
@@ -4657,7 +5019,7 @@ inline bool is_structure_type(const expr2tc &e)
 inline bool
 is_true(const expr2tc &expr)
 {
-  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).constant_value)
+  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
     return true;
   else
     return false;
@@ -4672,7 +5034,7 @@ is_true(const expr2tc &expr)
 inline bool
 is_false(const expr2tc &expr)
 {
-  if (is_constant_bool2t(expr) && !to_constant_bool2t(expr).constant_value)
+  if (is_constant_bool2t(expr) && !to_constant_bool2t(expr).value)
     return true;
   else
     return false;

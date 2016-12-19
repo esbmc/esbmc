@@ -62,7 +62,6 @@ smt_convt::overflow_arith(const expr2tc &expr)
       uint64_t topbit = 1ULL << (opers.side_1->type->get_width() - 1);
       constant_int2tc min_int(opers.side_1->type, BigInt(topbit));
       equality2tc is_min_int(min_int, opers.side_2);
-      implies2tc imp(is_min_int, greaterthan2tc(overflow.operand, zero));
       return convert_ast(or2tc(add_overflows, is_min_int));
     } else {
       // Just ensure the result is >= the operands.
@@ -71,6 +70,20 @@ smt_convt::overflow_arith(const expr2tc &expr)
       and2tc res(le1, le2);
       not2tc inv(res);
       return convert_ast(inv);
+    }
+  } else if(is_div2t(overflow.operand)) {
+    if(is_signed) {
+      // We can't divide -MIN_INT/-1
+      constant_int2tc zero(opers.side_1->type, BigInt(0));
+      uint64_t topbit = 1ULL << (opers.side_1->type->get_width() - 1);
+      constant_int2tc min_int(opers.side_1->type, -BigInt(topbit));
+      equality2tc is_min_int(min_int, opers.side_1);
+      implies2tc imp(is_min_int, greaterthan2tc(overflow.operand, zero));
+
+      constant_int2tc minus_one(opers.side_1->type, -BigInt(1));
+      equality2tc is_minus_one(minus_one, opers.side_2);
+
+      return convert_ast(and2tc(is_minus_one, is_min_int));
     }
   } else {
     assert(is_mul2t(overflow.operand) && "unexpected overflow_arith operand");

@@ -53,9 +53,6 @@ public:
                                  const type2tc &subtype);
 
 private:
-  bool assign_z3_expr(const exprt expr);
-  u_int convert_member_name(const exprt &lhs, const exprt &rhs);
-
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 
@@ -81,6 +78,15 @@ private:
   virtual smt_astt mk_smt_real(const std::string &str);
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
+  virtual smt_astt mk_smt_bvfloat(const ieee_floatt &thereal,
+                                  unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm);
+  virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast);
+  virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast);
+  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr);
+  virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr);
   virtual smt_astt mk_smt_bool(bool val);
   virtual smt_astt mk_array_symbol(const std::string &name, const smt_sort *s,
                                    smt_sortt array_subtype);
@@ -130,7 +136,7 @@ private:
     unsigned int major, minor, build, revision;
     Z3_get_version(&major, &minor, &build, &revision);
     std::stringstream ss;
-    ss << "Z3 v" << major << "." << minor;
+    ss << "Z3 v" << major << "." << minor << "." << build;
     return ss.str();
   }
 
@@ -151,6 +157,8 @@ public:
                                   unsigned int idx, expr2tc idx_expr) const;
     virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
     virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
+
+    virtual void dump() const override;
   };
 
   inline z3_smt_ast *
@@ -203,8 +211,6 @@ public:
 
   z3::sort pointer_sort;
   z3::func_decl pointer_decl;
-
-  Z3_context z3_ctx;
 };
 
 #endif

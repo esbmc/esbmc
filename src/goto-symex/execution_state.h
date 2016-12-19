@@ -547,7 +547,7 @@ class execution_statet : public goto_symext
   /** Number of nondeterministic symbols in this state. */
   unsigned nondet_count;
   /** Number of dynamic objects in this state. */
-  unsigned dynamic_counter;
+  static unsigned dynamic_counter;
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;

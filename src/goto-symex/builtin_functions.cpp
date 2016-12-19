@@ -45,16 +45,6 @@ goto_symext::symex_alloca(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
-  if(options.get_bool_option("inductive-step")
-     && !options.get_bool_option("disable-inductive-step"))
-  {
-    std::cout << "**** WARNING: this program contains dynamic memory allocation,"
-        << " so we are not applying the inductive step to this program!"
-        << std::endl;
-    options.set_option("disable-inductive-step", true);
-    throw 0;
-  }
-
   return symex_mem(false, lhs, code);
 }
 
@@ -142,15 +132,16 @@ goto_symext::symex_mem(
   }
 
   expr2tc rhs = rhs_addrof;
-
   expr2tc ptr_rhs = rhs;
+  guardt alloc_guard = cur_state->guard;
 
   if (!options.get_bool_option("force-malloc-success")) {
     symbol2tc null_sym(rhs->type, "NULL");
     sideeffect2tc choice(get_bool_type(), expr2tc(), expr2tc(), std::vector<expr2tc>(), type2tc(), sideeffect2t::nondet);
+    replace_nondet(choice);
 
     rhs = if2tc(rhs->type, choice, rhs, null_sym);
-    replace_nondet(rhs);
+    alloc_guard.add(choice);
 
     ptr_rhs = rhs;
   }
@@ -167,7 +158,7 @@ goto_symext::symex_mem(
   pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard, !is_malloc));
+  dynamic_memory.push_back(allocated_obj(rhs_copy, alloc_guard, !is_malloc));
 
   return rhs_addrof->ptr_obj;
 }
@@ -252,7 +243,8 @@ void goto_symext::symex_free(const expr2tc &expr)
   guardt guard;
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  pointer_object2tc ptr_obj(pointer_type2(), code.operand);
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
+  dereference(ptr_obj, false);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
@@ -475,7 +467,7 @@ goto_symext::intrinsic_switch_to(const code_function_call2t &call,
 
   const constant_int2t &thread_num = to_constant_int2t(num);
 
-  unsigned int tid = thread_num.constant_value.to_long();
+  unsigned int tid = thread_num.value.to_long();
   if (tid != art.get_cur_state().get_active_state_number())
     art.get_cur_state().switch_to_thread(tid);
 
@@ -533,7 +525,7 @@ goto_symext::intrinsic_set_thread_data(const code_function_call2t &call,
     abort();
   }
 
-  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
+  unsigned int tid = to_constant_int2t(threadid).value.to_ulong();
   art.get_cur_state().set_thread_start_data(tid, startdata);
 }
 
@@ -555,7 +547,7 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
     abort();
   }
 
-  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
+  unsigned int tid = to_constant_int2t(threadid).value.to_ulong();
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
   code_assign2tc assign(call.ret, startdata);
@@ -570,16 +562,6 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
-  if(options.get_bool_option("inductive-step")
-     && !options.get_bool_option("disable-inductive-step"))
-  {
-    std::cout << "**** WARNING: this program is multithreaded,"
-        << " so we are not applying the inductive step to this program!"
-        << std::endl;
-    options.set_option("disable-inductive-step", true);
-    throw 0;
-  }
-
   // As an argument, we expect the address of a symbol.
   const expr2tc &addr = call.operands[0];
   assert(is_address_of2t(addr));
@@ -647,7 +629,7 @@ goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reacha
     abort();
   }
 
-  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
+  unsigned int tid = to_constant_int2t(threadid).value.to_ulong();
   // Possibly we should handle this error; but meh.
   assert(art.get_cur_state().threads_state.size() >= tid);
 
@@ -719,7 +701,7 @@ goto_symext::intrinsic_register_monitor(const code_function_call2t &call, reacha
     abort();
   }
 
-  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
+  unsigned int tid = to_constant_int2t(threadid).value.to_ulong();
   assert(art.get_cur_state().threads_state.size() >= tid);
   ex_state.monitor_tid = tid;
   ex_state.tid_is_set = true;

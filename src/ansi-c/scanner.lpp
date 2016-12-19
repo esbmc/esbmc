@@ -80,14 +80,17 @@ hexinteger	"0"[xX]{hexdigit}({hexdigit}|"'")*{int_suffix}
 integer_s       {decinteger}|{bininteger}|{octinteger}|{hexinteger}
 octchar		"\\"{octdigit}{1,3}
 hexchar		"\\x"{hexdigit}+
-exponent	[eE][+-]?{integer}
-fraction	{integer}
-float1		{integer}"."{fraction}?({exponent})?
-float2		"."{fraction}({exponent})?
-float3		{integer}{exponent}
-float		{float1}|{float2}|{float3}
-float_f		{float}[fF]
-float_l		{float}[lL]
+exponent        [eE][+-]?{integer}
+fraction        {integer}
+float1          {integer}"."{fraction}?({exponent})?
+float2          "."{fraction}({exponent})?
+float3          {integer}{exponent}
+hexfloat1       "0"[xX]{hexdigit}*"."{hexdigit}+[pP][+-]?{integer}
+hexfloat2       "0"[xX]{hexdigit}*"."[pP][+-]?{integer}
+hexfloat3       "0"[xX]{hexdigit}*[pP][+-]?{integer}
+float_suffix    [fFlLiIjJ]*
+float           {float1}|{float2}|{float3}|{hexfloat1}|{hexfloat2}|{hexfloat3}
+float_s         {float}{float_suffix}|{integer}[fF]
 bitvector	{binary}[bB]
 bitvector_u	{binary}([uU][bB]|[bB][uU])
 cppstart	{ws}"#"{ws}
@@ -398,24 +401,12 @@ void ansi_c_scanner_init()
                   return (TOK_INTEGER);
                 }
 
-{float}		{
+{float_s}       {
                   init(&yyansi_clval.expr);
                   convert_float_literal(yytext, *yyansi_clval.expr);
                   PARSER.set_location(*yyansi_clval.expr);
 		  return(TOK_FLOATING);
-		}
-{float_f}	{
-                  init(&yyansi_clval.expr);
-                  convert_float_literal(yytext, *yyansi_clval.expr);
-                  PARSER.set_location(*yyansi_clval.expr);
-		  return(TOK_FLOATING);
-		}
-{float_l}	{
-                  init(&yyansi_clval.expr);
-                  convert_float_literal(yytext, *yyansi_clval.expr);
-                  PARSER.set_location(*yyansi_clval.expr);
-		  return(TOK_FLOATING);
-		}
+                }
 
 .		{ loc(); PARSER.tag_following=false; return(yytext[0]); }
 }

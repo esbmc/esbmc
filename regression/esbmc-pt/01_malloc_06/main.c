@@ -1,7 +1,9 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <pthread.h>
 
-void *malloc(unsigned size);
-void free(void *p);
+//void *malloc(unsigned size);
+//void free(void *p);
 
 #define N 2
 

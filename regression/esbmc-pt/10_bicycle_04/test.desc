@@ -1,5 +1,3 @@
 main.c
---unwind 2 --no-unwinding-assertions --context-switch 5
+--unwind 2 --no-unwinding-assertions --context-bound 5
 ^VERIFICATION SUCCESSFUL$
---
-^VERIFICATION FAILURE$

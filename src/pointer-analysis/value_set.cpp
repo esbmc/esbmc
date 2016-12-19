@@ -369,6 +369,13 @@ void value_sett::get_value_set_rec(
     get_value_set_rec(cast.from, dest, suffix, original_type);
     return;
   }
+  else if (is_bitcast2t(expr))
+  {
+    // Bitcasts are just typecasts with additional semantics
+    const bitcast2t &cast = to_bitcast2t(expr);
+    get_value_set_rec(cast.from, dest, suffix, original_type);
+    return;
+  }
   else if (is_add2t(expr) || is_sub2t(expr))
   {
     // Consider pointer arithmetic. This takes takes the form of finding the
@@ -404,7 +411,7 @@ void value_sett::get_value_set_rec(
       bool is_const = false;
       try {
         if (is_constant_int2t(non_ptr_op)) {
-          if (to_constant_int2t(non_ptr_op).constant_value.is_zero()) {
+          if (to_constant_int2t(non_ptr_op).value.is_zero()) {
             total_offs = 0;
           } else {
             if (is_empty_type(subtype))
@@ -413,7 +420,7 @@ void value_sett::get_value_set_rec(
             // Potentially rename,
             const type2tc renamed = ns.follow(subtype);
             mp_integer elem_size = type_byte_size(*renamed);
-            const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
+            const mp_integer &val =to_constant_int2t(non_ptr_op).value;
             total_offs = val * elem_size;
             if (is_sub2t(expr))
               total_offs.negate();
@@ -429,7 +436,7 @@ void value_sett::get_value_set_rec(
         // pointers, or worse. If a void pointer, treat the multiplier of the
         // addition as being one. If not void pointer, throw cookies.
         if (is_empty_type(subtype)) {
-          total_offs = to_constant_int2t(non_ptr_op).constant_value;
+          total_offs = to_constant_int2t(non_ptr_op).value;
           is_const = true;
         } else {
           std::cerr << "Pointer arithmetic on type where we can't determine ";
@@ -578,7 +585,7 @@ void value_sett::get_value_set_rec(
 
     assert(is_constant_int2t(dyn.instance));
     const constant_int2t &intref = to_constant_int2t(dyn.instance);
-    std::string idnum = integer2string(intref.constant_value);
+    std::string idnum = integer2string(intref.value);
     const std::string name = "value_set::dynamic_object" + idnum + suffix;
 
     // look it up
@@ -590,11 +597,44 @@ void value_sett::get_value_set_rec(
       return;
     }
   }
+  else if (is_concat2t(expr))
+  {
+    get_byte_stitching_value_set(expr, dest, suffix, original_type);
+    return;
+  }
 
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
   unknown2tc tmp(original_type);
   insert(dest, tmp, mp_integer(0));
+}
+
+void
+value_sett::get_byte_stitching_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const
+{
+
+  if (is_concat2t(expr)) {
+    const concat2t &ref = to_concat2t(expr);
+
+    get_byte_stitching_value_set(ref.side_1, dest, suffix, original_type);
+    get_byte_stitching_value_set(ref.side_2, dest, suffix, original_type);
+  } else if (is_lshr2t(expr)) {
+    const lshr2t &ref = to_lshr2t(expr);
+
+    get_byte_stitching_value_set(ref.side_1, dest, suffix, original_type);
+  } else if (is_byte_extract2t(expr)) {
+    const byte_extract2t &ref = to_byte_extract2t(expr);
+    // XXX XXX XXX this knackers offsets
+    get_value_set_rec(ref.source_value, dest, suffix, original_type);
+  } else {
+    get_value_set_rec(expr, dest, suffix, original_type);
+  }
+
+  return;
 }
 
 void value_sett::get_reference_set(
@@ -647,10 +687,14 @@ void value_sett::get_reference_set_rec(
     // Compute the offset introduced by this index.
     mp_integer index_offset;
     bool has_const_index_offset = false;
-    if (is_constant_int2t(index.index)) {
-      index_offset = to_constant_int2t(index.index).constant_value *
-                         type_byte_size(*index.type);
-      has_const_index_offset = true;
+    try {
+      if (is_constant_int2t(index.index)) {
+        index_offset = to_constant_int2t(index.index).value *
+                           type_byte_size(*index.type);
+        has_const_index_offset = true;
+      }
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      // Not a constant index offset then.
     }
 
     object_mapt array_references;
@@ -682,7 +726,8 @@ void value_sett::get_reference_set_rec(
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
           const array_type2t &a = to_array_type(index.source_value->type);
-          mp_integer m = type_byte_size(a);
+
+          mp_integer m = type_byte_size_default(a, 1);
 
           // This index operation, whatever the offset, will always multiply
           // by the size of the element type.
@@ -776,11 +821,18 @@ void value_sett::get_reference_set_rec(
 
     // This may or may not have a constant offset
     objectt o = (is_constant_int2t(extract.source_offset))
-      ? objectt(true, to_constant_int2t(extract.source_offset).constant_value)
+      ? objectt(true, to_constant_int2t(extract.source_offset).value)
       // Unclear what to do about alignments; default to nothing.
       : objectt(false, 1);
 
     insert(dest, extract.source_value, o);
+    return;
+  }
+  else if (is_concat2t(expr))
+  {
+    const concat2t &concat = to_concat2t(expr);
+    get_reference_set_rec(concat.side_1, dest);
+    get_reference_set_rec(concat.side_2, dest);
     return;
   }
 
@@ -800,10 +852,19 @@ void value_sett::assign(
   if (is_if2t(rhs))
   {
     // If the rhs could be either side of this if, perform the assigment of
-    // either side.
+    // either side. In case it refers to itself, assign to a temporary first,
+    // then assign back.
     const if2t &ifref = to_if2t(rhs);
-    assign(lhs, ifref.true_value, add_to_sets);
-    assign(lhs, ifref.false_value, true);
+
+    // Build a sym specific to this type. Give l1 number to guard against
+    // recursively entering this code path
+    symbol2tc xchg_sym(lhs->type, xchg_name, symbol2t::level1, xchg_num++, 0, 0, 0);
+
+    assign(xchg_sym, ifref.true_value, false);
+    assign(xchg_sym, ifref.false_value, true);
+    assign(lhs, xchg_sym, add_to_sets);
+
+    erase(xchg_sym->get_symbol_name());
     return;
   }
 
@@ -1023,7 +1084,7 @@ void value_sett::assign_rec(
       return; // We're assigning to something unknown. Not much we can do.
     assert(is_constant_int2t(dynamic_object.instance));
     unsigned int idnum =
-      to_constant_int2t(dynamic_object.instance).constant_value.to_long();
+      to_constant_int2t(dynamic_object.instance).value.to_long();
     const std::string name = "value_set::dynamic_object" + i2string(idnum);
 
     make_union(get_entry(name, suffix).object_map, values_rhs);
