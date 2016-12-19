@@ -133,6 +133,9 @@ void clang_c_adjust::adjust_expr(exprt& expr)
   {
     adjust_code(to_code(expr));
   }
+  else if(expr.id() == "array_of")
+  {
+  }
   else
   {
     std::cout << "Unexpected expression: " << expr.id().as_string()

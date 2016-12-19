@@ -382,7 +382,10 @@ bool clang_c_convertert::get_var(
 
     const auto *a = llvm::cast<clang::AnnotateAttr>(attr);
     if(a->getAnnotation().str() == "__ESBMC_inf_size")
+    {
+      assert(t.is_array());
       t.size(exprt("infinity", uint_type()));
+    }
   }
 
   std::string identifier;
