@@ -85,10 +85,8 @@ insn_to_string(const goto_programt::instructiont &insn,
   std::stringstream ss;
   contextt ctx;
 
-  list.push_back(insn);
-  goto_programt::output_instruction(namespacet(ctx), "", ss,
-                                          list.begin(), show_location,
-                                          show_variables);
+  assert(pythonctx_ns != NULL);
+  insn.output_instruction(*pythonctx_ns, "", ss, show_location, show_variables);
 
   return ss.str();
 }
