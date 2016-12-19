@@ -2995,6 +2995,7 @@ type_typedefs4(code, code_data)
 type_typedefs3(array, array_data)
 type_typedefs1(pointer, pointer_data)
 type_typedefs2(fixedbv, fixedbv_data)
+type_typedefs2(floatbv, floatbv_data)
 type_typedefs1(string, string_data)
 type_typedefs2(cpp_name, cpp_name_data)
 
