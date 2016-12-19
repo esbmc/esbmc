@@ -1386,11 +1386,6 @@ bool cbmc_parseoptionst::get_goto_program(
     return true;
   }
 
-  catch(...)
-  {
-    return true;
-  }
-
   return false;
 }
 
@@ -1431,10 +1426,6 @@ void cbmc_parseoptionst::preprocessing()
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-  }
-
-  catch(...)
-  {
   }
 }
 
@@ -1873,11 +1864,6 @@ bool cbmc_parseoptionst::process_goto_program(
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    return true;
-  }
-
-  catch(...)
-  {
     return true;
   }
 
