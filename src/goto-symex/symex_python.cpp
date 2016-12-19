@@ -509,7 +509,11 @@ build_goto_symex_classes()
     .def_readwrite("function_ptr_call_loc", &goto_symex_statet::framet::function_ptr_call_loc)
     .def_readwrite("function_ptr_combine_target", &goto_symex_statet::framet::function_ptr_combine_target)
     .def_readwrite("orig_func_ptr_call", &goto_symex_statet::framet::orig_func_ptr_call)
-    .def_readwrite("declaration_history", &goto_symex_statet::framet::declaration_history);
+    .def_readwrite("declaration_history", &goto_symex_statet::framet::declaration_history)
+    .def_readwrite("loop_iterations", &goto_symex_statet::framet::loop_iterations);
+
+  class_<goto_symex_statet::framet::loop_iterationst>("loop_iterationst")
+    .def(map_indexing_suite<hash_map_cont<unsigned, unsigned> >());
 
   void (goto_symex_statet::*current_name_expr)(expr2tc &) const = &goto_symex_statet::current_name;
   void (goto_symex_statet::*current_name_level)(const renaming::level2t &, expr2tc &) const = &goto_symex_statet::current_name;
@@ -541,7 +545,6 @@ build_goto_symex_classes()
     .def_readwrite("global_guard", &goto_symex_statet::global_guard)
     .def_readwrite("source", &goto_symex_statet::source)
     .def_readwrite("variable_instance_nums", &goto_symex_statet::variable_instance_nums)
-    .def_readwrite("unwind_map", &goto_symex_statet::unwind_map)
     .def_readwrite("function_unwind", &goto_symex_statet::function_unwind)
     .def_readwrite("use_value_set", &goto_symex_statet::use_value_set)
     .add_property("level2", make_function(get_level2, return_internal_reference<>()))
