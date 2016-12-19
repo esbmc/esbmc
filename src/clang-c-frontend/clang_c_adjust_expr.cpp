@@ -51,7 +51,8 @@ bool clang_c_adjust::adjust()
 
 void clang_c_adjust::adjust_symbol(symbolt& symbol)
 {
-  adjust_expr(symbol.value);
+  if(!symbol.value.is_nil())
+    adjust_expr(symbol.value);
 
   if(symbol.type.is_code() && symbol.name=="c::main")
     adjust_argc_argv(symbol);
