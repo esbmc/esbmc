@@ -37,6 +37,11 @@ public:
   smt_astt default_select(smt_convt *ctx, const expr2tc &idx) const;
   smt_astt project(smt_convt *ctx, unsigned int elem) const;
   smt_astt default_project(smt_convt *ctx, unsigned int elem) const;
+
+  void dump() const {
+    std::cerr << "smt_ast_wrapper::dump: unimplemented" << std::endl;
+    abort();
+  }
 };
 
 class smt_convt_wrapper : public smt_convt, public array_iface, public tuple_iface, public boost::python::wrapper<smt_convt>
@@ -84,6 +89,16 @@ public:
   void add_tuple_constraints_for_solving();
   void push_tuple_ctx();
   void pop_tuple_ctx();
+
+  // Uhhhh, float api?
+  smt_ast *mk_smt_bvfloat(const ieee_floatt &thereal, unsigned ew, unsigned sw);
+  smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
+  smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);
+  smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm);
+  smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast);
+  smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast);
+  smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr);
+  smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr);
 };
 
 #endif /* WITH_PYTHON */

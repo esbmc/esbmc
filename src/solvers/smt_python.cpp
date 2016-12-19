@@ -473,6 +473,54 @@ smt_convt_wrapper::pop_tuple_ctx()
   abort();
 }
 
+smt_ast *
+smt_convt_wrapper::mk_smt_bvfloat(const ieee_floatt &thereal, unsigned ew, unsigned sw)
+{
+  return get_override_checked(this, "mk_smt_bvfloat")(thereal, ew, sw);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+{
+  return get_override_checked(this, "mk_smt_bvfloat_nan")(ew, sw);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+{
+  return get_override_checked(this, "mk_smt_bvfloat_inf")(sgn, ew, sw);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+{
+  return get_override_checked(this, "mk_smt_bvfloat_rm")(rm);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
+{
+  return get_override_checked(this, "mk_smt_typecast_from_bvfloat")(cast);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
+{
+  return get_override_checked(this, "mk_smt_typecast_to_bvfloat")(cast);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_nearbyint_from_float(const nearbyint2t &expr)
+{
+  return get_override_checked(this, "mk_smt_nearbyint_from_float")(expr);
+}
+
+smt_astt
+smt_convt_wrapper::mk_smt_bvfloat_arith_ops(const expr2tc &expr)
+{
+  return get_override_checked(this, "mk_smt_bvfloat_arith_ops")(expr);
+}
+
 // Method for casting an smt_convt down to the wrapped type.
 boost::python::object
 smt_convt_wrapper::cast_conv_down(smt_convt *c)
