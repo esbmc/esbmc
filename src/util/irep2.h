@@ -2352,18 +2352,18 @@ public:
     : expr2t(ref) { }
 };
 
-class not_data : public logical_ops
+class bool_1op : public logical_ops
 {
 public:
-  not_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
+  bool_1op(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
     : logical_ops(t, id), value(v) { }
-  not_data(const not_data &ref)
+  bool_1op(const bool_1op &ref)
     : logical_ops(ref), value(ref.value) { }
 
   expr2tc value;
 
 // Type mangling:
-  typedef esbmct::field_traits<expr2tc, not_data, &not_data::value> value_field;
+  typedef esbmct::field_traits<expr2tc, bool_1op, &bool_1op::value> value_field;
   typedef esbmct::expr2t_traits_always_construct<value_field> traits;
 };
 
@@ -3113,7 +3113,7 @@ irep_typedefs(lessthan, relation_data);
 irep_typedefs(greaterthan, relation_data);
 irep_typedefs(lessthanequal, relation_data);
 irep_typedefs(greaterthanequal, relation_data);
-irep_typedefs(not, not_data);
+irep_typedefs(not, bool_1op);
 irep_typedefs(and, logic_2ops);
 irep_typedefs(or, logic_2ops);
 irep_typedefs(xor, logic_2ops);
@@ -3149,7 +3149,7 @@ irep_typedefs(byte_update, byte_update_data);
 irep_typedefs(with, with_data);
 irep_typedefs(member, member_data);
 irep_typedefs(index, index_data);
-irep_typedefs(isnan, arith_1op);
+irep_typedefs(isnan, bool_1op);
 irep_typedefs(overflow, overflow_ops);
 irep_typedefs(overflow_cast, overflow_cast_data);
 irep_typedefs(overflow_neg, overflow_ops);
@@ -3183,9 +3183,9 @@ irep_typedefs(code_cpp_catch, code_cpp_catch_data);
 irep_typedefs(code_cpp_throw, code_cpp_throw_data);
 irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data);
 irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
-irep_typedefs(isinf, arith_1op);
-irep_typedefs(isnormal, arith_1op);
-irep_typedefs(isfinite, arith_1op);
+irep_typedefs(isinf, bool_1op);
+irep_typedefs(isnormal, bool_1op);
+irep_typedefs(isfinite, bool_1op);
 irep_typedefs(signbit, arith_1op);
 irep_typedefs(concat, bit_2ops);
 
@@ -3620,7 +3620,7 @@ public:
 };
 
 /** Not operation. Inverts boolean operand. Always has boolean type.
- *  @extends not_data */
+ *  @extends bool_1op */
 class not2t : public not_expr_methods
 {
 public:
@@ -4318,7 +4318,7 @@ public:
 };
 
 /** Is operand not-a-number. Used to implement C library isnan function for
- *  float/double values. Boolean result. @extends isnan_data */
+ *  float/double values. Boolean result. @extends arith_1op */
 class isnan2t : public isnan_expr_methods
 {
 public:
