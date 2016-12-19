@@ -31,6 +31,8 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
       // Z3 requires these two arguments to be the same width
       offs = typecast2tc(source->type, data.source_offset);
 
+    offs = mul2tc(offs->type, offs, gen_ulong(8));
+
     lshr2tc shr(source->type, source, offs);
     smt_astt ext = convert_ast(shr);
     smt_astt res = mk_extract(ext, 7, 0, convert_sort(get_uint8_type()));
