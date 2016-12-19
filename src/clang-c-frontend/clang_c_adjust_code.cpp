@@ -143,6 +143,9 @@ void clang_c_adjust::adjust_decl(codet& code)
   if(code.operands().size() != 2)
     return;
 
+  // Check assignment
+  adjust_expr(code.op1());
+
   // Create typecast on assingments, if needed
   gen_typecast(ns, code.op1(), code.op0().type());
 }
