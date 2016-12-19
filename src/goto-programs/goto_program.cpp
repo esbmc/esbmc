@@ -22,7 +22,7 @@ void goto_programt::instructiont::output_instruction(
   const irep_idt& identifier,
   std::ostream& out,
   bool show_location,
-  bool show_variables)
+  bool show_variables) const
 {
   if (show_location)
   {
