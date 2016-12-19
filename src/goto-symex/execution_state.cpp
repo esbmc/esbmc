@@ -538,7 +538,13 @@ execution_statet::preserve_last_paths(void)
       } else {
         guardt tmp(ls.guard);
         tmp |= gs.guard;
-        if (tmp == pre_goto_guard)
+
+        expr2tc foo = tmp.as_expr();
+        expr2tc bar = pre_goto_guard.as_expr();
+        do_simplify(foo);
+        do_simplify(bar);
+
+        if (foo == bar)
           merge = true;
       }
 
