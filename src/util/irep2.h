@@ -3494,6 +3494,9 @@ public:
   bitcast2t(const type2tc &type, const expr2tc &from)
     : bitcast_expr_methods(type, bitcast_id, from, expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"))) { }
 
+  bitcast2t(const type2tc &type, const expr2tc &from, const expr2tc &roundsym)
+    : bitcast_expr_methods(type, bitcast_id, from, roundsym) { }
+
   bitcast2t(const bitcast2t &ref)
     : bitcast_expr_methods(ref){}
   // No simplification at this time
