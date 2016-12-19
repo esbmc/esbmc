@@ -49,4 +49,4 @@ libclangheaders_a_SOURCES = clang_Intrin.hs clang___clang_cuda_cmath.hs \
 SUFFIXES = .hs
 
 .hs.o:
-	$(top_srcdir)/ansi-c/headers/flail.sh $< $< | $(CC) $(CFLAGS) -x c - -c -o $@
+	$(top_srcdir)/c2goto/headers/flail.sh $< $< | $(CC) $(CFLAGS) -x c - -c -o $@
