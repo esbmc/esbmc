@@ -1547,7 +1547,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
 
   // Since we can't extract the top bit, from the fpbv, we'll
   // convert it to return if(is_neg) ? 1 : 0;
-  auto value = convert_ast(signbit.value);
+  auto value = convert_ast(signbit.operand);
   auto sort = convert_sort(signbit.type);
 
   // Create is_neg
@@ -1558,7 +1558,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
   else
   {
     expr2tc zero_expr;
-    migrate_expr(gen_zero(migrate_type_back(signbit.value->type)), zero_expr);
+    migrate_expr(gen_zero(migrate_type_back(signbit.operand->type)), zero_expr);
 
     is_neg = mk_func_app(boolean_sort, SMT_FUNC_LT, value, convert_ast(zero_expr));
   }

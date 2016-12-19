@@ -2672,7 +2672,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const signbit2t &ref2 = to_signbit2t(ref);
     exprt back("signbit", bool_typet());
-    back.copy_to_operands(migrate_expr_back(ref2.value));
+    back.copy_to_operands(migrate_expr_back(ref2.operand));
     return back;
   }
   case expr2t::concat_id:
