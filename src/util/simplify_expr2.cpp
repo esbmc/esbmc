@@ -1053,6 +1053,19 @@ struct Ortor
 expr2tc
 or2t::do_simplify(bool second __attribute__((unused))) const
 {
+  // Special case: if one side is a not of the other, and they're otherwise
+  // identical, simplify to true
+  if (is_not2t(side_1)) {
+    const not2t &ref = to_not2t(side_1);
+    if (ref.value == side_2)
+      return true_expr;
+  } else if (is_not2t(side_2)) {
+    const not2t &ref = to_not2t(side_2);
+    if (ref.value == side_1)
+      return true_expr;
+  }
+
+  // Otherwise, default
   return simplify_logic_2ops<Ortor, or2t>(type, side_1, side_2);
 }
 
