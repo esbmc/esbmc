@@ -28,7 +28,7 @@ void clang_c_adjust::adjust_code(codet& code)
   else if(statement=="block" ||
           statement=="decl-block")
   {
-    adjust_blocks(code);
+    adjust_operands(code);
   }
   else if(statement=="ifthenelse")
   {
@@ -85,12 +85,6 @@ void clang_c_adjust::adjust_code(codet& code)
     code.dump();
     abort();
   }
-}
-
-void clang_c_adjust::adjust_blocks(codet& code)
-{
-  Forall_operands(it, code)
-    adjust_expr(*it);
 }
 
 void clang_c_adjust::adjust_expression(codet& code)
