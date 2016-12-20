@@ -628,14 +628,14 @@ public:
     operands().resize(1);
   }
 
-  inline bool is_default() const
+  codet &code()
   {
-    return dfault();
+    return static_cast<codet &>(op0());
   }
 
-  const exprt::operandst &case_op() const
+  const codet &code() const
   {
-    return static_cast<const exprt &>(case_irep()).operands();
+    return static_cast<const codet &>(op0());
   }
 
   const irep_idt &get_label() const
