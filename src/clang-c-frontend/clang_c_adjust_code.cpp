@@ -57,9 +57,11 @@ void clang_c_adjust::adjust_code(codet& code)
   }
   else if(statement=="label")
   {
+    adjust_operands(code);
   }
   else if(statement=="return")
   {
+    adjust_operands(code);
   }
   else if(statement=="break")
   {
