@@ -124,49 +124,23 @@ void clang_c_adjust::adjust_expr(exprt& expr)
   }
   else if(expr.id() == "if")
   {
+    // Check all operands
+    adjust_operands(expr);
+
     // If the condition is not of boolean type, it must be casted
     gen_typecast(ns, expr.op0(), bool_type());
 
+    // Typecast both the true and false results
     gen_typecast_arithmetic(ns, expr.op1(), expr.op2());
   }
   else if(expr.is_code())
   {
     adjust_code(to_code(expr));
   }
-  else if(expr.is_typecast())
-  {
-    // Check first operand
-    adjust_expr(expr.op0());
-  }
-  else if(expr.id() == "array_of")
-  {
-  }
-  else if(expr.is_constant())
-  {
-  }
-  else if(expr.id()=="ieee_add" ||
-          expr.id()=="ieee_sub" ||
-          expr.id()=="ieee_mul" ||
-          expr.id()=="ieee_div")
-  {
-  }
-  else if(expr.is_struct())
-  {
-  }
-  else if(expr.is_union())
-  {
-  }
-  else if(expr.id() == "unary+" ||
-          expr.id() == "unary-" ||
-          expr.id() == "bitnot")
-  {
-  }
   else
   {
-    std::cout << "Unexpected expression: " << expr.id().as_string()
-                    << std::endl;
-    expr.dump();
-    abort();
+    // Just check operands of everything else
+    adjust_operands(expr);
   }
 }
 
@@ -243,6 +217,8 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt& expr)
 
 void clang_c_adjust::adjust_member(member_exprt& expr)
 {
+  adjust_operands(expr);
+
   exprt& base = expr.struct_op();
   if(base.type().is_pointer())
   {
@@ -255,13 +231,15 @@ void clang_c_adjust::adjust_member(member_exprt& expr)
 
 void clang_c_adjust::adjust_expr_binary_arithmetic(exprt& expr)
 {
+  adjust_operands(expr);
+
   exprt &op0=expr.op0();
   exprt &op1=expr.op1();
 
   const typet type0=ns.follow(op0.type());
   const typet type1=ns.follow(op1.type());
 
-  if(expr.id()=="shl" || expr.id()=="shr")
+  if(expr.id()=="shr")
   {
     gen_typecast_arithmetic(ns, op0);
     gen_typecast_arithmetic(ns, op1);
@@ -310,6 +288,8 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt& expr)
 
 void clang_c_adjust::adjust_index(index_exprt& index)
 {
+  adjust_operands(index);
+
   exprt &array_expr=index.op0();
   exprt &index_expr=index.op1();
 
@@ -351,6 +331,8 @@ void clang_c_adjust::adjust_index(index_exprt& index)
 
 void clang_c_adjust::adjust_expr_rel(exprt& expr)
 {
+  adjust_operands(expr);
+
   expr.type() = bool_type();
 
   exprt &op0=expr.op0();
@@ -386,6 +368,8 @@ void clang_c_adjust::adjust_float_arith(exprt &expr)
 
 void clang_c_adjust::adjust_address_of(exprt &expr)
 {
+  adjust_operands(expr);
+
   exprt &op=expr.op0();
 
   // special case: address of function designator
@@ -423,6 +407,8 @@ void clang_c_adjust::adjust_address_of(exprt &expr)
 
 void clang_c_adjust::adjust_dereference(exprt& deref)
 {
+  adjust_operands(deref);
+
   exprt &op=deref.op0();
 
   const typet op_type=ns.follow(op.type());
@@ -1068,6 +1054,8 @@ void clang_c_adjust::adjust_side_effect_statement_expression(
 
 void clang_c_adjust::adjust_expr_unary_boolean(exprt& expr)
 {
+  adjust_operands(expr);
+
   expr.type() = bool_type();
 
   exprt &operand=expr.op0();
@@ -1076,6 +1064,8 @@ void clang_c_adjust::adjust_expr_unary_boolean(exprt& expr)
 
 void clang_c_adjust::adjust_expr_binary_boolean(exprt& expr)
 {
+  adjust_operands(expr);
+
   expr.type() = bool_type();
 
   gen_typecast_bool(ns, expr.op0());
