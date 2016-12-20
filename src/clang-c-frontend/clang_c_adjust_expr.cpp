@@ -244,8 +244,7 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt& expr)
     gen_typecast_arithmetic(ns, op0);
     gen_typecast_arithmetic(ns, op1);
 
-    if(is_number(op0.type()) &&
-       is_number(op1.type()))
+    if(is_number(op0.type()) && is_number(op1.type()))
     {
       if(expr.id()=="shr") // shifting operation depends on types
       {
