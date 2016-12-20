@@ -1169,6 +1169,9 @@ void clang_c_adjust::make_index_type(exprt& expr)
 
 void clang_c_adjust::adjust_operands(exprt& expr)
 {
+  if(!expr.has_operands())
+    return;
+
   for(auto & op : expr.operands())
     adjust_expr(op);
 }
