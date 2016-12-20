@@ -682,9 +682,9 @@ public:
     return dfault();
   }
 
-  inline void set_default()
+  inline void set_default(bool value)
   {
-    return dfault(true);
+    return dfault(value);
   }
 
   inline const exprt &case_op() const
