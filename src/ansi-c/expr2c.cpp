@@ -2854,7 +2854,7 @@ std::string expr2ct::convert_sizeof(
   unsigned precedence __attribute__((unused)))
 {
   std::string dest="sizeof(";
-  dest+=convert(static_cast<const typet&>(src.find("sizeof-type")));
+  dest+=convert(static_cast<const typet&>(src.c_sizeof_type()));
   dest+=')';
 
   return dest;
