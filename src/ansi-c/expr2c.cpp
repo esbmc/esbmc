@@ -2389,7 +2389,7 @@ std::string expr2ct::convert_code(
     return convert_code_function_call(to_code_function_call(src), indent);
 
   if(statement=="label")
-    return convert_code_label(src, indent);
+    return convert_code_label(to_code_label(src), indent);
 
   if(statement=="free")
     return convert_code_free(src, indent);
@@ -2689,51 +2689,19 @@ Function: expr2ct::convert_code_label
 \*******************************************************************/
 
 std::string expr2ct::convert_code_label(
-  const codet &src,
+  const code_labelt &src,
   unsigned indent)
 {
-  bool first=true;
   std::string labels_string;
 
-  // XXX jmorse - labels irep isn't set anyhere, this code is pointless.
+  irep_idt label=src.get_label();
 
-  {
-    const irept::named_subt &labels=src.labels_irep().get_named_sub();
+  labels_string+="\n";
+  labels_string+=indent_str(indent);
+  labels_string+=name2string(label);
+  labels_string+=":\n";
 
-    forall_named_irep(it, labels)
-    {
-      if(first) { labels_string+="\n"; first=false; }
-      labels_string+=indent_str(indent);
-      labels_string+=name2string(it->first);
-      labels_string+=":\n";
-    }
-
-    const exprt &case_expr=(exprt &)src.case_irep();
-
-    forall_operands(it, case_expr)
-    {
-      if(first) { labels_string+="\n"; first=false; }
-      labels_string+=indent_str(indent);
-      labels_string+="case ";
-      labels_string+=convert(*it);
-      labels_string+=":\n";
-    }
-
-    if(src.dfault())
-    {
-      if(first) { labels_string+="\n"; first=false; }
-      labels_string+=indent_str(indent);
-      labels_string+="default:\n";
-    }
-  }
-
-  if(src.operands().size()!=1)
-  {
-    unsigned precedence;
-    return convert_norep(src, precedence);
-  }
-
-  std::string tmp=convert_code(to_code(src.op0()), indent);
+  std::string tmp=convert_code(src.code(), indent+2);
 
   return labels_string+tmp;
 }
