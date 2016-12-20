@@ -1664,15 +1664,13 @@ bool clang_c_convertert::get_expr(
       if(get_expr(*case_stmt.getSubStmt(), sub_stmt))
         return true;
 
+      code_switch_caset switch_case;
+      switch_case.case_op() = value;
+
       convert_expression_to_code(sub_stmt);
+      switch_case.code() = to_code(sub_stmt);
 
-      codet label("label");
-      exprt &case_ops=label.add_expr("case");
-      case_ops.copy_to_operands(value);
-
-      label.copy_to_operands(sub_stmt);
-
-      new_expr = label;
+      new_expr = switch_case;
       break;
     }
 
@@ -1687,13 +1685,13 @@ bool clang_c_convertert::get_expr(
       if(get_expr(*default_stmt.getSubStmt(), sub_stmt))
         return true;
 
+      code_switch_caset switch_case;
+      switch_case.set_default(true);
+
       convert_expression_to_code(sub_stmt);
+      switch_case.code() = to_code(sub_stmt);
 
-      codet label("label");
-      label.set("default", true);
-      label.copy_to_operands(sub_stmt);
-
-      new_expr = label;
+      new_expr = switch_case;
       break;
     }
 
@@ -1709,8 +1707,8 @@ bool clang_c_convertert::get_expr(
 
       convert_expression_to_code(sub_stmt);
 
-      codet label("label");
-      label.set("label", label_stmt.getName());
+      code_labelt label;
+      label.set_label(label_stmt.getName());
       label.copy_to_operands(sub_stmt);
 
       new_expr = label;
