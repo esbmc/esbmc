@@ -550,7 +550,7 @@ void clang_c_adjust::adjust_side_effect_function_call(
 {
   exprt &f_op=expr.function();
 
-  if(f_op.id()=="symbol")
+  if(f_op.is_symbol())
   {
     const irep_idt &identifier = f_op.identifier();
     symbolt* s = context.find_symbol(identifier);
@@ -594,6 +594,8 @@ void clang_c_adjust::adjust_side_effect_function_call(
         f_op.cmt_lvalue(true);
     }
   }
+  else
+    adjust_expr(f_op);
 
   // do implicit dereference
   if(f_op.is_address_of() && f_op.implicit() && (f_op.operands().size() == 1))
