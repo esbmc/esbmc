@@ -87,7 +87,7 @@ m4_define(ESBMC_ENABLE_CLANG, [
   AX_CLANG(3.9.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
   AX_LLVM(,[AC_MSG_FAILURE(Cannot find llvm dir, please pass it in --with-llvm argument)])
   AC_SUBST([ESBMC_CLANG_SUBDIRS], " clang-c-frontend clang-cpp-frontend ")
-  AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ../clang-c-frontend/headers/libclangheaders.a")
+  AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.a ../clang-cpp-frontend/libclangcppfrontend.a ../clang-c-frontend/headers/libclangheaders.a")
   ])
 
 AC_ARG_ENABLE(clang, [AS_HELP_STRING([--disable-clang], Build ESBMC without clang. (On by default))],
