@@ -207,12 +207,34 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   goto_programt::targett t=f.body.add_instruction();
   t->type=END_FUNCTION;
   t->location=end_location;
-  //t->code.identifier(identifier);
-  //XXXjmorse, disabled in migration, don't think this does anything
 
   if(to_code(symbol.value).get_statement()=="block")
     t->location=static_cast<const locationt &>(
         symbol.value.end_location());
+
+  // Wrap the body of functions name c::__VERIFIER_atomic_* with atomic_bengin
+  // and atomic_end
+  if(!f.body.instructions.empty() &&
+      has_prefix(id2string(identifier), "c::__VERIFIER_atomic_"))
+  {
+    goto_programt::instructiont a_begin;
+    a_begin.make_atomic_begin();
+    a_begin.location = f.body.instructions.front().location;
+    f.body.insert_swap(f.body.instructions.begin(), a_begin);
+
+    goto_programt::targett a_end = f.body.add_instruction();
+    a_end->make_atomic_end();
+    a_end->location = end_location;
+
+    Forall_goto_program_instructions(i_it, f.body)
+    {
+      if(i_it->is_goto() && i_it->targets.front()->is_end_function())
+      {
+        i_it->targets.clear();
+        i_it->targets.push_back(a_end);
+      }
+    }
+  }
 
   // do local variables
   Forall_goto_program_instructions(i_it, f.body)
