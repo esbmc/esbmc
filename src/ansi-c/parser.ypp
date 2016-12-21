@@ -1520,7 +1520,10 @@ labeled_statement:
 	| TOK_DEFAULT ':' statement
 	{
 	  $$=$1;
-	  statement(*$$, "label");
+	  statement(*$$, "switch_case");
+	  exprt nil;
+	  nil.make_nil();
+	  $$->move_to_operands(nil);
 	  mto($$, $3);
 	  $$->dfault(true);
 	}
