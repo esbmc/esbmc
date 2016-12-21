@@ -29,8 +29,7 @@ void clang_c_adjust::adjust_code(codet& code)
   {
     adjust_ifthenelse(code);
   }
-  else if(statement=="while" ||
-          statement=="dowhile")
+  else if(statement=="while" || statement=="dowhile")
   {
     adjust_while(code);
   }
