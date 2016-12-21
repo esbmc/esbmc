@@ -503,6 +503,8 @@ void clang_c_adjust::adjust_type(typet &type)
 
 void clang_c_adjust::adjust_side_effect_assignment(exprt& expr)
 {
+  adjust_operands(expr);
+
   const irep_idt &statement=expr.statement();
 
   exprt &op0=expr.op0();
@@ -1144,6 +1146,8 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
 
 void clang_c_adjust::adjust_comma(exprt& expr)
 {
+  adjust_operands(expr);
+
   expr.type() = expr.op1().type();
 
   // make this an l-value if the last operand is one
