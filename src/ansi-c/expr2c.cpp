@@ -2391,6 +2391,9 @@ std::string expr2ct::convert_code(
   if(statement=="label")
     return convert_code_label(to_code_label(src), indent);
 
+  if(statement=="switch_case")
+    return convert_code_switch_case(to_code_switch_case(src), indent);
+
   if(statement=="free")
     return convert_code_free(src, indent);
 
@@ -2702,6 +2705,48 @@ std::string expr2ct::convert_code_label(
   labels_string+=":\n";
 
   std::string tmp=convert_code(src.code(), indent+2);
+
+  return labels_string+tmp;
+}
+
+/*******************************************************************\
+
+Function: expr2ct::convert_code_switch_case
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string expr2ct::convert_code_switch_case(
+  const code_switch_caset &src,
+  unsigned indent)
+{
+  std::string labels_string;
+
+  if(src.is_default())
+  {
+    labels_string+="\n";
+    labels_string+=indent_str(indent);
+    labels_string+="default:\n";
+  }
+  else
+  {
+    labels_string+="\n";
+    labels_string+=indent_str(indent);
+    labels_string+="case ";
+    labels_string+=convert(src.case_op());
+    labels_string+=":\n";
+  }
+
+  unsigned next_indent=indent;
+  if(src.code().get_statement()!="block" &&
+     src.code().get_statement()!="switch_case")
+    next_indent+=2;
+  std::string tmp=convert_code(src.code(), next_indent);
 
   return labels_string+tmp;
 }
