@@ -628,14 +628,14 @@ public:
     operands().resize(1);
   }
 
-  inline bool is_default() const
+  codet &code()
   {
-    return dfault();
+    return static_cast<codet &>(op0());
   }
 
-  const exprt::operandst &case_op() const
+  const codet &code() const
   {
-    return static_cast<const exprt &>(case_irep()).operands();
+    return static_cast<const codet &>(op0());
   }
 
   const irep_idt &get_label() const
@@ -659,6 +659,65 @@ extern inline code_labelt &to_code_label(codet &code)
 {
   assert(code.get_statement()=="label");
   return static_cast<code_labelt &>(code);
+}
+
+/*! \brief A switch-case
+*/
+class code_switch_caset:public codet
+{
+public:
+  inline code_switch_caset():codet("switch_case")
+  {
+    operands().resize(2);
+  }
+
+  inline code_switch_caset(
+    const exprt &_case_op, const codet &_code) : codet("switch_case")
+  {
+    copy_to_operands(_case_op, _code);
+  }
+
+  inline bool is_default() const
+  {
+    return dfault();
+  }
+
+  inline void set_default(bool value)
+  {
+    return dfault(value);
+  }
+
+  inline const exprt &case_op() const
+  {
+    return op0();
+  }
+
+  inline exprt &case_op()
+  {
+    return op0();
+  }
+
+  codet &code()
+  {
+    return static_cast<codet &>(op1());
+  }
+
+  const codet &code() const
+  {
+    return static_cast<const codet &>(op1());
+  }
+};
+
+static inline const code_switch_caset &to_code_switch_case(const codet &code)
+{
+  assert(code.get_statement()=="switch_case" && code.operands().size()==2);
+  return static_cast<const code_switch_caset &>(code);
+}
+
+static inline code_switch_caset &to_code_switch_case(codet &code)
+{
+  assert(code.get_statement()=="switch_case" && code.operands().size()==2);
+  return static_cast<code_switch_caset &>(code);
 }
 
 class code_breakt:public codet
@@ -792,6 +851,13 @@ class side_effect_expr_function_callt:public side_effect_exprt
 {
 public:
   side_effect_expr_function_callt():side_effect_exprt("function_call")
+  {
+    operands().resize(2);
+    op1().id("arguments");
+  }
+
+  side_effect_expr_function_callt(const typet &_type)
+    : side_effect_exprt("function_call", _type)
   {
     operands().resize(2);
     op1().id("arguments");

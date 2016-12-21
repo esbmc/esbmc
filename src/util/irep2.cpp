@@ -931,6 +931,7 @@ type_to_string(const sideeffect_data::allockind &data,
                int indent __attribute__((unused)))
 {
   return (data == sideeffect_data::allockind::malloc) ? "malloc" :
+         (data == sideeffect_data::allockind::realloc) ? "realloc" :
          (data == sideeffect_data::allockind::alloca) ? "alloca" :
          (data == sideeffect_data::allockind::cpp_new) ? "cpp_new" :
          (data == sideeffect_data::allockind::cpp_new_arr) ? "cpp_new_arr" :
@@ -2118,9 +2119,9 @@ std::string empty_type2t::field_names [esbmct::num_type_fields]  =
 std::string symbol_type2t::field_names [esbmct::num_type_fields]  =
 { "symbol_name", "", "", "", ""};
 std::string struct_type2t::field_names [esbmct::num_type_fields]  =
-{ "members", "member_names", "typename", "", ""};
+{ "members", "member_names", "member_pretty_names", "typename", "", ""};
 std::string union_type2t::field_names [esbmct::num_type_fields]  =
-{ "members", "member_names", "typename", "", ""};
+{ "members", "member_names", "member_pretty_names", "typename", "", ""};
 std::string unsignedbv_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "", "", "", ""};
 std::string signedbv_type2t::field_names [esbmct::num_type_fields]  =

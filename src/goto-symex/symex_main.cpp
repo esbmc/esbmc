@@ -204,12 +204,6 @@ goto_symext::symex_step(reachability_treet & art)
         std::string name = id.as_string().substr(3);
         run_intrinsic(call, art, name);
         return;
-      } else if (has_prefix(id.as_string(), "cpp::__ESBMC")) {
-        cur_state->source.pc++;
-        std::string name = id.as_string().substr(5);
-        name = name.substr(0, name.find("("));
-        run_intrinsic(call, art, name);
-        return;
       }
     }
 
@@ -371,8 +365,6 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
     intrinsic_register_monitor(func_call, art);
   } else if (symname == "__ESBMC_kill_monitor") {
     intrinsic_kill_monitor(art);
-  } else if (symname == "__ESBMC_realloc") {
-    intrinsic_realloc(func_call, art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
     std::cerr << std::endl << "The name in question: " << symname << std::endl;

@@ -30,7 +30,7 @@ public:
   typedef hash_map_cont<std::string, smt_ast *, std::hash<std::string> >
     symtable_type;
 
-  boolector_convt(bool is_cpp, bool int_encoding, const namespacet &ns,
+  boolector_convt(bool int_encoding, const namespacet &ns,
                   const optionst &options);
   virtual ~boolector_convt();
 

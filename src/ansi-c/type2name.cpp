@@ -52,8 +52,6 @@ std::string type2name(const typet &type)
     result+='U' + type.width().as_string();
   else if(type.is_bool())
     result+='B';
-  else if(type.id()=="integer")
-    result+='I';
   else if(type.id()=="real")
     result+='R';
   else if(type.id()=="complex")
@@ -62,8 +60,6 @@ std::string type2name(const typet &type)
     result+='F' + type.width().as_string();
   else if(type.id()=="fixedbv")
     result+='X' + type.width().as_string();
-  else if(type.id()=="natural")
-    result+='N';
   else if(type.id()=="pointer")
     result+='*';
   else if(type.id()=="reference")
@@ -101,16 +97,10 @@ std::string type2name(const typet &type)
   {
     if(type.id()=="struct") result +="ST";
     if(type.id()=="union") result +="UN";
-    const struct_typet &t = to_struct_type(type);
-    const struct_typet::componentst &components = t.components();
+
     result+='[';
-    for(struct_typet::componentst::const_iterator it = components.begin();
-        it!=components.end();
-        it++)
-    {
-      result+=type2name(it->type());
-      result+="'" + it->name().as_string() + "'|";
-    }
+    for(auto it : to_struct_type(type).components())
+      result+=type2name(it.type()) + "'" + it.name().as_string() + "'|";
     result.resize(result.size()-1);
     result+=']';
   }

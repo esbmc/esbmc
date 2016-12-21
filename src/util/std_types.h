@@ -108,6 +108,16 @@ public:
       type()=_type;
     }
 
+    inline componentt(
+      const irep_idt &_name,
+      const irep_idt &_pretty_name,
+      const typet &_type) : exprt(a_component)
+    {
+      set_name(_name);
+      set_pretty_name(_pretty_name);
+      type()=_type;
+    }
+
     const irep_idt &get_name() const
     {
       return get(a_name);

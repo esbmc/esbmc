@@ -52,8 +52,6 @@ public:
     ost os;
 
     std::list<std::string> defines;
-    std::list<std::string> undefines;
-    std::list<std::string> preprocessor_options;
     std::list<std::string> include_paths;
 
     typedef enum { LIB_NONE, LIB_FULL } libt;

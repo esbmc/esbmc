@@ -20,6 +20,8 @@
 
 #include "typecast.h"
 
+#include <clang/AST/Attr.h>
+
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
   std::vector<std::unique_ptr<clang::ASTUnit> > &_ASTs)
@@ -28,8 +30,6 @@ clang_c_convertert::clang_c_convertert(
     ns(context),
     ASTs(_ASTs),
     current_scope_var_num(1),
-    anon_var_counter(0),
-    anon_tag_counter(0),
     sm(nullptr),
     current_functionDecl(nullptr)
 {
@@ -132,7 +132,12 @@ bool clang_c_convertert::get_decl(
     {
       const clang::FunctionDecl &fd =
         static_cast<const clang::FunctionDecl&>(decl);
-      return get_function(fd);
+
+      // We can safely ignore any expr generated when parsing C code
+      // In C++ mode, methods are initially parsed as function and
+      // need to be added to the class scope
+      exprt dummy;
+      return get_function(fd, dummy);
     }
 
     // Field inside a struct/union
@@ -145,24 +150,10 @@ bool clang_c_convertert::get_decl(
       if(get_type(fd.getType(), t))
         return true;
 
-      struct_union_typet::componentt comp;
-      comp.type() = t;
-
       std::string name, pretty_name;
-      if((t.is_struct() || t.is_union()) && fd.getName().str().empty())
-      {
-        name = to_struct_union_type(t).tag().as_string();
-        pretty_name = "#anon" + i2string(anon_tag_counter++);
-      }
-      else
-      {
-        get_field_name(fd, name);
-        pretty_name = name;
-      }
+      get_field_name(fd, name, pretty_name);
 
-      comp.name(name);
-      comp.pretty_name(pretty_name);
-
+      struct_union_typet::componentt comp(name, pretty_name, t);
       if(fd.isBitField() && !config.options.get_bool_option("no-bitfields"))
       {
         exprt width;
@@ -185,9 +176,10 @@ bool clang_c_convertert::get_decl(
       if(get_type(fd.getType(), t))
         return true;
 
-      struct_union_typet::componentt comp(fd.getName().str(), t);
-      comp.set_pretty_name(fd.getName().str());
+      std::string name, pretty_name;
+      get_field_name(*fd.getAnonField(), name, pretty_name);
 
+      struct_union_typet::componentt comp(name, pretty_name, t);
       if(fd.getAnonField()->isBitField())
       {
         exprt width;
@@ -220,7 +212,7 @@ bool clang_c_convertert::get_decl(
 
       for(auto decl : tu.decls())
       {
-        // This is a global declaration (varible, function, struct, etc)
+        // This is a global declaration (variable, function, struct, etc)
         // We don't need the exprt, it will be automatically added to the
         // context
         exprt dummy_decl;
@@ -251,12 +243,6 @@ bool clang_c_convertert::get_decl(
     case clang::Decl::Typedef:
       break;
 
-    case clang::Decl::Namespace:
-    case clang::Decl::TypeAlias:
-    case clang::Decl::FileScopeAsm:
-    case clang::Decl::Block:
-    case clang::Decl::Captured:
-    case clang::Decl::Import:
     default:
       std::cerr << "**** ERROR: ";
       std::cerr << "Unrecognized / unimplemented clang declaration "
@@ -353,17 +339,29 @@ bool clang_c_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &recordd,
   struct_union_typet &type)
 {
-  for(const auto &decl : recordd.decls())
+  // First, parse the fields
+  for(const auto &field : recordd.fields())
   {
     struct_typet::componentt comp;
-    if(get_decl(*decl, comp))
+    if(get_decl(*field, comp))
       return true;
 
-    // If we are parsing a field declaration, add it to the components
-    if(decl->getKind() == clang::Decl::Field)
-      type.components().push_back(comp);
+    // Don't add fields that have global storage (e.g., static)
+    if(const clang::VarDecl* nd = llvm::dyn_cast<clang::VarDecl>(field))
+      if(nd->hasGlobalStorage())
+        continue;
+
+    type.components().push_back(comp);
   }
 
+  return false;
+}
+
+bool clang_c_convertert::get_struct_union_class_methods(
+  const clang::RecordDecl &recordd,
+  struct_union_typet &type)
+{
+  // We don't add methods to the struct in C
   return false;
 }
 
@@ -375,6 +373,20 @@ bool clang_c_convertert::get_var(
   typet t;
   if(get_type(vd.getType(), t))
     return true;
+
+  // Check if we annotated it to be have an infinity size
+  for(auto attr : vd.getAttrs())
+  {
+    if (!llvm::isa<clang::AnnotateAttr>(attr))
+      continue;
+
+    const auto *a = llvm::cast<clang::AnnotateAttr>(attr);
+    if(a->getAnnotation().str() == "__ESBMC_inf_size")
+    {
+      assert(t.is_array());
+      t.size(exprt("infinity", uint_type()));
+    }
+  }
 
   std::string identifier;
   get_var_name(vd, identifier);
@@ -442,7 +454,8 @@ bool clang_c_convertert::get_var(
 }
 
 bool clang_c_convertert::get_function(
-  const clang::FunctionDecl &fd)
+  const clang::FunctionDecl &fd,
+  exprt &new_expr)
 {
   // Don't convert if clang thinks that the functions was implicitly converted
   if(fd.isImplicit())
@@ -610,7 +623,25 @@ bool clang_c_convertert::get_type(
   typet &new_type)
 {
   const clang::Type &the_type = *q_type.getTypePtrOrNull();
+  if(get_type(the_type, new_type))
+    return true;
 
+  if(q_type.isConstQualified())
+    new_type.cmt_constant(true);
+
+  if(q_type.isVolatileQualified())
+    new_type.cmt_volatile(true);
+
+  if(q_type.isRestrictQualified())
+    new_type.restricted(true);
+
+  return false;
+}
+
+bool clang_c_convertert::get_type(
+  const clang::Type &the_type,
+  typet &new_type)
+{
   switch (the_type.getTypeClass())
   {
     // Builtin types like integer
@@ -766,6 +797,10 @@ bool clang_c_convertert::get_type(
         type.arguments().push_back(param_type);
       }
 
+      // Apparently, if the type has no arguments, we assume ellipsis
+      if(!type.arguments().size() || func.isVariadic())
+        type.make_ellipsis();
+
       new_type = type;
       break;
     }
@@ -785,6 +820,10 @@ bool clang_c_convertert::get_type(
         return true;
 
       type.return_type() = return_type;
+
+      // Apparently, if the type has no arguments, we assume ellipsis
+      if(!type.arguments().size())
+        type.make_ellipsis();
 
       new_type = type;
       break;
@@ -807,10 +846,10 @@ bool clang_c_convertert::get_type(
 
     case clang::Type::Record:
     {
-      const clang::RecordDecl &tag =
+      const clang::RecordDecl &rd =
         *(static_cast<const clang::RecordType &>(the_type)).getDecl();
 
-      if(tag.isClass())
+      if(rd.isClass())
       {
         std::cerr << "Class Type is not supported yet" << std::endl;
         return true;
@@ -818,7 +857,7 @@ bool clang_c_convertert::get_type(
 
       // Search for the type on the type map
       type_mapt::iterator it;
-      if(search_add_type_map(tag, it))
+      if(search_add_type_map(rd, it))
         return true;
 
       symbolt &s = *context.find_symbol(it->second);
@@ -887,15 +926,22 @@ bool clang_c_convertert::get_type(
       break;
     }
 
+    case clang::Type::Decltype:
+    {
+      const clang::DecltypeType &dt =
+        static_cast<const clang::DecltypeType &>(the_type);
+
+      if(get_type(dt.getUnderlyingType(), new_type))
+        return true;
+
+      break;
+    }
     default:
       std::cerr << "No clang <=> ESBMC migration for type "
                 << the_type.getTypeClassName() << std::endl;
       the_type.dump();
       return true;
   }
-
-  if(q_type.isConstQualified())
-    new_type.cmt_constant(true);
 
   return false;
 }
@@ -920,7 +966,12 @@ bool clang_c_convertert::get_builtin_type(
     case clang::BuiltinType::Char_U:
     case clang::BuiltinType::UChar:
       new_type = unsigned_char_type();
-      c_type = "unsigned char";
+      c_type = "unsigned_char";
+      break;
+
+    case clang::BuiltinType::WChar_U:
+      new_type = unsigned_wchar_type();
+      c_type = "unsigned_wchar_t";
       break;
 
     case clang::BuiltinType::Char16:
@@ -933,58 +984,55 @@ bool clang_c_convertert::get_builtin_type(
       c_type = "char32_t";
       break;
 
-    case clang::BuiltinType::Char_S:
-    case clang::BuiltinType::SChar:
-      new_type = signed_char_type();
-      c_type = "signed char";
-      break;
-
     case clang::BuiltinType::UShort:
       new_type = unsigned_short_int_type();
-      c_type = "unsigned short";
+      c_type = "unsigned_short";
       break;
 
     case clang::BuiltinType::UInt:
       new_type = uint_type();
-      c_type = "unsigned int";
+      c_type = "unsigned_int";
       break;
 
     case clang::BuiltinType::ULong:
       new_type = long_uint_type();
-      c_type = "unsigned long";
+      c_type = "unsigned_long";
       break;
 
     case clang::BuiltinType::ULongLong:
       new_type = long_long_uint_type();
-      c_type = "unsigned long long";
+      c_type = "unsigned_long_long";
       break;
 
-    case clang::BuiltinType::Int128:
-    case clang::BuiltinType::UInt128:
-      // Various simplification / big-int related things use uint64_t's...
-      std::cerr << "ESBMC currently does not support integers bigger "
-                    "than 64 bits" << std::endl;
-      bt.dump();
-      return true;
+    case clang::BuiltinType::Char_S:
+    case clang::BuiltinType::SChar:
+      new_type = signed_char_type();
+      c_type = "signed_char";
+      break;
+
+    case clang::BuiltinType::WChar_S:
+      new_type = wchar_type();
+      c_type = "wchar_t";
+      break;
 
     case clang::BuiltinType::Short:
       new_type = signed_short_int_type();
-      c_type = "signed short";
+      c_type = "signed_short";
       break;
 
     case clang::BuiltinType::Int:
       new_type = int_type();
-      c_type = "signed int";
+      c_type = "signed_int";
       break;
 
     case clang::BuiltinType::Long:
       new_type = long_int_type();
-      c_type = "signed long";
+      c_type = "signed_long";
       break;
 
     case clang::BuiltinType::LongLong:
       new_type = long_long_int_type();
-      c_type = "signed long long";
+      c_type = "signed_long_long";
       break;
 
     case clang::BuiltinType::Float:
@@ -999,8 +1047,16 @@ bool clang_c_convertert::get_builtin_type(
 
     case clang::BuiltinType::LongDouble:
       new_type = long_double_type();
-      c_type = "long double";
+      c_type = "long_double";
       break;
+
+    case clang::BuiltinType::Int128:
+    case clang::BuiltinType::UInt128:
+      // Various simplification / big-int related things use uint64_t's...
+      std::cerr << "ESBMC currently does not support integers bigger "
+                << "than 64 bits" << std::endl;
+      bt.dump();
+      return true;
 
     default:
       std::cerr << "Unrecognized clang builtin type "
@@ -1010,7 +1066,7 @@ bool clang_c_convertert::get_builtin_type(
       return true;
   }
 
-  new_type.set("#c_type", c_type);
+  new_type.set("#cpp_type", c_type);
   return false;
 }
 
@@ -1234,9 +1290,9 @@ bool clang_c_convertert::get_expr(
       break;
     }
 
-    // A function call expr. The symbol may be undefined so we create it here
-    // This should be moved to a step after the conversion. The conversion
-    // step should only convert the code
+    // A function call expr
+    // It can be undefined here, the symbol will be added in
+    // adjust_expr::adjust_side_effect_function_call
     case clang::Stmt::CallExprClass:
     {
       const clang::CallExpr &function_call =
@@ -1256,7 +1312,8 @@ bool clang_c_convertert::get_expr(
       call.function() = callee_expr;
       call.type() = type;
 
-      for (const clang::Expr *arg : function_call.arguments()) {
+      for (const clang::Expr *arg : function_call.arguments())
+      {
         exprt single_arg;
         if(get_expr(*arg, single_arg))
           return true;
@@ -1336,6 +1393,18 @@ bool clang_c_convertert::get_expr(
       break;
     }
 
+    case clang::Stmt::GNUNullExprClass:
+    {
+      const clang::GNUNullExpr &gnun =
+        static_cast<const clang::GNUNullExpr&>(stmt);
+
+      typet t;
+      if(get_type(gnun.getType(), t))
+        return true;
+
+      new_expr = gen_zero(t);
+      break;
+    }
     // Casts expression:
     // Implicit: float f = 1; equivalent to float f = (float) 1;
     // CStyle: int a = (int) 3.0;
@@ -1535,7 +1604,7 @@ bool clang_c_convertert::get_expr(
       for (clang::DeclGroupRef::const_iterator
         it = declgroup.begin();
         it != declgroup.end();
-        it++)
+        ++it)
       {
         exprt single_decl;
         if(get_decl(**it, single_decl))
@@ -1595,15 +1664,13 @@ bool clang_c_convertert::get_expr(
       if(get_expr(*case_stmt.getSubStmt(), sub_stmt))
         return true;
 
+      code_switch_caset switch_case;
+      switch_case.case_op() = value;
+
       convert_expression_to_code(sub_stmt);
+      switch_case.code() = to_code(sub_stmt);
 
-      codet label("label");
-      exprt &case_ops=label.add_expr("case");
-      case_ops.copy_to_operands(value);
-
-      label.copy_to_operands(sub_stmt);
-
-      new_expr = label;
+      new_expr = switch_case;
       break;
     }
 
@@ -1618,13 +1685,13 @@ bool clang_c_convertert::get_expr(
       if(get_expr(*default_stmt.getSubStmt(), sub_stmt))
         return true;
 
+      code_switch_caset switch_case;
+      switch_case.set_default(true);
+
       convert_expression_to_code(sub_stmt);
+      switch_case.code() = to_code(sub_stmt);
 
-      codet label("label");
-      label.set("default", true);
-      label.copy_to_operands(sub_stmt);
-
-      new_expr = label;
+      new_expr = switch_case;
       break;
     }
 
@@ -1640,9 +1707,9 @@ bool clang_c_convertert::get_expr(
 
       convert_expression_to_code(sub_stmt);
 
-      codet label("label");
-      label.set("label", label_stmt.getName());
-      label.copy_to_operands(sub_stmt);
+      code_labelt label;
+      label.set_label(label_stmt.getName());
+      label.code() = to_code(sub_stmt);
 
       new_expr = label;
       break;
@@ -1656,8 +1723,12 @@ bool clang_c_convertert::get_expr(
       const clang::IfStmt &ifstmt =
         static_cast<const clang::IfStmt &>(stmt);
 
+      const clang::Stmt *cond_expr = ifstmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = ifstmt.getCond();
+
       exprt cond;
-      if(get_expr(*ifstmt.getCond(), cond))
+      if(get_expr(*cond_expr, cond))
         return true;
 
       exprt then;
@@ -1691,8 +1762,12 @@ bool clang_c_convertert::get_expr(
       const clang::SwitchStmt &switch_stmt =
         static_cast<const clang::SwitchStmt &>(stmt);
 
-      exprt value;
-      if(get_expr(*switch_stmt.getCond(), value))
+      const clang::Stmt *cond_expr = switch_stmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = switch_stmt.getCond();
+
+      exprt cond;
+      if(get_expr(*cond_expr, cond))
         return true;
 
       codet body;
@@ -1700,7 +1775,7 @@ bool clang_c_convertert::get_expr(
         return true;
 
       code_switcht switch_code;
-      switch_code.value() = value;
+      switch_code.value() = cond;
       switch_code.body() = body;
 
       new_expr = switch_code;
@@ -1714,8 +1789,12 @@ bool clang_c_convertert::get_expr(
       const clang::WhileStmt &while_stmt =
         static_cast<const clang::WhileStmt &>(stmt);
 
+      const clang::Stmt *cond_expr = while_stmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = while_stmt.getCond();
+
       exprt cond;
-      if(get_expr(*while_stmt.getCond(), cond))
+      if(get_expr(*cond_expr, cond))
         return true;
 
       codet body = code_skipt();
@@ -1773,11 +1852,13 @@ bool clang_c_convertert::get_expr(
           return true;
 
       convert_expression_to_code(init);
+      const clang::Stmt *cond_expr = for_stmt.getConditionVariableDeclStmt();
+      if(cond_expr == nullptr)
+        cond_expr = for_stmt.getCond();
 
       exprt cond = true_exprt();
-      const clang::Stmt *cond_stmt = for_stmt.getCond();
-      if(cond_stmt)
-        if(get_expr(*cond_stmt, cond))
+      if(cond_expr)
+        if(get_expr(*cond_expr, cond))
           return true;
 
       codet inc = code_skipt();
@@ -1903,20 +1984,6 @@ bool clang_c_convertert::get_expr(
       new_expr = code_skipt();
       break;
 
-    // No idea when these AST is created
-    case clang::Stmt::ImaginaryLiteralClass:
-    case clang::Stmt::ShuffleVectorExprClass:
-    case clang::Stmt::ConvertVectorExprClass:
-    case clang::Stmt::ChooseExprClass:
-    case clang::Stmt::GNUNullExprClass:
-    case clang::Stmt::DesignatedInitExprClass:
-    case clang::Stmt::ParenListExprClass:
-    case clang::Stmt::ExtVectorElementExprClass:
-    case clang::Stmt::BlockExprClass:
-    case clang::Stmt::AsTypeExprClass:
-    case clang::Stmt::PseudoObjectExprClass:
-    case clang::Stmt::AtomicExprClass:
-    case clang::Stmt::AttributedStmtClass:
     default:
       std::cerr << "Conversion of unsupported clang expr: \"";
       std::cerr << stmt.getStmtClassName() << "\" to expression" << std::endl;
@@ -2008,6 +2075,7 @@ bool clang_c_convertert::get_decl_ref(
   new_expr.identifier(identifier);
   new_expr.cmt_lvalue(true);
 
+  // Remove c:: or cpp::
   if(identifier.find_last_of("::") != std::string::npos)
     new_expr.name(identifier.substr(identifier.find_last_of("::")+1));
   else
@@ -2123,6 +2191,10 @@ bool clang_c_convertert::get_unary_operator_expr(
     case clang::UO_Deref:
       new_expr = exprt("dereference", uniop_type);
       break;
+
+    case clang::UO_Extension:
+      new_expr.swap(unary_sub);
+      return false;
 
     default:
       std::cerr << "Conversion of unsupported clang unary operator: \"";
@@ -2354,12 +2426,26 @@ void clang_c_convertert::get_default_symbol(
 
 void clang_c_convertert::get_field_name(
   const clang::FieldDecl& fd,
-  std::string &name)
+  std::string &name,
+  std::string &pretty_name)
 {
-  name = fd.getName().str();
+  name = pretty_name = fd.getName().str();
 
   if(name.empty())
-    name += "#anon" + i2string(anon_var_counter++);
+  {
+    typet t;
+    get_type(fd.getType(), t);
+
+    if(fd.isBitField())
+    {
+      exprt width;
+      get_expr(*fd.getBitWidth(), width);
+      t.width(width.cformat());
+    }
+
+    name = type2name(t);
+    pretty_name = "anon";
+  }
 }
 
 void clang_c_convertert::get_var_name(
@@ -2419,32 +2505,42 @@ void clang_c_convertert::get_function_name(
 }
 
 bool clang_c_convertert::get_tag_name(
-  const clang::RecordDecl& recordd,
-  std::string &identifier)
+  const clang::RecordDecl& rd,
+  std::string &name)
 {
-  if(recordd.getName().str().empty())
+  name = rd.getName().str();
+  if(!name.empty())
+    return false;
+
+  // Try to get the name from typedef (if one exists)
+  if (const clang::TagDecl *tag = llvm::dyn_cast<clang::TagDecl>(&rd))
   {
-    clang::RecordDecl *record_def = recordd.getDefinition();
-
-    struct_union_typet t;
-    if(recordd.isStruct())
-      t = struct_typet();
-    else if(recordd.isUnion())
-      t = union_typet();
-    else
-      // This should never be reached
-      abort();
-
-    if(get_struct_union_class_fields(*record_def, t))
-      return true;
-
-    identifier += "#anon#" + type2name(t);
+    if (const clang::TypedefNameDecl *tnd = rd.getTypedefNameForAnonDecl())
+    {
+      name = tnd->getName().str();
+      return false;
+    }
+    else if (tag->getIdentifier())
+    {
+      name = tag->getName().str();
+      return false;
+    }
   }
+
+  struct_union_typet t;
+  if(rd.isStruct())
+    t = struct_typet();
+  else if(rd.isUnion())
+    t = union_typet();
   else
-  {
-    identifier += recordd.getName().str();
-  }
+    // This should never be reached
+    abort();
 
+  clang::RecordDecl *record_def = rd.getDefinition();
+  if(get_struct_union_class_fields(*record_def, t))
+    return true;
+
+  name = type2name(t);
   return false;
 }
 

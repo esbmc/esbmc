@@ -157,12 +157,14 @@ void ansi_c_convertt::convert_code(codet &code)
   {
     assert(code.operands().size()==1);
     convert_code(to_code(code.op0()));
+  }
+  else if(statement=="switch_case")
+  {
+    assert(code.operands().size()==2);
+    if(code.op0().is_not_nil())
+      convert_expr(code.op0());
 
-    if(code.case_irep().is_not_nil()) {
-      exprt tmp = (exprt&)code.case_irep();
-      convert_expr(tmp);
-      code.case_irep(tmp);
-    }
+    convert_code(to_code(code.op1()));
   }
   else if(statement=="block")
   {

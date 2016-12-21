@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <sstream>
 #include <fstream>
 
-#include <ansi-c/cprover_library.h>
+#include <c2goto/cprover_library.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/c_link.h>
 

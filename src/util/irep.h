@@ -283,10 +283,6 @@ public:
     return find(a_cmt_type);
   }
 
-  inline const irept &case_irep(void) const {
-    return find(s_case);
-  }
-
   inline const irept &return_type(void) const {
     return find(s_return_type);
   }
@@ -828,10 +824,6 @@ public:
     set(s_components, val);
   }
 
-  inline void case_irep(const irept &val) {
-    set(s_case, val);
-  }
-
   inline void offsetof_type(const irept &val) {
     set(s_offsetof_type, val);
   }
@@ -938,7 +930,7 @@ protected:
   { return !name.empty() && name[0]=='#'; }
 
 public:
-  static const irep_idt s_type, s_arguments, s_components, s_case;
+  static const irep_idt s_type, s_arguments, s_components;
   static const irep_idt s_return_type, s_body, s_member, s_labels;
   static const irep_idt s_bv, s_targets, s_variables;
   static const irep_idt s_initializer, s_declaration_type, s_decl_value;

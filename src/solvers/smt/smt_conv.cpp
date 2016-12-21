@@ -66,7 +66,7 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
+smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   : ctx_level(0), boolean_sort(NULL), int_encoding(intmode), ns(_ns)
 {
   tuple_api = NULL;
@@ -80,7 +80,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
   names.push_back(irep_idt("pointer_object"));
   names.push_back(irep_idt("pointer_offset"));
 
-  struct_type2t *tmp = new struct_type2t(members, names, "pointer_struct");
+  struct_type2t *tmp = new struct_type2t(members, names, names, "pointer_struct");
   pointer_type_data = tmp;
   pointer_struct = type2tc(tmp);
 
@@ -96,7 +96,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   names.push_back(irep_idt("start"));
   names.push_back(irep_idt("end"));
-  tmp = new struct_type2t(members, names, "addr_space_type");
+  tmp = new struct_type2t(members, names, names, "addr_space_type");
   addr_space_type_data = tmp;
   addr_space_type = type2tc(tmp);
 
@@ -114,11 +114,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
   // this is the one modelling array that absolutely _has_ to be initialized
   // to false for each element, which is going to be shoved into
   // convert_identifier_pointer.
-  if (is_cpp) {
-    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic&0#1";
-  } else {
-    dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
-  }
+  dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
 
   ptr_foo_inited = false;
 }

@@ -17,15 +17,8 @@
 class clang_c_adjust
 {
   public:
-    clang_c_adjust(contextt &_context)
-      : context(_context),
-        ns(namespacet(context))
-    {
-    }
-
-    ~clang_c_adjust()
-    {
-    }
+    clang_c_adjust(contextt &_context);
+    virtual ~clang_c_adjust() = default;
 
     bool adjust();
 
@@ -36,10 +29,7 @@ class clang_c_adjust
     void adjust_symbol(symbolt &symbol);
     void adjust_type(typet &type);
 
-    void adjust_builtin(symbolt& symbol);
-
     void adjust_expr(exprt &expr);
-    void adjust_expr_main(exprt &expr);
 
     void adjust_side_effect_assignment(exprt &expr);
     void adjust_side_effect_function_call(
@@ -59,6 +49,9 @@ class clang_c_adjust
     void adjust_symbol(exprt &expr);
     void adjust_comma(exprt &expr);
 
+    void adjust_function_call_arguments(
+      side_effect_expr_function_callt &expr);
+
     void adjust_code(codet &code);
     void adjust_expression(codet &code);
     void adjust_ifthenelse(codet &code);
@@ -67,6 +60,8 @@ class clang_c_adjust
     void adjust_switch(codet &code);
     void adjust_assign(codet &code);
     void adjust_decl(codet &code);
+
+    void adjust_operands(exprt &expr);
 
     void adjust_argc_argv(const symbolt &main_symbol);
 

@@ -68,19 +68,10 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
 
   art1 = NULL;
 
-  // Work out whether or not we'll be modelling with cpp:: or c:: arrays.
-  const symbolt *sp;
-  if (!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp)) {
-    valid_ptr_arr_name = "c::__ESBMC_alloc";
-    alloc_size_arr_name = "c::__ESBMC_alloc_size";
-    deallocd_arr_name = "c::__ESBMC_deallocated";
-    dyn_info_arr_name = "c::__ESBMC_is_dynamic";
-  } else {
-    valid_ptr_arr_name = "cpp::__ESBMC_alloc";
-    alloc_size_arr_name = "cpp::__ESBMC_alloc_size";
-    deallocd_arr_name = "cpp::__ESBMC_deallocated";
-    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic";
-  }
+  valid_ptr_arr_name = "c::__ESBMC_alloc";
+  alloc_size_arr_name = "c::__ESBMC_alloc_size";
+  deallocd_arr_name = "c::__ESBMC_deallocated";
+  dyn_info_arr_name = "c::__ESBMC_is_dynamic";
 
   symbolt sym;
   sym.name = "symex_throw::thrown_obj";
@@ -192,6 +183,9 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
     case sideeffect2t::cpp_new:
     case sideeffect2t::cpp_new_arr:
       symex_cpp_new(lhs, effect);
+      break;
+    case sideeffect2t::realloc:
+      symex_realloc(lhs, effect);
       break;
     case sideeffect2t::malloc:
       symex_malloc(lhs, effect);

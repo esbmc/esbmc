@@ -6,12 +6,12 @@
 #include "minisat_conv.h"
 
 smt_convt *
-create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+create_new_minisat_solver(bool int_encoding, const namespacet &ns,
                           const optionst &options,
                           tuple_iface **tuple_api __attribute__((unused)),
                           array_iface **array_api __attribute__((unused)))
 {
-  minisat_convt *conv = new minisat_convt(int_encoding, ns, is_cpp, options);
+  minisat_convt *conv = new minisat_convt(int_encoding, ns,options);
   return conv;
 }
 
@@ -69,10 +69,10 @@ minisat_convt::lcnf(const bvt &bv)
 }
 
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
-                             bool is_cpp, const optionst &_opts)
+                             const optionst &_opts)
 : cnf_iface(),
   cnf_convt(static_cast<cnf_iface*>(this)),
-  bitblast_convt(int_encoding, _ns, is_cpp, static_cast<sat_iface*>(this)),
+  bitblast_convt(int_encoding, _ns, static_cast<sat_iface*>(this)),
   solver(), options(_opts), false_asserted(false)
 {
 }

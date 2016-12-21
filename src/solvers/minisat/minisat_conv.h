@@ -26,7 +26,7 @@ public:
     LEFT, LRIGHT, ARIGHT
   } shiftt;
 
-  minisat_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
+  minisat_convt(bool int_encoding, const namespacet &_ns,
                 const optionst &opts);
   ~minisat_convt();
 

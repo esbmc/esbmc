@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <ansi-c/c_final.h>
-#include <ansi-c/cprover_library.h>
+#include <c2goto/cprover_library.h>
 
 #include "cpp_final.h"
 

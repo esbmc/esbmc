@@ -8,19 +8,19 @@ extern "C" {
 
 smt_convt *
 create_new_boolector_solver(bool int_encoding, const namespacet &ns,
-                            bool is_cpp, const optionst &options,
+                            const optionst &options,
                             tuple_iface **tuple_api __attribute__((unused)),
                             array_iface **array_api)
 {
   boolector_convt *conv =
-    new boolector_convt(is_cpp, int_encoding, ns, options);
+    new boolector_convt(int_encoding, ns, options);
   *array_api = static_cast<array_iface*>(conv);
   return conv;
 }
 
-boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
+boolector_convt::boolector_convt(bool int_encoding,
                                  const namespacet &ns, const optionst &options)
-  : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false)
+  : smt_convt(int_encoding, ns), array_iface(false, false)
 {
 
   if (int_encoding) {

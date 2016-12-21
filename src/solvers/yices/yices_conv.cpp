@@ -19,12 +19,12 @@
 #endif
 
 smt_convt *
-create_new_yices_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+create_new_yices_solver(bool int_encoding, const namespacet &ns,
                               const optionst &opts __attribute__((unused)),
                               tuple_iface **tuple_api __attribute__((unused)),
                               array_iface **array_api)
 {
-  yices_convt *conv = new yices_convt(int_encoding, ns, is_cpp);
+  yices_convt *conv = new yices_convt(int_encoding, ns);
   *array_api = static_cast<array_iface*>(conv);
   // As illustrated by 01_cbmc_Pointer4, there is something broken in yices
   // tuples. Specifically, the implication of (p != NULL) doesn't seem to feed
@@ -33,8 +33,8 @@ create_new_yices_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
   return conv;
 }
 
-yices_convt::yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp)
-  : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false),
+yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
+  : smt_convt(int_encoding, ns), array_iface(false, false),
     sat_model(NULL)
 {
   yices_init();

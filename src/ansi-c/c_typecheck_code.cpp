@@ -56,6 +56,8 @@ void c_typecheck_baset::typecheck_code(codet &code)
     typecheck_expression(code);
   else if(statement=="label")
     typecheck_label(to_code_label(code));
+  else if(statement=="switch_case")
+    typecheck_switch_case(to_code_switch_case(code));
   else if(statement=="block")
     typecheck_block(code);
   else if(statement=="ifthenelse")
@@ -460,6 +462,29 @@ void c_typecheck_baset::typecheck_label(code_labelt &code)
   }
 
   typecheck_code(to_code(code.op0()));
+}
+
+/*******************************************************************\
+
+Function: c_typecheck_baset::typecheck_switch_case
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void c_typecheck_baset::typecheck_switch_case(code_switch_caset &code)
+{
+  if(code.operands().size()!=2)
+  {
+    err_location(code);
+    throw "label expected to have one operand";
+  }
+
+  typecheck_code(code.code());
 
   if(code.is_default())
   {
@@ -469,8 +494,7 @@ void c_typecheck_baset::typecheck_label(code_labelt &code)
       throw "did not expect default label here";
     }
   }
-
-  if(code.case_irep().is_not_nil())
+  else
   {
     if(!case_is_allowed)
     {
@@ -478,15 +502,9 @@ void c_typecheck_baset::typecheck_label(code_labelt &code)
       throw "did not expect `case' here";
     }
 
-    exprt case_expr=static_cast<const exprt &>(code.case_irep());
-
-    Forall_operands(it, case_expr)
-    {
-      typecheck_expr(*it);
-      implicit_typecast(*it, switch_op_type);
-    }
-
-    code.case_irep(case_expr);
+    exprt &case_expr=code.case_op();
+    typecheck_expr(case_expr);
+    implicit_typecast(case_expr, switch_op_type);
   }
 }
 

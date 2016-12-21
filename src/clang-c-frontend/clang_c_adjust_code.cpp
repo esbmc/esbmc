@@ -25,19 +25,11 @@ void clang_c_adjust::adjust_code(codet& code)
   {
     adjust_expression(code);
   }
-  else if(statement=="label")
-  {
-  }
-  else if(statement=="block" ||
-          statement=="decl-block")
-  {
-  }
   else if(statement=="ifthenelse")
   {
     adjust_ifthenelse(code);
   }
-  else if(statement=="while" ||
-          statement=="dowhile")
+  else if(statement=="while" || statement=="dowhile")
   {
     adjust_while(code);
   }
@@ -53,36 +45,16 @@ void clang_c_adjust::adjust_code(codet& code)
   {
     adjust_assign(code);
   }
-  else if(statement=="return")
-  {
-  }
-  else if(statement=="break")
-  {
-  }
-  else if(statement=="goto")
-  {
-  }
-  else if(statement=="continue")
-  {
-  }
   else if(statement=="decl")
   {
     adjust_decl(code);
-  }
-  else if(statement=="skip")
-  {
-  }
-  else if(statement=="asm")
-  {
   }
   else if(statement=="function_call")
   {
   }
   else
   {
-    std::cout << "Unexpected codet: " << statement << std::endl;
-    code.dump();
-    abort();
+    adjust_operands(code);
   }
 }
 
@@ -98,6 +70,9 @@ void clang_c_adjust::adjust_expression(codet& code)
     {
       assert(op.operands().size()==2);
 
+      // First, check sideeffect
+      adjust_expr(code.op0());
+
       // pull assignment statements up
       exprt::operandst operands;
       operands.swap(op.operands());
@@ -109,17 +84,26 @@ void clang_c_adjust::adjust_expression(codet& code)
       {
         assert(code.op1().operands().size()==2);
 
+        // Check the function call irep
+        adjust_expr(code.op1());
+
         code_function_callt function_call;
         function_call.location().swap(code.op1().location());
         function_call.lhs()=code.op0();
         function_call.function()=code.op1().op0();
         function_call.arguments()=code.op1().op1().operands();
         code.swap(function_call);
+        return;
       }
+
     }
-    else if(statement=="function_call")
+
+    if(statement=="function_call")
     {
       assert(op.operands().size()==2);
+
+      // First, check sideeffect irep
+      adjust_expr(code.op0());
 
       // pull function calls up
       code_function_callt function_call;
@@ -127,8 +111,12 @@ void clang_c_adjust::adjust_expression(codet& code)
       function_call.function()=op.op0();
       function_call.arguments()=op.op1().operands();
       code.swap(function_call);
+
+      return;
     }
   }
+
+  adjust_operands(code);
 }
 
 void clang_c_adjust::adjust_decl(codet& code)
@@ -136,36 +124,49 @@ void clang_c_adjust::adjust_decl(codet& code)
   if(code.operands().size() != 2)
     return;
 
+  // Check assignment
+  adjust_expr(code.op1());
+
   // Create typecast on assingments, if needed
   gen_typecast(ns, code.op1(), code.op0().type());
 }
 
 void clang_c_adjust::adjust_ifthenelse(codet& code)
 {
+  adjust_operands(code);
+
   // If the condition is not of boolean type, it must be casted
   gen_typecast_bool(ns, code.op0());
 }
 
 void clang_c_adjust::adjust_while(codet& code)
 {
+  adjust_operands(code);
+
   // If the condition is not of boolean type, it must be casted
   gen_typecast_bool(ns, code.op0());
 }
 
 void clang_c_adjust::adjust_for(codet& code)
 {
+  adjust_operands(code);
+
   // If the condition is not of boolean type, it must be casted
   gen_typecast_bool(ns, code.op1());
 }
 
 void clang_c_adjust::adjust_switch(codet& code)
 {
+  adjust_operands(code);
+
   // If the condition is not of int type, it must be casted
   gen_typecast_arithmetic(ns, code.op0());
 }
 
 void clang_c_adjust::adjust_assign(codet& code)
 {
+  adjust_operands(code);
+
   // Create typecast on assingments, if needed
   gen_typecast(ns, code.op1(), code.op0().type());
 }

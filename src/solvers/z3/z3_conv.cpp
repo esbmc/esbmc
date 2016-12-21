@@ -34,18 +34,18 @@
 #endif
 
 smt_convt *
-create_new_z3_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+create_new_z3_solver(bool int_encoding, const namespacet &ns,
                               const optionst &opts __attribute__((unused)),
                               tuple_iface **tuple_api, array_iface **array_api)
 {
-  z3_convt *conv = new z3_convt(int_encoding, is_cpp, ns);
+  z3_convt *conv = new z3_convt(int_encoding, ns);
   *tuple_api = static_cast<tuple_iface*>(conv);
   *array_api = static_cast<array_iface*>(conv);
   return conv;
 }
 
-z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
-: smt_convt(int_encoding, _ns, is_cpp), array_iface(true, true),ctx(false)
+z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
+: smt_convt(int_encoding, _ns), array_iface(true, true),ctx(false)
 {
 
   this->int_encoding = int_encoding;

@@ -39,7 +39,7 @@ public:
     LEFT, LRIGHT, ARIGHT
   } shiftt;
 
-  bitblast_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
+  bitblast_convt(bool int_encoding, const namespacet &_ns,
       sat_iface *sat_api);
   ~bitblast_convt();
 

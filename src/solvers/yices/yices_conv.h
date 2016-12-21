@@ -63,7 +63,7 @@ public:
 class yices_convt : public smt_convt, public array_iface, public tuple_iface
 {
 public:
-  yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp);
+  yices_convt(bool int_encoding, const namespacet &ns);
   virtual ~yices_convt();
 
   virtual resultt dec_solve();
