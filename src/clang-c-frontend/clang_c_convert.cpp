@@ -1709,7 +1709,7 @@ bool clang_c_convertert::get_expr(
 
       code_labelt label;
       label.set_label(label_stmt.getName());
-      label.copy_to_operands(sub_stmt);
+      label.code() = to_code(sub_stmt);
 
       new_expr = label;
       break;
