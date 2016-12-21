@@ -192,26 +192,31 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt& expr)
 {
   const irep_idt &statement=expr.get_statement();
 
-  if(statement=="preincrement" ||
-     statement=="predecrement" ||
-     statement=="postincrement" ||
-     statement=="postdecrement")
-  {
-  }
-  else if(has_prefix(id2string(statement), "assign"))
-    adjust_side_effect_assignment(expr);
-  else if(statement=="function_call")
+  if(statement=="function_call")
     adjust_side_effect_function_call(to_side_effect_expr_function_call(expr));
-  else if(statement=="statement_expression")
-    adjust_side_effect_statement_expression(expr);
-  else if(statement=="gcc_conditional_expression")
-  {
-  }
   else
   {
-    std::cout << "unknown side effect: " << statement;
-    std::cout << " at " << expr.location() << std::endl;
-    abort();
+    adjust_operands(expr);
+
+    if(statement=="preincrement" ||
+       statement=="predecrement" ||
+       statement=="postincrement" ||
+       statement=="postdecrement")
+    {
+    }
+    else if(has_prefix(id2string(statement), "assign"))
+      adjust_side_effect_assignment(expr);
+    else if(statement=="statement_expression")
+      adjust_side_effect_statement_expression(expr);
+    else if(statement=="gcc_conditional_expression")
+    {
+    }
+    else
+    {
+      std::cout << "unknown side effect: " << statement;
+      std::cout << " at " << expr.location() << std::endl;
+      abort();
+    }
   }
 }
 
@@ -503,8 +508,6 @@ void clang_c_adjust::adjust_type(typet &type)
 
 void clang_c_adjust::adjust_side_effect_assignment(exprt& expr)
 {
-  adjust_operands(expr);
-
   const irep_idt &statement=expr.statement();
 
   exprt &op0=expr.op0();
