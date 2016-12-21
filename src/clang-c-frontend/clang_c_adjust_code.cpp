@@ -84,6 +84,9 @@ void clang_c_adjust::adjust_expression(codet& code)
       {
         assert(code.op1().operands().size()==2);
 
+        // Check the function call irep
+        adjust_expr(code.op1());
+
         code_function_callt function_call;
         function_call.location().swap(code.op1().location());
         function_call.lhs()=code.op0();
