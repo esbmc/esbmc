@@ -169,6 +169,7 @@ protected:
   void convert_skip(const codet &code, goto_programt &dest);
   void convert_non_deterministic_goto(const codet &code, goto_programt &dest);
   void convert_label(const code_labelt &code, goto_programt &dest);
+  void convert_switch_case(const code_switch_caset &code, goto_programt &dest);
   void convert_function_call(const code_function_callt &code, goto_programt &dest);
   void convert_atomic_begin(const codet &code, goto_programt &dest);
   void convert_atomic_end(const codet &code, goto_programt &dest);

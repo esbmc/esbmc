@@ -137,25 +137,35 @@ void goto_convertt::convert_label(
                           (label, target));
     target->labels.push_back(label);
   }
+}
 
-  // cases?
-
-  const exprt::operandst &case_op=code.case_op();
-
-  if(!case_op.empty())
+void goto_convertt::convert_switch_case(
+  const code_switch_caset &code,
+  goto_programt &dest)
+{
+  if(code.operands().size()!=2)
   {
-    exprt::operandst &case_op_dest=targets.cases[target];
-
-    case_op_dest.reserve(case_op_dest.size()+case_op.size());
-
-    forall_expr(it, case_op)
-      case_op_dest.push_back(*it);
+    err_location(code);
+    throw "switch-case statement expected to have two operands";
   }
+
+  goto_programt tmp;
+  convert(code.code(), tmp);
+
+  goto_programt::targett target=tmp.instructions.begin();
+  dest.destructive_append(tmp);
 
   // default?
 
   if(code.is_default())
     targets.set_default(target);
+  else
+  {
+    // cases?
+
+    const exprt &case_op = code.case_op();
+    targets.cases[target].push_back(case_op);
+  }
 }
 
 void goto_convertt::convert(
@@ -184,6 +194,8 @@ void goto_convertt::convert(
     convert_function_call(to_code_function_call(code), dest);
   else if(statement=="label")
     convert_label(to_code_label(code), dest);
+  else if(statement=="switch_case")
+    convert_switch_case(to_code_switch_case(code), dest);
   else if(statement=="for")
     convert_for(code, dest);
   else if(statement=="while")
