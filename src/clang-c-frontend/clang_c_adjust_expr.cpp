@@ -577,6 +577,22 @@ void clang_c_adjust::adjust_side_effect_function_call(
 
       // clang will complain about this already, no need for us to do the same!
     }
+    else
+    {
+      // Pull symbol informations, like parameter types and location
+
+      // Save previous location
+      locationt location = f_op.location();
+
+      const symbolt &symbol = *s;
+      f_op = symbol_expr(symbol);
+
+      // Restore location
+      f_op.location() = location;
+
+      if(symbol.lvalue)
+        f_op.cmt_lvalue(true);
+    }
   }
 
   // do implicit dereference
