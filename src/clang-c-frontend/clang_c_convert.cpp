@@ -403,20 +403,20 @@ bool clang_c_convertert::get_var(
     identifier,
     location_begin);
 
-  if (vd.hasGlobalStorage() && !vd.hasInit())
-  {
-    // Initialize with zero value, if the symbol has initial value,
-    // it will be add later on this method
-    symbol.value = gen_zero(t, true);
-    symbol.value.zero_initializer(true);
-  }
-
   symbol.lvalue = true;
   symbol.static_lifetime = (vd.getStorageClass() == clang::SC_Static)
     || vd.hasGlobalStorage();
   symbol.is_extern = vd.hasExternalStorage();
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static)
     || (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
+
+  if (symbol.static_lifetime && !symbol.is_extern && !vd.hasInit())
+  {
+    // Initialize with zero value, if the symbol has initial value,
+    // it will be add later on this method
+    symbol.value = gen_zero(t, true);
+    symbol.value.zero_initializer(true);
+  }
 
   // Save the variable address and name to the object map
   std::string symbol_name = symbol.name.as_string();
