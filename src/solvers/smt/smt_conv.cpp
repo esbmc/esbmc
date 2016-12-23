@@ -402,10 +402,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     case expr2t::address_of_id:
       break; // Don't convert their operands
 
-    case expr2t::equality_id:
-      if(is_array_type(to_equality2t(expr).side_1->type))
-        break;
-
     default:
       // Convert /all the arguments/. Via magical delegates.
       expr->foreach_operand(
