@@ -1,3 +1,3 @@
 main.c
---context-bound 2
+--context-bound 2 --unwind 3 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$
