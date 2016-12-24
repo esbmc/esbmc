@@ -1,2 +1,3 @@
-main.c --unwind 2 --context-bound 2
+main.c 
+--unwind 2 --context-bound 2
 ^VERIFICATION FAILED$
