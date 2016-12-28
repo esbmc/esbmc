@@ -45,11 +45,10 @@ public:
     ltl_results_seen[ltl_res_succeeding] = 0;
     ltl_results_seen[ltl_res_good] = 0;
 
-    runtime_solver = create_solver_factory("",
-                                           opts.get_bool_option("int-encoding"),
-                                           ns, options);
-
     if (options.get_bool_option("smt-during-symex")) {
+      runtime_solver = create_solver_factory(
+        "", opts.get_bool_option("int-encoding"), ns, options);
+
       symex =
         new reachability_treet(
           funcs,

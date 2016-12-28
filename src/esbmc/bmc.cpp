@@ -686,7 +686,6 @@ bool bmct::run_thread()
         return false;
 
     if (!options.get_bool_option("smt-during-symex")) {
-      delete runtime_solver;
       runtime_solver = create_solver_factory("",
                                              options.get_bool_option("int-encoding"),
                                              ns, options);
