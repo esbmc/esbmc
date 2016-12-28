@@ -190,7 +190,7 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
     command_line += "--64 "
 
   if prop == Property.overflow:
-    command_line += "--overflow-check -D__VERIFIER_error=ESBMC_error "
+    command_line += "--no-pointer-check --no-bounds-check --overflow-check -D__VERIFIER_error=ESBMC_error "
   elif prop == Property.memory:
     command_line += "--memory-leak-check -D__VERIFIER_error=ESBMC_error "
   elif prop == Property.reach:
