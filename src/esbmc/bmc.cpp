@@ -84,8 +84,7 @@ Function: bmct::successful_trace
 
 \*******************************************************************/
 
-void bmct::successful_trace(smt_convt &smt_conv ,
-                            symex_target_equationt &equation __attribute__((unused)))
+void bmct::successful_trace(symex_target_equationt &equation __attribute__((unused)))
 {
   if(options.get_bool_option("base-case"))
   {
@@ -107,7 +106,7 @@ void bmct::successful_trace(smt_convt &smt_conv ,
   {
     case ui_message_handlert::GRAPHML:
       status("Building successful trace");
-      build_successful_goto_trace(equation, smt_conv, goto_trace);
+      build_successful_goto_trace(equation, ns, goto_trace);
       specification += options.get_bool_option("overflow-check") ? 1 : 0;
       specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
       generate_goto_trace_in_correctness_graphml_format(
@@ -667,7 +666,7 @@ bool bmct::run_thread()
 
     if(result->remaining_claims==0)
     {
-      successful_trace(*runtime_solver,*equation);
+      successful_trace(*equation);
       report_success();
       return false;
     }
@@ -853,7 +852,7 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
     case smt_convt::P_UNSATISFIABLE:
       if(!options.get_bool_option("base-case"))
       {
-        successful_trace(*solver, equation);
+        successful_trace(equation);
         report_success();
       }
       else

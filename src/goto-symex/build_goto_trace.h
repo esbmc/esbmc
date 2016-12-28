@@ -22,7 +22,7 @@ void build_goto_trace(
 
 void build_successful_goto_trace(
   const symex_target_equationt &target,
-  smt_convt &smt_conv,
+  const namespacet &ns,
   goto_tracet &goto_trace);
 
 bool is_valid_correctness_SSA_step(
