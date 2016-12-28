@@ -160,7 +160,7 @@ esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
-esbmc_dargs += "--clang-frontend "
+esbmc_dargs += "--clang-frontend --state-hashing -Dldv_assume=__ESBMC_assume "
 
 def get_command_line(strat, prop, arch, benchmark, first_go):
   command_line = esbmc_path + esbmc_dargs
@@ -192,7 +192,7 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   if prop == Property.overflow:
     command_line += "--overflow-check -D__VERIFIER_error=ESBMC_error "
   elif prop == Property.memory:
-    command_line += "--memory-leak-check "
+    command_line += "--memory-leak-check -D__VERIFIER_error=ESBMC_error "
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
 
