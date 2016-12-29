@@ -210,8 +210,9 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   command_line += benchmark
   return command_line
 
-def needs_second_go(strat, prop, result):
-  # We only double check correct results
+def needs_more_tries(strat, prop, result):
+  # Don't trust correct results, but we only recheck overflow verification,
+  # when using the fixed approach
   if result == Result.success and strat == "fixed" and prop == Property.overflow:
     return True
 
@@ -331,8 +332,8 @@ output = run_esbmc(esbmc_command_line)
 # Parse output
 result = parse_result(output, category_property)
 
-# Check if it needs a second go:
-if needs_second_go(strategy, category_property, result):
+# Check if it needs more tries:
+while needs_more_tries(strategy, category_property, result):
   esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
   output = run_esbmc(esbmc_command_line)
 
