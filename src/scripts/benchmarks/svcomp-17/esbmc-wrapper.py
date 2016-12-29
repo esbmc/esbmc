@@ -42,7 +42,7 @@ class Property:
   termination = 4
 
 class Unwindings:
-  loops = {2, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096}
+  loops = {2, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 6384, 32768}
 
 # Function to run esbmc
 def run_esbmc(cmd_line):
