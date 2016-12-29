@@ -215,13 +215,42 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   command_line += benchmark
   return command_line
 
-def needs_more_tries(strat, prop, result):
-  # Don't trust correct results, but we only recheck overflow verification,
-  # when using the fixed approach
-  if result == Result.success and strat == "fixed" and prop == Property.overflow:
-    return True
+def retry(strat, prop, result):
+  # Always trust the failed result
+  if Result.is_fail(result):
+    return result
 
-  return False
+  # We'll only recheck the fixed approach, when checking for overflow
+  if strat != "fixed" and prop != Property.overflow:
+    return result
+
+  # We'll retry a number of times
+  retry = 1
+  while retry != len(Unwindings.loops):
+    # The new command is incomplete
+    new_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
+
+    # Add the loop unwind, memory out and timeout
+    new_command_line += "--memlimit 14g --unwind " + str(Unwindings.loops[retry])
+    new_command_line += "--timeout " + str(895 - (int) (round(time.time() - start_time)))
+
+    # Run esbmc
+    new_output = run_esbmc(new_command_line)
+    new_result = parse_result(new_output, category_property)
+
+    # If the new result is false, we'll keep it
+    if new_result == Result.fail_overflow:
+      return new_result
+
+    # If the result is either timeout or memory out, we give up
+    if new_result == Result.err_timeout or new_result == Result.err_memout:
+      break
+
+    # retry next time with a bigger unwind
+    retry += 1
+
+  # Keep the previous result
+  return result
 
 def needs_validation(strat, prop, result):
   # We only validate for fixed + reachability + false result
@@ -338,14 +367,7 @@ output = run_esbmc(esbmc_command_line)
 result = parse_result(output, category_property)
 
 # Check if it needs more tries:
-while needs_more_tries(strategy, category_property, result):
-  esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
-  output = run_esbmc(esbmc_command_line)
-
-  # If the result is false, we'll keep it
-  new_result = parse_result(output, category_property)
-  if Result.is_fail(new_result):
-    result = new_result
+result = retry(strategy, category_property, result)
 
 # Check if we're going to validate the results
 if needs_validation(strategy, category_property, result):
