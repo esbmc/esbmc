@@ -184,6 +184,13 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
     print "Unknown strategy"
     exit(1)
 
+  if strat == "fixed":
+    if prop == Property.overflow and first_go:
+      # The first go when verifying floating points will run with bound 1
+      command_line += "--unwind 1 "
+    else:
+      command_line += "--unwind 160 "
+
   # Add arch
   if arch == 32:
     command_line += "--32 "
@@ -196,15 +203,6 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
     command_line += "--memory-leak-check -D__VERIFIER_error=ESBMC_error "
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
-
-  if strat == "fixed":
-    if prop == Property.overflow:
-      if first_go:  # The first go when verifying floating points will run with bound 1
-        command_line += "--unwind 1 --no-unwinding-assertions "
-      else:  # second go is with huge unwind
-        command_line += "--unwind 32778 --no-unwinding-assertions --timeout 20s --abort-on-recursion "
-    else:
-      command_line += "--unwind 160 "
 
   # Benchmark
   command_line += benchmark
