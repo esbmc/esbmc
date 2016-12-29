@@ -227,7 +227,7 @@ def retry(strat, prop, result, output):
 
   # We'll only recheck when either checking for overflow,
   # or if we forced the floating point mode
-  if prop != Property.overflow or "forcing floating-point mode" not in output:
+  if not (prop != Property.overflow or "forcing floating-point mode" not in output):
     return result
 
   # We'll retry a number of times
