@@ -41,6 +41,9 @@ class Property:
   overflow = 3
   termination = 4
 
+class Unwindings:
+  loops = {2, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096}
+
 # Function to run esbmc
 def run_esbmc(cmd_line):
   print "Verifying with ESBMC "
