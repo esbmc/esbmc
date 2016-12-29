@@ -11,15 +11,16 @@ import sys
 start_time = time.time()
 
 class Result:
-  err_timeout = 1
-  err_unwinding_assertion = 2
-  success = 3
-  fail_deref = 4
-  fail_memtrack = 5
-  fail_free = 6
-  fail_reach = 7
-  fail_overflow = 8
-  unknown = 9
+  success = 1
+  fail_deref = 2
+  fail_memtrack = 3
+  fail_free = 4
+  fail_reach = 5
+  fail_overflow = 6
+  err_timeout = 7
+  err_memout = 8
+  err_unwinding_assertion = 9
+  unknown = 10
 
   @staticmethod
   def is_fail(res):
@@ -66,6 +67,9 @@ def parse_result(the_output, prop):
   # Parse output
   if "Timed out" in the_output:
     return Result.err_timeout
+
+  if "out of memory" in the_output:
+    return Result.err_memout
 
   # Error messages:
   memory_leak = "dereference failure: forgotten memory"
@@ -129,12 +133,6 @@ def parse_result(the_output, prop):
   return Result.unknown
 
 def get_result_string(the_result):
-  if the_result == Result.err_timeout:
-    return "Timed out"
-
-  if the_result == Result.err_unwinding_assertion:
-    return "Unknown"
-
   if the_result == Result.fail_memtrack:
     return "FALSE_MEMTRACK"
 
@@ -152,6 +150,15 @@ def get_result_string(the_result):
 
   if the_result == Result.success:
     return "TRUE"
+
+  if the_result == Result.err_timeout:
+    return "Timed out"
+
+  if the_result == Result.err_unwinding_assertion:
+    return "Unknown"
+
+  if the_result == Result.err_memout:
+    return "Unknown"
 
   if the_result == Result.unknown:
     return "Unknown"
