@@ -216,13 +216,18 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   command_line += benchmark
   return command_line
 
-def retry(strat, prop, result):
+def retry(strat, prop, result, output):
   # Always trust the failed result
   if Result.is_fail(result):
     return result
 
-  # We'll only recheck the fixed approach, when checking for overflow
-  if strat != "fixed" and prop != Property.overflow:
+  # We'll only recheck the fixed approach
+  if strat != "fixed":
+    return result
+
+  # We'll only recheck when either checking for overflow,
+  # or if we forced the floating point mode
+  if prop != Property.overflow or "forcing floating-point mode" not in output:
     return result
 
   # We'll retry a number of times
@@ -253,7 +258,11 @@ def retry(strat, prop, result):
   # Keep the previous result
   return result
 
-def needs_validation(strat, prop, result):
+def needs_validation(strat, prop, result, output):
+  # If we're forcing floating-point mode, don't validate
+  if "forcing floating-point mode" in output:
+    return False
+
   # We only validate for fixed + reachability + false result
   if result == Result.fail_reach and strat == "fixed" and prop == Property.reach:
     return True
@@ -367,10 +376,10 @@ output = run_esbmc(esbmc_command_line)
 result = parse_result(output, category_property)
 
 # Check if it needs more tries:
-result = retry(strategy, category_property, result)
+result = retry(strategy, category_property, result, output)
 
 # Check if we're going to validate the results
-if needs_validation(strategy, category_property, result):
+if needs_validation(strategy, category_property, result, output):
   cpa_command_line = get_cpa_command_line(property_file, benchmark)
   output = run_cpa(cpa_command_line)
 
