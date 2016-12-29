@@ -192,9 +192,10 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
     exit(1)
 
   if strat == "fixed":
-    if prop == Property.overflow and first_go:
-      # The first go when verifying floating points will run with bound 1
-      command_line += "--unwind 1 "
+    if prop == Property.overflow:
+      if first_go:
+        # The first go when verifying floating points will run with bound 1
+        command_line += "--unwind 1 "
     else:
       command_line += "--unwind 160 "
 
@@ -231,8 +232,8 @@ def retry(strat, prop, result):
     new_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
 
     # Add the loop unwind, memory out and timeout
-    new_command_line += "--memlimit 14g --unwind " + str(Unwindings.loops[retry])
-    new_command_line += "--timeout " + str(895 - (int) (round(time.time() - start_time)))
+    new_command_line += " --memlimit 14g --unwind " + str(Unwindings.loops[retry])
+    new_command_line += " --timeout " + str(895 - (int) (round(time.time() - start_time)))
 
     # Run esbmc
     new_output = run_esbmc(new_command_line)
@@ -313,7 +314,6 @@ def parse_cpa_result(result):
   return Result.unknown
 
 # Options
-
 parser = argparse.ArgumentParser()
 parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choices=[32, 64], default=32)
 parser.add_argument("-v", "--version", help="Prints ESBMC's version", action='store_true')
