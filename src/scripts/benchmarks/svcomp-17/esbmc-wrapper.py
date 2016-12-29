@@ -171,8 +171,6 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   # Add strategy
   if strat == "kinduction":
     command_line += "--floatbv --unlimited-k-steps --z3 --k-induction "
-  elif strat == "fp":
-    command_line += "--floatbv --mathsat --no-bitfields "
   elif strat == "falsi":
     command_line += "--floatbv --unlimited-k-steps --z3 --falsification "
   elif strat == "incr":
@@ -196,13 +194,6 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
 
-  # Special handling when first verifying the program
-  if strat == "fp":
-    if first_go:  # The first go when verifying floating points will run with bound 1
-      command_line += "--unwind 1 --no-unwinding-assertions "
-    else: # second go is with timeout 20s
-      command_line += "--timeout 20s "
-
   if strat == "fixed":
     if prop == Property.overflow:
       if first_go:  # The first go when verifying floating points will run with bound 1
@@ -218,12 +209,8 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
 
 def needs_second_go(strat, prop, result):
   # We only double check correct results
-  if result == Result.success:
-    if strat == "fp":
-      return True
-
-    if strat == "fixed" and prop == Property.overflow:
-      return True
+  if result == Result.success and strat == "fixed" and prop == Property.overflow:
+    return True
 
   return False
 
@@ -294,7 +281,7 @@ parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choic
 parser.add_argument("-v", "--version", help="Prints ESBMC's version", action='store_true')
 parser.add_argument("-p", "--propertyfile", help="Path to the property file")
 parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
-parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "fp", "falsi", "incr", "fixed"], default="incr")
+parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="incr")
 
 args = parser.parse_args()
 
@@ -363,4 +350,3 @@ if needs_validation(strategy, category_property, result):
     result = Result.unknown
 
 print get_result_string(result)
-
