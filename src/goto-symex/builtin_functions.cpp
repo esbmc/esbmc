@@ -708,3 +708,10 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
   execution_statet &ex_state = art.get_cur_state();
   ex_state.kill_monitor_thread();
 }
+
+void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
+{
+  (void) lhs;
+  (void) code;
+  abort();
+}
