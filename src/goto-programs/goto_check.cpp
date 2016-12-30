@@ -536,6 +536,13 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
     || expr.id() == "/" || expr.id() == "mod"
     || expr.is_typecast())
   {
+    // Don't check pointers
+    if(expr.op0().type().is_pointer())
+      return;
+
+    if(expr.operands().size() == 2 && expr.op1().type().is_pointer())
+      return;
+
     if(expr.id() == "/" || expr.id() == "mod")
       div_by_zero_check(expr, guard);
 

@@ -45,11 +45,10 @@ public:
     ltl_results_seen[ltl_res_succeeding] = 0;
     ltl_results_seen[ltl_res_good] = 0;
 
-    runtime_solver = create_solver_factory("",
-                                           opts.get_bool_option("int-encoding"),
-                                           ns, options);
-
     if (options.get_bool_option("smt-during-symex")) {
+      runtime_solver = create_solver_factory(
+        "", opts.get_bool_option("int-encoding"), ns, options);
+
       symex =
         new reachability_treet(
           funcs,
@@ -114,8 +113,7 @@ protected:
 
   virtual void error_trace(
     smt_convt &smt_conv, symex_target_equationt &equation);
-  virtual void successful_trace(
-    smt_convt &smt_conv, symex_target_equationt &equation);
+  virtual void successful_trace(symex_target_equationt &equation);
     bool run_thread();
     int ltl_run_thread(symex_target_equationt *equation);
 };

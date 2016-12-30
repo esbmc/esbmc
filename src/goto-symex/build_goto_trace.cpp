@@ -89,7 +89,7 @@ void build_goto_trace(
 
 void build_successful_goto_trace(
     const symex_target_equationt &target,
-    smt_convt &smt_conv,
+    const namespacet &ns,
     goto_tracet &goto_trace)
 {
   unsigned step_nr=0;
@@ -98,7 +98,7 @@ void build_successful_goto_trace(
       it!=target.SSA_steps.end(); it++)
   {
     if((it->is_assignment() || it->is_assert() || it->is_assume())
-      && (is_valid_witness_expr(smt_conv.ns, it->lhs)))
+      && (is_valid_witness_expr(ns, it->lhs)))
     {
       goto_trace.steps.push_back(goto_trace_stept());
       goto_trace_stept &goto_trace_step=goto_trace.steps.back();

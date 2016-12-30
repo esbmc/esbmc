@@ -11,15 +11,16 @@ import sys
 start_time = time.time()
 
 class Result:
-  err_timeout = 1
-  err_unwinding_assertion = 2
-  success = 3
-  fail_deref = 4
-  fail_memtrack = 5
-  fail_free = 6
-  fail_reach = 7
-  fail_overflow = 8
-  unknown = 9
+  success = 1
+  fail_deref = 2
+  fail_memtrack = 3
+  fail_free = 4
+  fail_reach = 5
+  fail_overflow = 6
+  err_timeout = 7
+  err_memout = 8
+  err_unwinding_assertion = 9
+  unknown = 10
 
   @staticmethod
   def is_fail(res):
@@ -40,6 +41,9 @@ class Property:
   memory = 2
   overflow = 3
   termination = 4
+
+class Unwindings:
+  loops = [2, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
 
 # Function to run esbmc
 def run_esbmc(cmd_line):
@@ -63,6 +67,9 @@ def parse_result(the_output, prop):
   # Parse output
   if "Timed out" in the_output:
     return Result.err_timeout
+
+  if "out of memory" in the_output:
+    return Result.err_memout
 
   # Error messages:
   memory_leak = "dereference failure: forgotten memory"
@@ -126,12 +133,6 @@ def parse_result(the_output, prop):
   return Result.unknown
 
 def get_result_string(the_result):
-  if the_result == Result.err_timeout:
-    return "Timed out"
-
-  if the_result == Result.err_unwinding_assertion:
-    return "Unknown"
-
   if the_result == Result.fail_memtrack:
     return "FALSE_MEMTRACK"
 
@@ -150,6 +151,15 @@ def get_result_string(the_result):
   if the_result == Result.success:
     return "TRUE"
 
+  if the_result == Result.err_timeout:
+    return "Timed out"
+
+  if the_result == Result.err_unwinding_assertion:
+    return "Unknown"
+
+  if the_result == Result.err_memout:
+    return "Unknown"
+
   if the_result == Result.unknown:
     return "Unknown"
 
@@ -160,7 +170,7 @@ esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
-esbmc_dargs += "--clang-frontend "
+esbmc_dargs += "--clang-frontend --state-hashing -Dldv_assume=__ESBMC_assume "
 
 def get_command_line(strat, prop, arch, benchmark, first_go):
   command_line = esbmc_path + esbmc_dargs
@@ -171,8 +181,6 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   # Add strategy
   if strat == "kinduction":
     command_line += "--floatbv --unlimited-k-steps --z3 --k-induction "
-  elif strat == "fp":
-    command_line += "--floatbv --mathsat --no-bitfields "
   elif strat == "falsi":
     command_line += "--floatbv --unlimited-k-steps --z3 --falsification "
   elif strat == "incr":
@@ -183,6 +191,14 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
     print "Unknown strategy"
     exit(1)
 
+  if strat == "fixed":
+    if prop == Property.overflow:
+      if first_go:
+        # The first go when verifying floating points will run with bound 1
+        command_line += "--unwind 1 "
+    else:
+      command_line += "--unwind 160 "
+
   # Add arch
   if arch == 32:
     command_line += "--32 "
@@ -190,44 +206,63 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
     command_line += "--64 "
 
   if prop == Property.overflow:
-    command_line += "--overflow-check -D__VERIFIER_error=ESBMC_error "
+    command_line += "--no-pointer-check --no-bounds-check --overflow-check -D__VERIFIER_error=ESBMC_error "
   elif prop == Property.memory:
-    command_line += "--memory-leak-check "
+    command_line += "--memory-leak-check -D__VERIFIER_error=ESBMC_error "
   elif prop == Property.reach:
     command_line += "--no-pointer-check --no-bounds-check --error-label ERROR "
-
-  # Special handling when first verifying the program
-  if strat == "fp":
-    if first_go:  # The first go when verifying floating points will run with bound 1
-      command_line += "--unwind 1 --no-unwinding-assertions "
-    else: # second go is with timeout 20s
-      command_line += "--timeout 20s "
-
-  if strat == "fixed":
-    if prop == Property.overflow:
-      if first_go:  # The first go when verifying floating points will run with bound 1
-        command_line += "--unwind 1 --no-unwinding-assertions "
-      else:  # second go is with huge unwind
-        command_line += "--unwind 32778 --no-unwinding-assertions --timeout 20s --abort-on-recursion "
-    else:
-      command_line += "--unwind 160 "
 
   # Benchmark
   command_line += benchmark
   return command_line
 
-def needs_second_go(strat, prop, result):
-  # We only double check correct results
-  if result == Result.success:
-    if strat == "fp":
-      return True
+def retry(strat, prop, result, output):
+  # Always trust the failed result
+  if Result.is_fail(result):
+    return result
 
-    if strat == "fixed" and prop == Property.overflow:
-      return True
+  # We'll only recheck the fixed approach
+  if strat != "fixed":
+    return result
 
-  return False
+  # We'll only recheck when either checking for overflow,
+  # or if we forced the floating point mode
+  if prop != Property.overflow or "forcing floating-point mode" not in output:
+    return result
 
-def needs_validation(strat, prop, result):
+  # We'll retry a number of times
+  retry = 1
+  while retry != len(Unwindings.loops):
+    # The new command is incomplete
+    new_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
+
+    # Add the loop unwind, memory out and timeout
+    new_command_line += " --memlimit 14g --unwind " + str(Unwindings.loops[retry])
+    new_command_line += " --timeout " + str(895 - (int) (round(time.time() - start_time)))
+
+    # Run esbmc
+    new_output = run_esbmc(new_command_line)
+    new_result = parse_result(new_output, category_property)
+
+    # If the new result is false, we'll keep it
+    if new_result == Result.fail_overflow:
+      return new_result
+
+    # If the result is either timeout or memory out, we give up
+    if new_result == Result.err_timeout or new_result == Result.err_memout:
+      break
+
+    # retry next time with a bigger unwind
+    retry += 1
+
+  # Keep the previous result
+  return result
+
+def needs_validation(strat, prop, result, output):
+  # If we're forcing floating-point mode, don't validate
+  if "forcing floating-point mode" in output:
+    return False
+
   # We only validate for fixed + reachability + false result
   if result == Result.fail_reach and strat == "fixed" and prop == Property.reach:
     return True
@@ -288,13 +323,12 @@ def parse_cpa_result(result):
   return Result.unknown
 
 # Options
-
 parser = argparse.ArgumentParser()
 parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choices=[32, 64], default=32)
 parser.add_argument("-v", "--version", help="Prints ESBMC's version", action='store_true')
 parser.add_argument("-p", "--propertyfile", help="Path to the property file")
 parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
-parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "fp", "falsi", "incr", "fixed"], default="incr")
+parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="incr")
 
 args = parser.parse_args()
 
@@ -341,18 +375,11 @@ output = run_esbmc(esbmc_command_line)
 # Parse output
 result = parse_result(output, category_property)
 
-# Check if it needs a second go:
-if needs_second_go(strategy, category_property, result):
-  esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
-  output = run_esbmc(esbmc_command_line)
-
-  # If the result is false, we'll keep it
-  new_result = parse_result(output, category_property)
-  if Result.is_fail(new_result):
-    result = new_result
+# Check if it needs more tries:
+result = retry(strategy, category_property, result, output)
 
 # Check if we're going to validate the results
-if needs_validation(strategy, category_property, result):
+if needs_validation(strategy, category_property, result, output):
   cpa_command_line = get_cpa_command_line(property_file, benchmark)
   output = run_cpa(cpa_command_line)
 
@@ -363,4 +390,3 @@ if needs_validation(strategy, category_property, result):
     result = Result.unknown
 
 print get_result_string(result)
-
