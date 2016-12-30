@@ -196,14 +196,47 @@ Function: c_typecheck_baset::typecheck_expr_builtin_va_arg
 
 void c_typecheck_baset::typecheck_expr_builtin_va_arg(exprt &expr)
 {
-  if(expr.operands().size()!=1)
-  {
-    err_location(expr);
-    str << "builtin_va_arg expects one operand";
-    throw 0;
-  }
+  // The first parameter is the va_list, and the second
+  // is the type, which will need to be fixed and checked.
+  // The type is given by the parser as type of the expression.
 
-  typecheck_type(expr.type());
+  typet arg_type = expr.type();
+  typecheck_type(arg_type);
+
+  code_typet new_type;
+  new_type.return_type().swap(arg_type);
+  new_type.arguments().resize(1);
+  new_type.arguments()[0].type() = pointer_typet(empty_typet());
+
+  assert(expr.operands().size() == 1);
+  exprt arg = expr.op0();
+
+  implicit_typecast(arg, pointer_typet(empty_typet()));
+
+  // turn into function call
+  side_effect_expr_function_callt result;
+  result.location() = expr.location();
+  result.function() = symbol_exprt("builtin_va_arg");
+  result.function().location() = expr.location();
+  result.function().type() = new_type;
+  result.arguments().push_back(arg);
+  result.type() = new_type.return_type();
+
+  expr.swap(result);
+
+  // Make sure symbol exists, but we have it return void
+  // to avoid collisions of the same symbol with different
+  // types.
+
+  code_typet symbol_type = new_type;
+  symbol_type.return_type() = empty_typet();
+
+  symbolt symbol;
+  symbol.base_name = "builtin_va_arg";
+  symbol.name = "builtin_va_arg";
+  symbol.type = symbol_type;
+
+  context.move(symbol);
 }
 
 /*******************************************************************\
