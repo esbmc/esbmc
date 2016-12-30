@@ -554,6 +554,35 @@ void goto_convertt::do_abs(
   copy(assignment, ASSIGN, dest);
 }
 
+bool is_lvalue(const exprt &expr)
+{
+  if(expr.is_index())
+    return is_lvalue(to_index_expr(expr).op0());
+  else if(expr.is_member())
+    return is_lvalue(to_member_expr(expr).op0());
+  else if(expr.is_dereference())
+    return true;
+  else if(expr.is_symbol())
+    return true;
+  else
+    return false;
+}
+
+exprt make_va_list(const exprt &expr)
+{
+  // we first strip any typecast
+  if(expr.is_typecast())
+    return make_va_list(to_typecast_expr(expr).op());
+
+  // if it's an address of an lvalue, we take that
+  if(expr.is_address_of() &&
+     expr.operands().size()==1 &&
+     is_lvalue(expr.op0()))
+    return expr.op0();
+
+  return expr;
+}
+
 void goto_convertt::do_function_call_symbol(
   const exprt &lhs,
   const exprt &function,
@@ -780,6 +809,118 @@ void goto_convertt::do_function_call_symbol(
     new_function.type().add("#location") = function.cmt_location();
 
     do_cpp_new(lhs, new_function, dest);
+  }
+  else if(identifier == "builtin_va_arg")
+  {
+    // This does two things.
+    // 1) Move list pointer to next argument.
+    //    Done by gcc_builtin_va_arg_next.
+    // 2) Return value of argument.
+    //    This is just dereferencing.
+
+    if(arguments.size() != 1)
+    {
+      err_location(function);
+      throw "`" + id2string(identifier) + "' expected to have one argument";
+    }
+
+    exprt list_arg = make_va_list(arguments[0]);
+
+    {
+      side_effect_exprt rhs("va_arg", list_arg.type());
+      rhs.copy_to_operands(list_arg);
+      rhs.set("va_arg_type", to_code_type(function.type()).return_type());
+      goto_programt::targett t1 = dest.add_instruction(ASSIGN);
+      exprt assign_expr = code_assignt(list_arg, rhs);
+      migrate_expr(assign_expr, t1->code);
+      t1->location = function.location();
+    }
+
+    if(lhs.is_not_nil())
+    {
+      typet t = pointer_typet();
+      t.subtype() = lhs.type();
+      dereference_exprt rhs(lhs.type());
+      rhs.op0() = typecast_exprt(list_arg, t);
+      rhs.location() = function.location();
+      goto_programt::targett t2 = dest.add_instruction(ASSIGN);
+      exprt assign_expr = code_assignt(lhs, rhs);
+      migrate_expr(assign_expr, t2->code);
+      t2->location = function.location();
+    }
+  }
+  else if(identifier == "c::__builtin_va_copy")
+  {
+    if(arguments.size() != 2)
+    {
+      err_location(function);
+      throw "`" + id2string(identifier) + "' expected to have two arguments";
+    }
+
+    exprt dest_expr = make_va_list(arguments[0]);
+    exprt src_expr = typecast_exprt(arguments[1], dest_expr.type());
+
+    if(!is_lvalue(dest_expr))
+    {
+      err_location(dest_expr);
+      throw "va_copy argument expected to be lvalue";
+    }
+
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    exprt assign_expr = code_assignt(dest_expr, src_expr);
+    migrate_expr(assign_expr, t->code);
+    t->location = function.location();
+  }
+  else if(identifier == "c::__builtin_va_start")
+  {
+    // Set the list argument to be the address of the
+    // parameter argument.
+    if(arguments.size() != 2)
+    {
+      err_location(function);
+      throw "`" + id2string(identifier) + "' expected to have two arguments";
+    }
+
+    exprt dest_expr = make_va_list(arguments[0]);
+    exprt src_expr =
+      typecast_exprt(address_of_exprt(arguments[1]), dest_expr.type());
+
+    if(!is_lvalue(dest_expr))
+    {
+      err_location(dest_expr);
+      throw "va_start argument expected to be lvalue";
+    }
+
+    goto_programt::targett t = dest.add_instruction(ASSIGN);
+    exprt assign_expr = code_assignt(dest_expr, src_expr);
+    migrate_expr(assign_expr, t->code);
+    t->location = function.location();
+  }
+  else if(identifier == "c::__builtin_va_end")
+  {
+    // Invalidates the argument. We do so by setting it to NULL.
+    if(arguments.size() != 1)
+    {
+      err_location(function);
+      throw "`" + id2string(identifier) + "' expected to have one argument";
+    }
+
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if(!is_lvalue(dest_expr))
+    {
+      err_location(dest_expr);
+      throw "va_end argument expected to be lvalue";
+    }
+
+    // our __builtin_va_list is a pointer
+    if(ns.follow(dest_expr.type()).is_pointer())
+    {
+      goto_programt::targett t = dest.add_instruction(ASSIGN);
+      exprt assign_expr = code_assignt(dest_expr, gen_zero(dest_expr.type()));
+      migrate_expr(assign_expr, t->code);
+      t->location = function.location();
+    }
   }
   else
   {
