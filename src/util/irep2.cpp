@@ -936,6 +936,7 @@ type_to_string(const sideeffect_data::allockind &data,
          (data == sideeffect_data::allockind::cpp_new) ? "cpp_new" :
          (data == sideeffect_data::allockind::cpp_new_arr) ? "cpp_new_arr" :
          (data == sideeffect_data::allockind::nondet) ? "nondet" :
+         (data == sideeffect_data::allockind::va_arg) ? "va_arg" :
          (data == sideeffect_data::allockind::function_call) ? "function_call" :
          "unknown";
 }

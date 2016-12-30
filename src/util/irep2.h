@@ -2672,6 +2672,7 @@ public:
     cpp_new,
     cpp_new_arr,
     nondet,
+    va_arg,
     function_call
   };
 
