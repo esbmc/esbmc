@@ -190,18 +190,10 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   elif strat == "incr":
     command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
   elif strat == "fixed":
-    command_line += "--unroll-loops --no-unwinding-assertions --boolector "
+    command_line += "--unroll-loops --no-unwinding-assertions --unwind 1"
   else:
     print "Unknown strategy"
     exit(1)
-
-  if strat == "fixed":
-    if prop == Property.overflow:
-      if first_go:
-        # The first go when verifying floating points will run with bound 1
-        command_line += "--unwind 1 "
-    else:
-      command_line += "--unwind 160 "
 
   # Add arch
   if arch == 32:
