@@ -176,7 +176,7 @@ esbmc_path = "./esbmc "
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
 esbmc_dargs += "--clang-frontend --state-hashing -Dldv_assume=__ESBMC_assume "
 
-def get_command_line(strat, prop, arch, benchmark, first_go):
+def get_command_line(strat, prop, arch, benchmark, fp_mode):
   command_line = esbmc_path + esbmc_dargs
 
   # Add witness arg
@@ -188,9 +188,10 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   elif strat == "falsi":
     command_line += "--floatbv --unlimited-k-steps --z3 --falsification "
   elif strat == "incr":
-    command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
+    command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc "
   elif strat == "fixed":
-    command_line += "--unroll-loops --no-unwinding-assertions --unwind 1"
+    command_line += "--unroll-loops --no-unwinding-assertions --unwind 1 "
+    if fp_mode: command_line += "--floatbv --mathsat "
   else:
     print "Unknown strategy"
     exit(1)
@@ -363,7 +364,7 @@ else:
   exit(1)
 
 # Get command line
-esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, True)
+esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
 
 # Call ESBMC
 output = run_esbmc(esbmc_command_line)
