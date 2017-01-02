@@ -37,6 +37,14 @@ class Result:
       return True
     return False
 
+  @staticmethod
+  def is_out(res):
+    if res == Result.err_memout:
+      return True
+    if res == Result.err_timeout:
+      return True
+    return False
+
 class Property:
   reach = 1
   memory = 2
@@ -252,7 +260,7 @@ def retry(strat, prop, result, output):
       return result
 
     # If the result is either timeout or memory out, we give up
-    if new_result == Result.err_timeout or new_result == Result.err_memout:
+    if Result.is_out(result):
       break
 
     # We only run once on fp_mode
