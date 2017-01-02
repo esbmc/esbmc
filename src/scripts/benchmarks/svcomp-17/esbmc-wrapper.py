@@ -224,30 +224,40 @@ def retry(strat, prop, result, output):
 
   # We'll only recheck when either checking for overflow,
   # or if we forced the floating point mode
-  if not (prop != Property.overflow or "forcing floating-point mode" not in output):
+  fp_mode = (result == Result.force_fp_mode)
+  if not (prop != Property.overflow or not fp_mode):
     return result
 
-  # We'll retry a number of times
-  retry = 1
+  # We'll retry a number of times, however, the verification with
+  # unwind 1 for forced fp mode failed, so we try again with 1 unwind
+  retry = 1 - fp_mode
+
   while retry != len(Unwindings.loops):
     # The new command is incomplete
-    new_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
+    new_command_line = get_command_line(strategy, category_property, arch, benchmark, fp_mode)
 
-    # Add the loop unwind, memory out and timeout
-    new_command_line += " --memlimit 14g --unwind " + str(Unwindings.loops[retry])
-    new_command_line += " --timeout " + str(895 - (int) (round(time.time() - start_time)))
+    # Add memory out and timeout
+    new_command_line += " --memlimit 13g --timeout "
+    new_command_line += str(895 - (int) (round(time.time() - start_time)))
+
+    # Replace unwind
+    new_command_line = new_command_line.replace("unwind 1", "unwind " + str(Unwindings.loops[retry]))
 
     # Run esbmc
     new_output = run_esbmc(new_command_line)
     new_result = parse_result(new_output, category_property)
 
     # If the new result is false, we'll keep it
-    if new_result == Result.fail_overflow:
-      return new_result
+    if Result.is_fail(result):
+      return result
 
     # If the result is either timeout or memory out, we give up
     if new_result == Result.err_timeout or new_result == Result.err_memout:
       break
+
+    # We only run once on fp_mode
+    if fp_mode:
+      return result
 
     # retry next time with a bigger unwind
     retry += 1
