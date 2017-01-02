@@ -20,7 +20,8 @@ class Result:
   err_timeout = 7
   err_memout = 8
   err_unwinding_assertion = 9
-  unknown = 10
+  force_fp_mode = 10
+  unknown = 11
 
   @staticmethod
   def is_fail(res):
@@ -70,6 +71,9 @@ def parse_result(the_output, prop):
 
   if "out of memory" in the_output:
     return Result.err_memout
+
+  if "forcing floating-point mode" in the_output:
+    return Result.force_fp_mode
 
   # Error messages:
   memory_leak = "dereference failure: forgotten memory"
