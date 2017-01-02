@@ -257,7 +257,7 @@ def retry(strat, prop, result, output):
 
     # If the new result is false, we'll keep it
     if Result.is_fail(result):
-      return result
+      return new_result
 
     # If the result is either timeout or memory out, we give up
     if Result.is_out(result):
@@ -265,7 +265,7 @@ def retry(strat, prop, result, output):
 
     # We only run once on fp_mode
     if fp_mode:
-      return result
+      return new_result
 
     # retry next time with a bigger unwind
     retry += 1
