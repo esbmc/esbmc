@@ -303,7 +303,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     struct rlimit lim;
     lim.rlim_cur = size;
     lim.rlim_max = size;
-    if(setrlimit(RLIMIT_AS, &lim) != 0)
+    if(setrlimit(RLIMIT_DATA, &lim) != 0)
     {
       perror("Couldn't set memory limit");
       abort();
