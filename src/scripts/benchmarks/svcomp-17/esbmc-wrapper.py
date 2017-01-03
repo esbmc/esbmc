@@ -245,7 +245,9 @@ def verify(strat, prop):
   # unwind 1 for forced fp mode failed, so we try again with 1 unwind
   retry = 1 - fp_mode
 
-  while retry != len(Unwindings.loops):
+  unwinds = Unwindings.overflow if prop == Property.overflow else Unwindings.loops
+
+  while retry != len(unwinds):
     # The new command is incomplete
     new_command_line = get_command_line(strategy, category_property, arch, benchmark, fp_mode)
 
@@ -254,7 +256,11 @@ def verify(strat, prop):
     new_command_line += str(895 - (int) (round(time.time() - start_time)))
 
     # Replace unwind
-    new_command_line = new_command_line.replace("unwind 1", "unwind " + str(Unwindings.loops[retry]))
+    new_command_line = new_command_line.replace("unwind 1", "unwind " + str(unwinds[retry]))
+
+    # If verifying overflows, abort on recursion
+    if prop == Property.overflow:
+      new_command_line += " --abort-on-recursion"
 
     # Run esbmc
     new_output = run_esbmc(new_command_line)
