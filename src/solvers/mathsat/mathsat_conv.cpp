@@ -492,11 +492,11 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
     return new mathsat_smt_sort(k, msat_get_fp_roundingmode_type(env));
   case SMT_SORT_ARRAY:
   {
-    const mathsat_smt_sort *dom = va_arg(ap, const mathsat_smt_sort *);
-    const mathsat_smt_sort *range = va_arg(ap, const mathsat_smt_sort *);
+    mathsat_smt_sort *dom = va_arg(ap, mathsat_smt_sort *);
+    mathsat_smt_sort *range = va_arg(ap, mathsat_smt_sort *);
     mathsat_smt_sort *result =
       new mathsat_smt_sort(k, msat_get_array_type(env, dom->t, range->t),
-                           range->data_width, dom->data_width);
+                           range->data_width, dom->data_width, range);
     size_t sz = 0;
     int tmp;
     tmp = msat_is_bv_type(env, dom->t, &sz);
@@ -832,6 +832,15 @@ void
 mathsat_convt::pop_array_ctx(void)
 {
   return;
+}
+
+const smt_ast* mathsat_smt_ast::select(smt_convt* ctx, const expr2tc& idx) const
+{
+  const smt_ast *args[2];
+  args[0] = this;
+  args[1] = ctx->convert_ast(idx);
+  const smt_sort *rangesort = mathsat_sort_downcast(sort)->rangesort;
+  return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
 }
 
 void mathsat_smt_ast::dump() const
