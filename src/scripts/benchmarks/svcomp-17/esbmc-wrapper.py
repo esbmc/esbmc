@@ -202,7 +202,7 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
   elif strat == "incr":
     command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc "
   elif strat == "fixed":
-    command_line += "--floatbv --unroll-loops --no-unwinding-assertions --unwind 1 "
+    command_line += "--floatbv --unroll-loops --no-unwinding-assertions --unwind 1 --no-bitfields "
     if fp_mode: command_line += "--mathsat "
   else:
     print "Unknown strategy"
