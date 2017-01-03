@@ -264,13 +264,14 @@ def verify(strat, prop):
 
     # Run esbmc
     new_output = run_esbmc(new_command_line)
-
-    # Always keep the latest result
-    result = parse_result(new_output, category_property)
+    new_result = parse_result(new_output, category_property)
 
     # If the result is either timeout or memory out, we give up
-    if Result.is_out(result):
+    if Result.is_out(new_result):
       break
+
+    # Always keep the last _correct_ result
+    result = new_result
 
     # retry next time with a bigger unwind
     retry += 1
