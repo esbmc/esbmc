@@ -80,7 +80,7 @@ def parse_result(the_output, prop):
   if "out of memory" in the_output:
     return Result.err_memout
 
-  if "forcing floating-point mode" in the_output:
+  if "try with Z3 or Mathsat" in the_output:
     return Result.force_fp_mode
 
   # Error messages:
