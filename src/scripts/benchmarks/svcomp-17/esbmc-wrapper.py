@@ -190,8 +190,9 @@ esbmc_dargs += "--clang-frontend --state-hashing -Dldv_assume=__ESBMC_assume "
 def get_command_line(strat, prop, arch, benchmark, fp_mode):
   command_line = esbmc_path + esbmc_dargs
 
-  # Add witness arg
-  command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
+  # Add witness arg, if we're not checking memory
+  if prop != Property.memory:
+    command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
 
   # Add strategy
   if strat == "kinduction":
