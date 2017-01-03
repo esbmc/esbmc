@@ -77,7 +77,7 @@ def parse_result(the_output, prop):
   if "Timed out" in the_output:
     return Result.err_timeout
 
-  if "out of memory" in the_output:
+  if "Out of memory" in the_output:
     return Result.err_memout
 
   if "try with Z3 or Mathsat" in the_output:
