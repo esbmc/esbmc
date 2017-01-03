@@ -20,7 +20,8 @@ class Result:
   err_timeout = 7
   err_memout = 8
   err_unwinding_assertion = 9
-  unknown = 10
+  force_fp_mode = 10
+  unknown = 11
 
   @staticmethod
   def is_fail(res):
@@ -36,6 +37,16 @@ class Result:
       return True
     return False
 
+  @staticmethod
+  def is_out(res):
+    if res == Result.err_memout:
+      return True
+    if res == Result.err_timeout:
+      return True
+    if res == Result.unknown:
+      return True
+    return False
+
 class Property:
   reach = 1
   memory = 2
@@ -43,7 +54,9 @@ class Property:
   termination = 4
 
 class Unwindings:
-  loops = [2, 4, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192, 16384, 32768]
+  loops = [1, 64, 160]
+  fp = [1, 1024]
+  overflow = [1, 2, 32778]
 
 # Function to run esbmc
 def run_esbmc(cmd_line):
@@ -68,8 +81,11 @@ def parse_result(the_output, prop):
   if "Timed out" in the_output:
     return Result.err_timeout
 
-  if "out of memory" in the_output:
+  if "Out of memory" in the_output:
     return Result.err_memout
+
+  if "try with Z3 or Mathsat" in the_output:
+    return Result.force_fp_mode
 
   # Error messages:
   memory_leak = "dereference failure: forgotten memory"
@@ -172,11 +188,12 @@ esbmc_path = "./esbmc "
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --context-bound 7 "
 esbmc_dargs += "--clang-frontend --state-hashing -Dldv_assume=__ESBMC_assume "
 
-def get_command_line(strat, prop, arch, benchmark, first_go):
+def get_command_line(strat, prop, arch, benchmark, fp_mode):
   command_line = esbmc_path + esbmc_dargs
 
-  # Add witness arg
-  command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
+  # Add witness arg, if we're not checking memory
+  if prop != Property.memory:
+    command_line += "--witness-output " + os.path.basename(benchmark) + ".graphml "
 
   # Add strategy
   if strat == "kinduction":
@@ -184,20 +201,13 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   elif strat == "falsi":
     command_line += "--floatbv --unlimited-k-steps --z3 --falsification "
   elif strat == "incr":
-    command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc  "
+    command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc "
   elif strat == "fixed":
-    command_line += "--unroll-loops --no-unwinding-assertions --boolector "
+    command_line += "--floatbv --unroll-loops --no-unwinding-assertions --unwind 1 --no-bitfields "
+    if fp_mode: command_line += "--mathsat "
   else:
     print "Unknown strategy"
     exit(1)
-
-  if strat == "fixed":
-    if prop == Property.overflow:
-      if first_go:
-        # The first go when verifying floating points will run with bound 1
-        command_line += "--unwind 1 "
-    else:
-      command_line += "--unwind 160 "
 
   # Add arch
   if arch == 32:
@@ -216,51 +226,65 @@ def get_command_line(strat, prop, arch, benchmark, first_go):
   command_line += benchmark
   return command_line
 
-def retry(strat, prop, result, output):
-  # Always trust the failed result
-  if Result.is_fail(result):
-    return result
+def verify(strat, prop):
+  # Get command line
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, False)
+
+  # Call ESBMC
+  output = run_esbmc(esbmc_command_line)
+
+  # Parse output
+  result = parse_result(output, category_property)
 
   # We'll only recheck the fixed approach
   if strat != "fixed":
     return result
 
-  # We'll only recheck when either checking for overflow,
-  # or if we forced the floating point mode
-  if prop != Property.overflow or "forcing floating-point mode" not in output:
-    return result
+  # Retry in fp_mode?
+  fp_mode = (result == Result.force_fp_mode)
 
-  # We'll retry a number of times
-  retry = 1
-  while retry != len(Unwindings.loops):
+  # We'll retry a number of times, however, the verification with
+  # unwind 1 for forced fp mode failed, so we try again with 1 unwind
+  retry = 1 - fp_mode
+
+  # Choose correct loop unwind list
+  unwinds = Unwindings.overflow if prop == Property.overflow else Unwindings.fp if fp_mode else Unwindings.loops
+
+  while retry != len(unwinds):
     # The new command is incomplete
-    new_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
+    new_command_line = get_command_line(strategy, category_property, arch, benchmark, fp_mode)
 
-    # Add the loop unwind, memory out and timeout
-    new_command_line += " --memlimit 14g --unwind " + str(Unwindings.loops[retry])
-    new_command_line += " --timeout " + str(895 - (int) (round(time.time() - start_time)))
+    # Add memory out and timeout
+    new_command_line += " --memlimit 13g --timeout "
+    new_command_line += str(895 - (int) (round(time.time() - start_time)))
+
+    # Replace unwind
+    new_command_line = new_command_line.replace("unwind 1", "unwind " + str(unwinds[retry]))
+
+    # If verifying overflows, abort on recursion
+    if prop == Property.overflow:
+      new_command_line += " --abort-on-recursion"
 
     # Run esbmc
     new_output = run_esbmc(new_command_line)
     new_result = parse_result(new_output, category_property)
 
-    # If the new result is false, we'll keep it
-    if new_result == Result.fail_overflow:
-      return new_result
-
     # If the result is either timeout or memory out, we give up
-    if new_result == Result.err_timeout or new_result == Result.err_memout:
+    if Result.is_out(new_result):
       break
+
+    # Always keep the last _correct_ result
+    result = new_result
 
     # retry next time with a bigger unwind
     retry += 1
 
   # Keep the previous result
-  return result
+  return result, fp_mode
 
-def needs_validation(strat, prop, result, output):
+def needs_validation(strat, prop, result, fp_mode):
   # If we're forcing floating-point mode, don't validate
-  if "forcing floating-point mode" in output:
+  if fp_mode:
     return False
 
   # We only validate for fixed + reachability + false result
@@ -366,20 +390,10 @@ else:
   print "Unsupported Property"
   exit(1)
 
-# Get command line
-esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, True)
-
-# Call ESBMC
-output = run_esbmc(esbmc_command_line)
-
-# Parse output
-result = parse_result(output, category_property)
-
-# Check if it needs more tries:
-result = retry(strategy, category_property, result, output)
+result, fp_mode = verify(strategy, category_property)
 
 # Check if we're going to validate the results
-if needs_validation(strategy, category_property, result, output):
+if needs_validation(strategy, category_property, result, fp_mode):
   cpa_command_line = get_cpa_command_line(property_file, benchmark)
   output = run_cpa(cpa_command_line)
 
