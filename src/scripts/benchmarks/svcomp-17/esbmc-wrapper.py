@@ -55,6 +55,7 @@ class Property:
 
 class Unwindings:
   loops = [1, 64, 160]
+  fp = [1, 1024]
   overflow = [1, 2, 32778]
 
 # Function to run esbmc
@@ -246,7 +247,8 @@ def verify(strat, prop):
   # unwind 1 for forced fp mode failed, so we try again with 1 unwind
   retry = 1 - fp_mode
 
-  unwinds = Unwindings.overflow if prop == Property.overflow else Unwindings.loops
+  # Choose correct loop unwind list
+  unwinds = Unwindings.overflow if prop == Property.overflow else Unwindings.fp if fp_mode else Unwindings.loops
 
   while retry != len(unwinds):
     # The new command is incomplete
