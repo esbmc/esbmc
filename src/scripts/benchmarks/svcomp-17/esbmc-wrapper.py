@@ -221,19 +221,22 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
   command_line += benchmark
   return command_line
 
-def retry(strat, prop, result, fp_mode):
-  # Always trust the failed result
-  if Result.is_fail(result):
-    return result
+def verify(strat, prop):
+  # Get command line
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, False)
+
+  # Call ESBMC
+  output = run_esbmc(esbmc_command_line)
+
+  # Parse output
+  result = parse_result(output, category_property)
 
   # We'll only recheck the fixed approach
   if strat != "fixed":
     return result
 
-  # We'll only recheck when either checking for overflow,
-  # or if we forced the floating point mode
-  if not (prop != Property.overflow or not fp_mode):
-    return result
+  # Retry in fp_mode?
+  fp_mode = (result == Result.force_fp_mode)
 
   # We'll retry a number of times, however, the verification with
   # unwind 1 for forced fp mode failed, so we try again with 1 unwind
@@ -252,25 +255,19 @@ def retry(strat, prop, result, fp_mode):
 
     # Run esbmc
     new_output = run_esbmc(new_command_line)
-    new_result = parse_result(new_output, category_property)
 
-    # If the new result is false, we'll keep it
-    if Result.is_fail(result):
-      return new_result
+    # Always keep the latest result
+    result = parse_result(new_output, category_property)
 
     # If the result is either timeout or memory out, we give up
     if Result.is_out(result):
       break
 
-    # We only run once on fp_mode
-    if fp_mode:
-      return new_result
-
     # retry next time with a bigger unwind
     retry += 1
 
   # Keep the previous result
-  return result
+  return result, fp_mode
 
 def needs_validation(strat, prop, result, fp_mode):
   # If we're forcing floating-point mode, don't validate
@@ -380,18 +377,7 @@ else:
   print "Unsupported Property"
   exit(1)
 
-# Get command line
-esbmc_command_line = get_command_line(strategy, category_property, arch, benchmark, False)
-
-# Call ESBMC
-output = run_esbmc(esbmc_command_line)
-
-# Parse output
-result = parse_result(output, category_property)
-
-# Check if it needs more tries:
-fp_mode = (result == Result.force_fp_mode)
-result = retry(strategy, category_property, result, fp_mode)
+result, fp_mode = verify(strategy, category_property)
 
 # Check if we're going to validate the results
 if needs_validation(strategy, category_property, result, fp_mode):
