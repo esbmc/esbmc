@@ -43,6 +43,8 @@ class Result:
       return True
     if res == Result.err_timeout:
       return True
+    if res == Result.unknown:
+      return True
     return False
 
 class Property:
