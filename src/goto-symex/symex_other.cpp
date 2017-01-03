@@ -53,13 +53,6 @@ void goto_symext::symex_other(void)
   }
   else if (is_code_decl2t(code2))
   {
-    // TODO: remove this after SV-Comp
-    if(is_fixedbv_type(code2) && options.get_bool_option("unroll-loops"))
-    {
-      std::cout << "**** WARNING: forcing floating-point mode, using MathSAT" << std::endl;
-      abort();
-    }
-
     replace_dynamic_allocation(code2);
     replace_nondet(code2);
     dereference(code2, false);
