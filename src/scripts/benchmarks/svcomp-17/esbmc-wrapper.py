@@ -54,9 +54,9 @@ class Property:
   termination = 4
 
 class Unwindings:
-  loops = [1, 64, 160]
-  fp = [1, 1024]
-  overflow = [1, 2, 32778]
+  loops = ["160"]
+  fp = ["1", "0"]
+  overflow = ["1", "2", "32778"]
 
 # Function to run esbmc
 def run_esbmc(cmd_line):
@@ -203,7 +203,7 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
   elif strat == "incr":
     command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc "
   elif strat == "fixed":
-    command_line += "--floatbv --unroll-loops --no-unwinding-assertions --unwind 1 --no-bitfields "
+    command_line += "--floatbv --unroll-loops --no-unwinding-assertions --unwind 160 --no-bitfields "
     if fp_mode: command_line += "--mathsat "
   else:
     print "Unknown strategy"
@@ -255,11 +255,19 @@ def verify(strat, prop):
     new_command_line = get_command_line(strategy, category_property, arch, benchmark, fp_mode)
 
     # Add memory out and timeout
-    new_command_line += " --memlimit 13g --timeout "
-    new_command_line += str(895 - (int) (round(time.time() - start_time)))
+    timeout = str(895 - (int) (round(time.time() - start_time)))
+    new_command_line += " --memlimit 14g --timeout " + timeout + "s"
+
+    # Second time with fp_mode, run with tiny timeout
+    if retry == 1 and fp_mode:
+      new_command_line = new_command_line.replace("--timeout " + timeout + "s", "--timeout 10s")
 
     # Replace unwind
-    new_command_line = new_command_line.replace("unwind 1", "unwind " + str(unwinds[retry]))
+    new_command_line = new_command_line.replace("unwind 160", "unwind " + unwinds[retry])
+
+    # Remove unroll-loops, if running in fp_mode
+    if fp_mode:
+      new_command_line = new_command_line.replace("--unroll-loops ", "")
 
     # If verifying overflows, abort on recursion
     if prop == Property.overflow:
