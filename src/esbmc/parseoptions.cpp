@@ -180,10 +180,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   /* graphML generation options check */
   if(cmdline.isset("witness-output"))
-  {
     options.set_option("witness-output", cmdline.getval("witness-output"));
-    options.set_option("no-slice", true);
-  }
 
   if(cmdline.isset("witness-detailed"))
     options.set_option("witness-detailed", true);
