@@ -236,12 +236,12 @@ def verify(strat, prop):
   # Parse output
   result = parse_result(output, category_property)
 
-  # We'll only recheck the fixed approach
-  if strat != "fixed":
-    return result
-
   # Retry in fp_mode?
   fp_mode = (result == Result.force_fp_mode)
+
+  # We'll only recheck the fixed approach
+  if strat != "fixed":
+    return result, fp_mode
 
   # We'll retry a number of times, however, the verification with
   # unwind 1 for forced fp mode failed, so we try again with 1 unwind
