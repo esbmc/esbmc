@@ -1064,10 +1064,13 @@ int cbmc_parseoptionst::doit_k_induction()
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
 
-    std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << i2string((unsigned long) k_step);
-    std::cout << " ***\n";
-    std::cout << "*** Checking inductive step\n";
+    if(k_step > 1)
+    {
+      std::cout << "\n*** K-Induction Loop Iteration ";
+      std::cout << i2string((unsigned long) k_step);
+      std::cout << " ***\n";
+      std::cout << "*** Checking inductive step\n";
+    }
 
     if(!do_inductive_step(opts, goto_functions, k_step))
       return false;
