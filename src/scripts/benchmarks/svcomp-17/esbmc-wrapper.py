@@ -6,6 +6,7 @@ import shlex
 import subprocess
 import time
 import sys
+import resource
 
 # Start time for this script
 start_time = time.time()
@@ -299,6 +300,11 @@ def needs_validation(strat, prop, result, fp_mode):
   if result == Result.fail_reach and strat == "fixed" and prop == Property.reach:
     return True
 
+
+def setlimits():
+  # Set maximum RAM
+  resource.setrlimit(resource.RLIMIT_AS, (13958643712, 13958643712))
+
 def get_cpa_command_line(prop, benchmark):
   command_line = "./scripts/cpa.sh -witness-validation "
   command_line += "-spec ../" + os.path.basename(benchmark) + ".graphml "
@@ -330,7 +336,7 @@ def run_cpa(cmd_line):
 
       the_args = shlex.split(cmd_line)
 
-      p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=setlimits)
       (stdout, stderr) = p.communicate()
 
       """ DEBUG output
@@ -342,6 +348,9 @@ def run_cpa(cmd_line):
     os.chdir(cwd)
   except:
     print("Unexpected error:", sys.exc_info()[0])
+
+  # restore memory limit
+  resource.setrlimit(resource.RLIMIT_AS, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))
 
   return stdout
 
