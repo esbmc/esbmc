@@ -55,7 +55,7 @@ class Property:
   termination = 4
 
 class Unwindings:
-  loops = ["160"]
+  loops = ["160", "815"]
   fp = ["1", "0"]
   overflow = ["1", "2", "32778"]
 
