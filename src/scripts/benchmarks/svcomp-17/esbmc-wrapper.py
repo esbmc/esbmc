@@ -321,7 +321,7 @@ def run_cpa(cmd_line):
     cwd = os.getcwd()
 
     # Change to CPA's dir
-    os.chdir("./cpachecker/")
+    os.chdir(cwd + "/cpachecker/")
 
     # Checking if there is still enough time available
     elapsed_time = (int) (round(time.time() - start_time))
@@ -346,6 +346,8 @@ def run_cpa(cmd_line):
 
     # restore dir
     os.chdir(cwd)
+  except (OSError, AttributeError) as e:
+    print e
   except:
     print("Unexpected error:", sys.exc_info()[0])
 
