@@ -533,8 +533,7 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
   }
   else if (expr.id() == "+" || expr.id() == "-"
     || expr.id() == "*" || expr.id() == "unary-"
-    || expr.id() == "/" || expr.id() == "mod"
-    || expr.is_typecast())
+    || expr.id() == "/" || expr.id() == "mod")
   {
     // Don't check pointers
     if(expr.op0().type().is_pointer())
@@ -549,8 +548,7 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
     overflow_check(expr, guard);
   }
   else if (expr.id() == "ieee_add" || expr.id() == "ieee_sub"
-    || expr.id() == "ieee_mul" || expr.id() == "ieee_div"
-    || expr.is_typecast())
+    || expr.id() == "ieee_mul" || expr.id() == "ieee_div")
   {
     float_overflow_check(expr, guard);
     nan_check(expr, guard);
