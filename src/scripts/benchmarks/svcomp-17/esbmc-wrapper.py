@@ -343,9 +343,6 @@ def run_cpa(cmd_line):
       print stdout
       print stderr
       """
-
-    # restore dir
-    os.chdir(cwd)
   except (OSError, AttributeError) as e:
     print e
   except:
