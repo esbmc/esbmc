@@ -57,7 +57,7 @@ class Property:
 class Unwindings:
   loops = ["160", "815"]
   fp = ["1", "0"]
-  overflow = ["1", "2", "32778"]
+  overflow = ["1", "2", "64", "1024", "32778"]
 
 # Function to run esbmc
 def run_esbmc(cmd_line):
