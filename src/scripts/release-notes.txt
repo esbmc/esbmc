@@ -5,7 +5,7 @@ Release Notes of the ESBMC model checker
 + Support for floating point with Z3 and Mathsat (use --floatbv)
 + Improved witness generation (no need for tokenizer anymore)
 + Correctness witness generation
-+ Shipping with Mathsat 5.3.13, Z3 4.4.2 and Boolector 2.2.0
++ Shipping with Mathsat 5.3.14, Z3 4.5.0 and Boolector 2.2.0
 + General bug fixes
 
 *** Version 3.0.2
