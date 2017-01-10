@@ -455,8 +455,10 @@ void goto_symext::symex_assign_concat(
   guardt &guard)
 {
   // Right: generate a series of symex assigns.
+#ifndef NDEBUG
   const concat2t &cat = to_concat2t(lhs);
   assert(cat.type->get_width() > 8);
+#endif
   assert(is_scalar_type(rhs));
 
   // Second attempt at this code: byte stitching guarantees that all the concats
@@ -472,8 +474,10 @@ void goto_symext::symex_assign_concat(
   // Add final operand to list
   operand_list.push_back(cur_concat);
 
+#ifndef NDEBUG
   for (const auto &foo : operand_list)
     assert(foo->type->get_width() == 8);
+#endif
   assert((operand_list.size() * 8) == cat.type->get_width());
 
   bool is_big_endian =
