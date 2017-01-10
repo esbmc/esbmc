@@ -257,7 +257,7 @@ def verify(strat, prop):
 
     # Add memory out and timeout
     timeout = str(895 - (int) (round(time.time() - start_time)))
-    new_command_line += " --memlimit 13g --timeout " + timeout + "s"
+    new_command_line += " --memlimit 14g --timeout " + timeout + "s"
 
     # Second time with fp_mode, run with tiny timeout
     if retry == 1 and fp_mode:
