@@ -60,13 +60,11 @@ void clang_c_adjust::adjust_code(codet& code)
 
 void clang_c_adjust::adjust_expression(codet& code)
 {
-  exprt &op=code.op0();
+  exprt op = code.op0();
 
   if(op.id()=="sideeffect")
   {
-    const irep_idt &statement=op.statement();
-
-    if(statement=="assign")
+    if(op.statement() == "assign")
     {
       assert(op.operands().size()==2);
 
@@ -95,10 +93,9 @@ void clang_c_adjust::adjust_expression(codet& code)
         code.swap(function_call);
         return;
       }
-
     }
 
-    if(statement=="function_call")
+    if(op.statement() == "function_call")
     {
       assert(op.operands().size()==2);
 
