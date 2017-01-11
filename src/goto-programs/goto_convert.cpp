@@ -2064,7 +2064,7 @@ const std::string &goto_convertt::get_string_constant(
      || expr.op0().operands().size()!=2)
   {
     err_location(expr);
-    str << "expected string constant, but got: "
+    std::cerr << "expected string constant, but got: "
           << expr.pretty() << std::endl;
     abort();
   }
