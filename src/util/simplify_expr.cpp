@@ -2190,7 +2190,7 @@ bool simplify_exprt::simplify_inequality_not_constant(
     forall_value_list(it0, values0)
       forall_value_list(it1, values1)
       {
-        bool tmp;
+        bool tmp = false;
         const mp_integer &int_value0=*it0;
         const mp_integer &int_value1=*it1;
 

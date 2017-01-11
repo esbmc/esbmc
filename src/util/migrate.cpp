@@ -1408,7 +1408,6 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new dynamic_size2t(op0));
   } else if (expr.id() == "sideeffect") {
-    sideeffect2t::allockind t;
     expr2tc operand, thesize;
     type2tc cmt_type, plaintype;
     std::vector<expr2tc> args;
@@ -1426,6 +1425,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     migrate_type((const typet&)expr.cmt_type(), cmt_type);
     migrate_type(expr.type(), plaintype);
+
+    sideeffect2t::allockind t;
     if (expr.statement() == "malloc")
       t = sideeffect2t::malloc;
     else if (expr.statement() == "realloc")
@@ -1441,7 +1442,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     else if (expr.statement() == "function_call")
       t = sideeffect2t::function_call;
     else
-      assert(0 && "Unexpected side-effect statement");
+    {
+      std::cerr << "Unexpected side-effect statement\n";
+      abort();
+    }
 
     if (t == sideeffect2t::function_call) {
       const exprt &arguments = expr.op1();
