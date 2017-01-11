@@ -21,11 +21,7 @@ void clang_c_adjust::adjust_code(codet& code)
 {
   const irep_idt &statement=code.statement();
 
-  if(statement=="expression")
-  {
-    adjust_expression(code);
-  }
-  else if(statement=="ifthenelse")
+  if(statement=="ifthenelse")
   {
     adjust_ifthenelse(code);
   }
@@ -56,64 +52,6 @@ void clang_c_adjust::adjust_code(codet& code)
   {
     adjust_operands(code);
   }
-}
-
-void clang_c_adjust::adjust_expression(codet& code)
-{
-  exprt op = code.op0();
-
-  if(op.id()=="sideeffect")
-  {
-    if(op.statement() == "assign")
-    {
-      assert(op.operands().size()==2);
-
-      // First, check sideeffect
-      adjust_expr(code.op0());
-
-      // pull assignment statements up
-      exprt::operandst operands;
-      operands.swap(op.operands());
-      code.statement("assign");
-      code.operands().swap(operands);
-
-      if(code.op1().id()=="sideeffect" &&
-         code.op1().statement()=="function_call")
-      {
-        assert(code.op1().operands().size()==2);
-
-        // Check the function call irep
-        adjust_expr(code.op1());
-
-        code_function_callt function_call;
-        function_call.location().swap(code.op1().location());
-        function_call.lhs()=code.op0();
-        function_call.function()=code.op1().op0();
-        function_call.arguments()=code.op1().op1().operands();
-        code.swap(function_call);
-        return;
-      }
-    }
-
-    if(op.statement() == "function_call")
-    {
-      assert(op.operands().size()==2);
-
-      // First, check sideeffect irep
-      adjust_expr(code.op0());
-
-      // pull function calls up
-      code_function_callt function_call;
-      function_call.location()=code.location();
-      function_call.function()=op.op0();
-      function_call.arguments()=op.op1().operands();
-      code.swap(function_call);
-
-      return;
-    }
-  }
-
-  adjust_operands(code);
 }
 
 void clang_c_adjust::adjust_decl(codet& code)

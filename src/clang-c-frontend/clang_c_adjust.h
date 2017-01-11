@@ -53,7 +53,6 @@ class clang_c_adjust
       side_effect_expr_function_callt &expr);
 
     void adjust_code(codet &code);
-    void adjust_expression(codet &code);
     void adjust_ifthenelse(codet &code);
     void adjust_while(codet &code);
     void adjust_for(codet &code);
