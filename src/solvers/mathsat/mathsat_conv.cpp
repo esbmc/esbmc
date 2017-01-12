@@ -398,11 +398,13 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     break;
   }
   case SMT_FUNC_LTE:
-  case SMT_FUNC_BVSLTE:
     if((args[0]->sort->id == SMT_SORT_FLOATBV)
         && (args[1]->sort->id == SMT_SORT_FLOATBV))
       r = msat_make_fp_leq(env, args[0]->t, args[1]->t);
     else
+      r = msat_make_leq(env, args[0]->t, args[1]->t);
+    break;
+  case SMT_FUNC_BVSLTE:
       r = msat_make_bv_sleq(env, args[0]->t, args[1]->t);
     break;
   case SMT_FUNC_LT:
