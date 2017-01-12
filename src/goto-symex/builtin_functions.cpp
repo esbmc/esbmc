@@ -709,58 +709,9 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
   ex_state.kill_monitor_thread();
 }
 
-/* ********** FIXME IMPORT THESE FUNCTIONS FROM BUILTIN FUNCTIONS *********** */
-
-void get_alloc_type_rec(
-  const exprt &src,
-  typet &type,
-  exprt &size)
+void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
 {
-  static bool is_mul=false;
-
-  const irept &sizeof_type=src.c_sizeof_type();
-  //nec: ex33.c
-  if(!sizeof_type.is_nil() && !is_mul)
-  {
-    type=(typet &)sizeof_type;
-  }
-  else if(src.id()=="*")
-  {
-	is_mul=true;
-    forall_operands(it, src)
-      get_alloc_type_rec(*it, type, size);
-  }
-  else
-  {
-    size.copy_to_operands(src);
-  }
-}
-
-void get_alloc_type(
-  const exprt &src,
-  typet &type,
-  exprt &size)
-{
-  type.make_nil();
-  size.make_nil();
-
-  get_alloc_type_rec(src, type, size);
-
-  if(type.is_nil())
-    type=char_type();
-
-  if(size.has_operands())
-  {
-    if(size.operands().size()==1)
-    {
-      exprt tmp;
-      tmp.swap(size.op0());
-      size.swap(tmp);
-    }
-    else
-    {
-      size.id("*");
-      size.type()=size.op0().type();
-    }
-  }
+  (void) lhs;
+  (void) code;
+  abort();
 }

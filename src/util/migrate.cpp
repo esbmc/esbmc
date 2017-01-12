@@ -1439,6 +1439,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = sideeffect2t::cpp_new_arr;
     else if (expr.statement() == "nondet")
       t = sideeffect2t::nondet;
+    else if (expr.statement() == "va_arg")
+      t = sideeffect2t::va_arg;
     else if (expr.statement() == "function_call")
       t = sideeffect2t::function_call;
     else
@@ -2502,6 +2504,9 @@ migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::nondet:
       theexpr.statement("nondet");
+      break;
+    case sideeffect2t::va_arg:
+      theexpr.statement("va_arg");
       break;
     case sideeffect2t::function_call:
       theexpr.statement("function_call");

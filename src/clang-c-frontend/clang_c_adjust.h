@@ -48,6 +48,7 @@ class clang_c_adjust
     void adjust_side_effect(side_effect_exprt &expr);
     void adjust_symbol(exprt &expr);
     void adjust_comma(exprt &expr);
+    void adjust_builtin_va_arg(exprt &expr);
 
     void adjust_function_call_arguments(
       side_effect_expr_function_callt &expr);

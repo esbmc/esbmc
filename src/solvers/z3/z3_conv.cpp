@@ -992,7 +992,7 @@ z3_convt::mk_struct_sort(const type2tc &type)
 }
 
 const smt_ast *
-z3_convt::z3_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
+z3_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
 {
   const smt_sort *boolsort = ctx->mk_sort(SMT_SORT_BOOL);
   const smt_ast *args[2];
@@ -1002,7 +1002,7 @@ z3_convt::z3_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
 }
 
 const smt_ast *
-z3_convt::z3_smt_ast::update(smt_convt *conv, const smt_ast *value,
+z3_smt_ast::update(smt_convt *conv, const smt_ast *value,
                    unsigned int idx, expr2tc idx_expr) const
 {
 
@@ -1034,7 +1034,7 @@ z3_convt::z3_smt_ast::update(smt_convt *conv, const smt_ast *value,
 }
 
 const smt_ast *
-z3_convt::z3_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+z3_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 {
   const smt_ast *args[2];
   args[0] = this;
@@ -1044,7 +1044,7 @@ z3_convt::z3_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 }
 
 const smt_ast *
-z3_convt::z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
+z3_smt_ast::project(smt_convt *conv, unsigned int elem) const
 {
   z3_convt *z3_conv = static_cast<z3_convt*>(conv);
 
@@ -1381,7 +1381,7 @@ z3_convt::pop_tuple_ctx()
   return;
 }
 
-void z3_convt::z3_smt_ast::dump() const
+void z3_smt_ast::dump() const
 {
   std::cout << Z3_ast_to_string(e.ctx(), e) << std::endl;
   std::cout << "sort is " << Z3_sort_to_string(e.ctx(), Z3_get_sort(e.ctx(), e)) << std::endl;

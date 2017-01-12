@@ -3138,6 +3138,8 @@ std::string expr2ct::convert(
       return convert_nondet(src, precedence=15);
     else if(statement=="statement_expression")
       return convert_statement_expression(src, precedence=15);
+    else if(statement=="va_arg")
+      return convert_function(src, "va_arg", precedence=15);
     else
       return convert_norep(src, precedence);
   }

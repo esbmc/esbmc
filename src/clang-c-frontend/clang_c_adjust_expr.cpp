@@ -133,6 +133,10 @@ void clang_c_adjust::adjust_expr(exprt& expr)
     // Typecast both the true and false results
     gen_typecast_arithmetic(ns, expr.op1(), expr.op2());
   }
+  else if(expr.id()=="builtin_va_arg")
+  {
+    adjust_builtin_va_arg(expr);
+  }
   else if(expr.is_code())
   {
     adjust_code(to_code(expr));
@@ -1174,6 +1178,50 @@ void clang_c_adjust::adjust_comma(exprt& expr)
   // make this an l-value if the last operand is one
   if(expr.op1().cmt_lvalue())
     expr.cmt_lvalue(true);
+}
+
+void clang_c_adjust::adjust_builtin_va_arg(exprt& expr)
+{
+  // The first parameter is the va_list, and the second
+  // is the type, which will need to be fixed and checked.
+  // The type is given by the parser as type of the expression.
+
+  typet arg_type = expr.type();
+
+  code_typet new_type;
+  new_type.return_type().swap(arg_type);
+  new_type.arguments().resize(1);
+  new_type.arguments()[0].type() = pointer_typet(empty_typet());
+
+  assert(expr.operands().size() == 1);
+  exprt arg = expr.op0();
+
+  gen_typecast(ns, arg, pointer_typet(empty_typet()));
+
+  // turn into function call
+  side_effect_expr_function_callt result;
+  result.location() = expr.location();
+  result.function() = symbol_exprt("builtin_va_arg");
+  result.function().location() = expr.location();
+  result.function().type() = new_type;
+  result.arguments().push_back(arg);
+  result.type() = new_type.return_type();
+
+  expr.swap(result);
+
+  // Make sure symbol exists, but we have it return void
+  // to avoid collisions of the same symbol with different
+  // types.
+
+  code_typet symbol_type = new_type;
+  symbol_type.return_type() = empty_typet();
+
+  symbolt symbol;
+  symbol.base_name = "builtin_va_arg";
+  symbol.name = "builtin_va_arg";
+  symbol.type = symbol_type;
+
+  context.move(symbol);
 }
 
 void clang_c_adjust::make_index_type(exprt& expr)
