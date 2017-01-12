@@ -68,13 +68,6 @@ mathsat_convt::mathsat_convt(bool int_encoding,
                              const namespacet &ns)
   : smt_convt(int_encoding, ns), array_iface(false, false)
 {
-
-  if (int_encoding) {
-    std::cerr << "MathSAT converter doesn't support integer encoding"
-              << std::endl;
-    abort();
-  }
-
   cfg = msat_parse_config(mathsat_config);
   msat_set_option(cfg, "model_generation", "true");
   env = msat_create_env(cfg);
@@ -474,9 +467,9 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
   va_start(ap, k);
   switch (k) {
   case SMT_SORT_INT:
+    return new mathsat_smt_sort(k, msat_get_integer_type(env));
   case SMT_SORT_REAL:
-    std::cerr << "Sorry, no integer encoding sorts for MathSAT" << std::endl;
-    abort();
+    return new mathsat_smt_sort(k, msat_get_rational_type(env));
   case SMT_SORT_BV:
   {
     unsigned long uint = va_arg(ap, unsigned long);
@@ -516,15 +509,27 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
 }
 
 smt_ast *
-mathsat_convt::mk_smt_int(const mp_integer &theint __attribute__((unused)), bool sign __attribute__((unused)))
+mathsat_convt::mk_smt_int(const mp_integer &theint, bool sign)
 {
-  abort();
+  char buffer[256], *n = nullptr;
+  n = theint.as_string(buffer, 256);
+  assert(n != nullptr);
+
+  msat_term t = msat_make_number(env, n);
+  check_msat_error(t);
+
+  smt_sort *s = mk_sort(SMT_SORT_INT);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_ast *
-mathsat_convt::mk_smt_real(const std::string &str __attribute__((unused)))
+mathsat_convt::mk_smt_real(const std::string &str)
 {
-  abort();
+  msat_term t = msat_make_number(env, str.c_str());
+  check_msat_error(t);
+
+  smt_sort *s = mk_sort(SMT_SORT_REAL);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_ast *
