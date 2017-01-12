@@ -18,10 +18,9 @@ public:
   mathsat_smt_sort(smt_sort_kind i, msat_type _t, unsigned int r_w,
                    unsigned int dom_w)
     : smt_sort(i, r_w, dom_w), t(_t) { }
-  mathsat_smt_sort(smt_sort_kind i, msat_type _t, unsigned int r_w,
-                   unsigned int dw, const smt_sort *_rangesort)
-    : smt_sort(i, r_w, dw), t(_t), rangesort(_rangesort) { }
-
+  mathsat_smt_sort(smt_sort_kind i, msat_type _t, unsigned long w, unsigned long dw,
+                   const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), t(_t), rangesort(_rangesort) {}
   virtual ~mathsat_smt_sort() { }
 
   msat_type t;

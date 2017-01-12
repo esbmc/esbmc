@@ -485,16 +485,18 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
     return new mathsat_smt_sort(k, msat_get_fp_roundingmode_type(env));
   case SMT_SORT_ARRAY:
   {
-    mathsat_smt_sort *dom = va_arg(ap, mathsat_smt_sort *);
-    mathsat_smt_sort *range = va_arg(ap, mathsat_smt_sort *);
-    mathsat_smt_sort *result =
-      new mathsat_smt_sort(k, msat_get_array_type(env, dom->t, range->t),
-                           range->data_width, dom->data_width, range);
-    size_t sz = 0;
-    int tmp;
-    tmp = msat_is_bv_type(env, dom->t, &sz);
-    assert(tmp == 1 && "Domain of array must be a bitvector");
-    return result;
+    const mathsat_smt_sort *dom = va_arg(ap, const mathsat_smt_sort *);
+    const mathsat_smt_sort *range = va_arg(ap, const mathsat_smt_sort *);
+    assert(int_encoding || dom->data_width != 0);
+
+    // The range data width is allowed to be zero, which happens if the range
+    // is not a bitvector / integer
+    unsigned int data_width = range->data_width;
+    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
+      data_width = 1;
+
+    return new mathsat_smt_sort(k, msat_get_array_type(env, dom->t, range->t),
+                                data_width, dom->data_width, range);
   }
   case SMT_SORT_BOOL:
     return new mathsat_smt_sort(k, msat_get_bool_type(env));
