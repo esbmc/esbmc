@@ -193,13 +193,15 @@ AS_IF([test "${enable_esbmc}" = "yes"], [
 
 AC_ARG_ENABLE(enable-python, [AS_HELP_STRING([--enable-python], Build python support into ESBMC)])
 AS_IF([test "${enable_python}" = "yes"], [
-  dnl Check for python
-  PKG_CHECK_MODULES([LIBPYTHON], [python], [
+  dnl Check for python. Hardcoded to python 3: I was going to make this
+  dnl selectable, but then realised that everyone (even I) need a little
+  dnl knudging towards python3 now and then.
+  PKG_CHECK_MODULES([LIBPYTHON3], [python], [
     dnl Add flags to build python in; enable build of libesbmc
-    AS_VAR_APPEND(CXXFLAGS, " $LIBPYTHON_CFLAGS -DWITH_PYTHON ")
-    AS_VAR_APPEND(CFLAGS, " $LIBPYTHON_CFLAGS -DWITH_PYTHON ")
-    AS_VAR_APPEND(LIBS, " $LIBPYTHON_LIBS -lboost_python ")
-    AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON_LIBS -lboost_python ")
+    AS_VAR_APPEND(CXXFLAGS, " $LIBPYTHON3_CFLAGS -DWITH_PYTHON ")
+    AS_VAR_APPEND(CFLAGS, " $LIBPYTHON3_CFLAGS -DWITH_PYTHON ")
+    AS_VAR_APPEND(LIBS, " $LIBPYTHON3_LIBS -lboost_python ")
+    AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON3_LIBS -lboost_python ")
 
     dnl Check if we can actually compile in boost-python. Needs to be after
     dnl python libs added to LIBS
