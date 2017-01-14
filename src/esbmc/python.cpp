@@ -298,6 +298,7 @@ BOOST_PYTHON_MODULE(esbmc)
   // This is essentially the entry point for the esbmc shared object.
   // Workarounds for the static order initialization are in init_esbmc_process
   // due to some annoyance with object lifetime.
+  scope esbmc;
 
   // Register process init and sort-of deconstruction.
   def("init_esbmc_process", &init_esbmc_process);
@@ -314,8 +315,7 @@ BOOST_PYTHON_MODULE(esbmc)
     object types(handle<>(borrowed(PyImport_AddModule("esbmc.type"))));
     scope quux = types;
 
-    object esbmc_module(handle<>(borrowed(PyImport_AddModule("esbmc"))));
-    esbmc_module.attr("type") = types;
+    esbmc.attr("type") = types;
 
     build_base_type2t_python_class();
 
@@ -342,8 +342,7 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_TYPE_DOWNCASTING, foo, ESBMC_LIST_OF_TYPES)
     object exprs(handle<>(borrowed(PyImport_AddModule("esbmc.expr"))));
     scope quux = exprs;
 
-    object esbmc_module(handle<>(borrowed(PyImport_AddModule("esbmc"))));
-    esbmc_module.attr("expr") = exprs;
+    esbmc.attr("expr") = exprs;
 
     exprs.attr("is_nil_expr") = make_function(&is_nil_expr);
 

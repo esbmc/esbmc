@@ -607,11 +607,12 @@ build_smt_conv_python_class(void)
 {
   using namespace boost::python;
 
+  scope esbmc;
+
   object solve(handle<>(borrowed(PyImport_AddModule("esbmc.solve"))));
   scope quux = solve;
 
-  object esbmc_module(handle<>(borrowed(PyImport_AddModule("esbmc"))));
-  esbmc_module.attr("solve") = solve;
+  esbmc.attr("solve") = solve;
 
   solve.attr("downcast_sort") = make_function(&downcast_sort);
   solve.attr("downcast_ast") = make_function(&downcast_ast);

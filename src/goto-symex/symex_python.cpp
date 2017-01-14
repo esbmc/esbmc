@@ -303,11 +303,12 @@ build_goto_symex_classes()
 {
   using namespace boost::python;
 
+  scope esbmc;
+
   object symex(handle<>(borrowed(PyImport_AddModule("esbmc.symex"))));
   scope quux = symex;
 
-  object esbmc_module(handle<>(borrowed(PyImport_AddModule("esbmc"))));
-  esbmc_module.attr("symex") = symex;
+  esbmc.attr("symex") = symex;
 
   symex.attr("slice") = make_function(&::slice);
   symex.attr("simple_slice") = make_function(&::simple_slice);
