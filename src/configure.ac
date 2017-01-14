@@ -196,16 +196,18 @@ AS_IF([test "${enable_python}" = "yes"], [
   dnl Check for python. Hardcoded to python 3: I was going to make this
   dnl selectable, but then realised that everyone (even I) need a little
   dnl knudging towards python3 now and then.
-  PKG_CHECK_MODULES([LIBPYTHON3], [python], [
+  PKG_CHECK_MODULES([LIBPYTHON3], [python3], [
     dnl Add flags to build python in; enable build of libesbmc
     AS_VAR_APPEND(CXXFLAGS, " $LIBPYTHON3_CFLAGS -DWITH_PYTHON ")
     AS_VAR_APPEND(CFLAGS, " $LIBPYTHON3_CFLAGS -DWITH_PYTHON ")
-    AS_VAR_APPEND(LIBS, " $LIBPYTHON3_LIBS -lboost_python ")
-    AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON3_LIBS -lboost_python ")
+    dnl Misery: debian wants -py34 on the end, autoconf library stuff doesn't
+    dnl detect that. Hardcode for now.
+    AS_VAR_APPEND(LIBS, " $LIBPYTHON3_LIBS -lboost_python-py34 ")
+    AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON3_LIBS -lboost_python-py34 ")
 
     dnl Check if we can actually compile in boost-python. Needs to be after
     dnl python libs added to LIBS
-    AC_CHECK_LIB([boost_python], [no_init], [],
+    AC_CHECK_LIB([boost_python-py34], [no_init], [],
         [AC_MSG_ERROR([Python supported requested but boost-python not found])], []
     )
 
