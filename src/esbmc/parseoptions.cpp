@@ -19,7 +19,7 @@ extern "C" {
 #include <signal.h>
 #include <unistd.h>
 
-#ifdef HAVE_SENDFILE
+#ifdef HAVE_SENDFILE_ESBMC
 #include <sys/sendfile.h>
 #endif
 #include <sys/resource.h>
@@ -1893,7 +1893,7 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 
   bool res = bmc1.run();
 
-#ifdef HAVE_SENDFILE
+#ifdef HAVE_SENDFILE_ESBMC
   if (bmc1.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, NULL, 100000);
