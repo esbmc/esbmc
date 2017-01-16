@@ -799,7 +799,7 @@ pointer_offset2t::do_simplify(bool second) const
     type2tc ptr_int_type = get_int_type(config.ansi_c.pointer_width);
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
     mp_integer thesize = (is_empty_type(ptr_subtype)) ? 1
-                          : type_byte_size(*ptr_subtype.get());
+                          : type_byte_size(ptr_subtype);
     constant_int2tc type_size(type, thesize);
 
     // SV-Comp workaround

@@ -1769,7 +1769,11 @@ public:
   inline const name##_type2t & to_##name##_type(const type2tc &t) \
     { return dynamic_cast<const name##_type2t &> (*t.get()); } \
   inline name##_type2t & to_##name##_type(type2tc &t) \
-    { return dynamic_cast<name##_type2t &> (*t.get()); }
+    { return dynamic_cast<name##_type2t &> (*t.get()); } \
+  inline name##_type2t & to_##name##_type(type2t &t) \
+     { return dynamic_cast<name##_type2t &> (t); } \
+  inline const name##_type2t & to_##name##_type(const type2t &t) \
+     { return dynamic_cast<const name##_type2t &> (t); }
 
 type_macros(bool);
 type_macros(empty);

@@ -334,7 +334,7 @@ void goto_convertt::do_cpp_new(
     expr2tc alloc_units;
     migrate_expr(alloc_size, alloc_units);
     migrate_type(rhs.type(), subtype);
-    mp_integer sz = type_byte_size(*subtype);
+    mp_integer sz = type_byte_size(subtype);
     constant_int2tc sz_expr(uint_type2(), sz);
     mul2tc byte_size(uint_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);

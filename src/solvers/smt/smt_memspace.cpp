@@ -155,7 +155,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       if (is_empty_type(followed_type))
         type_size = 1;
       else
-        type_size = type_byte_size(*followed_type);
+        type_size = type_byte_size(followed_type);
 
       // Generate nonptr * constant.
       type2tc inttype = machine_ptr;

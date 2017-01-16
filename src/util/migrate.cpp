@@ -584,7 +584,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     // actually perform any flattening, because something else in the union
     // transformation should have transformed it to a byte array. Simply take
     // the address (it has to have storage), cast to byte array, and index.
-    BigInt size = type_byte_size(*new_expr->type);
+    BigInt size = type_byte_size(new_expr->type);
     address_of2tc addrof(new_expr->type, new_expr);
     type2tc byteptr(new pointer_type2t(get_uint8_type()));
     typecast2tc cast(byteptr, addrof);
@@ -596,7 +596,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     }
   } else if (is_number_type(new_expr) || is_bool_type(new_expr) ||
              is_pointer_type(new_expr)) {
-    BigInt size = type_byte_size(*new_expr->type);
+    BigInt size = type_byte_size(new_expr->type);
 
     bool is_big_endian =
       config.ansi_c.endianess ==configt::ansi_ct::IS_BIG_ENDIAN;

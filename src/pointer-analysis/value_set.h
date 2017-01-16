@@ -223,7 +223,7 @@ public:
     assert(!is_symbol_type(t));
     if (is_array_type(t)) {
       const array_type2t &arr = to_array_type(t);
-      return type_byte_size_default((*arr.subtype), 8).to_ulong();
+      return type_byte_size_default(arr.subtype, 8).to_ulong();
     } else {
       return 8;
     }

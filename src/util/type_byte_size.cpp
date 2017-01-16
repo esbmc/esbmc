@@ -52,12 +52,14 @@ round_up_to_int64(mp_integer &mp)
 }
 
 mp_integer
-member_offset(const struct_type2t &type, const irep_idt &member)
+member_offset(const type2tc &type, const irep_idt &member)
 {
   mp_integer result = 0;
   unsigned idx = 0;
 
-  forall_types(it, type.members) {
+  const struct_type2t &thetype = to_struct_type(type);
+
+  forall_types(it, thetype.members) {
     // If the current field is 64 bits, and we're on a 32 bit machine, then we
     // _must_ round up to 64 bits now.
     if (is_scalar_type(*it) && !is_code_type(*it) &&
@@ -70,12 +72,12 @@ member_offset(const struct_type2t &type, const irep_idt &member)
     if (is_array_type(*it) && to_array_type(*it).subtype->get_width() > 32)
       round_up_to_int64(result);
 
-    if (type.member_names[idx] == member.as_string())
+    if (thetype.member_names[idx] == member.as_string())
       break;
 
     // XXX 100% unhandled: bitfields.
 
-    mp_integer sub_size = type_byte_size(**it);
+    mp_integer sub_size = type_byte_size(*it);
     // Handle padding: we need to observe the usual struct constraints.
     round_up_to_word(sub_size);
 
@@ -83,14 +85,14 @@ member_offset(const struct_type2t &type, const irep_idt &member)
     idx++;
   }
 
-  assert(idx != type.members.size() && "Attempted to find member offset of "
+  assert(idx != thetype.members.size() && "Attempted to find member offset of "
          "member not in a struct");
 
   return result;
 }
 
 mp_integer
-type_byte_size_default(const type2t &type, mp_integer defaultval)
+type_byte_size_default(const type2tc &type, mp_integer defaultval)
 {
   try {
     return type_byte_size(type);
@@ -100,10 +102,10 @@ type_byte_size_default(const type2t &type, mp_integer defaultval)
 }
 
 mp_integer
-type_byte_size(const type2t &type)
+type_byte_size(const type2tc &type)
 {
 
-  switch (type.type_id) {
+  switch (type.get()->type_id) {
   case type2t::bool_id:
     return 1;
   case type2t::empty_id:
@@ -111,7 +113,7 @@ type_byte_size(const type2t &type)
     abort();
   case type2t::symbol_id:
     std::cerr << "Symbolic type id in type_byte_size" <<std::endl;
-    type.dump();
+    type.get()->dump();
     abort();
   case type2t::code_id:
     // In C++, methods are struct fields.
@@ -119,18 +121,18 @@ type_byte_size(const type2t &type)
     abort();
   case type2t::cpp_name_id:
     std::cerr << "C++ symbolic type id in type_byte_size" <<std::endl;
-    type.dump();
+    type.get()->dump();
     abort();
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::fixedbv_id:
   case type2t::floatbv_id:
-    return mp_integer(type.get_width() / 8);
+    return mp_integer(type.get()->get_width() / 8);
   case type2t::pointer_id:
     return mp_integer(config.ansi_c.pointer_width / 8);
   case type2t::string_id:
   {
-    const string_type2t &t2 = static_cast<const string_type2t&>(type);
+    const string_type2t &t2 = to_string_type(type);
     return mp_integer(t2.width);
   }
   case type2t::array_id:
@@ -140,8 +142,8 @@ type_byte_size(const type2t &type)
 
     // type_byte_size will handle all alignment and trailing padding byte
     // problems.
-    const array_type2t &t2 = static_cast<const array_type2t&>(type);
-    mp_integer subsize = type_byte_size(*t2.subtype);
+    const array_type2t &t2 = to_array_type(type);
+    mp_integer subsize = type_byte_size(t2.subtype);
 
     // Attempt to compute constant array offset. If we can't, we can't
     // reasonably return anything anyway, so throw.
@@ -166,7 +168,7 @@ type_byte_size(const type2t &type)
     // so that they all start on wourd boundries. Also add any trailing bytes
     // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
 
-    const struct_type2t &t2 = static_cast<const struct_type2t&>(type);
+    const struct_type2t &t2 = to_struct_type(type);
     mp_integer accumulated_size(0);
     forall_types(it, t2.members) {
       // If the current field is 64 bits, and we're on a 32 bit machine, then we
@@ -185,7 +187,7 @@ type_byte_size(const type2t &type)
       if (is_array_type(*it) && to_array_type(*it).subtype->get_width() > 32)
         round_up_to_int64(accumulated_size);
 
-      mp_integer memb_size = type_byte_size(**it);
+      mp_integer memb_size = type_byte_size(*it);
 
       round_up_to_word(memb_size);
 
@@ -202,10 +204,10 @@ type_byte_size(const type2t &type)
   {
     // Very simple: the largest field size, rounded up to a word boundry for
     // array allocation alignment.
-    const union_type2t &t2 = static_cast<const union_type2t&>(type);
+    const union_type2t &t2 = to_union_type(type);
     mp_integer max_size(0);
     forall_types(it, t2.members) {
-      mp_integer memb_size = type_byte_size(**it);
+      mp_integer memb_size = type_byte_size(*it);
       max_size = std::max(max_size, memb_size);
     }
 
@@ -214,7 +216,7 @@ type_byte_size(const type2t &type)
   }
   default:
     std::cerr << "Unrecognised type in type_byte_size:" << std::endl;
-    type.dump();
+    type.get()->dump();
     abort();
   }
 }
@@ -229,7 +231,7 @@ compute_pointer_offset(const expr2tc &expr)
     mp_integer sub_size;
     if (is_array_type(index.source_value)) {
       const array_type2t &arr_type = to_array_type(index.source_value->type);
-      sub_size = type_byte_size(*arr_type.subtype.get());
+      sub_size = type_byte_size(arr_type.subtype);
     } else if (is_string_type(index.source_value)) {
       sub_size = 8;
     } else {
@@ -264,8 +266,7 @@ compute_pointer_offset(const expr2tc &expr)
 
     mp_integer result;
     if (is_struct_type(memb.source_value->type)) {
-      const struct_type2t &type = to_struct_type(memb.source_value->type);
-      result = member_offset(type, memb.member);
+      result = member_offset(memb.source_value->type, memb.member);
     } else {
       result = 0; // Union offsets are always 0.
     }
