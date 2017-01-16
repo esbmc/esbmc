@@ -713,5 +713,6 @@ void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
 {
   (void) lhs;
   (void) code;
+  std::cerr << "Sorry, no support for va_args\n";
   abort();
 }
