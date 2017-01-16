@@ -2605,3 +2605,8 @@ smt_ast::project(smt_convt *ctx __attribute__((unused)),
   std::cerr << "Projecting from non-tuple based AST" << std::endl;
   abort();
 }
+
+void smt_convt::dump_SMT()
+{
+  std::cerr << "SMT dump not implemented for " << solver_text();
+}

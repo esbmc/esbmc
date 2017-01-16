@@ -732,6 +732,9 @@ public:
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_neg(const expr2tc &expr);
 
+  /** Method to dump the SMT formula */
+  virtual void dump_SMT();
+
   /** @} */
 
   /** @{
