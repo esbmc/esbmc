@@ -252,6 +252,9 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
     status(str.str());
   }
 
+  if(options.get_bool_option("dump-smt-formula"))
+    smt_conv.dump_SMT();
+
   std::stringstream ss;
   ss << "Solving with solver " << smt_conv.solver_text();
   status(ss.str());
