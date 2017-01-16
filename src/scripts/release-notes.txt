@@ -1,7 +1,12 @@
 Release Notes of the ESBMC model checker
 
+*** Version 3.2
++ Support for integer/real arithmetic when using MathSAT
++ New option to dump the SMT formula (only Z3)
++ Partial support for va_args
+
 *** Version 3.1
-+ Rewritten k-induciton (should greatly reduce false positives)
++ Rewritten k-induction (should greatly reduce false positives)
 + Support for floating point with Z3 and Mathsat (use --floatbv)
 + Improved witness generation (no need for tokenizer anymore)
 + Correctness witness generation
