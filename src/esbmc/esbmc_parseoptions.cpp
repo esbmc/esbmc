@@ -1426,7 +1426,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
   // Find main function; find first function call; insert updates to each
   // property expression. This makes sure that there isn't inconsistent
   // initialization of each monitor boolean.
-  goto_functionst::function_mapt::iterator f_it = goto_functions.function_map.find("main");
+  goto_functionst::function_mapt::iterator f_it = goto_functions.function_map.find("__ESBMC_main");
   assert(f_it != goto_functions.function_map.end());
   Forall_goto_program_instructions(p_it, f_it->second.body) {
     if (p_it->type == FUNCTION_CALL) {

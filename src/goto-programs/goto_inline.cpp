@@ -444,7 +444,7 @@ void goto_inline(
   {
     // find main
     goto_functionst::function_mapt::const_iterator it=
-      goto_functions.function_map.find("main");
+      goto_functions.function_map.find("__ESBMC_main");
 
     if(it==goto_functions.function_map.end())
     {
@@ -483,7 +483,7 @@ void goto_inline(
       it=goto_functions.function_map.begin();
       it!=goto_functions.function_map.end();
       it++)
-    if(it->first!="main")
+    if(it->first!="__ESBMC_main")
     {
       it->second.body_available=false;
       it->second.body.clear();
@@ -502,7 +502,7 @@ void goto_inline(
   {
     // find main
     goto_functionst::function_mapt::iterator it=
-      goto_functions.function_map.find("main");
+      goto_functions.function_map.find("__ESBMC_main");
 
     if(it==goto_functions.function_map.end())
       return;

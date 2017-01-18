@@ -433,7 +433,7 @@ void cpp_declarator_convertert::get_final_identifier()
 
   // main is always "C" linkage, as a matter of principle
   if(is_code &&
-     base_name=="main" &&
+     base_name=="__ESBMC_main" &&
      scope->prefix=="")
   {
     mode="C";

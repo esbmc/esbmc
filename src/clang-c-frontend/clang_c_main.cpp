@@ -244,7 +244,7 @@ bool clang_main(
   code_typet main_type;
   main_type.return_type()=empty_typet();
 
-  new_symbol.name="main";
+  new_symbol.name="__ESBMC_main";
   new_symbol.type.swap(main_type);
   new_symbol.value.swap(init_code);
 

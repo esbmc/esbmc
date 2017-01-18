@@ -80,7 +80,7 @@ public:
 
   irep_idt main_id() const
   {
-    return "main";
+    return "__ESBMC_main";
   }
 
   void swap(goto_functionst &other)

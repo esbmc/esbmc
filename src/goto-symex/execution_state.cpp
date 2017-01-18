@@ -59,7 +59,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
 
   goto_functionst::function_mapt::const_iterator it =
-    goto_functions.function_map.find("main");
+    goto_functions.function_map.find("__ESBMC_main");
   if (it == goto_functions.function_map.end()) {
     std::cerr << "main symbol not found; please set an entry point" <<std::endl;
     abort();
@@ -250,7 +250,7 @@ execution_statet::symex_step(reachability_treet &art)
 
   switch (instruction.type) {
     case END_FUNCTION:
-      if (instruction.function == "main") {
+      if (instruction.function == "__ESBMC_main") {
         end_thread();
         force_cswitch();
       } else {
