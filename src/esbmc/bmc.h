@@ -46,28 +46,26 @@ public:
     ltl_results_seen[ltl_res_good] = 0;
 
     if (options.get_bool_option("smt-during-symex")) {
-      runtime_solver = create_solver_factory(
-        "", opts.get_bool_option("int-encoding"), ns, options);
+      runtime_solver = std::shared_ptr<smt_convt>(
+        create_solver_factory("", opts.get_bool_option("int-encoding"), ns, options));
 
-      symex =
-        new reachability_treet(
-          funcs,
-          ns,
-          options,
-          std::shared_ptr<runtime_encoded_equationt>(
-            new runtime_encoded_equationt(ns, *runtime_solver)),
-          _context,
-          _message_handler);
+      symex = std::make_shared<reachability_treet>(
+        funcs,
+        ns,
+        options,
+        std::shared_ptr<runtime_encoded_equationt>(
+          new runtime_encoded_equationt(ns, *runtime_solver)),
+        _context,
+        _message_handler);
     } else {
-      symex =
-        new reachability_treet(
-          funcs,
-          ns,
-          options,
-          std::shared_ptr<symex_target_equationt>(
-            new symex_target_equationt(ns)),
-          _context,
-          _message_handler);
+      symex = std::make_shared<reachability_treet>(
+        funcs,
+        ns,
+        options,
+        std::shared_ptr<symex_target_equationt>(
+          new symex_target_equationt(ns)),
+        _context,
+        _message_handler);
     }
   }
 
@@ -92,8 +90,8 @@ public:
 protected:
   const contextt &context;
   namespacet ns;
-  smt_convt *runtime_solver;
-  reachability_treet *symex;
+  std::shared_ptr<smt_convt> runtime_solver;
+  std::shared_ptr<reachability_treet> symex;
 
   // use gui format
   language_uit::uit ui;

@@ -686,12 +686,11 @@ bool bmct::run_thread()
         return false;
 
     if (!options.get_bool_option("smt-during-symex")) {
-      runtime_solver = create_solver_factory("",
-                                             options.get_bool_option("int-encoding"),
-                                             ns, options);
+      runtime_solver = std::shared_ptr<smt_convt>(
+        create_solver_factory("", options.get_bool_option("int-encoding"), ns,options));
     }
 
-    ret = run_solver(*equation, runtime_solver);
+    ret = run_solver(*equation, runtime_solver.get());
 
     return ret;
   }
