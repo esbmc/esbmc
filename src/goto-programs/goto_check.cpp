@@ -289,15 +289,15 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
   // always correct, and just adds needless claims. In the past a "no bounds
   // check" attribute in old irep handled this.
   if (expr.op0().id_string() == "symbol"
-      && expr.op0().identifier() == "c::argv'"
+      && expr.op0().identifier() == "argv'"
       && expr.op1().id_string() == "symbol"
-      && expr.op1().identifier() == "c::argc'")
+      && expr.op1().identifier() == "argc'")
     return;
 
   if (expr.op0().id_string() == "symbol"
-      && expr.op0().identifier() == "c::envp'"
+      && expr.op0().identifier() == "envp'"
       && expr.op1().id_string() == "symbol"
-      && expr.op1().identifier() == "c::envp_size'")
+      && expr.op1().identifier() == "envp_size'")
     return;
 
   typet array_type = ns.follow(expr.op0().type());

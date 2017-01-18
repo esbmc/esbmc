@@ -111,7 +111,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   // this is the one modelling array that absolutely _has_ to be initialized
   // to false for each element, which is going to be shoved into
   // convert_identifier_pointer.
-  dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
+  dyn_info_arr_name = "__ESBMC_is_dynamic&0#1";
 
   ptr_foo_inited = false;
 }
@@ -1593,7 +1593,7 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
 
   assert(is_symbol2t(expr));
 
-  // Bad, we have to select given the result of c::__ESBMC_rounding_mode:
+  // Bad, we have to select given the result of __ESBMC_rounding_mode:
   // 0 is round to Nearest/even
   // 1 is round to -oo
   // 2 is round to +oo

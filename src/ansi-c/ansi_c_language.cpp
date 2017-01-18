@@ -285,7 +285,7 @@ bool ansi_c_languaget::final(
   message_handlert &message_handler)
 {
   if(c_final(context, message_handler)) return true;
-  if(c_main(context, "c::", "c::main", message_handler)) return true;
+  if(c_main(context, "main", message_handler)) return true;
 
   return false;
 }

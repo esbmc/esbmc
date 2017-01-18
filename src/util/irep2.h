@@ -3417,13 +3417,13 @@ public:
     : nearbyint_expr_methods(type, nearbyint_id, from, rounding_mode) { }
 
   /** Primary constructor. This constructor defaults the rounding mode to
-   *  the c::__ESBMC_rounding_mode symbol
+   *  the __ESBMC_rounding_mode symbol
    *  @param type Type to round to
    *  @param from Expression to round from.
    */
   nearbyint2t(const type2tc &type, const expr2tc &from)
     : nearbyint_expr_methods(type, nearbyint_id, from,
-        expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode")))
+        expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode")))
   {
   }
 
@@ -3452,13 +3452,13 @@ public:
     : typecast_expr_methods(type, typecast_id, from, rounding_mode) { }
 
   /** Primary constructor. This constructor defaults the rounding mode to
-   *  the c::__ESBMC_rounding_mode symbol
+   *  the __ESBMC_rounding_mode symbol
    *  @param type Type to typecast to
    *  @param from Expression to cast from.
    */
   typecast2t(const type2tc &type, const expr2tc &from)
     : typecast_expr_methods(type, typecast_id, from,
-        expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode")))
+        expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode")))
   {
   }
 
@@ -3487,7 +3487,7 @@ public:
    *  @param from Expression to cast from.
    */
   bitcast2t(const type2tc &type, const expr2tc &from)
-    : bitcast_expr_methods(type, bitcast_id, from, expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"))) { }
+    : bitcast_expr_methods(type, bitcast_id, from, expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"))) { }
 
   bitcast2t(const type2tc &type, const expr2tc &from, const expr2tc &roundsym)
     : bitcast_expr_methods(type, bitcast_id, from, roundsym) { }

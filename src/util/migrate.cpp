@@ -480,7 +480,7 @@ sym_name_to_symbol(irep_idt init, type2tc type)
   } else if (init.as_string().compare(0, 3, "cs$") == 0 ||
              init.as_string().compare(0, 8, "kindice$") == 0 ||
              init.as_string().compare(0, 2, "s$") == 0 ||
-             init.as_string().compare(0, 5, "c::i$") == 0) {
+             init.as_string().compare(0, 5, "i$") == 0) {
     // This is part of k-induction, where the type is slowly accumulated over
     // time, and the symbol never makes its way into the symbol table :|
     return expr2tc(new symbol2t(type, init, symbol2t::level0, 0, 0, 0, 0));
@@ -704,7 +704,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rounding_mode =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -731,7 +731,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rounding_mode =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1071,7 +1071,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rm =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1093,7 +1093,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rm =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1115,7 +1115,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rm =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1134,7 +1134,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rm =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1153,7 +1153,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rm =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");

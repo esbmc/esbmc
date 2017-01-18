@@ -83,7 +83,7 @@ void goto_convertt::do_printf(
   const irep_idt &f_id=function.identifier();
 
   if(f_id==CPROVER_PREFIX "printf" ||
-     f_id=="c::printf")
+     f_id=="printf")
   {
     exprt printf_code("sideeffect",
       static_cast<const typet &>(function.type().return_type()));
@@ -797,7 +797,7 @@ void goto_convertt::do_function_call_symbol(
       t2->location = function.location();
     }
   }
-  else if(identifier == "c::__builtin_va_copy")
+  else if(identifier == "__builtin_va_copy")
   {
     if(arguments.size() != 2)
     {
@@ -819,7 +819,7 @@ void goto_convertt::do_function_call_symbol(
     migrate_expr(assign_expr, t->code);
     t->location = function.location();
   }
-  else if(identifier == "c::__builtin_va_start")
+  else if(identifier == "__builtin_va_start")
   {
     // Set the list argument to be the address of the
     // parameter argument.
@@ -844,7 +844,7 @@ void goto_convertt::do_function_call_symbol(
     migrate_expr(assign_expr, t->code);
     t->location = function.location();
   }
-  else if(identifier == "c::__builtin_va_end")
+  else if(identifier == "__builtin_va_end")
   {
     // Invalidates the argument. We do so by setting it to NULL.
     if(arguments.size() != 1)

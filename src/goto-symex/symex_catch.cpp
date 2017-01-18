@@ -246,7 +246,7 @@ bool goto_symext::terminate_handler()
 {
   // We must look on the context if the user included exception lib
   const symbolt *tmp;
-  bool is_included=ns.lookup("cpp::std::terminate()",tmp);
+  bool is_included=ns.lookup("std::terminate()",tmp);
 
   // If it do, we must call the terminate function:
   // It'll call the current function handler
@@ -254,7 +254,7 @@ bool goto_symext::terminate_handler()
     codet terminate_function=to_code(tmp->value.op0());
 
     // We only call it if the user replaced the default one
-    if(terminate_function.op1().identifier()=="cpp::std::default_terminate()")
+    if(terminate_function.op1().identifier()=="std::default_terminate()")
       return false;
 
     // Call the function
@@ -290,7 +290,7 @@ bool goto_symext::unexpected_handler()
 
   // We must look on the context if the user included exception lib
   const symbolt *tmp;
-  bool is_included=ns.lookup("cpp::std::unexpected()",tmp);
+  bool is_included=ns.lookup("std::unexpected()",tmp);
 
   // If it do, we must call the unexpected function:
   // It'll call the current function handler
@@ -302,7 +302,7 @@ bool goto_symext::unexpected_handler()
 
     // We only call it if the user replaced the default one
     if (to_symbol2t(to_code_function_call2t(the_call).function).thename ==
-        "cpp::std::default_unexpected()")
+        "std::default_unexpected()")
       return false;
 
     // Indicate there we're inside the unexpected flow

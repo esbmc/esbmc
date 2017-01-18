@@ -51,12 +51,12 @@ void rw_sett::read_write_rec(
         return; // ignore for now
       }
 
-      if(symbol->name=="c::__ESBMC_alloc" ||
-         symbol->name=="c::__ESBMC_alloc_size" ||
-         symbol->name=="c::stdin" ||
-         symbol->name=="c::stdout" ||
-         symbol->name=="c::stderr" ||
-         symbol->name=="c::sys_nerr")
+      if(symbol->name=="__ESBMC_alloc" ||
+         symbol->name=="__ESBMC_alloc_size" ||
+         symbol->name=="stdin" ||
+         symbol->name=="stdout" ||
+         symbol->name=="stderr" ||
+         symbol->name=="sys_nerr")
       {
         return; // ignore for now
       }

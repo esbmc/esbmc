@@ -21,9 +21,9 @@
  *    the symbol we're dealing with, corresponding to the field name. So a tuple
  *    with fields a, b, and c, with the symbol name "faces" would create:
  *
- *      c::main::1::faces.a
- *      c::main::1::faces.b
- *      c::main::1::faces.c
+ *      main::1::faces.a
+ *      main::1::faces.b
+ *      main::1::faces.c
  *
  *    As variables with the appropriate type. Project / update redirects
  *    expressions to deal with those symbols. Equality is similar.

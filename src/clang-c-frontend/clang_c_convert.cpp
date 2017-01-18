@@ -685,7 +685,7 @@ bool clang_c_convertert::get_type(
       if(sub_type.is_struct() || sub_type.is_union())
       {
         struct_union_typet t = to_struct_union_type(sub_type);
-        sub_type = symbol_typet("c::tag-" + t.tag().as_string());
+        sub_type = symbol_typet("tag-" + t.tag().as_string());
       }
 
       new_type = gen_pointer_type(sub_type);
@@ -1283,7 +1283,7 @@ bool clang_c_convertert::get_expr(
       if(size_type.is_struct() || size_type.is_union())
       {
         struct_union_typet t = to_struct_union_type(size_type);
-        size_type = symbol_typet("c::tag-" + t.tag().as_string());
+        size_type = symbol_typet("tag-" + t.tag().as_string());
       }
 
       new_expr.set("#c_sizeof_type", size_type);
@@ -2038,7 +2038,7 @@ bool clang_c_convertert::get_decl_ref(
       std::string base_name, pretty_name;
       get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
 
-      identifier = "c::" + pretty_name;
+      identifier = pretty_name;
 
       if(get_type(fd.getType(), type))
         return true;
@@ -2072,12 +2072,7 @@ bool clang_c_convertert::get_decl_ref(
   new_expr = exprt("symbol", type);
   new_expr.identifier(identifier);
   new_expr.cmt_lvalue(true);
-
-  // Remove c:: or cpp::
-  if(identifier.find_last_of("::") != std::string::npos)
-    new_expr.name(identifier.substr(identifier.find_last_of("::")+1));
-  else
-    new_expr.name(identifier);
+  new_expr.name(identifier);
 
   return false;
 }
@@ -2420,7 +2415,7 @@ void clang_c_convertert::get_default_symbol(
   symbol.type = type;
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
-  symbol.name = "c::" + pretty_name;
+  symbol.name = pretty_name;
   symbol.is_used = is_used;
 }
 

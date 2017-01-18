@@ -444,7 +444,6 @@ void cpp_declarator_convertert::get_final_identifier()
     identifier+=id2string(cpp_typecheck.function_identifier(final_type));
 
   final_identifier=
-    cpp_identifier_prefix(mode)+"::"+
     scope->prefix+
     identifier;
 }
@@ -670,7 +669,7 @@ Function: cpp_declarator_convertert::main_function_rules
 void cpp_declarator_convertert::main_function_rules(
   const symbolt &symbol)
 {
-  if(symbol.name=="c::main")
+  if(symbol.name=="main")
   {
     if(symbol.type.id()!="code")
     {

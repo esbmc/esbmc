@@ -420,7 +420,7 @@ goto_symex_statet::gen_stack_trace() const
 
     if (it->function_identifier == "") { // Top level call
       break;
-    } else if (it->function_identifier == "c::main" &&
+    } else if (it->function_identifier == "main" &&
                src.pc->location == get_nil_irep()) {
       trace.push_back(stack_framet(it->function_identifier));
     } else {

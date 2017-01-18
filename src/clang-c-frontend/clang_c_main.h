@@ -14,7 +14,6 @@
 
 bool clang_main(
   contextt &context,
-  const std::string &default_prefix,
   const std::string &standard_main,
   message_handlert &message_handler);
 

@@ -1,1 +1,1 @@
-#define CPROVER_PREFIX "c::__ESBMC_"
+#define CPROVER_PREFIX "__ESBMC_"

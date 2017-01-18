@@ -446,10 +446,10 @@ reformat_class_name(const std::string &from)
   size_t pos = from.rfind(':');
   std::string classname;
   if (pos == std::string::npos) {
-    classname = "cpp::tag." + from;
+    classname = "tag." + from;
   } else {
     pos++;
-    classname = "cpp::" + from.substr(0, pos) + "tag." + from.substr(pos);
+    classname = from.substr(0, pos) + "tag." + from.substr(pos);
   }
 
   return classname;

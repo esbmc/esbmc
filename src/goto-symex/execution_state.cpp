@@ -833,8 +833,8 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
     if (ns.lookup(name, symbol))
       return;
 
-    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size" ||
-        name == "c::__ESBMC_is_dynamic") {
+    if (name == "__ESBMC_alloc" || name == "__ESBMC_alloc_size" ||
+        name == "__ESBMC_is_dynamic") {
       return;
     }
     else if ((symbol->static_lifetime || symbol->type.is_dynamic_set()))
@@ -1238,7 +1238,7 @@ execution_statet::init_property_monitors(void)
       namespacet ns(new_context);
       languagest languages(ns, MODE_C);
 
-      std::string expr_str = strings["c::__ESBMC_property_" + prop_name];
+      std::string expr_str = strings["__ESBMC_property_" + prop_name];
       std::string dummy_str = "";
 
       languages.to_expr(expr_str, dummy_str, main_expr, message_handler);

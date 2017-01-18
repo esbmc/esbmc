@@ -203,10 +203,10 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   if(to_code(symbol.value).get_statement()=="block")
     t->location=static_cast<const locationt &>(symbol.value.end_location());
 
-  // Wrap the body of functions name c::__VERIFIER_atomic_* with atomic_bengin
+  // Wrap the body of functions name __VERIFIER_atomic_* with atomic_bengin
   // and atomic_end
   if(!f.body.instructions.empty() &&
-      has_prefix(id2string(identifier), "c::__VERIFIER_atomic_"))
+      has_prefix(id2string(identifier), "__VERIFIER_atomic_"))
   {
     goto_programt::instructiont a_begin;
     a_begin.make_atomic_begin();
@@ -334,12 +334,12 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
 
   // Some type symbols aren't entirely correct. This is because (in the current
   // 27_exStbFb test) some type symbols get the module name inserted into the
-  // name -- so c::int32_t becomes c::main::int32_t.
+  // name -- so int32_t becomes main::int32_t.
   //
   // Now this makes entire sense, because int32_t could be something else in
   // some other file. However, because type symbols aren't squashed at type
   // checking time (which, you know, might make sense) we now don't know what
-  // type symbol to link "c::int32_t" up to. So; instead we test to see whether
+  // type symbol to link "int32_t" up to. So; instead we test to see whether
   // a type symbol is linked correctly, and if it isn't we look up what module
   // the current block of code came from and try to guess what type symbol it
   // should have.
@@ -371,10 +371,10 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
       // Detect module prefix, then insert module name after it.
       if (ident.c_str()[0] == 'c' && ident.c_str()[1] == 'p' &&
           ident.c_str()[2] == 'p') {
-        ident2 = "cpp::" + cur_name_sym.module.as_string() + "::" +
+        ident2 = cur_name_sym.module.as_string() + "::" +
                  ident.substr(5, std::string::npos);
       } else {
-        ident2 = "c::" + cur_name_sym.module.as_string() + "::"  +
+        ident2 = cur_name_sym.module.as_string() + "::"  +
                  ident.substr(3, std::string::npos);
       }
 

@@ -421,7 +421,7 @@ void goto_symext::symex_cpp_new(
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  symbol2tc sym(sym_type, "c::__ESBMC_is_dynamic");
+  symbol2tc sym(sym_type, "__ESBMC_is_dynamic");
 
   pointer_object2tc ptr_obj(pointer_type2(), lhs);
   index2tc idx(get_bool_type(), sym, ptr_obj);

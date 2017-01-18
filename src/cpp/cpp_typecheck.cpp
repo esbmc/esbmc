@@ -44,28 +44,6 @@ const struct_typet &cpp_typecheckt::this_struct_type()
 
 /*******************************************************************\
 
-Function: cpp_identifier_prefix
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-std::string cpp_identifier_prefix(const irep_idt &mode)
-{
-  if(mode=="C++")
-    return "cpp";
-  else if(mode=="C")
-    return "c";
-  else
-    return id2string(mode);
-}
-
-/*******************************************************************\
-
 Function: cpp_typecheckt::to_string
 
   Inputs:
@@ -346,7 +324,7 @@ void cpp_typecheckt::static_initialization()
   // Create the initialization procedure
   symbolt init_symbol;
 
-  init_symbol.name="c::#ini#"+id2string(module);
+  init_symbol.name="#ini#"+id2string(module);
   init_symbol.base_name="#ini#"+id2string(module);
   init_symbol.value.swap(block_sini);
   init_symbol.mode=current_mode;
