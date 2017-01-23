@@ -196,8 +196,10 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 }
 
 void
-smt_convt::renumber_symbol_address(const expr2tc &guard,
-    const expr2tc &addr_symbol, const expr2tc &new_size)
+smt_convt::renumber_symbol_address(
+  const expr2tc &guard,
+  const expr2tc &addr_symbol,
+  const expr2tc &new_size)
 {
   const symbol2t &sym = to_symbol2t(addr_symbol);
   std::string str = sym.get_symbol_name();

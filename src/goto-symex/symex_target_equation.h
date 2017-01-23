@@ -54,14 +54,14 @@ public:
     const sourcet &source,
     std::vector<dstring> stack_trace,
     assignment_typet assignment_type);
-    
+
   // output
   virtual void output(
     const expr2tc &guard,
     const sourcet &source,
     const std::string &fmt,
     const std::list<expr2tc> &args);
-  
+
   // record an assumption
   // cond is destroyed
   virtual void assumption(
@@ -85,8 +85,11 @@ public:
     const sourcet &source);
 
   virtual void convert(smt_convt &smt_conv);
-  void convert_internal_step(smt_convt &smt_conv, const smt_ast *&assumpt_ast,
-                             smt_convt::ast_vec &assertions, SSA_stept &s);
+  void convert_internal_step(
+    smt_convt &smt_conv,
+    const smt_ast *&assumpt_ast,
+    smt_convt::ast_vec &assertions,
+    SSA_stept &s);
 
   class SSA_stept
   {
@@ -99,7 +102,7 @@ public:
     // stack trace recorded per function activation record. Valid for assignment
     // and assert steps only. In reverse order (most recent in idx 0).
     std::vector<dstring> stack_trace;
-    
+
     bool is_assert() const     { return type==goto_trace_stept::ASSERT; }
     bool is_assume() const     { return type==goto_trace_stept::ASSUME; }
     bool is_assignment() const { return type==goto_trace_stept::ASSIGNMENT; }
@@ -109,10 +112,10 @@ public:
     
     expr2tc guard;
 
-    // for ASSIGNMENT  
+    // for ASSIGNMENT
     expr2tc lhs, rhs, original_lhs;
     assignment_typet assignment_type;
-    
+
     // for ASSUME/ASSERT
     expr2tc cond;
     std::string comment;
@@ -124,10 +127,10 @@ public:
     // for conversion
     const smt_ast *guard_ast, *cond_ast;
     std::list<expr2tc> converted_output_args;
-    
+
     // for slicing
     bool ignore;
-    
+
     SSA_stept() : ignore(false)
     {
     }
@@ -136,7 +139,7 @@ public:
     void short_output(const namespacet &ns, std::ostream &out,
                       bool show_ignored = false) const;
   };
-  
+
   unsigned count_ignored_SSA_steps() const
   {
     unsigned i=0;
