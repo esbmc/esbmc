@@ -516,8 +516,8 @@ void goto_symext::replace_nondet(expr2tc &expr)
       to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
     unsigned int &nondet_count = get_dynamic_counter();
-    expr = symbol2tc(expr->type,
-                              "nondet$symex::nondet"+i2string(nondet_count++));
+    expr =
+      symbol2tc(expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
   }
   else
   {
