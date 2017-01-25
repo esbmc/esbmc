@@ -191,7 +191,7 @@ void goto_program_dereferencet::dereference_instruction(
       const dereference2t &deref = to_dereference2t(func_call.function);
       invalid_pointer2tc invalid_ptr(deref.value);
       guardt guard;
-      guard.move(invalid_ptr);
+      guard.add(invalid_ptr);
 #if 1
       if(!options.get_bool_option("no-pointer-check"))
       {

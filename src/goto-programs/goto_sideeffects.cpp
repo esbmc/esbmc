@@ -120,7 +120,7 @@ void goto_convertt::remove_sideeffects(
       if(s[i]) last=i;
     }
 
-    unsigned old_guards=guard.size();
+    guardt old_guards(guard);
 
     for(unsigned i=0; i<=last; i++)
     {
@@ -155,7 +155,7 @@ void goto_convertt::remove_sideeffects(
       }
     }
 
-    guard.resize(old_guards);
+    guard.swap(old_guards);
 
     return;
   }
@@ -182,24 +182,24 @@ void goto_convertt::remove_sideeffects(
 
     if(o1)
     {
-      unsigned old_guard=guard.size();
+      guardt old_guards(guard);
       expr2tc tmp;
       migrate_expr(expr.op0(), tmp);
       guard.add(tmp);
       remove_sideeffects(expr.op1(), guard, dest);
-      guard.resize(old_guard);
+      guard.swap(old_guards);
     }
 
     if(o2)
     {
-      unsigned old_guard=guard.size();
+      guardt old_guards(guard);
       exprt tmp(expr.op0());
       tmp.make_not();
       expr2tc tmp_expr;
       migrate_expr(tmp, tmp_expr);
       guard.add(tmp_expr);
       remove_sideeffects(expr.op2(), guard, dest);
-      guard.resize(old_guard);
+      guard.swap(old_guards);
     }
 
     return;

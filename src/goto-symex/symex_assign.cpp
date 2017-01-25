@@ -397,23 +397,22 @@ void goto_symext::symex_assign_if(
 {
   // we have (c?a:b)=e;
 
-  unsigned old_guard_size=guard.size();
-
   // need to copy rhs -- it gets destroyed
   expr2tc rhs_copy = rhs;
   const if2t &ifval = to_if2t(lhs);
 
   expr2tc cond = ifval.cond;
 
+  guardt old_guard(guard);
+
   guard.add(cond);
   symex_assign_rec(ifval.true_value, rhs, guard);
-  guard.resize(old_guard_size);
+  guard = old_guard;
 
   not2tc not_cond(cond);
-
   guard.add(not_cond);
   symex_assign_rec(ifval.false_value, rhs_copy, guard);
-  guard.resize(old_guard_size);
+  guard = old_guard;
 }
 
 void goto_symext::symex_assign_byte_extract(

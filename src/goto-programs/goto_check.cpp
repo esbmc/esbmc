@@ -455,7 +455,7 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
     if (!expr.is_boolean())
       throw expr.id_string() + " must be Boolean, but got " + expr.pretty();
 
-    unsigned old_guards = guard.size();
+    guardt old_guards(guard);
 
     for (unsigned i = 0; i < expr.operands().size(); i++)
     {
@@ -473,7 +473,7 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
         tmp.make_not();
         expr2tc tmp_expr;
         migrate_expr(tmp, tmp_expr);
-        guard.move(tmp_expr);
+        guard.add(tmp_expr);
       }
       else
       {
@@ -483,7 +483,7 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
       }
     }
 
-    guard.resize(old_guards);
+    guard.swap(old_guards);
 
     return;
   }
@@ -502,23 +502,23 @@ void goto_checkt::check_rec(const exprt &expr, guardt &guard, bool address)
     check_rec(expr.op0(), guard, false);
 
     {
-      unsigned old_guard = guard.size();
+      guardt old_guards(guard);
       expr2tc tmp;
       migrate_expr(expr.op0(), tmp);
       guard.add(tmp);
       check_rec(expr.op1(), guard, false);
-      guard.resize(old_guard);
+      guard.swap(old_guards);
     }
 
     {
-      unsigned old_guard = guard.size();
+      guardt old_guards(guard);
       exprt tmp(expr.op0());
       tmp.make_not();
       expr2tc tmp_expr;
       migrate_expr(tmp, tmp_expr);
-      guard.move(tmp_expr);
+      guard.add(tmp_expr);
       check_rec(expr.op2(), guard, false);
-      guard.resize(old_guard);
+      guard.swap(old_guards);
     }
 
     return;
