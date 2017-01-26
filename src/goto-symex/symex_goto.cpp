@@ -167,10 +167,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
       cur_state->assignment(guard_expr, new_rhs, false);
 
-      guardt guard;
-
       target->assignment(
-        guard.as_expr(),
+        true_expr,
         guard_expr, guard_expr,
         new_rhs,
         cur_state->source,
@@ -314,10 +312,8 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     cur_state->assignment(new_lhs, rhs, false);
 
-    guardt true_guard;
-
     target->assignment(
-      true_guard.as_expr(),
+      true_expr,
       new_lhs, lhs,
       rhs,
       cur_state->source,
