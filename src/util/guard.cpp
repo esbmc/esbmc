@@ -38,7 +38,8 @@ void guardt::add(const expr2tc &expr)
 
   if(is_true() || ::is_false(expr))
   {
-    clear_insert(expr);
+    guard_list.clear();
+    guard_list.insert(expr);
     return;
   }
 
@@ -77,14 +78,10 @@ guardt &operator |= (guardt &g1, const guardt &g2)
     // Both guards have one symbol, so check if we opposite symbols, e.g,
     // g1 == sym1 and g2 == !sym1
     expr2tc or_expr(new or2t(*g1.guard_list.begin(), *g2.guard_list.begin()));
-    expr2tc simpl_or = or_expr->simplify();
-    if(!is_nil_expr(simpl_or))
-    {
-      if(::is_true(simpl_or)) { g1.make_true(); return g1; }
-      if(::is_false(simpl_or)) { g1.make_false(); return g1; }
+    do_simplify(or_expr);
 
-      or_expr = simpl_or;
-    }
+    if(::is_true(or_expr)) { g1.make_true(); return g1; }
+    if(::is_false(or_expr)) { g1.make_false(); return g1; }
 
     // Despite if we could simplify or not, clear and set the new guard
     g1.clear_insert(or_expr);
@@ -121,11 +118,12 @@ guardt &operator |= (guardt &g1, const guardt &g2)
     expr2tc g1_expr = g1.as_expr();
     expr2tc g2_expr = new_g2.as_expr();
 
-    // One of the is a set of symbols
-    assert(is_and2t(g1_expr) || is_and2t(g2_expr));
+    // This might be simplified away
+    expr2tc or_expr(new or2t(g1_expr, g2_expr));
+    do_simplify(or_expr);
 
-    // Add the or'd expression to g1
-    g1.clear_insert(and2tc(common.as_expr(), or2tc(g1_expr, g2_expr)));
+    g1.clear_append(common);
+    g1.add(or_expr);
   }
 
   return g1;
@@ -153,7 +151,7 @@ void guardt::swap(guardt& g)
 void guardt::clear_insert(const expr2tc& expr)
 {
   guard_list.clear();
-  guard_list.insert(expr);
+  add(expr);
 }
 
 void guardt::guard_expr(expr2tc& dest) const
@@ -197,11 +195,16 @@ void guardt::make_true()
 
 void guardt::make_false()
 {
-  guard_list.clear();
-  guard_list.insert(false_expr);
+  add(false_expr);
 }
 
 bool guardt::is_single_symbol() const
 {
   return (guard_list.size() == 1);
+}
+
+void guardt::clear_append(const guardt& guard)
+{
+  guard_list.clear();
+  append(guard);
 }

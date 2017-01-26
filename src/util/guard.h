@@ -28,6 +28,7 @@ public:
   void add(const expr2tc &expr);
   void append(const guardt &guard);
   void clear_insert(const expr2tc &expr);
+  void clear_append(const guardt &guard);
 
   expr2tc as_expr() const;
   void guard_expr(expr2tc &dest) const;
