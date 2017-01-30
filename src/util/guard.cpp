@@ -81,7 +81,6 @@ guardt &operator |= (guardt &g1, const guardt &g2)
     do_simplify(or_expr);
 
     if(::is_true(or_expr)) { g1.make_true(); return g1; }
-    if(::is_false(or_expr)) { g1.make_false(); return g1; }
 
     // Despite if we could simplify or not, clear and set the new guard
     g1.clear_insert(or_expr);
