@@ -280,6 +280,10 @@ void goto_symext::symex_assume(void)
 
   cur_state->guard.guard_expr(cond);
   assume(cond);
+
+  // If we're assuming false, make the guard for the following statement false
+  if(is_false(cond))
+    cur_state->guard.make_false();
 }
 
 void goto_symext::symex_assert(void)
