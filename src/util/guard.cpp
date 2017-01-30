@@ -114,12 +114,11 @@ guardt &operator |= (guardt &g1, const guardt &g2)
     }
 
     // Get the and expression from both guards
-    expr2tc g1_expr = g1.as_expr();
-    expr2tc g2_expr = new_g2.as_expr();
+    expr2tc or_expr(new or2t(g1.as_expr(), new_g2.as_expr()));
 
-    // This might be simplified away
-    expr2tc or_expr(new or2t(g1_expr, g2_expr));
-    do_simplify(or_expr);
+    // If the guards single symbols, try to simplify the or expression
+    if(g1.is_single_symbol() && new_g2.is_single_symbol())
+      do_simplify(or_expr);
 
     g1.clear_append(common);
     g1.add(or_expr);
