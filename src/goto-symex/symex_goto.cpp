@@ -249,6 +249,17 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
   goto_state.level2.get_variables(variables);
   cur_state->level2.get_variables(variables);
 
+  guardt tmp_guard;
+  if(!variables.empty()
+     && !cur_state->guard.is_false()
+     && !goto_state.guard.is_false())
+  {
+    tmp_guard = goto_state.guard;
+
+    // this gets the diff between the guards
+    tmp_guard -= cur_state->guard;
+  }
+
   for (std::set<renaming::level2t::name_record>::const_iterator
        it = variables.begin();
        it != variables.end();
@@ -276,15 +287,10 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     if (cur_state->guard.is_false()) {
       rhs = symbol2tc(type, symbol.name);
       cur_state->current_name(goto_state, rhs);
-    } else if (goto_state.guard.is_false())    {
+    } else if (goto_state.guard.is_false()) {
       rhs = symbol2tc(type, symbol.name);
       cur_state->current_name(goto_state, rhs);
-    } else   {
-      guardt tmp_guard(goto_state.guard);
-
-      // this gets the diff between the guards
-      tmp_guard -= cur_state->guard;
-
+    } else {
       symbol2tc true_val(type, symbol.name);
       symbol2tc false_val(type, symbol.name);
 
