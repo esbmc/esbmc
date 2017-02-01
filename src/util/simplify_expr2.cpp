@@ -195,7 +195,7 @@ simplify_arith_2ops(
   if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
   {
     // Were we able to simplify the sides?
-    if(!simpl_side_1 && !simpl_side_2)
+    if(simpl_side_1 || simpl_side_2)
     {
       expr2tc new_op = expr2tc(new constructor(type, new_side_1, new_side_2));
       return typecast_check_return(type, new_op);
@@ -460,7 +460,7 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
   if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
   {
     // Were we able to simplify the sides?
-    if(!simpl_side_1 && !simpl_side_2)
+    if(simpl_side_1 || simpl_side_2)
     {
       modulus2tc new_op(type, new_side_1, new_side_2);
       return typecast_check_return(type, new_op);
@@ -883,7 +883,7 @@ simplify_logic_2ops(
   if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
   {
     // Were we able to simplify the sides?
-    if(!simpl_side_1 && !simpl_side_2)
+    if(simpl_side_1 || simpl_side_2)
     {
       expr2tc new_op = expr2tc(new constructor(new_side_1, new_side_2));
       return typecast_check_return(type, new_op);
@@ -1151,7 +1151,7 @@ do_bit_munge_operation(
   if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
   {
     // Were we able to simplify the sides?
-    if(!simpl_side_1 && !simpl_side_2)
+    if(simpl_side_1 || simpl_side_2)
     {
       expr2tc new_op = expr2tc(new constructor(type, new_side_1, new_side_2));
       return typecast_check_return(type, new_op);
@@ -1605,7 +1605,7 @@ simplify_relations(
   if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
   {
     // Were we able to simplify the sides?
-    if(!simpl_side_1 && !simpl_side_2)
+    if(simpl_side_1 || simpl_side_2)
     {
       expr2tc new_op = expr2tc(new constructor(new_side_1, new_side_2));
       return typecast_check_return(type, new_op);
@@ -1708,7 +1708,7 @@ simplify_floatbv_relations(
   if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
   {
     // Were we able to simplify the sides?
-    if(!simpl_side_1 && !simpl_side_2)
+    if(simpl_side_1 || simpl_side_2)
     {
       expr2tc new_op = expr2tc(new constructor(new_side_1, new_side_2));
       return typecast_check_return(type, new_op);
@@ -2152,7 +2152,7 @@ simplify_floatbv_2ops(
       || !is_constant_int2t(rounding_mode))
   {
     // Were we able to simplify the sides?
-    if(!simpl_side_1 && !simpl_side_2)
+    if(simpl_side_1 || simpl_side_2)
     {
       expr2tc new_op =
         expr2tc(new constructor(type, new_side_1, new_side_2, rounding_mode));
