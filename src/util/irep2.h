@@ -5104,4 +5104,23 @@ inline void do_simplify(expr2tc &expr)
       expr = tmp;
   }
 }
+
+inline void make_not(expr2tc &expr)
+{
+  if (is_constant_bool2t(expr))
+  {
+    constant_bool2t &b = to_constant_bool2t(expr);
+    b.value = !b.value;
+    return;
+  }
+
+  expr2tc new_expr;
+  if (is_not2t(expr))
+    new_expr.swap(to_not2t(expr).value);
+  else
+    new_expr = not2tc(expr);
+
+  expr.swap(new_expr);
+}
+
 #endif /* _UTIL_IREP2_H_ */
