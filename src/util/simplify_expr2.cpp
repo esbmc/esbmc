@@ -508,13 +508,15 @@ simplify_arith_1op(
     return expr2tc();
 
   // Try to recursively simplify nested operation, if any
-  expr2tc to_simplify = try_simplification(value);
-  if (!is_constant_expr(to_simplify))
+  expr2tc new_value = value;
+  bool simpl_side_1 = ::simplify(new_value);
+
+  if (!is_constant_expr(new_value))
   {
     // Were we able to simplify anything?
-    if(value != to_simplify)
+    if(!simpl_side_1)
     {
-      expr2tc new_neg = expr2tc(new constructor(type, to_simplify));
+      expr2tc new_neg = expr2tc(new constructor(type, new_value));
       return typecast_check_return(type, new_neg);
     }
 
@@ -529,7 +531,7 @@ simplify_arith_1op(
       (constant_int2t&(*)(expr2tc&)) to_constant_int2t;
 
     simpl_res =
-      TFunctor<constant_int2t>::simplify(to_simplify, to_constant);
+      TFunctor<constant_int2t>::simplify(new_value, to_constant);
   }
   else if(is_fixedbv_type(value))
   {
@@ -537,7 +539,7 @@ simplify_arith_1op(
       (constant_fixedbv2t&(*)(expr2tc&)) to_constant_fixedbv2t;
 
     simpl_res =
-      TFunctor<constant_fixedbv2t>::simplify(to_simplify, to_constant);
+      TFunctor<constant_fixedbv2t>::simplify(new_value, to_constant);
   }
   else if(is_floatbv_type(value))
   {
@@ -545,7 +547,7 @@ simplify_arith_1op(
       (constant_floatbv2t&(*)(expr2tc&)) to_constant_floatbv2t;
 
     simpl_res =
-      TFunctor<constant_floatbv2t>::simplify(to_simplify, to_constant);
+      TFunctor<constant_floatbv2t>::simplify(new_value, to_constant);
   }
   else if(is_bool_type(value))
   {
@@ -553,7 +555,7 @@ simplify_arith_1op(
       (constant_bool2t&(*)(expr2tc&)) to_constant_bool2t;
 
     simpl_res =
-      TFunctor<constant_bool2t>::simplify(to_simplify, to_constant);
+      TFunctor<constant_bool2t>::simplify(new_value, to_constant);
   }
   else
     return expr2tc();
