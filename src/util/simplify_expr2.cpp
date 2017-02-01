@@ -37,13 +37,18 @@ typecast_check_return(const type2tc &type, expr2tc &expr)
   // Don't type cast from constant to pointer
   // TODO: check if this is right
   if(is_pointer_type(type) && is_number_type(expr))
-    return try_simplification(expr);
+  {
+    do_simplify(expr);
+    return expr;
+  }
 
   // Create a typecast of the result
-  expr2tc typecast = expr2tc(new typecast2t(type, expr));
+  typecast2tc typecast(type, expr);
 
   // Try to simplify the typecast
-  return try_simplification(typecast);
+  do_simplify(typecast);
+
+  return typecast;
 }
 
 static void
