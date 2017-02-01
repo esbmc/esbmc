@@ -877,17 +877,9 @@ index2t::do_simplify(bool second __attribute__((unused))) const
 expr2tc
 not2t::do_simplify(bool second __attribute__((unused))) const
 {
-  expr2tc simp = try_simplification(value);
-
-  if (is_not2t(simp))
-    // These negate.
-    return to_not2t(simp).value;
-
-  if (!is_constant_bool2t(simp))
-    return expr2tc();
-
-  const constant_bool2t &val = to_constant_bool2t(simp);
-  return expr2tc(new constant_bool2t(!val.value));
+  expr2tc new_value = value;
+  ::make_not(new_value);
+  return new_value;
 }
 
 template<template<typename> class TFunctor, typename constructor>
