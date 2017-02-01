@@ -1830,6 +1830,11 @@ struct Lessthantor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
+    // op1 < zero and op2 is unsigned: always true
+    if(is_constant(op1))
+      if((get_value(op1) < 0) && is_unsignedbv_type(op2))
+        return true_expr;
+
     if(is_constant(op1) && is_constant(op2))
       return constant_bool2tc(get_value(op1) < get_value(op2));
 
@@ -1852,6 +1857,11 @@ struct Greaterthantor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
+    // op2 < zero and op1 is unsigned: always true
+    if(is_constant(op2))
+      if((get_value(op2) < 0) && is_unsignedbv_type(op1))
+        return true_expr;
+
     if(is_constant(op1) && is_constant(op2))
       return constant_bool2tc(get_value(op1) > get_value(op2));
 
@@ -1874,6 +1884,11 @@ struct Lessthanequaltor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
+    // op1 <= zero and op2 is unsigned: always true
+    if(is_constant(op1))
+      if((get_value(op1) <= 0) && is_unsignedbv_type(op2))
+        return true_expr;
+
     if(is_constant(op1) && is_constant(op2))
       return constant_bool2tc(get_value(op1) <= get_value(op2));
 
@@ -1896,6 +1911,11 @@ struct Greaterthanequaltor
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
+    // op2 <= zero and op1 is unsigned: always true
+    if(is_constant(op2))
+      if((get_value(op2) <= 0) && is_unsignedbv_type(op1))
+        return true_expr;
+
     if(is_constant(op1) && is_constant(op2))
       return constant_bool2tc(get_value(op1) >= get_value(op2));
 
