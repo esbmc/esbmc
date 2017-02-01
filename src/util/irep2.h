@@ -5094,15 +5094,20 @@ get_base_array_subtype(const type2tc &type)
     return subtype;
 }
 
-inline void do_simplify(expr2tc &expr)
+inline bool do_simplify(expr2tc &expr)
 {
   static bool no_simplify = config.options.get_bool_option("no-simplify");
   if(!no_simplify)
   {
     expr2tc tmp = expr->simplify();
     if (!is_nil_expr(tmp))
+    {
       expr = tmp;
+      return true;
+    }
   }
+
+  return false;
 }
 
 inline void make_not(expr2tc &expr)
