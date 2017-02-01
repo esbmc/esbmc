@@ -1692,20 +1692,6 @@ simplify_relations(
   return typecast_check_return(type, simpl_res);
 }
 
-template<class constant_type>
-struct Equalitytor
-{
-  static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant __attribute__((unused)),
-    std::function<constant_type&(expr2tc&)> get_value)
-  {
-    bool res = (get_value(op1) == get_value(op2));
-    return constant_bool2tc(res);
-  }
-};
-
 template<template<typename> class TFunctor, typename constructor>
 static expr2tc
 simplify_floatbv_relations(
@@ -1783,6 +1769,22 @@ struct IEEE_equalitytor
     }
 
     return expr2tc();
+  }
+};
+
+template<class constant_type>
+struct Equalitytor
+{
+  static expr2tc simplify(
+    expr2tc &op1,
+    expr2tc &op2,
+    std::function<bool(const expr2tc&)> is_constant,
+    std::function<constant_type&(expr2tc&)> get_value)
+  {
+    if(is_constant(op1) && is_constant(op2))
+      return constant_bool2tc(get_value(op1) == get_value(op2));
+
+    return constant_bool2tc(op1 == op2);
   }
 };
 
