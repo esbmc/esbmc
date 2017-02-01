@@ -466,19 +466,19 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
     return expr2tc();
 
   // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
+  expr2tc new_side_1 = side_1;
+  bool simpl_side_1 = ::simplify(new_side_1);
 
-  if (!is_constant_expr(simplied_side_1)
-      || !is_constant_expr(simplied_side_2))
+  expr2tc new_side_2 = side_2;
+  bool simpl_side_2 = ::simplify(new_side_2);
+
+  if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
   {
     // Were we able to simplify the sides?
-    if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
+    if(!simpl_side_1 && !simpl_side_2)
     {
-      expr2tc new_mod =
-        expr2tc(new modulus2t(type, simplied_side_1, simplied_side_2));
-
-      return typecast_check_return(type, new_mod);
+      modulus2tc new_op(type, new_side_1, new_side_2);
+      return typecast_check_return(type, new_op);
     }
 
     return expr2tc();
@@ -486,8 +486,8 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
 
   if(is_bv_type(type))
   {
-    const constant_int2t &numerator = to_constant_int2t(simplied_side_1);
-    const constant_int2t &denominator = to_constant_int2t(simplied_side_2);
+    const constant_int2t &numerator = to_constant_int2t(new_side_1);
+    const constant_int2t &denominator = to_constant_int2t(new_side_2);
 
     auto c = numerator.value;
     c %= denominator.value;
