@@ -869,8 +869,16 @@ expr2tc
 not2t::do_simplify(bool second __attribute__((unused))) const
 {
   expr2tc new_value = value;
-  ::make_not(new_value);
-  return new_value;
+  ::simplify(new_value);
+
+  if (is_not2t(new_value))
+    // These negate.
+    return to_not2t(new_value).value;
+
+  if (!is_constant_bool2t(new_value))
+    return expr2tc();
+
+  return constant_bool2tc(!to_constant_bool2t(new_value).value);
 }
 
 template<template<typename> class TFunctor, typename constructor>
