@@ -1805,11 +1805,13 @@ struct Notequaltor
   static expr2tc simplify(
     expr2tc &op1,
     expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant __attribute__((unused)),
+    std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    bool res = (get_value(op1) != get_value(op2));
-    return constant_bool2tc(res);
+    if(is_constant(op1) && is_constant(op2))
+      return constant_bool2tc(get_value(op1) != get_value(op2));
+
+    return constant_bool2tc(op1 != op2);
   }
 };
 
@@ -1825,11 +1827,13 @@ struct Lessthantor
   static expr2tc simplify(
     expr2tc &op1,
     expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant __attribute__((unused)),
+    std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    bool res = (get_value(op1) < get_value(op2));
-    return constant_bool2tc(res);
+    if(is_constant(op1) && is_constant(op2))
+      return constant_bool2tc(get_value(op1) < get_value(op2));
+
+    return expr2tc();
   }
 };
 
@@ -1845,11 +1849,13 @@ struct Greaterthantor
   static expr2tc simplify(
     expr2tc &op1,
     expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant __attribute__((unused)),
+    std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    bool res = (get_value(op1) > get_value(op2));
-    return constant_bool2tc(res);
+    if(is_constant(op1) && is_constant(op2))
+      return constant_bool2tc(get_value(op1) > get_value(op2));
+
+    return expr2tc();
   }
 };
 
@@ -1865,11 +1871,13 @@ struct Lessthanequaltor
   static expr2tc simplify(
     expr2tc &op1,
     expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant __attribute__((unused)),
+    std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    bool res = (get_value(op1) <= get_value(op2));
-    return constant_bool2tc(res);
+    if(is_constant(op1) && is_constant(op2))
+      return constant_bool2tc(get_value(op1) <= get_value(op2));
+
+    return expr2tc();
   }
 };
 
@@ -1885,11 +1893,13 @@ struct Greaterthanequaltor
   static expr2tc simplify(
     expr2tc &op1,
     expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant __attribute__((unused)),
+    std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    bool res = (get_value(op1) >= get_value(op2));
-    return constant_bool2tc(res);
+    if(is_constant(op1) && is_constant(op2))
+      return constant_bool2tc(get_value(op1) >= get_value(op2));
+
+    return expr2tc();
   }
 };
 
