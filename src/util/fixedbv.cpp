@@ -206,3 +206,27 @@ bool operator >(const fixedbvt &a, int i)
   other.from_integer(i);
   return a > other;
 }
+
+bool operator < (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a < other;
+}
+
+bool operator >= (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a >= other;
+}
+
+bool operator <= (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a <= other;
+}
