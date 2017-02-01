@@ -160,10 +160,8 @@ void guardt::guard_expr(expr2tc& dest) const
 
   if(::is_false(dest))
   {
-    dest = not2tc(as_expr());
-    // TODO: Should we try to simplify this? Calling simplify might be too
-    // expensive for big guards but it would be good to try to simplify
-    // only the top level expression, like exprt::make_not()
+    dest = as_expr();
+    make_not(dest);
     return;
   }
 
