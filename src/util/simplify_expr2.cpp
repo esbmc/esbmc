@@ -267,20 +267,20 @@ struct Addtor
     {
       // Found a zero? Simplify to op2
       if(get_value(op1) == 0)
-        return expr2tc(op2->clone());
+        return op2;
     }
 
     if(is_constant(op2))
     {
       // Found a zero? Simplify to op1
       if(get_value(op2) == 0)
-        return expr2tc(op1->clone());
+        return op1;
     }
 
     // Two constants? Simplify to result of the addition
     if (is_constant(op1) && is_constant(op2))
     {
-      auto c = expr2tc(op1->clone());
+      expr2tc c = op1;
       get_value(c) += get_value(op2);
       return expr2tc(c);
     }
@@ -319,14 +319,9 @@ struct Subtor
       // Found a zero? Simplify to -op2
       if(get_value(op1) == 0)
       {
-        auto c = expr2tc(new neg2t(op2->type, op2));
-        expr2tc neg_simpl_res = expr2tc(c->simplify());
-
-        // We might not be able to simplify the negation, if op2 is a symbol
-        if(!is_nil_expr(neg_simpl_res))
-          return expr2tc(neg_simpl_res->clone());
-
-        return expr2tc(c);
+        neg2tc c(op2->type, op2);
+        ::simplify(c);
+        return c;
       }
     }
 
@@ -334,15 +329,15 @@ struct Subtor
     {
       // Found a zero? Simplify to op1
       if(get_value(op2) == 0)
-        return expr2tc(op1->clone());
+        return op1;
     }
 
     // Two constants? Simplify to result of the subtraction
     if (is_constant(op1) && is_constant(op2))
     {
-      auto c = expr2tc(op1->clone());
+      expr2tc c = op1;
       get_value(c) -= get_value(op2);
-      return expr2tc(c);
+      return c;
     }
 
     return expr2tc();
@@ -368,30 +363,30 @@ struct Multor
     {
       // Found a zero? Simplify to zero
       if(get_value(op1) == 0)
-        return expr2tc(op1->clone());
+        return op1;
 
       // Found an one? Simplify to op2
       if(get_value(op1) == 1)
-        return expr2tc(op2->clone());
+        return op2;
     }
 
     if(is_constant(op2))
     {
       // Found a zero? Simplify to zero
       if(get_value(op2) == 0)
-        return expr2tc(op2->clone());
+        return op2;
 
       // Found an one? Simplify to op1
       if(get_value(op2) == 1)
-        return expr2tc(op1->clone());
+        return op1;
     }
 
     // Two constants? Simplify to result of the multiplication
     if (is_constant(op1) && is_constant(op2))
     {
-      auto c = expr2tc(op1->clone());
+      expr2tc c = op1;
       get_value(c) *= get_value(op2);
-      return expr2tc(c);
+      return c;
     }
 
     return expr2tc();
@@ -417,7 +412,7 @@ struct Divtor
     {
       // Numerator is zero? Simplify to zero
       if(get_value(numerator) == 0)
-        return expr2tc(numerator->clone());
+        return numerator;
     }
 
     if(is_constant(denominator))
@@ -428,15 +423,15 @@ struct Divtor
 
       // Denominator is one? Simplify to numerator's constant
       if(get_value(denominator) == 1)
-        return expr2tc(numerator->clone());
+        return numerator;
     }
 
     // Two constants? Simplify to result of the division
     if (is_constant(numerator) && is_constant(denominator))
     {
-      auto c = expr2tc(numerator->clone());
+      expr2tc c = numerator;
       get_value(c) /= get_value(denominator);
-      return expr2tc(c);
+      return c;
     }
 
     return expr2tc();
@@ -561,7 +556,7 @@ struct Negator
     const expr2tc &number,
     std::function<constant_type&(expr2tc&)> to_constant)
   {
-    auto c = expr2tc(number->clone());
+    expr2tc c = number;
     to_constant(c).value = !to_constant(c).value;
     return expr2tc(c);
   }
@@ -580,15 +575,13 @@ struct abstor
     const expr2tc &number,
     std::function<constant_type&(expr2tc&)> to_constant)
   {
-    auto c = expr2tc(number->clone());
+    expr2tc c = number;
 
-    // When we call BigInt/fixedbv/floatbv constructor
-    // with no argument, it generates the zero equivalent
     if(to_constant(c).value > 0)
-      return expr2tc(c);
+      return number;
 
     to_constant(c).value = !to_constant(c).value;
-    return expr2tc(c);
+    return c;
   }
 };
 
@@ -1091,20 +1084,19 @@ struct Xortor
     {
       // False? Simplify to op2
       if(get_value(op1) == 0)
-        return expr2tc(op2->clone());
+        return op2;
     }
 
     if(is_constant(op2))
     {
       // False? Simplify to op1
       if(get_value(op2) == 0)
-        return expr2tc(op1->clone());
+        return op1;
     }
 
     // Two constants? Simplify to result of the xor
     if (is_constant(op1) && is_constant(op2))
-      return expr2tc(
-        new constant_bool2t(!(get_value(op1) == 0) ^ !(get_value(op2) == 0)));
+      return constant_bool2tc(!(get_value(op1) == 0) ^ !(get_value(op2) == 0));
 
     return expr2tc();
   }
@@ -2048,9 +2040,8 @@ struct Isnantor
     const expr2tc &number,
     std::function<constant_type&(expr2tc&)> to_constant)
   {
-    auto c = expr2tc(number->clone());
-    bool res = to_constant(c).value.is_NaN();
-    return expr2tc(new constant_bool2t(res));
+    expr2tc c = number;
+    return constant_bool2tc(to_constant(c).value.is_NaN());
   }
 };
 
@@ -2067,9 +2058,8 @@ struct Isinftor
     const expr2tc &number,
     std::function<constant_type&(expr2tc&)> to_constant)
   {
-    auto c = expr2tc(number->clone());
-    bool res = to_constant(c).value.is_infinity();
-    return expr2tc(new constant_bool2t(res));
+    expr2tc c = number;
+    return constant_bool2tc(to_constant(c).value.is_infinity());
   }
 };
 
@@ -2086,9 +2076,8 @@ struct Isnormaltor
     const expr2tc &number,
     std::function<constant_type&(expr2tc&)> to_constant)
   {
-    auto c = expr2tc(number->clone());
-    bool res = to_constant(c).value.is_normal();
-    return expr2tc(new constant_bool2t(res));
+    expr2tc c = number;
+    return constant_bool2tc(to_constant(c).value.is_normal());
   }
 };
 
@@ -2105,9 +2094,8 @@ struct Isfinitetor
     const expr2tc &number,
     std::function<constant_type&(expr2tc&)> to_constant)
   {
-    auto c = expr2tc(number->clone());
-    bool res = to_constant(c).value.is_finite();
-    return expr2tc(new constant_bool2t(res));
+    expr2tc c = number;
+    return constant_bool2tc(to_constant(c).value.is_finite());
   }
 };
 
@@ -2124,9 +2112,8 @@ struct Signbittor
     const expr2tc &number,
     std::function<constant_type&(expr2tc&)> to_constant)
   {
-    auto c = expr2tc(number->clone());
-    bool res = to_constant(c).value.get_sign();
-    return expr2tc(new constant_bool2t(res));
+    auto c = number;
+    return constant_bool2tc(to_constant(c).value.get_sign());
   }
 };
 
@@ -2216,14 +2203,14 @@ struct IEEE_addtor
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(to_constant_int2t(rm).value.to_long());
 
-      auto c1 = expr2tc(op1->clone());
+      expr2tc c1 = op1;
       get_value(c1).rounding_mode = mode;
 
-      auto c2 = expr2tc(op2->clone());
+      expr2tc c2 = op2;
       get_value(c2).rounding_mode = mode;
 
       get_value(c1) += get_value(c2);
-      return expr2tc(c1);
+      return c1;
     }
 
     return expr2tc();
@@ -2253,14 +2240,14 @@ struct IEEE_subtor
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(to_constant_int2t(rm).value.to_long());
 
-      auto c1 = expr2tc(op1->clone());
+      expr2tc c1 = op1;
       get_value(c1).rounding_mode = mode;
 
-      auto c2 = expr2tc(op2->clone());
+      expr2tc c2 = op2;
       get_value(c2).rounding_mode = mode;
 
-      get_value(c1) -= get_value(c2);
-      return expr2tc(c1);
+      get_value(op1) -= get_value(op2);
+      return c1;
     }
 
     return expr2tc();
@@ -2290,14 +2277,14 @@ struct IEEE_multor
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(to_constant_int2t(rm).value.to_long());
 
-      auto c1 = expr2tc(op1->clone());
+      expr2tc c1 = op1;
       get_value(c1).rounding_mode = mode;
 
-      auto c2 = expr2tc(op2->clone());
+      expr2tc c2 = op2;
       get_value(c2).rounding_mode = mode;
 
       get_value(c1) *= get_value(c2);
-      return expr2tc(c1);
+      return c1;
     }
 
     return expr2tc();
@@ -2327,21 +2314,21 @@ struct IEEE_divtor
       ieee_floatt::rounding_modet mode =
         static_cast<ieee_floatt::rounding_modet>(to_constant_int2t(rm).value.to_long());
 
-      auto c1 = expr2tc(op1->clone());
+      expr2tc c1 = op1;
       get_value(c1).rounding_mode = mode;
 
-      auto c2 = expr2tc(op2->clone());
+      expr2tc c2 = op2;
       get_value(c2).rounding_mode = mode;
 
       get_value(c1) /= get_value(c2);
-      return expr2tc(c1);
+      return c1;
     }
 
     if(is_constant(op2))
     {
       // Denominator is one? Exact for all rounding modes.
       if(get_value(op2) == 1)
-        return expr2tc(op1->clone());
+        return op1;
     }
 
     return expr2tc();
