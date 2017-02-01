@@ -198,18 +198,18 @@ simplify_arith_2ops(
     return expr2tc();
 
   // Try to recursively simplify nested operations both sides, if any
-  expr2tc simplied_side_1 = try_simplification(side_1);
-  expr2tc simplied_side_2 = try_simplification(side_2);
+  expr2tc new_side_1 = side_1;
+  bool simpl_side_1 = do_simplify(new_side_1);
 
-  if (!is_constant_expr(simplied_side_1)
-      && !is_constant_expr(simplied_side_2))
+  expr2tc new_side_2 = side_2;
+  bool simpl_side_2 = do_simplify(new_side_2);
+
+  if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
   {
     // Were we able to simplify the sides?
-    if((side_1 != simplied_side_1) || (side_2 != simplied_side_2))
+    if(!simpl_side_1 && !simpl_side_2)
     {
-      expr2tc new_op =
-        expr2tc(new constructor(type, simplied_side_1, simplied_side_2));
-
+      expr2tc new_op = expr2tc(new constructor(type, new_side_1, new_side_2));
       return typecast_check_return(type, new_op);
     }
 
@@ -221,7 +221,7 @@ simplify_arith_2ops(
   // This should be handled by ieee_*
   assert(!is_floatbv_type(type));
 
-  if(is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
+  if(is_bv_type(new_side_1) || is_bv_type(new_side_2))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_int2t;
@@ -232,9 +232,9 @@ simplify_arith_2ops(
 
     simpl_res =
       TFunctor<BigInt>::simplify(
-        simplied_side_1, simplied_side_2, is_constant, get_value);
+        new_side_1, new_side_2, is_constant, get_value);
   }
-  else if(is_fixedbv_type(simplied_side_1) || is_fixedbv_type(simplied_side_2))
+  else if(is_fixedbv_type(new_side_1) || is_fixedbv_type(new_side_2))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_fixedbv2t;
@@ -245,9 +245,9 @@ simplify_arith_2ops(
 
     simpl_res =
       TFunctor<fixedbvt>::simplify(
-        simplied_side_1, simplied_side_2, is_constant, get_value);
+        new_side_1, new_side_2, is_constant, get_value);
   }
-  else if(is_bool_type(simplied_side_1) || is_bool_type(simplied_side_2))
+  else if(is_bool_type(new_side_1) || is_bool_type(new_side_2))
   {
     std::function<bool(const expr2tc&)> is_constant =
       (bool(*)(const expr2tc&)) &is_constant_bool2t;
@@ -258,7 +258,7 @@ simplify_arith_2ops(
 
     simpl_res =
       TFunctor<bool>::simplify(
-        simplied_side_1, simplied_side_2, is_constant, get_value);
+        new_side_1, new_side_2, is_constant, get_value);
   }
   else
     return expr2tc();
