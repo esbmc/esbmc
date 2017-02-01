@@ -984,26 +984,43 @@ struct Andtor
     {
       // False? never true
       if(get_value(op1) == 0)
-        return expr2tc(op1->clone());
+        return op1;
       else
         // constant true; other operand determines truth
-        return expr2tc(op2->clone());
+        return op2;
     }
 
     if(is_constant(op2))
     {
       // False? never true
       if(get_value(op2) == 0)
-        return expr2tc(op2->clone());
+        return op2;
       else
         // constant true; other operand determines truth
-        return expr2tc(op1->clone());
+        return op1;
     }
 
     // Two constants? Simplify to result of the and
     if (is_constant(op1) && is_constant(op2))
-      return expr2tc(
-        new constant_bool2t(!(get_value(op1) == 0) && !(get_value(op2) == 0)));
+      return constant_bool2tc(!(get_value(op1) == 0) && !(get_value(op2) == 0));
+
+    // Special case: negation
+    if(is_not2t(op1))
+    {
+      const not2t &ref = to_not2t(op1);
+      if(ref.value == op2)
+        return false_expr;
+    }
+
+    if(is_not2t(op2))
+    {
+      const not2t &ref = to_not2t(op2);
+      if(ref.value == op1)
+        return false_expr;
+    }
+
+    if(op1 == op2)
+      return op1;
 
     return expr2tc();
   }
@@ -1039,9 +1056,26 @@ struct Ortor
     }
 
     // Two constants? Simplify to result of the or
-    if (is_constant(op1) && is_constant(op2))
-      return expr2tc(
-        new constant_bool2t(!(get_value(op1) == 0) || !(get_value(op2) == 0)));
+    if(is_constant(op1) && is_constant(op2))
+      return constant_bool2tc(!(get_value(op1) == 0) || !(get_value(op2) == 0));
+
+    // Special case: negation
+    if(is_not2t(op1))
+    {
+      const not2t &ref = to_not2t(op1);
+      if(ref.value == op2)
+        return true_expr;
+    }
+
+    if(is_not2t(op2))
+    {
+      const not2t &ref = to_not2t(op2);
+      if(ref.value == op1)
+        return true_expr;
+    }
+
+    if(op1 == op2)
+      return op1;
 
     return expr2tc();
   }
@@ -1050,19 +1084,6 @@ struct Ortor
 expr2tc
 or2t::do_simplify(bool second __attribute__((unused))) const
 {
-  // Special case: if one side is a not of the other, and they're otherwise
-  // identical, simplify to true
-  if (is_not2t(side_1)) {
-    const not2t &ref = to_not2t(side_1);
-    if (ref.value == side_2)
-      return true_expr;
-  } else if (is_not2t(side_2)) {
-    const not2t &ref = to_not2t(side_2);
-    if (ref.value == side_1)
-      return true_expr;
-  }
-
-  // Otherwise, default
   return simplify_logic_2ops<Ortor, or2t>(type, side_1, side_2);
 }
 
