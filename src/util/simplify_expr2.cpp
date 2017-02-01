@@ -43,7 +43,7 @@ typecast_check_return(const type2tc &type, expr2tc &expr)
   typecast2tc typecast(type, expr);
 
   // Try to simplify the typecast
-  do_simplify(typecast);
+  simplify(typecast);
 
   return typecast;
 }
@@ -196,10 +196,10 @@ simplify_arith_2ops(
 
   // Try to recursively simplify nested operations both sides, if any
   expr2tc new_side_1 = side_1;
-  bool simpl_side_1 = do_simplify(new_side_1);
+  bool simpl_side_1 = simplify(new_side_1);
 
   expr2tc new_side_2 = side_2;
-  bool simpl_side_2 = do_simplify(new_side_2);
+  bool simpl_side_2 = simplify(new_side_2);
 
   if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
   {

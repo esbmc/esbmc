@@ -5094,7 +5094,7 @@ get_base_array_subtype(const type2tc &type)
     return subtype;
 }
 
-inline bool do_simplify(expr2tc &expr)
+inline bool simplify(expr2tc &expr)
 {
   static bool no_simplify = config.options.get_bool_option("no-simplify");
   if(!no_simplify)

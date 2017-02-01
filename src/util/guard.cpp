@@ -78,7 +78,7 @@ guardt &operator |= (guardt &g1, const guardt &g2)
     // Both guards have one symbol, so check if we opposite symbols, e.g,
     // g1 == sym1 and g2 == !sym1
     expr2tc or_expr(new or2t(*g1.guard_list.begin(), *g2.guard_list.begin()));
-    do_simplify(or_expr);
+    simplify(or_expr);
 
     if(::is_true(or_expr)) { g1.make_true(); return g1; }
 
@@ -118,7 +118,7 @@ guardt &operator |= (guardt &g1, const guardt &g2)
 
     // If the guards single symbols, try to simplify the or expression
     if(g1.is_single_symbol() && new_g2.is_single_symbol())
-      do_simplify(or_expr);
+      simplify(or_expr);
 
     g1.clear_append(common);
     g1.add(or_expr);
