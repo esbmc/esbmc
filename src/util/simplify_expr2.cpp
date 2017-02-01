@@ -471,13 +471,23 @@ modulus2t::do_simplify(bool second __attribute__((unused))) const
 
   if(is_bv_type(type))
   {
-    const constant_int2t &numerator = to_constant_int2t(new_side_1);
-    const constant_int2t &denominator = to_constant_int2t(new_side_2);
+    if(is_constant_int2t(new_side_2))
+    {
+      // Denominator is one? Simplify to zero
+      if(to_constant_int2t(new_side_2).value == 1)
+        return constant_int2tc(type, BigInt(0));
+    }
 
-    auto c = numerator.value;
-    c %= denominator.value;
+    if (is_constant_int2t(new_side_1) && is_constant_int2t(new_side_2))
+    {
+      const constant_int2t &numerator = to_constant_int2t(new_side_1);
+      const constant_int2t &denominator = to_constant_int2t(new_side_2);
 
-    return constant_int2tc(type, c);
+      auto c = numerator.value;
+      c %= denominator.value;
+
+      return constant_int2tc(type, c);
+    }
   }
 
   return expr2tc();
