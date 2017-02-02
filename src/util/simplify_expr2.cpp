@@ -1795,7 +1795,7 @@ struct Equalitytor
     if(is_constant(op1) && is_constant(op2))
       return constant_bool2tc(get_value(op1) == get_value(op2));
 
-    return constant_bool2tc(op1 == op2);
+    return expr2tc();
   }
 };
 
@@ -1822,7 +1822,7 @@ struct Notequaltor
     if(is_constant(op1) && is_constant(op2))
       return constant_bool2tc(get_value(op1) != get_value(op2));
 
-    return constant_bool2tc(op1 != op2);
+    return expr2tc();
   }
 };
 
