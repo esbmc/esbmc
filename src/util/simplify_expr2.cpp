@@ -292,7 +292,6 @@ expr2tc
 add2t::do_simplify(bool __attribute__((unused))) const
 {
   expr2tc res = simplify_arith_2ops<Addtor, add2t>(type, side_1, side_2);
-
   if(!is_nil_expr(res))
     return res;
 
@@ -446,7 +445,6 @@ div2t::do_simplify(bool second __attribute__((unused))) const
 expr2tc
 modulus2t::do_simplify(bool second __attribute__((unused))) const
 {
-
   if(!is_number_type(type))
     return expr2tc();
 
@@ -1726,15 +1724,15 @@ simplify_floatbv_relations(
   if(is_floatbv_type(new_side_1) || is_floatbv_type(new_side_2))
   {
     std::function<bool(const expr2tc&)> is_constant =
-        (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
+      (bool(*)(const expr2tc&)) &is_constant_floatbv2t;
 
     std::function<ieee_floatt& (expr2tc&)> get_value =
-        [](expr2tc& c) -> ieee_floatt&
+      [](expr2tc& c) -> ieee_floatt&
         { return to_constant_floatbv2t(c).value; };
 
     simpl_res =
-        TFunctor<ieee_floatt>::simplify(
-          new_side_1, new_side_2, is_constant, get_value);
+      TFunctor<ieee_floatt>::simplify(
+        new_side_1, new_side_2, is_constant, get_value);
   }
   else
     assert(0);
@@ -1748,7 +1746,7 @@ struct IEEE_equalitytor
   static expr2tc simplify(
     expr2tc &op1,
     expr2tc &op2,
-    std::function<bool(const expr2tc&)> is_constant __attribute__((unused)),
+    std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // Two constants? Simplify to result of the comparison
