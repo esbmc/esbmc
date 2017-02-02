@@ -192,7 +192,8 @@ simplify_arith_2ops(
   expr2tc new_side_2 = side_2;
   bool simpl_side_2 = simplify(new_side_2);
 
-  if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
+  // If the all the conds are false, just give up
+  if(!(is_constant_expr(new_side_1) || is_constant_expr(new_side_2)))
   {
     // Were we able to simplify the sides?
     if(simpl_side_1 || simpl_side_2)
@@ -507,7 +508,7 @@ simplify_arith_1op(
   if (!is_constant_expr(new_value))
   {
     // Were we able to simplify anything?
-    if(!simpl_side_1)
+    if(simpl_side_1)
     {
       expr2tc new_neg = expr2tc(new constructor(type, new_value));
       return typecast_check_return(type, new_neg);
@@ -896,7 +897,11 @@ simplify_logic_2ops(
   expr2tc new_side_2 = side_2;
   bool simpl_side_2 = ::simplify(new_side_2);
 
-  if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
+  bool one_symbol = is_symbol2t(new_side_1) || is_symbol2t(new_side_2);
+  bool one_const = is_constant_expr(new_side_1) || is_constant_expr(new_side_2);
+
+  // If the all the conds are false, just give up
+  if(!(one_symbol || one_const))
   {
     // Were we able to simplify the sides?
     if(simpl_side_1 || simpl_side_2)
@@ -1618,7 +1623,11 @@ simplify_relations(
   expr2tc new_side_2 = side_2;
   bool simpl_side_2 = ::simplify(new_side_2);
 
-  if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
+  bool one_symbol = is_symbol2t(new_side_1) || is_symbol2t(new_side_2);
+  bool one_const = is_constant_expr(new_side_1) || is_constant_expr(new_side_2);
+
+  // If the all the conds are false, just give up
+  if(!(one_symbol || one_const))
   {
     // Were we able to simplify the sides?
     if(simpl_side_1 || simpl_side_2)
@@ -1707,7 +1716,11 @@ simplify_floatbv_relations(
   expr2tc new_side_2 = side_2;
   bool simpl_side_2 = ::simplify(new_side_2);
 
-  if (!is_constant_expr(new_side_1) && !is_constant_expr(new_side_2))
+  bool one_symbol = is_symbol2t(new_side_1) || is_symbol2t(new_side_2);
+  bool one_const = is_constant_expr(new_side_1) || is_constant_expr(new_side_2);
+
+  // If the all the conds are false, just give up
+  if(!(one_symbol || one_const))
   {
     // Were we able to simplify the sides?
     if(simpl_side_1 || simpl_side_2)
@@ -2043,7 +2056,7 @@ simplify_floatbv_1op(
   if (!is_constant_expr(new_value))
   {
     // Were we able to simplify anything?
-    if(!simpl_side_1)
+    if(simpl_side_1)
     {
       expr2tc new_neg = expr2tc(new constructor(new_value));
       return typecast_check_return(type, new_neg);
