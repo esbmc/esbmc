@@ -39,7 +39,7 @@ void guardt::add(const expr2tc &expr)
   if(is_true() || ::is_false(expr))
   {
     guard_list.clear();
-    guard_list.insert(expr);
+    guard_list.push_back(expr);
     return;
   }
 
@@ -51,7 +51,7 @@ void guardt::add(const expr2tc &expr)
     return;
   }
 
-  guard_list.insert(expr);
+  guard_list.push_back(expr);
 }
 
 void guardt::append(const guardt &guard)
@@ -62,8 +62,15 @@ void guardt::append(const guardt &guard)
 
 guardt &operator -= (guardt &g1, const guardt &g2)
 {
-  for(auto it2 : g2.guard_list)
-    g1.guard_list.erase(it2);
+  guardt::guard_listt diff;
+  std::set_difference(
+    g1.guard_list.begin(),
+    g1.guard_list.end(),
+    g2.guard_list.begin(),
+    g2.guard_list.end(),
+    std::back_inserter(diff));
+
+  g1.guard_list.swap(diff);
   return g1;
 }
 
@@ -96,28 +103,38 @@ guardt &operator |= (guardt &g1, const guardt &g2)
     // Simplify equation: everything that's common in both guards, will not
     // be or'd
 
-    // Create a new g2, which we can remove stuff from
-    guardt new_g2(g2);
 
     // Common guards
     guardt common;
+    std::set_intersection(
+      g1.guard_list.begin(),
+      g1.guard_list.end(),
+      g2.guard_list.begin(),
+      g2.guard_list.end(),
+      std::back_inserter(common.guard_list));
 
-    for(auto it2 : g2.guard_list)
-    {
-      auto it1 = g1.guard_list.find(it2);
-      if(it1 != g1.guard_list.end())
-      {
-        common.add(it2);
-        new_g2.guard_list.erase(it2);
-        g1.guard_list.erase(it1);
-      }
-    }
+    // New g1 and g2, without the common guards
+    guardt new_g1;
+    std::set_difference(
+      g1.guard_list.begin(),
+      g1.guard_list.end(),
+      common.guard_list.begin(),
+      common.guard_list.end(),
+      std::back_inserter(new_g1.guard_list));
+
+    guardt new_g2;
+    std::set_difference(
+      g2.guard_list.begin(),
+      g2.guard_list.end(),
+      common.guard_list.begin(),
+      common.guard_list.end(),
+      std::back_inserter(new_g2.guard_list));
 
     // Get the and expression from both guards
-    expr2tc or_expr(new or2t(g1.as_expr(), new_g2.as_expr()));
+    expr2tc or_expr(new or2t(new_g1.as_expr(), new_g2.as_expr()));
 
     // If the guards single symbols, try to simplify the or expression
-    if(g1.is_single_symbol() && new_g2.is_single_symbol())
+    if(new_g1.is_single_symbol() && new_g2.is_single_symbol())
       simplify(or_expr);
 
     g1.clear_append(common);
@@ -206,4 +223,14 @@ void guardt::clear_append(const guardt& guard)
 {
   guard_list.clear();
   append(guard);
+}
+
+guardt::guard_listt::size_type guardt::size() const
+{
+  return guard_list.size();
+}
+
+void guardt::resize(guard_listt::size_type size)
+{
+  guard_list.resize(size);
 }

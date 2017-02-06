@@ -23,7 +23,7 @@ public:
   guardt() : guard_list() { }
   guardt(const guardt &ref) { *this = ref; }
 
-  typedef hash_set_cont<expr2tc, irep2_hash> guard_listt;
+  typedef std::vector<expr2tc> guard_listt;
 
   void add(const expr2tc &expr);
   void append(const guardt &guard);
@@ -45,6 +45,9 @@ public:
   friend guardt &operator -= (guardt &g1, const guardt &g2);
   friend guardt &operator |= (guardt &g1, const guardt &g2);
   friend bool operator == (const guardt &g1, const guardt &g2);
+
+  guard_listt::size_type size() const;
+  void resize(guard_listt::size_type size);
 
   void dump() const;
 
