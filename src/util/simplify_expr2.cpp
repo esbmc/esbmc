@@ -1491,7 +1491,7 @@ typecast2t::do_simplify(bool second) const
     expr2tc zero2;
     migrate_expr(zero, zero2);
 
-    return notequal2tc(simp, zero2);
+    return not2tc(equality2tc(simp, zero2));
   }
   else if (is_pointer_type(type) && is_pointer_type(simp))
   {
