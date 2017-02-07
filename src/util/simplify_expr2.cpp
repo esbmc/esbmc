@@ -267,31 +267,33 @@ template<class constant_type>
 struct Addtor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
     {
       // Found a zero? Simplify to op2
-      if(get_value(op1) == 0)
+      expr2tc c1 = op1;
+      if(get_value(c1) == 0)
         return op2;
     }
 
     if(is_constant(op2))
     {
       // Found a zero? Simplify to op1
-      if(get_value(op2) == 0)
+      expr2tc c2 = op2;
+      if(get_value(c2) == 0)
         return op1;
     }
 
     // Two constants? Simplify to result of the addition
     if (is_constant(op1) && is_constant(op2))
     {
-      expr2tc c = op1;
-      get_value(c) += get_value(op2);
-      return c;
+      expr2tc c1 = op1, c2 = op2;
+      get_value(c1) += get_value(c2);
+      return c1;
     }
 
     return expr2tc();
@@ -317,15 +319,16 @@ template<class constant_type>
 struct Subtor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
     {
       // Found a zero? Simplify to -op2
-      if(get_value(op1) == 0)
+      expr2tc c1 = op1;
+      if(get_value(c1) == 0)
       {
         neg2tc c(op2->type, op2);
         ::simplify(c);
@@ -336,16 +339,17 @@ struct Subtor
     if(is_constant(op2))
     {
       // Found a zero? Simplify to op1
-      if(get_value(op2) == 0)
+      expr2tc c2 = op2;
+      if(get_value(c2) == 0)
         return op1;
     }
 
     // Two constants? Simplify to result of the subtraction
     if (is_constant(op1) && is_constant(op2))
     {
-      expr2tc c = op1;
-      get_value(c) -= get_value(op2);
-      return c;
+      expr2tc c1 = op1, c2 = op2;
+      get_value(c1) -= get_value(c2);
+      return c1;
     }
 
     return expr2tc();
@@ -362,39 +366,43 @@ template<class constant_type>
 struct Multor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
     {
+      expr2tc c1 = op1;
+
       // Found a zero? Simplify to zero
-      if(get_value(op1) == 0)
+      if(get_value(c1) == 0)
         return op1;
 
       // Found an one? Simplify to op2
-      if(get_value(op1) == 1)
+      if(get_value(c1) == 1)
         return op2;
     }
 
     if(is_constant(op2))
     {
+      expr2tc c2 = op2;
+
       // Found a zero? Simplify to zero
-      if(get_value(op2) == 0)
+      if(get_value(c2) == 0)
         return op2;
 
       // Found an one? Simplify to op1
-      if(get_value(op2) == 1)
+      if(get_value(c2) == 1)
         return op1;
     }
 
     // Two constants? Simplify to result of the multiplication
     if (is_constant(op1) && is_constant(op2))
     {
-      expr2tc c = op1;
-      get_value(c) *= get_value(op2);
-      return c;
+      expr2tc c1 = op1, c2 = op2;
+      get_value(c1) *= get_value(c2);
+      return c1;
     }
 
     return expr2tc();
@@ -411,35 +419,38 @@ template<class constant_type>
 struct Divtor
 {
   static expr2tc simplify(
-    expr2tc &numerator,
-    expr2tc &denominator,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
-    if(is_constant(numerator))
+    if(is_constant(op1))
     {
       // Numerator is zero? Simplify to zero
-      if(get_value(numerator) == 0)
-        return numerator;
+      expr2tc c1 = op1;
+      if(get_value(c1) == 0)
+        return op1;
     }
 
-    if(is_constant(denominator))
+    if(is_constant(op2))
     {
+      expr2tc c2 = op2;
+
       // Denominator is zero? Don't simplify
-      if(get_value(denominator) == 0)
+      if(get_value(c2) == 0)
         return expr2tc();
 
       // Denominator is one? Simplify to numerator's constant
-      if(get_value(denominator) == 1)
-        return numerator;
+      if(get_value(c2) == 1)
+        return op1;
     }
 
     // Two constants? Simplify to result of the division
-    if (is_constant(numerator) && is_constant(denominator))
+    if (is_constant(op1) && is_constant(op2))
     {
-      expr2tc c = numerator;
-      get_value(c) /= get_value(denominator);
-      return c;
+      expr2tc c1 = op1, c2 = op2;
+      get_value(c1) /= get_value(c2);
+      return c1;
     }
 
     return expr2tc();
@@ -980,35 +991,31 @@ template<class constant_type>
 struct Andtor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
     {
       // False? never true
-      if(get_value(op1) == 0)
-        return expr2tc(op1->clone());
-      else
-        // constant true; other operand determines truth
-        return expr2tc(op2->clone());
+      expr2tc c1 = op1;
+      return (get_value(c1) == 0) ? c1 : op2;
     }
 
     if(is_constant(op2))
     {
       // False? never true
-      if(get_value(op2) == 0)
-        return expr2tc(op2->clone());
-      else
-        // constant true; other operand determines truth
-        return expr2tc(op1->clone());
+      expr2tc c2 = op2;
+      return (get_value(c2) == 0) ? c2 : op1;
     }
 
     // Two constants? Simplify to result of the and
     if (is_constant(op1) && is_constant(op2))
-      return expr2tc(
-        new constant_bool2t(!(get_value(op1) == 0) && !(get_value(op2) == 0)));
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(!(get_value(c1) == 0) && !(get_value(c2) == 0));
+    }
 
     return expr2tc();
   }
@@ -1024,29 +1031,33 @@ template<class constant_type>
 struct Ortor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
     {
       // True? Simplify to op2
-      if(!(get_value(op1) == 0))
+      expr2tc c1 = op1;
+      if(!(get_value(c1) == 0))
         return true_expr;
     }
 
     if(is_constant(op2))
     {
       // True? Simplify to op1
-      if(!(get_value(op2) == 0))
+      expr2tc c2 = op2;
+      if(!(get_value(c2) == 0))
         return true_expr;
     }
 
     // Two constants? Simplify to result of the or
     if (is_constant(op1) && is_constant(op2))
-      return expr2tc(
-        new constant_bool2t(!(get_value(op1) == 0) || !(get_value(op2) == 0)));
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(!(get_value(c1) == 0) || !(get_value(c2) == 0));
+    }
 
     return expr2tc();
   }
@@ -1075,28 +1086,33 @@ template<class constant_type>
 struct Xortor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1))
     {
+      expr2tc c1 = op1;
       // False? Simplify to op2
-      if(get_value(op1) == 0)
+      if(get_value(c1) == 0)
         return op2;
     }
 
     if(is_constant(op2))
     {
+      expr2tc c2 = op2;
       // False? Simplify to op1
-      if(get_value(op2) == 0)
+      if(get_value(c2) == 0)
         return op1;
     }
 
     // Two constants? Simplify to result of the xor
     if (is_constant(op1) && is_constant(op2))
-      return constant_bool2tc(!(get_value(op1) == 0) ^ !(get_value(op2) == 0));
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(!(get_value(c1) == 0) ^ !(get_value(c2) == 0));
+    }
 
     return expr2tc();
   }
@@ -1112,19 +1128,27 @@ template<class constant_type>
 struct Impliestor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // False => * evaluate to true, always
-    if(is_constant(op1) && (get_value(op1) == 0))
-      return true_expr;
+    if(is_constant(op1))
+    {
+      expr2tc c1 = op1;
+      if(get_value(c1) == 0)
+        return true_expr;
+    }
 
     // Otherwise, the only other thing that will make this expr always true is
     // if side 2 is true.
-    if(is_constant(op2) && !(get_value(op2) == 0))
-      return true_expr;
+    if(is_constant(op2))
+    {
+      expr2tc c2 = op2;
+      if(!(get_value(c2) == 0))
+        return true_expr;
+    }
 
     return expr2tc();
   }
@@ -1727,16 +1751,16 @@ template<class constant_type>
 struct IEEE_equalitytor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // Two constants? Simplify to result of the comparison
     if (is_constant(op1) && is_constant(op2))
     {
-      bool res = (get_value(op1) == get_value(op2));
-      return constant_bool2tc(res);
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(get_value(c1) == get_value(c2));
     }
 
     if(op1 == op2)
@@ -1755,13 +1779,16 @@ template<class constant_type>
 struct Equalitytor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1) && is_constant(op2))
-      return constant_bool2tc(get_value(op1) == get_value(op2));
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(get_value(c1) == get_value(c2));
+    }
 
     return expr2tc();
   }
@@ -1782,13 +1809,16 @@ template<class constant_type>
 struct Notequaltor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     if(is_constant(op1) && is_constant(op2))
-      return constant_bool2tc(get_value(op1) != get_value(op2));
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(get_value(c1) != get_value(c2));
+    }
 
     return expr2tc();
   }
@@ -1804,18 +1834,24 @@ template<class constant_type>
 struct Lessthantor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // op1 < zero and op2 is unsigned: always true
     if(is_constant(op1))
-      if((get_value(op1) < 0) && is_unsignedbv_type(op2))
+    {
+      expr2tc c1 = op1;
+      if((get_value(c1) < 0) && is_unsignedbv_type(op2))
         return true_expr;
+    }
 
     if(is_constant(op1) && is_constant(op2))
-      return constant_bool2tc(get_value(op1) < get_value(op2));
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(get_value(c1) < get_value(c2));
+    }
 
     return expr2tc();
   }
@@ -1831,18 +1867,24 @@ template<class constant_type>
 struct Greaterthantor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // op2 < zero and op1 is unsigned: always true
     if(is_constant(op2))
-      if((get_value(op2) < 0) && is_unsignedbv_type(op1))
+    {
+      expr2tc c2 = op2;
+      if((get_value(c2) < 0) && is_unsignedbv_type(op1))
         return true_expr;
+    }
 
     if(is_constant(op1) && is_constant(op2))
-      return constant_bool2tc(get_value(op1) > get_value(op2));
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(get_value(c1) > get_value(c2));
+    }
 
     return expr2tc();
   }
@@ -1858,18 +1900,24 @@ template<class constant_type>
 struct Lessthanequaltor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // op1 <= zero and op2 is unsigned: always true
     if(is_constant(op1))
-      if((get_value(op1) <= 0) && is_unsignedbv_type(op2))
+    {
+      expr2tc c1 = op1;
+      if((get_value(c1) <= 0) && is_unsignedbv_type(op2))
         return true_expr;
+    }
 
     if(is_constant(op1) && is_constant(op2))
-      return constant_bool2tc(get_value(op1) <= get_value(op2));
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(get_value(c1) <= get_value(c2));
+    }
 
     return expr2tc();
   }
@@ -1885,18 +1933,24 @@ template<class constant_type>
 struct Greaterthanequaltor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
   {
     // op2 <= zero and op1 is unsigned: always true
     if(is_constant(op2))
-      if((get_value(op2) <= 0) && is_unsignedbv_type(op1))
+    {
+      expr2tc c2 = op2;
+      if((get_value(c2) <= 0) && is_unsignedbv_type(op1))
         return true_expr;
+    }
 
     if(is_constant(op1) && is_constant(op2))
-      return constant_bool2tc(get_value(op1) >= get_value(op2));
+    {
+      expr2tc c1 = op1, c2 = op2;
+      return constant_bool2tc(get_value(c1) >= get_value(c2));
+    }
 
     return expr2tc();
   }
@@ -2212,8 +2266,8 @@ template<class constant_type>
 struct IEEE_addtor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     const expr2tc &rm,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
@@ -2249,8 +2303,8 @@ template<class constant_type>
 struct IEEE_subtor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     const expr2tc &rm,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
@@ -2267,7 +2321,7 @@ struct IEEE_subtor
       expr2tc c2 = op2;
       get_value(c2).rounding_mode = mode;
 
-      get_value(op1) -= get_value(op2);
+      get_value(c1) -= get_value(c2);
       return c1;
     }
 
@@ -2286,8 +2340,8 @@ template<class constant_type>
 struct IEEE_multor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     const expr2tc &rm,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
@@ -2323,8 +2377,8 @@ template<class constant_type>
 struct IEEE_divtor
 {
   static expr2tc simplify(
-    expr2tc &op1,
-    expr2tc &op2,
+    const expr2tc &op1,
+    const expr2tc &op2,
     const expr2tc &rm,
     std::function<bool(const expr2tc&)> is_constant,
     std::function<constant_type&(expr2tc&)> get_value)
@@ -2347,8 +2401,14 @@ struct IEEE_divtor
 
     if(is_constant(op2))
     {
+      ieee_floatt::rounding_modet mode =
+        static_cast<ieee_floatt::rounding_modet>(to_constant_int2t(rm).value.to_long());
+
+      expr2tc c2 = op2;
+      get_value(c2).rounding_mode = mode;
+
       // Denominator is one? Exact for all rounding modes.
-      if(get_value(op2) == 1)
+      if(get_value(c2) == 1)
         return op1;
     }
 
