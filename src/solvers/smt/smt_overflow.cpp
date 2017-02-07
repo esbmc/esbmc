@@ -1,6 +1,6 @@
 #include "smt_conv.h"
 
-smt_astt 
+smt_astt
 smt_convt::overflow_arith(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.
@@ -214,7 +214,7 @@ smt_convt::overflow_cast(const expr2tc &expr)
   return mk_func_app(boolsort, SMT_FUNC_NOT, &nooverflow, 1);
 }
 
-smt_astt 
+smt_astt
 smt_convt::overflow_neg(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.
