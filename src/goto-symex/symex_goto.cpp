@@ -284,12 +284,15 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     expr2tc rhs;
 
-    if (cur_state->guard.is_false()) {
+    if (cur_state->guard.is_false() || goto_state.guard.is_false()) {
       rhs = symbol2tc(type, symbol.name);
-      cur_state->current_name(goto_state, rhs);
-    } else if (goto_state.guard.is_false()) {
-      rhs = symbol2tc(type, symbol.name);
-      cur_state->current_name(goto_state, rhs);
+
+      // Try to get the value
+      renaming::level2t::rename_to_record(rhs, *it);
+      goto_state.level2.rename(rhs);
+
+      if(is_symbol2t(rhs))
+        cur_state->current_name(goto_state, rhs);
     } else {
       symbol2tc true_val(type, symbol.name);
       symbol2tc false_val(type, symbol.name);
@@ -316,7 +319,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     // to.
     renaming::level2t::rename_to_record(new_lhs, *it);
 
-    cur_state->assignment(new_lhs, rhs, false);
+    cur_state->assignment(new_lhs, rhs, true);
 
     target->assignment(
       true_expr,
