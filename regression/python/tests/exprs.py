@@ -171,7 +171,7 @@ class Exprs(unittest.TestCase):
 
     def test_struct(self):
         import esbmc
-        from types import Types
+        from .types import Types
         # Type where we have four fields (a, b, c, d) of integer sizes one
         # to four.
         struct_type = Types.struct_maker()
