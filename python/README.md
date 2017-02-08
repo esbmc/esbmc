@@ -173,12 +173,30 @@ will still compare true to None.
 
 ## Future directions
 
- * No idea
+Currently there are none: these bindings just provide access. It's conceivable
+that (over a long time) ESBMC may become more library like, or some
+transformations may become implemented in python, but that's all speculation.
 
 ## Even more caveats
 
- * Best to assume that esbmc is going to crash every time you do something
- * boost shared ptrs?
- * I subclassed an stdl container
- * old irep?
- * Probably can't extend things like enums
+It's best to assume that esbmc is going to crash every time you do something,
+unless you're very confident in what it does. I wouldn't recommend developing
+in an interactive python instance, better to keep scripts on disk most of the
+time.
+
+Boost shared ptrs have a fantastic facility for acting as a python reference
+and a C++ shared\_ptr reference at the same time, intimitely binding the
+lifetime of each object. ESBMC contains a random mixture of std::shared\_ptr
+and boost::shared\_ptr, so bear this in mind if you have inexplicable python
+references hanging around.
+
+I subclassed an stl container to better enable python access to it. I am not
+proud of this.
+
+Currently there's no way of accessing the 'old' irep from python, which is
+deliberate. If it's ever supported, it'll be as opaque handles, with
+migration facilities to/from irep2.
+
+It's conceptually desirable for various enumerations to be extended, for example
+to allow the creation of new SSA step types or GOTO program insn types. However,
+so much of ESBMC switches on those enums that this seems infeasible as of now.
