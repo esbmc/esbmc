@@ -34,7 +34,7 @@ public:
 class cvc_convt : public smt_convt, public array_iface
 {
 public:
-  cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns);
+  cvc_convt(bool int_encoding, const namespacet &ns);
   ~cvc_convt();
 
   virtual resultt dec_solve();

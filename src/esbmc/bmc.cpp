@@ -84,8 +84,7 @@ Function: bmct::successful_trace
 
 \*******************************************************************/
 
-void bmct::successful_trace(smt_convt &smt_conv ,
-                            symex_target_equationt &equation __attribute__((unused)))
+void bmct::successful_trace(symex_target_equationt &equation __attribute__((unused)))
 {
   if(options.get_bool_option("base-case"))
   {
@@ -107,7 +106,7 @@ void bmct::successful_trace(smt_convt &smt_conv ,
   {
     case ui_message_handlert::GRAPHML:
       status("Building successful trace");
-      build_successful_goto_trace(equation, smt_conv, goto_trace);
+      build_successful_goto_trace(equation, ns, goto_trace);
       specification += options.get_bool_option("overflow-check") ? 1 : 0;
       specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
       generate_goto_trace_in_correctness_graphml_format(
@@ -253,6 +252,9 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
     status(str.str());
   }
 
+  if(options.get_bool_option("dump-smt-formula"))
+    smt_conv.dump_SMT();
+
   std::stringstream ss;
   ss << "Solving with solver " << smt_conv.solver_text();
   status(ss.str());
@@ -388,47 +390,45 @@ void bmct::show_program(symex_target_equationt &equation)
 
   languagest languages(ns, MODE_C);
 
-  std::cout << "\n" << "Program constraints:" << "\n";
+  std::cout << "\n" << "Program constraints: " << equation.SSA_steps.size() << "\n";
 
   bool print_guard = config.options.get_bool_option("dump-guards");
   bool sparse = config.options.get_bool_option("simple-ssa-printing");
 
-  for(symex_target_equationt::SSA_stepst::const_iterator
-      it=equation.SSA_steps.begin();
-      it!=equation.SSA_steps.end(); it++)
+  for(const auto &it : equation.SSA_steps)
   {
     if (!sparse) {
-      std::cout << "// " << it->source.pc->location_number << " ";
-      std::cout << it->source.pc->location.as_string() << "\n";
+      std::cout << "// " << it.source.pc->location_number << " ";
+      std::cout << it.source.pc->location.as_string() << "\n";
     }
 
     std::cout <<   "(" << count << ") ";
 
     std::string string_value;
 
-    if(it->is_assignment())
+    exprt cond = migrate_expr_back(it.cond);
+    languages.from_expr(cond, string_value);
+
+    if(it.is_assignment())
     {
-      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << string_value << "\n";
     }
-    else if(it->is_assert())
+    else if(it.is_assert())
     {
-      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(assert)" << string_value << "\n";
     }
-    else if(it->is_assume())
+    else if(it.is_assume())
     {
-      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(assume)" << string_value << "\n";
     }
-    else if (it->is_renumber())
+    else if (it.is_renumber())
     {
-      std::cout << "renumber: " << from_expr(ns, "", it->lhs) << "\n";
+      std::cout << "renumber: " << from_expr(ns, "", it.lhs) << "\n";
     }
 
-    if(!migrate_expr_back(it->guard).is_true() && print_guard)
+    if(!migrate_expr_back(it.guard).is_true() && print_guard)
     {
-      languages.from_expr(migrate_expr_back(it->guard), string_value);
+      languages.from_expr(migrate_expr_back(it.guard), string_value);
       std::cout << std::string(i2string(count).size()+3, ' ');
       std::cout << "guard: " << string_value << "\n";
     }
@@ -583,20 +583,20 @@ bool bmct::run_thread()
   {
     message_streamt message_stream(*get_message_handler());
     message_stream.error(error_str);
-    abort();
+    return true;
   }
 
   catch(const char *error_str)
   {
     message_streamt message_stream(*get_message_handler());
     message_stream.error(error_str);
-    abort();
+    return true;
   }
 
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    abort();
+    return true;
   }
 
   fine_timet symex_stop = current_time();
@@ -667,7 +667,7 @@ bool bmct::run_thread()
 
     if(result->remaining_claims==0)
     {
-      successful_trace(*runtime_solver,*equation);
+      successful_trace(*equation);
       report_success();
       return false;
     }
@@ -686,13 +686,11 @@ bool bmct::run_thread()
         return false;
 
     if (!options.get_bool_option("smt-during-symex")) {
-      delete runtime_solver;
-      runtime_solver = create_solver_factory("", is_cpp,
-                                             options.get_bool_option("int-encoding"),
-                                             ns, options);
+      runtime_solver = std::shared_ptr<smt_convt>(
+        create_solver_factory("", options.get_bool_option("int-encoding"), ns,options));
     }
 
-    ret = run_solver(*equation, runtime_solver);
+    ret = run_solver(*equation, runtime_solver.get());
 
     return ret;
   }
@@ -700,19 +698,19 @@ bool bmct::run_thread()
   catch(std::string &error_str)
   {
     error(error_str);
-    abort();
+    return true;
   }
 
   catch(const char *error_str)
   {
     error(error_str);
-    abort();
+    return true;
   }
 
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    abort();
+    return true;
   }
 }
 
@@ -742,7 +740,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_BAD" << std::endl;
   if (num_asserts != 0) {
-    solver = create_solver_factory("z3", is_cpp,
+    solver = create_solver_factory("z3",
                                    options.get_bool_option("int-encoding"),
                                    ns, options);
     ret = run_solver(*equation, solver);
@@ -781,7 +779,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_FAILING" << std::endl;
   if (num_asserts != 0) {
-    solver = create_solver_factory("z3", is_cpp,
+    solver = create_solver_factory("z3",
                                    options.get_bool_option("int-encoding"),
                                    ns, options);
     ret = run_solver(*equation, solver);
@@ -820,7 +818,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 
   std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
   if (num_asserts != 0) {
-    solver = create_solver_factory("z3", is_cpp,
+    solver = create_solver_factory("z3",
                                    options.get_bool_option("int-encoding"),
                                    ns, options);
     ret = run_solver(*equation, solver);
@@ -854,7 +852,7 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
     case smt_convt::P_UNSATISFIABLE:
       if(!options.get_bool_option("base-case"))
       {
-        successful_trace(*solver, equation);
+        successful_trace(equation);
         report_success();
       }
       else

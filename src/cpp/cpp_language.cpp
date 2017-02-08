@@ -122,19 +122,22 @@ Function: cpp_languaget::internal_additions
 
 void cpp_languaget::internal_additions(std::ostream &out)
 {
-  out << "# 1 \"<built-in>\"" << std::endl;
+  out << "# 1 \"esbmc_intrinsics.h" << std::endl;
 
   out << "void *operator new(unsigned int size);" << std::endl;
 
-  // assume/assert
-  out << "extern \"C\" void assert(bool assertion);" << std::endl;
-  out << "extern \"C\" void __ESBMC_assume(bool assumption);" << std::endl;
-  out << "extern \"C\" void __ESBMC_assert("
-         "bool assertion, const char *description);" << std::endl;
+  out << "extern \"C\" {" << std::endl;
 
-  // __ESBMC_atomic_{begin,end}
-  out << "extern \"C\" void __ESBMC_atomic_begin();" << std::endl;
-  out << "extern \"C\" void __ESBMC_atomic_end();" << std::endl;
+  // assume/assert
+  out << "void __ESBMC_assume(bool assumption);" << std::endl;
+  out << "void assert(bool assertion);" << std::endl;
+  out << "void __ESBMC_assert("
+         "bool assertion, const char *description);" << std::endl;
+  out << "bool __ESBMC_same_object(const void *, const void *);" << std::endl;
+
+  // pointers
+  out << "unsigned __ESBMC_POINTER_OBJECT(const void *p);" << std::endl;
+  out << "signed __ESBMC_POINTER_OFFSET(const void *p);" << std::endl;
 
   out << "extern \"C\" int __ESBMC_rounding_mode = 0;" << std::endl;
 
@@ -145,12 +148,27 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "unsigned __CPROVER::constant_infinity_uint;" << std::endl;
   out << "bool __ESBMC_alloc[__CPROVER::constant_infinity_uint];" << std::endl;
   out << "unsigned __ESBMC_alloc_size[__CPROVER::constant_infinity_uint];" << std::endl;
-  out << " bool __ESBMC_deallocated[__CPROVER::constant_infinity_uint];" << std::endl;
+  out << "bool __ESBMC_deallocated[__CPROVER::constant_infinity_uint];" << std::endl;
   out << "bool __ESBMC_is_dynamic[__CPROVER::constant_infinity_uint];" << std::endl;
 
-  // GCC stuff
-  out << "extern \"C\" {" << std::endl;
-  out << GCC_BUILTIN_HEADERS;
+  // float stuff
+  out << "bool __ESBMC_isnan(double f);" << std::endl;
+  out << "bool __ESBMC_isfinite(double f);" << std::endl;
+  out << "bool __ESBMC_isinf(double f);" << std::endl;
+  out << "bool __ESBMC_isnormal(double f);" << std::endl;
+  out << "int __ESBMC_rounding_mode;" << std::endl;
+
+  // absolute value
+  out << "int __ESBMC_abs(int x);" << std::endl;
+  out << "long int __ESBMC_labs(long int x);" << std::endl;
+  out << "double __ESBMC_fabs(double x);" << std::endl;
+  out << "long double __ESBMC_fabsl(long double x);" << std::endl;
+  out << "float __ESBMC_fabsf(float x);" << std::endl;
+
+  // Digital controllers code
+  out << "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, bool isDenominator);" << std::endl;
+  out << "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);" << std::endl;
+  out << "bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);" << std::endl;
 
   // Forward decs for pthread main thread begin/end hooks. Because they're
   // pulled in from the C library, they need to be declared prior to pulling
@@ -158,7 +176,36 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "void pthread_start_main_hook(void);" << std::endl;
   out << "void pthread_end_main_hook(void);" << std::endl;
 
-  //  Empty __FILE__ and __LINE__ definitions.
+  // GCC stuff
+  out << GCC_BUILTIN_HEADERS;
+
+  // Forward declarations for nondeterministic types.
+  out << "int nondet_int();" << std::endl;
+  out << "unsigned int nondet_uint();" << std::endl;
+  out << "long nondet_long();" << std::endl;
+  out << "unsigned long nondet_ulong();" << std::endl;
+  out << "short nondet_short();" << std::endl;
+  out << "unsigned short nondet_ushort();" << std::endl;
+  out << "short nondet_short();" << std::endl;
+  out << "unsigned short nondet_ushort();" << std::endl;
+  out << "char nondet_char();" << std::endl;
+  out << "unsigned char nondet_uchar();" << std::endl;
+  out << "signed char nondet_schar();" << std::endl;
+
+  // And again, for TACAS VERIFIER versions,
+  out << "int __VERIFIER_nondet_int();" << std::endl;
+  out << "unsigned int __VERIFIER_nondet_uint();" << std::endl;
+  out << "long __VERIFIER_nondet_long();" << std::endl;
+  out << "unsigned long __VERIFIER_nondet_ulong();" << std::endl;
+  out << "short __VERIFIER_nondet_short();" << std::endl;
+  out << "unsigned short __VERIFIER_nondet_ushort();" << std::endl;
+  out << "short __VERIFIER_nondet_short();" << std::endl;
+  out << "unsigned short __VERIFIER_nondet_ushort();" << std::endl;
+  out << "char __VERIFIER_nondet_char();" << std::endl;
+  out << "unsigned char __VERIFIER_nondet_uchar();" << std::endl;
+  out << "signed char __VERIFIER_nondet_schar();" << std::endl;
+
+  out << "const char *__PRETTY_FUNCTION__;" << std::endl;
   out << "const char *__FILE__ = \"\";" << std::endl;
   out << "unsigned int __LINE__ = 0;" << std::endl;
 

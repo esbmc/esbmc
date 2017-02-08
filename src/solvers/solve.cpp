@@ -48,14 +48,14 @@ sizeof(esbmc_solvers) / sizeof(esbmc_solver_config);
 
 static smt_convt *
 create_solver(std::string the_solver,
-            bool is_cpp, bool int_encoding, const namespacet &ns,
+            bool int_encoding, const namespacet &ns,
             const optionst &options, tuple_iface **tuple_api,
             array_iface **array_api)
 {
 
   for (unsigned int i = 0; i < esbmc_num_solvers; i++) {
     if (the_solver == esbmc_solvers[i].name) {
-      return esbmc_solvers[i].create(int_encoding, ns, is_cpp,
+      return esbmc_solvers[i].create(int_encoding, ns,
                                options, tuple_api, array_api);
     }
   }
@@ -87,7 +87,7 @@ pick_default_solver()
 }
 
 static smt_convt *
-pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
+pick_solver(bool int_encoding, const namespacet &ns,
             const optionst &options, tuple_iface **tuple_api,
             array_iface **array_api)
 {
@@ -123,12 +123,12 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
     }
   }
 
-  return create_solver(the_solver, is_cpp, int_encoding, ns,
+  return create_solver(the_solver, int_encoding, ns,
                        options, tuple_api, array_api);
 }
 
 smt_convt *
-create_solver_factory1(const std::string &solver_name, bool is_cpp,
+create_solver_factory1(const std::string &solver_name,
                        bool int_encoding, const namespacet &ns,
                        const optionst &options,
                        tuple_iface **tuple_api,
@@ -136,21 +136,21 @@ create_solver_factory1(const std::string &solver_name, bool is_cpp,
 {
   if (solver_name == "")
     // Pick one based on options.
-    return pick_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
+    return pick_solver(int_encoding, ns, options, tuple_api, array_api);
 
-  return create_solver(solver_name, is_cpp, int_encoding, ns,
+  return create_solver(solver_name, int_encoding, ns,
                        options, tuple_api, array_api);
 }
 
 
 smt_convt *
-create_solver_factory(const std::string &solver_name, bool is_cpp,
+create_solver_factory(const std::string &solver_name,
                       bool int_encoding, const namespacet &ns,
                       const optionst &options)
 {
   tuple_iface *tuple_api = NULL;
   array_iface *array_api = NULL;
-  smt_convt *ctx = create_solver_factory1(solver_name, is_cpp, int_encoding, ns, options, &tuple_api, &array_api);
+  smt_convt *ctx = create_solver_factory1(solver_name, int_encoding, ns, options, &tuple_api, &array_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");

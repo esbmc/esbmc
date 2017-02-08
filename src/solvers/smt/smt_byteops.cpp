@@ -21,7 +21,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
     if (data.big_endian) {
-      auto data_size = type_byte_size(*source->type);
+      auto data_size = type_byte_size(source->type);
       constant_int2tc data_size_expr(source->type, data_size - 1);
       sub2tc sub(source->type, data_size_expr, offs);
       offs = sub;
@@ -30,6 +30,8 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     if (offs->type->get_width() != src_width)
       // Z3 requires these two arguments to be the same width
       offs = typecast2tc(source->type, data.source_offset);
+
+    offs = mul2tc(offs->type, offs, gen_ulong(8));
 
     lshr2tc shr(source->type, source, offs);
     smt_astt ext = convert_ast(shr);
@@ -101,7 +103,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
     if (data.big_endian) {
-      auto data_size = type_byte_size(*source->type);
+      auto data_size = type_byte_size(source->type);
       constant_int2tc data_size_expr(source->type, data_size - 1);
       sub2tc sub(source->type, data_size_expr, offs);
       offs = sub;
@@ -145,7 +147,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   // Flip location if we're in big-endian mode
   if (data.big_endian) {
     unsigned int data_size =
-      type_byte_size(*data.source_value->type).to_ulong() - 1;
+      type_byte_size(data.source_value->type).to_ulong() - 1;
     src_offset = data_size - src_offset;
   }
 

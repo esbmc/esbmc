@@ -1474,11 +1474,15 @@ class struct_union_data : public type2t
 {
 public:
   struct_union_data(type2t::type_ids id, const std::vector<type2tc> &membs,
-                     const std::vector<irep_idt> &names, const irep_idt &n)
-    : type2t(id), members(membs), member_names(names), name(n) { }
+    const std::vector<irep_idt> &names, const std::vector<irep_idt> &pretty_names,
+    const irep_idt &n)
+      : type2t(id), members(membs), member_names(names),
+        member_pretty_names(pretty_names), name(n)
+  {
+  }
   struct_union_data(const struct_union_data &ref)
     : type2t(ref), members(ref.members), member_names(ref.member_names),
-      name(ref.name) { }
+      member_pretty_names(ref.member_pretty_names), name(ref.name) { }
 
   /** Fetch index number of member. Given a textual name of a member of a
    *  struct or union, this method will look up what index it is into the
@@ -1495,13 +1499,15 @@ public:
 
   std::vector<type2tc> members;
   std::vector<irep_idt> member_names;
+  std::vector<irep_idt> member_pretty_names;
   irep_idt name;
 
 // Type mangling:
   typedef esbmct::field_traits<std::vector<type2tc>, struct_union_data, &struct_union_data::members> members_field;
   typedef esbmct::field_traits<std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names> member_names_field;
+  typedef esbmct::field_traits<std::vector<irep_idt>, struct_union_data, &struct_union_data::member_pretty_names> member_pretty_names_field;
   typedef esbmct::field_traits<irep_idt, struct_union_data, &struct_union_data::name> name_field;
-  typedef esbmct::type2t_traits<members_field, member_names_field, name_field> traits;
+  typedef esbmct::type2t_traits<members_field, member_names_field, member_pretty_names_field, name_field> traits;
 };
 
 class bv_data : public type2t
@@ -1738,8 +1744,9 @@ public:
    */
   struct_type2t(const std::vector<type2tc> &members,
                 const std::vector<irep_idt> &memb_names,
+                const std::vector<irep_idt> &memb_pretty_names,
                 const irep_idt &name)
-    : struct_type_methods(struct_id, members, memb_names, name) {}
+    : struct_type_methods(struct_id, members, memb_names, memb_pretty_names, name) {}
   struct_type2t(const struct_type2t &ref) : struct_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
 
@@ -1762,8 +1769,9 @@ public:
    */
   union_type2t(const std::vector<type2tc> &members,
                const std::vector<irep_idt> &memb_names,
+               const std::vector<irep_idt> &memb_pretty_names,
                const irep_idt &name)
-    : union_type_methods(union_id, members, memb_names, name) {}
+    : union_type_methods(union_id, members, memb_names, memb_pretty_names, name) {}
   union_type2t(const union_type2t &ref) : union_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
 
@@ -1982,7 +1990,11 @@ public:
   inline const name##_type2t & to_##name##_type(const type2tc &t) \
     { return dynamic_cast<const name##_type2t &> (*t.get()); } \
   inline name##_type2t & to_##name##_type(type2tc &t) \
-    { return dynamic_cast<name##_type2t &> (*t.get()); }
+    { return dynamic_cast<name##_type2t &> (*t.get()); } \
+  inline name##_type2t & to_##name##_type(type2t &t) \
+     { return dynamic_cast<name##_type2t &> (t); } \
+  inline const name##_type2t & to_##name##_type(const type2t &t) \
+     { return dynamic_cast<const name##_type2t &> (t); }
 
 type_macros(bool);
 type_macros(empty);
@@ -2787,10 +2799,12 @@ public:
    *  themselves are entirely self explanatory. */
   enum allockind {
     malloc,
+    realloc,
     alloca,
     cpp_new,
     cpp_new_arr,
     nondet,
+    va_arg,
     function_call
   };
 

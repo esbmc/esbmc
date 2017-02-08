@@ -121,6 +121,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
   } else if (type.id() == typet::t_struct) {
     std::vector<type2tc> members;
     std::vector<irep_idt> names;
+    std::vector<irep_idt> pretty_names;
     const struct_typet &strct = to_struct_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
@@ -146,17 +147,19 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
 
       members.push_back(ref);
       names.push_back(it->get(typet::a_name));
+      pretty_names.push_back(it->get(typet::a_pretty_name));
     }
 
     irep_idt name = type.get("tag");
     if (name.as_string() == "")
       name = type.get("name"); // C++
 
-    struct_type2t *s = new struct_type2t(members, names, name);
+    struct_type2t *s = new struct_type2t(members, names, pretty_names, name);
     new_type_ref = type2tc(s);
   } else if (type.id() == typet::t_union) {
     std::vector<type2tc> members;
     std::vector<irep_idt> names;
+    std::vector<irep_idt> pretty_names;
     const struct_union_typet &strct = to_union_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
@@ -167,11 +170,12 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
 
       members.push_back(ref);
       names.push_back(it->get(typet::a_name));
+      pretty_names.push_back(it->get(typet::a_pretty_name));
     }
 
     irep_idt name = type.get("tag");
     assert(name.as_string() != "");
-    union_type2t *u = new union_type2t(members, names, name);
+    union_type2t *u = new union_type2t(members, names, pretty_names, name);
     new_type_ref = type2tc(u);
   } else if (type.id() == typet::t_fixedbv) {
     unsigned int width_bits = to_fixedbv_type(type).get_width();
@@ -580,7 +584,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     // actually perform any flattening, because something else in the union
     // transformation should have transformed it to a byte array. Simply take
     // the address (it has to have storage), cast to byte array, and index.
-    BigInt size = type_byte_size(*new_expr->type);
+    BigInt size = type_byte_size(new_expr->type);
     address_of2tc addrof(new_expr->type, new_expr);
     type2tc byteptr(new pointer_type2t(get_uint8_type()));
     typecast2tc cast(byteptr, addrof);
@@ -592,7 +596,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     }
   } else if (is_number_type(new_expr) || is_bool_type(new_expr) ||
              is_pointer_type(new_expr)) {
-    BigInt size = type_byte_size(*new_expr->type);
+    BigInt size = type_byte_size(new_expr->type);
 
     bool is_big_endian =
       config.ansi_c.endianess ==configt::ansi_ct::IS_BIG_ENDIAN;
@@ -1404,7 +1408,6 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new dynamic_size2t(op0));
   } else if (expr.id() == "sideeffect") {
-    sideeffect2t::allockind t;
     expr2tc operand, thesize;
     type2tc cmt_type, plaintype;
     std::vector<expr2tc> args;
@@ -1422,8 +1425,12 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     migrate_type((const typet&)expr.cmt_type(), cmt_type);
     migrate_type(expr.type(), plaintype);
+
+    sideeffect2t::allockind t;
     if (expr.statement() == "malloc")
       t = sideeffect2t::malloc;
+    else if (expr.statement() == "realloc")
+      t = sideeffect2t::realloc;
     else if (expr.statement() == "alloca")
       t = sideeffect2t::alloca;
     else if (expr.statement() == "cpp_new")
@@ -1432,10 +1439,15 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = sideeffect2t::cpp_new_arr;
     else if (expr.statement() == "nondet")
       t = sideeffect2t::nondet;
+    else if (expr.statement() == "va_arg")
+      t = sideeffect2t::va_arg;
     else if (expr.statement() == "function_call")
       t = sideeffect2t::function_call;
     else
-      assert(0 && "Unexpected side-effect statement");
+    {
+      std::cerr << "Unexpected side-effect statement\n";
+      abort();
+    }
 
     if (t == sideeffect2t::function_call) {
       const exprt &arguments = expr.op1();
@@ -1625,7 +1637,7 @@ migrate_type_back(const type2tc &ref)
       component.id("component");
       component.type() = migrate_type_back(*it);
       component.set_name(irep_idt(ref2.member_names[idx]));
-      component.pretty_name(irep_idt(ref2.member_names[idx]));
+      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
       comps.push_back(component);
       idx++;
     }
@@ -1647,7 +1659,7 @@ migrate_type_back(const type2tc &ref)
       component.id("component");
       component.type() = migrate_type_back(*it);
       component.set_name(irep_idt(ref2.member_names[idx]));
-      component.pretty_name(irep_idt(ref2.member_names[idx]));
+      component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
       comps.push_back(component);
       idx++;
     }
@@ -2478,6 +2490,9 @@ migrate_expr_back(const expr2tc &ref)
     case sideeffect2t::malloc:
       theexpr.statement("malloc");
       break;
+    case sideeffect2t::realloc:
+      theexpr.statement("realloc");
+      break;
     case sideeffect2t::alloca:
       theexpr.statement("alloca");
       break;
@@ -2489,6 +2504,9 @@ migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::nondet:
       theexpr.statement("nondet");
+      break;
+    case sideeffect2t::va_arg:
+      theexpr.statement("va_arg");
       break;
     case sideeffect2t::function_call:
       theexpr.statement("function_call");

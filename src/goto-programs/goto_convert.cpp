@@ -137,25 +137,35 @@ void goto_convertt::convert_label(
                           (label, target));
     target->labels.push_back(label);
   }
+}
 
-  // cases?
-
-  const exprt::operandst &case_op=code.case_op();
-
-  if(!case_op.empty())
+void goto_convertt::convert_switch_case(
+  const code_switch_caset &code,
+  goto_programt &dest)
+{
+  if(code.operands().size()!=2)
   {
-    exprt::operandst &case_op_dest=targets.cases[target];
-
-    case_op_dest.reserve(case_op_dest.size()+case_op.size());
-
-    forall_expr(it, case_op)
-      case_op_dest.push_back(*it);
+    err_location(code);
+    throw "switch-case statement expected to have two operands";
   }
+
+  goto_programt tmp;
+  convert(code.code(), tmp);
+
+  goto_programt::targett target=tmp.instructions.begin();
+  dest.destructive_append(tmp);
 
   // default?
 
   if(code.is_default())
     targets.set_default(target);
+  else
+  {
+    // cases?
+
+    const exprt &case_op = code.case_op();
+    targets.cases[target].push_back(case_op);
+  }
 }
 
 void goto_convertt::convert(
@@ -184,6 +194,8 @@ void goto_convertt::convert(
     convert_function_call(to_code_function_call(code), dest);
   else if(statement=="label")
     convert_label(to_code_label(code), dest);
+  else if(statement=="switch_case")
+    convert_switch_case(to_code_switch_case(code), dest);
   else if(statement=="for")
     convert_for(code, dest);
   else if(statement=="while")
@@ -342,7 +354,7 @@ void goto_convertt::convert_block(
       const exprt &op0=code_it.op0();
       assert(op0.id()=="symbol");
       const irep_idt &identifier=op0.identifier();
-      const symbolt &symbol=lookup(identifier);
+      const symbolt &symbol=ns.lookup(identifier);
 
       if(!symbol.static_lifetime &&
          !symbol.type.is_code())
@@ -358,7 +370,7 @@ void goto_convertt::convert_block(
         const exprt &op0=it->op0();
         assert(op0.id()=="symbol");
         const irep_idt &identifier=op0.identifier();
-        const symbolt &symbol=lookup(identifier);
+        const symbolt &symbol=ns.lookup(identifier);
 
         if(!symbol.static_lifetime &&
            !symbol.type.is_code())
@@ -706,7 +718,7 @@ void goto_convertt::convert_decl(
 
   const irep_idt &identifier=op0.identifier();
 
-  const symbolt &symbol=lookup(identifier);
+  const symbolt &symbol=ns.lookup(identifier);
   if(symbol.static_lifetime ||
      symbol.type.is_code())
 	  return; // this is a SKIP!
@@ -937,7 +949,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
     if (identifier.empty())
 	  return;
 
-	const symbolt &symbol=lookup(identifier);
+    const symbolt &symbol=ns.lookup(identifier);
 
     if (!(identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
           && (symbol.static_lifetime || symbol.type.is_dynamic_set()))
@@ -967,7 +979,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   else if(rhs.id() == "symbol")
   {
 	const irep_idt &identifier=rhs.identifier();
-	const symbolt &symbol=lookup(identifier);
+	const symbolt &symbol=ns.lookup(identifier);
 	if(symbol.static_lifetime || symbol.type.is_dynamic_set())
 	{
 	  // make new assignment to temp for each global symbol
@@ -1013,7 +1025,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   else if(expr.id() == "symbol")
   {
     const irep_idt &identifier=expr.identifier();
-  	const symbolt &symbol=lookup(identifier);
+  	const symbolt &symbol=ns.lookup(identifier);
 
     if (identifier == "c::__ESBMC_alloc"
     	|| identifier == "c::__ESBMC_alloc_size")
@@ -1051,7 +1063,7 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
   else if (is_symbol2t(expr))
   {
     irep_idt identifier = to_symbol2t(expr).get_symbol_name();
-    const symbolt &symbol = lookup(identifier);
+    const symbolt &symbol = ns.lookup(identifier);
 
     if (identifier == "c::__ESBMC_alloc"
     	|| identifier == "c::__ESBMC_alloc_size")
@@ -2052,7 +2064,7 @@ const std::string &goto_convertt::get_string_constant(
      || expr.op0().operands().size()!=2)
   {
     err_location(expr);
-    str << "expected string constant, but got: "
+    std::cerr << "expected string constant, but got: "
           << expr.pretty() << std::endl;
     abort();
   }

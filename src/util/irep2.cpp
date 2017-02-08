@@ -1302,10 +1302,12 @@ type_to_string(const sideeffect_data::allockind &data,
                int indent __attribute__((unused)))
 {
   return (data == sideeffect_data::allockind::malloc) ? "malloc" :
+         (data == sideeffect_data::allockind::realloc) ? "realloc" :
          (data == sideeffect_data::allockind::alloca) ? "alloca" :
          (data == sideeffect_data::allockind::cpp_new) ? "cpp_new" :
          (data == sideeffect_data::allockind::cpp_new_arr) ? "cpp_new_arr" :
          (data == sideeffect_data::allockind::nondet) ? "nondet" :
+         (data == sideeffect_data::allockind::va_arg) ? "va_arg" :
          (data == sideeffect_data::allockind::function_call) ? "function_call" :
          "unknown";
 }
@@ -2664,9 +2666,9 @@ std::string empty_type2t::field_names [esbmct::num_type_fields]  =
 std::string symbol_type2t::field_names [esbmct::num_type_fields]  =
 { "symbol_name", "", "", "", ""};
 std::string struct_type2t::field_names [esbmct::num_type_fields]  =
-{ "members", "member_names", "typename", "", ""};
+{ "members", "member_names", "member_pretty_names", "typename", "", ""};
 std::string union_type2t::field_names [esbmct::num_type_fields]  =
-{ "members", "member_names", "typename", "", ""};
+{ "members", "member_names", "member_pretty_names", "typename", "", ""};
 std::string unsignedbv_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "", "", "", ""};
 std::string signedbv_type2t::field_names [esbmct::num_type_fields]  =
@@ -2981,23 +2983,23 @@ std::string concat2t::field_names [esbmct::num_type_fields]  =
   template class esbmct::irep_methods2<basename##_type2t, superclass, typename superclass::traits, basename##_type2tc, boost::mpl::pop_front<typename boost::mpl::pop_front<typename boost::mpl::pop_front<typename boost::mpl::pop_front<typename superclass::traits::fields>::type>::type>::type>::type>;
 
 #define type_typedefs_empty(basename)\
-  template class esbmct::type_methods2<basename##_type2t, type2t, esbmct::type2t_default_traits, basename##_type2tc>;\
-  template class esbmct::irep_methods2<basename##_type2t, type2t, esbmct::type2t_default_traits, basename##_type2tc>;
+  template class esbmct::type_methods2<basename##2t, type2t, esbmct::type2t_default_traits, basename##2tc>;\
+  template class esbmct::irep_methods2<basename##2t, type2t, esbmct::type2t_default_traits, basename##2tc>;
 
-type_typedefs_empty(bool)
-type_typedefs_empty(empty)
-type_typedefs1(symbol, symbol_type_data)
-type_typedefs3(struct, struct_union_data)
-type_typedefs3(union, struct_union_data)
-type_typedefs1(unsignedbv, bv_data)
-type_typedefs1(signedbv, bv_data)
-type_typedefs4(code, code_data)
-type_typedefs3(array, array_data)
-type_typedefs1(pointer, pointer_data)
-type_typedefs2(fixedbv, fixedbv_data)
-type_typedefs2(floatbv, floatbv_data)
-type_typedefs1(string, string_data)
-type_typedefs2(cpp_name, cpp_name_data)
+type_typedefs_empty(bool_type)
+type_typedefs_empty(empty_type)
+type_typedefs1(symbol_type, symbol_type_data)
+type_typedefs3(struct_type, struct_union_data)
+type_typedefs3(union_type, struct_union_data)
+type_typedefs1(unsignedbv_type, bv_data)
+type_typedefs1(signedbv_type, bv_data)
+type_typedefs4(code_type, code_data)
+type_typedefs3(array_type, array_data)
+type_typedefs1(pointer_type, pointer_data)
+type_typedefs2(fixedbv_type, fixedbv_data)
+type_typedefs2(floatbv_type, floatbv_data)
+type_typedefs1(string_type, string_data)
+type_typedefs2(cpp_name_type, cpp_name_data)
 
 // Explicit instanciation for exprs.
 

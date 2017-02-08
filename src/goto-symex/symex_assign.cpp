@@ -70,19 +70,10 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
 
   art1 = NULL;
 
-  // Work out whether or not we'll be modelling with cpp:: or c:: arrays.
-  const symbolt *sp;
-  if (!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp)) {
-    valid_ptr_arr_name = "c::__ESBMC_alloc";
-    alloc_size_arr_name = "c::__ESBMC_alloc_size";
-    deallocd_arr_name = "c::__ESBMC_deallocated";
-    dyn_info_arr_name = "c::__ESBMC_is_dynamic";
-  } else {
-    valid_ptr_arr_name = "cpp::__ESBMC_alloc";
-    alloc_size_arr_name = "cpp::__ESBMC_alloc_size";
-    deallocd_arr_name = "cpp::__ESBMC_deallocated";
-    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic";
-  }
+  valid_ptr_arr_name = "c::__ESBMC_alloc";
+  alloc_size_arr_name = "c::__ESBMC_alloc_size";
+  deallocd_arr_name = "c::__ESBMC_deallocated";
+  dyn_info_arr_name = "c::__ESBMC_is_dynamic";
 
   symbolt sym;
   sym.name = "symex_throw::thrown_obj";
@@ -195,11 +186,17 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
     case sideeffect2t::cpp_new_arr:
       symex_cpp_new(lhs, effect);
       break;
+    case sideeffect2t::realloc:
+      symex_realloc(lhs, effect);
+      break;
     case sideeffect2t::malloc:
       symex_malloc(lhs, effect);
       break;
     case sideeffect2t::alloca:
       symex_alloca(lhs, effect);
+      break;
+    case sideeffect2t::va_arg:
+      symex_va_arg(lhs, effect);
       break;
     // No nondet side effect?
     default:
@@ -437,8 +434,7 @@ void goto_symext::symex_assign_byte_extract(
     assert(!is_multi_dimensional_array(arr_type.subtype) &&
            "Can't currently byte extract through more than two dimensions of "
            "array right now, sorry");
-    constant_int2tc subtype_sz(index_type2(),
-                               type_byte_size(*arr_type.subtype));
+    constant_int2tc subtype_sz(index_type2(), type_byte_size(arr_type.subtype));
     expr2tc div = div2tc(index_type2(), extract.source_offset, subtype_sz);
     expr2tc mod = modulus2tc(index_type2(), extract.source_offset, subtype_sz);
     do_simplify(div);
@@ -463,8 +459,10 @@ void goto_symext::symex_assign_concat(
   guardt &guard)
 {
   // Right: generate a series of symex assigns.
+#ifndef NDEBUG
   const concat2t &cat = to_concat2t(lhs);
   assert(cat.type->get_width() > 8);
+#endif
   assert(is_scalar_type(rhs));
 
   // Second attempt at this code: byte stitching guarantees that all the concats
@@ -480,8 +478,10 @@ void goto_symext::symex_assign_concat(
   // Add final operand to list
   operand_list.push_back(cur_concat);
 
+#ifndef NDEBUG
   for (const auto &foo : operand_list)
     assert(foo->type->get_width() == 8);
+#endif
   assert((operand_list.size() * 8) == cat.type->get_width());
 
   bool is_big_endian =

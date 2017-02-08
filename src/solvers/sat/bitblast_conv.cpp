@@ -3,8 +3,8 @@
 #include "bitblast_conv.h"
 
 bitblast_convt::bitblast_convt(bool int_encoding, const namespacet &_ns,
-    bool is_cpp, sat_iface *_sat_api)
-  : smt_convt(int_encoding, _ns, is_cpp), sat_api(_sat_api)
+    sat_iface *_sat_api)
+  : smt_convt(int_encoding, _ns), sat_api(_sat_api)
 {
 }
 
@@ -487,7 +487,7 @@ bitblast_convt::get_bv(const type2tc &t, smt_astt a)
   return constant_int2tc(t, BigInt(accuml));
 }
 
-smt_astt 
+smt_astt
 bitblast_convt::make_disjunct(const smt_convt::ast_vec &v)
 {
   bvt bv;
@@ -503,7 +503,7 @@ bitblast_convt::make_disjunct(const smt_convt::ast_vec &v)
   return ba;
 }
 
-smt_astt 
+smt_astt
 bitblast_convt::make_conjunct(const smt_convt::ast_vec &v)
 {
   bvt bv;
@@ -663,7 +663,7 @@ bitblast_convt::cond_negate(const bvt &vals, bvt &out, literalt cond)
 
   for (unsigned int i = 0; i < vals.size(); i++)
     out[i] = sat_api->lselect(cond, inv[i], vals[i]);
-  
+
   return;
 }
 

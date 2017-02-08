@@ -207,12 +207,34 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   goto_programt::targett t=f.body.add_instruction();
   t->type=END_FUNCTION;
   t->location=end_location;
-  //t->code.identifier(identifier);
-  //XXXjmorse, disabled in migration, don't think this does anything
 
   if(to_code(symbol.value).get_statement()=="block")
     t->location=static_cast<const locationt &>(
         symbol.value.end_location());
+
+  // Wrap the body of functions name c::__VERIFIER_atomic_* with atomic_bengin
+  // and atomic_end
+  if(!f.body.instructions.empty() &&
+      has_prefix(id2string(identifier), "c::__VERIFIER_atomic_"))
+  {
+    goto_programt::instructiont a_begin;
+    a_begin.make_atomic_begin();
+    a_begin.location = f.body.instructions.front().location;
+    f.body.insert_swap(f.body.instructions.begin(), a_begin);
+
+    goto_programt::targett a_end = f.body.add_instruction();
+    a_end->make_atomic_end();
+    a_end->location = end_location;
+
+    Forall_goto_program_instructions(i_it, f.body)
+    {
+      if(i_it->is_goto() && i_it->targets.front()->is_end_function())
+      {
+        i_it->targets.clear();
+        i_it->targets.push_back(a_end);
+      }
+    }
+  }
 
   // do local variables
   Forall_goto_program_instructions(i_it, f.body)
@@ -519,7 +541,7 @@ goto_convert_functionst::fix_union_type(typet &type, bool is_pointer)
     // one authorative type_byte_size function
     type2tc new_type;
     migrate_type(type, new_type);
-    auto size = type_byte_size(*new_type);
+    auto size = type_byte_size(new_type);
     new_type = type2tc(new array_type2t(get_uint8_type(),
                                         gen_ulong(size.to_uint64()), false));
     type = migrate_type_back(new_type);
@@ -552,7 +574,7 @@ goto_convert_functionst::fix_union_expr(exprt &expr)
       expr2tc dataobj;
       migrate_expr(expr.op0(), dataobj);
       type2tc union_type = dataobj->type;
-      auto size = type_byte_size(*union_type);
+      auto size = type_byte_size(union_type);
       type2tc array_type = type2tc(new array_type2t(get_uint8_type(),
             gen_ulong(size.to_uint64()), false));
       type2tc union_pointer(new pointer_type2t(union_type));

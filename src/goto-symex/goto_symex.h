@@ -377,10 +377,6 @@ protected:
   void run_intrinsic(const code_function_call2t &call, reachability_treet &art,
                      const std::string symname);
 
-  /** Implementation of realloc. */
-  void intrinsic_realloc(const code_function_call2t &call,
-                         reachability_treet &arg);
-
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
   /** Perform switch_to; switches control to explicit thread ID. */
@@ -581,6 +577,8 @@ protected:
 
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  /** Implementation of realloc. */
+  void symex_realloc(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of alloca. */
   expr2tc symex_alloca(const expr2tc &lhs, const sideeffect2t &code);
   /** Wrapper around for alloca and malloc. */
@@ -596,6 +594,8 @@ protected:
   void symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, const expr2tc &code);
+  /** Symbolic implementation of va_arg */
+  void symex_va_arg(const expr2tc &lhs,  const sideeffect2t &code);
 
   /**
    *  Replace nondet func calls with nondeterminism.

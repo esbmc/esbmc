@@ -7,8 +7,8 @@ lib_LTLIBRARIES = libmain.la @ESBMC_SHARED_LIB@
 # Work out what gets linked in.
 ESBMC_SOLVER_LIBS = @ESBMC_SOLVER_LIBS@
 libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la ../langapi/liblangapi.la \
-                  ../ansi-c/libansic.la ../ansi-c/libclib.la ../ansi-c/cpp/libcpp.la \
-                  ../ansi-c/headers/libheaders.la ../goto-programs/libgotoprograms.la \
+                  ../ansi-c/libansic.la ../c2goto/libclib.la ../ansi-c/cpp/libcpp.la \
+                  ../c2goto/headers/libheaders.la ../goto-programs/libgotoprograms.la \
                   @ESBMC_CLANG_ARCHIVES@ \
                   ../pointer-analysis/libpointeranalysis.la ../util/libutil.la \
                   ../big-int/libbigint.la ../solvers/libsolvers.la
@@ -43,8 +43,8 @@ AM_LDFLAGS = @ESBMC_LDFLAGS@
 
 buildidstring.c: $(libs_to_link_in) $(esbmc_SOURCES) $(libmain_la_SOURCES) python.cpp
 	$(top_srcdir)/scripts/buildidobj.sh .
-	$(top_srcdir)/ansi-c/headers/flail.sh buildidstring .//buildidobj.txt > $@
+	$(top_srcdir)/c2goto/headers/flail.sh buildidstring .//buildidobj.txt > $@
 
 # Second instance of buildidstring to appease libtool
 ltbuildidstring.c: $(libs_to_link_in) $(esbmc_SOURCES) $(libmain_la_SOURCES) python.cpp
-	$(top_srcdir)/ansi-c/headers/flail.sh buildidstring .//buildidobj.txt > $@
+	$(top_srcdir)/c2goto/headers/flail.sh buildidstring .//buildidobj.txt > $@

@@ -1513,16 +1513,17 @@ labeled_statement:
 	| TOK_CASE constant_expression ':' statement
 	{
 	  $$=$1;
-	  statement(*$$, "label");
+	  statement(*$$, "switch_case");
+	  mto($$, $2);
 	  mto($$, $4);
-	  exprt tmp("");
-	  tmp.move_to_operands(*$2);
-	  $$->case_irep(tmp);
 	}
 	| TOK_DEFAULT ':' statement
 	{
 	  $$=$1;
-	  statement(*$$, "label");
+	  statement(*$$, "switch_case");
+	  exprt nil;
+	  nil.make_nil();
+	  $$->move_to_operands(nil);
 	  mto($$, $3);
 	  $$->dfault(true);
 	}

@@ -259,7 +259,7 @@ void ansi_c_convert_typet::write(typet &type)
       else if(int64_cnt)
         width=8*8;
       else
-        assert(false);
+        abort();
     }
     else if(short_cnt)
     {

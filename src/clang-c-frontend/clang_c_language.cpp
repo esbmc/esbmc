@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <sstream>
 #include <fstream>
 
-#include <ansi-c/cprover_library.h>
+#include <c2goto/cprover_library.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/c_link.h>
 
@@ -92,9 +92,6 @@ void clang_c_languaget::build_compiler_string(
 
   // Ignore ctype defined by the system
   compiler_string.push_back("-D__NO_CTYPE");
-
-  // Realloc should call __ESBMC_realloc
-  compiler_string.push_back("-Drealloc=__ESBMC_realloc");
 
   // Force clang see all files as .c
   // This forces the preprocessor to be called even in preprocessed files
@@ -210,19 +207,21 @@ void clang_c_languaget::internal_additions()
     "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
 
     // malloc
-    // This will be set to infinity size array at clang_c_adjust
-    // TODO: We definitely need a better solution for this
     "__attribute__((used))\n"
+    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
     "_Bool __ESBMC_alloc[1];\n"
-    "__attribute__((used))\n"
-    "_Bool __ESBMC_deallocated[1];\n"
-    "__attribute__((used))\n"
-    "_Bool __ESBMC_is_dynamic[1];\n"
-    "__attribute__((used))\n"
-    "unsigned long __ESBMC_alloc_size[1];\n"
 
     "__attribute__((used))\n"
-    "void *__ESBMC_realloc(void *ptr, long unsigned int size);\n"
+    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
+    "_Bool __ESBMC_deallocated[1];\n"
+
+    "__attribute__((used))\n"
+    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
+    "_Bool __ESBMC_is_dynamic[1];\n"
+
+    "__attribute__((used))\n"
+    "__attribute__((annotate(\"__ESBMC_inf_size\")))\n"
+    "unsigned long __ESBMC_alloc_size[1];\n"
 
     // float stuff
     "__attribute__((used))\n"

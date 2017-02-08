@@ -29,7 +29,8 @@ extern "C" {
 #include <goto-programs/read_goto_binary.h>
 
 #include "cprover_library.h"
-#include "ansi_c_language.h"
+#include "../ansi-c/ansi_c_language.h"
+#include "../clang-c-frontend/clang_c_language.h"
 
 #ifndef NO_CPROVER_LIBRARY
 

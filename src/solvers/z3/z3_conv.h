@@ -33,10 +33,47 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 typedef unsigned int uint;
 
+class z3_smt_sort : public smt_sort {
+public:
+#define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
+  z3_smt_sort(smt_sort_kind i, z3::sort _s)
+    : smt_sort(i), s(_s), rangesort(NULL) { }
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
+    : smt_sort(i), s(_s), rangesort(NULL), tupletype(_tupletype) { }
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w)
+    : smt_sort(i, w), s(_s), rangesort(NULL) { }
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w, unsigned long dw,
+              const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
+
+  virtual ~z3_smt_sort() { }
+
+  z3::sort s;
+  const smt_sort *rangesort;
+  type2tc tupletype;
+};
+
+class z3_smt_ast : public smt_ast {
+public:
+#define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
+  z3_smt_ast(smt_convt *ctx, z3::expr _e, const smt_sort *_s) :
+            smt_ast(ctx, _s), e(_e) { }
+  virtual ~z3_smt_ast() { }
+  z3::expr e;
+
+  virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
+  virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
+                                unsigned int idx, expr2tc idx_expr) const;
+  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
+  virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
+
+  virtual void dump() const override;
+};
+
 class z3_convt: public smt_convt, public tuple_iface, public array_iface
 {
 public:
-  z3_convt(bool int_encoding, bool is_cpp, const namespacet &ns);
+  z3_convt(bool int_encoding, const namespacet &ns);
   virtual ~z3_convt();
 private:
   void intr_push_ctx(void);
@@ -52,7 +89,6 @@ public:
   virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
                                  const type2tc &subtype);
 
-private:
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 
@@ -142,49 +178,15 @@ private:
 
   virtual tvt l_get(const smt_ast *a);
 
+  virtual void dump_SMT();
+
   // Some useful types
 public:
-  #define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
-  class z3_smt_ast : public smt_ast {
-  public:
-    z3_smt_ast(smt_convt *ctx, z3::expr _e, const smt_sort *_s) :
-              smt_ast(ctx, _s), e(_e) { }
-    virtual ~z3_smt_ast() { }
-    z3::expr e;
-
-    virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
-    virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
-                                  unsigned int idx, expr2tc idx_expr) const;
-    virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
-    virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
-
-    virtual void dump() const override;
-  };
 
   inline z3_smt_ast *
   new_ast(z3::expr _e, const smt_sort *_s) {
     return new z3_smt_ast(this, _e, _s);
   }
-
-  class z3_smt_sort : public smt_sort {
-  public:
-  #define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
-    z3_smt_sort(smt_sort_kind i, z3::sort _s)
-      : smt_sort(i), s(_s), rangesort(NULL) { }
-    z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
-      : smt_sort(i), s(_s), rangesort(NULL), tupletype(_tupletype) { }
-    z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w)
-      : smt_sort(i, w), s(_s), rangesort(NULL) { }
-    z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w, unsigned long dw,
-                const smt_sort *_rangesort)
-      : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
-
-    virtual ~z3_smt_sort() { }
-
-    z3::sort s;
-    const smt_sort *rangesort;
-    type2tc tupletype;
-  };
 
   //  Must be first member; that way it's the last to be destroyed.
   z3::context ctx;

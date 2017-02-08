@@ -118,13 +118,21 @@ AC_DEFUN([AX_CLANG],
     for lib in $clanglibs ; do
         AC_MSG_CHECKING(if we can find libclang$lib)
         if ls "$clang_libs_path/libclang$lib"* >/dev/null 2>&1 ; then
-	 clang_LIBS="$clang_LIBS -lclang$lib"
-	 AC_MSG_RESULT(yes)
-    else
-	 AC_MSG_NOTICE([Can't find libclang$lib])
-	 ifelse([$3], , :, [$3])
-    fi
+            clang_LIBS="$clang_LIBS -lclang$lib"
+            AC_MSG_RESULT(yes)
+        else
+            AC_MSG_NOTICE([Can't find libclang$lib])
+            ifelse([$3], , :, [$3])
+        fi
     done
+
+    dnl Search if clang was shipped with a symbolic link call libgomp.so
+    dnl We actually link with libgomp.so and this link breaks the old frontend
+    AC_MSG_CHECKING(if $clang_libs_path/libgomp.so is present)
+    if ls -L "$clang_libs_path/libgomp.so" >/dev/null 2>&1 ; then
+        AC_MSG_ERROR([Found libgomp.so on $clang_libs_path. ESBMC is linked against the GNU libgomp and the one shipped with clang is known to cause issues on our tool. Please, remove it before continuing.])
+    fi
+    AC_MSG_RESULT(no)
 
     clang_CPPFLAGS="-I$clang_includes_path"
     clang_LDFLAGS="-L$clang_libs_path"

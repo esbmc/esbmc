@@ -51,7 +51,7 @@ libclangheaders_la_SOURCES = clang_Intrin.c clang___clang_cuda_cmath.c \
 SUFFIXES = .hs
 
 .hs.c:
-	$(top_srcdir)/ansi-c/headers/flail.sh $< $< > $@
+	$(top_srcdir)/c2goto/headers/flail.sh $< $< > $@
 
 clean-local:
 	-rm -rf *.c

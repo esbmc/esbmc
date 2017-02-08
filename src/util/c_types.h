@@ -30,6 +30,7 @@ typet unsigned_char_type();
 typet signed_char_type();
 typet char16_type();
 typet char32_type();
+typet unsigned_wchar_type();
 typet wchar_type();
 type2tc char_type2();
 typet float_type();

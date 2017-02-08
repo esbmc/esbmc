@@ -28,6 +28,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"no-pointer-check",	switc,		""	},
 { 0,	"document-subgoals",	switc,		""	},
 { 0,	"all-claims",		switc,		""	},
+{ 0,  "dump-smt-formula",   switc,    ""  },
 { 'D',	"",			string,		""	},
 { 'I',	"",			string,		""	},
 { 0,	"depth",		number,		""	},

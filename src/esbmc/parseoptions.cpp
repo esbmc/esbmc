@@ -180,10 +180,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   /* graphML generation options check */
   if(cmdline.isset("witness-output"))
-  {
     options.set_option("witness-output", cmdline.getval("witness-output"));
-    options.set_option("no-slice", true);
-  }
 
   if(cmdline.isset("witness-detailed"))
     options.set_option("witness-detailed", true);
@@ -303,7 +300,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     struct rlimit lim;
     lim.rlim_cur = size;
     lim.rlim_max = size;
-    if(setrlimit(RLIMIT_AS, &lim) != 0)
+    if(setrlimit(RLIMIT_DATA, &lim) != 0)
     {
       perror("Couldn't set memory limit");
       abort();
@@ -1067,10 +1064,13 @@ int cbmc_parseoptionst::doit_k_induction()
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
 
-    std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << i2string((unsigned long) k_step);
-    std::cout << " ***\n";
-    std::cout << "*** Checking inductive step\n";
+    if(k_step > 1)
+    {
+      std::cout << "\n*** K-Induction Loop Iteration ";
+      std::cout << i2string((unsigned long) k_step);
+      std::cout << " ***\n";
+      std::cout << "*** Checking inductive step\n";
+    }
 
     if(!do_inductive_step(opts, goto_functions, k_step))
       return false;
@@ -1385,11 +1385,6 @@ bool cbmc_parseoptionst::get_goto_program(
     return true;
   }
 
-  catch(...)
-  {
-    return true;
-  }
-
   return false;
 }
 
@@ -1430,10 +1425,6 @@ void cbmc_parseoptionst::preprocessing()
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-  }
-
-  catch(...)
-  {
   }
 }
 
@@ -1872,11 +1863,6 @@ bool cbmc_parseoptionst::process_goto_program(
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    return true;
-  }
-
-  catch(...)
-  {
     return true;
   }
 
