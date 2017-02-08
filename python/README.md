@@ -40,12 +40,34 @@ you immediately pay a performance penalty.
 
 ## Building
 
- * Requires python-dev, of course
- * That allows for python instances within ESBMC process
- * Must be shared object to be used in any other python process
+To build these bindings you need to have your distributions python 3 development
+package installed, which the configure script should automatically discover. You
+also need Boost.Python to be installed, it's most likely in your distributions
+libboost package.
+
+The configure script is hard coded to build for python 3: technically the
+autoconf file can be edited to build against python 2, and Boost.Python will
+work just as well with that. At the time of writing, python 2 only has three
+years of life left, you should avoid starting new projects in it.
+
+Two switches to the configure script are required to build the python bindings:
+ * --enable-python
  * --enable-shared
- * Env vars
- * Boost python
+The former is self explanatory, the latter causes a shared object (.so) library
+of ESBMC functions to be build. If you're not interested in the ESBMC command
+line too, you might want to add --disable-esbmc to the configure command line,
+which will avoid building static object files, and will save you 50% of build
+time.
+
+Once built, a libesbmc.so.0.0.0 file will exist in the esbmc/.libs directory of
+your build directory. To access ESBMC from python, symlink (or copy) the shared
+object into your python path as 'esbmc.so', and import it from python:
+
+    import esbmc
+
+We might get around to writing some examples; in the mean time there should be
+some regression tests published that illustrate accessing ESBMC apis from
+python.
 
 ## Caveat emptor
 
