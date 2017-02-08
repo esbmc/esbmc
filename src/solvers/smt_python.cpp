@@ -190,8 +190,8 @@ smt_ast_wrapper::default_project(smt_convt *ctx, unsigned int elem) const
 }
 
 smt_convt_wrapper::smt_convt_wrapper(bool int_encoding, const namespacet &_ns,
-      bool is_cpp, bool bools_in_arrays, bool can_init_inf_arrays)
-  : smt_convt(int_encoding, _ns, is_cpp),
+      bool bools_in_arrays, bool can_init_inf_arrays)
+  : smt_convt(int_encoding, _ns),
     array_iface(bools_in_arrays, can_init_inf_arrays),
     tuple_iface()
 {
