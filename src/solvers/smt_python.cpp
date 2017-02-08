@@ -536,11 +536,11 @@ smt_convt_wrapper::cast_conv_down(smt_convt *c)
 }
 
 static smt_convt *
-bounce_solver_factory(bool is_cpp, bool int_encoding, const namespacet &ns,
+bounce_solver_factory(bool int_encoding, const namespacet &ns,
     const optionst &options, const char *name = "bees")
 {
   std::string foo(name);
-  return create_solver_factory(name, is_cpp, int_encoding, ns, options);
+  return create_solver_factory(name, int_encoding, ns, options);
 }
 
 static
@@ -811,7 +811,7 @@ build_smt_conv_python_class(void)
     // be to store a python object holding the solver name, and define a method
     // to construct it or something.
     cp->def("make", &bounce_solver_factory,
-        (arg("is_cpp"), arg("int_encoding"), arg("ns"), arg("options"), arg("name")=solver_name),
+        (arg("int_encoding"), arg("ns"), arg("options"), arg("name")=solver_name),
         return_value_policy<manage_new_object>());
 
     cp->staticmethod("make");
