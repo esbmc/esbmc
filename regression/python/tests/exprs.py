@@ -27,7 +27,7 @@ class Exprs(unittest.TestCase):
         import esbmc
         val = self.make_int()
         self.assertTrue(val.type == self.make_unsigned(), "Can't get expr type field")
-        self.assertTrue(val.constant_value == self.make_bigint(), "Can't get expr value field")
+        self.assertTrue(val.value == self.make_bigint(), "Can't get expr value field")
         self.assertTrue(val.expr_id == esbmc.expr.expr_ids.constant_int, "Can't get expr value field")
 
     def test_cmps(self):
@@ -44,7 +44,7 @@ class Exprs(unittest.TestCase):
     def test_pretty(self):
         import esbmc
         val = self.make_int()
-        reftext = "constant_int\n* constant_value : 0\n* type : unsignedbv\n  * width : 32"
+        reftext = "constant_int\n* value : 0\n* type : unsignedbv\n  * width : 32"
         self.assertTrue(val.pretty(0) == reftext, "Expr pretty should work")
 
     def test_clone(self):
@@ -167,7 +167,7 @@ class Exprs(unittest.TestCase):
         self.assertTrue(simp.expr_id == esbmc.expr.expr_ids.constant_int, "Simplified add should be a constant int")
         # As it's a new irep it's copied by container value, so gets
         # downcasted automagically by boost.python?
-        self.assertTrue(simp.constant_value.to_long() == 3, "Simplified add has wrong value")
+        self.assertTrue(simp.value.to_long() == 3, "Simplified add has wrong value")
 
     def test_struct(self):
         import esbmc
