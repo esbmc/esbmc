@@ -9,6 +9,12 @@
 
 class dummy_goto_class { };
 
+static bool
+insn_lt(const goto_programt::instructiont &i1, const goto_programt::instructiont &i2)
+{
+  return i1.location_number < i2.location_number;
+}
+
 boost::python::object
 get_instructions(const goto_programt &prog)
 {
@@ -170,7 +176,10 @@ build_goto_func_class()
     .def("is_assert", &insnt::is_assert)
     .def("is_atomic_begin", &insnt::is_atomic_begin)
     .def("is_atomic_end", &insnt::is_atomic_end)
-    .def("is_end_function", &insnt::is_end_function);
+    .def("is_end_function", &insnt::is_end_function)
+    // Define a less-than operator so that we can put instructions in maps,
+    // based on their location number.
+    .def("__lt__", &insn_lt);
   // Can't publish "is backwards goto" because it touches targets
 
   // Trickyness: the 'targets' field of an instruction is very well suited,
