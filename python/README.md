@@ -71,11 +71,23 @@ python.
 
 ## Caveat emptor
 
- * As mentioned, no substitude for knowledge
- * Some things aren't exported
- * Some thingis can't be exported easily
- * Python isn't going to slow down C++ development
- * Not the default
+As mentioned above, these bindings are not a substitute for knowing about ESBMCs
+internals, and there are limitations as to what can be done. There are no good
+python representations of, for example, list iterators that are used extensively
+throughout ESBMC instead of pointers. If you need to deeply mess with internals,
+you will need to use C++.
+
+Certain APIs are not exported from ESBMC to python, for example fiddly
+intrinsics, everything to do with parsing and GOTO conversion, and things like
+state hashing. The most likely reasons for a facility not being exported is that
+it's not particularly useful as a library or interesting, or that it has a very
+complicated type signature.
+
+We make no attempt to preserve a stable ABI or API between ESBMC releases, and
+as a result all releases are breaking releases. The good news is that python
+insulates against ABI changes, and you'll only experience exceptions if a
+function signature changes (or is deleted), which should always present when you
+call into ESBMC from python.
 
 ## Runtime examination and debugging
 
