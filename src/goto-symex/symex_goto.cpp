@@ -290,9 +290,6 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       // Try to get the value
       renaming::level2t::rename_to_record(rhs, *it);
       goto_state.level2.rename(rhs);
-
-      if(is_symbol2t(rhs))
-        cur_state->current_name(goto_state, rhs);
     } else {
       symbol2tc true_val(type, symbol.name);
       symbol2tc false_val(type, symbol.name);
@@ -303,10 +300,9 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       renaming::level2t::rename_to_record(true_val, *it);
       renaming::level2t::rename_to_record(false_val, *it);
 
-      // Manually rename those l1 variables to level2 under the two different
-      // level2 objects.
-      goto_state.level2.get_ident_name(true_val);
-      cur_state->level2.get_ident_name(false_val);
+      // Try to get the symbol's value
+      goto_state.level2.rename(true_val);
+      cur_state->level2.rename(false_val);
 
       rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
     }
