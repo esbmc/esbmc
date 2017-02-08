@@ -1,6 +1,6 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python3
 
 import unittest
 from tests import *
 
-unittest.main(verbosity=2)
+unittest.main(verbosity=20)
