@@ -1163,6 +1163,35 @@ type_poolt::type_poolt(bool yolo __attribute__((unused)))
   return;
 }
 
+type_poolt &
+type_poolt::operator=(type_poolt const &ref)
+{
+  bool_type = ref.bool_type;
+  empty_type = ref.empty_type;
+  struct_map = ref.struct_map;
+  union_map = ref.union_map;
+  array_map = ref.array_map;
+  pointer_map = ref.pointer_map;
+  unsignedbv_map = ref.unsignedbv_map;
+  signedbv_map = ref.signedbv_map;
+  fixedbv_map = ref.fixedbv_map;
+  floatbv_map = ref.floatbv_map;
+  string_map = ref.string_map;
+  code_map = ref.code_map;
+
+  // Re-establish some pointers
+  uint8 = &unsignedbv_map[unsignedbv_typet(8)];
+  uint16 = &unsignedbv_map[unsignedbv_typet(16)];
+  uint32 = &unsignedbv_map[unsignedbv_typet(32)];
+  uint64 = &unsignedbv_map[unsignedbv_typet(64)];
+  int8 = &signedbv_map[signedbv_typet(8)];
+  int16 = &signedbv_map[signedbv_typet(16)];
+  int32 = &signedbv_map[signedbv_typet(32)];
+  int64 = &signedbv_map[signedbv_typet(64)];
+
+  return *this;
+}
+
 // XXX investigate performance implications of this cache
 static const type2tc &
 get_type_from_pool(const typet &val,

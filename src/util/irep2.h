@@ -2075,6 +2075,8 @@ public:
   type_poolt(void);
   type_poolt(bool yolo);
 
+  type_poolt &operator=(type_poolt const &ref);
+
   type2tc bool_type;
   type2tc empty_type;
 
