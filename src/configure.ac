@@ -209,13 +209,19 @@ AS_IF([test "${enable_python}" = "yes"], [
     AS_VAR_SET(py3suffix, `echo $pkg_cv_PYTHON3_VERSION | sed -e 's/\.//g'`)
     AS_VAR_SET(py3libname, "boost_python-py${py3suffix}")
 
+    dnl Alternately, if the user overrides with a --with-boost-python= spec,
+    dnl the set the libname to that
+    AC_ARG_WITH([boost-python-libname], [AS_HELP_STRING([--with-boost-python-libname], [Specify basename of boost-pythons shared object])], [
+      AS_VAR_SET(py3libname, "${with_boost_python_libname}")],
+    [])
+
     AS_VAR_APPEND(LIBS, " $LIBPYTHON3_LIBS ")
     AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON3_LIBS ")
 
     dnl Check if we can actually compile in boost-python. Needs to be after
     dnl python libs added to LIBS
     AC_CHECK_LIB(["${py3libname}"], [no_init], [],
-        [AC_MSG_ERROR([Python supported requested but boost-python not found])], []
+        [AC_MSG_ERROR([Python supported requested but boost-python not found. Alternately, packaging sketchyness means I couldn't deduce the base soname, and you can specify it with --with-boost-python-libname=boost_python-foobar'])], []
     )
 
     dnl Alright, add the lib name to that
