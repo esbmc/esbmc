@@ -293,6 +293,14 @@ downcast_expr(const expr2tc &expr)
   return o(expr);
 }
 
+static void
+py_deconstructor()
+{
+  // Release global reference by overwriting with fresh dict
+  type_to_downcast = extract<dict>(object());
+  expr_to_downcast = extract<dict>(object());
+}
+
 BOOST_PYTHON_MODULE(esbmc)
 {
   // This is essentially the entry point for the esbmc shared object.
@@ -419,6 +427,9 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
   build_value_set_classes();
 
   def("trap", &its_a_trap);
+
+  object atexit = import("atexit");
+  atexit.attr("register")(make_function(py_deconstructor));
 }
 
 // Include these other things that are special to the esbmc binary:
