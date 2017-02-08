@@ -230,7 +230,7 @@ AS_IF([test "${enable_python}" = "yes"], [
 
     AC_SUBST([ESBMC_PYTHON_OBJ], "python.lo")
   ], [
-    AC_MSG_ERROR(Asked for python support but pkgconfig finds no python library. You need to install python development packages.)
+    AC_MSG_ERROR(Asked for python support but pkgconfig finds no python library. You need to install python (3) development packages.)
   ])
 ], [
     AC_SUBST([ESBMC_PYTHON_OBJ], "")
