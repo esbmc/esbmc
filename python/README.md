@@ -12,18 +12,31 @@ Contents:
 
 ## Introduction
 
-What this is
- * Bindings
- * Easier inspection of runtime stuff
- * The ability to quickly prototype logic
- * Interoperability with Other Things
- * Python is nice
+The ESBMC python bindings allow access to the internal APIs and data structures
+of ESBMC, without having to write any native code or depend on headers. The
+entire system is contained in a single shared object. A replication of the ESBMC
+command line program can be achieved in roughly thirty lines of python. Most
+importantly, python code can be hooked into ESBMC at various stages, allowing 
+inspection and extension. We have chosen python because:
+ * It's a great language
+ * Rapid prototyping and even heavy lifting is easy to achieve
+ * There's a wealth of libraries already available, easily interoperability
+   between BMC and other technology
+ * The selected binding mechanism (Boost.Python) is (largely) type safe and
+   directly encapsulates our existing C++ facilities
 
-What this isn't
- * Going to take away hard work
- * A substitude for knowing how ESBMC works
- * A silver bullet
- * Fast
+It's important to understand that these python bindings are just that: an API
+for accessing the underlying C++ API. Thus if you perform illegal behaviour
+with the API such as an out-of-range vector access, you'll still likely
+experience a crash. The benefits comes from being able to compose objects /
+algorithms / data structures from python with ESBMC objects.
+
+Accordingly, these bindings come with some hard truths: using them is not a
+substitute for knowing about (much of) ESBMCs internals, you still have to
+understand what you're dealing with. They don't provide anything more than
+what ESBMC already does. They are no silver bullet for making an analysis or
+extension work (they just make it easier). Finally, the moment you touch python
+you immediately pay a performance penalty.
 
 ## Building
 
