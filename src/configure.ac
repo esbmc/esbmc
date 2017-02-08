@@ -200,16 +200,27 @@ AS_IF([test "${enable_python}" = "yes"], [
     dnl Add flags to build python in; enable build of libesbmc
     AS_VAR_APPEND(CXXFLAGS, " $LIBPYTHON3_CFLAGS -DWITH_PYTHON ")
     AS_VAR_APPEND(CFLAGS, " $LIBPYTHON3_CFLAGS -DWITH_PYTHON ")
+
     dnl Misery: debian wants -py34 on the end, autoconf library stuff doesn't
-    dnl detect that. Hardcode for now.
-    AS_VAR_APPEND(LIBS, " $LIBPYTHON3_LIBS -lboost_python-py34 ")
-    AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON3_LIBS -lboost_python-py34 ")
+    dnl detect that. Attempt to build the version number by frobbing pkgconfig
+
+    _PKG_CONFIG(PYTHON3_VERSION, modversion, python3)
+
+    AS_VAR_SET(py3suffix, `echo $pkg_cv_PYTHON3_VERSION | sed -e 's/\.//g'`)
+    AS_VAR_SET(py3libname, "boost_python-py${py3suffix}")
+
+    AS_VAR_APPEND(LIBS, " $LIBPYTHON3_LIBS ")
+    AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON3_LIBS ")
 
     dnl Check if we can actually compile in boost-python. Needs to be after
     dnl python libs added to LIBS
-    AC_CHECK_LIB([boost_python-py34], [no_init], [],
+    AC_CHECK_LIB(["${py3libname}"], [no_init], [],
         [AC_MSG_ERROR([Python supported requested but boost-python not found])], []
     )
+
+    dnl Alright, add the lib name to that
+    AS_VAR_APPEND(LIBS, " -l${py3libname} ")
+    AS_VAR_APPEND(C2GOTO_LIBS, " -l${py3libname} ")
 
     AC_SUBST([ESBMC_PYTHON_OBJ], "python.lo")
   ], [
