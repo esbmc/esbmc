@@ -221,7 +221,7 @@ AS_IF([test "${enable_python}" = "yes"], [
     dnl Check if we can actually compile in boost-python. Needs to be after
     dnl python libs added to LIBS
     AC_CHECK_LIB(["${py3libname}"], [no_init], [],
-        [AC_MSG_ERROR([Python supported requested but boost-python not found. Alternately, packaging sketchyness means I couldn't deduce the base soname, and you can specify it with --with-boost-python-libname=boost_python-foobar'])], []
+        [AC_MSG_ERROR([Python supported requested but boost-python not found. Alternately: packaging sketchyness means I couldn't deduce the base soname and you can specify it with --with-boost-python-libname=boost_python-foobar'])], []
     )
 
     dnl Alright, add the lib name to that
@@ -230,7 +230,7 @@ AS_IF([test "${enable_python}" = "yes"], [
 
     AC_SUBST([ESBMC_PYTHON_OBJ], "python.lo")
   ], [
-    AC_MSG_ERROR("Asked for python support, but pkgconfig finds no python library. You need to install python development packages.")
+    AC_MSG_ERROR(Asked for python support but pkgconfig finds no python library. You need to install python development packages.)
   ])
 ], [
     AC_SUBST([ESBMC_PYTHON_OBJ], "")
