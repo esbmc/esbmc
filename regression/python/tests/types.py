@@ -135,7 +135,8 @@ class Types(unittest.TestCase):
         ilist = esbmc.irep_idt_vec()
         ilist.extend(namelist)
 
-        struct = esbmc.type.struct.make(tlist, ilist, esbmc.irep_idt("fgasdf"))
+        # Pretty names = names
+        struct = esbmc.type.struct.make(tlist, ilist, ilist, esbmc.irep_idt("fgasdf"))
         return struct
 
     def test_struct_creation(self):
