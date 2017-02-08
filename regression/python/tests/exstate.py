@@ -91,7 +91,7 @@ class Exstate(unittest.TestCase):
 
         # In theory installed; now run forrest!
         result = self.art.get_next_formula()
-        btor = esbmc.solve.solvers.boolector.make(False, False, self.ns, self.opts)
+        btor = esbmc.solve.solvers.boolector.make(False, self.ns, self.opts)
         result.target.convert(btor)
         issat = btor.dec_solve()
         self.assertTrue(issat == esbmc.solve.smt_result.sat, "Overriden ex_state didn't produce a viable trace")

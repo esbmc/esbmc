@@ -27,7 +27,7 @@ class Reachtree(unittest.TestCase):
         # Run a full model checking process (:O)
         self.art.setup_for_new_explore()
         result = self.art.get_next_formula()
-        btor = esbmc.solve.solvers.boolector.make(False, False, self.ns, self.opts)
+        btor = esbmc.solve.solvers.boolector.make(False, self.ns, self.opts)
         result.target.convert(btor)
         issat = btor.dec_solve()
         # This test case should have a counterexample
@@ -52,7 +52,7 @@ class Reachtree(unittest.TestCase):
         self.art.has_complete_formula = False;
         result = self.art.get_cur_state().get_symex_result();
 
-        btor = esbmc.solve.solvers.boolector.make(False, False, self.ns, self.opts)
+        btor = esbmc.solve.solvers.boolector.make(False, self.ns, self.opts)
         result.target.convert(btor)
         issat = btor.dec_solve()
         # This test case should have a counterexample

@@ -45,7 +45,7 @@ class Gotoinsns(unittest.TestCase):
     def test_more_fields(self):
         import esbmc
         theinsn = self.insns[0]
-        self.assertTrue(esbmc.downcast_expr(theinsn.guard).constant_value == True, "insn guard should be true")
+        self.assertTrue(esbmc.downcast_expr(theinsn.guard).value == True, "insn guard should be true")
         # No access to labels field right no
         # This has the value 99 right now, but we can't really assert that
         # because it'll change when we edit... anything
