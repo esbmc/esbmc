@@ -62,5 +62,7 @@ class Gotoprogs(unittest.TestCase):
             self.main.set_instructions(insns)
         except RuntimeError:
             pass
+        except TypeError: # New in python3
+            pass
         else:
             self.assertTrue(False, "set_instructions should throw on bad target")
