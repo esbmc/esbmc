@@ -63,8 +63,8 @@ namespacet *pythonctx_ns = NULL;
 // Type pool needs to live as long as the process.
 static type_poolt *tp = NULL;
 
-dict type_to_downcast;
-dict expr_to_downcast;
+dict *type_to_downcast = NULL;
+dict *expr_to_downcast = NULL;
 
 static void
 its_a_trap()
@@ -278,7 +278,7 @@ downcast_type(const type2tc &type)
     return object();
 
   assert(type->type_id < type2t::end_type_id);
-  object o = type_to_downcast[type->type_id];
+  object o = (*type_to_downcast)[type->type_id];
   return o(type);
 }
 
@@ -289,16 +289,18 @@ downcast_expr(const expr2tc &expr)
     return object();
 
   assert(expr->expr_id < expr2t::end_expr_id);
-  object o = expr_to_downcast[expr->expr_id];
+  object o = (*expr_to_downcast)[expr->expr_id];
   return o(expr);
 }
 
 static void
 py_deconstructor()
 {
-  // Release global reference by overwriting with fresh dict
-  type_to_downcast = extract<dict>(object());
-  expr_to_downcast = extract<dict>(object());
+  // Release global reference
+  delete type_to_downcast;
+  delete expr_to_downcast;
+  type_to_downcast = NULL;
+  expr_to_downcast = NULL;
 }
 
 BOOST_PYTHON_MODULE(esbmc)
@@ -339,9 +341,9 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_TYPE_SET, foo, ESBMC_LIST_OF_TYPES)
     build_type2t_container_converters();
 
     // Build downcasting infrastructure
-    type_to_downcast = dict();
+    type_to_downcast = new dict();
 #define _ESBMC_IREP2_TYPE_DOWNCASTING(r, data, elem) \
-    type_to_downcast[type2t::BOOST_PP_CAT(elem,_id)] = \
+    (*type_to_downcast)[type2t::BOOST_PP_CAT(elem,_id)] = \
         make_function(downcast_vehicle<BOOST_PP_CAT(elem,_type2tc), type2tc>);
 BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_TYPE_DOWNCASTING, foo, ESBMC_LIST_OF_TYPES)
   }
@@ -364,9 +366,9 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_EXPR2_MPL_EXPR_SET, foo, ESBMC_LIST_OF_EXPRS)
     build_expr2t_container_converters();
 
     // Build downcasting infrastructure
-    expr_to_downcast = dict();
+    expr_to_downcast = new dict();
 #define _ESBMC_IREP2_EXPR_DOWNCASTING(r, data, elem) \
-    expr_to_downcast[expr2t::BOOST_PP_CAT(elem,_id)] = \
+    (*expr_to_downcast)[expr2t::BOOST_PP_CAT(elem,_id)] = \
         make_function(downcast_vehicle<BOOST_PP_CAT(elem,2tc), expr2tc>);
 BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
 
