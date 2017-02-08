@@ -108,27 +108,68 @@ behaviour of ESBMC during symex, however:
 
 ## Use as a library
 
- * ESBMC contains globals
- * One instance per process pls
- * Basic outline of the high level point that exporting stops
- * If you want to over-ride internals, you might need to implement up to that
-   point
- * Might be addressed in the future via factories
- * Might also provide a high level python library that does the main driving
- * Solver API as an example?
+ESBMC is not designed to be used as a library -- many global variables exist,
+and just in general the codebase has never made concession in favour of handling
+the verification of different programs within the same process. This is not
+easily solvable, and it's best to consider any python process as being an ESBMC
+process with extra surrounding python logic. As a result, the esbmc python
+module contains it's own globals, and attempting to create more than one
+parseoptions object (the top level object) will lead to undefined behaviour.
+
+The python bindings export facilities for parsing input files into GOTO
+functions, creation of symex objects and running of the symex interpreter,
+creation of SMT solver objects, and processing of counterexample traces. The top
+level ESBMC logic (src/esbmc/bmc.cpp) is not exported: the different components
+must be composed to replicate what you want it to do. An example is in
+esbmc\_wrap\_solver.py.
 
 ## Caveat programmer
 
- * Boost.python is crazy shit
- * Reference counting
- * Downcasting, lol, and other gotchas
- * I don't really intend on making things "nice" for python, i.e. irep\_idt 
-   as\_string
- * Wrapped objects?
- * Const correctness
- * XXX that compiler bug for irep2?
- * Exceptions through a C++ call stack might become fairly crazy
- * 'None' and when things are non-evalued internal references
+Boost.Python is pretty crazy, and while it's documented, ESBMC runs into many
+corner cases. Happily in 95% of cases it can infer the signature of any function
+and trivially wrap it to be a python function object. I would recommend emailing
+the ESBMC users mailing list before attempting to export any other part of ESBMC
+to python.
+
+Python is reference counted: C++ is not (by default). This means that one risks
+storing a reference to a python object in C++ that then expires. Some of these
+cases are caught by Boost.Python, but not all of them can be. The solution is to
+know the correct lifetime of all python objects referred to in C++, and to store
+python references to them for the correct period.
+
+Boost.Python cannot fully determine the most derived type of objects in C++
+being accessed from python: downcasting is often required. The net effect of
+this is that you cannot access fields of expressions until you've called
+esbmc.downcast\_expr with the expr. (This is the analogue of having to downcast
+exprs in ESBMC itself). Happily once downcast\_expr is called, you can treat
+the expression like any python object.
+
+However, if you add additional attributes to the __dict__ of a python object
+that refers to a C++ object, you cannot rely on them sticking around. There is
+no additional storage in the C++ object, and accessing the C++ object at a later
+date will create a different python object referring to the C++ object, with a
+completely new __dict__. To circumvent this, one must extend the C++ object with
+a python object wrapper, which is beyond the scope of this readme.
+
+Const correctness falls by the wayside with most Boost.Python operations. As a
+result, all expressions are immutable from python, but you need to take care
+not to pass (for example) an expression reference into a C++ method that will
+mutate it. Otherwise you'll set fire to an expression that the rest of ESBMC
+thought was const.
+
+There's no reason why you can't repeatedly call in and out of C++ / python with
+these bindings, however be aware that:
+ * Exceptions in python will cause calls from C++ to immediately terminate with
+   None, and if you don't clear the exception it'll continue if you return back
+   into python
+ * Exceptions in C++ will set fire to a random piece of python
+ * Segfaults are still as fatal as ever
+
+Nil expressions should evaluate to be equal to None, and you can pass None in
+place of a nil expression. Just as with the rest of ESBMC, you need to compare
+certain expression holders with None before operating on them. Some are python
+objects that _refer_ to nil expressions, thus will not be None themselves, but
+will still compare true to None.
 
 ## Future directions
 
