@@ -76,6 +76,9 @@ mathsat_convt::mathsat_convt(bool int_encoding,
 
 mathsat_convt::~mathsat_convt(void)
 {
+  delete_all_asts();
+  msat_destroy_env(env);
+  _env = nullptr;
 }
 
 void
@@ -130,6 +133,8 @@ mathsat_convt::get_bool(const smt_ast *a)
     std::cerr << "Boolean model value is neither true or false" << std::endl;
     abort();
   }
+
+  msat_free(msat_term_repr(t));
 }
 
 expr2tc
@@ -146,6 +151,7 @@ mathsat_convt::get_bv(const type2tc &_t,
 
   msat_term_to_number(env, t, val);
   check_msat_error(t);
+  msat_free(msat_term_repr(t));
 
   mpz_t num;
   mpz_init(num);
@@ -194,6 +200,8 @@ mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
   mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(elem_sort), t);
   expr2tc result = get_bv(elem_sort, tmpb);
   free(tmpb);
+
+  msat_free(msat_term_repr(t));
 
   return result;
 }
@@ -881,4 +889,16 @@ mathsat_convt::get_mant_width(smt_sortt sort)
   int ret = msat_is_fp_type(env, ms->t, &exp_width, &mant_width);
   assert(ret != 0 && "Non FP type passed to mathsat_convt::get_mant_width");
   return mant_width;
+}
+
+mathsat_smt_ast::~mathsat_smt_ast()
+{
+  // TODO: disabled because it's painfully slow
+//  free(msat_term_repr(t));
+}
+
+mathsat_smt_sort::~mathsat_smt_sort()
+{
+  free(msat_type_repr(t));
+  delete rangesort;
 }
