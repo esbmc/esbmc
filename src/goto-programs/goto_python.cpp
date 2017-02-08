@@ -91,7 +91,6 @@ insn_to_string(const goto_programt::instructiont &insn,
   return ss.str();
 }
 
-#ifdef WITH_PYTHON
 void
 build_goto_func_class()
 {
@@ -199,6 +198,5 @@ build_goto_func_class()
     .def("clear", &goto_programt::clear)
     .def("empty", &goto_programt::empty);
 }
-#endif
 
 #endif
