@@ -1,3 +1,15 @@
+# XXX XXX XXX
+# This code doesn't work -- or at least, an important 10% of it still fails.
+# A primary error was trying to use Z3's tuples from python, instead of using
+# ESBMCs tuple flattener. You should ignore this code unless you're an
+# archaeologist or want to examine from-python C++ method overrides.
+
+#
+#
+#
+#
+#
+
 # PYTHONPATH needs to include the path to $Z3DIR/python.
 # And on debian jessie for some reason I need to LD_PRELOAD librt.so?
 
