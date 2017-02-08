@@ -91,10 +91,20 @@ call into ESBMC from python.
 
 ## Runtime examination and debugging
 
- * Can break in and have RT object in locals
- * Might be able to use this to instrument various points in ESBMC
- * Lists
- * Dicts
+The --break-at $insnnum command line option now drops into a python interactive
+interpreter, allowing internal state to be frobbed during symex. Given that
+python objects are trivially callable from C++, it's easy to install a call out
+to python from ESBMC to perform accounting or statistics collection, following
+the --break-at example.
+
+Alternately, one can override *certain* object methods from python, and one can
+install a python object within ESBMC, allowing one for example to override
+symex\_step so that each step within ESBMC calls out to python. (An example of
+this should be in the regression tests). This allows greater control over the
+behaviour of ESBMC during symex, however:
+ * It relies on methods being virtual in C++, which carries a performance cost
+ * For some facilities, installing python objects into ESBMC is prohibitively
+   complex
 
 ## Use as a library
 
