@@ -2608,5 +2608,5 @@ smt_ast::project(smt_convt *ctx __attribute__((unused)),
 
 void smt_convt::dump_SMT()
 {
-  std::cerr << "SMT dump not implemented for " << solver_text();
+  std::cerr << "SMT dump not implemented for " << solver_text() << "\n";
 }
