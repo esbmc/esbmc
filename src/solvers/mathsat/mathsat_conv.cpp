@@ -902,3 +902,8 @@ mathsat_smt_sort::~mathsat_smt_sort()
   free(msat_type_repr(t));
   delete rangesort;
 }
+
+void mathsat_convt::dump_SMT()
+{
+  print_mathsat_formula();
+}
