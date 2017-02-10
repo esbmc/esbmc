@@ -49,6 +49,7 @@ protected:
   expr2tc g_expr;
 
   bool is_single_symbol() const;
+  void clear();
   void clear_append(const guardt &guard);
   void clear_insert(const expr2tc &expr);
 };

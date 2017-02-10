@@ -29,7 +29,7 @@ void guardt::add(const expr2tc &expr)
 
   if(is_true() || ::is_false(expr))
   {
-    guard_list.clear();
+    clear();
     guard_list.push_back(expr);
     return;
   }
@@ -94,7 +94,6 @@ guardt &operator |= (guardt &g1, const guardt &g2)
     // Simplify equation: everything that's common in both guards, will not
     // be or'd
 
-
     // Common guards
     guardt common;
     std::set_intersection(
@@ -154,12 +153,6 @@ void guardt::swap(guardt& g)
   guard_list.swap(g.guard_list);
 }
 
-void guardt::clear_insert(const expr2tc& expr)
-{
-  guard_list.clear();
-  add(expr);
-}
-
 void guardt::guard_expr(expr2tc& dest) const
 {
   // Fills the expr only if it's not true
@@ -205,8 +198,20 @@ bool guardt::is_single_symbol() const
   return (guard_list.size() == 1);
 }
 
-void guardt::clear_append(const guardt& guard)
+void guardt::clear()
 {
   guard_list.clear();
+  g_expr = expr2tc();
+}
+
+void guardt::clear_append(const guardt& guard)
+{
+  clear();
   append(guard);
+}
+
+void guardt::clear_insert(const expr2tc& expr)
+{
+  clear();
+  add(expr);
 }
