@@ -18,17 +18,8 @@ expr2tc guardt::as_expr() const
   if(is_single_symbol())
     return *guard_list.begin();
 
-  // We can assume at least two operands, return a chain of ands
-  auto it = guard_list.begin();
-
-  expr2tc arg1, arg2;
-  arg1 = *it++;
-  arg2 = *it++;
-  and2tc res(arg1, arg2);
-  while (it != guard_list.end())
-    res = and2tc(res, *it++);
-
-  return res;
+  assert(!is_nil_expr(g_expr));
+  return g_expr;
 }
 
 void guardt::add(const expr2tc &expr)

@@ -46,6 +46,7 @@ public:
 
 protected:
   guard_listt guard_list;
+  expr2tc g_expr;
 
   bool is_single_symbol() const;
   void clear_append(const guardt &guard);
