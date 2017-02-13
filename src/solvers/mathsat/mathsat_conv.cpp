@@ -902,14 +902,12 @@ mathsat_convt::get_mant_width(smt_sortt sort)
 
 mathsat_smt_ast::~mathsat_smt_ast()
 {
-  // TODO: disabled because it's painfully slow
-//  free(msat_term_repr(t));
+  // We don't need to free the AST or the sort,
+  // as freeing env does exactly the same
 }
 
 mathsat_smt_sort::~mathsat_smt_sort()
 {
-  free(msat_type_repr(t));
-  delete rangesort;
 }
 
 void mathsat_convt::dump_SMT()

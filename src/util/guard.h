@@ -27,16 +27,12 @@ public:
 
   void add(const expr2tc &expr);
   void append(const guardt &guard);
-  void clear_insert(const expr2tc &expr);
-  void clear_append(const guardt &guard);
 
   expr2tc as_expr() const;
   void guard_expr(expr2tc &dest) const;
 
-  bool empty() const;
   bool is_true() const;
   bool is_false() const;
-  bool is_single_symbol() const;
 
   void make_true();
   void make_false();
@@ -46,13 +42,14 @@ public:
   friend guardt &operator |= (guardt &g1, const guardt &g2);
   friend bool operator == (const guardt &g1, const guardt &g2);
 
-  guard_listt::size_type size() const;
-  void resize(guard_listt::size_type size);
-
   void dump() const;
 
 protected:
   guard_listt guard_list;
+
+  bool is_single_symbol() const;
+  void clear_append(const guardt &guard);
+  void clear_insert(const expr2tc &expr);
 };
 
 #endif

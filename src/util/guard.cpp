@@ -185,14 +185,9 @@ void guardt::guard_expr(expr2tc& dest) const
   dest = expr2tc(new implies2t(as_expr(), dest));
 }
 
-bool guardt::empty() const
-{
-  return guard_list.empty();
-}
-
 bool guardt::is_true() const
 {
-  return empty();
+  return guard_list.empty();
 }
 
 bool guardt::is_false() const
@@ -223,14 +218,4 @@ void guardt::clear_append(const guardt& guard)
 {
   guard_list.clear();
   append(guard);
-}
-
-guardt::guard_listt::size_type guardt::size() const
-{
-  return guard_list.size();
-}
-
-void guardt::resize(guard_listt::size_type size)
-{
-  guard_list.resize(size);
 }
