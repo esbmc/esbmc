@@ -45,6 +45,22 @@ void guardt::add(const expr2tc &expr)
   guard_list.push_back(expr);
 }
 
+void guardt::guard_expr(expr2tc& dest) const
+{
+  // Fills the expr only if it's not true
+  if(is_true())
+    return;
+
+  if(::is_false(dest))
+  {
+    dest = as_expr();
+    make_not(dest);
+    return;
+  }
+
+  dest = expr2tc(new implies2t(as_expr(), dest));
+}
+
 void guardt::append(const guardt &guard)
 {
   for(auto it : guard.guard_list)
@@ -151,22 +167,6 @@ operator == (const guardt &g1, const guardt &g2)
 void guardt::swap(guardt& g)
 {
   guard_list.swap(g.guard_list);
-}
-
-void guardt::guard_expr(expr2tc& dest) const
-{
-  // Fills the expr only if it's not true
-  if(is_true())
-    return;
-
-  if(::is_false(dest))
-  {
-    dest = as_expr();
-    make_not(dest);
-    return;
-  }
-
-  dest = expr2tc(new implies2t(as_expr(), dest));
 }
 
 bool guardt::is_true() const
