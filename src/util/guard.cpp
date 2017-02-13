@@ -30,11 +30,8 @@ void guardt::add(const expr2tc &expr)
   if(is_true() || ::is_false(expr))
   {
     clear();
-    guard_list.push_back(expr);
-    return;
   }
-
-  if(is_and2t(expr))
+  else if(is_and2t(expr))
   {
     const and2t &theand = to_and2t(expr);
     add(theand.side_1);
@@ -43,6 +40,20 @@ void guardt::add(const expr2tc &expr)
   }
 
   guard_list.push_back(expr);
+
+  // Update the chain of ands
+
+  // Easy case, there is no g_expr
+  if(is_nil_expr(g_expr))
+  {
+    g_expr = expr;
+  }
+  else
+  {
+    // Otherwise, just update the chain of ands
+    and2tc new_g_expr(g_expr, expr);
+    g_expr.swap(new_g_expr);
+  }
 }
 
 void guardt::guard_expr(expr2tc& dest) const
