@@ -337,6 +337,15 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_ADD:
     r = msat_make_plus(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_SUB:
+  {
+    msat_term neg_b =
+      msat_make_times(env, msat_make_number(env, "-1"), args[1]->t);
+    check_msat_error(neg_b);
+
+    r = msat_make_plus(env, args[0]->t, neg_b);
+    break;
+  }
   case SMT_FUNC_BVADD:
     r = msat_make_bv_plus(env, args[0]->t, args[1]->t);
     break;
