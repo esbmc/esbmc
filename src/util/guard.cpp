@@ -105,6 +105,8 @@ guardt &operator -= (guardt &g1, const guardt &g2)
     std::back_inserter(diff));
 
   g1.guard_list.swap(diff);
+  g1.build_guard_expr();
+
   return g1;
 }
 
@@ -145,6 +147,7 @@ guardt &operator |= (guardt &g1, const guardt &g2)
       g2.guard_list.begin(),
       g2.guard_list.end(),
       std::back_inserter(common.guard_list));
+    common.build_guard_expr();
 
     // New g1 and g2, without the common guards
     guardt new_g1;
@@ -154,6 +157,7 @@ guardt &operator |= (guardt &g1, const guardt &g2)
       common.guard_list.begin(),
       common.guard_list.end(),
       std::back_inserter(new_g1.guard_list));
+    new_g1.build_guard_expr();
 
     guardt new_g2;
     std::set_difference(
@@ -162,6 +166,7 @@ guardt &operator |= (guardt &g1, const guardt &g2)
       common.guard_list.begin(),
       common.guard_list.end(),
       std::back_inserter(new_g2.guard_list));
+    new_g2.build_guard_expr();
 
     // Get the and expression from both guards
     expr2tc or_expr(new or2t(new_g1.as_expr(), new_g2.as_expr()));
