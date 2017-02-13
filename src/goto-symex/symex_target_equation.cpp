@@ -107,8 +107,11 @@ void symex_target_equationt::assertion(
 }
 
 void
-symex_target_equationt::renumber(const expr2tc &guard, const expr2tc &symbol,
-                                 const expr2tc &size, const sourcet &source)
+symex_target_equationt::renumber(
+  const expr2tc &guard,
+  const expr2tc &symbol,
+  const expr2tc &size,
+  const sourcet &source)
 {
   assert(is_symbol2t(symbol));
   assert(is_bv_type(size));
@@ -139,10 +142,11 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
   return;
 }
 
-void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
-                   const smt_ast *&assumpt_ast,
-                   smt_convt::ast_vec &assertions,
-                   SSA_stept &step)
+void symex_target_equationt::convert_internal_step(
+  smt_convt &smt_conv,
+  const smt_ast *&assumpt_ast,
+  smt_convt::ast_vec &assertions,
+  SSA_stept &step)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
   bvt assert_bv;

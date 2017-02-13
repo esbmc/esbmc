@@ -232,8 +232,12 @@ public:
   // e.g., NAN==NAN
   friend bool operator ==(const ieee_floatt &a, const ieee_floatt &b);
   friend bool operator !=(const ieee_floatt &a, const ieee_floatt &b);
+
   friend bool operator ==(const ieee_floatt &a, int i);
   friend bool operator >(const ieee_floatt &a, int i);
+  friend bool operator <(const ieee_floatt &a, int i);
+  friend bool operator >=(const ieee_floatt &a, int i);
+  friend bool operator <=(const ieee_floatt &a, int i);
 
 protected:
   void divide_and_round(mp_integer &fraction, const mp_integer &factor);

@@ -1350,6 +1350,30 @@ bool operator >(const ieee_floatt &a, int i)
   return a > other;
 }
 
+bool operator <(const ieee_floatt &a, int i)
+{
+  ieee_floatt other;
+  other.spec=a.spec;
+  other.from_integer(i);
+  return a < other;
+}
+
+bool operator >=(const ieee_floatt &a, int i)
+{
+  ieee_floatt other;
+  other.spec=a.spec;
+  other.from_integer(i);
+  return a >= other;
+}
+
+bool operator <=(const ieee_floatt &a, int i)
+{
+  ieee_floatt other;
+  other.spec=a.spec;
+  other.from_integer(i);
+  return a <= other;
+}
+
 /*******************************************************************\
 
 Function: operator !=

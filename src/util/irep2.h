@@ -5094,4 +5094,38 @@ get_base_array_subtype(const type2tc &type)
     return subtype;
 }
 
+inline bool simplify(expr2tc &expr)
+{
+  static bool no_simplify = config.options.get_bool_option("no-simplify");
+  if(!no_simplify)
+  {
+    expr2tc tmp = expr->simplify();
+    if (!is_nil_expr(tmp))
+    {
+      expr = tmp;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+inline void make_not(expr2tc &expr)
+{
+  if (is_constant_bool2t(expr))
+  {
+    constant_bool2t &b = to_constant_bool2t(expr);
+    b.value = !b.value;
+    return;
+  }
+
+  expr2tc new_expr;
+  if (is_not2t(expr))
+    new_expr.swap(to_not2t(expr).value);
+  else
+    new_expr = not2tc(expr);
+
+  expr.swap(new_expr);
+}
+
 #endif /* _UTIL_IREP2_H_ */

@@ -186,8 +186,9 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
     // 2nd should be guarded with the fact that the first operand didn't short
     // circuit.
     assert(is_bool_type(expr));
+
     // Take the current size of the guard, so that we can reset it later.
-    unsigned old_guards=guard.size();
+    guardt old_guards(guard);
 
     expr.get()->Foreach_operand([this, &guard, &expr] (expr2tc &op) {
       assert(is_bool_type(op));
@@ -199,7 +200,7 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
       // Guard the next operand against this operand short circuiting us.
       if (is_or2t(expr)) {
         not2tc tmp(op);
-        guard.move(tmp);
+        guard.add(tmp);
       } else {
         guard.add(op);
       }
@@ -207,7 +208,7 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
     );
 
     // Reset guard to where it was.
-    guard.resize(old_guards);
+    guard.swap(old_guards);
     return;
   }
   else
@@ -224,18 +225,18 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
     bool o2 = has_dereference(ifref.false_value);
 
     if (o1) {
-      unsigned old_guard=guard.size();
+      guardt old_guards(guard);
       guard.add(ifref.cond);
       dereference_expr(ifref.true_value, guard, mode);
-      guard.resize(old_guard);
+      guard.swap(old_guards);
     }
 
     if (o2) {
-      unsigned old_guard=guard.size();
+      guardt old_guards(guard);
       not2tc tmp(ifref.cond);
-      guard.move(tmp);
+      guard.add(tmp);
       dereference_expr(ifref.false_value, guard, mode);
-      guard.resize(old_guard);
+      guard.swap(old_guards);
     }
 
     return;
@@ -716,7 +717,7 @@ dereferencet::deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, 
   // produce new guard
 
   guardt tmp_guard(guard);
-  tmp_guard.move(invalid_pointer_expr);
+  tmp_guard.add(invalid_pointer_expr);
 
   // Adjust error message depending on the context
   std::string foo =
@@ -1624,7 +1625,7 @@ void dereferencet::valid_check(
       not2tc not_valid_expr(valid_expr);
 
       guardt tmp_guard(guard);
-      tmp_guard.move(not_valid_expr);
+      tmp_guard.add(not_valid_expr);
 
       std::string foo =
         (mode == FREE) ? "invalidated dynamic object freed" : "invalidated dynamic object";
@@ -1694,7 +1695,7 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
   // Report these as assertions; they'll be simplified away if they're constant
 
   guardt tmp_guard1(guard);
-  tmp_guard1.move(is_in_bounds);
+  tmp_guard1.add(is_in_bounds);
   dereference_failure("array bounds", "array bounds violated", tmp_guard1);
 }
 
