@@ -52,6 +52,8 @@ protected:
   void clear();
   void clear_append(const guardt &guard);
   void clear_insert(const expr2tc &expr);
+
+  void build_guard_expr();
 };
 
 #endif

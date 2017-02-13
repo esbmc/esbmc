@@ -61,6 +61,33 @@ void guardt::guard_expr(expr2tc& dest) const
   dest = expr2tc(new implies2t(as_expr(), dest));
 }
 
+void guardt::build_guard_expr()
+{
+  // This method closely related to guardt::add and guardt::guard_expr
+  // We need to build the chain of ands, to avoid memory bloat on as_expr
+
+  // if the guard is true, or a single symbol, we don't need to build it
+  if(is_true() || is_single_symbol())
+    return;
+
+  // This method will only be used, when the guard is nil, for instance,
+  // guardt &operator -= and guardt &operator |=, all other cases should
+  // be handled by guardt::add
+  assert(is_nil_expr(g_expr));
+
+  // We can assume at least two operands
+  auto it = guard_list.begin();
+
+  expr2tc arg1, arg2;
+  arg1 = *it++;
+  arg2 = *it++;
+  and2tc res(arg1, arg2);
+  while (it != guard_list.end())
+    res = and2tc(res, *it++);
+
+  g_expr.swap(res);
+}
+
 void guardt::append(const guardt &guard)
 {
   for(auto it : guard.guard_list)
