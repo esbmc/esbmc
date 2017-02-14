@@ -247,7 +247,7 @@ bool guardt::is_single_symbol() const
 void guardt::clear()
 {
   guard_list.clear();
-  g_expr = expr2tc();
+  g_expr.reset();
 }
 
 void guardt::clear_append(const guardt& guard)
