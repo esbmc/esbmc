@@ -213,6 +213,7 @@ operator == (const guardt &g1, const guardt &g2)
 void guardt::swap(guardt& g)
 {
   guard_list.swap(g.guard_list);
+  g_expr.swap(g.g_expr);
 }
 
 bool guardt::is_true() const
