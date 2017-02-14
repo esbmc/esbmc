@@ -115,6 +115,9 @@ guardt &operator -= (guardt &g1, const guardt &g2)
     g2.guard_list.end(),
     std::back_inserter(diff));
 
+  // Clear g1 and build the guard's list and expr
+  g1.clear();
+
   g1.guard_list.swap(diff);
   g1.build_guard_expr();
 
