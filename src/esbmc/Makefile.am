@@ -2,7 +2,8 @@
 EXTRA_PROGRAMS = esbmc
 bin_PROGRAMS = @ESBMC_BINARY@
 EXTRA_LTLIBRARIES = libesbmc.la
-lib_LTLIBRARIES = libmain.la @ESBMC_SHARED_LIB@
+lib_LTLIBRARIES = @ESBMC_SHARED_LIB@
+noinst_LTLIBRARIES = libmain.la
 
 # Work out what gets linked in.
 ESBMC_SOLVER_LIBS = @ESBMC_SOLVER_LIBS@
