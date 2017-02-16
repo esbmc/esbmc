@@ -34,8 +34,9 @@ from python with ESBMC objects.
 Accordingly, these bindings come with some hard truths: using them is not a
 substitute for knowing about (much of) ESBMCs internals. They don't provide
 anything more than what ESBMC already does. They are no silver bullet for making
-an analysis or extension work (they just make it easier). Finally, the moment
-you touch python you immediately pay a performance penalty.
+an analysis or extension work (they just make it easier). Finally, by it's
+nature python is slower than C++, thus these bindings will not be as performant
+as a C++ implementation.
 
 ## Building
 
@@ -47,7 +48,7 @@ libboost package.
 The configure script is hard coded to build for python 3: technically the
 autoconf file can be edited to build against python 2, and Boost.Python will
 work just as well with that. At the time of writing, python 2 only has three
-years of life left, you should avoid starting new projects in it.
+years of life left, new projects should avoid using it.
 
 Two switches to the configure script are required to build the python bindings:
  * --enable-python
@@ -58,8 +59,8 @@ line too, you might want to add --disable-esbmc to the configure command line,
 which will avoid building static object files, and will save you 50% of build
 time.
 
-Once built, a libesbmc.so.0.0.0 file will exist in the esbmc/.libs directory of
-your build directory. To access ESBMC from python, symlink (or copy) the shared
+Once built, a libesbmc.so file will exist in the esbmc/.libs directory of your
+build directory. To access ESBMC from python, symlink (or copy) the shared
 object into your python path as 'esbmc.so', and import it from python:
 
     import esbmc
