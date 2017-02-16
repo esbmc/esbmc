@@ -28,16 +28,16 @@ AC_PROG_LEX
 AC_PROG_MAKE_SET
 
 AC_CHECK_PROG(esbmc_has_yacc, $YACC, "yes", "no")
-AS_IF([test "x$esbmc_has_yacc" = "xno"], [AC_MSG_ERROR([Cannot find yacc])])
+AS_IF([test "x$esbmc_has_yacc" = "xno"], AC_MSG_ERROR([Cannot find yacc]))
 AC_CHECK_PROG(esbmc_has_lex, $LEX, "yes", "no")
-AS_IF([test "x$esbmc_has_lex" = "xno"], [AC_MSG_ERROR([Cannot find lex])])
+AS_IF([test "x$esbmc_has_lex" = "xno"], AC_MSG_ERROR([Cannot find lex]))
 AC_CHECK_PROG(esbmc_has_awk, $AWK, "yes", "no")
-AS_IF([test "x$esbmc_has_awk" = "xno"], [AC_MSG_ERROR([Cannot find awk])])
+AS_IF([test "x$esbmc_has_awk" = "xno"], AC_MSG_ERROR([Cannot find awk]))
 dnl Don't seem to be able to test for sed
 
 AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
 
-AX_BOOST_BASE(1.47, [], [AC_MSG_ERROR([Cannot find boost base dir, please pass it in --with-boost argument or set BOOST_ROOT])])
+AX_BOOST_BASE(1.47, [], AC_MSG_ERROR([Cannot find boost base dir; please pass it in --with-boost argument or set BOOST_ROOT]))
 
 AS_VAR_APPEND(CPPFLAGS, " $BOOST_CPPFLAGS")
 AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS")
@@ -61,7 +61,7 @@ AC_CHECK_LIB([pthread], [pthread_create],
 dnl Some librt's depend on pthread, so prepend it to the libs
 AC_CHECK_LIB([rt], [timer_create],
     [AS_VAR_SET(LIBS, " -lrt $LIBS")],
-    [AC_MSG_ERROR([No librt found])], []
+    AC_MSG_ERROR([No librt found]), []
 )
 
 AC_CHECK_LIB([gomp], [omp_get_num_threads],
@@ -86,8 +86,8 @@ AC_CHECK_LIB([crypto], [SHA1_Init],
 
 # Define what to do when clang is enabled
 m4_define(ESBMC_ENABLE_CLANG, [
-  AX_CLANG(3.9.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
-  AX_LLVM(,[AC_MSG_FAILURE(Cannot find llvm dir, please pass it in --with-llvm argument)])
+  AX_CLANG(3.9.0, [], AC_MSG_ERROR([Cannot find clang lib dir; please pass it in --with-clang-libdir argument or set CLANG_ROOT]))
+  AX_LLVM(,AC_MSG_FAILURE(Cannot find llvm dir, please pass it in --with-llvm argument))
   AC_SUBST([ESBMC_CLANG_SUBDIRS], " clang-c-frontend clang-cpp-frontend ")
   AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ../clang-c-frontend/headers/libclangheaders.la")
   ])
@@ -109,12 +109,12 @@ AC_ARG_ENABLE(clang, [AS_HELP_STRING([--disable-clang], Build ESBMC without clan
 ]
 )
 
-AC_CHECK_HEADERS([boost/mpl/if.hpp], [], [AC_MSG_ERROR([No boost mpl found])])
-AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], [AC_MSG_ERROR([No boost shared ptr found])])
-AC_CHECK_HEADERS([boost/crc.hpp], [], [AC_MSG_ERROR([No boost CRC library found])])
-AC_CHECK_HEADERS([boost/utility/enable_if.hpp], [], [AC_MSG_ERROR([No boost enable_if utility found])])
-AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], [AC_MSG_ERROR([No boost fusion library found])])
-AC_CHECK_HEADERS([sys/sendfile.h], [AC_DEFINE([HAVE_SENDFILE_ESBMC], [], [Has sendfile header])], [])
+AC_CHECK_HEADERS([boost/mpl/if.hpp], [], AC_MSG_ERROR([No boost mpl found]))
+AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], AC_MSG_ERROR([No boost shared ptr found]))
+AC_CHECK_HEADERS([boost/crc.hpp], [], AC_MSG_ERROR([No boost CRC library found]))
+AC_CHECK_HEADERS([boost/utility/enable_if.hpp], [], AC_MSG_ERROR([No boost enable_if utility found]))
+AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], AC_MSG_ERROR([No boost fusion library found]))
+AC_CHECK_HEADERS([sys/sendfile.h], AC_DEFINE([HAVE_SENDFILE_ESBMC], [], [Has sendfile header]), [])
 
 AC_CHECK_HEADERS([unistd.h], [AC_DEFINE([HAVE_UNISTD], [], [Has unistd.h header])], [])
 
@@ -221,7 +221,7 @@ AS_IF([test "${enable_python}" = "yes"], [
     dnl Check if we can actually compile in boost-python. Needs to be after
     dnl python libs added to LIBS
     AC_CHECK_LIB(["${py3libname}"], [no_init], [],
-        [AC_MSG_ERROR([Python supported requested but boost-python not found. Alternately: packaging sketchyness means I couldn't deduce the base soname and you can specify it with --with-boost-python-libname=boost_python-foobar'])], []
+        AC_MSG_ERROR([Python supported requested but boost-python not found. Alternately: packaging sketchyness means I couldn't deduce the base soname and you can specify it with --with-boost-python-libname=boost_python-foobar']), []
     )
 
     dnl Alright, add the lib name to that
@@ -229,9 +229,9 @@ AS_IF([test "${enable_python}" = "yes"], [
     AS_VAR_APPEND(C2GOTO_LIBS, " -l${py3libname} ")
 
     AC_SUBST([ESBMC_PYTHON_OBJ], "python.lo")
-  ], [
-    AC_MSG_ERROR(Asked for python support but pkgconfig finds no python library. You need to install python (3) development packages.)
-  ])
+  ],
+    AC_MSG_ERROR(Asked for python support but pkgconfig finds no python library. You need to install python 3 development packages.)
+  )
 ], [
     AC_SUBST([ESBMC_PYTHON_OBJ], "")
 ])
@@ -403,7 +403,7 @@ m4_define(ESBMC_OPTIONAL_SOLVER, [
       AS_VAR_SET(esbmc_with_dir_path, "$with_$3")
       ESBMC_CHECK_SOLVER([$esbmc_with_dir_path], [$2], $3, $4, $5, $6, [$7], $8)
       AS_IF([test "$esbmc_found_solver_$3" != "yes"],
-            [ AC_MSG_ERROR(["Path to $3 given on command line (with --with-$3), but can't use $3 installation there"])])
+            AC_MSG_ERROR(["Path to $3 given on command line (with --with-$3); but can't use $3 installation there"]))
       ], [
         ESBMC_CHECK_SOLVER([$1], [$2], $3, $4, $5, $6, [$7], $8)
       ]
@@ -477,10 +477,10 @@ m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
   dnl appropriate version symlinks are not installed, and bail.
   AS_IF([test -d $1], [
     AS_IF([test ! -z "`ls $2 | grep libyices.so.2*`"], [
-      AS_IF([test ! -e "$2/libyices.so"], [
-        AC_MSG_ERROR([Found yices, but cannot link against it. A shared object exists in $2, however you need to symlink a "libyices.so" to it to work. Or, specify --disable-yices])
+      AS_IF([test ! -e "$2/libyices.so"],
+        AC_MSG_ERROR([Found yices but cannot link against it. A shared object exists in $2; however you need to symlink a "libyices.so" to it to work. Or, specify --disable-yices])
         exit 1
-      ])
+      )
     ])
   ])
 ])dnl
