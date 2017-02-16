@@ -26,17 +26,16 @@ inspection and extension. We have chosen python because:
    directly encapsulates our existing C++ facilities
 
 It's important to understand that these python bindings are just that: an API
-for accessing the underlying C++ API. Thus if you perform illegal behaviour
-with the API such as an out-of-range vector access, you'll still likely
-experience a crash. The benefits comes from being able to compose objects /
-algorithms / data structures from python with ESBMC objects.
+for accessing the underlying C++ API. Thus any illegal behaviour with the API
+such as an out-of-range vector access will stilly likely cause a crash. The
+benefits comes from being able to compose objects / algorithms / data structures
+from python with ESBMC objects.
 
 Accordingly, these bindings come with some hard truths: using them is not a
-substitute for knowing about (much of) ESBMCs internals, you still have to
-understand what you're dealing with. They don't provide anything more than
-what ESBMC already does. They are no silver bullet for making an analysis or
-extension work (they just make it easier). Finally, the moment you touch python
-you immediately pay a performance penalty.
+substitute for knowing about (much of) ESBMCs internals. They don't provide
+anything more than what ESBMC already does. They are no silver bullet for making
+an analysis or extension work (they just make it easier). Finally, the moment
+you touch python you immediately pay a performance penalty.
 
 ## Building
 
