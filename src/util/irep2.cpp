@@ -70,7 +70,8 @@ public:
     (void)out;
     // Everything here should have become an lvalue over an rvalue. Only thing
     // that should pass through this far is None. 
-    assert(0 && "rvalue of irep2tc_to_irep2t should never be called");
+    std::cerr << "rvalue of irep2tc_to_irep2t should never be called" << std::endl;
+    abort();
   }
 
   static void *lvalue_cvt(const Container *foo)
