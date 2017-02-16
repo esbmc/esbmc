@@ -337,6 +337,15 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_ADD:
     r = msat_make_plus(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_SUB:
+  {
+    msat_term neg_b =
+      msat_make_times(env, msat_make_number(env, "-1"), args[1]->t);
+    check_msat_error(neg_b);
+
+    r = msat_make_plus(env, args[0]->t, neg_b);
+    break;
+  }
   case SMT_FUNC_BVADD:
     r = msat_make_bv_plus(env, args[0]->t, args[1]->t);
     break;
@@ -893,12 +902,15 @@ mathsat_convt::get_mant_width(smt_sortt sort)
 
 mathsat_smt_ast::~mathsat_smt_ast()
 {
-  // TODO: disabled because it's painfully slow
-//  free(msat_term_repr(t));
+  // We don't need to free the AST or the sort,
+  // as freeing env does exactly the same
 }
 
 mathsat_smt_sort::~mathsat_smt_sort()
 {
-  free(msat_type_repr(t));
-  delete rangesort;
+}
+
+void mathsat_convt::dump_SMT()
+{
+  print_mathsat_formula();
 }
