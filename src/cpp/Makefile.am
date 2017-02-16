@@ -30,6 +30,17 @@ libcxx_la_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck_constructor.cpp cpp_typecheck_virtual_table.cpp
 libcxx_la_LIBADD = libcxxscanner.la
 
+cppincludedir = $(includedir)/cpp
+cppinclude_HEADERS = cpp_class_type.h cpp_convert_type.h cpp_declaration.h \
+      cpp_declarator.h cpp_declarator_converter.h cpp_enum_type.h \
+      cpp_exception_id.h cpp_final.h cpp_id.h cpp_item.h cpp_language.h \
+      cpp_linkage_spec.h cpp_member_spec.h cpp_name.h cpp_namespace_spec.h \
+      cpp_parse_tree.h cpp_parser.h cpp_scope.h cpp_scopes.h \
+      cpp_storage_spec.h cpp_template_args.h cpp_template_type.h \
+      cpp_token.h cpp_token_buffer.h cpp_type2name.h cpp_typecast.h \
+      cpp_typecheck.h cpp_typecheck_fargs.h cpp_typecheck_resolve.h \
+      cpp_using.h cpp_util.h expr2cpp.h template_map.h tokens.h
+
 clean-local:
 	-rm scanner.cpp scanner.hpp
 .PHONY: clean-local

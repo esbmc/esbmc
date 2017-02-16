@@ -15,3 +15,21 @@ libutil_la_SOURCES = \
       thread.cpp crypto_hash.cpp type_byte_size.cpp dcutil.cpp \
       string_constant.cpp c_types.cpp ieee_float.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils
+
+utilincludedir = $(includedir)/util
+utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
+      bp_converter.h bp_opaque_ptr.h c_misc.h c_types.h cmdline.h \
+      config.h context.h cprover_prefix.h crypto_hash.h dcutil.h \
+      destructor.h dstring.h expr.h expr_util.h fixedbv.h \
+      format_constant.h format_spec.h global.h guard.h hash_cont.h \
+      i2string.h ieee_float.h irep.h irep2.h irep_serialization.h \
+      language.h language_file.h location.h message.h message_stream.h \
+      migrate.h mp_arith.h namespace.h numbering.h options.h \
+      parseoptions.h parser.h pointer_arithmetic.h prefix.h \
+      reference_counting.h rename.h replace_symbol.h signal_catcher.h \
+      simplify_expr.h simplify_expr_class.h simplify_utils.h std_code.h \
+      std_expr.h std_types.h string2array.h string_constant.h \
+      string_container.h string_hash.h symbol.h symbol_serialization.h \
+      thread.h threeval.h time_stopping.h type.h type_byte_size.h \
+      type_eq.h typecheck.h ui_message.h union_find.h xml.h xml_irep.h
+
