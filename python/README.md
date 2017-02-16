@@ -161,8 +161,8 @@ the C++ object with a python object wrapper, which is beyond the scope of this
 readme.
 
 Const correctness falls by the wayside with most Boost.Python operations. As a
-result, all expressions are immutable from python, but take care not to pass
-(for example) an expression reference into a C++ method that will mutate it.
+result expression are read-only from python, but take care not to pass (for
+example) an expression reference into a C++ method that will mutate it.
 Otherwise you'll set fire to an expression that the rest of ESBMC thought was
 const.
 
