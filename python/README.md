@@ -106,6 +106,14 @@ behaviour of ESBMC during symex, however:
  * For some facilities, installing python objects into ESBMC is prohibitively
    complex
 
+Extensions and new features can be prototyped in a similar manner, for example
+by hooking symex\_step one can install custom intrinsics or re-interpret the
+meaning of certain operations. The challenge is interacting correctly with the
+rest of the model checker, for example if transforming the nature of an
+assignment, the correct internal APIs must be called to ensure subsequent reads
+will read the correct variable. The python bindings allow access to (almost)
+all such APIs, and it is substantially easier to debug ESBMC in a REPL.
+
 ## Use as a library
 
 ESBMC is not designed to be used as a library -- many global variables exist,
