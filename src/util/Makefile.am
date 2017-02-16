@@ -20,7 +20,7 @@ utilincludedir = $(includedir)/util
 utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
       bp_converter.h bp_opaque_ptr.h c_misc.h c_types.h cmdline.h \
       config.h context.h cprover_prefix.h crypto_hash.h dcutil.h \
-      destructor.h dstring.h expr.h expr_util.h fixedbv.h \
+      dstring.h expr.h expr_util.h fixedbv.h \
       format_constant.h format_spec.h global.h guard.h hash_cont.h \
       i2string.h ieee_float.h irep.h irep2.h irep_serialization.h \
       language.h language_file.h location.h message.h message_stream.h \
