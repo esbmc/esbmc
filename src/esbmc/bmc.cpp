@@ -397,6 +397,9 @@ void bmct::show_program(symex_target_equationt &equation)
 
   for(const auto &it : equation.SSA_steps)
   {
+    if(!(it.is_assert() || it.is_assignment() || it.is_assume()))
+      continue;
+
     if (!sparse) {
       std::cout << "// " << it.source.pc->location_number << " ";
       std::cout << it.source.pc->location.as_string() << "\n";

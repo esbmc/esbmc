@@ -167,7 +167,7 @@ namespace z3 {
         void init(config & c, bool use_ints);
         context(bool dummy __attribute__((unused))) : m_ctx(NULL), m_esbmc_int_sort(NULL), int_encoding(false) { }
         context(config & c, bool use_ints) : int_encoding(use_ints) { init(c, use_ints); }
-        ~context() { Z3_del_context(m_ctx); }
+        ~context() { Z3_del_context(m_ctx); Z3_finalize_memory(); }
         operator Z3_context() const { return m_ctx; }
 
         /**

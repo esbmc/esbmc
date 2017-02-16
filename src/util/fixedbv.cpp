@@ -207,6 +207,30 @@ bool operator >(const fixedbvt &a, int i)
   return a > other;
 }
 
+bool operator < (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a < other;
+}
+
+bool operator >= (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a >= other;
+}
+
+bool operator <= (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a <= other;
+}
+
 #ifdef WITH_PYTHON
 #include <boost/python/class.hpp>
 
@@ -233,4 +257,3 @@ build_fixedbv_python_class()
 }
 
 #endif
-

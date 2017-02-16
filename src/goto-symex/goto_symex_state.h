@@ -200,6 +200,8 @@ public:
     typedef hash_map_cont<unsigned, unsigned> loop_iterationst;
     loop_iterationst loop_iterations;
 
+    guardt entry_guard;
+
     framet(unsigned int thread_id) :
       return_value(expr2tc())
     {

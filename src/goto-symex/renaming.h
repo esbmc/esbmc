@@ -215,7 +215,7 @@ namespace renaming {
       }
 
       bool operator()(const name_record &ref, const name_record &ref2) const
-      { 
+      {
         return ref < ref2;
       }
     };
@@ -288,8 +288,8 @@ namespace renaming {
 
     friend void build_goto_symex_classes();
     // Repeat of the above ignored friend directive.
-//  protected:
-    typedef std::map<const name_record, valuet, name_rec_hash> current_namest;
+    typedef hash_map_cont<const name_record, valuet, name_rec_hash> current_namest;
+
     current_namest current_names;
     typedef std::map<const expr2tc, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;

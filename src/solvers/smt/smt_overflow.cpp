@@ -1,6 +1,6 @@
 #include "smt_conv.h"
 
-smt_astt 
+smt_astt
 smt_convt::overflow_arith(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.
@@ -71,7 +71,7 @@ smt_convt::overflow_arith(const expr2tc &expr)
       not2tc inv(res);
       return convert_ast(inv);
     }
-  } else if(is_div2t(overflow.operand)) {
+  } else if(is_div2t(overflow.operand) || is_modulus2t(overflow.operand)) {
     if(is_signed) {
       // We can't divide -MIN_INT/-1
       constant_int2tc zero(opers.side_1->type, BigInt(0));
@@ -214,7 +214,7 @@ smt_convt::overflow_cast(const expr2tc &expr)
   return mk_func_app(boolsort, SMT_FUNC_NOT, &nooverflow, 1);
 }
 
-smt_astt 
+smt_astt
 smt_convt::overflow_neg(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.
