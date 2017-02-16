@@ -51,5 +51,5 @@ ltbuildidstring.c: $(libs_to_link_in) $(esbmc_SOURCES) $(libmain_la_SOURCES) pyt
 	$(top_srcdir)/c2goto/headers/flail.sh buildidstring .//buildidobj.txt > $@
 
 esbmcincludedir = $(includedir)/esbmc
-esbmcinclude_HEADERS = bmc.h document_subgoals.h parseoptions.h
+esbmcinclude_HEADERS = bmc.h document_subgoals.h parseoptions.h version.h
 

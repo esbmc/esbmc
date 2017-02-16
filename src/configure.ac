@@ -58,6 +58,8 @@ AS_VAR_SET(ver_minhex, `printf "%02X" ${ver_minversion}`)
 AS_VAR_SET(ver_phex, `printf "%02X" ${ver_pversion}`)
 AS_VAR_SET(ver_hexstr, `printf "0x${ver_majhex}${ver_minhex}${ver_phex}"`)
 
+AC_SUBST([ESBMC_VERSION_HEX], "${ver_hexstr}")
+
 dnl Continue looking at our compilation situation
 
 AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
@@ -545,7 +547,7 @@ AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 AC_SUBST([ESBMC_SOLVER_LIBS], "$ESBMC_SOLVER_LIBS")
 
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-cpp-frontend/Makefile c2goto/headers/Makefile c2goto/Makefile esbmc/Makefile solvers/solver_config.h])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-cpp-frontend/Makefile c2goto/headers/Makefile c2goto/Makefile esbmc/Makefile solvers/solver_config.h esbmc/version.h])
 AC_OUTPUT
 
 AS_ECHO(["----------------------------------------"])
