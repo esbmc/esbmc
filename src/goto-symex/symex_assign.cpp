@@ -250,10 +250,8 @@ void goto_symext::symex_assign_symbol(
 {
   // put assignment guard in rhs
 
-  if (!guard.empty())
-  {
+  if (!guard.is_true())
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
-  }
 
   expr2tc orig_name_lhs = lhs;
   cur_state->get_original_name(orig_name_lhs);

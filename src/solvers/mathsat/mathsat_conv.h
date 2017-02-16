@@ -96,6 +96,8 @@ public:
   size_t get_exp_width(smt_sortt sort);
   size_t get_mant_width(smt_sortt sort);
 
+  virtual void dump_SMT();
+
   // MathSAT data.
   msat_config cfg;
   msat_env env;

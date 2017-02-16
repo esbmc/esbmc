@@ -1766,8 +1766,8 @@ struct IEEE_equalitytor
     if(op1 == op2)
     {
       // x == x is the same as saying !isnan(x)
-      expr2tc isnan = isnan2tc(op1);
-      expr2tc is_not_nan = not2tc(isnan);
+      expr2tc is_nan(new isnan2t(op1));
+      expr2tc is_not_nan = not2tc(is_nan);
       return try_simplification(is_not_nan);
     }
 
