@@ -104,7 +104,7 @@ void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
   message.set_verbosity(v);
 }
 
-extern "C" uint8_t *version_string;
+extern "C" uint8_t *esbmc_version_string;
 
 uint64_t cbmc_parseoptionst::read_time_spec(const char *str)
 {
@@ -190,7 +190,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("git-hash"))
   {
-    std::cout << version_string << std::endl;
+    std::cout << esbmc_version_string << std::endl;
     exit(0);
   }
 

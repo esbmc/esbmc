@@ -14,4 +14,4 @@ const mode_table_et mode_table[] =
 };
 
 extern "C" uint8_t buildidstring_buf[1];
-uint8_t *version_string = buildidstring_buf;
+uint8_t *esbmc_version_string = buildidstring_buf;
