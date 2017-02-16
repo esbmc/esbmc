@@ -35,6 +35,31 @@ AC_CHECK_PROG(esbmc_has_awk, $AWK, "yes", "no")
 AS_IF([test "x$esbmc_has_awk" = "xno"], [AC_MSG_ERROR([Cannot find awk])])
 dnl Don't seem to be able to test for sed
 
+dnl Transform version numbers into some integers...
+AS_VAR_SET(ver_numcomponents, `echo esbmcversion | awk 'BEGIN{RS="."}{print $0;}' | wc -l`)
+AS_IF([test "${ver_numcomponents}" != "4"], [
+  AC_MSG_ERROR([Couldnt interpret esbmc version number in esbmc/version])
+])
+dnl Could use cut; too bad.
+AS_VAR_SET(ver_majversion, `echo esbmcversion | awk 'BEGIN{FS="."}{print $1;}'`)
+AS_VAR_SET(ver_minversion, `echo esbmcversion | awk 'BEGIN{FS="."}{print $2;}'`)
+AS_VAR_SET(ver_pversion, `echo esbmcversion | awk 'BEGIN{FS="."}{print $3;}'`)
+AS_ECHO("ESBMC version is ${ver_majversion}.${ver_minversion}.${ver_pversion}")
+
+AS_IF([test "${ver_minversion}" -gt "255"], [
+  AC_MSG_ERROR([Min version component is too large])
+])
+AS_IF([test "${ver_pversion}" -gt "255"], [
+  AC_MSG_ERROR([Patch version component is too large])
+])
+
+AS_VAR_SET(ver_majhex, `printf "%X" ${ver_majversion}`)
+AS_VAR_SET(ver_minhex, `printf "%02X" ${ver_minversion}`)
+AS_VAR_SET(ver_phex, `printf "%02X" ${ver_pversion}`)
+AS_VAR_SET(ver_hexstr, `printf "0x${ver_majhex}${ver_minhex}${ver_phex}"`)
+
+dnl Continue looking at our compilation situation
+
 AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
 
 AX_BOOST_BASE(1.47, [], [AC_MSG_ERROR([Cannot find boost base dir, please pass it in --with-boost argument or set BOOST_ROOT])])
