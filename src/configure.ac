@@ -12,7 +12,7 @@ AC_INIT([ESBMC], [esbmcversion], [esbmc-users@googlegroups.com])
 AC_DEFINE([ESBMC_VERSION], ["AC_PACKAGE_VERSION"], [ESBMC version number])
 dnl Numerous things croak unless we do this immediately:
 AC_CONFIG_AUX_DIR([scripts/build-aux])
-AC_CONFIG_MACRO_DIR([scripts/build-aux/m4])
+AC_CONFIG_MACRO_DIRS([scripts/build-aux/m4 /usr/share/aclocal])
 
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADER(ac_config.h:scripts/ac_config.in)
@@ -42,10 +42,12 @@ AX_BOOST_BASE(1.47, [], [AC_MSG_ERROR([Cannot find boost base dir, please pass i
 AS_VAR_APPEND(CPPFLAGS, " $BOOST_CPPFLAGS")
 AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS")
 
+AS_VAR_SET(C2GOTO_LIBS, "")
+
 AM_PROG_AR
 AM_PROG_LEX
 
-LT_INIT(static)
+LT_INIT(static disable-shared)
 LTDL_INIT
 
 AC_LANG(C++)
@@ -87,7 +89,7 @@ m4_define(ESBMC_ENABLE_CLANG, [
   AX_CLANG(3.9.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
   AX_LLVM(,[AC_MSG_FAILURE(Cannot find llvm dir, please pass it in --with-llvm argument)])
   AC_SUBST([ESBMC_CLANG_SUBDIRS], " clang-c-frontend clang-cpp-frontend ")
-  AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.a ../clang-cpp-frontend/libclangcppfrontend.a ../clang-c-frontend/headers/libclangheaders.a")
+  AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ../clang-c-frontend/headers/libclangheaders.la")
   ])
 
 AC_ARG_ENABLE(clang, [AS_HELP_STRING([--disable-clang], Build ESBMC without clang. (On by default))],
@@ -112,7 +114,7 @@ AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], [AC_MSG_ERROR([No boost shared ptr 
 AC_CHECK_HEADERS([boost/crc.hpp], [], [AC_MSG_ERROR([No boost CRC library found])])
 AC_CHECK_HEADERS([boost/utility/enable_if.hpp], [], [AC_MSG_ERROR([No boost enable_if utility found])])
 AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], [AC_MSG_ERROR([No boost fusion library found])])
-AC_CHECK_HEADERS([sys/sendfile.h], [AC_DEFINE([HAVE_SENDFILE], [], [Has sendfile header])], [])
+AC_CHECK_HEADERS([sys/sendfile.h], [AC_DEFINE([HAVE_SENDFILE_ESBMC], [], [Has sendfile header])], [])
 
 AC_CHECK_HEADERS([unistd.h], [AC_DEFINE([HAVE_UNISTD], [], [Has unistd.h header])], [])
 
@@ -178,9 +180,78 @@ AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)
 
 AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build flag)])
 
+dnl on by default...
+AC_ARG_ENABLE(enable-esbmc, [AS_HELP_STRING([--enable-esbmc], Build main ESBMC binary)])
+AS_IF([test "${enable_esbmc}" = "yes"], [
+  AC_SUBST([ESBMC_BINARY], "esbmc")
+], [
+  dnl If we turn esbmc off, disable creation of any statc objects
+  AS_IF([test "${enable_esbmc}" = "no"], [
+    AS_VAR_SET(enable_static, "no")
+  ])
+])
+
+AC_ARG_ENABLE(enable-python, [AS_HELP_STRING([--enable-python], Build python support into ESBMC)])
+AS_IF([test "${enable_python}" = "yes"], [
+  dnl Check for python. Hardcoded to python 3: I was going to make this
+  dnl selectable, but then realised that everyone (even I) need a little
+  dnl knudging towards python3 now and then.
+  PKG_CHECK_MODULES([LIBPYTHON3], [python3], [
+    dnl Add flags to build python in; enable build of libesbmc
+    AS_VAR_APPEND(CXXFLAGS, " $LIBPYTHON3_CFLAGS -DWITH_PYTHON ")
+    AS_VAR_APPEND(CFLAGS, " $LIBPYTHON3_CFLAGS -DWITH_PYTHON ")
+
+    dnl Misery: debian wants -py34 on the end, autoconf library stuff doesn't
+    dnl detect that. Attempt to build the version number by frobbing pkgconfig
+
+    _PKG_CONFIG(PYTHON3_VERSION, modversion, python3)
+
+    AS_VAR_SET(py3suffix, `echo $pkg_cv_PYTHON3_VERSION | sed -e 's/\.//g'`)
+    AS_VAR_SET(py3libname, "boost_python-py${py3suffix}")
+
+    dnl Alternately, if the user overrides with a --with-boost-python= spec,
+    dnl the set the libname to that
+    AC_ARG_WITH([boost-python-libname], [AS_HELP_STRING([--with-boost-python-libname], [Specify basename of boost-pythons shared object])], [
+      AS_VAR_SET(py3libname, "${with_boost_python_libname}")],
+    [])
+
+    AS_VAR_APPEND(LIBS, " $LIBPYTHON3_LIBS ")
+    AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON3_LIBS ")
+
+    dnl Check if we can actually compile in boost-python. Needs to be after
+    dnl python libs added to LIBS
+    AC_CHECK_LIB(["${py3libname}"], [no_init], [],
+        [AC_MSG_ERROR([Python supported requested but boost-python not found. Alternately: packaging sketchyness means I couldn't deduce the base soname and you can specify it with --with-boost-python-libname=boost_python-foobar'])], []
+    )
+
+    dnl Alright, add the lib name to that
+    AS_VAR_APPEND(LIBS, " -l${py3libname} ")
+    AS_VAR_APPEND(C2GOTO_LIBS, " -l${py3libname} ")
+
+    AC_SUBST([ESBMC_PYTHON_OBJ], "python.lo")
+  ], [
+    AC_MSG_ERROR(Asked for python support but pkgconfig finds no python library. You need to install python (3) development packages.)
+  ])
+], [
+    AC_SUBST([ESBMC_PYTHON_OBJ], "")
+])
+
+dnl If --enable-shared was supplied, then enable building of libesbmc.
+AS_IF([test "${enable_shared}" = "yes"], [
+  AC_SUBST([ESBMC_SHARED_LIB], "libesbmc.la")
+], [
+  AC_SUBST([ESBMC_SHARED_LIB], "")
+])
+
 AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 $ESBMC_CLANG_CXXFLAGS ")
-dnl A necessary evil due to the presence of rubbish in boost::python's headers
-AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations ")
+dnl A necessary evil due to the presence of rubbish in boost::python's headers.
+dnl local typedefs because that's hwo boost python works
+dnl deprecated decls because it uses auto ptrs
+dnl field initializers due to a, uh, totally legitimate initializer mismatch
+dnl       with later versions of python headers
+dnl String aliasing... the following knackers that:
+dnl       return (*(void**)m_result.bytes == Py_None)
+AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations -Wno-missing-field-initializers -Wno-strict-aliasing $ESBMC_CLANG_CFLAGS ")
 
 dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 dnl Unless of course you're on a mac, in which case clang will frequently

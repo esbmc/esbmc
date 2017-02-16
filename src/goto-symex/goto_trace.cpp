@@ -243,9 +243,14 @@ show_state_header(
 
   // Print stack trace
 
-  std::vector<dstring>::const_iterator it;
-  for (it = state.stack_trace.begin(); it != state.stack_trace.end(); it++)
-    out << it->as_string() << std::endl;
+  for (std::vector<stack_framet>::const_iterator it = state.stack_trace.begin();
+       it != state.stack_trace.end(); it++)
+  {
+    if (it->src == NULL)
+      out << it->function.as_string() << std::endl;
+    else
+      out << it->function.as_string() << " at " << it->src->pc->location.get_file().as_string() << " line " << it->src->pc->location.get_line().as_string() << std::endl;
+  }
 
   out << "----------------------------------------------------" << std::endl;
 }

@@ -19,7 +19,7 @@ extern "C" {
 #include <signal.h>
 #include <unistd.h>
 
-#ifdef HAVE_SENDFILE
+#ifdef HAVE_SENDFILE_ESBMC
 #include <sys/sendfile.h>
 #endif
 #include <sys/resource.h>
@@ -389,8 +389,6 @@ int cbmc_parseoptionst::doit()
   if(cmdline.isset("incremental-bmc"))
     return doit_incremental();
 
-  goto_functionst goto_functions;
-
   optionst opts;
   get_command_line_options(opts);
 
@@ -406,6 +404,9 @@ int cbmc_parseoptionst::doit()
 
   if(set_claims(goto_functions))
     return 7;
+
+  if (opts.get_bool_option("skip-bmc"))
+    return 0;
 
   bool res = false;
 
@@ -473,7 +474,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
     abort();
   }
 
-  goto_functionst goto_functions;
   optionst opts;
 
   if(process_type != PARENT)
@@ -1017,8 +1017,8 @@ int cbmc_parseoptionst::doit_k_induction()
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 
-  // Generate goto functions
-  goto_functionst goto_functions;
+  // Generate goto functions for base case and forward condition
+  status("\n*** Generating Base Case and Forward Condition ***");
 
   optionst opts;
   get_command_line_options(opts);
@@ -1132,7 +1132,6 @@ int cbmc_parseoptionst::doit_falsification()
 int cbmc_parseoptionst::doit_incremental()
 {
   // Generate goto functions for base case and forward condition
-  goto_functionst goto_functions;
 
   optionst opts;
   get_command_line_options(opts);
@@ -1880,7 +1879,7 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 
   bool res = bmc1.run();
 
-#ifdef HAVE_SENDFILE
+#ifdef HAVE_SENDFILE_ESBMC
   if (bmc1.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, NULL, 100000);

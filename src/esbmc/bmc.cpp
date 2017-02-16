@@ -566,7 +566,7 @@ bool bmct::run(void)
 
 bool bmct::run_thread()
 {
-  std::shared_ptr<goto_symext::symex_resultt> result;
+  boost::shared_ptr<goto_symext::symex_resultt> result;
   bool ret;
 
   fine_timet symex_start = current_time();
@@ -611,7 +611,7 @@ bool bmct::run_thread()
   status(str.str());
 
   auto equation =
-    std::dynamic_pointer_cast<symex_target_equationt>(result->target);
+    boost::dynamic_pointer_cast<symex_target_equationt>(result->target);
 
   print(8, "size of program expression: "+
            i2string((unsigned long)equation.get()->SSA_steps.size())+

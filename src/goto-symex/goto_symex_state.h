@@ -10,6 +10,8 @@
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
+#include <boost/shared_ptr.hpp>
+
 #include <irep2.h>
 
 #include <assert.h>
@@ -93,7 +95,7 @@ public:
   {
   public:
     unsigned depth;
-    std::shared_ptr<renaming::level2t> level2_ptr;
+    boost::shared_ptr<renaming::level2t> level2_ptr;
     renaming::level2t &level2;
     value_sett value_set;
     guardt guard;
@@ -397,7 +399,7 @@ public:
    *  current function invocations on the stack, and returns them.
    *  @return Vector of strings describing the current function calls in state.
    */
-  std::vector<dstring> gen_stack_trace(void) const;
+  std::vector<stack_framet> gen_stack_trace(void) const;
 
   /**
    *  Fixup types after renaming: we might rename a symbol that we

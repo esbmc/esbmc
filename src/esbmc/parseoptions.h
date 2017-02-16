@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_CBMC_PARSEOPTIONS_H
 #define CPROVER_CBMC_PARSEOPTIONS_H
 
+#include <goto-programs/goto_convert_functions.h>
 #include <langapi/language_ui.h>
 #include <ui_message.h>
 #include <util/parseoptions.h>
@@ -73,6 +74,9 @@ protected:
   void add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, expr2tc> >monitors);
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
+
+public:
+  goto_functionst goto_functions;
 };
 
 #endif

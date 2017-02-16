@@ -8,7 +8,8 @@ AM_YFLAGS = -d -pyyansi_c
 AM_LFLAGS = --header-file=scanner.hpp -Pyyansi_c -o scanner.cpp
 
 libansicscanner_la_SOURCES = scanner.lpp
-libansicscanner_la_CXXFLAGS = $(ESBMC_CXXFLAGS_WARNINGS) -I$(top_srcdir) -I$(top_srcdir)/util
+libansicscanner_la_CXXFLAGS = $(ESBMC_CXXFLAGS_WARNINGS) -I$(top_srcdir) \
+      -I$(top_srcdir)/util
 
 libansic_la_SOURCES = parser.ypp \
       c_typecast.cpp ansi_c_parser.cpp \
@@ -26,6 +27,17 @@ libansic_la_SOURCES = parser.ypp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp
 libansic_la_LIBADD = libansicscanner.la
 BUILT_SOURCES = parser.hpp
+
+ansicincludedir = $(includedir)/ansi-c
+ansicinclude_HEADERS = ansi_c_convert.h ansi_c_convert_type.h \
+      ansi_c_declaration.h ansi_c_language.h ansi_c_parse_tree.h \
+      ansi_c_parser.h ansi_c_typecheck.h c_final.h c_link.h c_main.h \
+      c_preprocess.h c_qualifiers.h c_sizeof.h c_storage_spec.h c_typecast.h \
+      c_typecheck_base.h convert_character_literal.h convert_float_literal.h \
+      convert_integer_literal.h convert_string_literal.h expr2c.h \
+      fix_symbol.h gcc_builtin_headers.h headers.h parse_float.h \
+      preprocessor_line.h printf_formatter.h trans_unit.h type2name.h \
+      unescape_string.h
 
 clean-local:
 	-rm scanner.cpp scanner.hpp parser.hpp parser.cpp

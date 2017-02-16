@@ -19,6 +19,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <hash_cont.h>
 #include <options.h>
 
+#include <boost/shared_ptr.hpp>
+
 #include <goto-programs/goto_functions.h>
 
 #include <pointer-analysis/dereference.h>
@@ -52,7 +54,7 @@ public:
    */
   goto_symext(const namespacet &_ns, contextt &_new_context,
               const goto_functionst &goto_functions,
-              std::shared_ptr<symex_targett> _target, optionst &opts);
+              boost::shared_ptr<symex_targett> _target, optionst &opts);
   goto_symext(const goto_symext &sym);
   goto_symext& operator=(const goto_symext &sym);
 
@@ -88,12 +90,12 @@ public:
   class symex_resultt {
   public:
     symex_resultt(
-      std::shared_ptr<symex_targett> t,
+      boost::shared_ptr<symex_targett> t,
       unsigned int claims,
       unsigned int remain)
       : target(t), total_claims(claims), remaining_claims(remain) { };
 
-    std::shared_ptr<symex_targett> target;
+    boost::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
   };
@@ -120,7 +122,7 @@ public:
   /**
    *  Create a symex result for this run.
    */
-  std::shared_ptr<goto_symext::symex_resultt> get_symex_result(void);
+  boost::shared_ptr<goto_symext::symex_resultt> get_symex_result(void);
 
   /**
    *  Symbolically execute one instruction.
@@ -647,7 +649,7 @@ protected:
   /** GOTO functions that we're operating over. */
   const goto_functionst &goto_functions;
   /** Target listening to the execution trace */
-  std::shared_ptr<symex_targett> target;
+  boost::shared_ptr<symex_targett> target;
   /** Target thread we're currently operating upon */
   goto_symex_statet *cur_state;
   /** Symbol names for modelling arrays.
@@ -723,6 +725,8 @@ protected:
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
+
+  friend void build_goto_symex_classes();
 };
 
 #endif

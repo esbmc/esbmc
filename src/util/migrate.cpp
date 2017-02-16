@@ -1530,7 +1530,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new invalid_pointer2t(op0));
   } else if (expr.id() == "code" && expr.statement() == "skip") {
-    new_expr_ref = expr2tc(new code_skip2t());
+    new_expr_ref = expr2tc(new code_skip2t(get_empty_type()));
   } else if (expr.id() == "code" && expr.statement() == "goto") {
     new_expr_ref = expr2tc(new code_goto2t(expr.get("destination")));
   } else if (expr.id() == "comma") {
@@ -2690,7 +2690,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const signbit2t &ref2 = to_signbit2t(ref);
     exprt back("signbit", bool_typet());
-    back.copy_to_operands(migrate_expr_back(ref2.value));
+    back.copy_to_operands(migrate_expr_back(ref2.operand));
     return back;
   }
   case expr2t::concat_id:

@@ -101,6 +101,8 @@ public:
   class objectt
   {
   public:
+    objectt() : offset(0), offset_is_set(true), offset_alignment(0) { }
+
     objectt(bool offset_set, unsigned int operand)
     {
       if (offset_set) {
