@@ -189,7 +189,7 @@ transformations may become implemented in python, but that's all speculation.
 
 ## Even more caveats
 
-It's best to assume that esbmc is going to crash every time you do something,
+It's best to assume that esbmc is going to crash when performing an operation,
 unless you're very confident in what it does. I wouldn't recommend developing
 in an interactive python instance, better to keep scripts on disk most of the
 time.
@@ -200,7 +200,7 @@ lifetime of each object. ESBMC contains a random mixture of std::shared\_ptr
 and boost::shared\_ptr, so bear this in mind if you have inexplicable python
 references hanging around.
 
-I subclassed an stl container to better enable python access to it. I am not
+I subclassed an STL container to better enable python access to it. I am not
 proud of this.
 
 Currently there's no way of accessing the 'old' irep from python, which is
