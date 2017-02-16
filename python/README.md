@@ -161,10 +161,10 @@ the C++ object with a python object wrapper, which is beyond the scope of this
 readme.
 
 Const correctness falls by the wayside with most Boost.Python operations. As a
-result expression are read-only from python, but take care not to pass (for
+result expression are read-only from python, but take care when passing (for
 example) an expression reference into a C++ method that will mutate it.
 Otherwise you'll set fire to an expression that the rest of ESBMC thought was
-const.
+const: call clone() first to avoid this.
 
 There's no reason why one cannot repeatedly call in and out of C++ / python with
 these bindings, however be aware that:
