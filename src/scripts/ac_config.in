@@ -274,7 +274,7 @@
 #undef HAVE_SELECT
 
 /* Has sendfile header */
-#undef HAVE_SENDFILE
+#undef HAVE_SENDFILE_ESBMC
 
 /* Define to 1 if you have the `setenv' function. */
 #undef HAVE_SETENV
