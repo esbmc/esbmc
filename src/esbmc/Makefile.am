@@ -7,12 +7,12 @@ noinst_LTLIBRARIES = libmain.la
 
 # Work out what gets linked in.
 ESBMC_SOLVER_LIBS = @ESBMC_SOLVER_LIBS@
-libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la ../langapi/liblangapi.la \
-                  ../ansi-c/libansic.la ../c2goto/libclib.la ../ansi-c/cpp/libcpp.la \
-                  ../c2goto/headers/libheaders.la ../goto-programs/libgotoprograms.la \
-                  @ESBMC_CLANG_ARCHIVES@ \
-                  ../pointer-analysis/libpointeranalysis.la ../util/libutil.la \
-                  ../big-int/libbigint.la ../solvers/libsolvers.la
+libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la \
+      ../langapi/liblangapi.la ../ansi-c/libansic.la ../c2goto/libclib.la \
+      ../ansi-c/cpp/libcpp.la ../c2goto/headers/libheaders.la \
+      ../goto-programs/libgotoprograms.la @ESBMC_CLANG_ARCHIVES@ \
+      ../pointer-analysis/libpointeranalysis.la ../util/libutil.la \
+      ../big-int/libbigint.la ../solvers/libsolvers.la
 
 # An aside about python: linking it in is sketchy, but supported by libtool
 # extra sources and dependencies. The real issue is that the symex convenience

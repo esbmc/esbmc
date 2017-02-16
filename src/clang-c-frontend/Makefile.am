@@ -2,8 +2,8 @@ SUBDIRS = headers
 
 noinst_LTLIBRARIES = libclangcfrontend.la
 
-libclangcfrontend_la_SOURCES = \
-      clang_c_language.cpp clang_c_convert.cpp clang_c_main.cpp clang_c_adjust_expr.cpp typecast.cpp \
+libclangcfrontend_la_SOURCES = clang_c_language.cpp clang_c_convert.cpp \
+      clang_c_main.cpp clang_c_adjust_expr.cpp typecast.cpp \
       clang_c_adjust_code.cpp clang_c_convert_literals.cpp clang_headers.cpp
 
 # Can't rely on clang headers not warning, so disable werror

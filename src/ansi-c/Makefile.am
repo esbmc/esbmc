@@ -8,7 +8,8 @@ AM_YFLAGS = -d -pyyansi_c
 AM_LFLAGS = --header-file=scanner.hpp -Pyyansi_c -o scanner.cpp
 
 libansicscanner_la_SOURCES = scanner.lpp
-libansicscanner_la_CXXFLAGS = $(ESBMC_CXXFLAGS_WARNINGS) -I$(top_srcdir) -I$(top_srcdir)/util
+libansicscanner_la_CXXFLAGS = $(ESBMC_CXXFLAGS_WARNINGS) -I$(top_srcdir) \
+      -I$(top_srcdir)/util
 
 libansic_la_SOURCES = parser.ypp \
       c_typecast.cpp ansi_c_parser.cpp \
