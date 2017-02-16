@@ -69,7 +69,7 @@ public:
     (void)type;
     (void)out;
     // Everything here should have become an lvalue over an rvalue. Only thing
-    // that should pass through this far is None. 
+    // that should pass through this far is None.
     assert(0 && "rvalue of irep2tc_to_irep2t should never be called");
   }
 
@@ -2333,7 +2333,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   foo.staticmethod("make");
 
   build_python_class_rec(foo, 0);
-  
+
   register_irep_methods<base2t> bar;
   bar(foo, basename);
   return;
