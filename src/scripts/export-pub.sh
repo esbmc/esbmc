@@ -22,7 +22,7 @@ done
 shift $((OPTIND-1))
 
 if test $# != 1; then
-  echo "Usage: scripts/export-pub.sh [-n outputsuffix] output.tgz" >&2
+  echo "Usage: src/scripts/export-pub.sh [-n outputsuffix] output.tgz" >&2
   exit 1
 fi
 
@@ -60,7 +60,7 @@ rm $tmpfile
 # Ahem
 mkdir $tmpdir/.git
 
-sh -c "cd $tmpdir; scripts/autoboot.sh"
+sh -c "cd $tmpdir/src; scripts/autoboot.sh"
 
 # Autobooted; delete non-public stuff
 
