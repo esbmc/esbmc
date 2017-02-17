@@ -30,6 +30,7 @@ if not commands.getoutput('uname -s') == 'Linux':
 parser = argparse.ArgumentParser()
 parser.add_argument("--clangdir", help="Path to the clang directory")
 parser.add_argument("--llvmdir", help="Path to the llvm directory")
+parser.add_argument("--boostpython", help="boost_python lib name")
 parser.add_argument("-a", "--arch", help="Either 32 or 64 bits", type=int, choices=[32, 64], default=64)
 parser.add_argument("--compiler", help="Compiler to preprocess the benchmarks", choices=['g++', 'clang++'], default='g++')
 
@@ -38,6 +39,7 @@ clangdir = args.clangdir
 llvmdir = args.llvmdir
 arch = args.arch
 compiler = args.compiler
+boostpython = args.boostpython
 
 # Procedure:
 # 1) Tell the user what's about to happen
@@ -120,6 +122,11 @@ if clangdir:
 
 if llvmdir:
   configure_str += "--with-llvm=" + llvmdir + " "
+
+if boostpython:
+  configure_str += "--with-boost-python-libname=" + boostpython + " "
+
+configure_str += "--enable-esbmc --enable-shared --enable-python "
 
 # Build dynamic
 do_build('esbmc-v' + esbmcversion + '-linux-' + str(arch), configure_str)

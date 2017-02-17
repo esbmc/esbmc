@@ -2334,7 +2334,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   foo.staticmethod("make");
 
   build_python_class_rec(foo, 0);
-  
+
   register_irep_methods<base2t> bar;
   bar(foo, basename);
   return;
