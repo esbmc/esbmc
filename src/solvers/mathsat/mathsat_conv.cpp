@@ -43,7 +43,7 @@ void print_mathsat_formula()
   msat_free(asserted_formulas);
 }
 
-void check_msat_error(msat_term r)
+void check_msat_error(msat_term &r)
 {
   if (MSAT_ERROR_TERM(r)) {
     std::cerr << "Error creating SMT " << std::endl;
@@ -536,7 +536,7 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
 }
 
 smt_ast *
-mathsat_convt::mk_smt_int(const mp_integer &theint, bool sign)
+mathsat_convt::mk_smt_int(const mp_integer &theint, bool sign __attribute__((unused)))
 {
   char buffer[256], *n = nullptr;
   n = theint.as_string(buffer, 256);
@@ -560,8 +560,10 @@ mathsat_convt::mk_smt_real(const std::string &str)
 }
 
 smt_ast *
-mathsat_convt::mk_smt_bvint(const mp_integer &theint,
-                            bool sign __attribute__((unused)), unsigned int w)
+mathsat_convt::mk_smt_bvint(
+  const mp_integer &theint,
+  bool sign __attribute__((unused)),
+  unsigned int w)
 {
   std::stringstream ss;
 
@@ -677,6 +679,9 @@ smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 
     t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
   }
+  else
+    abort();
+
   check_msat_error(t);
   assert(s != NULL);
 
