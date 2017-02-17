@@ -247,13 +247,23 @@ AS_IF([test "${enable_python}" = "yes"], [
 
     dnl Check if we can actually compile in boost-python. Needs to be after
     dnl python libs added to LIBS
-    AC_CHECK_LIB(["${py3libname}"], [no_init], [],
-        [AC_MSG_ERROR([Python supported requested but boost-python not found. Alternately: packaging sketchyness means I couldn't deduce the base soname and you can specify it with --with-boost-python-libname=boost_python-foobar'])], []
-    )
-
-    dnl Alright, add the lib name to that
-    AS_VAR_APPEND(LIBS, " -l${py3libname} ")
-    AS_VAR_APPEND(C2GOTO_LIBS, " -l${py3libname} ")
+    AC_CHECK_LIB(["${py3libname}"], [no_init],
+    [
+      dnl Alright, add the lib name to that
+      AS_VAR_APPEND(LIBS, " -l${py3libname} ")
+      AS_VAR_APPEND(C2GOTO_LIBS, " -l${py3libname} ")
+    ],
+    [
+      dnl Fedora just has -lboost_python3
+      AC_CHECK_LIB(["boost_python3"], [no_init],
+      [
+        AS_VAR_APPEND(LIBS, " -lboost_python3 ")
+        AS_VAR_APPEND(C2GOTO_LIBS, " -lboost_python3 ")
+      ],
+      [
+        AC_MSG_ERROR([Python supported requested but boost-python not found. Alternately: packaging sketchyness means I couldn't deduce the base soname and you can specify it with --with-boost-python-libname=boost_python-foobar'])
+      ])
+    ])
 
     AC_SUBST([ESBMC_PYTHON_OBJ], "python.lo")
   ], [
