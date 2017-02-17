@@ -15,8 +15,8 @@ def run_command(cmd):
   for line in iter(proc.stdout.readline, ""):
     print line,
 
-if not os.path.isdir('./esbmc'):
-  print "Please run from src/ dir"
+if not os.path.isdir('./src'):
+  print "Please run from the top level dir"
   exit(1)
 
 if not commands.getoutput('uname -m') == 'x86_64':
@@ -54,7 +54,7 @@ boostpython = args.boostpython
 
 print "Will now produce a source distribution and compile into a release. Any local uncommitted changes will be ignored"
 
-with open('esbmc/version', 'r') as version_file:
+with open('src/esbmc/version', 'r') as version_file:
   esbmcversion = version_file.read()
 print 'ESBMC version: ' + esbmcversion
 
@@ -77,7 +77,7 @@ def fin():
   shutil.rmtree(destdir)
 
 print 'Exporting public version of ESBMC, please wait.'
-print run_command('scripts/export-pub.sh -n buildrelease ' + tmpfile)
+print run_command('src/scripts/export-pub.sh -n buildrelease ' + tmpfile)
 
 # 3
 
@@ -91,7 +91,7 @@ def do_build(releasename, configureflags):
 
   destname = destdir + "/" + releasename
   os.mkdir(destname)
-  run_command(srcdir + '/buildrelease/configure --prefix=' + destname + " " + configureflags)
+  run_command(srcdir + '/buildrelease/src/configure --prefix=' + destname + " " + configureflags)
 
   # build
   run_command('make -j' + str(multiprocessing.cpu_count()+1))
