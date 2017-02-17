@@ -26,6 +26,12 @@ if test $# != 1; then
   exit 1
 fi
 
+stat .git >/dev/null 2>&1
+if test $? != 0; then
+  echo "You must run export-pub.sh in the top level esbmc directory" >&2
+  exit 1
+fi
+
 # Procedure:
 # 1) Export ESBMC to a tarball from git, avoiding local contamination
 # 2) Extract, run autoconf
