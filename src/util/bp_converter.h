@@ -70,7 +70,7 @@ struct esbmc_python_cvt
       return ValueCvt::lvalue_cvt(foo);
     }
 
-    static void cons(PyObject *src, boost::python::converter::rvalue_from_python_stage1_data *stage1)
+    static void cons(PyObject *src __attribute__((unused)), boost::python::converter::rvalue_from_python_stage1_data *stage1)
     {
       using namespace boost::python;
       // We're a non-reference non-ptr piece of data; therefore we get created
