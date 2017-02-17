@@ -1,4 +1,5 @@
 #include <langapi/mode.h>
+#include <esbmc/version.h>
 
 const mode_table_et mode_table[] =
 {
@@ -15,3 +16,7 @@ const mode_table_et mode_table[] =
 
 extern "C" uint8_t buildidstring_buf[1];
 uint8_t *esbmc_version_string = buildidstring_buf;
+
+extern "C" {
+uint64_t esbmc_version = ESBMC_VERSION_CONST;
+}
