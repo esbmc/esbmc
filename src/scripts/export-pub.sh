@@ -64,6 +64,7 @@ sh -c "cd $tmpdir; scripts/autoboot.sh"
 
 # Autobooted; delete non-public stuff
 
+cp -r $tmpdir/regression/python $tmpdir/python/tests
 rm -rf $tmpdir/regression
 rm -rf $tmpdir/docs
 rm -rf $tmpdir/scripts/benchmarks
