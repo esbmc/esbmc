@@ -29,7 +29,8 @@ libmain_la_SOURCES = parseoptions.cpp bmc.cpp globals.cpp \
 EXTRA_libmain_la_SOURCES = python.cpp
 
 # libesbmc -> shared object of all of ESBMCs Stuff (TM)
-libesbmc_la_LDFLAGS = -module -shared -rpath ${libdir} # Makes this shared
+# -rpath needed otherwise libtool bails on making it shared.
+libesbmc_la_LDFLAGS = -module -shared -rpath ${libdir} -release @ESBMC_VERSION_STR@
 libesbmc_la_LIBADD = $(libs_to_link_in) $(ESBMC_SOLVER_LIBS) ./libmain.la @ESBMC_PYTHON_OBJ@
 libesbmc_la_SOURCES = ltbuildidstring.c
 EXTRA_libesbmc_la_DEPENDENCIES = @ESBMC_PYTHON_OBJ@
