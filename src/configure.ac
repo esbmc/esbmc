@@ -221,6 +221,19 @@ AS_IF([test "${enable_esbmc}" = "yes"], [
 
 AC_ARG_ENABLE(enable-python, [AS_HELP_STRING([--enable-python], Build python support into ESBMC)])
 AS_IF([test "${enable_python}" = "yes"], [
+  dnl check for dependencies when building the static library
+  AS_IF([test "${enable_static_link}" = "yes"], [
+    AC_CHECK_LIB([expat], [XML_ExpatVersion],
+      [AS_VAR_APPEND(LIBS, " -lexpat")],
+      AC_MSG_ERROR([No libexpat found]), []
+    )
+
+    AC_CHECK_LIB([util], [openpty],
+      [AS_VAR_APPEND(LIBS, " -lutil")],
+      AC_MSG_ERROR([No libutil found]), []
+    )
+  ])
+
   dnl Check for python. Hardcoded to python 3: I was going to make this
   dnl selectable, but then realised that everyone (even I) need a little
   dnl knudging towards python3 now and then.
@@ -243,23 +256,23 @@ AS_IF([test "${enable_python}" = "yes"], [
       AS_VAR_SET(py3libname, "${with_boost_python_libname}")],
     [])
 
-    AS_VAR_APPEND(LIBS, " $LIBPYTHON3_LIBS ")
-    AS_VAR_APPEND(C2GOTO_LIBS, " $LIBPYTHON3_LIBS ")
+    AS_VAR_SET(LIBS, " $LIBPYTHON3_LIBS $LIBS")
+    AS_VAR_SET(C2GOTO_LIBS, " $LIBPYTHON3_LIBS $C2GOTO_LIBS")
 
     dnl Check if we can actually compile in boost-python. Needs to be after
     dnl python libs added to LIBS
     AC_CHECK_LIB(["${py3libname}"], [no_init],
     [
       dnl Alright, add the lib name to that
-      AS_VAR_APPEND(LIBS, " -l${py3libname} ")
-      AS_VAR_APPEND(C2GOTO_LIBS, " -l${py3libname} ")
+      AS_VAR_SET(LIBS, " -l${py3libname} $LIBS")
+      AS_VAR_SET(C2GOTO_LIBS, " -l${py3libname} $C2GOTO_LIBS")
     ],
     [
       dnl Fedora just has -lboost_python3
       AC_CHECK_LIB(["boost_python3"], [no_init],
       [
-        AS_VAR_APPEND(LIBS, " -lboost_python3 ")
-        AS_VAR_APPEND(C2GOTO_LIBS, " -lboost_python3 ")
+        AS_VAR_SET(LIBS, " -lboost_python3 $LIBS")
+        AS_VAR_SET(C2GOTO_LIBS, " -lboost_python3 $C2GOTO_LIBS")
       ],
       
         AC_MSG_ERROR([Python supported requested but boost-python not found. Alternately: packaging sketchyness means I couldn't deduce the base soname and you can specify it with --with-boost-python-libname=boost_python-foobar'])
