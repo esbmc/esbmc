@@ -325,41 +325,12 @@ boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
 {
   const smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
 
-  if (w > 32) {
-    // We have to pass things around via means of strings, becausae boolector
-    // uses native int types as arguments to its functions, rather than fixed
-    // width integers. Seeing how amd64 is LP64, there's no way to pump 64 bit
-    // ints to boolector natively.
-    if (w > 64) {
-      std::cerr <<  "Boolector backend assumes maximum bitwidth is 64, sorry"
-                << std::endl;
-      abort();
-    }
-
-    char buffer[65];
-    memset(buffer, 0, sizeof(buffer));
-
-    // Note that boolector has the most significant bit first in bit strings.
-    int64_t num = theint.to_int64();
-    uint64_t bit = 1ULL << (w - 1);
-    for (unsigned int i = 0; i < w; i++) {
-      if (num & bit)
-        buffer[i] = '1';
-      else
-        buffer[i] = '0';
-
-      bit >>= 1;
-    }
-
-    BoolectorNode *node = boolector_const(btor, buffer);
-    return new_ast(s, node);
-  }
-
   BoolectorNode *node;
   if (sign) {
-    node = boolector_int(btor, theint.to_long(), w);
+    node = boolector_int(btor, theint.to_long(), boolector_sort_downcast(s)->t);
   } else {
-    node = boolector_unsigned_int(btor, theint.to_ulong(), w);
+    node =
+      boolector_unsigned_int(btor, theint.to_ulong(), boolector_sort_downcast(s)->t);
   }
 
   return new_ast(s, node);
@@ -391,13 +362,13 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 
   switch(s->id) {
   case SMT_SORT_BV:
-    node = boolector_var(btor, s->data_width, name.c_str());
+    node = boolector_var(btor, boolector_sort_downcast(s)->t, name.c_str());
     break;
   case SMT_SORT_BOOL:
-    node = boolector_var(btor, 1, name.c_str());
+    node = boolector_var(btor, boolector_sort_downcast(s)->t, name.c_str());
     break;
   case SMT_SORT_ARRAY:
-    node = boolector_array(btor, s->data_width, s->domain_width, name.c_str());
+    node = boolector_array(btor, boolector_sort_downcast(s)->t, name.c_str());
     break;
   default:
     return NULL; // Hax.
