@@ -599,3 +599,8 @@ void boolector_convt::dump_SMT()
 {
   boolector_dump_smt2(btor, stdout);
 }
+
+void btor_smt_ast::dump() const
+{
+  boolector_dump_btor_node(boolector_get_btor(e), stdout, e);
+}

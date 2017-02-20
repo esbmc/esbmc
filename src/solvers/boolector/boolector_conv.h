@@ -40,7 +40,7 @@ public:
   virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
 
   virtual ~btor_smt_ast() { }
-  virtual void dump() const { abort(); }
+  virtual void dump() const;
 
   BoolectorNode *e;
 };
