@@ -585,3 +585,8 @@ boolector_convt::fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
 
   return new_ast(res_sort, shift);
 }
+
+void boolector_convt::dump_SMT()
+{
+  boolector_dump_smt2(btor, stdout);
+}
