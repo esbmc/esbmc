@@ -586,6 +586,15 @@ boolector_convt::fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
   return new_ast(res_sort, shift);
 }
 
+const smt_ast* btor_smt_ast::select(smt_convt* ctx, const expr2tc& idx) const
+{
+  const smt_ast *args[2];
+  args[0] = this;
+  args[1] = ctx->convert_ast(idx);
+  const smt_sort *rangesort = boolector_sort_downcast(sort)->rangesort;
+  return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
+}
+
 void boolector_convt::dump_SMT()
 {
   boolector_dump_smt2(btor, stdout);

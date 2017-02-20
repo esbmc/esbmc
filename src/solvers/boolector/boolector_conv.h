@@ -36,6 +36,9 @@ public:
 #define btor_ast_downcast(x) static_cast<const btor_smt_ast *>(x)
   btor_smt_ast(smt_convt *ctx, const smt_sort *_s, BoolectorNode *_e)
     : smt_ast(ctx, _s), e(_e) { }
+
+  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
+
   virtual ~btor_smt_ast() { }
   virtual void dump() const { abort(); }
 
