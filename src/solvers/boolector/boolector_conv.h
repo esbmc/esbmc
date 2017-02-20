@@ -10,7 +10,25 @@ extern "C" {
 #include <boolector.h>
 }
 
-// There's no boolector sort structure, therefore just use smt_sort.
+class boolector_smt_sort : public smt_sort
+{
+public:
+#define boolector_sort_downcast(x) static_cast<const boolector_smt_sort *>(x)
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t) : smt_sort(i), t(_t) { }
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t, unsigned int w)
+    : smt_sort(i, w), t(_t) { }
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t, unsigned int r_w,
+                   unsigned int dom_w)
+    : smt_sort(i, r_w, dom_w), t(_t) { }
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t, unsigned long w, unsigned long dw,
+                   const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), t(_t), rangesort(_rangesort) {}
+  virtual ~boolector_smt_sort() = default;
+
+  BoolectorSort t;
+  const smt_sort *rangesort;
+};
+
 
 class btor_smt_ast : public smt_ast
 {
