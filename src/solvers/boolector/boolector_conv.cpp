@@ -634,5 +634,5 @@ void boolector_convt::dump_SMT()
 
 void btor_smt_ast::dump() const
 {
-  boolector_dump_btor_node(boolector_get_btor(e), stdout, e);
+  boolector_dump_smt2_node(boolector_get_btor(e), stdout, e);
 }
