@@ -629,7 +629,6 @@ const smt_ast* btor_smt_ast::select(smt_convt* ctx, const expr2tc& idx) const
 
 void boolector_convt::dump_SMT()
 {
-  boolector_simplify(btor);
   boolector_dump_smt2(btor, stdout);
 }
 
