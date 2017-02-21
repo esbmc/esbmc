@@ -322,7 +322,7 @@ smt_astt boolector_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 smt_ast *
 boolector_convt::mk_smt_bvint(
   const mp_integer &theint,
-  bool sign __attribute__((unused)),
+  bool sign,
   unsigned int w)
 {
   const smt_sort *s = mk_sort(SMT_SORT_BV, w);
