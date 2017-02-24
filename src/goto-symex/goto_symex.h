@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
 #include <irep2.h>
-#include <ac_config.h>
 
 #include <map>
 #include <stack>
