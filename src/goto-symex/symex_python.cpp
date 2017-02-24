@@ -1,6 +1,7 @@
 #ifdef WITH_PYTHON
 #include <sstream>
 
+#include <boost/python.hpp>
 #include <boost/python/class.hpp>
 #include <boost/python/init.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>

@@ -11,7 +11,10 @@
 #include <boost/static_assert.hpp>
 #include <boost/functional/hash.hpp>
 
+#include <ac_config.h>
+
 #ifdef WITH_PYTHON
+#include <boost/python.hpp>
 #include <boost/python/operators.hpp>
 #include <boost/python/object/find_instance.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
@@ -69,7 +72,7 @@ public:
     (void)type;
     (void)out;
     // Everything here should have become an lvalue over an rvalue. Only thing
-    // that should pass through this far is None. 
+    // that should pass through this far is None.
     std::cerr << "rvalue of irep2tc_to_irep2t should never be called" << std::endl;
     abort();
   }
@@ -128,6 +131,18 @@ public:
     return const_cast<void *>(reinterpret_cast<const void*>((foo)));
   }
 };
+
+// Extra bonus point fun: if we're using boost python, then additional
+// juggling is required to extract what the pointee type is from our shared
+// pointer class
+namespace boost {
+  namespace python {
+    template <typename T1, typename T2, unsigned int T3, typename T4, T4 T1::*T5, typename T6>
+    struct pointee<esbmct::something2tc<T1, T2, T3, T4, T5, T6> > {
+      typedef T2 type;
+    };
+  }
+}
 
 #endif
 
@@ -513,6 +528,7 @@ BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_TYPES)
 
   return;
 }
+#endif
 
 namespace esbmct {
 template <typename ...Args>
@@ -522,7 +538,6 @@ type2t_traits<Args...>::make_contained(typename Args::result_type... args) -> ir
   return irep_container<base2t>(new derived(args...));
 }
 }
-#endif
 
 /*************************** Base expr2t definitions **************************/
 
@@ -996,6 +1011,7 @@ BOOST_PP_LIST_FOR_EACH(hahatemporary, foo, ESBMC_LIST_OF_EXPRS)
 
   return;
 }
+#endif
 
 // Undoubtedly a better way of doing this...
 namespace esbmct {
@@ -1020,7 +1036,6 @@ expr2t_traits_always_construct<Args...>::make_contained(typename Args::result_ty
   return irep_container<base2t>(new derived(args...));
 }
 }
-#endif
 
 /**************************** Expression constructors *************************/
 
@@ -2307,12 +2322,12 @@ esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::fo
   superclass::foreach_operand_impl_rec(f);
 }
 
-#ifdef WITH_PYTHON
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void
 esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::build_python_class(
     const typename container::id_field_type id)
 {
+#ifdef WITH_PYTHON
   using namespace boost::python;
 
   // Build python class out of the derived type (such as add2t) and with the
@@ -2338,8 +2353,10 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   register_irep_methods<base2t> bar;
   bar(foo, basename);
   return;
-}
+#else
+  (void) id;
 #endif /* WITH_PYTHON */
+}
 
 // Types
 
@@ -2597,11 +2614,14 @@ template<> class field_to_be_skipped<const expr2t::expr_ids, expr2t>
 template<> class field_to_be_skipped<type2tc, expr2t>
 {public: static bool value(type2tc expr2t::*foo) { if (foo == &expr2t::type) return true; else return false; } };
 
+#endif /* WITH PYTHON */
+
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 template <typename T>
 void
 esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::build_python_class_rec(T &obj, unsigned int idx)
 {
+#ifdef WITH_PYTHON
   // Optionally skip this field if it's generic to types / exprs.
   if (field_to_be_skipped<cur_type, base_class>::value(membr_ptr::value)) {
     assert(idx == 0);
@@ -2614,9 +2634,12 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::bu
   superclass::build_python_class_rec(
       obj.def_readonly(derived::field_names[idx].c_str(), membr_ptr::value), idx+1);
   return;
+#else
+  (void) obj;
+  (void) idx;
+#endif
 }
 
-#endif /* WITH PYTHON */
 
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 void

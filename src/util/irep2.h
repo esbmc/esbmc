@@ -10,8 +10,6 @@
 #include <vector>
 #include <functional>
 
-#include <ac_config.h>
-
 #include <boost/mpl/if.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/crc.hpp>
@@ -34,10 +32,6 @@
 #include <boost/bind/placeholders.hpp>
 
 #include <boost/static_assert.hpp>
-
-#ifdef WITH_PYTHON
-#include <boost/python.hpp>
-#endif
 
 #include <boost/preprocessor/list/adt.hpp>
 #include <boost/preprocessor/list/for_each.hpp>
@@ -1001,9 +995,8 @@ namespace esbmct {
     static constexpr bool always_construct = false;
     typedef type2t base2t;
 
-#ifdef WITH_PYTHON
-    template <typename derived> static irep_container<base2t> make_contained(typename Args::result_type...);
-#endif
+    template <typename derived>
+    static irep_container<base2t> make_contained(typename Args::result_type...);
   };
 
   /** Trait class for expr2t ireps.
@@ -1022,10 +1015,9 @@ namespace esbmct {
     static constexpr unsigned int num_fields = boost::mpl::size<fields>::type::value;
     typedef expr2t base2t;
 
-#ifdef WITH_PYTHON
     // Note addition of type2tc...
-    template <typename derived> static irep_container<base2t> make_contained(const type2tc &, typename Args::result_type...);
-#endif
+    template <typename derived>
+    static irep_container<base2t> make_contained(const type2tc &, typename Args::result_type...);
   };
 
   // "Specialisation" for expr kinds that don't take a type, like boolean
@@ -1043,9 +1035,8 @@ namespace esbmct {
     static constexpr unsigned int num_fields = boost::mpl::size<fields>::type::value;
     typedef expr2t base2t;
 
-#ifdef WITH_PYTHON
-    template <typename derived> static irep_container<base2t> make_contained(typename Args::result_type...);
-#endif
+    template <typename derived>
+    static irep_container<base2t> make_contained(typename Args::result_type...);
   };
 
   // Hack to force something2tc to always construct the traits' type, rather
@@ -1060,10 +1051,8 @@ namespace esbmct {
     static constexpr unsigned int num_fields = boost::mpl::size<fields>::type::value;
     typedef expr2t base2t;
 
-#ifdef WITH_PYTHON
-    template <typename derived> static irep_container<base2t> make_contained(typename Args::result_type...);
-#endif
-
+    template <typename derived>
+    static irep_container<base2t> make_contained(typename Args::result_type...);
   };
 
   // Declaration of irep and expr methods templates.
@@ -1133,10 +1122,7 @@ namespace esbmct {
     size_t do_crc(size_t seed) const;
     void hash(crypto_hash &hash) const;
 
-#ifdef WITH_PYTHON
     static void build_python_class(const typename container::id_field_type id);
-#endif
-
 
   protected:
     // Fetch the type information about the field we are concerned with out
@@ -1165,10 +1151,8 @@ namespace esbmct {
     void foreach_subtype_impl_rec(type2t::subtype_delegate &t);
     void foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &t)const;
 
-#ifdef WITH_PYTHON
     template <typename T>
     static void build_python_class_rec(T &obj, unsigned int idx);
-#endif
   };
 
   // Base instance of irep_methods2. This is a template specialization that
@@ -1270,14 +1254,12 @@ namespace esbmct {
       return;
     }
 
-#ifdef WITH_PYTHON
     template <typename T>
     static void build_python_class_rec(T &obj, unsigned int idx)
     {
       (void)obj;
       (void)idx;
     }
-#endif
   };
 
   /** Expression methods template for expr ireps.
@@ -1415,20 +1397,6 @@ template <typename T1, typename T2, unsigned int T3, typename T4, T4 T1::*T5, ty
 T2* get_pointer(esbmct::something2tc<T1, T2, T3, T4, T5, T6> const& p) {
   return const_cast<T2*>(p.get());
 }
-
-// Extra bonus point fun: if we're using boost python, then additional
-// juggling is required to extract what the pointee type is from our shared
-// pointer class
-#ifdef WITH_PYTHON
-namespace boost {
-  namespace python {
-    template <typename T1, typename T2, unsigned int T3, typename T4, T4 T1::*T5, typename T6>
-    struct pointee<esbmct::something2tc<T1, T2, T3, T4, T5, T6> > {
-      typedef T2 type;
-    };
-  }
-}
-#endif
 
 // So - make some type definitions for the different types we're going to be
 // working with. This is to avoid the repeated use of template names in later

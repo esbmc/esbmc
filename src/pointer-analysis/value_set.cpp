@@ -1345,6 +1345,7 @@ value_sett::dump(void) const
 }
 
 #ifdef WITH_PYTHON
+#include <boost/python.hpp>
 #include <boost/python/class.hpp>
 #include <boost/python/init.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
@@ -1430,7 +1431,7 @@ build_value_set_classes()
     .def_readwrite("object_numbering", &value_sett::object_numbering)
     .def_readwrite("values", &value_sett::values);
   // XXX object numberingt?
-  
+
   class_<value_sett::valuest>("valuest")
     .def(map_indexing_suite<value_sett::valuest>());
 

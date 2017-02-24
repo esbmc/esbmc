@@ -6,6 +6,7 @@
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple.h>
 #include <solvers/smt/smt_array.h>
+#include <boost/python.hpp>
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
 

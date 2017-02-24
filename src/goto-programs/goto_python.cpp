@@ -6,6 +6,7 @@
 
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
+#include <boost/python.hpp>
 
 class dummy_goto_class { };
 
