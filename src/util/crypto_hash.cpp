@@ -1,14 +1,21 @@
 
 #include "crypto_hash.h"
+#include <ac_config.h>
 
 #ifndef HAVE_OPENSSL
 
 extern "C" {
-  #include <dlfcn.h>
-  #include <string.h>
-
-  #include <openssl/sha.h>
+#include <openssl/sha.h>
 }
+
+#include <cstring>
+
+class crypto_hash_private {
+public:
+#ifndef HAVE_OPENSSL
+  SHA_CTX c;
+#endif
+};
 
 bool
 crypto_hash::operator<(const crypto_hash h2) const
@@ -33,22 +40,22 @@ crypto_hash::to_string() const
   return std::string(hex);
 }
 
-crypto_hash::crypto_hash()
+crypto_hash::crypto_hash() : p_crypto(std::make_shared<crypto_hash_private>())
 {
-  SHA1_Init(&c);
+  SHA1_Init(&p_crypto->c);
 }
 
 void
 crypto_hash::ingest(void const *data, unsigned int size)
 {
-  SHA1_Update(&c, data, size);
+  SHA1_Update(&p_crypto->c, data, size);
   return;
 }
 
 void
 crypto_hash::fin(void)
 {
-  SHA1_Final(hash, &c);
+  SHA1_Final(hash, &p_crypto->c);
 }
 
 #else /* !NO_OPENSSL */
