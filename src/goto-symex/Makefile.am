@@ -6,7 +6,7 @@ libsymex_la_SOURCES = symex_python.cpp \
       symex_goto.cpp builtin_functions.cpp slice.cpp symex_other.cpp \
       xml_goto_trace.cpp symex_valid_object.cpp \
       dynamic_allocation.cpp symex_catch.cpp renaming.cpp \
-      execution_state.cpp reachability_tree.cpp
+      execution_state.cpp reachability_tree.cpp witnesses.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
 
 symexincludedir = $(includedir)/goto-symex
