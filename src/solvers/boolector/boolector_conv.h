@@ -10,7 +10,25 @@ extern "C" {
 #include <boolector.h>
 }
 
-// There's no boolector sort structure, therefore just use smt_sort.
+class boolector_smt_sort : public smt_sort
+{
+public:
+#define boolector_sort_downcast(x) static_cast<const boolector_smt_sort *>(x)
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t) : smt_sort(i), t(_t) { }
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t, unsigned int w)
+    : smt_sort(i, w), t(_t) { }
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t, unsigned int r_w,
+                   unsigned int dom_w)
+    : smt_sort(i, r_w, dom_w), t(_t) { }
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t, unsigned long w, unsigned long dw,
+                   const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), t(_t), rangesort(_rangesort) {}
+  virtual ~boolector_smt_sort() = default;
+
+  BoolectorSort t;
+  const smt_sort *rangesort;
+};
+
 
 class btor_smt_ast : public smt_ast
 {
@@ -18,8 +36,11 @@ public:
 #define btor_ast_downcast(x) static_cast<const btor_smt_ast *>(x)
   btor_smt_ast(smt_convt *ctx, const smt_sort *_s, BoolectorNode *_e)
     : smt_ast(ctx, _s), e(_e) { }
+
+  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
+
   virtual ~btor_smt_ast() { }
-  virtual void dump() const { abort(); }
+  virtual void dump() const;
 
   BoolectorNode *e;
 };
@@ -87,6 +108,8 @@ public:
                          (Btor *, BoolectorNode *, BoolectorNode *);
   smt_ast *fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
       const btor_smt_ast *op1, smt_sortt res_sort);
+
+  virtual void dump_SMT();
 
   // Members
 

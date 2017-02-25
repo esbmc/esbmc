@@ -29,7 +29,7 @@ boolector_convt::boolector_convt(bool int_encoding,
   }
 
   btor = boolector_new();
-  boolector_set_opt(btor,"model_gen",1);
+  boolector_set_opt(btor, BTOR_OPT_MODEL_GEN, 1);
 
   if (options.get_option("output") != "") {
     debugfile = fopen(options.get_option("output").c_str(), "w");
@@ -215,7 +215,6 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
   // Boolector doesn't have any special handling for sorts, they're all always
   // explicit arguments to functions. So, just use the base smt_sort class.
   va_list ap;
-  smt_sort *s = NULL, *dom, *range;
   unsigned long uint;
 
   va_start(ap, k);
@@ -226,25 +225,32 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
     abort();
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
-    s = new smt_sort(k, uint);
-    break;
+    return new boolector_smt_sort(k, boolector_bitvec_sort(btor, uint), uint);
   case SMT_SORT_ARRAY:
-    dom = va_arg(ap, smt_sort *); // Consider constness?
-    range = va_arg(ap, smt_sort *);
-    s = new smt_sort(k, range->data_width, dom->data_width);
-    break;
+  {
+    const boolector_smt_sort* dom = va_arg(ap, boolector_smt_sort *); // Consider constness?
+    const boolector_smt_sort* range = va_arg(ap, boolector_smt_sort *);
+
+    assert(int_encoding || dom->data_width != 0);
+
+    // The range data width is allowed to be zero, which happens if the range
+    // is not a bitvector / integer
+    unsigned int data_width = range->data_width;
+    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
+      data_width = 1;
+
+    return new boolector_smt_sort(k, boolector_array_sort(btor, dom->t, range->t),
+                                  data_width, dom->data_width, range);
+  }
   case SMT_SORT_BOOL:
-    s = new smt_sort(k);
-    break;
+    return new boolector_smt_sort(k, boolector_bool_sort(btor));
   case SMT_SORT_FLOATBV:
     std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
     abort();
-  default:
-    std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
-    abort();
   }
 
-  return s;
+  std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
+  abort();
 }
 
 smt_ast *
@@ -314,10 +320,12 @@ smt_astt boolector_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 }
 
 smt_ast *
-boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
-                              unsigned int w)
+boolector_convt::mk_smt_bvint(
+  const mp_integer &theint,
+  bool sign,
+  unsigned int w)
 {
-  const smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
+  const smt_sort *s = mk_sort(SMT_SORT_BV, w);
 
   if (w > 32) {
     // We have to pass things around via means of strings, becausae boolector
@@ -351,9 +359,10 @@ boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
 
   BoolectorNode *node;
   if (sign) {
-    node = boolector_int(btor, theint.to_long(), w);
+    node = boolector_int(btor, theint.to_long(), boolector_sort_downcast(s)->t);
   } else {
-    node = boolector_unsigned_int(btor, theint.to_ulong(), w);
+    node =
+      boolector_unsigned_int(btor, theint.to_ulong(), boolector_sort_downcast(s)->t);
   }
 
   return new_ast(s, node);
@@ -385,13 +394,13 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 
   switch(s->id) {
   case SMT_SORT_BV:
-    node = boolector_var(btor, s->data_width, name.c_str());
+    node = boolector_var(btor, boolector_sort_downcast(s)->t, name.c_str());
     break;
   case SMT_SORT_BOOL:
-    node = boolector_var(btor, 1, name.c_str());
+    node = boolector_var(btor, boolector_sort_downcast(s)->t, name.c_str());
     break;
   case SMT_SORT_ARRAY:
-    node = boolector_array(btor, s->data_width, s->domain_width, name.c_str());
+    node = boolector_array(btor, boolector_sort_downcast(s)->t, name.c_str());
     break;
   default:
     return NULL; // Hax.
@@ -607,4 +616,23 @@ boolector_convt::fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
     shift = boolector_slice(btor, shift, res_sort->data_width-1, 0);
 
   return new_ast(res_sort, shift);
+}
+
+const smt_ast* btor_smt_ast::select(smt_convt* ctx, const expr2tc& idx) const
+{
+  const smt_ast *args[2];
+  args[0] = this;
+  args[1] = ctx->convert_ast(idx);
+  const smt_sort *rangesort = boolector_sort_downcast(sort)->rangesort;
+  return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
+}
+
+void boolector_convt::dump_SMT()
+{
+  boolector_dump_smt2(btor, stdout);
+}
+
+void btor_smt_ast::dump() const
+{
+  boolector_dump_smt2_node(boolector_get_btor(e), stdout, e);
 }
