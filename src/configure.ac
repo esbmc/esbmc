@@ -201,9 +201,13 @@ LT_LIB_DLLOAD
 
 AC_ARG_ENABLE(static-link, [AS_HELP_STRING([--enable-static-link], Build a static version of esbmc)])
 AS_VAR_SET(ESBMC_LDFLAGS, "")
+AS_VAR_SET(LIBESBMC_LDFLAGS, "")
 AS_IF([test "${enable_static_link}" = "yes"], [
   AS_VAR_SET(ESBMC_LDFLAGS, " -all-static ")
+], [
+    AS_VAR_SET(LIBESBMC_LDFLAGS, " -shared ")
 ])
+AC_SUBST([LIBESBMC_LDFLAGS], $LIBESBMC_LDFLAGS)
 AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)
 
 AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build flag)])
