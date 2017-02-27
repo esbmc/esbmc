@@ -30,6 +30,7 @@ boolector_convt::boolector_convt(bool int_encoding,
 
   btor = boolector_new();
   boolector_set_opt(btor, BTOR_OPT_MODEL_GEN, 1);
+  boolector_set_opt(btor, BTOR_OPT_AUTO_CLEANUP, 1);
 
   if (options.get_option("output") != "") {
     debugfile = fopen(options.get_option("output").c_str(), "w");
@@ -40,9 +41,7 @@ boolector_convt::boolector_convt(bool int_encoding,
 
 boolector_convt::~boolector_convt(void)
 {
-  delete_all_asts();
-
-//  boolector_delete(btor);
+  boolector_delete(btor);
 
   btor = NULL;
   if (debugfile)
