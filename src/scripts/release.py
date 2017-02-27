@@ -118,7 +118,7 @@ configure_str += "CXXFLAGS=\"" + cxxflags + "\" "
 configure_str += "CFLAGS=\"" + cflags + "\" "
 
 if clangdir:
-  configure_str += "--with-clang-libdir=" + clangdir + " "
+  configure_str += "--with-clang=" + clangdir + " "
 
 if llvmdir:
   configure_str += "--with-llvm=" + llvmdir + " "
@@ -126,10 +126,10 @@ if llvmdir:
 if boostpython:
   configure_str += "--with-boost-python-libname=" + boostpython + " "
 
-configure_str += "--enable-esbmc --enable-shared --enable-python "
+configure_str += "--enable-esbmc --enable-libesbmc --enable-python "
 
 # Build dynamic
 do_build('esbmc-v' + esbmcversion + '-linux-' + str(arch), configure_str)
 
 # Build static
-do_build('esbmc-v' + esbmcversion + '-linux-static-' + str(arch), configure_str + " --enable-static-link")
+do_build('esbmc-v' + esbmcversion + '-linux-static-' + str(arch), configure_str + " --enable-static-link --disable-shared")
