@@ -75,7 +75,7 @@ AS_VAR_SET(C2GOTO_LIBS, "")
 AM_PROG_AR
 AM_PROG_LEX
 
-LT_INIT(static disable-shared)
+LT_INIT(static shared)
 LTDL_INIT
 
 AC_LANG(C++)
