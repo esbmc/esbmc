@@ -15,15 +15,15 @@
 
 AC_DEFUN([AX_CLANG],
 [
-        AC_ARG_WITH([clang-libdir],
-                AS_HELP_STRING([--with-clang-libdir=LIB_DIR],
+        AC_ARG_WITH([clang],
+                AS_HELP_STRING([--with-clang=LIB_DIR],
                 [Force given directory for clang libraries. Note that this will override library path detection, so use this parameter only if default library detection fails and you know exactly where your clang libraries are located.]),
                 [
                 if test -d "$withval"
                 then
                         ac_clang_lib_path="$withval"
                 else
-                        AC_MSG_ERROR(--with-clang-libdir expected directory name)
+                        AC_MSG_ERROR(--with-clang expected directory name)
                 fi
                 ],
                 [ac_clang_lib_path=""]
