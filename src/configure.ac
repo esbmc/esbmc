@@ -287,11 +287,11 @@ AS_IF([test "${enable_python}" = "yes"], [
     AC_SUBST([ESBMC_PYTHON_OBJ], "")
 ])
 
-dnl If --enable-shared was supplied, then enable building of libesbmc.
-AS_IF([test "${enable_shared}" = "yes"], [
-  AC_SUBST([ESBMC_SHARED_LIB], "libesbmc.la")
+dnl If --enable-libesbmc was supplied, then enable building of libesbmc.
+AS_IF([test "${enable_libesbmc}" = "yes"], [
+  AC_SUBST([ESBMC_LIB], "libesbmc.la")
 ], [
-  AC_SUBST([ESBMC_SHARED_LIB], "")
+  AC_SUBST([ESBMC_LIB], "")
 ])
 
 AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 $ESBMC_CLANG_CXXFLAGS ")
