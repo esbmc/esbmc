@@ -212,12 +212,7 @@ dnl on by default...
 AC_ARG_ENABLE(enable-esbmc, [AS_HELP_STRING([--enable-esbmc], Build main ESBMC binary)])
 AS_IF([test "${enable_esbmc}" = "yes"], [
   AC_SUBST([ESBMC_BINARY], "esbmc")
-], [
-  dnl If we turn esbmc off, disable creation of any statc objects
-  AS_IF([test "${enable_esbmc}" = "no"], [
-    AS_VAR_SET(enable_static, "no")
-  ])
-])
+], [])
 
 AC_ARG_ENABLE(enable-python, [AS_HELP_STRING([--enable-python], Build python support into ESBMC)])
 AS_IF([test "${enable_python}" = "yes"], [
