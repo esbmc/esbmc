@@ -398,10 +398,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     case expr2t::address_of_id:
       break; // Don't convert their operands
 
-    case expr2t::equality_id:
-      if(is_array_type(to_equality2t(expr).side_1->type))
-        break;
-
     default:
       // Convert /all the arguments/. Via magical delegates.
       expr->foreach_operand(
@@ -1192,7 +1188,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   default:
-    std::cerr << "Couldn't convert expression in unrecognized format"
+    std::cerr << "Couldn't convert expression in unrecognised format"
               << std::endl;
     expr->dump();
     abort();
@@ -1286,6 +1282,7 @@ smt_convt::convert_sort(const type2tc &type)
 
     if (is_tuple_ast_type(range)) {
       type2tc thetype = flatten_array_type(type);
+      rewrite_ptrs_to_structs(thetype);
       result = tuple_api->mk_struct_sort(thetype);
       break;
     }
@@ -1542,7 +1539,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
 
   // Since we can't extract the top bit, from the fpbv, we'll
   // convert it to return if(is_neg) ? 1 : 0;
-  auto value = convert_ast(signbit.value);
+  auto value = convert_ast(signbit.operand);
   auto sort = convert_sort(signbit.type);
 
   // Create is_neg
@@ -1553,7 +1550,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
   else
   {
     expr2tc zero_expr;
-    migrate_expr(gen_zero(migrate_type_back(signbit.value->type)), zero_expr);
+    migrate_expr(gen_zero(migrate_type_back(signbit.operand->type)), zero_expr);
 
     is_neg = mk_func_app(boolean_sort, SMT_FUNC_LT, value, convert_ast(zero_expr));
   }
@@ -2517,11 +2514,15 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
   // Take a constant_array2t or an array_of, and format the data from them into
   // a form palatable to tuple_array_create.
 
+  // Strip out any pointers
+  type2tc arr_type = expr->type;
+  rewrite_ptrs_to_structs(arr_type);
+
   if (is_constant_array_of2t(expr)) {
     const constant_array_of2t &arr = to_constant_array_of2t(expr);
     smt_astt arg = convert_ast(arr.initializer);
 
-    return tuple_api->tuple_array_create(arr.type, &arg, true, domain);
+    return tuple_api->tuple_array_create(arr_type, &arg, true, domain);
   } else {
     assert(is_constant_array2t(expr));
     const constant_array2t &arr = to_constant_array2t(expr);
@@ -2532,8 +2533,34 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
       i++;
     }
 
-    return tuple_api->tuple_array_create(arr.type, args, false, domain);
+    return tuple_api->tuple_array_create(arr_type, args, false, domain);
   }
+}
+
+void
+smt_convt::rewrite_ptrs_to_structs(type2tc &type)
+{
+  // Type may contain pointers; replace those with the structure equivalent.
+  // Ideally the real solver will never see pointer types.
+  // Create a delegate that recurses over all subtypes, replacing pointers
+  // as we go. Extra scaffolding is to work around the fact we can't refer
+  // to replace_w_ptr until after it's been defined, ho hum.
+  type2t::subtype_delegate *delegate = NULL;
+  auto replace_w_ptr = [this, &delegate](type2tc &e) {
+    if (is_pointer_type(e)) {
+      // Replace this field of the expr with a pointer struct :O:O:O:O
+      e = pointer_struct;
+    } else {
+      // Recurse
+      e.get()->Foreach_subtype(*delegate);
+    }
+  };
+
+  type2t::subtype_delegate del_wrap(std::ref(replace_w_ptr));
+  delegate = &del_wrap;
+  type.get()->Foreach_subtype(replace_w_ptr);
+
+  return;
 }
 
 // Default behaviours for SMT AST's
@@ -2568,9 +2595,8 @@ smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   // We're an array; just generate a 'with' operation.
   expr2tc index;
   if (is_nil_expr(idx_expr)) {
-    assert(sort->domain_width != 0 && "Array sort with zero-sized domain "
-           "width");
-    index = constant_int2tc(type2tc(new unsignedbv_type2t(sort->domain_width)),
+    unsigned int dom_width = ctx->int_encoding ? 32 : sort->domain_width;
+    index = constant_int2tc(type2tc(new unsignedbv_type2t(dom_width)),
           BigInt(idx));
   } else {
     index = idx_expr;
@@ -2605,4 +2631,9 @@ smt_ast::project(smt_convt *ctx __attribute__((unused)),
 {
   std::cerr << "Projecting from non-tuple based AST" << std::endl;
   abort();
+}
+
+void smt_convt::dump_SMT()
+{
+  std::cerr << "SMT dump not implemented for " << solver_text() << "\n";
 }

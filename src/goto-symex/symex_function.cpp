@@ -228,6 +228,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.level1.thread_id = cur_state->source.thread_nr;
 
   frame.calling_location = cur_state->source;
+  frame.entry_guard = cur_state->guard;
 
   // preserve locality of local variables
   locality(goto_function);
@@ -449,6 +450,9 @@ goto_symext::pop_frame(void)
   // restore state
   cur_state->source.pc = frame.calling_location.pc;
   cur_state->source.prog = frame.calling_location.prog;
+
+  if(!cur_state->guard.is_false())
+    cur_state->guard = frame.entry_guard;
 
   // clear locals from L2 renaming
   for(statet::framet::local_variablest::const_iterator

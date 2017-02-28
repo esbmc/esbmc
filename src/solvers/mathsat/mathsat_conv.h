@@ -18,11 +18,10 @@ public:
   mathsat_smt_sort(smt_sort_kind i, msat_type _t, unsigned int r_w,
                    unsigned int dom_w)
     : smt_sort(i, r_w, dom_w), t(_t) { }
-  mathsat_smt_sort(smt_sort_kind i, msat_type _t, unsigned int r_w,
-                   unsigned int dw, const smt_sort *_rangesort)
-    : smt_sort(i, r_w, dw), t(_t), rangesort(_rangesort) { }
-
-  virtual ~mathsat_smt_sort() { }
+  mathsat_smt_sort(smt_sort_kind i, msat_type _t, unsigned long w, unsigned long dw,
+                   const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), t(_t), rangesort(_rangesort) {}
+  virtual ~mathsat_smt_sort();
 
   msat_type t;
   const smt_sort *rangesort;
@@ -34,7 +33,7 @@ public:
 #define mathsat_ast_downcast(x) static_cast<const mathsat_smt_ast *>(x)
   mathsat_smt_ast(smt_convt *ctx, const smt_sort *_s, msat_term _t)
     : smt_ast(ctx, _s), t(_t) { }
-  virtual ~mathsat_smt_ast() { }
+  virtual ~mathsat_smt_ast();
 
   virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
   virtual void dump() const;
@@ -96,6 +95,8 @@ public:
 
   size_t get_exp_width(smt_sortt sort);
   size_t get_mant_width(smt_sortt sort);
+
+  virtual void dump_SMT();
 
   // MathSAT data.
   msat_config cfg;

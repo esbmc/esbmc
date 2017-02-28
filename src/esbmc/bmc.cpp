@@ -252,6 +252,9 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
     status(str.str());
   }
 
+  if(options.get_bool_option("dump-smt-formula"))
+    smt_conv.dump_SMT();
+
   std::stringstream ss;
   ss << "Solving with solver " << smt_conv.solver_text();
   status(ss.str());
@@ -387,47 +390,48 @@ void bmct::show_program(symex_target_equationt &equation)
 
   languagest languages(ns, MODE_C);
 
-  std::cout << "\n" << "Program constraints:" << "\n";
+  std::cout << "\n" << "Program constraints: " << equation.SSA_steps.size() << "\n";
 
   bool print_guard = config.options.get_bool_option("dump-guards");
   bool sparse = config.options.get_bool_option("simple-ssa-printing");
 
-  for(symex_target_equationt::SSA_stepst::const_iterator
-      it=equation.SSA_steps.begin();
-      it!=equation.SSA_steps.end(); it++)
+  for(const auto &it : equation.SSA_steps)
   {
+    if(!(it.is_assert() || it.is_assignment() || it.is_assume()))
+      continue;
+
     if (!sparse) {
-      std::cout << "// " << it->source.pc->location_number << " ";
-      std::cout << it->source.pc->location.as_string() << "\n";
+      std::cout << "// " << it.source.pc->location_number << " ";
+      std::cout << it.source.pc->location.as_string() << "\n";
     }
 
     std::cout <<   "(" << count << ") ";
 
     std::string string_value;
 
-    if(it->is_assignment())
+    exprt cond = migrate_expr_back(it.cond);
+    languages.from_expr(cond, string_value);
+
+    if(it.is_assignment())
     {
-      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << string_value << "\n";
     }
-    else if(it->is_assert())
+    else if(it.is_assert())
     {
-      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(assert)" << string_value << "\n";
     }
-    else if(it->is_assume())
+    else if(it.is_assume())
     {
-      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(assume)" << string_value << "\n";
     }
-    else if (it->is_renumber())
+    else if (it.is_renumber())
     {
-      std::cout << "renumber: " << from_expr(ns, "", it->lhs) << "\n";
+      std::cout << "renumber: " << from_expr(ns, "", it.lhs) << "\n";
     }
 
-    if(!migrate_expr_back(it->guard).is_true() && print_guard)
+    if(!migrate_expr_back(it.guard).is_true() && print_guard)
     {
-      languages.from_expr(migrate_expr_back(it->guard), string_value);
+      languages.from_expr(migrate_expr_back(it.guard), string_value);
       std::cout << std::string(i2string(count).size()+3, ' ');
       std::cout << "guard: " << string_value << "\n";
     }
@@ -562,7 +566,7 @@ bool bmct::run(void)
 
 bool bmct::run_thread()
 {
-  std::shared_ptr<goto_symext::symex_resultt> result;
+  boost::shared_ptr<goto_symext::symex_resultt> result;
   bool ret;
 
   fine_timet symex_start = current_time();
@@ -607,7 +611,7 @@ bool bmct::run_thread()
   status(str.str());
 
   auto equation =
-    std::dynamic_pointer_cast<symex_target_equationt>(result->target);
+    boost::dynamic_pointer_cast<symex_target_equationt>(result->target);
 
   print(8, "size of program expression: "+
            i2string((unsigned long)equation.get()->SSA_steps.size())+
@@ -685,12 +689,11 @@ bool bmct::run_thread()
         return false;
 
     if (!options.get_bool_option("smt-during-symex")) {
-      runtime_solver = create_solver_factory("",
-                                             options.get_bool_option("int-encoding"),
-                                             ns, options);
+      runtime_solver = std::shared_ptr<smt_convt>(
+        create_solver_factory("", options.get_bool_option("int-encoding"), ns,options));
     }
 
-    ret = run_solver(*equation, runtime_solver);
+    ret = run_solver(*equation, runtime_solver.get());
 
     return ret;
   }

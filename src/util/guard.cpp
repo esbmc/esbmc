@@ -10,27 +10,28 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "guard.h"
 
-expr2tc guardt::as_expr(guard_listt::const_iterator it) const
+expr2tc guardt::as_expr() const
 {
-  if (it == guard_list.end())
+  if(is_true())
     return true_expr;
-  else if (it == --guard_list.end())
-    return guard_list.back();
 
-  // We can assume at least two operands;
-  expr2tc arg1, arg2;
-  arg1 = *it++;
-  arg2 = *it++;
-  and2tc res(arg1, arg2);
-  while (it != guard_list.end())
-    res = and2tc(res, *it++);
+  if(is_single_symbol())
+    return *guard_list.begin();
 
-  return res;
+  assert(!is_nil_expr(g_expr));
+  return g_expr;
 }
 
 void guardt::add(const expr2tc &expr)
 {
-  if (is_and2t(expr))
+  if(is_false() || ::is_true(expr))
+    return;
+
+  if(is_true() || ::is_false(expr))
+  {
+    clear();
+  }
+  else if(is_and2t(expr))
   {
     const and2t &theand = to_and2t(expr);
     add(theand.side_1);
@@ -38,129 +39,168 @@ void guardt::add(const expr2tc &expr)
     return;
   }
 
-  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
+  guard_list.push_back(expr);
+
+  // Update the chain of ands
+
+  // Easy case, there is no g_expr
+  if(is_nil_expr(g_expr))
   {
+    g_expr = expr;
   }
   else
   {
-    guard_list.push_back(expr);
+    // Otherwise, just update the chain of ands
+    and2tc new_g_expr(g_expr, expr);
+    g_expr.swap(new_g_expr);
   }
 }
 
-void guardt::move(expr2tc &expr)
+void guardt::guard_expr(expr2tc& dest) const
 {
-  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
+  // Fills the expr only if it's not true
+  if(is_true())
+    return;
+
+  if(::is_false(dest))
   {
+    dest = as_expr();
+    make_not(dest);
+    return;
   }
-  else
-  {
-    guard_list.push_back(expr);
-  }
+
+  dest = expr2tc(new implies2t(as_expr(), dest));
+}
+
+void guardt::build_guard_expr()
+{
+  // This method closely related to guardt::add and guardt::guard_expr
+  // We need to build the chain of ands, to avoid memory bloat on as_expr
+
+  // if the guard is true, or a single symbol, we don't need to build it
+  if(is_true() || is_single_symbol())
+    return;
+
+  // This method will only be used, when the guard is nil, for instance,
+  // guardt &operator -= and guardt &operator |=, all other cases should
+  // be handled by guardt::add
+  assert(is_nil_expr(g_expr));
+
+  // We can assume at least two operands
+  auto it = guard_list.begin();
+
+  expr2tc arg1, arg2;
+  arg1 = *it++;
+  arg2 = *it++;
+  and2tc res(arg1, arg2);
+  while (it != guard_list.end())
+    res = and2tc(res, *it++);
+
+  g_expr.swap(res);
+}
+
+void guardt::append(const guardt &guard)
+{
+  for(auto it : guard.guard_list)
+    add(it);
 }
 
 guardt &operator -= (guardt &g1, const guardt &g2)
 {
-  guardt::guard_listt::const_iterator it2=g2.guard_list.begin();
-  
-  while(!g1.guard_list.empty() &&
-        it2!=g2.guard_list.end() &&
-        g1.guard_list.front()==*it2)
-  {
-    g1.guard_list.pop_front();
-    it2++;
-  }
+  guardt::guard_listt diff;
+  std::set_difference(
+    g1.guard_list.begin(),
+    g1.guard_list.end(),
+    g2.guard_list.begin(),
+    g2.guard_list.end(),
+    std::back_inserter(diff));
 
+  // Clear g1 and build the guard's list and expr
+  g1.clear();
+
+  g1.guard_list.swap(diff);
+  g1.build_guard_expr();
 
   return g1;
-}
-
-void
-guardt::back_sub(const guardt &g2)
-{
-  guardt::guard_listt::const_reverse_iterator it2 = g2.guard_list.rbegin();
-
-  while (!guard_list.empty() &&
-         it2 != g2.guard_list.rend() &&
-         guard_list.back()==*it2)
-  {
-    guard_list.pop_back();
-    it2++;
-  }
 }
 
 guardt &operator |= (guardt &g1, const guardt &g2)
 {
-  if(g2.is_false()) return g1;
-  if(g1.is_false()) { g1.guard_list=g2.guard_list; return g1; }
+  // Easy cases
+  if(g2.is_false() || g1.is_true()) return g1;
+  if(g1.is_false() || g2.is_true()) { g1 = g2; return g1; }
 
-  // find common prefix  
-  guardt::guard_listt::iterator it1=g1.guard_list.begin();
-  guardt::guard_listt::const_iterator it2=g2.guard_list.begin();
-  
-  while(it1!=g1.guard_list.end())
+  if(g1.is_single_symbol() && g2.is_single_symbol())
   {
-    if(it2==g2.guard_list.end())
-      break;
-      
-    if(*it1!=*it2)
-      break;
+    // Both guards have one symbol, so check if we opposite symbols, e.g,
+    // g1 == sym1 and g2 == !sym1
+    expr2tc or_expr(new or2t(*g1.guard_list.begin(), *g2.guard_list.begin()));
+    simplify(or_expr);
 
-    it1++;
-    it2++;
+    if(::is_true(or_expr)) { g1.make_true(); return g1; }
+
+    // Despite if we could simplify or not, clear and set the new guard
+    g1.clear_insert(or_expr);
   }
-  
-  if(it2==g2.guard_list.end()) return g1;
-
-  // end of common prefix
-  expr2tc and_expr1, and_expr2;
-  and_expr1 = g1.as_expr(it1);
-  and_expr2 = g2.as_expr(it2);
-  
-  g1.guard_list.erase(it1, g1.guard_list.end());
-  
-  not2tc tmp(and_expr2);
-  
-  if (tmp != and_expr1)
+  else
   {
-    if ((is_constant_bool2t(and_expr1) &&
-         to_constant_bool2t(and_expr1).value) ||
-        (is_constant_bool2t(and_expr2) &&
-         to_constant_bool2t(and_expr2).value))
-    {
-    }
-    else
-    {
-      or2tc or_expr(and_expr1, and_expr2);
-      g1.move(or_expr);
-    }
+    // Here, we have a symbol (or symbols) in g2 to be or'd with the symbol
+    // (or symbols) in g1, e.g:
+    // g1 = !guard3 && !guard2 && !guard1
+    // g2 = guard2 && !guard1
+    // res = g1 || g2 = (!guard3 && !guard2 && !guard1) || (guard2 && !guard1)
+
+    // Simplify equation: everything that's common in both guards, will not
+    // be or'd
+
+    // Common guards
+    guardt common;
+    std::set_intersection(
+      g1.guard_list.begin(),
+      g1.guard_list.end(),
+      g2.guard_list.begin(),
+      g2.guard_list.end(),
+      std::back_inserter(common.guard_list));
+    common.build_guard_expr();
+
+    // New g1 and g2, without the common guards
+    guardt new_g1;
+    std::set_difference(
+      g1.guard_list.begin(),
+      g1.guard_list.end(),
+      common.guard_list.begin(),
+      common.guard_list.end(),
+      std::back_inserter(new_g1.guard_list));
+    new_g1.build_guard_expr();
+
+    guardt new_g2;
+    std::set_difference(
+      g2.guard_list.begin(),
+      g2.guard_list.end(),
+      common.guard_list.begin(),
+      common.guard_list.end(),
+      std::back_inserter(new_g2.guard_list));
+    new_g2.build_guard_expr();
+
+    // Get the and expression from both guards
+    expr2tc or_expr(new or2t(new_g1.as_expr(), new_g2.as_expr()));
+
+    // If the guards single symbols, try to simplify the or expression
+    if(new_g1.is_single_symbol() && new_g2.is_single_symbol())
+      simplify(or_expr);
+
+    g1.clear_append(common);
+    g1.add(or_expr);
   }
-  
+
   return g1;
-}
-
-std::ostream &operator << (std::ostream &out, const guardt &g)
-{
-  for (std::list<expr2tc>::const_iterator it = g.guard_list.begin();
-       it != g.guard_list.end(); it++)
-    out << "*** " << (*it)->pretty() << std::endl;
-
-  return out;
-}
-
-bool guardt::is_false() const
-{
-  forall_guard(it, guard_list)
-    if (is_constant_bool2t(*it) && !to_constant_bool2t(*it).value)
-      return true;
-      
-  return false;
 }
 
 void
 guardt::dump(void) const
 {
-  std::cout << *this;
-  return;
+  for (auto it : guard_list)
+    it->dump();
 }
 
 bool
@@ -168,4 +208,57 @@ operator == (const guardt &g1, const guardt &g2)
 {
   // Very simple: the guard list should be identical.
   return g1.guard_list == g2.guard_list;
+}
+
+void guardt::swap(guardt& g)
+{
+  guard_list.swap(g.guard_list);
+  g_expr.swap(g.g_expr);
+}
+
+bool guardt::is_true() const
+{
+  return guard_list.empty();
+}
+
+bool guardt::is_false() const
+{
+  // Never false
+  if(guard_list.size() != 1)
+    return false;
+
+  return (*guard_list.begin() == false_expr);
+}
+
+void guardt::make_true()
+{
+  guard_list.clear();
+}
+
+void guardt::make_false()
+{
+  add(false_expr);
+}
+
+bool guardt::is_single_symbol() const
+{
+  return (guard_list.size() == 1);
+}
+
+void guardt::clear()
+{
+  guard_list.clear();
+  g_expr.reset();
+}
+
+void guardt::clear_append(const guardt& guard)
+{
+  clear();
+  append(guard);
+}
+
+void guardt::clear_insert(const expr2tc& expr)
+{
+  clear();
+  add(expr);
 }

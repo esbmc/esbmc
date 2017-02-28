@@ -62,24 +62,26 @@ class goto_programt
 public:
   /*! \brief copy constructor
       \param[in] src an empty goto program
-      \remark Use copy_from to copy non-empty goto-programs
   */
-  inline goto_programt(const goto_programt &src __attribute__((unused)))
+  inline goto_programt(const goto_programt &src)
   {
-    // DO NOT COPY ME! I HAVE POINTERS IN ME!
-    assert(src.instructions.empty());
+    // CBMC didn't permit copy-construction, instead requiring calling
+    // copy_from instead. While explicit is better than implicit though,
+    // the only implication of allowing this is the occasional performance
+    // loss, which is best identified by a profiler.
+    copy_from(src);
+    update();
   }
 
   /*! \brief assignment operator
       \param[in] src an empty goto program
-      \remark Use copy_from to copy non-empty goto-programs
   */
-  inline goto_programt &operator=(const goto_programt &src
-                                  __attribute__((unused)))
+  inline goto_programt &operator=(const goto_programt &src)
+                                  
   {
     // DO NOT COPY ME! I HAVE POINTERS IN ME!
-    assert(src.instructions.empty());
     instructions.clear();
+    copy_from(src);
     update();
     return *this;
   }
@@ -455,9 +457,157 @@ public:
 
   //! Does the goto program have an assertion?
   bool has_assertion() const;
+
+  static std::ostream &output_instruction(
+    const class namespacet &ns,
+    const irep_idt &identifier,
+    std::ostream &out,
+    instructionst::const_iterator it,
+    bool show_location=true,
+    bool show_variables=false);
+
+  // Template for extracting instructions /from/ a goto program, to a type
+  // abstract something else.
+  template <typename OutList, typename ListAppender, typename OutElem,
+            typename SetAttrObj, typename SetAttrNil>
+  void extract_instructions(OutList &list,
+                       ListAppender listappend, SetAttrObj setattrobj,
+                       SetAttrNil setattrnil) const;
+
+  // Template for extracting instructions /from/ a type abstract something,
+  // to a goto program.
+  template <typename InList, typename InElem, typename FetchElem,
+            typename ElemToInsn, typename GetAttr, typename IsAttrNil>
+  void inject_instructions(InList list,
+                              unsigned int len, FetchElem fetchelem,
+                              ElemToInsn elemtoinsn, GetAttr getattr,
+                              IsAttrNil isattrnil);
 };
 
 bool operator<(const goto_programt::const_targett i1,
                const goto_programt::const_targett i2);
+
+template <typename OutList, typename ListAppender, typename OutElem,
+         typename SetAttrObj, typename SetAttrNil>
+void
+goto_programt::extract_instructions(OutList &list, ListAppender listappend,
+    SetAttrObj setattrobj, SetAttrNil setattrnil) const
+{
+  std::vector<OutElem> py_obj_vec;
+  std::set<goto_programt::const_targett> targets;
+  std::map<goto_programt::const_targett, unsigned int> target_map;
+
+  // Convert instructions into python objects -- store in python list, as well
+  // as in an stl vector, for easy access by index. Collect a set of all the
+  // target iterators that are used in this function as well.
+  for (const goto_programt::instructiont &insn : instructions) {
+    OutElem o(insn);
+    listappend(list, o);
+    py_obj_vec.push_back(o);
+
+    if (!insn.targets.empty()) {
+      assert(insn.targets.size() == 1 && "Insn with multiple targets");
+      targets.insert(*insn.targets.begin());
+    }
+  }
+
+  // Map target iterators to index positions in the instruction list. Their
+  // positions is the structure that we'll map over to python.
+  unsigned int i = 0;
+  for (auto it = instructions.begin();
+       it != instructions.end();
+       it++, i++) {
+    if (targets.find(it) != targets.end())
+      target_map.insert(std::make_pair(it, i));
+  }
+
+  // Iterate back over all the instructions again, this time filling out the
+  // target attribute for each corresponding python object. If there's no
+  // target, set it to None, otherwise set it to a reference to the
+  // corresponding other python object.
+  i = 0;
+  for (const goto_programt::instructiont &insn : instructions) {
+    if (insn.targets.empty()) {
+      // If there's no target, set the target attribute to None
+      setattrnil(py_obj_vec[i]);
+    } else {
+      assert(insn.targets.size() == 1 && "Insn with multiple targets");
+      auto it = *insn.targets.begin();
+      auto target_it = target_map.find(it);
+      assert(target_it != target_map.end());
+
+      // Set target attr to be reference to the correspondingly indexed python
+      // object.
+      setattrobj(py_obj_vec[i], py_obj_vec[target_it->second]);
+    }
+    i++;
+  }
+
+  return;
+}
+
+template <typename InList, typename InElem, typename FetchElem,
+         typename ElemToInsn, typename GetAttr, typename IsAttrNil>
+void
+goto_programt::inject_instructions(InList list,
+    unsigned int len, FetchElem fetchelem, ElemToInsn elemtoinsn,
+    GetAttr getattr, IsAttrNil isattrnil)
+{
+  // Reverse the get_instructions function: generate a list of instructiont's
+  // that preserve the 'target' attribute relation.
+
+  std::vector<InElem> py_obj_vec;
+  std::vector<goto_programt::targett> obj_it_vec;
+  std::map<InElem, unsigned int> target_map;
+
+  instructions.clear();
+
+  // Extract list into vector we can easily index, pushing the extracted C++
+  // object into the goto_programt's instruction list. Later store a vector of
+  // iterators into that list: we need the instructiont storage and it's
+  // iterators to stay stable, while mapping the 'target' relation back from
+  // python into C++.
+  for (unsigned int i = 0; i < len; i++) {
+    InElem item = fetchelem(list, i);
+    py_obj_vec.push_back(item);
+    instructions.push_back(elemtoinsn(item));
+
+    // XXX -- the performance of the following may be absolutely terrible,
+    // it's not clear whether there's an operator< for std::map to infer
+    // anywhere here. Based on assumption that a POD comparison is done against
+    // the contained python ptr.
+    target_map.insert(std::make_pair(item, i));
+  }
+
+  for (auto it = instructions.begin(); it != instructions.end(); it++)
+    obj_it_vec.push_back(it);
+
+  // Now iterate over each pair of python/c++ instructiont objs looking at the
+  // 'target' attribute. Update the corresponding 'target' field of the C++
+  // object accordingly
+  for (unsigned int i = 0; i < py_obj_vec.size(); i++) {
+    auto target = getattr(py_obj_vec[i]);
+    auto it = obj_it_vec[i];
+
+    if (isattrnil(target)) {
+      it->targets.clear();
+    } else {
+      // Record a target -- map object to index, and from there to a list iter
+      auto map_it = target_map.find(target);
+      // Python user is entirely entitled to plug an arbitary object in here,
+      // in which case we explode. Could raise an exception, but I prefer to
+      // fail fast & fail hard. This isn't something the user should handle
+      // anyway, and it's difficult for us to clean up afterwards.
+      if (map_it == target_map.end())
+        throw "Target of instruction is not in list";
+
+      auto target_list_it = obj_it_vec[map_it->second];
+      it->targets.clear();
+      it->targets.push_back(target_list_it);
+    }
+  }
+
+  return;
+}
 
 #endif

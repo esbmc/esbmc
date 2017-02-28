@@ -266,7 +266,7 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
   expr2tc object_size_exp;
   if (is_nil_expr(size)) {
     try {
-      mp_integer object_size = type_byte_size(*new_type);
+      mp_integer object_size = type_byte_size(new_type);
       object_size_exp =
         constant_int2tc(pointer_type2(), object_size.to_ulong());
     } catch (array_type2t::dyn_sized_array_excp *e) {
@@ -713,5 +713,6 @@ void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
 {
   (void) lhs;
   (void) code;
+  std::cerr << "Sorry, no support for va_args\n";
   abort();
 }

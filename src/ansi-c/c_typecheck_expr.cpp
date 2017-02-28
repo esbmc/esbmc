@@ -2082,7 +2082,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
       intop=&op0;
     }
     else
-      assert(false);
+      abort();
 
     make_index_type(*intop);
     expr.type()=pop->type();

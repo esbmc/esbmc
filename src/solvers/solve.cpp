@@ -7,14 +7,6 @@
 
 #include "solver_config.h"
 
-typedef smt_convt *(solver_creator)
-  (bool int_encoding, const namespacet &ns, const optionst &opts,
-   tuple_iface **tuple_api, array_iface **array_api);
-
-typedef smt_convt *(*solver_creator_ptr)
-  (bool int_encoding, const namespacet &ns, const optionst &opts,
-   tuple_iface **tuple_api, array_iface **array_api);
-
 solver_creator create_new_smtlib_solver;
 solver_creator create_new_z3_solver;
 solver_creator create_new_minisat_solver;
@@ -23,12 +15,7 @@ solver_creator create_new_cvc_solver;
 solver_creator create_new_mathsat_solver;
 solver_creator create_new_yices_solver;
 
-struct solver_config {
-  std::string name;
-  solver_creator_ptr create;
-};
-
-static struct solver_config solvers[] =  {
+const struct esbmc_solver_config esbmc_solvers[] =  {
   { "smtlib", create_new_smtlib_solver },
 #ifdef Z3
   { "z3", create_new_z3_solver },
@@ -50,14 +37,14 @@ static struct solver_config solvers[] =  {
 #endif
 };
 
-static const std::string list_of_all_solvers[] =
+const std::string list_of_all_solvers[] =
 { "z3", "smtlib", "minisat", "boolector", "mathsat", "cvc", "yices"};
 
-static const unsigned int total_num_of_solvers =
+const unsigned int total_num_of_solvers =
 sizeof(list_of_all_solvers) / sizeof(std::string);
 
-static const unsigned int num_solvers =
-sizeof(solvers) / sizeof(solver_config);
+const unsigned int esbmc_num_solvers =
+sizeof(esbmc_solvers) / sizeof(esbmc_solver_config);
 
 static smt_convt *
 create_solver(std::string the_solver,
@@ -66,9 +53,9 @@ create_solver(std::string the_solver,
             array_iface **array_api)
 {
 
-  for (unsigned int i = 0; i < num_solvers; i++) {
-    if (the_solver == solvers[i].name) {
-      return solvers[i].create(int_encoding, ns,
+  for (unsigned int i = 0; i < esbmc_num_solvers; i++) {
+    if (the_solver == esbmc_solvers[i].name) {
+      return esbmc_solvers[i].create(int_encoding, ns,
                                options, tuple_api, array_api);
     }
   }
@@ -86,15 +73,15 @@ pick_default_solver()
   return "boolector";
 #else
   // Pick whatever's first in the list.
-  if (num_solvers == 1) {
+  if (esbmc_num_solvers == 1) {
     std::cerr << "No solver backends built into ESBMC; please either build ";
     std::cerr << "some in, or explicitly configure the smtlib backend";
     std::cerr << std::endl;
     abort();
   } else {
-    std::cerr << "No solver specified; defaulting to " << solvers[1].name;
+    std::cerr << "No solver specified; defaulting to " << esbmc_solvers[1].name;
     std::cerr << std::endl;
-    return solvers[1].name;
+    return esbmc_solvers[1].name;
   }
 #endif
 }

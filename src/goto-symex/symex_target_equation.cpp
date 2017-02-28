@@ -20,6 +20,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_symex_state.h"
 #include "symex_target_equation.h"
+#include "goto_symex.h"
 
 void symex_target_equationt::assignment(
   const expr2tc &guard,
@@ -27,7 +28,7 @@ void symex_target_equationt::assignment(
   const expr2tc &original_lhs,
   const expr2tc &rhs,
   const sourcet &source,
-  std::vector<dstring> stack_trace,
+  std::vector<stack_framet> stack_trace,
   assignment_typet assignment_type)
 {
   assert(!is_nil_expr(lhs));
@@ -89,7 +90,7 @@ void symex_target_equationt::assertion(
   const expr2tc &guard,
   const expr2tc &cond,
   const std::string &msg,
-  std::vector<dstring> stack_trace,
+  std::vector<stack_framet> stack_trace,
   const sourcet &source)
 {
   SSA_steps.push_back(SSA_stept());
@@ -107,8 +108,11 @@ void symex_target_equationt::assertion(
 }
 
 void
-symex_target_equationt::renumber(const expr2tc &guard, const expr2tc &symbol,
-                                 const expr2tc &size, const sourcet &source)
+symex_target_equationt::renumber(
+  const expr2tc &guard,
+  const expr2tc &symbol,
+  const expr2tc &size,
+  const sourcet &source)
 {
   assert(is_symbol2t(symbol));
   assert(is_bv_type(size));
@@ -139,10 +143,11 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
   return;
 }
 
-void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
-                   const smt_ast *&assumpt_ast,
-                   smt_convt::ast_vec &assertions,
-                   SSA_stept &step)
+void symex_target_equationt::convert_internal_step(
+  smt_convt &smt_conv,
+  const smt_ast *&assumpt_ast,
+  smt_convt::ast_vec &assertions,
+  SSA_stept &step)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
   bvt assert_bv;
@@ -445,7 +450,7 @@ runtime_encoded_equationt::convert(smt_convt &smt_conv)
   return;
 }
 
-std::shared_ptr<symex_targett>
+boost::shared_ptr<symex_targett>
 runtime_encoded_equationt::clone(void) const
 {
   // Only permit cloning at the start of a run - there should never be any data
@@ -455,7 +460,7 @@ runtime_encoded_equationt::clone(void) const
   assert(SSA_steps.size() == 0 && "runtime_encoded_equationt shouldn't be "
          "cloned when it contains data");
   auto nthis =
-    std::shared_ptr<runtime_encoded_equationt>(new runtime_encoded_equationt(*this));
+    boost::shared_ptr<runtime_encoded_equationt>(new runtime_encoded_equationt(*this));
   nthis.get()->cvt_progress = nthis.get()->SSA_steps.end();
   return nthis;
 }

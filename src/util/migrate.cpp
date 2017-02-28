@@ -584,7 +584,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     // actually perform any flattening, because something else in the union
     // transformation should have transformed it to a byte array. Simply take
     // the address (it has to have storage), cast to byte array, and index.
-    BigInt size = type_byte_size(*new_expr->type);
+    BigInt size = type_byte_size(new_expr->type);
     address_of2tc addrof(new_expr->type, new_expr);
     type2tc byteptr(new pointer_type2t(get_uint8_type()));
     typecast2tc cast(byteptr, addrof);
@@ -596,7 +596,7 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     }
   } else if (is_number_type(new_expr) || is_bool_type(new_expr) ||
              is_pointer_type(new_expr)) {
-    BigInt size = type_byte_size(*new_expr->type);
+    BigInt size = type_byte_size(new_expr->type);
 
     bool is_big_endian =
       config.ansi_c.endianess ==configt::ansi_ct::IS_BIG_ENDIAN;
@@ -1408,7 +1408,6 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new dynamic_size2t(op0));
   } else if (expr.id() == "sideeffect") {
-    sideeffect2t::allockind t;
     expr2tc operand, thesize;
     type2tc cmt_type, plaintype;
     std::vector<expr2tc> args;
@@ -1426,6 +1425,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     migrate_type((const typet&)expr.cmt_type(), cmt_type);
     migrate_type(expr.type(), plaintype);
+
+    sideeffect2t::allockind t;
     if (expr.statement() == "malloc")
       t = sideeffect2t::malloc;
     else if (expr.statement() == "realloc")
@@ -1443,7 +1444,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     else if (expr.statement() == "function_call")
       t = sideeffect2t::function_call;
     else
-      assert(0 && "Unexpected side-effect statement");
+    {
+      std::cerr << "Unexpected side-effect statement\n";
+      abort();
+    }
 
     if (t == sideeffect2t::function_call) {
       const exprt &arguments = expr.op1();
@@ -1526,7 +1530,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = expr2tc(new invalid_pointer2t(op0));
   } else if (expr.id() == "code" && expr.statement() == "skip") {
-    new_expr_ref = expr2tc(new code_skip2t());
+    new_expr_ref = expr2tc(new code_skip2t(get_empty_type()));
   } else if (expr.id() == "code" && expr.statement() == "goto") {
     new_expr_ref = expr2tc(new code_goto2t(expr.get("destination")));
   } else if (expr.id() == "comma") {
@@ -2686,7 +2690,7 @@ migrate_expr_back(const expr2tc &ref)
   {
     const signbit2t &ref2 = to_signbit2t(ref);
     exprt back("signbit", bool_typet());
-    back.copy_to_operands(migrate_expr_back(ref2.value));
+    back.copy_to_operands(migrate_expr_back(ref2.operand));
     return back;
   }
   case expr2t::concat_id:

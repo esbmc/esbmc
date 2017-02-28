@@ -13,6 +13,8 @@
 #include <iostream>
 #include <vector>
 
+#include <boost/shared_ptr.hpp>
+
 #include <prefix.h>
 #include <std_expr.h>
 #include <expr_util.h>
@@ -62,16 +64,15 @@ goto_symext::assume(const expr2tc &assumption)
 
   // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
-  cur_state->global_guard.guard_expr(tmp_guard);
   target->assumption(tmp_guard, assumption, cur_state->source);
   return;
 }
 
-std::shared_ptr<goto_symext::symex_resultt>
+boost::shared_ptr<goto_symext::symex_resultt>
 goto_symext::get_symex_result(void)
 {
 
-  return std::shared_ptr<goto_symext::symex_resultt>(
+  return boost::shared_ptr<goto_symext::symex_resultt>(
     new goto_symext::symex_resultt(target, total_claims, remaining_claims));
 }
 
@@ -267,28 +268,24 @@ void goto_symext::symex_assume(void)
   if (cur_state->guard.is_false())
     return;
 
-  const goto_programt::instructiont &instruction=*cur_state->source.pc;
+  expr2tc cond = cur_state->source.pc->guard;
 
-  expr2tc tmp = instruction.guard;
-  replace_nondet(tmp);
+  replace_nondet(cond);
+  dereference(cond, false);
+  replace_dynamic_allocation(cond);
 
-  dereference(tmp, false);
-  replace_dynamic_allocation(tmp);
+  cur_state->rename(cond);
+  do_simplify(cond);
 
-  cur_state->rename(tmp);
-  do_simplify(tmp);
+  if (is_true(cond))
+    return;
 
-  if (!is_true(tmp))
-  {
-    expr2tc tmp2 = tmp;
-    expr2tc tmp3 = tmp2;
-    cur_state->guard.guard_expr(tmp2);
+  cur_state->guard.guard_expr(cond);
+  assume(cond);
 
-    assume(tmp2);
-
-    // we also add it to the state guard
-    cur_state->guard.add(tmp3);
-  }
+  // If we're assuming false, make the guard for the following statement false
+  if(is_false(cond))
+    cur_state->guard.make_false();
 }
 
 void goto_symext::symex_assert(void)
@@ -399,7 +396,7 @@ goto_symext::finish_formula(void)
     cur_state->rename(eq);
     target->assertion(it->alloc_guard.as_expr(), eq,
                       "dereference failure: forgotten memory",
-                      std::vector<dstring>(), cur_state->source);
+                      std::vector<stack_framet>(), cur_state->source);
     total_claims++;
     remaining_claims++;
   }

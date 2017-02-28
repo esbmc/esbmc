@@ -89,6 +89,9 @@ public:
   friend bool operator !=(const fixedbvt &a, const fixedbvt &b) { return a.v!=b.v; }
 
   friend bool operator > (const fixedbvt &a, int i);
+  friend bool operator < (const fixedbvt &a, int i);
+  friend bool operator >= (const fixedbvt &a, int i);
+  friend bool operator <= (const fixedbvt &a, int i);
 
   const mp_integer &get_value() const { return v; }
   void set_value(const mp_integer &_v) { v=_v; }

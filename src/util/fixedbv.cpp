@@ -206,3 +206,54 @@ bool operator >(const fixedbvt &a, int i)
   other.from_integer(i);
   return a > other;
 }
+
+bool operator < (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a < other;
+}
+
+bool operator >= (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a >= other;
+}
+
+bool operator <= (const fixedbvt &a, int i)
+{
+  fixedbvt other;
+  other.spec = a.spec;
+  other.from_integer(i);
+  return a <= other;
+}
+
+#ifdef WITH_PYTHON
+#include <boost/python/class.hpp>
+
+void
+build_fixedbv_python_class()
+{
+  using namespace boost::python;
+
+  init<unsigned, unsigned> fbv_spec_init;
+  class_<fixedbv_spect>("fixedbv_spec", fbv_spec_init)
+    .def_readwrite("width", &fixedbv_spect::width)
+    .def_readwrite("integer_bits", &fixedbv_spect::integer_bits)
+    .def("get_fraction_bits", &fixedbv_spect::get_fraction_bits);
+
+  // Only default inits
+  class_<fixedbvt>("fixedbv")
+    .def_readwrite("spec", &fixedbvt::spec)
+    .add_property("value",
+        make_function(&fixedbvt::get_value, return_value_policy<return_by_value>()),
+        make_function(&fixedbvt::set_value, return_value_policy<return_by_value>()))
+    .def("from_integer", &fixedbvt::from_integer)
+    .def("to_integer", &fixedbvt::to_integer)
+    .def("round", &fixedbvt::round);
+}
+
+#endif

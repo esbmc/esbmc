@@ -178,6 +178,8 @@ public:
 
   virtual tvt l_get(const smt_ast *a);
 
+  virtual void dump_SMT();
+
   // Some useful types
 public:
 

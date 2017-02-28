@@ -19,7 +19,7 @@ extern "C" {
 #include <signal.h>
 #include <unistd.h>
 
-#ifdef HAVE_SENDFILE
+#ifdef HAVE_SENDFILE_ESBMC
 #include <sys/sendfile.h>
 #endif
 #include <sys/resource.h>
@@ -104,7 +104,7 @@ void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
   message.set_verbosity(v);
 }
 
-extern "C" uint8_t *version_string;
+extern "C" uint8_t *esbmc_version_string;
 
 uint64_t cbmc_parseoptionst::read_time_spec(const char *str)
 {
@@ -180,10 +180,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   /* graphML generation options check */
   if(cmdline.isset("witness-output"))
-  {
     options.set_option("witness-output", cmdline.getval("witness-output"));
-    options.set_option("no-slice", true);
-  }
 
   if(cmdline.isset("witness-detailed"))
     options.set_option("witness-detailed", true);
@@ -193,7 +190,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("git-hash"))
   {
-    std::cout << version_string << std::endl;
+    std::cout << esbmc_version_string << std::endl;
     exit(0);
   }
 
@@ -392,8 +389,6 @@ int cbmc_parseoptionst::doit()
   if(cmdline.isset("incremental-bmc"))
     return doit_incremental();
 
-  goto_functionst goto_functions;
-
   optionst opts;
   get_command_line_options(opts);
 
@@ -409,6 +404,9 @@ int cbmc_parseoptionst::doit()
 
   if(set_claims(goto_functions))
     return 7;
+
+  if (opts.get_bool_option("skip-bmc"))
+    return 0;
 
   bool res = false;
 
@@ -476,7 +474,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
     abort();
   }
 
-  goto_functionst goto_functions;
   optionst opts;
 
   if(process_type != PARENT)
@@ -1020,8 +1017,8 @@ int cbmc_parseoptionst::doit_k_induction()
   if(cmdline.isset("k-induction-parallel"))
     return doit_k_induction_parallel();
 
-  // Generate goto functions
-  goto_functionst goto_functions;
+  // Generate goto functions for base case and forward condition
+  status("\n*** Generating Base Case and Forward Condition ***");
 
   optionst opts;
   get_command_line_options(opts);
@@ -1067,10 +1064,13 @@ int cbmc_parseoptionst::doit_k_induction()
     if(!do_forward_condition(opts, goto_functions, k_step))
       return false;
 
-    std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << i2string((unsigned long) k_step);
-    std::cout << " ***\n";
-    std::cout << "*** Checking inductive step\n";
+    if(k_step > 1)
+    {
+      std::cout << "\n*** K-Induction Loop Iteration ";
+      std::cout << i2string((unsigned long) k_step);
+      std::cout << " ***\n";
+      std::cout << "*** Checking inductive step\n";
+    }
 
     if(!do_inductive_step(opts, goto_functions, k_step))
       return false;
@@ -1132,7 +1132,6 @@ int cbmc_parseoptionst::doit_falsification()
 int cbmc_parseoptionst::doit_incremental()
 {
   // Generate goto functions for base case and forward condition
-  goto_functionst goto_functions;
 
   optionst opts;
   get_command_line_options(opts);
@@ -1880,7 +1879,7 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 
   bool res = bmc1.run();
 
-#ifdef HAVE_SENDFILE
+#ifdef HAVE_SENDFILE_ESBMC
   if (bmc1.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, NULL, 100000);

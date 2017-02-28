@@ -732,6 +732,9 @@ public:
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_neg(const expr2tc &expr);
 
+  /** Method to dump the SMT formula */
+  virtual void dump_SMT();
+
   /** @} */
 
   /** @{
@@ -946,6 +949,10 @@ public:
     else
       return mk_sort(SMT_SORT_BV, width, false);
   }
+
+  /** For the given type, replace all instances of a pointer type with the
+   *  struct representation of it. */
+  void rewrite_ptrs_to_structs(type2tc &type);
 
   /** When dealing with multi-dimensional arrays, and selecting one element
    *  out of several dimensions, reduce it to an expression on a single

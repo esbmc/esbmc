@@ -1,13 +1,14 @@
 #!/bin/sh
 
 if test ! -e esbmc; then
-  echo "Please run2 from src/ dir";
+  echo "Please run from src/ dir";
   exit 1
 fi
 
 libtoolize
 
-aclocal -I scripts/build-aux/m4
+# /usr/share contains PKG macros
+aclocal -I scripts/build-aux/m4 -I /usr/share/aclocal
 
 automake --add-missing --foreign
 

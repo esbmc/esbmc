@@ -6,6 +6,7 @@ import shlex
 import subprocess
 import time
 import sys
+import resource
 
 # Start time for this script
 start_time = time.time()
@@ -54,9 +55,9 @@ class Property:
   termination = 4
 
 class Unwindings:
-  loops = [1, 64, 160]
-  fp = [1, 1024]
-  overflow = [1, 2, 32778]
+  loops = ["160", "815"]
+  fp = ["1", "0"]
+  overflow = ["1", "2", "64", "1024", "32778"]
 
 # Function to run esbmc
 def run_esbmc(cmd_line):
@@ -203,7 +204,7 @@ def get_command_line(strat, prop, arch, benchmark, fp_mode):
   elif strat == "incr":
     command_line += "--floatbv --unlimited-k-steps --z3 --incremental-bmc "
   elif strat == "fixed":
-    command_line += "--floatbv --unroll-loops --no-unwinding-assertions --unwind 1 --no-bitfields "
+    command_line += "--floatbv --unroll-loops --no-unwinding-assertions --unwind 160 --no-bitfields "
     if fp_mode: command_line += "--mathsat "
   else:
     print "Unknown strategy"
@@ -236,12 +237,12 @@ def verify(strat, prop):
   # Parse output
   result = parse_result(output, category_property)
 
-  # We'll only recheck the fixed approach
-  if strat != "fixed":
-    return result
-
   # Retry in fp_mode?
   fp_mode = (result == Result.force_fp_mode)
+
+  # We'll only recheck the fixed approach
+  if strat != "fixed":
+    return result, fp_mode
 
   # We'll retry a number of times, however, the verification with
   # unwind 1 for forced fp mode failed, so we try again with 1 unwind
@@ -255,11 +256,19 @@ def verify(strat, prop):
     new_command_line = get_command_line(strategy, category_property, arch, benchmark, fp_mode)
 
     # Add memory out and timeout
-    new_command_line += " --memlimit 13g --timeout "
-    new_command_line += str(895 - (int) (round(time.time() - start_time)))
+    timeout = str(895 - (int) (round(time.time() - start_time)))
+    new_command_line += " --memlimit 14g --timeout " + timeout + "s"
+
+    # Second time with fp_mode, run with tiny timeout
+    if retry == 1 and fp_mode:
+      new_command_line = new_command_line.replace("--timeout " + timeout + "s", "--timeout 10s")
 
     # Replace unwind
-    new_command_line = new_command_line.replace("unwind 1", "unwind " + str(unwinds[retry]))
+    new_command_line = new_command_line.replace("unwind 160", "unwind " + unwinds[retry])
+
+    # Remove unroll-loops, if running in fp_mode
+    if fp_mode:
+      new_command_line = new_command_line.replace("--unroll-loops ", "")
 
     # If verifying overflows, abort on recursion
     if prop == Property.overflow:
@@ -291,6 +300,11 @@ def needs_validation(strat, prop, result, fp_mode):
   if result == Result.fail_reach and strat == "fixed" and prop == Property.reach:
     return True
 
+
+def setlimits():
+  # Set maximum RAM
+  resource.setrlimit(resource.RLIMIT_AS, (13958643712, 13958643712))
+
 def get_cpa_command_line(prop, benchmark):
   command_line = "./scripts/cpa.sh -witness-validation "
   command_line += "-spec ../" + os.path.basename(benchmark) + ".graphml "
@@ -307,7 +321,7 @@ def run_cpa(cmd_line):
     cwd = os.getcwd()
 
     # Change to CPA's dir
-    os.chdir("./cpachecker/")
+    os.chdir(cwd + "/cpachecker/")
 
     # Checking if there is still enough time available
     elapsed_time = (int) (round(time.time() - start_time))
@@ -322,18 +336,20 @@ def run_cpa(cmd_line):
 
       the_args = shlex.split(cmd_line)
 
-      p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+      p = subprocess.Popen(the_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=setlimits)
       (stdout, stderr) = p.communicate()
 
       """ DEBUG output
       print stdout
       print stderr
       """
-
-    # restore dir
-    os.chdir(cwd)
+  except (OSError, AttributeError) as e:
+    print e
   except:
     print("Unexpected error:", sys.exc_info()[0])
+
+  # restore memory limit
+  resource.setrlimit(resource.RLIMIT_AS, (resource.RLIM_INFINITY, resource.RLIM_INFINITY))
 
   return stdout
 

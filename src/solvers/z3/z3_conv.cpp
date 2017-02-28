@@ -1386,3 +1386,8 @@ void z3_smt_ast::dump() const
   std::cout << Z3_ast_to_string(e.ctx(), e) << std::endl;
   std::cout << "sort is " << Z3_sort_to_string(e.ctx(), Z3_get_sort(e.ctx(), e)) << std::endl;
 }
+
+void z3_convt::dump_SMT()
+{
+  std::cout << solver << std::endl;
+}

@@ -137,7 +137,7 @@ expr2tc pointer_logict::object_rec(
   {
     const array_type2t &arrtype = dynamic_cast<const array_type2t&>
                                               (*src->type.get());
-    mp_integer size=type_byte_size(*arrtype.subtype.get());
+    mp_integer size=type_byte_size(arrtype.subtype);
 
     if (size == 0)
       return src;
@@ -171,8 +171,8 @@ expr2tc pointer_logict::object_rec(
     forall_types(it, members) {
       assert(offset>=current_offset);
 
-      mp_integer sub_size=type_byte_size(**it);
-      
+      mp_integer sub_size=type_byte_size(*it);
+
       if(sub_size==0)
         return src;
       

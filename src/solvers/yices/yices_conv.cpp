@@ -56,7 +56,6 @@ yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
 yices_convt::~yices_convt()
 {
   yices_free_context(yices_ctx);
-  yices_garbage_collect(NULL, 0, NULL, 0, false);
 }
 
 void

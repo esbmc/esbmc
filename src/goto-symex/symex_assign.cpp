@@ -10,6 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <migrate.h>
 #include <assert.h>
 
+#include <boost/shared_ptr.hpp>
+
 #include <simplify_expr.h>
 #include <i2string.h>
 #include <cprover_prefix.h>
@@ -23,7 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
                          const goto_functionst &_goto_functions,
-                         std::shared_ptr<symex_targett> _target, optionst &opts) :
+                         boost::shared_ptr<symex_targett> _target, optionst &opts) :
   guard_identifier_s("goto_symex::guard"),
   total_claims(0),
   remaining_claims(0),
@@ -248,10 +250,8 @@ void goto_symext::symex_assign_symbol(
 {
   // put assignment guard in rhs
 
-  if (!guard.empty())
-  {
+  if (!guard.is_true())
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
-  }
 
   expr2tc orig_name_lhs = lhs;
   cur_state->get_original_name(orig_name_lhs);
@@ -397,23 +397,22 @@ void goto_symext::symex_assign_if(
 {
   // we have (c?a:b)=e;
 
-  unsigned old_guard_size=guard.size();
-
   // need to copy rhs -- it gets destroyed
   expr2tc rhs_copy = rhs;
   const if2t &ifval = to_if2t(lhs);
 
   expr2tc cond = ifval.cond;
 
+  guardt old_guard(guard);
+
   guard.add(cond);
   symex_assign_rec(ifval.true_value, rhs, guard);
-  guard.resize(old_guard_size);
+  guard = old_guard;
 
   not2tc not_cond(cond);
-
   guard.add(not_cond);
   symex_assign_rec(ifval.false_value, rhs_copy, guard);
-  guard.resize(old_guard_size);
+  guard = old_guard;
 }
 
 void goto_symext::symex_assign_byte_extract(
@@ -432,8 +431,7 @@ void goto_symext::symex_assign_byte_extract(
     assert(!is_multi_dimensional_array(arr_type.subtype) &&
            "Can't currently byte extract through more than two dimensions of "
            "array right now, sorry");
-    constant_int2tc subtype_sz(index_type2(),
-                               type_byte_size(*arr_type.subtype));
+    constant_int2tc subtype_sz(index_type2(), type_byte_size(arr_type.subtype));
     expr2tc div = div2tc(index_type2(), extract.source_offset, subtype_sz);
     expr2tc mod = modulus2tc(index_type2(), extract.source_offset, subtype_sz);
     do_simplify(div);
@@ -458,8 +456,10 @@ void goto_symext::symex_assign_concat(
   guardt &guard)
 {
   // Right: generate a series of symex assigns.
+#ifndef NDEBUG
   const concat2t &cat = to_concat2t(lhs);
   assert(cat.type->get_width() > 8);
+#endif
   assert(is_scalar_type(rhs));
 
   // Second attempt at this code: byte stitching guarantees that all the concats
@@ -475,8 +475,10 @@ void goto_symext::symex_assign_concat(
   // Add final operand to list
   operand_list.push_back(cur_concat);
 
+#ifndef NDEBUG
   for (const auto &foo : operand_list)
     assert(foo->type->get_width() == 8);
+#endif
   assert((operand_list.size() * 8) == cat.type->get_width());
 
   bool is_big_endian =
@@ -514,8 +516,8 @@ void goto_symext::replace_nondet(expr2tc &expr)
       to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
     unsigned int &nondet_count = get_dynamic_counter();
-    expr = symbol2tc(expr->type,
-                              "nondet$symex::nondet"+i2string(nondet_count++));
+    expr =
+      symbol2tc(expr->type, "nondet$symex::nondet" + i2string(nondet_count++));
   }
   else
   {
