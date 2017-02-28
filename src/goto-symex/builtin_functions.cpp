@@ -192,7 +192,7 @@ goto_symext::symex_mem(
     type2tc subtype;
     migrate_type(symbol.type.subtype(), subtype);
     expr2tc sym = symbol2tc(new_type, symbol.name);
-    expr2tc idx_val = zero_ulong;
+    expr2tc idx_val = gen_ulong(0);
     expr2tc idx = index2tc(subtype, sym, idx_val);
     rhs_addrof.get()->type =
       get_pointer_type(pointer_typet(symbol.type.subtype()));
@@ -302,7 +302,7 @@ void goto_symext::symex_free(const expr2tc &expr)
     guardt g = cur_state->guard;
     g.add(item.guard);
     expr2tc offset = item.offset;
-    expr2tc eq = equality2tc(offset, zero_ulong);
+    expr2tc eq = equality2tc(offset, gen_ulong(0));
     g.guard_expr(eq);
     claim(eq, "Operand of free must have zero pointer offset");
   }
@@ -407,7 +407,7 @@ void goto_symext::symex_cpp_new(
   if(do_array)
   {
     symbol2tc sym(newtype, symbol.name);
-    index2tc idx(renamedtype2, sym, zero_ulong);
+    index2tc idx(renamedtype2, sym, gen_ulong(0));
     rhs.get()->ptr_obj = idx;
   }
   else

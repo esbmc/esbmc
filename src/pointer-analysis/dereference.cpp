@@ -1028,7 +1028,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
       } else {
         // This is a valid access to this field. Extract it, recurse.
         value = member2tc(*it, value, struct_type.member_names[i]);
-        build_reference_rec(value, zero_ulong, type, guard, mode);
+        build_reference_rec(value, gen_ulong(0), type, guard, mode);
       }
       return;
     } else if (int_offset > m_offs &&
@@ -1805,7 +1805,7 @@ dereferencet::check_alignment(unsigned long minwidth, const expr2tc offset,
   if (options.get_bool_option("int-encoding")) {
     expr2tc align = gen_ulong(minwidth);
     modulus2tc moded(align->type, offset, align);
-    neq = notequal2tc(moded, zero_ulong);
+    neq = notequal2tc(moded, gen_ulong(0));
   } else {
     bitand2tc anded(mask_expr->type, mask_expr, offset);
     neq = notequal2tc(anded, gen_ulong(0));
