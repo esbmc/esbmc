@@ -1,5 +1,11 @@
 Release Notes of the ESBMC model checker
 
+*** Version 4.1
++ Support for Boolector 2.4.1
++ Fix static libesbmc not being built
++ Fix a static initialization order fiasco
++ Removed the need for ac_config.h when using libesbmc
+
 *** Version 4.0
 + 100% more python: new python API for faster prototyping
 + Support to build ESBMC as library
