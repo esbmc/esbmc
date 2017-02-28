@@ -519,9 +519,9 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
 
       std::string data = respval.data.substr(2);
       if (data[0] == '0')
-        result = false_expr;
+        result = gen_false_expr();
       else if (data[0] == '1')
-        result = true_expr;
+        result = gen_true_expr();
       else {
         std::cerr << "Unrecognized boolean-typed binary number format";
         std::cerr << std::endl;
@@ -545,9 +545,9 @@ smtlib_convt::get_bool(smt_astt a)
 {
   tvt res = l_get(a);
   if (res.is_true())
-    return true_expr;
+    return gen_true_expr();
   else if (res.is_false())
-    return false_expr;
+    return gen_false_expr();
   else {
     std::cerr << "Non-true, non-false value read from smtlib model" <<std::endl;
     abort();

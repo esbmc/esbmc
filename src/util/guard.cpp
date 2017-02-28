@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 expr2tc guardt::as_expr() const
 {
   if(is_true())
-    return true_expr;
+    return gen_true_expr();
 
   if(is_single_symbol())
     return *guard_list.begin();
@@ -227,7 +227,7 @@ bool guardt::is_false() const
   if(guard_list.size() != 1)
     return false;
 
-  return (*guard_list.begin() == false_expr);
+  return (*guard_list.begin() == gen_false_expr());
 }
 
 void guardt::make_true()
@@ -237,7 +237,7 @@ void guardt::make_true()
 
 void guardt::make_false()
 {
-  add(false_expr);
+  add(gen_false_expr());
 }
 
 bool guardt::is_single_symbol() const

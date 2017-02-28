@@ -5028,6 +5028,18 @@ is_false(const expr2tc &expr)
 }
 
 inline expr2tc
+gen_true_expr()
+{
+  return constant_bool2tc(true);
+}
+
+inline expr2tc
+gen_false_expr()
+{
+  return constant_bool2tc(false);
+}
+
+inline expr2tc
 gen_uint(const type2tc &type, unsigned long val)
 {
   constant_int2tc v(type, BigInt(val));

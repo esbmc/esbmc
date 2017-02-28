@@ -245,17 +245,17 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
   symbol2tc sym(sym_type, dyn_info_arr_name);
 
   index2tc idx(get_bool_type(), sym, ptr_obj);
-  expr2tc truth = true_expr;
+  expr2tc truth = gen_true_expr();
   symex_assign_rec(idx, truth, guard);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
-  truth = true_expr;
+  truth = gen_true_expr();
   symex_assign_rec(valid_index_expr, truth, guard);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
-  expr2tc falseity = false_expr;
+  expr2tc falseity = gen_false_expr();
   symex_assign_rec(dealloc_index_expr, falseity, guard);
 
   type2tc sz_sym_type =
@@ -316,12 +316,12 @@ void goto_symext::symex_free(const expr2tc &expr)
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
-  expr2tc truth = true_expr;
+  expr2tc truth = gen_true_expr();
   symex_assign_rec(dealloc_index_expr, truth, guard);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
-  expr2tc falsity = false_expr;
+  expr2tc falsity = gen_false_expr();
   symex_assign_rec(valid_index_expr, falsity, guard);
 }
 
@@ -426,7 +426,7 @@ void goto_symext::symex_cpp_new(
 
   pointer_object2tc ptr_obj(pointer_type2(), lhs);
   index2tc idx(get_bool_type(), sym, ptr_obj);
-  expr2tc truth = true_expr;
+  expr2tc truth = gen_true_expr();
 
   symex_assign_rec(idx, truth, guard);
 

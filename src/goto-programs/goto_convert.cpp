@@ -116,7 +116,7 @@ void goto_convertt::convert_label(
   if(error_label!="" && label==error_label)
   {
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard = false_expr;
+    t->guard = gen_false_expr();
     t->location=code.location();
     t->location.property("error label");
     t->location.comment("error label");
@@ -1334,7 +1334,7 @@ void goto_convertt::convert_for(
   goto_programt tmp_y;
   goto_programt::targett y=tmp_y.add_instruction();
   y->make_goto(u);
-  y->guard = true_expr;
+  y->guard = gen_true_expr();
   y->location=code.location();
 
   dest.destructive_append(sideeffects);
@@ -1398,7 +1398,7 @@ void goto_convertt::convert_while(
 
   // y: if(c) goto v;
   y->make_goto(v);
-  y->guard = true_expr;
+  y->guard = gen_true_expr();
   y->location=code.location();
 
   dest.destructive_append(tmp_branch);
@@ -1978,7 +1978,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_false=dest.add_instruction();
     t_false->make_goto(target_false);
-    t_false->guard = true_expr;
+    t_false->guard = gen_true_expr();
     t_false->location=location;
     return;
   }
@@ -2001,7 +2001,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_true=dest.add_instruction();
     t_true->make_goto(target_true);
-    t_true->guard = true_expr;
+    t_true->guard = gen_true_expr();
     t_true->location=location;
 
     return;
@@ -2024,7 +2024,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_false=dest.add_instruction();
     t_false->make_goto(target_false);
-    t_false->guard = true_expr;
+    t_false->guard = gen_true_expr();
     t_false->location=guard.location();
 
     return;
@@ -2047,7 +2047,7 @@ void goto_convertt::generate_conditional_branch(
 
   goto_programt::targett t_false=dest.add_instruction();
   t_false->make_goto(target_false);
-  t_false->guard = true_expr;
+  t_false->guard = gen_true_expr();
   t_false->location=guard.location();
 }
 

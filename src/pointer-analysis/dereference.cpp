@@ -598,7 +598,7 @@ dereferencet::build_reference_to(
   expr2tc &pointer_guard)
 {
   expr2tc value;
-  pointer_guard = false_expr;
+  pointer_guard = gen_false_expr();
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {
@@ -1335,7 +1335,7 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
   // So:
   std::list<std::pair<expr2tc, expr2tc> > resolved_list;
 
-  construct_struct_ref_from_dyn_offs_rec(value, offs, type, true_expr, mode,
+  construct_struct_ref_from_dyn_offs_rec(value, offs, type, gen_true_expr(), mode,
                                          resolved_list);
 
   if (resolved_list.size() == 0) {
@@ -1356,7 +1356,7 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
 
   // Finally, record an assertion that if none of those accesses were legal,
   // then it's an illegal access.
-  expr2tc accuml = false_expr;
+  expr2tc accuml = gen_false_expr();
   for (std::list<std::pair<expr2tc, expr2tc> >::const_iterator
        it = resolved_list.begin(); it != resolved_list.end(); it++) {
     accuml = or2tc(accuml, it->first);

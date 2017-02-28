@@ -74,7 +74,7 @@ void goto_unwindt::unwind_program(
       t_goto->make_goto(loop_exit);
       t_goto->location=loop_exit->location;
       t_goto->function=loop_exit->function;
-      t_goto->guard=true_expr;
+      t_goto->guard=gen_true_expr();
     }
   }
 

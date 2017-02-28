@@ -388,7 +388,7 @@ smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
     symbol2tc allocarr(arrtype, dyn_info_arr_name);
     constant_int2tc objid(machine_uint, BigInt(obj_num));
     index2tc idx(get_bool_type(), allocarr, objid);
-    equality2tc dyn_eq(idx, false_expr);
+    equality2tc dyn_eq(idx, gen_false_expr());
     assert_expr(dyn_eq);
 
     return ptr_val;

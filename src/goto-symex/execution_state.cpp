@@ -656,7 +656,7 @@ execution_statet::is_cur_state_guard_false(void)
     runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
                                                  (target.get());
 
-    equality2tc the_question(true_expr, parent_guard);
+    equality2tc the_question(gen_true_expr(), parent_guard);
 
     try {
       tvt res = rte->ask_solver_question(the_question);

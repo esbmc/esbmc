@@ -86,7 +86,7 @@ goto_symext::symex_step(reachability_treet & art)
   // depth exceeded?
   {
     if (depth_limit != 0 && cur_state->depth > depth_limit)
-      cur_state->guard.add(false_expr);
+      cur_state->guard.add(gen_false_expr());
     cur_state->depth++;
   }
 
@@ -390,7 +390,7 @@ goto_symext::finish_formula(void)
 
     // Assert that the allocated object was freed.
     deallocated_obj2tc deallocd(it->obj);
-    equality2tc eq(deallocd, true_expr);
+    equality2tc eq(deallocd, gen_true_expr());
     replace_dynamic_allocation(eq);
     it->alloc_guard.guard_expr(eq);
     cur_state->rename(eq);

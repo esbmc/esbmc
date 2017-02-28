@@ -674,9 +674,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_bool) {
     std::string theval = expr.value().as_string();
     if (theval == "true")
-      new_expr_ref = true_expr;
+      new_expr_ref = gen_true_expr();
     else
-      new_expr_ref = false_expr;
+      new_expr_ref = gen_false_expr();
   } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_pointer &&
              expr.value() == "NULL") {
     // Null is a symbol with pointer type.

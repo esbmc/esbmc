@@ -1041,7 +1041,7 @@ struct Ortor
       // True? Simplify to op2
       expr2tc c1 = op1;
       if(!(get_value(c1) == 0))
-        return true_expr;
+        return gen_true_expr();
     }
 
     if(is_constant(op2))
@@ -1049,7 +1049,7 @@ struct Ortor
       // True? Simplify to op1
       expr2tc c2 = op2;
       if(!(get_value(c2) == 0))
-        return true_expr;
+        return gen_true_expr();
     }
 
     // Two constants? Simplify to result of the or
@@ -1071,11 +1071,11 @@ or2t::do_simplify(bool second __attribute__((unused))) const
   if (is_not2t(side_1)) {
     const not2t &ref = to_not2t(side_1);
     if (ref.value == side_2)
-      return true_expr;
+      return gen_true_expr();
   } else if (is_not2t(side_2)) {
     const not2t &ref = to_not2t(side_2);
     if (ref.value == side_1)
-      return true_expr;
+      return gen_true_expr();
   }
 
   // Otherwise, default
@@ -1138,7 +1138,7 @@ struct Impliestor
     {
       expr2tc c1 = op1;
       if(get_value(c1) == 0)
-        return true_expr;
+        return gen_true_expr();
     }
 
     // Otherwise, the only other thing that will make this expr always true is
@@ -1147,7 +1147,7 @@ struct Impliestor
     {
       expr2tc c2 = op2;
       if(!(get_value(c2) == 0))
-        return true_expr;
+        return gen_true_expr();
     }
 
     return expr2tc();
@@ -1419,7 +1419,7 @@ typecast2t::do_simplify(bool second) const
       else if(is_bool_type(type))
       {
         const constant_int2t &theint = to_constant_int2t(simp);
-        return theint.value.is_zero() ? false_expr : true_expr;
+        return theint.value.is_zero() ? gen_false_expr() : gen_true_expr();
       }
       else if(is_floatbv_type(type))
       {
@@ -1454,7 +1454,7 @@ typecast2t::do_simplify(bool second) const
       else if(is_bool_type(type))
       {
         const constant_fixedbv2t &fbv = to_constant_fixedbv2t(simp);
-        return fbv.value.is_zero() ? false_expr : true_expr;
+        return fbv.value.is_zero() ? gen_false_expr() : gen_true_expr();
       }
     }
     else if (is_floatbv_type(simp) && is_number_type(type))
@@ -1479,7 +1479,7 @@ typecast2t::do_simplify(bool second) const
       }
       else if(is_bool_type(type))
       {
-        return fpbv.is_zero() ? false_expr : true_expr;
+        return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
       }
     }
   }
@@ -1844,7 +1844,7 @@ struct Lessthantor
     {
       expr2tc c1 = op1;
       if((get_value(c1) < 0) && is_unsignedbv_type(op2))
-        return true_expr;
+        return gen_true_expr();
     }
 
     if(is_constant(op1) && is_constant(op2))
@@ -1877,7 +1877,7 @@ struct Greaterthantor
     {
       expr2tc c2 = op2;
       if((get_value(c2) < 0) && is_unsignedbv_type(op1))
-        return true_expr;
+        return gen_true_expr();
     }
 
     if(is_constant(op1) && is_constant(op2))
@@ -1910,7 +1910,7 @@ struct Lessthanequaltor
     {
       expr2tc c1 = op1;
       if((get_value(c1) <= 0) && is_unsignedbv_type(op2))
-        return true_expr;
+        return gen_true_expr();
     }
 
     if(is_constant(op1) && is_constant(op2))
@@ -1943,7 +1943,7 @@ struct Greaterthanequaltor
     {
       expr2tc c2 = op2;
       if((get_value(c2) <= 0) && is_unsignedbv_type(op1))
-        return true_expr;
+        return gen_true_expr();
     }
 
     if(is_constant(op1) && is_constant(op2))
@@ -2010,7 +2010,7 @@ obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 
   if (is_symbol2t(a) && is_symbol2t(b)) {
     if (a == b)
-      return true_expr;
+      return gen_true_expr();
   } else if (is_index2t(a) && is_index2t(b)) {
     return obj_equals_addr_of(to_index2t(a).source_value,
                               to_index2t(b).source_value);
@@ -2020,9 +2020,9 @@ obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
   } else if (is_constant_string2t(a) && is_constant_string2t(b)) {
     bool val = (to_constant_string2t(a).value == to_constant_string2t(b).value);
     if (val)
-      return true_expr;
+      return gen_true_expr();
     else
-      return false_expr;
+      return gen_false_expr();
   }
 
   return expr2tc();
@@ -2039,7 +2039,7 @@ same_object2t::do_simplify(bool second __attribute__((unused))) const
   if (is_symbol2t(side_1) && is_symbol2t(side_2) &&
       to_symbol2t(side_1).get_symbol_name() == "NULL" &&
       to_symbol2t(side_1).get_symbol_name() == "NULL")
-    return true_expr;
+    return gen_true_expr();
 
   return expr2tc();
 }
