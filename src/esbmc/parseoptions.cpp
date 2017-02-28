@@ -370,9 +370,6 @@ int cbmc_parseoptionst::doit()
 
   set_verbosity_msg(*this);
 
-  // Depends on command line options and config
-  init_expr_constants();
-
   if(cmdline.isset("preprocess"))
   {
     preprocessing();

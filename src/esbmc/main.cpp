@@ -45,7 +45,6 @@ int main(int argc, const char **argv)
   // To avoid the static initialization order fiasco:
   type_poolt bees(true);
   type_pool = bees;
-  init_expr_constants();
   dereference_handlers_init();
 
   cbmc_parseoptionst parseoptions(argc, argv);

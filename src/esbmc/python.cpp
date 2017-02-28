@@ -188,7 +188,6 @@ init_esbmc_process(boost::python::object o)
   // Init esbmc Stuff. First the static order initialization fiasco.
   tp = new type_poolt(true);
   type_pool = *tp;
-  init_expr_constants();
   dereference_handlers_init();
 
   python_module_engaged = true;

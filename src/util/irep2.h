@@ -5027,24 +5027,6 @@ is_false(const expr2tc &expr)
     return false;
 }
 
-// To initialize the below at a defined time...
-void init_expr_constants(void);
-
-extern const expr2tc true_expr;
-extern const expr2tc false_expr;
-extern const constant_int2tc zero_u32;
-extern const constant_int2tc one_u32;
-extern const constant_int2tc zero_32;
-extern const constant_int2tc one_32;
-extern const constant_int2tc zero_u64;
-extern const constant_int2tc one_u64;
-extern const constant_int2tc zero_64;
-extern const constant_int2tc one_64;
-extern const constant_int2tc zero_ulong;
-extern const constant_int2tc one_ulong;
-extern const constant_int2tc zero_long;
-extern const constant_int2tc one_long;
-
 inline expr2tc
 gen_uint(const type2tc &type, unsigned long val)
 {
