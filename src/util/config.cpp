@@ -50,12 +50,6 @@ void configt::ansi_ct::set_32()
   word_size=32;
   wchar_t_width=4*8;
   alignment=4;
-
-  // Configure exprs we use as long / uints etc for this mode.
-  const_cast<constant_int2tc&>(zero_ulong) = zero_u32;
-  const_cast<constant_int2tc&>(one_ulong) = one_u32;
-  const_cast<constant_int2tc&>(zero_long) = zero_32;
-  const_cast<constant_int2tc&>(one_long) = one_32;
 }
 
 void configt::ansi_ct::set_64()
@@ -75,12 +69,6 @@ void configt::ansi_ct::set_64()
   word_size=64;
   wchar_t_width=4*8;
   alignment=4;
-
-  // Configure exprs we use as long / uints etc for this mode.
-  const_cast<constant_int2tc&>(zero_ulong) = zero_u64;
-  const_cast<constant_int2tc&>(one_ulong) = one_u64;
-  const_cast<constant_int2tc&>(zero_long) = zero_64;
-  const_cast<constant_int2tc&>(one_long) = one_64;
 }
 
 bool configt::set(const cmdlinet &cmdline)
