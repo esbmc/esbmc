@@ -14,9 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <map>
 #include <string>
 
-#include <ac_config.h>
-
-#include <assert.h>
+#include <cassert>
 #include "global.h"
 
 #define USE_DSTRING
