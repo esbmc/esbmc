@@ -101,28 +101,6 @@ const expr2tc& dereferencet::get_symbol(const expr2tc &expr)
 
 /************************* Expression decomposing code ************************/
 
-enum expr_deref_handler {
-  deref_recurse = 0,
-  deref_munge_guard,
-  deref_addrof,
-  deref_deref,
-  deref_nonscalar
-};
-
-static char deref_expr_handler_actions[expr2t::end_expr_id];
-
-void
-dereference_handlers_init(void)
-{
-  deref_expr_handler_actions[expr2t::and_id] = deref_munge_guard;
-  deref_expr_handler_actions[expr2t::or_id] = deref_munge_guard;
-  deref_expr_handler_actions[expr2t::if_id] = deref_munge_guard;
-  deref_expr_handler_actions[expr2t::address_of_id] = deref_addrof;
-  deref_expr_handler_actions[expr2t::dereference_id] = deref_deref;
-  deref_expr_handler_actions[expr2t::index_id] = deref_nonscalar;
-  deref_expr_handler_actions[expr2t::member_id] = deref_nonscalar;
-}
-
 void
 dereferencet::dereference_expr(
   expr2tc &expr,
@@ -133,46 +111,51 @@ dereferencet::dereference_expr(
   if (!has_dereference(expr))
     return;
 
-  switch (deref_expr_handler_actions[expr->expr_id]) {
-  case deref_recurse:
+  switch(expr->expr_id)
   {
-    expr.get()->Foreach_operand([this, &guard, &mode] (expr2tc &e) {
-        if (is_nil_expr(e))
-          return;
+    case expr2t::and_id:
+    case expr2t::or_id:
+    case expr2t::if_id:
+      dereference_guard_expr(expr, guard, mode);
+      break;
 
-        dereference_expr(e, guard, mode);
-      }
-    );
-    break;
+    case expr2t::address_of_id:
+      dereference_addrof_expr(expr, guard, mode);
+      break;
+
+    case expr2t::dereference_id:
+      dereference_deref(expr, guard, mode);
+      break;
+
+    case expr2t::index_id:
+    case expr2t::member_id:
+    {
+      // The result of this expression should be scalar: we're transitioning
+      // from a scalar result to a nonscalar result.
+
+      std::list<expr2tc> scalar_step_list;
+      expr2tc res = dereference_expr_nonscalar(expr, guard, mode,
+                                               scalar_step_list);
+      assert(scalar_step_list.size() == 0); // Should finish empty.
+
+      // If a dereference successfully occurred, replace expr at this level.
+      // XXX -- explain this better.
+      if (!is_nil_expr(res))
+        expr = res;
+      break;
+    }
+
+    default:
+    {
+      // Recurse over the operands
+      expr.get()->Foreach_operand([this, &guard, &mode] (expr2tc &e)
+        {
+          if (is_nil_expr(e)) return;
+          dereference_expr(e, guard, mode);
+        });
+      break;
+    }
   }
-  case deref_munge_guard:
-    dereference_guard_expr(expr, guard, mode);
-    break;
-  case deref_addrof:
-    dereference_addrof_expr(expr, guard, mode);
-    break;
-  case deref_deref:
-    dereference_deref(expr, guard, mode);
-    break;
-  case deref_nonscalar:
-  {
-    // The result of this expression should be scalar: we're transitioning
-    // from a scalar result to a nonscalar result.
-
-    std::list<expr2tc> scalar_step_list;
-    expr2tc res = dereference_expr_nonscalar(expr, guard, mode,
-                                             scalar_step_list);
-    assert(scalar_step_list.size() == 0); // Should finish empty.
-
-    // If a dereference successfully occurred, replace expr at this level.
-    // XXX -- explain this better.
-    if (!is_nil_expr(res))
-      expr = res;
-    break;
-  }
-  }
-
-  return;
 }
 
 void

@@ -37,7 +37,6 @@ public:
   irep_idt function;
 };
 
-void dereference_handlers_init(void);
 void build_bigint_python_class();
 void build_base_expr2t_python_class();
 void build_base_type2t_python_class();
@@ -188,7 +187,6 @@ init_esbmc_process(boost::python::object o)
   // Init esbmc Stuff. First the static order initialization fiasco.
   tp = new type_poolt(true);
   type_pool = *tp;
-  dereference_handlers_init();
 
   python_module_engaged = true;
   po = new cbmc_parseoptionst(argc, argv);
