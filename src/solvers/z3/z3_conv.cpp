@@ -1221,9 +1221,9 @@ z3_convt::get_bool(const smt_ast *a)
   }
 
   if (Z3_get_bool_value(ctx, e) == Z3_L_TRUE)
-    return true_expr;
+    return gen_true_expr();
   else
-    return false_expr;
+    return gen_false_expr();
 }
 
 expr2tc

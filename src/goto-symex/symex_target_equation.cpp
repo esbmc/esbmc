@@ -132,7 +132,7 @@ symex_target_equationt::renumber(
 void symex_target_equationt::convert(smt_convt &smt_conv)
 {
   smt_convt::ast_vec assertions;
-  const smt_ast *assumpt_ast = smt_conv.convert_ast(true_expr);
+  const smt_ast *assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
   for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
     convert_internal_step(smt_conv, assumpt_ast, assertions, *it);
@@ -151,8 +151,8 @@ void symex_target_equationt::convert_internal_step(
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
   bvt assert_bv;
-  const smt_ast *true_val = smt_conv.convert_ast(true_expr);
-  const smt_ast *false_val = smt_conv.convert_ast(false_expr);
+  const smt_ast *true_val = smt_conv.convert_ast(gen_true_expr());
+  const smt_ast *false_val = smt_conv.convert_ast(gen_false_expr());
 
   if (step.ignore) {
     step.cond_ast = true_val;
@@ -365,7 +365,7 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
     conv(_conv)
 {
   assert_vec_list.push_back(smt_convt::ast_vec());
-  assumpt_chain.push_back(conv.convert_ast(true_expr));
+  assumpt_chain.push_back(conv.convert_ast(gen_true_expr()));
   cvt_progress = SSA_steps.end();
 }
 

@@ -42,9 +42,6 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
     config.set(cmdline);
     config.options.set_option("keep-unused", true);
 
-    // Depends on command line options and config
-    init_expr_constants();
-
     if (!cmdline.isset("output")) {
       std::cerr << "Must set output file" << std::endl;
       return 1;
@@ -66,10 +63,6 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 
 int main(int argc, const char **argv)
 {
-  // To avoid the static initialization fiasco,
-  type_poolt bees(true);
-  type_pool = bees;
-
   c2goto_parseopt parseopt(argc, argv);
   return parseopt.main();
 }

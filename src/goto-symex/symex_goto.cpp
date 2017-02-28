@@ -44,7 +44,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   {
     auto rte = boost::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
-    equality2tc question(true_expr, new_guard);
+    equality2tc question(gen_true_expr(), new_guard);
     try {
       symex_slicet slicer;
       symex_target_equationt eq = dynamic_cast<const symex_target_equationt&>(*target);
@@ -168,7 +168,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       cur_state->assignment(guard_expr, new_rhs, false);
 
       target->assignment(
-        true_expr,
+        gen_true_expr(),
         guard_expr, guard_expr,
         new_rhs,
         cur_state->source,
@@ -318,7 +318,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     cur_state->assignment(new_lhs, rhs, true);
 
     target->assignment(
-      true_expr,
+      gen_true_expr(),
       new_lhs, lhs,
       rhs,
       cur_state->source,
@@ -335,7 +335,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   expr2tc negated_cond;
 
   if (is_true(guard)) {
-    negated_cond = false_expr;
+    negated_cond = gen_false_expr();
   } else {
     negated_cond = not2tc(guard);
   }

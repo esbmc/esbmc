@@ -126,9 +126,9 @@ mathsat_convt::get_bool(const smt_ast *a)
   check_msat_error(t);
 
   if (msat_term_is_true(env, t)) {
-    return true_expr;
+    return gen_true_expr();
   } else if (msat_term_is_false(env, t)) {
-    return false_expr;
+    return gen_false_expr();
   } else {
     std::cerr << "Boolean model value is neither true or false" << std::endl;
     abort();

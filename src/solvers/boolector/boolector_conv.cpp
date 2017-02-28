@@ -431,9 +431,9 @@ boolector_convt::get_bool(const smt_ast *a)
 {
   tvt t = l_get(a);
   if (t.is_true())
-    return true_expr;
+    return gen_true_expr();
   else if (t.is_false())
-    return false_expr;
+    return gen_false_expr();
   else
     return expr2tc();
 }

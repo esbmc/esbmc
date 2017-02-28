@@ -192,7 +192,7 @@ goto_symext::symex_mem(
     type2tc subtype;
     migrate_type(symbol.type.subtype(), subtype);
     expr2tc sym = symbol2tc(new_type, symbol.name);
-    expr2tc idx_val = zero_ulong;
+    expr2tc idx_val = gen_ulong(0);
     expr2tc idx = index2tc(subtype, sym, idx_val);
     rhs_addrof.get()->type =
       get_pointer_type(pointer_typet(symbol.type.subtype()));
@@ -245,17 +245,17 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
   symbol2tc sym(sym_type, dyn_info_arr_name);
 
   index2tc idx(get_bool_type(), sym, ptr_obj);
-  expr2tc truth = true_expr;
+  expr2tc truth = gen_true_expr();
   symex_assign_rec(idx, truth, guard);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
-  truth = true_expr;
+  truth = gen_true_expr();
   symex_assign_rec(valid_index_expr, truth, guard);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
-  expr2tc falseity = false_expr;
+  expr2tc falseity = gen_false_expr();
   symex_assign_rec(dealloc_index_expr, falseity, guard);
 
   type2tc sz_sym_type =
@@ -302,7 +302,7 @@ void goto_symext::symex_free(const expr2tc &expr)
     guardt g = cur_state->guard;
     g.add(item.guard);
     expr2tc offset = item.offset;
-    expr2tc eq = equality2tc(offset, zero_ulong);
+    expr2tc eq = equality2tc(offset, gen_ulong(0));
     g.guard_expr(eq);
     claim(eq, "Operand of free must have zero pointer offset");
   }
@@ -316,12 +316,12 @@ void goto_symext::symex_free(const expr2tc &expr)
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
-  expr2tc truth = true_expr;
+  expr2tc truth = gen_true_expr();
   symex_assign_rec(dealloc_index_expr, truth, guard);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
-  expr2tc falsity = false_expr;
+  expr2tc falsity = gen_false_expr();
   symex_assign_rec(valid_index_expr, falsity, guard);
 }
 
@@ -407,7 +407,7 @@ void goto_symext::symex_cpp_new(
   if(do_array)
   {
     symbol2tc sym(newtype, symbol.name);
-    index2tc idx(renamedtype2, sym, zero_ulong);
+    index2tc idx(renamedtype2, sym, gen_ulong(0));
     rhs.get()->ptr_obj = idx;
   }
   else
@@ -426,7 +426,7 @@ void goto_symext::symex_cpp_new(
 
   pointer_object2tc ptr_obj(pointer_type2(), lhs);
   index2tc idx(get_bool_type(), sym, ptr_obj);
-  expr2tc truth = true_expr;
+  expr2tc truth = gen_true_expr();
 
   symex_assign_rec(idx, truth, guard);
 

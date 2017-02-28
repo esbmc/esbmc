@@ -213,7 +213,7 @@ void goto_k_inductiont::duplicate_loop_body(
       t_goto->make_goto(_loop_exit);
       t_goto->location = _loop_exit->location;
       t_goto->function = _loop_exit->function;
-      t_goto->guard = true_expr;
+      t_goto->guard = gen_true_expr();
     }
   }
 
@@ -601,7 +601,7 @@ void goto_k_inductiont::assume_all_state_vector(goto_programt::targett& loop_exi
   goto_programt tmp_y;
   goto_programt::targett y=tmp_y.add_instruction();
   y->make_goto(u);
-  y->guard = true_expr;
+  y->guard = gen_true_expr();
 
   dest.destructive_append(tmp_v);
   dest.destructive_append(tmp_w);

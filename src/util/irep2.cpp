@@ -1140,11 +1140,6 @@ object_descriptor2t::get_root_object(void) const
 
 type_poolt::type_poolt(void)
 {
-  // This space is deliberately left blank
-}
-
-type_poolt::type_poolt(bool yolo __attribute__((unused)))
-{
   bool_type = type2tc(new bool_type2t());
   empty_type = type2tc(new empty_type2t());
 
@@ -2668,50 +2663,6 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::fo
 }
 
 /********************** Constants and explicit instantiations *****************/
-
-const expr2tc true_expr;
-const expr2tc false_expr;
-
-const constant_int2tc zero_u32;
-const constant_int2tc one_u32;
-const constant_int2tc zero_32;
-const constant_int2tc one_32;
-const constant_int2tc zero_u64;
-const constant_int2tc one_u64;
-const constant_int2tc zero_64;
-const constant_int2tc one_64;
-
-const constant_int2tc zero_ulong;
-const constant_int2tc one_ulong;
-const constant_int2tc zero_long;
-const constant_int2tc one_long;
-
-// More avoidance of static initialization order fiasco
-void
-init_expr_constants(void)
-{
-  const_cast<expr2tc&>(true_expr) = expr2tc(new constant_bool2t(true));
-  const_cast<expr2tc&>(false_expr) = expr2tc(new constant_bool2t(false));
-
-  const_cast<constant_int2tc&>(zero_u32)
-    = constant_int2tc(type_pool.get_uint(32), BigInt(0));
-  const_cast<constant_int2tc&>(one_u32)
-    = constant_int2tc(type_pool.get_uint(32), BigInt(1));
-  const_cast<constant_int2tc&>(zero_32)
-    = constant_int2tc(type_pool.get_int(32), BigInt(0));
-  const_cast<constant_int2tc&>(one_32)
-    = constant_int2tc(type_pool.get_int(32), BigInt(1));
-
-  const_cast<constant_int2tc&>(zero_u64)
-    = constant_int2tc(type_pool.get_uint(64), BigInt(0));
-  const_cast<constant_int2tc&>(one_u64)
-    = constant_int2tc(type_pool.get_uint(64), BigInt(1));
-  const_cast<constant_int2tc&>(zero_64)
-    = constant_int2tc(type_pool.get_int(64), BigInt(0));
-  const_cast<constant_int2tc&>(one_64)
-    = constant_int2tc(type_pool.get_int(64), BigInt(1));
-
-}
 
 std::string bool_type2t::field_names [esbmct::num_type_fields]  = {"","","","", ""};
 std::string empty_type2t::field_names [esbmct::num_type_fields]  =

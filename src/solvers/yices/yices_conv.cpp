@@ -112,9 +112,9 @@ yices_convt::l_get(smt_astt l)
   if (is_nil_expr(b))
     return tvt(tvt::TV_UNKNOWN);
 
-  if (b == true_expr)
+  if (b == gen_true_expr())
     return tvt(true);
-  else if (b == false_expr)
+  else if (b == gen_false_expr())
     return tvt(false);
   else
     return tvt(tvt::TV_UNKNOWN);
@@ -496,9 +496,9 @@ yices_convt::get_bool(smt_astt a)
     return expr2tc();
 
   if (val)
-    return true_expr;
+    return gen_true_expr();
   else
-    return false_expr;
+    return gen_false_expr();
 }
 
 expr2tc

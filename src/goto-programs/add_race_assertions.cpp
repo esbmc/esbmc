@@ -91,7 +91,7 @@ void w_guardst::add_initialization(goto_programt &goto_program) const
 
     t=goto_program.insert(t);
     t->type=ASSIGN;
-    t->code = code_assign2tc(new_sym, false_expr);
+    t->code = code_assign2tc(new_sym, gen_false_expr());
 
     t++;
   }

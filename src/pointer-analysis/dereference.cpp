@@ -101,28 +101,6 @@ const expr2tc& dereferencet::get_symbol(const expr2tc &expr)
 
 /************************* Expression decomposing code ************************/
 
-enum expr_deref_handler {
-  deref_recurse = 0,
-  deref_munge_guard,
-  deref_addrof,
-  deref_deref,
-  deref_nonscalar
-};
-
-static char deref_expr_handler_actions[expr2t::end_expr_id];
-
-void
-dereference_handlers_init(void)
-{
-  deref_expr_handler_actions[expr2t::and_id] = deref_munge_guard;
-  deref_expr_handler_actions[expr2t::or_id] = deref_munge_guard;
-  deref_expr_handler_actions[expr2t::if_id] = deref_munge_guard;
-  deref_expr_handler_actions[expr2t::address_of_id] = deref_addrof;
-  deref_expr_handler_actions[expr2t::dereference_id] = deref_deref;
-  deref_expr_handler_actions[expr2t::index_id] = deref_nonscalar;
-  deref_expr_handler_actions[expr2t::member_id] = deref_nonscalar;
-}
-
 void
 dereferencet::dereference_expr(
   expr2tc &expr,
@@ -133,46 +111,51 @@ dereferencet::dereference_expr(
   if (!has_dereference(expr))
     return;
 
-  switch (deref_expr_handler_actions[expr->expr_id]) {
-  case deref_recurse:
+  switch(expr->expr_id)
   {
-    expr.get()->Foreach_operand([this, &guard, &mode] (expr2tc &e) {
-        if (is_nil_expr(e))
-          return;
+    case expr2t::and_id:
+    case expr2t::or_id:
+    case expr2t::if_id:
+      dereference_guard_expr(expr, guard, mode);
+      break;
 
-        dereference_expr(e, guard, mode);
-      }
-    );
-    break;
+    case expr2t::address_of_id:
+      dereference_addrof_expr(expr, guard, mode);
+      break;
+
+    case expr2t::dereference_id:
+      dereference_deref(expr, guard, mode);
+      break;
+
+    case expr2t::index_id:
+    case expr2t::member_id:
+    {
+      // The result of this expression should be scalar: we're transitioning
+      // from a scalar result to a nonscalar result.
+
+      std::list<expr2tc> scalar_step_list;
+      expr2tc res = dereference_expr_nonscalar(expr, guard, mode,
+                                               scalar_step_list);
+      assert(scalar_step_list.size() == 0); // Should finish empty.
+
+      // If a dereference successfully occurred, replace expr at this level.
+      // XXX -- explain this better.
+      if (!is_nil_expr(res))
+        expr = res;
+      break;
+    }
+
+    default:
+    {
+      // Recurse over the operands
+      expr.get()->Foreach_operand([this, &guard, &mode] (expr2tc &e)
+        {
+          if (is_nil_expr(e)) return;
+          dereference_expr(e, guard, mode);
+        });
+      break;
+    }
   }
-  case deref_munge_guard:
-    dereference_guard_expr(expr, guard, mode);
-    break;
-  case deref_addrof:
-    dereference_addrof_expr(expr, guard, mode);
-    break;
-  case deref_deref:
-    dereference_deref(expr, guard, mode);
-    break;
-  case deref_nonscalar:
-  {
-    // The result of this expression should be scalar: we're transitioning
-    // from a scalar result to a nonscalar result.
-
-    std::list<expr2tc> scalar_step_list;
-    expr2tc res = dereference_expr_nonscalar(expr, guard, mode,
-                                             scalar_step_list);
-    assert(scalar_step_list.size() == 0); // Should finish empty.
-
-    // If a dereference successfully occurred, replace expr at this level.
-    // XXX -- explain this better.
-    if (!is_nil_expr(res))
-      expr = res;
-    break;
-  }
-  }
-
-  return;
 }
 
 void
@@ -598,7 +581,7 @@ dereferencet::build_reference_to(
   expr2tc &pointer_guard)
 {
   expr2tc value;
-  pointer_guard = false_expr;
+  pointer_guard = gen_false_expr();
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {
@@ -1028,7 +1011,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
       } else {
         // This is a valid access to this field. Extract it, recurse.
         value = member2tc(*it, value, struct_type.member_names[i]);
-        build_reference_rec(value, zero_ulong, type, guard, mode);
+        build_reference_rec(value, gen_ulong(0), type, guard, mode);
       }
       return;
     } else if (int_offset > m_offs &&
@@ -1335,7 +1318,7 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
   // So:
   std::list<std::pair<expr2tc, expr2tc> > resolved_list;
 
-  construct_struct_ref_from_dyn_offs_rec(value, offs, type, true_expr, mode,
+  construct_struct_ref_from_dyn_offs_rec(value, offs, type, gen_true_expr(), mode,
                                          resolved_list);
 
   if (resolved_list.size() == 0) {
@@ -1356,7 +1339,7 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
 
   // Finally, record an assertion that if none of those accesses were legal,
   // then it's an illegal access.
-  expr2tc accuml = false_expr;
+  expr2tc accuml = gen_false_expr();
   for (std::list<std::pair<expr2tc, expr2tc> >::const_iterator
        it = resolved_list.begin(); it != resolved_list.end(); it++) {
     accuml = or2tc(accuml, it->first);
@@ -1805,7 +1788,7 @@ dereferencet::check_alignment(unsigned long minwidth, const expr2tc offset,
   if (options.get_bool_option("int-encoding")) {
     expr2tc align = gen_ulong(minwidth);
     modulus2tc moded(align->type, offset, align);
-    neq = notequal2tc(moded, zero_ulong);
+    neq = notequal2tc(moded, gen_ulong(0));
   } else {
     bitand2tc anded(mask_expr->type, mask_expr, offset);
     neq = notequal2tc(anded, gen_ulong(0));

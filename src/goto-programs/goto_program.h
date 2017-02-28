@@ -77,7 +77,7 @@ public:
       \param[in] src an empty goto program
   */
   inline goto_programt &operator=(const goto_programt &src)
-                                  
+
   {
     // DO NOT COPY ME! I HAVE POINTERS IN ME!
     instructions.clear();
@@ -132,7 +132,7 @@ public:
     {
       type=_type;
       targets.clear();
-      guard = true_expr;
+      guard = gen_true_expr();
       code = expr2tc();
       inductive_step_instruction = false;
     }
@@ -215,7 +215,7 @@ public:
       loop_number(unsigned(0)),
       target_number(unsigned(-1))
     {
-      guard = true_expr;
+      guard = gen_true_expr();
     }
 
     inline instructiont(goto_program_instruction_typet _type):
@@ -226,7 +226,7 @@ public:
       loop_number(unsigned(0)),
       target_number(unsigned(-1))
     {
-      guard = true_expr;
+      guard = gen_true_expr();
     }
 
     //! swap two instructions
