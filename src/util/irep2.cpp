@@ -1140,11 +1140,6 @@ object_descriptor2t::get_root_object(void) const
 
 type_poolt::type_poolt(void)
 {
-  // This space is deliberately left blank
-}
-
-type_poolt::type_poolt(bool yolo __attribute__((unused)))
-{
   bool_type = type2tc(new bool_type2t());
   empty_type = type2tc(new empty_type2t());
 

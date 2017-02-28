@@ -184,10 +184,6 @@ init_esbmc_process(boost::python::object o)
   // out of parseoptions at the point where we would usually start BMC.
   argv[i++] = "--skip-bmc";
 
-  // Init esbmc Stuff. First the static order initialization fiasco.
-  tp = new type_poolt(true);
-  type_pool = *tp;
-
   python_module_engaged = true;
   po = new cbmc_parseoptionst(argc, argv);
   free(argv);
