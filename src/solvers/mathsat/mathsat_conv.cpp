@@ -76,7 +76,6 @@ mathsat_convt::mathsat_convt(bool int_encoding,
 
 mathsat_convt::~mathsat_convt(void)
 {
-  delete_all_asts();
   msat_destroy_env(env);
   _env = nullptr;
 }

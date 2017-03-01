@@ -76,7 +76,6 @@ z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
 
 z3_convt::~z3_convt()
 {
-  delete_all_asts();
 }
 
 void
