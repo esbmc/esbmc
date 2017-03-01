@@ -2265,31 +2265,19 @@ smt_convt::get(const expr2tc &expr)
     return get_bool(convert_ast(expr));
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
+  case type2t::floatbv_id:
     return get_bv(expr->type, convert_ast(expr));
   case type2t::fixedbv_id:
   {
-    // XXX -- again, another candidate for refactoring.
-    expr2tc tmp = get_bv(expr->type, convert_ast(expr));
-    if (is_nil_expr(tmp))
-      return tmp;
+    expr2tc bv = get_bv(expr->type, convert_ast(expr));
+    assert(!is_nil_expr(bv));
 
-    const constant_int2t &intval = to_constant_int2t(tmp);
-    uint64_t val = intval.value.to_ulong();
-    std::stringstream ss;
-    ss << val;
-    constant_exprt value_expr(migrate_type_back(expr->type));
-    value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
-    fixedbvt fbv;
-    fbv.from_expr(value_expr);
+    fixedbvt fbv(
+      constant_exprt(
+        integer2binary(to_constant_int2t(bv).value, expr->type->get_width()),
+        integer2string(to_constant_int2t(bv).value),
+        migrate_type_back(expr->type)));
     return constant_fixedbv2tc(expr->type, fbv);
-  }
-  case type2t::floatbv_id:
-  {
-    expr2tc tmp = get_bv(expr->type, convert_ast(expr));
-    if (is_nil_expr(tmp))
-      return expr2tc();
-
-    return tmp;
   }
   case type2t::array_id:
     return get_array(convert_ast(expr), expr->type);
