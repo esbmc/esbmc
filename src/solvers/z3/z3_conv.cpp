@@ -377,7 +377,7 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
 tvt
 z3_convt::l_get(const smt_ast *a)
 {
-  tvt result = tvt(tvt::TV_ASSUME);
+  tvt result = tvt(tvt::TV_UNKNOWN);
 
   expr2tc res = get_bool(a);
 
