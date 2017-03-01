@@ -48,7 +48,6 @@ public:
   ~mathsat_convt(void);
 
   virtual resultt dec_solve();
-  virtual tvt l_get(const smt_ast *a);
   virtual const std::string solver_text();
 
   virtual void assert_ast(const smt_ast *a);

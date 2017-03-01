@@ -378,24 +378,6 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   return;
 }
 
-tvt
-z3_convt::l_get(const smt_ast *a)
-{
-  tvt result = tvt(tvt::TV_ASSUME);
-
-  expr2tc res = get_bool(a);
-
-  if (!is_nil_expr(res) && is_constant_bool2t(res)) {
-    result = (to_constant_bool2t(res).is_true())
-             ? tvt(tvt::TV_TRUE) : tvt(tvt::TV_FALSE);
-  } else {
-    result = tvt(tvt::TV_UNKNOWN);
-  }
-
-
-  return result;
-}
-
 void
 z3_convt::assert_ast(const smt_ast *a)
 {

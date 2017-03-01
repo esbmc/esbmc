@@ -105,21 +105,6 @@ yices_convt::dec_solve()
   }
 }
 
-tvt
-yices_convt::l_get(smt_astt l)
-{
-  expr2tc b = get_bool(l);
-  if (is_nil_expr(b))
-    return tvt(tvt::TV_UNKNOWN);
-
-  if (b == gen_true_expr())
-    return tvt(true);
-  else if (b == gen_false_expr())
-    return tvt(false);
-  else
-    return tvt(tvt::TV_UNKNOWN);
-}
-
 const std::string
 yices_convt::solver_text()
 {
@@ -497,8 +482,8 @@ yices_convt::get_bool(smt_astt a)
 
   if (val)
     return gen_true_expr();
-  else
-    return gen_false_expr();
+
+  return gen_false_expr();
 }
 
 expr2tc

@@ -64,37 +64,6 @@ boolector_convt::dec_solve()
     return P_ERROR;
 }
 
-tvt
-boolector_convt::l_get(const smt_ast *l)
-{
-  assert(l->sort->id == SMT_SORT_BOOL);
-  const btor_smt_ast *ast = btor_ast_downcast(l);
-  const char *result = boolector_bv_assignment(btor, ast->e);
-
-  assert(result != NULL && "Boolector returned null bv assignment string");
-
-  tvt t;
-
-  switch (*result) {
-  case '1':
-    t = tvt(tvt::TV_TRUE);
-    break;
-  case '0':
-    t = tvt(tvt::TV_FALSE);
-    break;
-  case 'x':
-    t = tvt(tvt::TV_UNKNOWN);
-    break;
-  default:
-    std::cerr << "Boolector bv model string \"" << result << "\" not of the "
-              << "expected format" << std::endl;
-    abort();
-  }
-
-  boolector_free_bv_assignment(btor, result);
-  return t;
-}
-
 const std::string
 boolector_convt::solver_text()
 {
@@ -429,13 +398,24 @@ boolector_convt::mk_extract(const smt_ast *a, unsigned int high,
 expr2tc
 boolector_convt::get_bool(const smt_ast *a)
 {
-  tvt t = l_get(a);
-  if (t.is_true())
-    return gen_true_expr();
-  else if (t.is_false())
-    return gen_false_expr();
-  else
-    return expr2tc();
+  assert(a->sort->id == SMT_SORT_BOOL);
+  const btor_smt_ast *ast = btor_ast_downcast(a);
+  const char *result = boolector_bv_assignment(btor, ast->e);
+
+  assert(result != NULL && "Boolector returned null bv assignment string");
+
+  expr2tc res;
+  switch (*result) {
+  case '1':
+    res = gen_true_expr();
+    break;
+  case '0':
+    res = gen_false_expr();
+    break;
+  }
+
+  boolector_free_bv_assignment(btor, result);
+  return res;
 }
 
 static int64_t read_btor_string(const char *result, unsigned int len)

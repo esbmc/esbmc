@@ -176,8 +176,6 @@ public:
     return ss.str();
   }
 
-  virtual tvt l_get(const smt_ast *a);
-
   virtual void dump_SMT();
 
   // Some useful types

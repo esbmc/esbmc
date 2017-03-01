@@ -206,18 +206,6 @@ mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
   return result;
 }
 
-tvt
-mathsat_convt::l_get(const smt_ast *a)
-{
-  constant_bool2tc b = get_bool(a);
-  if (b->value)
-    return tvt(true);
-  else if (!b->value)
-    return tvt(false);
-  else
-    assert(0);
-}
-
 const std::string
 mathsat_convt::solver_text()
 {

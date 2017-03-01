@@ -67,7 +67,6 @@ public:
   virtual ~yices_convt();
 
   virtual resultt dec_solve();
-  virtual tvt l_get(const smt_ast *l);
   virtual const std::string solver_text();
 
   virtual void assert_ast(const smt_ast *a);

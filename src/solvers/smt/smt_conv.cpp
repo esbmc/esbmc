@@ -2637,3 +2637,15 @@ void smt_convt::dump_SMT()
 {
   std::cerr << "SMT dump not implemented for " << solver_text() << "\n";
 }
+
+tvt smt_convt::l_get(smt_astt a)
+{
+  expr2tc b = get_bool(a);
+  if (is_true(b))
+    return tvt(true);
+
+  if (is_false(b))
+    return tvt(false);
+
+  return tvt(tvt::TV_UNKNOWN);
+}

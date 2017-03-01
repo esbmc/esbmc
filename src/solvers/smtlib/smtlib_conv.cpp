@@ -543,20 +543,6 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
 expr2tc
 smtlib_convt::get_bool(smt_astt a)
 {
-  tvt res = l_get(a);
-  if (res.is_true())
-    return gen_true_expr();
-  else if (res.is_false())
-    return gen_false_expr();
-  else {
-    std::cerr << "Non-true, non-false value read from smtlib model" <<std::endl;
-    abort();
-  }
-}
-
-tvt
-smtlib_convt::l_get(const smt_ast *a)
-{
   fprintf(out_stream, "(get-value (");
 
   std::string output;
@@ -598,14 +584,11 @@ smtlib_convt::l_get(const smt_ast *a)
 //         "Unexpected valuation variable from smtlib solver");
 
   // And finally we have our value. It should be true or false.
-  tvt result;
+  expr2tc result;
   if (second.token == TOK_KW_TRUE) {
-    result = tvt(true);
+    result = gen_true_expr();
   } else if (second.token == TOK_KW_FALSE) {
-    result = tvt(false);
-  } else {
-    std::cerr << "Unexpected literal valuation from smtlib solver" << std::endl;
-    abort();
+    result = gen_false_expr();
   }
 
   delete smtlib_output;

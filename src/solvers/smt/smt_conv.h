@@ -525,7 +525,7 @@ public:
    *  unassigned.
    *  @param a The boolean sorted ast to fetch the value of.
    *  @return A three-valued return val, of the assignment to a. */
-  virtual tvt l_get(smt_astt a)=0;
+  virtual tvt l_get(smt_astt a);
 
   /** @} */
 

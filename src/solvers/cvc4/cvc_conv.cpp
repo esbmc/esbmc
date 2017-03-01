@@ -46,17 +46,6 @@ cvc_convt::dec_solve()
   }
 }
 
-tvt
-cvc_convt::l_get(const smt_ast *a)
-{
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
-  constant_bool2tc b = get_bool(ca);
-  if (b->value)
-    return tvt(true);
-  else
-    return tvt(false);
-}
-
 expr2tc
 cvc_convt::get_bool(const smt_ast *a)
 {
