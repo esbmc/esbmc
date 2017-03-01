@@ -382,7 +382,6 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
 
   // Attempt to read an integer.
   BigInt m;
-  bool was_integer = true;
   if (respval.token == TOK_DECIMAL) {
     m = string2integer(respval.data);
   } else if (respval.token == TOK_NUMERAL) {
@@ -395,28 +394,12 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
   } else if (respval.token == TOK_BINNUM) {
     std::string data = respval.data.substr(2);
     m = string2integer(data, 2);
-  } else {
-    was_integer = false;
   }
 
   // Generate the appropriate expr.
   expr2tc result;
-  if (is_bv_type(t)) {
-    assert(was_integer && "smtlib solver didn't provide integer response to "
-           "integer get-value");
-    result = constant_int2tc(t, m);
-  } else if (is_fixedbv_type(t)) {
-    assert(!int_encoding && "Can't parse reals right now in smtlib solver "
-           "responses");
-    assert(was_integer && "smtlib solver didn't provide integer/bv response to "
-           "fixedbv get-value");
-    const fixedbv_type2t &fbtype = to_fixedbv_type(t);
-    fixedbv_spect spec(fbtype.width, fbtype.integer_bits);
-    fixedbvt fbt;
-    fbt.spec = spec;
-    fbt.from_integer(m);
-    result = constant_fixedbv2tc(t, fbt);
-  } else if (is_bool_type(t)) {
+  if(is_bool_type(t))
+  {
     if (respval.token == TOK_KW_TRUE) {
       result = constant_bool2tc(true);
     } else if (respval.token == TOK_KW_FALSE) {
@@ -425,9 +408,9 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
       std::cerr << "Unexpected token reading value of boolean symbol from "
                    "smtlib solver" << std::endl;
     }
-  } else {
-    abort();
   }
+  else
+    result = constant_int2tc(t, m);
 
   delete smtlib_output;
   return result;

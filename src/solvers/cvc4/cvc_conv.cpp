@@ -56,7 +56,7 @@ cvc_convt::get_bool(const smt_ast *a)
 }
 
 expr2tc
-cvc_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a)
+cvc_convt::get_bv(const type2tc &t, const smt_ast *a)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
@@ -64,7 +64,7 @@ cvc_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a)
   // XXX, might croak on 32 bit machines. I'm not aware of a fixed-width api
   // for CVC right now.
   uint64_t val = foo.toInteger().getUnsignedLong();
-  return constant_int2tc(get_uint_type(foo.getSize()), BigInt(val));
+  return constant_int2tc(t, BigInt(val));
 }
 
 expr2tc

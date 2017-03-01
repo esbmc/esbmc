@@ -137,8 +137,7 @@ mathsat_convt::get_bool(const smt_ast *a)
 }
 
 expr2tc
-mathsat_convt::get_bv(const type2tc &_t,
-                      const smt_ast *a)
+mathsat_convt::get_bv(const type2tc &_t, const smt_ast *a)
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_get_model_value(env, mast->t);
@@ -179,7 +178,7 @@ mathsat_convt::get_bv(const type2tc &_t,
     abort();
   }
 
-  return constant_int2tc(get_uint64_type(), BigInt(finval));
+  return constant_int2tc(_t, BigInt(finval));
 }
 
 expr2tc

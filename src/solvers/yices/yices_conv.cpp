@@ -496,27 +496,22 @@ yices_convt::get_bv(const type2tc &t, smt_astt a)
   // XXX -- model fetching for ints needs to be better
   if (int_encoding) {
     int64_t val;
-    err = yices_get_int64_value(sat_model, ast->term, &val);
-    if (err)
-      return expr2tc();
-    else
-      return constant_int2tc(t, BigInt(val));
-  } else {
-    unsigned int width = t->get_width();
-    assert(width <= 64);
-    err = yices_get_bv_value(sat_model, ast->term, data);
-    if (err)
-      return expr2tc();
-
-    uint64_t val = 0;
-    int i;
-    for (i = width - 1; i >= 0; i--) {
-      val <<= 1;
-      val |= data[i];
-    }
-
+    yices_get_int64_value(sat_model, ast->term, &val);
     return constant_int2tc(t, BigInt(val));
   }
+
+  unsigned int width = t->get_width();
+  assert(width <= 64);
+  yices_get_bv_value(sat_model, ast->term, data);
+
+  uint64_t val = 0;
+  int i;
+  for (i = width - 1; i >= 0; i--) {
+    val <<= 1;
+    val |= data[i];
+  }
+
+  return constant_int2tc(t, BigInt(val));
 }
 
 expr2tc
