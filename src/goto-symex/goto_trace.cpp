@@ -132,7 +132,8 @@ counterexample_value(
   {
     value_string = from_expr(ns, identifier, value);
 
-    if (is_constant_expr(value))
+    // Don't print the bit-vector if we're running on integer/real mode
+    if (is_constant_expr(value) && !config.options.get_bool_option("ir"))
     {
       if (is_bv_type(value))
       {
