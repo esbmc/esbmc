@@ -27,14 +27,13 @@ void build_goto_trace(
   {
 
     const symex_target_equationt::SSA_stept &SSA_step=*it;
-    tvt result;
-    result=smt_conv.l_get(SSA_step.guard_ast);
+    tvt result = smt_conv.l_get(SSA_step.guard_ast);
 
-    if(result!=tvt(true) && result!=tvt(tvt::TV_ASSUME) && SSA_step.type != goto_trace_stept::ASSERT)
+    if(result != tvt(true))
       continue;
 
-    if(it->is_assignment() &&
-       SSA_step.assignment_type==symex_target_equationt::HIDDEN)
+    if(SSA_step.assignment_type == symex_target_equationt::HIDDEN
+       && it->is_assignment())
       continue;
 
     step_nr++;
@@ -69,21 +68,8 @@ void build_goto_trace(
         goto_trace_step.output_args.push_back(smt_conv.get(arg));
     }
 
-    if(SSA_step.is_assert() ||
-       SSA_step.is_assume())
-    {
-      result = smt_conv.l_get(SSA_step.cond_ast);
-      if ((result==tvt(tvt::TV_ASSUME) && SSA_step.comment.compare("arithmetic overflow on *")==0) ||
-    	 (result==tvt(false) && SSA_step.comment.compare("arithmetic overflow on *")==0)) {
-        goto_trace_step.guard = true;
-      } else if (result==tvt(tvt::TV_ASSUME) && SSA_step.comment.compare("unwinding assertion loop")==0) {
-        goto_trace_step.guard = false;
-      } else if (result==tvt(tvt::TV_UNKNOWN)) {
-        goto_trace_step.guard = true;
-      } else {
-        goto_trace_step.guard = result.is_true();
-      }
-    }
+    if(SSA_step.is_assert() || SSA_step.is_assume())
+      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond_ast).is_false();
   }
 }
 
