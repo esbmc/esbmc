@@ -137,7 +137,7 @@ counterexample_value(
       if (is_bv_type(value))
       {
         value_string +=
-          " (" + integer2string(to_constant_int2t(value).value) + ")";
+          " (" + integer2binary(to_constant_int2t(value).value, value->type->get_width()) + ")";
       }
       else if (is_fixedbv_type(value))
       {
