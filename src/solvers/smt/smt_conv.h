@@ -88,7 +88,9 @@
  *  @see smt_convt::mk_func_app
  */
 
-class smt_convt; // Forward dec.
+// Forward dec.
+class fp_convt;
+class smt_convt;
 
 /** Identifier for SMT sort kinds
  *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own
@@ -363,8 +365,10 @@ public:
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
 #include "smt_tuple.h"
-// Also, array interface
+// The array interface
 #include "smt_array.h"
+// And the fp converter
+#include "fp_conv.h"
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
@@ -625,52 +629,6 @@ public:
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w) = 0;
 
-  /** Create a floating point bitvector
-   *  @param thereal the ieee float number
-   *  @param ew Exponent width, in bits, of the bitvector to create.
-   *  @param sw Significand width, in bits, of the bitvector to create.
-   *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvfloat(const ieee_floatt &thereal,
-                                  unsigned ew, unsigned sw) = 0;
-
-  /** Create a NaN floating point bitvector
-   *  @param ew Exponent width, in bits, of the bitvector to create.
-   *  @param sw Significand width, in bits, of the bitvector to create.
-   *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw) = 0;
-
-  /** Create a (+/-)inf floating point bitvector
-   *  @param sgn Whether this bitvector is negative or positive.
-   *  @param ew Exponent width, in bits, of the bitvector to create.
-   *  @param sw Significand width, in bits, of the bitvector to create.
-   *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw) = 0;
-
-  /** Create a rounding mode to be used by floating point cast and arith ops
-   *  @param rm the kind of rounding mode
-   *  @return The newly created rounding mode smt_ast. */
-  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm) = 0;
-
-  /** Typecast from a floating point
-   *  @param cast the cast expression
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast) = 0;
-
-  /** Typecast to a floating point
-   *  @param cast the cast expression
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast) = 0;
-
-  /** Calculate the nearby int from a floating point, considering the rounding mode
-   *  @param expr the nearby int expression
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr) = 0;
-
-  /** Convert the ieee arithmetic operations (add, sub, mul, div, mod)
-   *  @param expr the arithmetic operations
-   *  @return The newly created cast smt_ast. */
-  virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr) = 0;
-
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.
    *  @return The newly created terminal smt_ast of this boolean. */
@@ -866,6 +824,8 @@ public:
   void set_tuple_iface(tuple_iface *iface);
   /** Stores handle for the array interface. */
   void set_array_iface(array_iface *iface);
+  /** Stores handle for the floating-point interface. */
+  void set_fp_conv(fp_convt *iface);
   /** Store a new address-allocation record into the address space accounting.
    *  idx indicates the object number of this record. */
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
@@ -1094,6 +1054,7 @@ public:
 
   tuple_iface *tuple_api;
   array_iface *array_api;
+  fp_convt *fp_api;
 
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.

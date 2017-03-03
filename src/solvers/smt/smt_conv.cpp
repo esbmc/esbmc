@@ -71,6 +71,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
 {
   tuple_api = NULL;
   array_api = NULL;
+  fp_api = NULL;
 
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -135,6 +136,13 @@ smt_convt::set_array_iface(array_iface *iface)
 {
   assert(array_api == NULL && "set_array_iface should only be called once");
   array_api = iface;
+}
+
+void
+smt_convt::set_fp_conv(fp_convt *iface)
+{
+  assert(fp_api == NULL && "set_fp_iface should only be called once");
+  fp_api = iface;
 }
 
 void
@@ -582,14 +590,14 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 3);
-    a = mk_smt_bvfloat_arith_ops(expr);
+    a = fp_api->mk_smt_bvfloat_arith_ops(expr);
     break;
   }
   case expr2t::ieee_fma_id:
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 4);
-    a = mk_smt_bvfloat_arith_ops(expr);
+    a = fp_api->mk_smt_bvfloat_fma(expr);
     break;
   }
   case expr2t::modulus_id:
@@ -681,7 +689,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::nearbyint_id:
   {
-    a = mk_smt_nearbyint_from_float(to_nearbyint2t(expr));
+    a = fp_api->mk_smt_nearbyint_from_float(to_nearbyint2t(expr));
     break;
   }
   case expr2t::if_id:
@@ -1393,13 +1401,13 @@ smt_convt::convert_terminal(const expr2tc &expr)
       unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
       unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
       if(thereal.value.is_NaN())
-        return mk_smt_bvfloat_nan(exponent_width, fraction_width);
+        return fp_api->mk_smt_bvfloat_nan(exponent_width, fraction_width);
 
       bool sign = thereal.value.get_sign();
       if(thereal.value.is_infinity())
-        return mk_smt_bvfloat_inf(sign, exponent_width, fraction_width);
+        return fp_api->mk_smt_bvfloat_inf(sign, exponent_width, fraction_width);
 
-      return mk_smt_bvfloat(thereal.value, exponent_width, fraction_width);
+      return fp_api->mk_smt_bvfloat(thereal.value, exponent_width, fraction_width);
     }
   }
   case expr2t::constant_bool_id:
@@ -1584,7 +1592,7 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
     ieee_floatt::rounding_modet rm =
       static_cast<ieee_floatt::rounding_modet>
         (to_constant_int2t(expr).value.to_int64());
-    return mk_smt_bvfloat_rm(rm);
+    return fp_api->mk_smt_bvfloat_rm(rm);
   }
 
   assert(is_symbol2t(expr));
@@ -1611,10 +1619,10 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
     mk_func_app(bs, SMT_FUNC_EQ, symbol,
       mk_smt_bvint(BigInt(2), false, get_int32_type()->get_width()));
 
-  smt_astt ne = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_EVEN);
-  smt_astt mi = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_MINUS_INF);
-  smt_astt pi = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_PLUS_INF);
-  smt_astt ze = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+  smt_astt ne = fp_api->mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt mi = fp_api->mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_MINUS_INF);
+  smt_astt pi = fp_api->mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_PLUS_INF);
+  smt_astt ze = fp_api->mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
 
   smt_astt ite2 =
     mk_func_app(

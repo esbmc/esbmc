@@ -45,7 +45,7 @@ public:
   BoolectorNode *e;
 };
 
-class boolector_convt : public smt_convt, public array_iface
+class boolector_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
   typedef hash_map_cont<std::string, smt_ast *, std::hash<std::string> >
@@ -64,20 +64,11 @@ public:
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
                                const smt_ast * const *args,
                                unsigned int numargs);
-  virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
+  virtual smt_sortt mk_sort(const smt_sort_kind k, ...);
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign);
   virtual smt_ast *mk_smt_real(const std::string &str);
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
-  virtual smt_ast *mk_smt_bvfloat(const ieee_floatt &thereal,
-                                  unsigned ew, unsigned sw);
-  virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
-  virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);
-  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm);
-  virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast);
-  virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast);
-  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr);
-  virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr);
   virtual smt_ast *mk_smt_bool(bool val);
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s,

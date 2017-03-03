@@ -10,17 +10,19 @@ smt_convt *
 create_new_boolector_solver(bool int_encoding, const namespacet &ns,
                             const optionst &options,
                             tuple_iface **tuple_api __attribute__((unused)),
-                            array_iface **array_api)
+                            array_iface **array_api,
+                            fp_convt **fp_api __attribute__((unused)))
 {
   boolector_convt *conv =
     new boolector_convt(int_encoding, ns, options);
   *array_api = static_cast<array_iface*>(conv);
+  *fp_api = static_cast<fp_convt*>(conv);
   return conv;
 }
 
 boolector_convt::boolector_convt(bool int_encoding,
                                  const namespacet &ns, const optionst &options)
-  : smt_convt(int_encoding, ns), array_iface(false, false)
+  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(ctx)
 {
 
   if (int_encoding) {
@@ -208,7 +210,7 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
 }
 
-smt_sort *
+smt_sortt
 boolector_convt::mk_sort(const smt_sort_kind k, ...)
 {
   // Boolector doesn't have any special handling for sorts, they're all always
@@ -263,58 +265,6 @@ smt_ast *
 boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 {
   std::cerr << "Boolector can't create Real sorts" << std::endl;
-  abort();
-}
-
-smt_ast *
-boolector_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                unsigned ew, unsigned sw)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt
-boolector_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt
-boolector_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
   abort();
 }
 

@@ -6,15 +6,17 @@ smt_convt *
 create_new_cvc_solver(bool int_encoding, const namespacet &ns,
                       const optionst &opts __attribute__((unused)),
                       tuple_iface **tuple_api __attribute__((unused)),
-                      array_iface **array_api)
+                      array_iface **array_api,
+                      fp_convt **fp_api __attribute__((unused)))
 {
   cvc_convt *conv = new cvc_convt(int_encoding, ns);
   *array_api = static_cast<array_iface*>(conv);
+  *fp_api = static_cast<fp_convt*>(conv);
   return conv;
 }
 
 cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
-   : smt_convt(int_encoding, ns), array_iface(false, false),
+   : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(ctx),
      em(), smt(&em), sym_tab()
 {
   // Already initialized stuff in the constructor list,
@@ -241,7 +243,7 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   return new cvc_smt_ast(this, s, e);
 }
 
-smt_sort *
+smt_sortt
 cvc_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
@@ -259,7 +261,6 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
   {
     uint = va_arg(ap, unsigned long);
     thebool = va_arg(ap, int);
-    thebool = thebool;
     CVC4::BitVectorType t = em.mkBitVectorType(uint);
     return new cvc_smt_sort(k, t, uint);
   }
@@ -304,55 +305,6 @@ cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
   CVC4::BitVector bv = CVC4::BitVector(w, (uint64_t)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
   return new cvc_smt_ast(this, s, e);
-}
-
-smt_ast* cvc_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                   unsigned ew, unsigned sw)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt cvc_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
-{
-  std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-  abort();
 }
 
 smt_ast *

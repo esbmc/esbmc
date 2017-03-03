@@ -60,7 +60,7 @@ public:
   std::string symname;
 };
 
-class yices_convt : public smt_convt, public array_iface, public tuple_iface
+class yices_convt : public smt_convt, public array_iface, public tuple_iface, public fp_convt
 {
 public:
   yices_convt(bool int_encoding, const namespacet &ns);
@@ -80,15 +80,6 @@ public:
   virtual smt_astt mk_smt_real(const std::string &str);
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
-  virtual smt_astt mk_smt_bvfloat(const ieee_floatt &thereal,
-                                  unsigned ew, unsigned sw);
-  virtual smt_astt mk_smt_bvfloat_nan(unsigned ew, unsigned sw);
-  virtual smt_astt mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw);
-  virtual smt_astt mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm);
-  virtual smt_astt mk_smt_typecast_from_bvfloat(const typecast2t &cast);
-  virtual smt_astt mk_smt_typecast_to_bvfloat(const typecast2t &cast);
-  virtual smt_astt mk_smt_nearbyint_from_float(const nearbyint2t &expr);
-  virtual smt_astt mk_smt_bvfloat_arith_ops(const expr2tc &expr);
   virtual smt_astt mk_smt_bool(bool val);
   virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_astt mk_array_symbol(const std::string &name, const smt_sort *s,

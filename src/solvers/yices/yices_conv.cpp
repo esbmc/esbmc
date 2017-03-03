@@ -22,10 +22,12 @@ smt_convt *
 create_new_yices_solver(bool int_encoding, const namespacet &ns,
                               const optionst &opts __attribute__((unused)),
                               tuple_iface **tuple_api __attribute__((unused)),
-                              array_iface **array_api)
+                              array_iface **array_api,
+                              fp_convt **fp_api)
 {
   yices_convt *conv = new yices_convt(int_encoding, ns);
   *array_api = static_cast<array_iface*>(conv);
+  *fp_api = static_cast<fp_convt*>(conv);
   // As illustrated by 01_cbmc_Pointer4, there is something broken in yices
   // tuples. Specifically, the implication of (p != NULL) doesn't seem to feed
   // through to the later dereference, which fails.
@@ -34,7 +36,7 @@ create_new_yices_solver(bool int_encoding, const namespacet &ns,
 }
 
 yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false),
+  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(ctx),
     sat_model(NULL)
 {
   yices_init();
@@ -136,9 +138,9 @@ yices_convt::assert_ast(smt_astt a)
 }
 
 smt_astt
-yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
-                             smt_astt const *args,
-                             unsigned int numargs)
+yices_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
+                         const smt_ast * const *args,
+                         unsigned int numargs)
 {
   const yices_smt_ast *asts[4];
   unsigned int i;
@@ -364,55 +366,6 @@ yices_convt::mk_smt_bvint(const mp_integer &theint,
   term_t term = yices_bvconst_uint64(w, theint.to_int64());
   smt_sortt s = mk_sort(SMT_SORT_BV, w, false);
   return new yices_smt_ast(this, s, term);
-}
-
-smt_astt yices_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                     unsigned ew, unsigned sw)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
-}
-
-smt_astt yices_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
-{
-  std::cerr << "Yices can't create floating point sorts" << std::endl;
-  abort();
 }
 
 smt_astt
