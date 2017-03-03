@@ -1346,15 +1346,15 @@ smt_astt z3_convt::mk_smt_bvfloat_fma(const expr2tc &expr)
   unsigned sw = to_floatbv_type(expr->type).fraction;
   smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
 
-  // Sides
+  // Operands
   smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
   const z3_smt_ast *ms1 = z3_smt_downcast(s1);
 
   smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
   const z3_smt_ast *ms2 = z3_smt_downcast(s2);
 
-  smt_astt v3 = convert_ast(*expr->get_sub_expr(3));
-  const z3_smt_ast *mv3 = z3_smt_downcast(v3);
+  smt_astt s3 = convert_ast(*expr->get_sub_expr(3));
+  const z3_smt_ast *mv3 = z3_smt_downcast(s3);
 
   return new_ast(z3_ctx.fpa_fma(mrm->e, ms1->e, ms2->e, mv3->e), s);
 }
