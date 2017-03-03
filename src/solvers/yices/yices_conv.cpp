@@ -36,7 +36,7 @@ create_new_yices_solver(bool int_encoding, const namespacet &ns,
 }
 
 yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(ctx),
+  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this),
     sat_model(NULL)
 {
   yices_init();

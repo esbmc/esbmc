@@ -22,7 +22,7 @@ create_new_boolector_solver(bool int_encoding, const namespacet &ns,
 
 boolector_convt::boolector_convt(bool int_encoding,
                                  const namespacet &ns, const optionst &options)
-  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(ctx)
+  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
 {
 
   if (int_encoding) {

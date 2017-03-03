@@ -65,9 +65,8 @@ create_new_mathsat_solver(bool int_encoding, const namespacet &ns,
   return conv;
 }
 
-mathsat_convt::mathsat_convt(bool int_encoding,
-                             const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(ctx)
+mathsat_convt::mathsat_convt(bool int_encoding, const namespacet &ns)
+  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
 {
   cfg = msat_parse_config(mathsat_config);
   msat_set_option(cfg, "model_generation", "true");
