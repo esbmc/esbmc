@@ -299,7 +299,6 @@ smt_sortt
 yices_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
-  unsigned long uint;
 
   va_start(ap, k);
   switch(k) {
@@ -309,7 +308,7 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
   }
   case SMT_SORT_INT:
   {
-    return new yices_smt_sort(k, yices_int_type(), 1);
+    return new yices_smt_sort(k, yices_int_type(), 0);
   }
   case SMT_SORT_REAL:
   {
@@ -331,8 +330,14 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
   }
   case SMT_SORT_BV:
   {
-    uint = va_arg(ap, unsigned long);
+    unsigned long uint = va_arg(ap, unsigned long);
     return new yices_smt_sort(k, yices_bv_type(uint), uint);
+  }
+  case SMT_SORT_FLOATBV:
+  {
+    unsigned ew = va_arg(ap, unsigned long);
+    unsigned sw = va_arg(ap, unsigned long);
+    return mk_bvfloat_sort(ew, sw);
   }
   default:
     std::cerr << "Unimplemented sort " << k << " in yices mk_sort" << std::endl;

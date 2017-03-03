@@ -216,38 +216,43 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
   // Boolector doesn't have any special handling for sorts, they're all always
   // explicit arguments to functions. So, just use the base smt_sort class.
   va_list ap;
-  unsigned long uint;
 
   va_start(ap, k);
-  switch (k) {
-  case SMT_SORT_INT:
-  case SMT_SORT_REAL:
-    std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
-    abort();
-  case SMT_SORT_BV:
-    uint = va_arg(ap, unsigned long);
-    return new boolector_smt_sort(k, boolector_bitvec_sort(btor, uint), uint);
-  case SMT_SORT_ARRAY:
+  switch (k)
   {
-    const boolector_smt_sort* dom = va_arg(ap, boolector_smt_sort *); // Consider constness?
-    const boolector_smt_sort* range = va_arg(ap, boolector_smt_sort *);
+    case SMT_SORT_INT:
+    case SMT_SORT_REAL:
+      std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
+      abort();
+    case SMT_SORT_BV:
+    {
+      unsigned long uint = va_arg(ap, unsigned long);
+      return new boolector_smt_sort(k, boolector_bitvec_sort(btor, uint), uint);
+    }
+    case SMT_SORT_ARRAY:
+    {
+      const boolector_smt_sort* dom = va_arg(ap, boolector_smt_sort *); // Consider constness?
+      const boolector_smt_sort* range = va_arg(ap, boolector_smt_sort *);
 
-    assert(int_encoding || dom->data_width != 0);
+      assert(int_encoding || dom->data_width != 0);
 
-    // The range data width is allowed to be zero, which happens if the range
-    // is not a bitvector / integer
-    unsigned int data_width = range->data_width;
-    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
-      data_width = 1;
+      // The range data width is allowed to be zero, which happens if the range
+      // is not a bitvector / integer
+      unsigned int data_width = range->data_width;
+      if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
+        data_width = 1;
 
-    return new boolector_smt_sort(k, boolector_array_sort(btor, dom->t, range->t),
-                                  data_width, dom->data_width, range);
-  }
-  case SMT_SORT_BOOL:
-    return new boolector_smt_sort(k, boolector_bool_sort(btor));
-  case SMT_SORT_FLOATBV:
-    std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-    abort();
+      return new boolector_smt_sort(k, boolector_array_sort(btor, dom->t, range->t),
+                                    data_width, dom->data_width, range);
+    }
+    case SMT_SORT_BOOL:
+      return new boolector_smt_sort(k, boolector_bool_sort(btor));
+    case SMT_SORT_FLOATBV:
+    {
+      unsigned ew = va_arg(ap, unsigned long);
+      unsigned sw = va_arg(ap, unsigned long);
+      return mk_bvfloat_sort(ew, sw);
+    }
   }
 
   std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;

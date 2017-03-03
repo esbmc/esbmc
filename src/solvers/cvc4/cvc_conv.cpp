@@ -247,8 +247,6 @@ smt_sortt
 cvc_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
-  unsigned long uint;
-  int thebool;
 
   va_start(ap, k);
   switch (k) {
@@ -259,8 +257,7 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
   }
   case SMT_SORT_BV:
   {
-    uint = va_arg(ap, unsigned long);
-    thebool = va_arg(ap, int);
+    unsigned long uint = va_arg(ap, unsigned long);
     CVC4::BitVectorType t = em.mkBitVectorType(uint);
     return new cvc_smt_sort(k, t, uint);
   }
@@ -273,8 +270,9 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
   }
   case SMT_SORT_FLOATBV:
   {
-    std::cerr << "CVC4 can't create floating point sorts" << std::endl;
-    abort();
+    unsigned ew = va_arg(ap, unsigned long);
+    unsigned sw = va_arg(ap, unsigned long);
+    return mk_bvfloat_sort(ew, sw);
   }
   default:
     std::cerr << "Unimplemented smt sort " << k << " in CVC mk_sort"
