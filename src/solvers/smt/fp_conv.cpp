@@ -92,9 +92,10 @@ smt_sortt fp_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
   abort();
 }
 
-expr2tc fp_convt::get_fpbv(smt_astt a)
+expr2tc fp_convt::get_fpbv(const type2tc &t, smt_astt a)
 {
   std::cerr << "Chosen solver doesn't support floating-point numbers (cex)\n";
+  (void) t;
   (void) a;
   abort();
 }

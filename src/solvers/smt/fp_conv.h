@@ -71,10 +71,11 @@ public:
    *  @return The floating-point representation of the type, wrapped in an smt_sort. */
   virtual smt_sortt mk_fpbv_sort(const unsigned ew, const unsigned sw);
 
-  /** Extract the assignment to a bitvector from the SMT solvers model.
+  /** Extract the assignment to a floating-point from the SMT solvers model.
+   *  @param t The AST type
    *  @param a The AST whos value we wish to know.
-   *  @return Expression representation of a's value, as a constant_int2tc */
-  virtual expr2tc get_fpbv(smt_astt a);
+   *  @return Expression representation of a's value, as a constant_floatbv2tc */
+  virtual expr2tc get_fpbv(const type2tc &t, smt_astt a);
 
   smt_convt *ctx;
 };
