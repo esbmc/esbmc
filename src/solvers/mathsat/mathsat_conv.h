@@ -83,8 +83,11 @@ public:
 
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
-  expr2tc get_array_elem(const smt_ast *array, uint64_t idx,
-                         const type2tc &elem_sort);
+  virtual expr2tc get_fpbv(const type2tc &t, smt_astt a);
+  expr2tc get_array_elem(
+    const smt_ast *array,
+    uint64_t idx,
+    const type2tc &elem_sort);
 
   virtual const smt_ast *convert_array_of(smt_astt init_val,
                                           unsigned long domain_width);

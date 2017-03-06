@@ -1219,6 +1219,8 @@ z3_convt::get_bool(const smt_ast *a)
 expr2tc
 z3_convt::get_bv(const type2tc &t, const smt_ast *a)
 {
+  assert(is_bv_type(t));
+
   const z3_smt_ast *za = z3_smt_downcast(a);
 
   z3::expr e = za->e;
@@ -1229,37 +1231,45 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
     return expr2tc();
   }
 
-  if (Z3_get_ast_kind(z3_ctx, e) == Z3_NUMERAL_AST)
-  {
-    std::string value = Z3_get_numeral_string(z3_ctx, e);
-    return constant_int2tc(t, BigInt(value.c_str()));
-  }
-  else if (Z3_get_ast_kind(z3_ctx, e) == Z3_APP_AST)
-  {
-    // floatbv?
-    if(!is_floatbv_type(t))
-      return expr2tc();
+  assert (Z3_get_ast_kind(z3_ctx, e) == Z3_NUMERAL_AST);
 
-    unsigned ew = Z3_fpa_get_ebits(z3_ctx, e.get_sort());
+  std::string value = Z3_get_numeral_string(z3_ctx, e);
+  return constant_int2tc(t, BigInt(value.c_str()));
+}
 
-    // Remove an extra bit added when creating the sort,
-    // because we represent the hidden bit like Z3 does
-    unsigned sw = Z3_fpa_get_sbits(z3_ctx, e.get_sort()) - 1;
+expr2tc z3_convt::get_fpbv(const type2tc& t, smt_astt a)
+{
+  assert(is_floatbv_type(t));
 
-    ieee_float_spect spec(sw, ew);
-    ieee_floatt value(spec);
+  const z3_smt_ast *za = z3_smt_downcast(a);
 
-    Z3_ast v;
-    if(Z3_model_eval(z3_ctx, model, Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
-    {
-      ieee_floatt number(spec);
-      number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
-
-      return constant_floatbv2tc(t, number);
-    }
+  z3::expr e = za->e;
+  try {
+    e = model.eval(e, false);
+  } catch (z3::exception &e) {
+    // No model value
+    return expr2tc();
   }
 
-  return expr2tc();
+  assert(Z3_get_ast_kind(z3_ctx, e) == Z3_APP_AST);
+
+  unsigned ew = Z3_fpa_get_ebits(z3_ctx, e.get_sort());
+
+  // Remove an extra bit added when creating the sort,
+  // because we represent the hidden bit like Z3 does
+  unsigned sw = Z3_fpa_get_sbits(z3_ctx, e.get_sort()) - 1;
+
+  ieee_float_spect spec(sw, ew);
+  ieee_floatt value(spec);
+
+  Z3_ast v;
+  if(!Z3_model_eval(z3_ctx, model, Z3_mk_fpa_to_ieee_bv(z3_ctx, e), 1, &v))
+    return expr2tc();
+
+  ieee_floatt number(spec);
+  number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
+
+  return constant_floatbv2tc(t, number);
 }
 
 expr2tc

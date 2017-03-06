@@ -86,8 +86,11 @@ public:
 
   virtual expr2tc get_bool(const smt_ast *a);
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
-  virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
-                                 const type2tc &subtype);
+  virtual expr2tc get_fpbv(const type2tc &t, smt_astt a);
+  virtual expr2tc get_array_elem(
+    const smt_ast *array,
+    uint64_t index,
+    const type2tc &subtype);
 
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);

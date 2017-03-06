@@ -140,6 +140,8 @@ mathsat_convt::get_bool(const smt_ast *a)
 expr2tc
 mathsat_convt::get_bv(const type2tc &_t, const smt_ast *a)
 {
+  assert(is_bv_type(_t));
+
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_get_model_value(env, mast->t);
   check_msat_error(t);
@@ -158,18 +160,6 @@ mathsat_convt::get_bv(const type2tc &_t, const smt_ast *a)
   char buffer[mpz_sizeinbase(num, 10) + 2];
   mpz_get_str(buffer, 10, num);
 
-  if(is_floatbv_type(_t))
-  {
-    ieee_float_spect spec(
-      to_floatbv_type(_t).fraction,
-      to_floatbv_type(_t).exponent);
-
-    ieee_floatt number(spec);
-    number.unpack(BigInt(buffer));
-
-    return constant_floatbv2tc(_t, number);
-  }
-
   char *foo = buffer;
   int64_t finval = strtoll(buffer, &foo, 10);
 
@@ -180,6 +170,38 @@ mathsat_convt::get_bv(const type2tc &_t, const smt_ast *a)
   }
 
   return constant_int2tc(get_uint64_type(), BigInt(finval));
+}
+
+expr2tc mathsat_convt::get_fpbv(const type2tc& _t, smt_astt a)
+{
+  assert(is_floatbv_type(_t));
+
+  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
+  msat_term t = msat_get_model_value(env, mast->t);
+  check_msat_error(t);
+
+  // GMP rational value object.
+  mpq_t val;
+  mpq_init(val);
+
+  msat_term_to_number(env, t, val);
+  check_msat_error(t);
+  msat_free(msat_term_repr(t));
+
+  mpz_t num;
+  mpz_init(num);
+  mpz_set(num, mpq_numref(val));
+  char buffer[mpz_sizeinbase(num, 10) + 2];
+  mpz_get_str(buffer, 10, num);
+
+  ieee_float_spect spec(
+    to_floatbv_type(_t).fraction,
+    to_floatbv_type(_t).exponent);
+
+  ieee_floatt number(spec);
+  number.unpack(BigInt(buffer));
+
+  return constant_floatbv2tc(_t, number);
 }
 
 expr2tc
