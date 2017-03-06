@@ -590,14 +590,14 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 3);
-    a = fp_api->mk_smt_bvfloat_arith_ops(expr);
+    a = fp_api->mk_smt_fpbv_arith_ops(expr);
     break;
   }
   case expr2t::ieee_fma_id:
   {
     assert(is_floatbv_type(expr));
     assert(expr->get_num_sub_exprs() == 4);
-    a = fp_api->mk_smt_bvfloat_fma(expr);
+    a = fp_api->mk_smt_fpbv_fma(expr);
     break;
   }
   case expr2t::modulus_id:
@@ -1401,13 +1401,13 @@ smt_convt::convert_terminal(const expr2tc &expr)
       unsigned int fraction_width = to_floatbv_type(thereal.type).fraction;
       unsigned int exponent_width = to_floatbv_type(thereal.type).exponent;
       if(thereal.value.is_NaN())
-        return fp_api->mk_smt_bvfloat_nan(exponent_width, fraction_width);
+        return fp_api->mk_smt_fpbv_nan(exponent_width, fraction_width);
 
       bool sign = thereal.value.get_sign();
       if(thereal.value.is_infinity())
-        return fp_api->mk_smt_bvfloat_inf(sign, exponent_width, fraction_width);
+        return fp_api->mk_smt_fpbv_inf(sign, exponent_width, fraction_width);
 
-      return fp_api->mk_smt_bvfloat(thereal.value, exponent_width, fraction_width);
+      return fp_api->mk_smt_fpbv(thereal.value, exponent_width, fraction_width);
     }
   }
   case expr2t::constant_bool_id:
@@ -1592,7 +1592,7 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
     ieee_floatt::rounding_modet rm =
       static_cast<ieee_floatt::rounding_modet>
         (to_constant_int2t(expr).value.to_int64());
-    return fp_api->mk_smt_bvfloat_rm(rm);
+    return fp_api->mk_smt_fpbv_rm(rm);
   }
 
   assert(is_symbol2t(expr));
@@ -1619,10 +1619,10 @@ smt_astt smt_convt::convert_rounding_mode(const expr2tc& expr)
     mk_func_app(bs, SMT_FUNC_EQ, symbol,
       mk_smt_bvint(BigInt(2), false, get_int32_type()->get_width()));
 
-  smt_astt ne = fp_api->mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_EVEN);
-  smt_astt mi = fp_api->mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_MINUS_INF);
-  smt_astt pi = fp_api->mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_PLUS_INF);
-  smt_astt ze = fp_api->mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+  smt_astt ne = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_EVEN);
+  smt_astt mi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_MINUS_INF);
+  smt_astt pi = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_PLUS_INF);
+  smt_astt ze = fp_api->mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
 
   smt_astt ite2 =
     mk_func_app(

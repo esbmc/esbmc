@@ -170,7 +170,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
   } else if (is_unsignedbv_type(cast.from)) {
     return convert_typecast_to_ints_from_unsigned(cast);
   } else if (is_floatbv_type(cast.from)) {
-    return fp_api->mk_smt_typecast_from_bvfloat(cast);
+    return fp_api->mk_smt_typecast_from_fpbv(cast);
   } else if (is_bool_type(cast.from)) {
     return convert_typecast_to_ints_from_bool(cast);
   }
@@ -542,7 +542,7 @@ smt_convt::convert_typecast(const expr2tc &expr)
   } else if (is_bv_type(cast.type) || is_fixedbv_type(cast.type)) {
     return convert_typecast_to_ints(cast);
   } else if (is_floatbv_type(cast.type)) {
-    return fp_api->mk_smt_typecast_to_bvfloat(cast);
+    return fp_api->mk_smt_typecast_to_fpbv(cast);
   } else if (is_struct_type(cast.type)) {
     return convert_typecast_to_struct(cast);
   } else if (is_union_type(cast.type)) {

@@ -251,7 +251,7 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
     {
       unsigned ew = va_arg(ap, unsigned long);
       unsigned sw = va_arg(ap, unsigned long);
-      return mk_bvfloat_sort(ew, sw);
+      return mk_fpbv_sort(ew, sw);
     }
   }
 

@@ -690,7 +690,7 @@ z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 }
 
 smt_astt
-z3_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
+z3_convt::mk_smt_fpbv(const ieee_floatt &thereal,
                          unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
@@ -712,7 +712,7 @@ z3_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
       z3_smt_downcast(sig_bv)->e), s);
 }
 
-smt_astt z3_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+smt_astt z3_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
@@ -720,7 +720,7 @@ smt_astt z3_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
   return new_ast(z3_ctx.fpa_nan(zs->s), s);
 }
 
-smt_astt z3_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+smt_astt z3_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
@@ -728,7 +728,7 @@ smt_astt z3_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
   return new_ast(z3_ctx.fpa_inf(sgn, zs->s), s);
 }
 
-smt_astt z3_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+smt_astt z3_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
   smt_sortt s = mk_sort(SMT_SORT_FLOATBV_RM);
 
@@ -749,7 +749,7 @@ smt_astt z3_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
   abort();
 }
 
-smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
+smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
 {
   // Rounding mode symbol
   smt_astt rm_const;
@@ -763,7 +763,7 @@ smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
-    rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+    rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
     const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
     return new_ast(z3_ctx.fpa_to_ubv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
@@ -772,7 +772,7 @@ smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
-    rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+    rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
     const z3_smt_ast *mrm_const = z3_smt_downcast(rm_const);
 
     return new_ast(z3_ctx.fpa_to_sbv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
@@ -793,7 +793,7 @@ smt_astt z3_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
   abort();
 }
 
-smt_astt z3_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
+smt_astt z3_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
 {
   // Rounding mode symbol
   smt_astt rm_const = convert_rounding_mode(cast.rounding_mode);
@@ -850,7 +850,7 @@ smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
   return new_ast(z3_ctx.fpa_to_integral(mrm->e, mfrom->e), s);
 }
 
-smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
+smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol
   smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(2));
@@ -947,7 +947,7 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   {
     unsigned ew = va_arg(ap, unsigned long);
     unsigned sw = va_arg(ap, unsigned long);
-    return mk_bvfloat_sort(ew, sw);
+    return mk_fpbv_sort(ew, sw);
   }
   case SMT_SORT_FLOATBV_RM:
     s = new z3_smt_sort(k, z3_ctx.fpa_rm_sort());
@@ -1336,7 +1336,7 @@ z3_convt::make_conjunct(const ast_vec &v)
   return new_ast(e, s);
 }
 
-smt_astt z3_convt::mk_smt_bvfloat_fma(const expr2tc &expr)
+smt_astt z3_convt::mk_smt_fpbv_fma(const expr2tc &expr)
 {
   // Rounding mode symbol
   smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(2));
@@ -1401,7 +1401,7 @@ void z3_smt_ast::dump() const
   std::cout << "sort is " << Z3_sort_to_string(e.ctx(), Z3_get_sort(e.ctx(), e)) << std::endl;
 }
 
-smt_sortt z3_convt::mk_bvfloat_sort(const unsigned ew, const unsigned sw)
+smt_sortt z3_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
   // We need to add an extra bit to the significand size,
   // as it has no hidden bit

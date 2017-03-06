@@ -503,7 +503,7 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
   {
     unsigned ew = va_arg(ap, unsigned long);
     unsigned sw = va_arg(ap, unsigned long);
-    return mk_bvfloat_sort(ew, sw);
+    return mk_fpbv_sort(ew, sw);
   }
   case SMT_SORT_FLOATBV_RM:
     return new mathsat_smt_sort(k, msat_get_fp_roundingmode_type(env));
@@ -577,7 +577,7 @@ mathsat_convt::mk_smt_bvint(
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
+smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal,
                                        unsigned ew, unsigned sw)
 {
   const mp_integer sig = thereal.get_fraction();
@@ -602,7 +602,7 @@ smt_astt mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
   msat_term t = msat_make_fp_nan(env, ew, sw);
   check_msat_error(t);
@@ -611,7 +611,7 @@ smt_astt mathsat_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+smt_astt mathsat_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
   msat_term t =
     sgn ? msat_make_fp_minus_inf(env, ew, sw) : msat_make_fp_plus_inf(env, ew, sw);
@@ -621,7 +621,7 @@ smt_astt mathsat_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+smt_astt mathsat_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
   msat_term t;
   switch(rm)
@@ -647,7 +647,7 @@ smt_astt mathsat_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
+smt_astt mathsat_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
 {
   // Rounding mode symbol
   smt_astt rm_const;
@@ -662,7 +662,7 @@ smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
 
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
-    rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+    rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
     const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm_const);
 
     t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, mfrom->t);
@@ -687,7 +687,7 @@ smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
+smt_astt mathsat_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
 {
   smt_astt rm = convert_rounding_mode(cast.rounding_mode);
   const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
@@ -744,7 +744,7 @@ smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
+smt_astt mathsat_convt::mk_smt_fpbv_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol
   smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(2));
@@ -783,9 +783,9 @@ smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_bvfloat_fma(const expr2tc& expr)
+smt_astt mathsat_convt::mk_smt_fpbv_fma(const expr2tc& expr)
 {
-  return fp_convt::mk_smt_bvfloat_fma(expr);
+  return fp_convt::mk_smt_fpbv_fma(expr);
 }
 
 smt_ast *
@@ -912,7 +912,7 @@ mathsat_smt_sort::~mathsat_smt_sort()
 {
 }
 
-smt_sortt mathsat_convt::mk_bvfloat_sort(const unsigned ew, const unsigned sw)
+smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
 {
   return
     new mathsat_smt_sort(SMT_SORT_FLOATBV, msat_get_fp_type(env, ew, sw), ew + sw + 1);
