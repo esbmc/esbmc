@@ -11,13 +11,11 @@ fp_convt::fp_convt(smt_convt *_ctx) : ctx(_ctx)
 {
 }
 
-smt_astt fp_convt::mk_smt_fpbv(const ieee_floatt& thereal, unsigned ew, unsigned sw)
+smt_astt fp_convt::mk_smt_fpbv(const ieee_floatt& thereal)
 {
   std::cerr << __PRETTY_FUNCTION__ <<
     " not implemented for the chosen solver" << std::endl;
   (void) thereal;
-  (void) ew;
-  (void) sw;
   abort();
 }
 

@@ -577,8 +577,7 @@ mathsat_convt::mk_smt_bvint(
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal,
-                                       unsigned ew, unsigned sw)
+smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
   const mp_integer sig = thereal.get_fraction();
 
@@ -587,8 +586,8 @@ smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal,
     thereal.get_exponent() + thereal.spec.bias() : 0;
 
   std::string sgn_str = thereal.get_sign() ? "1" : "0";
-  std::string exp_str = integer2binary(exp, ew);
-  std::string sig_str = integer2binary(sig, sw);
+  std::string exp_str = integer2binary(exp, thereal.spec.e);
+  std::string sig_str = integer2binary(sig, thereal.spec.f);
 
   std::string smt_str = "(fp #b" + sgn_str;
   smt_str += " #b" + exp_str;
@@ -598,7 +597,7 @@ smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal,
   msat_term t = msat_from_string(env, smt_str.c_str());
   check_msat_error(t);
 
-  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, thereal.spec.e, thereal.spec.f);
   return new mathsat_smt_ast(this, s, t);
 }
 

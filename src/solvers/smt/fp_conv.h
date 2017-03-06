@@ -21,8 +21,7 @@ public:
    *  @param ew Exponent width, in bits, of the bitvector to create.
    *  @param sw Significand width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_astt mk_smt_fpbv(const ieee_floatt &thereal,
-                                  unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_fpbv(const ieee_floatt &thereal);
 
   /** Create a NaN floating point bitvector
    *  @param ew Exponent width, in bits, of the bitvector to create.

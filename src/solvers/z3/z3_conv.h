@@ -114,8 +114,7 @@ public:
   virtual smt_astt mk_smt_real(const std::string &str);
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
-  virtual smt_astt mk_smt_fpbv(const ieee_floatt &thereal,
-                                  unsigned ew, unsigned sw);
+  virtual smt_astt mk_smt_fpbv(const ieee_floatt &thereal);
   virtual smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw);
   virtual smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm);

@@ -1407,7 +1407,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
       if(thereal.value.is_infinity())
         return fp_api->mk_smt_fpbv_inf(sign, exponent_width, fraction_width);
 
-      return fp_api->mk_smt_fpbv(thereal.value, exponent_width, fraction_width);
+      return fp_api->mk_smt_fpbv(thereal.value);
     }
   }
   case expr2t::constant_bool_id:

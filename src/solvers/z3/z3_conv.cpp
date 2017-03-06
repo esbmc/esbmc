@@ -690,10 +690,9 @@ z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 }
 
 smt_astt
-z3_convt::mk_smt_fpbv(const ieee_floatt &thereal,
-                         unsigned ew, unsigned sw)
+z3_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
-  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, thereal.spec.e, thereal.spec.f);
 
   const mp_integer sig = thereal.get_fraction();
 
@@ -702,8 +701,8 @@ z3_convt::mk_smt_fpbv(const ieee_floatt &thereal,
     thereal.get_exponent() + thereal.spec.bias() : 0;
 
   smt_astt sgn_bv = mk_smt_bvint(BigInt(thereal.get_sign()), false, 1);
-  smt_astt exp_bv = mk_smt_bvint(exp, false, ew);
-  smt_astt sig_bv = mk_smt_bvint(sig, false, sw);
+  smt_astt exp_bv = mk_smt_bvint(exp, false, thereal.spec.e);
+  smt_astt sig_bv = mk_smt_bvint(sig, false, thereal.spec.f);
 
   return new_ast(
     z3_ctx.fpa_val(

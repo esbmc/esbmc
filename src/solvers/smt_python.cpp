@@ -475,9 +475,9 @@ smt_convt_wrapper::pop_tuple_ctx()
 }
 
 smt_ast *
-smt_convt_wrapper::mk_smt_fpbv(const ieee_floatt &thereal, unsigned ew, unsigned sw)
+smt_convt_wrapper::mk_smt_fpbv(const ieee_floatt &thereal)
 {
-  return get_override_checked(this, "mk_smt_fpbv")(thereal, ew, sw);
+  return get_override_checked(this, "mk_smt_fpbv")(thereal);
 }
 
 smt_astt

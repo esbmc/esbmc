@@ -91,7 +91,7 @@ public:
   void pop_tuple_ctx();
 
   // Uhhhh, float api?
-  smt_ast *mk_smt_fpbv(const ieee_floatt &thereal, unsigned ew, unsigned sw);
+  smt_ast *mk_smt_fpbv(const ieee_floatt &thereal);
   smt_astt mk_smt_fpbv_nan(unsigned ew, unsigned sw);
   smt_astt mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw);
   smt_astt mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm);
