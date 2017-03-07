@@ -1287,15 +1287,7 @@ smt_convt::convert_sort(const type2tc &type)
       break;
     }
 
-    // Work around QF_AUFBV demanding arrays of bitvectors.
-    smt_sortt r;
-    if (is_bool_type(range) && !array_api->supports_bools_in_arrays) {
-      r = mk_int_bv_sort(1);
-    } else {
-      r = convert_sort(range);
-    }
-
-    result = mk_sort(SMT_SORT_ARRAY, d, r);
+    result = mk_sort(SMT_SORT_ARRAY, d, convert_sort(range));
     break;
   }
   default:
@@ -2601,13 +2593,7 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
          "scalar AST");
 
   // Just apply a select operation to the current array. Index should be fixed.
-
-  // Guess the resulting sort. This could be a lot, lot better.
-  smt_sortt range_sort = NULL;
-  if (sort->data_width == 1 && ctx->array_api->supports_bools_in_arrays)
-    range_sort = ctx->boolean_sort;
-  else
-    range_sort = ctx->mk_int_bv_sort(sort->data_width);
+  smt_sortt range_sort = ctx->mk_int_bv_sort(sort->get_data_width());
 
   return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT,
                           this, ctx->convert_ast(idx));
