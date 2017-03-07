@@ -40,9 +40,11 @@ public:
     : smt_sort(i), s(_s), rangesort(NULL) { }
   z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
     : smt_sort(i), s(_s), rangesort(NULL), tupletype(_tupletype) { }
-  z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w)
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w)
     : smt_sort(i, w), s(_s), rangesort(NULL) { }
-  z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w, unsigned long dw,
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w, size_t sw)
+    : smt_sort(i, w, sw), s(_s), rangesort(NULL) { }
+  z3_smt_sort(smt_sort_kind i, z3::sort _s, size_t w, size_t dw,
               const smt_sort *_rangesort)
     : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
 

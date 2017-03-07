@@ -72,7 +72,7 @@ cvc_convt::get_array_elem(const smt_ast *array, uint64_t index,
                           const type2tc &elem_sort)
 {
   const cvc_smt_ast *carray = cvc_ast_downcast(array);
-  unsigned int orig_w = array->sort->domain_width;
+  size_t orig_w = array->sort->get_domain_width();
 
   smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
   const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
@@ -257,7 +257,7 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
     const cvc_smt_sort *dom = va_arg(ap, const cvc_smt_sort*);
     const cvc_smt_sort *range = va_arg(ap, const cvc_smt_sort*);
     CVC4::ArrayType t = em.mkArrayType(dom->t, range->t);
-    return new cvc_smt_sort(k, t, range->data_width, dom->data_width);
+    return new cvc_smt_sort(k, t, range->get_data_width(), dom->get_data_width());
   }
   case SMT_SORT_FLOATBV:
   {

@@ -101,8 +101,8 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms,
          "array flattener. Should be flattened elsewhere");
 
   // Create either a new bounded or unbounded array.
-  unsigned long domain_width = ms->domain_width;
-  unsigned long array_size = 1UL << domain_width;
+  size_t domain_width = ms->get_domain_width();
+  size_t array_size = 1UL << domain_width;
 
   // Create new AST storage
   array_ast *mast = new_ast(ms);
@@ -163,7 +163,7 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
   // For undetermined indexes, create a large case switch across all values.
   smt_astt fresh = ctx->mk_fresh(ressort, "array_mk_select::");
   smt_astt real_idx = ctx->convert_ast(idx);
-  unsigned long dom_width = ma->sort->domain_width;
+  size_t dom_width = ma->sort->get_domain_width();
   smt_sortt bool_sort = ctx->boolean_sort;
 
   for (unsigned long i = 0; i < ma->array_fields.size(); i++) {
@@ -208,7 +208,7 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
   // array.
   smt_astt real_idx = ctx->convert_ast(idx);
   smt_astt real_value = value;
-  unsigned long dom_width = mast->sort->domain_width;
+  size_t dom_width = mast->sort->get_domain_width();
 
   for (unsigned long i = 0; i < mast->array_fields.size(); i++) {
     smt_astt this_idx = ctx->mk_smt_bvint(BigInt(i), false, dom_width);
@@ -1243,7 +1243,7 @@ array_ast::update(smt_convt *ctx __attribute__((unused)), smt_astt value,
                                 expr2tc idx_expr) const
 {
   if (is_nil_expr(idx_expr))
-    idx_expr = constant_int2tc(get_uint_type(sort->domain_width), BigInt(idx));
+    idx_expr = constant_int2tc(get_uint_type(sort->get_domain_width()), BigInt(idx));
 
   return array_ctx->mk_store(this, idx_expr, value, sort);
 }

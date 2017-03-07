@@ -1792,7 +1792,7 @@ smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
     return idx;
 
   smt_sortt s = convert_sort(arr_sort);
-  unsigned int domain_width = s->domain_width;
+  size_t domain_width = s->get_domain_width();
   if (domain_width == config.ansi_c.int_width)
     return idx;
 
@@ -2306,7 +2306,7 @@ smt_convt::get_array(smt_astt array, const type2tc &t)
 
   // Fetch the array bounds, if it's huge then assume this is a 1024 element
   // array. Then fetch all elements and formulate a constant_array.
-  size_t w = array->sort->domain_width;
+  size_t w = array->sort->get_domain_width();
   if (w > 10)
     w = 10;
 
@@ -2583,9 +2583,9 @@ smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   // We're an array; just generate a 'with' operation.
   expr2tc index;
   if (is_nil_expr(idx_expr)) {
-    unsigned int dom_width = ctx->int_encoding ? 32 : sort->domain_width;
-    index = constant_int2tc(type2tc(new unsignedbv_type2t(dom_width)),
-          BigInt(idx));
+    size_t dom_width = ctx->int_encoding ? 32 : sort->get_domain_width();
+    index =
+      constant_int2tc(type2tc(new unsignedbv_type2t(dom_width)), BigInt(idx));
   } else {
     index = idx_expr;
   }

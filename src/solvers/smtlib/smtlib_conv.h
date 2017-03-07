@@ -27,7 +27,8 @@ public:
     : smt_sort(k) { }
   explicit smtlib_smt_sort(smt_sort_kind k, const smtlib_smt_sort *dom,
                   const smtlib_smt_sort *rag)
-    : smt_sort(k, rag->data_width, dom->data_width), domain(dom), range(rag) { }
+    : smt_sort(k, rag->get_data_width(), dom->get_domain_width()),
+      domain(dom), range(rag) { }
 
   const smtlib_smt_sort *domain;
   const smtlib_smt_sort *range;

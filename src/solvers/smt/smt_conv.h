@@ -240,37 +240,62 @@ struct expr_op_convert {
 class smt_sort;
 typedef const smt_sort * smt_sortt;
 
-class smt_sort {
+class smt_sort
+{
 public:
   /** Identifies what /kind/ of sort this is.
    *  The specific sort itself may be parameterised with widths and domains,
    *  for example. */
   smt_sort_kind id;
-  /** Data size of the sort.
-   *  For bitvectors this is the bit width, for arrays the range BV bit width.
-   *  For everything else, undefined */
-  unsigned long data_width;
-  /** BV Width of array domain. For everything else, undefined */
-  unsigned long domain_width;
 
-  smt_sort(smt_sort_kind i) : id(i), data_width(0), domain_width(0)
+  smt_sort(smt_sort_kind i) : id(i), data_width(0), secondary_width(0)
   {
     assert(id != SMT_SORT_ARRAY);
   }
-  smt_sort(smt_sort_kind i, unsigned long width)
-    : id(i), data_width(width), domain_width(0)
+
+  smt_sort(smt_sort_kind i, size_t width)
+    : id(i), data_width(width), secondary_width(0)
   {
     assert(width != 0 || i == SMT_SORT_INT);
     assert(id != SMT_SORT_ARRAY);
   }
-  smt_sort(smt_sort_kind i, unsigned long rwidth, unsigned long domwidth)
-    : id(i), data_width(rwidth), domain_width(domwidth) {
-      assert(id == SMT_SORT_ARRAY);
-      //assert(domain_width != 0);
-      // XXX not applicable during int mode?
-    }
+
+  smt_sort(smt_sort_kind i, size_t rwidth, size_t domwidth)
+    : id(i), data_width(rwidth), secondary_width(domwidth)
+  {
+    assert(id == SMT_SORT_ARRAY || id == SMT_SORT_FLOATBV);
+    // assert(secondary_width != 0);
+    // XXX not applicable during int mode?
+  }
+
+  size_t get_data_width() const { return data_width; }
+
+  size_t get_domain_width() const
+  {
+    assert(id == SMT_SORT_ARRAY);
+    return secondary_width;
+  }
+
+  size_t get_significand_width() const
+  {
+    assert(id == SMT_SORT_FLOATBV);
+    return secondary_width;
+  }
 
   virtual ~smt_sort() { }
+
+private:
+  /** Data size of the sort.
+   * For bitvectors and floating-points this is the bit width,
+   * for arrays the range BV bit width,
+   * For everything else, undefined */
+  size_t data_width;
+
+  /** Secondary width
+   * For floating-points this is the significand width,
+   * for arrays this is the width of array domain,
+   * For everything else, undefined */
+  size_t secondary_width;
 };
 
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))

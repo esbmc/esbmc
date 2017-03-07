@@ -199,16 +199,16 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
     const boolector_smt_sort* dom = va_arg(ap, boolector_smt_sort *); // Consider constness?
     const boolector_smt_sort* range = va_arg(ap, boolector_smt_sort *);
 
-    assert(int_encoding || dom->data_width != 0);
+    assert(int_encoding || dom->get_data_width() != 0);
 
     // The range data width is allowed to be zero, which happens if the range
     // is not a bitvector / integer
-    unsigned int data_width = range->data_width;
+    unsigned int data_width = range->get_data_width();
     if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
       data_width = 1;
 
     return new boolector_smt_sort(k, boolector_array_sort(btor, dom->t, range->t),
-                                  data_width, dom->data_width, range);
+                                  data_width, dom->get_data_width(), range);
   }
   case SMT_SORT_BOOL:
     return new boolector_smt_sort(k, boolector_bool_sort(btor));
@@ -452,11 +452,11 @@ static int64_t read_btor_string(const char *result, unsigned int len)
 expr2tc
 boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
 {
-  assert(a->sort->id == SMT_SORT_BV && a->sort->data_width != 0);
+  assert(a->sort->id == SMT_SORT_BV && a->sort->get_data_width() != 0);
   const btor_smt_ast *ast = btor_ast_downcast(a);
 
   const char *result = boolector_bv_assignment(btor, ast->e);
-  int64_t val = read_btor_string(result, a->sort->data_width);
+  int64_t val = read_btor_string(result, a->sort->get_data_width());
   boolector_free_bv_assignment(btor, result);
 
   constant_int2tc exp(t, BigInt(val));
@@ -482,11 +482,11 @@ boolector_convt::get_array_elem(const smt_ast *array, uint64_t index,
   expr2tc final_result;
 
   for (int i = 0; i < size; i++) {
-    int64_t idx = read_btor_string(indicies[i], array->sort->domain_width);
+    int64_t idx = read_btor_string(indicies[i], array->sort->get_domain_width());
     if (idx == (int64_t)index) {
-      int64_t value = read_btor_string(values[i], array->sort->data_width);
+      int64_t value = read_btor_string(values[i], array->sort->get_data_width());
       final_result =
-        constant_int2tc(get_int_type(array->sort->data_width), BigInt(value));
+        constant_int2tc(get_int_type(array->sort->get_data_width()), BigInt(value));
       break;
     }
   }
@@ -571,14 +571,14 @@ boolector_convt::fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
   unsigned int bwidth;
 
   data_op = op0->e;
-  bwidth = log2(op0->sort->data_width);
+  bwidth = log2(op0->sort->get_data_width());
 
   // If we're a non-power-of-x number, some zero extension has to occur
-  if (pow(2.0, bwidth) < op0->sort->data_width) {
+  if (pow(2.0, bwidth) < op0->sort->get_data_width()) {
     // Zero extend up to bwidth + 1
     bwidth++;
     unsigned int new_size = pow(2.0, bwidth);
-    unsigned int diff = new_size - op0->sort->data_width;
+    unsigned int diff = new_size - op0->sort->get_data_width();
     smt_sortt newsort = mk_sort(SMT_SORT_BV, new_size);
     smt_astt zeroext = convert_zero_ext(op0, newsort, diff);
     data_op = btor_ast_downcast(zeroext)->e;
@@ -592,7 +592,7 @@ boolector_convt::fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
 
   // If zero extension occurred, cut off the top few bits of this value.
   if (need_to_shift_down)
-    shift = boolector_slice(btor, shift, res_sort->data_width-1, 0);
+    shift = boolector_slice(btor, shift, res_sort->get_data_width() - 1, 0);
 
   return new_ast(res_sort, shift);
 }

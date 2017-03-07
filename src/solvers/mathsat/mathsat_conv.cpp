@@ -185,7 +185,7 @@ expr2tc
 mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
                               const type2tc &elem_sort)
 {
-  size_t orig_w = array->sort->domain_width;
+  size_t orig_w = array->sort->get_domain_width();
   const mathsat_smt_ast *mast = mathsat_ast_downcast(array);
 
   smt_ast *tmpast = mk_smt_bvint(BigInt(idx), false, orig_w);
@@ -498,16 +498,16 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
   {
     const mathsat_smt_sort *dom = va_arg(ap, const mathsat_smt_sort *);
     const mathsat_smt_sort *range = va_arg(ap, const mathsat_smt_sort *);
-    assert(int_encoding || dom->data_width != 0);
+    assert(int_encoding || dom->get_data_width() != 0);
 
     // The range data width is allowed to be zero, which happens if the range
     // is not a bitvector / integer
-    unsigned int data_width = range->data_width;
+    unsigned int data_width = range->get_data_width();
     if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
       data_width = 1;
 
     return new mathsat_smt_sort(k, msat_get_array_type(env, dom->t, range->t),
-                                data_width, dom->data_width, range);
+                                data_width, dom->get_data_width(), range);
   }
   case SMT_SORT_BOOL:
     return new mathsat_smt_sort(k, msat_get_bool_type(env));

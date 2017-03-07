@@ -914,16 +914,16 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   {
     z3_smt_sort *dom = va_arg(ap, z3_smt_sort *); // Consider constness?
     z3_smt_sort *range = va_arg(ap, z3_smt_sort *);
-    assert(int_encoding || dom->data_width != 0);
+    assert(int_encoding || dom->get_data_width() != 0);
 
     // The range data width is allowed to be zero, which happens if the range
     // is not a bitvector / integer
-    unsigned int data_width = range->data_width;
+    unsigned int data_width = range->get_data_width();
     if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
       data_width = 1;
 
     s = new z3_smt_sort(k, ctx.array_sort(dom->s, range->s), data_width,
-                        dom->data_width, range);
+                        dom->get_data_width(), range);
     break;
   }
   case SMT_SORT_BOOL:
@@ -932,11 +932,11 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_FLOATBV:
   {
     unsigned ew = va_arg(ap, unsigned long);
-    unsigned sw = va_arg(ap, unsigned long);
+    unsigned sw = va_arg(ap, unsigned long) + 1; // significand width + hidden bit
 
     // We need to add an extra bit to the significand size,
     // as it has no hidden bit
-    s = new z3_smt_sort(k, ctx.fpa_sort(ew, sw + 1), ew + sw + 1);
+    s = new z3_smt_sort(k, ctx.fpa_sort(ew, sw), ew + sw, sw);
     break;
   }
   case SMT_SORT_FLOATBV_RM:
@@ -991,7 +991,7 @@ z3_smt_ast::update(smt_convt *conv, const smt_ast *value,
 
   if (sort->id == SMT_SORT_ARRAY) {
     if (is_nil_expr(idx_expr)) {
-      unsigned int dom_width = (conv->int_encoding) ? 32 : sort->domain_width;
+      unsigned int dom_width = (conv->int_encoding) ? 32 : sort->get_domain_width();
       index = constant_int2tc(type2tc(new unsignedbv_type2t(dom_width)),
             BigInt(idx));
     } else {
@@ -1072,11 +1072,11 @@ z3_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
   z3::expr val = z3_smt_downcast(init_val)->e;
   z3::expr output = z3::to_expr(ctx, Z3_mk_const_array(ctx, dom_sort, val));
 
-  long unsigned int range_width = range->data_width;
+  size_t range_width = range->get_data_width();
   if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
     range_width = 1;
 
-  long unsigned int dom_width = (int_encoding) ? 0 : dom_sort.bv_size();
+  size_t dom_width = (int_encoding) ? 0 : dom_sort.bv_size();
   smt_sort *s =
     new z3_smt_sort(SMT_SORT_ARRAY, array_sort, range_width, dom_width, range);
   return new_ast(output, s);
@@ -1258,7 +1258,7 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
                          const type2tc &subtype)
 {
   const z3_smt_ast *za = z3_smt_downcast(array);
-  unsigned long array_bound = array->sort->domain_width;
+  unsigned long array_bound = array->sort->get_domain_width();
   const z3_smt_ast *idx;
   if (int_encoding)
     idx = static_cast<const z3_smt_ast*>(mk_smt_int(BigInt(index), false));

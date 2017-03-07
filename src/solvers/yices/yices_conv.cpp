@@ -306,11 +306,11 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
     yices_smt_sort *range = va_arg(ap, yices_smt_sort*);
     type_t t = yices_function_type(1, &dom->type, range->type);
 
-    unsigned int tmp = range->data_width;
+    unsigned int tmp = range->get_data_width();
     if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_UNION)
       tmp = 1;
 
-    return new yices_smt_sort(k, t, tmp, dom->data_width, range);
+    return new yices_smt_sort(k, t, tmp, dom->get_data_width(), range);
   }
   case SMT_SORT_BV:
   {
@@ -490,7 +490,6 @@ expr2tc
 yices_convt::get_bv(const type2tc &t, smt_astt a)
 {
   int32_t data[64];
-  int32_t err = 0;
   const yices_smt_ast *ast = yices_ast_downcast(a);
 
   // XXX -- model fetching for ints needs to be better
@@ -524,7 +523,7 @@ yices_convt::get_array_elem(smt_astt array, uint64_t index,
   if (int_encoding) {
     idx = yices_int64(index);
   } else {
-    idx = yices_bvconst_uint64(array->sort->domain_width, index);
+    idx = yices_bvconst_uint64(array->sort->get_domain_width(), index);
   }
 
   term_t app = yices_application(ast->term, 1, &idx);
