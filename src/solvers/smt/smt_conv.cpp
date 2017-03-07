@@ -2270,35 +2270,42 @@ smt_convt::pre_solve()
 expr2tc
 smt_convt::get(const expr2tc &expr)
 {
-  switch (expr->type->type_id) {
-  case type2t::bool_id:
-    return get_bool(convert_ast(expr));
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-    return get_bv(expr->type, convert_ast(expr));
-  case type2t::fixedbv_id:
+  switch (expr->type->type_id)
   {
-    expr2tc bv = get_bv(expr->type, convert_ast(expr));
-    assert(!is_nil_expr(bv));
+    case type2t::bool_id:
+      return get_bool(convert_ast(expr));
 
-    fixedbvt fbv(
-      constant_exprt(
-        integer2binary(to_constant_int2t(bv).value, expr->type->get_width()),
-        integer2string(to_constant_int2t(bv).value),
-        migrate_type_back(expr->type)));
-    return constant_fixedbv2tc(expr->type, fbv);
-  }
-  case type2t::floatbv_id:
-    return fp_api->get_fpbv(expr->type, convert_ast(expr));
-  case type2t::array_id:
-    return get_array(convert_ast(expr), expr->type);
-  case type2t::struct_id:
-  case type2t::pointer_id:
-    return tuple_api->tuple_get(expr);
-  default:
-    std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
-              << ") in smt get" << std::endl;
-    abort();
+    case type2t::unsignedbv_id:
+    case type2t::signedbv_id:
+      return get_bv(expr->type, convert_ast(expr));
+
+    case type2t::fixedbv_id:
+    {
+      expr2tc bv = get_bv(expr->type, convert_ast(expr));
+      assert(!is_nil_expr(bv));
+
+      fixedbvt fbv(
+        constant_exprt(
+          integer2binary(to_constant_int2t(bv).value, expr->type->get_width()),
+          integer2string(to_constant_int2t(bv).value),
+          migrate_type_back(expr->type)));
+      return constant_fixedbv2tc(expr->type, fbv);
+    }
+
+    case type2t::floatbv_id:
+      return fp_api->get_fpbv(expr->type, convert_ast(expr));
+
+    case type2t::array_id:
+      return get_array(convert_ast(expr), expr->type);
+
+    case type2t::struct_id:
+    case type2t::pointer_id:
+      return tuple_api->tuple_get(expr);
+
+    default:
+      std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
+          << ") in smt get" << std::endl;
+      abort();
   }
 }
 
