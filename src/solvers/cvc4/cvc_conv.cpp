@@ -80,7 +80,7 @@ cvc_convt::get_array_elem(const smt_ast *array, uint64_t index,
   free(tmpast);
 
   cvc_smt_ast *tmpb = new cvc_smt_ast(this, convert_sort(elem_sort), e);
-  expr2tc result = get_bv(type2tc(), tmpb);
+  expr2tc result = get_bv(elem_sort, tmpb);
   free(tmpb);
 
   return result;
