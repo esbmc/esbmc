@@ -57,16 +57,16 @@ smt_convt *
 create_new_mathsat_solver(bool int_encoding, const namespacet &ns,
                           const optionst &opts __attribute__((unused)),
                           tuple_iface **tuple_api __attribute__((unused)),
-                          array_iface **array_api)
+                          array_iface **array_api, fp_convt **fp_api)
 {
   mathsat_convt *conv = new mathsat_convt(int_encoding, ns);
   *array_api = static_cast<array_iface*>(conv);
+  *fp_api = static_cast<fp_convt*>(conv);
   return conv;
 }
 
-mathsat_convt::mathsat_convt(bool int_encoding,
-                             const namespacet &ns)
-  : smt_convt(int_encoding, ns), array_iface(false, false)
+mathsat_convt::mathsat_convt(bool int_encoding, const namespacet &ns)
+  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
 {
   cfg = msat_parse_config(mathsat_config);
   msat_set_option(cfg, "model_generation", "true");
@@ -139,6 +139,8 @@ mathsat_convt::get_bool(const smt_ast *a)
 expr2tc
 mathsat_convt::get_bv(const type2tc &_t, const smt_ast *a)
 {
+  assert(is_bv_type(_t));
+
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_get_model_value(env, mast->t);
   check_msat_error(t);
@@ -157,18 +159,6 @@ mathsat_convt::get_bv(const type2tc &_t, const smt_ast *a)
   char buffer[mpz_sizeinbase(num, 10) + 2];
   mpz_get_str(buffer, 10, num);
 
-  if(is_floatbv_type(_t))
-  {
-    ieee_float_spect spec(
-      to_floatbv_type(_t).fraction,
-      to_floatbv_type(_t).exponent);
-
-    ieee_floatt number(spec);
-    number.unpack(BigInt(buffer));
-
-    return constant_floatbv2tc(_t, number);
-  }
-
   char *foo = buffer;
   int64_t finval = strtoll(buffer, &foo, 10);
 
@@ -179,6 +169,38 @@ mathsat_convt::get_bv(const type2tc &_t, const smt_ast *a)
   }
 
   return constant_int2tc(_t, BigInt(finval));
+}
+
+expr2tc mathsat_convt::get_fpbv(const type2tc& _t, smt_astt a)
+{
+  assert(is_floatbv_type(_t));
+
+  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
+  msat_term t = msat_get_model_value(env, mast->t);
+  check_msat_error(t);
+
+  // GMP rational value object.
+  mpq_t val;
+  mpq_init(val);
+
+  msat_term_to_number(env, t, val);
+  check_msat_error(t);
+  msat_free(msat_term_repr(t));
+
+  mpz_t num;
+  mpz_init(num);
+  mpz_set(num, mpq_numref(val));
+  char buffer[mpz_sizeinbase(num, 10) + 2];
+  mpz_get_str(buffer, 10, num);
+
+  ieee_float_spect spec(
+    to_floatbv_type(_t).fraction,
+    to_floatbv_type(_t).exponent);
+
+  ieee_floatt number(spec);
+  number.unpack(BigInt(buffer));
+
+  return constant_floatbv2tc(_t, number);
 }
 
 expr2tc
@@ -470,7 +492,7 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   return new mathsat_smt_ast(this, s, r);
 }
 
-smt_sort *
+smt_sortt
 mathsat_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
@@ -490,7 +512,7 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
   {
     unsigned ew = va_arg(ap, unsigned long);
     unsigned sw = va_arg(ap, unsigned long) + 1;
-    return new mathsat_smt_sort(k, msat_get_fp_type(env, ew, sw), ew + sw, sw);
+    return mk_fpbv_sort(ew, sw);
   }
   case SMT_SORT_FLOATBV_RM:
     return new mathsat_smt_sort(k, msat_get_fp_roundingmode_type(env));
@@ -531,7 +553,7 @@ mathsat_convt::mk_smt_int(const mp_integer &theint, bool sign __attribute__((unu
   msat_term t = msat_make_number(env, n);
   check_msat_error(t);
 
-  smt_sort *s = mk_sort(SMT_SORT_INT);
+  smt_sortt s = mk_sort(SMT_SORT_INT);
   return new mathsat_smt_ast(this, s, t);
 }
 
@@ -541,7 +563,7 @@ mathsat_convt::mk_smt_real(const std::string &str)
   msat_term t = msat_make_number(env, str.c_str());
   check_msat_error(t);
 
-  smt_sort *s = mk_sort(SMT_SORT_REAL);
+  smt_sortt s = mk_sort(SMT_SORT_REAL);
   return new mathsat_smt_ast(this, s, t);
 }
 
@@ -560,12 +582,11 @@ mathsat_convt::mk_smt_bvint(
   msat_term t = msat_make_bv_number(env, str.c_str(), w, 2);
   check_msat_error(t);
 
-  smt_sort *s = mk_sort(SMT_SORT_BV, w, false);
+  smt_sortt s = mk_sort(SMT_SORT_BV, w, false);
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_ast* mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                       unsigned ew, unsigned sw)
+smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
   const mp_integer sig = thereal.get_fraction();
 
@@ -574,8 +595,8 @@ smt_ast* mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
     thereal.get_exponent() + thereal.spec.bias() : 0;
 
   std::string sgn_str = thereal.get_sign() ? "1" : "0";
-  std::string exp_str = integer2binary(exp, ew);
-  std::string sig_str = integer2binary(sig, sw);
+  std::string exp_str = integer2binary(exp, thereal.spec.e);
+  std::string sig_str = integer2binary(sig, thereal.spec.f);
 
   std::string smt_str = "(fp #b" + sgn_str;
   smt_str += " #b" + exp_str;
@@ -585,30 +606,30 @@ smt_ast* mathsat_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
   msat_term t = msat_from_string(env, smt_str.c_str());
   check_msat_error(t);
 
-  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, thereal.spec.e, thereal.spec.f);
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
+smt_astt mathsat_convt::mk_smt_fpbv_nan(unsigned ew, unsigned sw)
 {
   msat_term t = msat_make_fp_nan(env, ew, sw);
   check_msat_error(t);
 
-  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
+smt_astt mathsat_convt::mk_smt_fpbv_inf(bool sgn, unsigned ew, unsigned sw)
 {
   msat_term t =
     sgn ? msat_make_fp_minus_inf(env, ew, sw) : msat_make_fp_plus_inf(env, ew, sw);
   check_msat_error(t);
 
-  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
+smt_astt mathsat_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
   msat_term t;
   switch(rm)
@@ -630,11 +651,11 @@ smt_astt mathsat_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
   }
   check_msat_error(t);
 
-  smt_sort *s = mk_sort(SMT_SORT_FLOATBV_RM);
+  smt_sortt s = mk_sort(SMT_SORT_FLOATBV_RM);
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
+smt_astt mathsat_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
 {
   // Rounding mode symbol
   smt_astt rm_const;
@@ -643,13 +664,13 @@ smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
   const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
 
   msat_term t;
-  smt_sort *s = NULL;
+  smt_sortt s;
   if(is_bv_type(cast.type)) {
     s = mk_sort(SMT_SORT_BV);
 
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
-    rm_const = mk_smt_bvfloat_rm(ieee_floatt::ROUND_TO_ZERO);
+    rm_const = mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO);
     const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm_const);
 
     t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, mfrom->t);
@@ -674,7 +695,7 @@ smt_astt mathsat_convt::mk_smt_typecast_from_bvfloat(const typecast2t &cast)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
+smt_astt mathsat_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
 {
   smt_astt rm = convert_rounding_mode(cast.rounding_mode);
   const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
@@ -684,7 +705,7 @@ smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
 
   unsigned ew = to_floatbv_type(cast.type).exponent;
   unsigned sw = to_floatbv_type(cast.type).fraction;
-  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
 
   msat_term t;
   if(is_bool_type(cast.from)) {
@@ -731,7 +752,7 @@ smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
   return new mathsat_smt_ast(this, s, t);
 }
 
-smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
+smt_astt mathsat_convt::mk_smt_fpbv_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol
   smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(2));
@@ -758,13 +779,6 @@ smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
     case expr2t::ieee_div_id:
       t = msat_make_fp_div(env, mrm->t, ms1->t, ms2->t);
       break;
-    case expr2t::ieee_fma_id:
-    {
-      // Mathsat doesn't support fma for now, if we force
-      // the multiplication, it will provide the wrong answer
-      std::cerr << "Mathsat doesn't support the fused multiply-add "
-          "(fp.fma) operator" << std::endl;
-    }
     default:
       abort();
   }
@@ -772,9 +786,14 @@ smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 
   unsigned ew = to_floatbv_type(expr->type).exponent;
   unsigned sw = to_floatbv_type(expr->type).fraction;
-  smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
 
   return new mathsat_smt_ast(this, s, t);
+}
+
+smt_astt mathsat_convt::mk_smt_fpbv_fma(const expr2tc& expr)
+{
+  return fp_convt::mk_smt_fpbv_fma(expr);
 }
 
 smt_ast *
@@ -899,6 +918,12 @@ mathsat_smt_ast::~mathsat_smt_ast()
 
 mathsat_smt_sort::~mathsat_smt_sort()
 {
+}
+
+smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
+{
+  return
+    new mathsat_smt_sort(SMT_SORT_FLOATBV, msat_get_fp_type(env, ew, sw), ew + sw, sw);
 }
 
 void mathsat_convt::dump_SMT()

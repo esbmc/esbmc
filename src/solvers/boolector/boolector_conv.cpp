@@ -10,17 +10,19 @@ smt_convt *
 create_new_boolector_solver(bool int_encoding, const namespacet &ns,
                             const optionst &options,
                             tuple_iface **tuple_api __attribute__((unused)),
-                            array_iface **array_api)
+                            array_iface **array_api,
+                            fp_convt **fp_api __attribute__((unused)))
 {
   boolector_convt *conv =
     new boolector_convt(int_encoding, ns, options);
   *array_api = static_cast<array_iface*>(conv);
+  *fp_api = static_cast<fp_convt*>(conv);
   return conv;
 }
 
 boolector_convt::boolector_convt(bool int_encoding,
                                  const namespacet &ns, const optionst &options)
-  : smt_convt(int_encoding, ns), array_iface(false, false)
+  : smt_convt(int_encoding, ns), array_iface(false, false), fp_convt(this)
 {
 
   if (int_encoding) {
@@ -177,44 +179,51 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
 }
 
-smt_sort *
+smt_sortt
 boolector_convt::mk_sort(const smt_sort_kind k, ...)
 {
   // Boolector doesn't have any special handling for sorts, they're all always
   // explicit arguments to functions. So, just use the base smt_sort class.
   va_list ap;
-  unsigned long uint;
 
   va_start(ap, k);
-  switch (k) {
-  case SMT_SORT_INT:
-  case SMT_SORT_REAL:
-    std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
-    abort();
-  case SMT_SORT_BV:
-    uint = va_arg(ap, unsigned long);
-    return new boolector_smt_sort(k, boolector_bitvec_sort(btor, uint), uint);
-  case SMT_SORT_ARRAY:
+  switch (k)
   {
-    const boolector_smt_sort* dom = va_arg(ap, boolector_smt_sort *); // Consider constness?
-    const boolector_smt_sort* range = va_arg(ap, boolector_smt_sort *);
+    case SMT_SORT_INT:
+    case SMT_SORT_REAL:
+      std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
+      abort();
+    case SMT_SORT_BV:
+    {
+      unsigned long uint = va_arg(ap, unsigned long);
+      return new boolector_smt_sort(k, boolector_bitvec_sort(btor, uint), uint);
+    }
+    case SMT_SORT_ARRAY:
+    {
+      const boolector_smt_sort* dom = va_arg(ap, boolector_smt_sort *); // Consider constness?
+      const boolector_smt_sort* range = va_arg(ap, boolector_smt_sort *);
 
-    assert(int_encoding || dom->get_data_width() != 0);
+      assert(int_encoding || dom->get_data_width() != 0);
 
-    // The range data width is allowed to be zero, which happens if the range
-    // is not a bitvector / integer
-    unsigned int data_width = range->get_data_width();
-    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
-      data_width = 1;
+      // The range data width is allowed to be zero, which happens if the range
+      // is not a bitvector / integer
+      unsigned int data_width = range->get_data_width();
+      if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
+        data_width = 1;
 
-    return new boolector_smt_sort(k, boolector_array_sort(btor, dom->t, range->t),
-                                  data_width, dom->get_data_width(), range);
-  }
-  case SMT_SORT_BOOL:
-    return new boolector_smt_sort(k, boolector_bool_sort(btor));
-  case SMT_SORT_FLOATBV:
-    std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-    abort();
+      return new boolector_smt_sort(k, boolector_array_sort(btor, dom->t, range->t),
+          data_width, dom->get_data_width(), range);
+    }
+
+    case SMT_SORT_BOOL:
+      return new boolector_smt_sort(k, boolector_bool_sort(btor));
+
+    case SMT_SORT_FLOATBV:
+    {
+      unsigned ew = va_arg(ap, unsigned long);
+      unsigned sw = va_arg(ap, unsigned long) + 1;
+      return mk_fpbv_sort(ew, sw);
+    }
   }
 
   std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
@@ -232,58 +241,6 @@ smt_ast *
 boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 {
   std::cerr << "Boolector can't create Real sorts" << std::endl;
-  abort();
-}
-
-smt_ast *
-boolector_convt::mk_smt_bvfloat(const ieee_floatt &thereal,
-                                unsigned ew, unsigned sw)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt
-boolector_convt::mk_smt_bvfloat_nan(unsigned ew, unsigned sw)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt
-boolector_convt::mk_smt_bvfloat_inf(bool sgn, unsigned ew, unsigned sw)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_bvfloat_rm(ieee_floatt::rounding_modet rm)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_typecast_from_bvfloat(const typecast2t& cast)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_typecast_to_bvfloat(const typecast2t& cast)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
-  abort();
-}
-
-smt_astt boolector_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
-{
-  std::cout << "Boolector can't create floating point sorts, try with Z3 or Mathsat" << std::endl;
   abort();
 }
 
