@@ -99,13 +99,15 @@ class smt_convt;
 enum smt_sort_kind {
   SMT_SORT_INT = 1,
   SMT_SORT_REAL = 2,
-  SMT_SORT_BV = 4,
-  SMT_SORT_ARRAY = 8,
-  SMT_SORT_BOOL = 16,
-  SMT_SORT_STRUCT = 32,
-  SMT_SORT_UNION = 64, // Contencious
-  SMT_SORT_FLOATBV = 128,
-  SMT_SORT_FLOATBV_RM = 256
+  SMT_SORT_SBV = 4,
+  SMT_SORT_UBV = 8,
+  SMT_SORT_ARRAY = 16,
+  SMT_SORT_BOOL = 32,
+  SMT_SORT_STRUCT = 64,
+  SMT_SORT_UNION = 128, // Contencious
+  SMT_SORT_FLOATBV = 256,
+  SMT_SORT_FLOATBV_RM = 512,
+  SMT_SORT_FIXEDBV = 1024
 };
 
 /** Identifiers for SMT functions.
@@ -621,7 +623,7 @@ public:
    *  arguments are:
    *  * Bools: None
    *  * Int's: None
-   *  * BV's:  Width as a machine integer, and a bool that's true if it's signed
+   *  * BV's:  Width as a machine integer
    *  * Arrays: Two pointers to smt_sort's: the domain sort, and the range sort
    *
    *  Structs and unions use @ref mk_struct_sort and @ref mk_union_sort.
@@ -927,13 +929,6 @@ public:
   type2tc get_flattened_array_subtype(const type2tc &type);
   /** Fetch the number of elements in an array (the domain). */
   expr2tc array_domain_to_width(const type2tc &type);
-  /** Create an array domain sort */
-  smt_sortt mk_int_bv_sort(unsigned int width) {
-    if (int_encoding)
-      return mk_sort(SMT_SORT_INT);
-    else
-      return mk_sort(SMT_SORT_BV, width, false);
-  }
 
   /** For the given type, replace all instances of a pointer type with the
    *  struct representation of it. */

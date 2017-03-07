@@ -331,7 +331,7 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
     if (int_encoding)
       domain = mk_sort(SMT_SORT_INT);
     else
-      domain = mk_sort(SMT_SORT_BV, domain_width, false);
+      domain = mk_sort(SMT_SORT_UBV, domain_width);
 
     smt_sortt range = convert_sort(arr.subtype);
     sort = z3_sort_downcast(mk_sort(SMT_SORT_ARRAY, domain, range))->s;
@@ -656,7 +656,7 @@ z3_convt::mk_smt_real(const std::string &str)
 smt_astt
 z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
-  smt_sortt s = mk_sort(SMT_SORT_BV, width, sign);
+  smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
   if (theint.is_negative())
     return new_ast(z3_ctx.bv_val(theint.to_int64(), width), s);
   else
@@ -732,7 +732,7 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
 
   smt_sortt s;
   if(is_unsignedbv_type(cast.type)) {
-    s = mk_sort(SMT_SORT_BV);
+    s = mk_sort(SMT_SORT_UBV);
 
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
@@ -741,7 +741,7 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
 
     return new_ast(z3_ctx.fpa_to_ubv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
   } else if(is_signedbv_type(cast.type)) {
-    s = mk_sort(SMT_SORT_BV);
+    s = mk_sort(SMT_SORT_SBV);
 
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
@@ -891,7 +891,9 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_REAL:
     s = new z3_smt_sort(k, z3_ctx.real_sort());
     break;
-  case SMT_SORT_BV:
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_UBV:
+  case SMT_SORT_SBV:
   {
     unsigned long uint = va_arg(ap, unsigned long);
     s = new z3_smt_sort(k, z3_ctx.bv_sort(uint), uint);

@@ -162,8 +162,8 @@ smt_convt::smt_post_init(void)
     machine_int_sort = mk_sort(SMT_SORT_INT, false);
     machine_uint_sort = machine_int_sort;
   } else {
-    machine_int_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, true);
-    machine_uint_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, false);
+    machine_int_sort = mk_sort(SMT_SORT_SBV, config.ansi_c.int_width);
+    machine_uint_sort = mk_sort(SMT_SORT_UBV, config.ansi_c.int_width);
   }
 
   boolean_sort = mk_sort(SMT_SORT_BOOL);
@@ -463,7 +463,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (int_encoding) {
       domain = machine_int_sort;
     } else {
-      domain = mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+      domain = mk_sort(SMT_SORT_UBV, calculate_array_domain_width(arr));
     }
 
     expr2tc flat_expr = expr;
@@ -983,7 +983,7 @@ smt_convt::convert_ast(const expr2tc &expr)
 
     unsigned long accuml_side =
       cat.side_1->type->get_width() + cat.side_2->type->get_width();
-    smt_sortt s = mk_sort(SMT_SORT_BV, accuml_side, false);
+    smt_sortt s = mk_sort(SMT_SORT_UBV, accuml_side);
     a = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 
     break;
@@ -1237,33 +1237,42 @@ smt_convt::convert_sort(const type2tc &type)
     result = tuple_api->mk_struct_sort(pointer_struct);
     break;
   case type2t::unsignedbv_id:
-    /* FALLTHROUGH */
+  {
+    if (int_encoding)
+      result = mk_sort(SMT_SORT_INT);
+    else
+      result = mk_sort(SMT_SORT_UBV, type->get_width());
+    break;
+  }
   case type2t::signedbv_id:
   {
-    unsigned int width = type->get_width();
-    assert(width != 0);
-    result = mk_int_bv_sort(width);
+    if (int_encoding)
+      result = mk_sort(SMT_SORT_INT);
+    else
+      result = mk_sort(SMT_SORT_SBV, type->get_width());
+    break;
   }
-  break;
   case type2t::fixedbv_id:
   {
-    unsigned int width = type->get_width();
+
     if (int_encoding)
       result = mk_sort(SMT_SORT_REAL);
     else
-      result = mk_sort(SMT_SORT_BV, width, false);
+      result = mk_sort(SMT_SORT_FIXEDBV, type->get_width());
+    break;
   }
-  break;
   case type2t::floatbv_id:
   {
-    unsigned int fraw = to_floatbv_type(type).fraction;
-    unsigned int expw = to_floatbv_type(type).exponent;
     if (int_encoding)
       result = mk_sort(SMT_SORT_REAL);
     else
-      result = mk_sort(SMT_SORT_FLOATBV, expw, fraw);
+    {
+      unsigned int sw = to_floatbv_type(type).fraction;
+      unsigned int ew = to_floatbv_type(type).exponent;
+      result = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+    }
+    break;
   }
-  break;
   case type2t::string_id:
   {
     const string_type2t &str_type = to_string_type(type);
@@ -1653,7 +1662,7 @@ smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
                             unsigned int topbit, unsigned int topwidth)
 {
 
-  smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
+  smt_sortt bit = mk_sort(SMT_SORT_UBV, 1);
   smt_astt the_top_bit = mk_extract(a, topbit-1, topbit-1, bit);
   smt_astt zero_bit = mk_smt_bvint(BigInt(0), false, 1);
   smt_sortt b = boolean_sort;
@@ -1669,7 +1678,7 @@ smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
   BigInt big_int(big);
   smt_astt f = mk_smt_bvint(big_int, false, topwidth);
 
-  smt_sortt topsort = mk_sort(SMT_SORT_BV, topwidth, false);
+  smt_sortt topsort = mk_sort(SMT_SORT_UBV, topwidth);
   smt_astt topbits = mk_func_app(topsort, SMT_FUNC_ITE, t, z, f);
 
   return mk_func_app(s, SMT_FUNC_CONCAT, topbits, a);
@@ -1721,9 +1730,9 @@ smt_convt::round_fixedbv_to_int(smt_astt a, unsigned int fromwidth,
   unsigned int frac_width = fromwidth / 2;
 
   // Sorts
-  smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
-  smt_sortt halfwidth = mk_sort(SMT_SORT_BV, frac_width, false);
-  smt_sortt tosort = mk_sort(SMT_SORT_BV, towidth, false);
+  smt_sortt bit = mk_sort(SMT_SORT_UBV, 1);
+  smt_sortt halfwidth = mk_sort(SMT_SORT_UBV, frac_width);
+  smt_sortt tosort = mk_sort(SMT_SORT_UBV, towidth);
   smt_sortt boolsort = boolean_sort;
 
   // Determine whether the source is signed from its topmost bit.
@@ -1775,9 +1784,10 @@ smt_astt
 smt_convt::make_bit_bool(smt_astt a)
 {
 
-  assert(((!int_encoding && a->sort->id == SMT_SORT_BV) ||
-          (int_encoding && a->sort->id == SMT_SORT_INT)) &&
-        "Wrong sort fed to " "smt_convt::make_bit_bool");
+  assert(((!int_encoding && a->sort->id == SMT_SORT_UBV)
+          || (!int_encoding && a->sort->id == SMT_SORT_SBV)
+          || (int_encoding && a->sort->id == SMT_SORT_INT))
+          && "Wrong sort fed to " "smt_convt::make_bit_bool");
 
   smt_sortt boolsort = boolean_sort;
   smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
@@ -1841,7 +1851,7 @@ smt_convt::make_array_domain_sort(const array_type2t &arr)
   if (!is_array_type(arr.subtype)) {
     // Normal array, work out what the domain sort is.
     unsigned int domain_width = calculate_array_domain_width(arr);
-    return mk_int_bv_sort(domain_width);
+    return mk_sort(SMT_SORT_UBV, domain_width);
   } else {
     // This is an array of arrays -- we're going to convert this into a single
     // array that has an extended domain. Work out that width. Firstly, how
@@ -1865,7 +1875,7 @@ smt_convt::make_array_domain_sort(const array_type2t &arr)
       subarr = arr.subtype;
     }
 
-    return mk_sort(SMT_SORT_BV, domwidth, false);
+    return mk_sort(SMT_SORT_UBV, domwidth);
   }
 }
 
@@ -2455,11 +2465,11 @@ array_iface::default_convert_array_of(smt_astt init_val,
   if (init_val->sort->id == SMT_SORT_BOOL && !supports_bools_in_arrays) {
     smt_astt zero = ctx->mk_smt_bvint(BigInt(0), false, 1);
     smt_astt one = ctx->mk_smt_bvint(BigInt(0), false, 1);
-    smt_sortt result_sort = ctx->mk_sort(SMT_SORT_BV, 1, false);
+    smt_sortt result_sort = ctx->mk_sort(SMT_SORT_UBV, 1);
     init_val = ctx->mk_func_app(result_sort, SMT_FUNC_ITE, init_val, one, zero);
   }
 
-  smt_sortt domwidth = ctx->mk_int_bv_sort(array_size);
+  smt_sortt domwidth = ctx->mk_sort(SMT_SORT_UBV, array_size);
   smt_sortt arrsort = ctx->mk_sort(SMT_SORT_ARRAY, domwidth, init_val->sort);
   smt_astt newsym_ast =
     ctx->mk_fresh(arrsort, "default_array_of::", init_val->sort);
@@ -2602,7 +2612,7 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
          "scalar AST");
 
   // Just apply a select operation to the current array. Index should be fixed.
-  smt_sortt range_sort = ctx->mk_int_bv_sort(sort->get_data_width());
+  smt_sortt range_sort = ctx->mk_sort(SMT_SORT_UBV, sort->get_data_width());
 
   return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT,
                           this, ctx->convert_ast(idx));

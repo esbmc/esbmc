@@ -180,7 +180,9 @@ smtlib_convt::sort_to_string(const smt_sort *s) const
     return "Int";
   case SMT_SORT_REAL:
     return "Real";
-  case SMT_SORT_BV:
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_UBV:
+  case SMT_SORT_SBV:
     ss << "(_ BitVec " << sort->get_data_width() << ")";
     return ss.str();
   case SMT_SORT_ARRAY:
@@ -635,30 +637,32 @@ smt_sortt
 smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 {
   va_list ap;
-  smtlib_smt_sort *s = NULL, *dom, *range;
-  unsigned long uint;
-  int thebool;
+  smtlib_smt_sort *s = NULL;
 
   va_start(ap, k);
   switch (k) {
   case SMT_SORT_INT:
-    thebool = va_arg(ap, int);
-    s = new smtlib_smt_sort(k, thebool);
+    s = new smtlib_smt_sort(k);
     break;
   case SMT_SORT_REAL:
     s = new smtlib_smt_sort(k);
     break;
-  case SMT_SORT_BV:
-    uint = va_arg(ap, unsigned long);
-    thebool = va_arg(ap, int);
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_UBV:
+  case SMT_SORT_SBV:
+  {
+    unsigned long uint = va_arg(ap, unsigned long);
     assert(uint != 0);
     s = new smtlib_smt_sort(k, uint);
     break;
+  }
   case SMT_SORT_ARRAY:
-    dom = va_arg(ap, smtlib_smt_sort *); // Consider constness?
-    range = va_arg(ap, smtlib_smt_sort *);
+  {
+    smtlib_smt_sort* dom = va_arg(ap, smtlib_smt_sort *); // Consider constness?
+    smtlib_smt_sort* range = va_arg(ap, smtlib_smt_sort *);
     s = new smtlib_smt_sort(k, dom, range);
     break;
+  }
   case SMT_SORT_BOOL:
     s = new smtlib_smt_sort(k);
     break;
@@ -690,7 +694,7 @@ smtlib_convt::mk_smt_real(const std::string &str)
 smt_ast *
 smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 {
-  smt_sortt s = mk_sort(SMT_SORT_BV, w, sign);
+  smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, w);
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_BVINT);
   a->intval = theint;
   return a;

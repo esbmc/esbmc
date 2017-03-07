@@ -377,7 +377,7 @@ smt_astt
 array_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
   // Create a new array, initialized with init_val
-  smt_sortt dom_sort = ctx->mk_int_bv_sort(domain_width);
+  smt_sortt dom_sort = ctx->mk_sort(SMT_SORT_UBV, domain_width);
   smt_sortt idx_sort = init_val->sort;
 
   smt_sortt arr_sort = ctx->mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);

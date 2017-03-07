@@ -91,8 +91,8 @@ smt_convt::overflow_arith(const expr2tc &expr)
     // Zero extend; multiply; Make a decision based on the top half.
     unsigned int sz = zero->type->get_width();
     smt_sortt boolsort = boolean_sort;
-    smt_sortt normalsort = mk_sort(SMT_SORT_BV, sz, false);
-    smt_sortt bigsort = mk_sort(SMT_SORT_BV, sz * 2, false);
+    smt_sortt normalsort = mk_sort(SMT_SORT_UBV, sz);
+    smt_sortt bigsort = mk_sort(SMT_SORT_UBV, sz * 2);
 
     // All one bit vector is tricky, might be 64 bits wide for all we know.
     constant_int2tc allonesexpr(zero->type, BigInt((sz == 64)
@@ -187,9 +187,9 @@ smt_convt::overflow_cast(const expr2tc &expr)
   unsigned int neg_one_bits = (width - bits) + 1;
 
   smt_sortt pos_zero_bits_sort =
-    mk_sort(SMT_SORT_BV, pos_zero_bits, false);
+    mk_sort(SMT_SORT_UBV, pos_zero_bits);
   smt_sortt neg_one_bits_sort =
-    mk_sort(SMT_SORT_BV, neg_one_bits, false);
+    mk_sort(SMT_SORT_UBV, neg_one_bits);
 
   smt_astt pos_bits = mk_smt_bvint(BigInt(0), false, pos_zero_bits);
   smt_astt neg_bits = mk_smt_bvint(BigInt((1 << neg_one_bits) - 1),
