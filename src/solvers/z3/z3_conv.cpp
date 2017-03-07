@@ -1174,45 +1174,33 @@ expr2tc
 z3_convt::get_bool(const smt_ast *a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
-  const z3_smt_ast *za = z3_smt_downcast(a);
 
-  z3::expr e = za->e;
-  try {
-    e = model.eval(e, false);
-  } catch (z3::exception &e) {
-    // No model value
-    return expr2tc();
-  }
+  const z3_smt_ast *za = z3_smt_downcast(a);
+  z3::expr e = model.eval(za->e, false);
 
   if (Z3_get_bool_value(ctx, e) == Z3_L_TRUE)
     return gen_true_expr();
-  else
-    return gen_false_expr();
+
+  return gen_false_expr();
 }
 
 expr2tc
 z3_convt::get_bv(const type2tc &t, const smt_ast *a)
 {
   const z3_smt_ast *za = z3_smt_downcast(a);
-
-  z3::expr e = za->e;
-  try {
-    e = model.eval(e, false);
-  } catch (z3::exception &e) {
-    // No model value
-    return expr2tc();
-  }
+  z3::expr e = model.eval(za->e, false);
 
   if (Z3_get_ast_kind(ctx, e) == Z3_NUMERAL_AST)
   {
     std::string value = Z3_get_numeral_string(ctx, e);
     return constant_int2tc(t, BigInt(value.c_str()));
   }
-  else if (Z3_get_ast_kind(ctx, e) == Z3_APP_AST)
+
+  if (Z3_get_ast_kind(ctx, e) == Z3_APP_AST)
   {
     // floatbv?
     if(!is_floatbv_type(t))
-      return expr2tc();
+      abort();
 
     unsigned ew = Z3_fpa_get_ebits(ctx, e.get_sort());
 
@@ -1233,12 +1221,14 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
     }
   }
 
-  return expr2tc();
+  abort();
 }
 
 expr2tc
-z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
-                         const type2tc &subtype)
+z3_convt::get_array_elem(
+  const smt_ast *array,
+  uint64_t index,
+  const type2tc &subtype)
 {
   const z3_smt_ast *za = z3_smt_downcast(array);
   unsigned long array_bound = array->sort->get_domain_width();
@@ -1248,20 +1238,11 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
   else
     idx = static_cast<const z3_smt_ast*>(mk_smt_bvint(BigInt(index), false, array_bound));
 
-  z3::expr e = select(za->e, idx->e);
-  try {
-    e = model.eval(e, false);
-  } catch (z3::exception &e) {
-    // No model value
-    return expr2tc();
-  }
+  z3::expr e = model.eval(select(za->e, idx->e), false);
 
   z3_smt_ast *value = new_ast(e, convert_sort(subtype));
-  unsigned long bv_size = array->sort->data_width;
-  type2tc res_type = (int_encoding) ? get_int_type(64) : get_uint_type(bv_size);
-  expr2tc result = get_bv(res_type, value);
-
-  return result;
+  type2tc res_type = (int_encoding) ? get_int_type(64) : subtype;
+  return get_bv(res_type, value);
 }
 
 void
