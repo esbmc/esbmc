@@ -63,7 +63,6 @@ public:
   virtual ~z3_smt_ast() { }
   z3::expr e;
 
-  virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
   virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
                                 unsigned int idx, expr2tc idx_expr) const;
   virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;

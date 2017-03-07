@@ -47,9 +47,6 @@ create_new_z3_solver(bool int_encoding, const namespacet &ns,
 z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
 : smt_convt(int_encoding, _ns), array_iface(true, true),ctx(false)
 {
-
-  this->int_encoding = int_encoding;
-
   assumpt_mode = false;
 
   z3::config conf;
@@ -143,13 +140,9 @@ z3_convt::init_addr_space_array(void)
 smt_convt::resultt
 z3_convt::dec_solve(void)
 {
-  unsigned major, minor, build, revision;
-  z3::check_result result;
-  Z3_get_version(&major, &minor, &build, &revision);
-
   pre_solve();
 
-  result = check2_z3_properties();
+  z3::check_result result = check2_z3_properties();
 
   if (result == z3::unsat)
     return smt_convt::P_UNSATISFIABLE;
@@ -970,16 +963,6 @@ z3_convt::mk_struct_sort(const type2tc &type)
   } else {
     return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
   }
-}
-
-const smt_ast *
-z3_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
-{
-  const smt_sort *boolsort = ctx->mk_sort(SMT_SORT_BOOL);
-  const smt_ast *args[2];
-  args[0] = this;
-  args[1] = other;
-  return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 }
 
 const smt_ast *
