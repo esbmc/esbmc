@@ -12,13 +12,12 @@ class mathsat_smt_sort : public smt_sort
 {
 public:
 #define mathsat_sort_downcast(x) static_cast<const mathsat_smt_sort *>(x)
-  mathsat_smt_sort(smt_sort_kind i, msat_type _t) : smt_sort(i), t(_t) { }
-  mathsat_smt_sort(smt_sort_kind i, msat_type _t, unsigned int w)
-    : smt_sort(i, w), t(_t) { }
-  mathsat_smt_sort(smt_sort_kind i, msat_type _t, unsigned int r_w,
-                   unsigned int dom_w)
-    : smt_sort(i, r_w, dom_w), t(_t) { }
-  mathsat_smt_sort(smt_sort_kind i, msat_type _t, unsigned long w, unsigned long dw,
+  mathsat_smt_sort(smt_sort_kind i, msat_type _t) : smt_sort(i), t(_t), rangesort(NULL) { }
+  mathsat_smt_sort(smt_sort_kind i, msat_type _t, size_t w)
+    : smt_sort(i, w), t(_t), rangesort(NULL) { }
+  mathsat_smt_sort(smt_sort_kind i, msat_type _t, size_t r_w, size_t dom_w)
+    : smt_sort(i, r_w, dom_w), t(_t), rangesort(NULL) { }
+  mathsat_smt_sort(smt_sort_kind i, msat_type _t, size_t w, size_t dw,
                    const smt_sort *_rangesort)
     : smt_sort(i, w, dw), t(_t), rangesort(_rangesort) {}
   virtual ~mathsat_smt_sort();

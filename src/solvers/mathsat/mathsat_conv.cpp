@@ -489,8 +489,8 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_FLOATBV:
   {
     unsigned ew = va_arg(ap, unsigned long);
-    unsigned sw = va_arg(ap, unsigned long);
-    return new mathsat_smt_sort(k, msat_get_fp_type(env, ew, sw), ew + sw + 1);
+    unsigned sw = va_arg(ap, unsigned long) + 1;
+    return new mathsat_smt_sort(k, msat_get_fp_type(env, ew, sw), ew + sw, sw);
   }
   case SMT_SORT_FLOATBV_RM:
     return new mathsat_smt_sort(k, msat_get_fp_roundingmode_type(env));
