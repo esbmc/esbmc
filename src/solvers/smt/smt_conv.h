@@ -961,7 +961,7 @@ public:
   // Ours:
   /** Given an array expression, attempt to extract its valuation from the
    *  solver model, computing a constant_array2tc by calling get_array_elem. */
-  expr2tc get_array(smt_astt array, const type2tc &t);
+  expr2tc get_array(const expr2tc &expr);
 
   void delete_all_asts();
 

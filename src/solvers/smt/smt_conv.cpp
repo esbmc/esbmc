@@ -2295,7 +2295,7 @@ smt_convt::get(const expr2tc &expr)
       return fp_api->get_fpbv(expr->type, convert_ast(expr));
 
     case type2t::array_id:
-      return get_array(convert_ast(expr), expr->type);
+      return get_array(expr);
 
     case type2t::struct_id:
     case type2t::pointer_id:
@@ -2309,17 +2309,11 @@ smt_convt::get(const expr2tc &expr)
 }
 
 expr2tc
-smt_convt::get_array(smt_astt array, const type2tc &t)
+smt_convt::get_array(const expr2tc &expr)
 {
   // XXX -- printing multidimensional arrays?
 
-  type2tc newtype = flatten_array_type(t);
-
-  const array_type2t &ar = to_array_type(newtype);
-  if (is_tuple_ast_type(ar.subtype)) {
-    std::cerr << "Tuple array getting not implemented yet, sorry" << std::endl;
-    return expr2tc();
-  }
+  smt_astt array = convert_ast(expr);
 
   // Fetch the array bounds, if it's huge then assume this is a 1024 element
   // array. Then fetch all elements and formulate a constant_array.
@@ -2327,6 +2321,7 @@ smt_convt::get_array(smt_astt array, const type2tc &t)
   if (w > 10)
     w = 10;
 
+  const array_type2t &ar = to_array_type(flatten_array_type(expr->type));
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;

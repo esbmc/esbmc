@@ -52,9 +52,11 @@ void build_goto_trace(
     goto_trace_step.format_string=SSA_step.format_string;
     goto_trace_step.stack_trace = SSA_step.stack_trace;
 
-    if(!is_nil_expr(SSA_step.lhs)) {
+    // If we're dealing with an array_of, there's no need to fetch the rhs
+    if(!is_nil_expr(SSA_step.rhs) && is_constant_array_of2t(SSA_step.rhs))
+      goto_trace_step.value = SSA_step.rhs;
+    else if(!is_nil_expr(SSA_step.lhs))
       goto_trace_step.value = smt_conv.get(SSA_step.lhs);
-    }
 
     for(std::list<expr2tc>::const_iterator
         j=SSA_step.converted_output_args.begin();
