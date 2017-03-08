@@ -90,7 +90,7 @@ public:
   z3::check_result check2_z3_properties(void);
 
   virtual expr2tc get_bool(const smt_ast *a);
-  virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
+  virtual BigInt get_bv(const smt_ast *a);
   virtual expr2tc get_fpbv(const type2tc &t, smt_astt a);
   virtual expr2tc get_array_elem(
     const smt_ast *array,

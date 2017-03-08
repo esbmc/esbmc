@@ -101,13 +101,13 @@ enum smt_sort_kind {
   SMT_SORT_REAL = 2,
   SMT_SORT_SBV = 4,
   SMT_SORT_UBV = 8,
-  SMT_SORT_ARRAY = 16,
-  SMT_SORT_BOOL = 32,
-  SMT_SORT_STRUCT = 64,
-  SMT_SORT_UNION = 128, // Contencious
-  SMT_SORT_FLOATBV = 256,
-  SMT_SORT_FLOATBV_RM = 512,
-  SMT_SORT_FIXEDBV = 1024
+  SMT_SORT_FIXEDBV = 16,
+  SMT_SORT_ARRAY = 32,
+  SMT_SORT_BOOL = 64,
+  SMT_SORT_STRUCT = 128,
+  SMT_SORT_UNION = 256, // Contencious
+  SMT_SORT_FLOATBV = 512,
+  SMT_SORT_FLOATBV_RM = 1024
 };
 
 /** Identifiers for SMT functions.
@@ -688,7 +688,7 @@ public:
   /** Extract the assignment to a bitvector from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
    *  @return Expression representation of a's value, as a constant_int2tc */
-  virtual expr2tc get_bv(const type2tc &t, smt_astt a) = 0;
+  virtual BigInt get_bv(smt_astt a) = 0;
 
   /** @} */
 

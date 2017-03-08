@@ -1180,10 +1180,10 @@ z3_convt::get_bool(const smt_ast *a)
   return gen_false_expr();
 }
 
-expr2tc
-z3_convt::get_bv(const type2tc &t, const smt_ast *a)
+BigInt
+z3_convt::get_bv(const smt_ast *a)
 {
-  assert(is_bv_type(t));
+  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
 
   const z3_smt_ast *za = z3_smt_downcast(a);
   z3::expr e = model.eval(za->e, false);
@@ -1191,7 +1191,7 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
   assert (Z3_get_ast_kind(z3_ctx, e) == Z3_NUMERAL_AST);
 
   std::string value = Z3_get_numeral_string(z3_ctx, e);
-  return constant_int2tc(t, BigInt(value.c_str()));
+  return mp_integer(BigInt(value.c_str()));
 }
 
 expr2tc z3_convt::get_fpbv(const type2tc& t, smt_astt a)
@@ -1228,19 +1228,23 @@ z3_convt::get_array_elem(
   uint64_t index,
   const type2tc &subtype)
 {
-  const z3_smt_ast *za = z3_smt_downcast(array);
-  unsigned long array_bound = array->sort->get_domain_width();
-  const z3_smt_ast *idx;
-  if (int_encoding)
-    idx = static_cast<const z3_smt_ast*>(mk_smt_int(BigInt(index), false));
-  else
-    idx = static_cast<const z3_smt_ast*>(mk_smt_bvint(BigInt(index), false, array_bound));
-
-  z3::expr e = model.eval(select(za->e, idx->e), false);
-
-  z3_smt_ast *value = new_ast(e, convert_sort(subtype));
-  type2tc res_type = (int_encoding) ? get_int_type(64) : subtype;
-  return get_bv(res_type, value);
+  (void) array;
+  (void) index;
+  (void) subtype;
+//  const z3_smt_ast *za = z3_smt_downcast(array);
+//  unsigned long array_bound = array->sort->get_domain_width();
+//  const z3_smt_ast *idx;
+//  if (int_encoding)
+//    idx = static_cast<const z3_smt_ast*>(mk_smt_int(BigInt(index), false));
+//  else
+//    idx = static_cast<const z3_smt_ast*>(mk_smt_bvint(BigInt(index), false, array_bound));
+//
+//  z3::expr e = model.eval(select(za->e, idx->e), false);
+//
+//  z3_smt_ast *value = new_ast(e, convert_sort(subtype));
+//  type2tc res_type = (int_encoding) ? get_int_type(64) : subtype;
+//  return get_bv(res_type, value);
+  return expr2tc();
 }
 
 void

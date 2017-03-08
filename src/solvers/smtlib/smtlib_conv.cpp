@@ -347,8 +347,8 @@ smtlib_convt::dec_solve()
   }
 }
 
-expr2tc
-smtlib_convt::get_bv(const type2tc &t, smt_astt a)
+BigInt
+smtlib_convt::get_bv(smt_astt a)
 {
 
   // This should always be a symbol.
@@ -399,24 +399,8 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
     m = string2integer(data, 2);
   }
 
-  // Generate the appropriate expr.
-  expr2tc result;
-  if(is_bool_type(t))
-  {
-    if (respval.token == TOK_KW_TRUE) {
-      result = constant_bool2tc(true);
-    } else if (respval.token == TOK_KW_FALSE) {
-      result = constant_bool2tc(false);
-    } else {
-      std::cerr << "Unexpected token reading value of boolean symbol from "
-                   "smtlib solver" << std::endl;
-    }
-  }
-  else
-    result = constant_int2tc(t, m);
-
   delete smtlib_output;
-  return result;
+  return m;
 }
 
 expr2tc

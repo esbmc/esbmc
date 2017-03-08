@@ -2277,17 +2277,16 @@ smt_convt::get(const expr2tc &expr)
 
     case type2t::unsignedbv_id:
     case type2t::signedbv_id:
-      return get_bv(expr->type, convert_ast(expr));
+      return constant_int2tc(expr->type, get_bv(convert_ast(expr)));
 
     case type2t::fixedbv_id:
     {
-      expr2tc bv = get_bv(expr->type, convert_ast(expr));
-      assert(!is_nil_expr(bv));
+      BigInt val = get_bv(convert_ast(expr));
 
       fixedbvt fbv(
         constant_exprt(
-          integer2binary(to_constant_int2t(bv).value, expr->type->get_width()),
-          integer2string(to_constant_int2t(bv).value),
+          integer2binary(val, expr->type->get_width()),
+          integer2string(val),
           migrate_type_back(expr->type)));
       return constant_fixedbv2tc(expr->type, fbv);
     }

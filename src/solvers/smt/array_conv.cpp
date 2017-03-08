@@ -449,56 +449,60 @@ array_convt::mk_bounded_array_equality(const array_ast *a1, const array_ast *a2)
 expr2tc
 array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
 {
-  // During model building: get the value of an array at a particular, explicit,
-  // index.
-  const array_ast *mast = array_downcast(a);
-
-  if (!is_unbounded_array(a->sort)) {
-    if (index < mast->array_fields.size()) {
-      return ctx->get_bv(subtype, mast->array_fields[index]);
-    } else {
-      return expr2tc(); // Out of range
-    }
-  }
-
-  if (mast->base_array_id >= array_valuation.size()) {
-    // This is an array that was not previously converted, therefore doesn't
-    // appear in the valuation table. Therefore, all its values are free.
-    return expr2tc();
-  }
-
-  // Fetch all the indexes
-  const idx_record_containert &indexes = array_indexes[mast->base_array_id];
-  unsigned int i = 0;
-
-  // Basically, we have to do a linear search of all the indexes to find one
-  // that matches the index argument.
-  idx_record_containert::const_iterator it;
-  for (it = indexes.begin(); it != indexes.end(); it++, i++) {
-    const expr2tc &e = it->idx;
-    expr2tc e2 = ctx->get(e);
-    if (is_nil_expr(e2))
-      continue;
-
-    const constant_int2t &intval = to_constant_int2t(e2);
-    if (intval.value.to_uint64() == index)
-      break;
-  }
-
-  if (it == indexes.end())
-    // Then this index wasn't modelled in any way.
-    return expr2tc();
-
-  // We've found an index; pick its value out, convert back to expr.
-
-  const ast_vect &solver_values =
-    array_valuation[mast->base_array_id][mast->array_update_num];
-  assert(i < solver_values.size());
-
-  if (array_subtypes[mast->base_array_id]->id == SMT_SORT_BOOL)
-    return ctx->get_bool(solver_values[i]);
-  else
-    return ctx->get_bv(subtype, solver_values[i]);
+  (void) a;
+  (void) index;
+  (void) subtype;
+  return expr2tc(); // Out of range
+//  // During model building: get the value of an array at a particular, explicit,
+//  // index.
+//  const array_ast *mast = array_downcast(a);
+//
+//  if (!is_unbounded_array(a->sort)) {
+//    if (index < mast->array_fields.size()) {
+//      return ctx->get_bv(subtype, mast->array_fields[index]);
+//    } else {
+//      return expr2tc(); // Out of range
+//    }
+//  }
+//
+//  if (mast->base_array_id >= array_valuation.size()) {
+//    // This is an array that was not previously converted, therefore doesn't
+//    // appear in the valuation table. Therefore, all its values are free.
+//    return expr2tc();
+//  }
+//
+//  // Fetch all the indexes
+//  const idx_record_containert &indexes = array_indexes[mast->base_array_id];
+//  unsigned int i = 0;
+//
+//  // Basically, we have to do a linear search of all the indexes to find one
+//  // that matches the index argument.
+//  idx_record_containert::const_iterator it;
+//  for (it = indexes.begin(); it != indexes.end(); it++, i++) {
+//    const expr2tc &e = it->idx;
+//    expr2tc e2 = ctx->get(e);
+//    if (is_nil_expr(e2))
+//      continue;
+//
+//    const constant_int2t &intval = to_constant_int2t(e2);
+//    if (intval.value.to_uint64() == index)
+//      break;
+//  }
+//
+//  if (it == indexes.end())
+//    // Then this index wasn't modelled in any way.
+//    return expr2tc();
+//
+//  // We've found an index; pick its value out, convert back to expr.
+//
+//  const ast_vect &solver_values =
+//    array_valuation[mast->base_array_id][mast->array_update_num];
+//  assert(i < solver_values.size());
+//
+//  if (array_subtypes[mast->base_array_id]->id == SMT_SORT_BOOL)
+//    return ctx->get_bool(solver_values[i]);
+//  else
+//    return ctx->get_bv(subtype, solver_values[i]);
 }
 
 void
