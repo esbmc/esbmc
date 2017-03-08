@@ -479,17 +479,20 @@ protected:
   virtual void symex_assign(const expr2tc &code);
 
   /** Recursively perform symex assign. @see symex_assign */
-  void symex_assign_rec(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_rec(
+    const expr2tc &lhs, const expr2tc &full_lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a symbol.
    *  Renames further, performs goto_symex_statet::assignment and symex target
    *  assignments.
    *  @param lhs Symbol to assign to
+   *  @param full_lhs The original assignment symbol
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_symbol(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_symbol(
+    const expr2tc &lhs, const expr2tc &full_lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a structure.
@@ -505,19 +508,23 @@ protected:
    *  the constant_struct irep is used).
    *
    *  @param lhs Symbol to assign to
+   *  @param full_lhs The original assignment symbol
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_structure(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_structure(
+    const expr2tc &lhs, const expr2tc &full_lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a typecast irep.
    *  This just ends up moving the typecast from the lhs to the rhs.
    *  @param lhs Typecast to assign to
+   *  @param full_lhs The original assignment symbol
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_typecast(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_typecast(
+    const expr2tc &lhs, const expr2tc &full_lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to an array.
@@ -525,30 +532,36 @@ protected:
    *  destination. rhs converted to a WITH statement, updating the contents of
    *  the original array with the value of the original rhs.
    *  @param lhs Array to assign to
+   *  @param full_lhs The original assignment symbol
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_array(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_array(
+    const expr2tc &lhs, const expr2tc &full_lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a struct.
    *  Exactly like with arrays, but with structs and members.
    *  @see symex_assign_array
    *  @param lhs Struct to assign to
+   *  @param full_lhs The original assignment symbol
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_member(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_member(
+    const expr2tc &lhs, const expr2tc &full_lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to an "if".
    *  This ends up being two assignments, one to one branch of the if, the
    *  other to the other. The appropriate guard is executed in either case.
    *  @param lhs "If" to assign to
+   *  @param full_lhs The original assignment symbol
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_if(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_if(
+    const expr2tc &lhs, const expr2tc &full_lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a byte extract.
@@ -556,11 +569,12 @@ protected:
    *  right hand side at the appropriate position. Currently a problem , as
    *  assignments of something that's bigger than a byte fails.
    *  @param lhs Byte extract to assign to
+   *  @param full_lhs The original assignment symbol
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_byte_extract(const expr2tc &lhs, expr2tc &rhs,
-                                 guardt &guard);
+  void symex_assign_byte_extract(
+    const expr2tc &lhs, const expr2tc &full_lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Assign through a 'concat' operation. These are generated when we fail to
@@ -569,10 +583,12 @@ protected:
    *  expression, this means that we have to decompose the right hand side into
    *  a series of byte assignments.
    *  @param lhs Concat to assign to
+   *  @param full_lhs The original assignment symbol
    *  @param rhs Value to assign to lhs
    *  @param guard Assignment guard.
    */
-  void symex_assign_concat(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_concat(
+    const expr2tc &lhs, const expr2tc &full_lhs, expr2tc &rhs, guardt &guard);
 
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
