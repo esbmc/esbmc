@@ -61,11 +61,12 @@ goto_symext::argument_assignments(
 
   // iterates over the types of the arguments
   unsigned int name_idx = 0;
-  for (std::vector<type2tc>::const_iterator it2 = argument_types.begin();
-       it2 != argument_types.end(); it2++, name_idx++)
+  for(std::vector<type2tc>::const_iterator it2 = argument_types.begin();
+      it2 != argument_types.end(); it2++, name_idx++)
   {
     // if you run out of actual arguments there was a mismatch
-    if (it1 == arguments.end()) {
+    if(it1 == arguments.end())
+    {
       std::cerr << "function call: not enough arguments" << std::endl;
       abort();
     }
@@ -73,7 +74,8 @@ goto_symext::argument_assignments(
     const type2tc &arg_type = *it2;
     const irep_idt &identifier = function_type.argument_names[name_idx];
 
-    if (identifier == "") {
+    if(identifier == "")
+    {
       std::cerr << "no identifier for function argument" << std::endl;
       abort();
     }
@@ -83,33 +85,39 @@ goto_symext::argument_assignments(
     expr2tc lhs;
     migrate_expr(tmp_lhs, lhs);
 
-    if (is_nil_expr(*it1)) {
+    if(is_nil_expr(*it1))
+    {
       ; // XXX jmorse, is this valid?
-    } else {
+    }
+    else
+    {
       expr2tc rhs = *it1;
 
       // it should be the same exact type
-      if (!base_type_eq(arg_type, rhs->type, ns)) {
-	const type2tc &f_arg_type = arg_type;
-	const type2tc &f_rhs_type = rhs->type;
+      if(!base_type_eq(arg_type, rhs->type, ns))
+      {
+        const type2tc &f_arg_type = arg_type;
+        const type2tc &f_rhs_type = rhs->type;
 
-	// we are willing to do some limited conversion
-	if ((is_number_type(f_arg_type) ||
-             is_bool_type(f_arg_type) ||
-             is_pointer_type(f_arg_type)) &&
-	    (is_number_type(f_rhs_type) ||
-             is_bool_type(f_rhs_type) ||
-             is_pointer_type(f_rhs_type))) {
+        // we are willing to do some limited conversion
+        if ((is_number_type(f_arg_type)
+             || is_bool_type(f_arg_type)
+             || is_pointer_type(f_arg_type))
+            && (is_number_type(f_rhs_type)
+                || is_bool_type(f_rhs_type)
+                || is_pointer_type(f_rhs_type)))
+        {
           rhs = typecast2tc(arg_type, rhs);
-	} else   {
-	  std::string error = "function call: argument \"" +
-	                      id2string(identifier) +
-	                      "\" type mismatch: got " +
-	                      get_type_id((*it1)->type)+ ", expected " +
-	                      get_type_id(arg_type);
+        }
+        else
+        {
+          std::string error = "function call: argument \""
+              + id2string(identifier) + "\" type mismatch: got "
+              + get_type_id((*it1)->type) + ", expected "
+              + get_type_id(arg_type);
           std::cerr << error << std::endl;
           abort();
-	}
+        }
       }
 
       guardt guard;
@@ -119,11 +127,14 @@ goto_symext::argument_assignments(
     it1++;
   }
 
-  if (function_type.ellipsis) {
-    for (; it1 != arguments.end(); it1++)
+  if(function_type.ellipsis)
+  {
+    for(; it1 != arguments.end(); it1++)
     {
     }
-  } else if (it1 != arguments.end())      {
+  }
+  else if(it1 != arguments.end())
+  {
     // we got too many arguments, but we will just ignore them
   }
 }
