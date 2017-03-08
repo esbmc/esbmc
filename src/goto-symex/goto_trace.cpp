@@ -120,17 +120,15 @@ goto_trace_stept::output(
 
 void
 counterexample_value(
-  std::ostream &out, const namespacet &ns, const expr2tc &lhs,
-  const expr2tc &value)
+  std::ostream &out, const namespacet &ns, const expr2tc &lhs, const expr2tc &value)
 {
-  const irep_idt &identifier = to_symbol2t(lhs).get_symbol_name();
   std::string value_string;
 
   if (is_nil_expr(value))
     value_string = "(assignment removed)";
   else
   {
-    value_string = from_expr(ns, identifier, value);
+    value_string = from_expr(ns, "", value);
 
     // Don't print the bit-vector if we're running on integer/real mode
     if (is_constant_expr(value) && !config.options.get_bool_option("ir"))
@@ -153,13 +151,7 @@ counterexample_value(
     }
   }
 
-  std::string name = id2string(identifier);
-
-  const symbolt *symbol;
-  if (!ns.lookup(identifier, symbol))
-    if (symbol->pretty_name != "")
-      name = id2string(symbol->pretty_name);
-  out << "  " << name << "=" << value_string << std::endl;
+  out << "  " << from_expr(ns, "", lhs) << " = " << value_string << std::endl;
 }
 
 void
