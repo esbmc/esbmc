@@ -1836,37 +1836,7 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
 smt_sortt
 smt_convt::make_array_domain_sort(const array_type2t &arr)
 {
-
-  // Start special casing if this is an array of arrays.
-  if (!is_array_type(arr.subtype)) {
-    // Normal array, work out what the domain sort is.
-    unsigned int domain_width = calculate_array_domain_width(arr);
-    return mk_int_bv_sort(domain_width);
-  } else {
-    // This is an array of arrays -- we're going to convert this into a single
-    // array that has an extended domain. Work out that width. Firstly, how
-    // many levels of array do we have?
-
-    unsigned int how_many_arrays = 1;
-    type2tc subarr = arr.subtype;
-    while (is_array_type(subarr)) {
-      how_many_arrays++;
-      subarr = to_array_type(subarr).subtype;
-    }
-
-    assert(how_many_arrays < 64 && "Suspiciously large number of array "
-                                   "dimensions");
-    unsigned int domwidth;
-    unsigned int i;
-    domwidth = calculate_array_domain_width(arr);
-    subarr = arr.subtype;
-    for (i = 1; i < how_many_arrays; i++) {
-      domwidth += calculate_array_domain_width(to_array_type(arr.subtype));
-      subarr = arr.subtype;
-    }
-
-    return mk_sort(SMT_SORT_BV, domwidth, false);
-  }
+  return mk_sort(SMT_SORT_BV, make_array_domain_sort_exp(arr)->get_width(), false);
 }
 
 type2tc
@@ -1880,27 +1850,19 @@ smt_convt::make_array_domain_sort_exp(const array_type2t &arr)
       return get_uint_type(config.ansi_c.int_width);
     else
       return get_uint_type(calculate_array_domain_width(arr));
-  } else {
+  }
+  else
+  {
     // This is an array of arrays -- we're going to convert this into a single
-    // array that has an extended domain. Work out that width. Firstly, how
-    // many levels of array do we have?
+    // array that has an extended domain. Work out that width.
 
-    unsigned int how_many_arrays = 1;
+    unsigned int domwidth = calculate_array_domain_width(arr);
+
     type2tc subarr = arr.subtype;
-    while (is_array_type(subarr)) {
-      how_many_arrays++;
+    while(is_array_type(subarr))
+    {
+      domwidth += calculate_array_domain_width(to_array_type(subarr));
       subarr = to_array_type(subarr).subtype;
-    }
-
-    assert(how_many_arrays < 64 && "Suspiciously large number of array "
-                                   "dimensions");
-    unsigned int domwidth;
-    unsigned int i;
-    domwidth = calculate_array_domain_width(arr);
-    subarr = arr.subtype;
-    for (i = 1; i < how_many_arrays; i++) {
-      domwidth += calculate_array_domain_width(to_array_type(arr.subtype));
-      subarr = arr.subtype;
     }
 
     return get_uint_type(domwidth);
