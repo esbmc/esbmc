@@ -965,24 +965,14 @@ const smt_ast *
 z3_smt_ast::update(smt_convt *conv, const smt_ast *value,
                    unsigned int idx, expr2tc idx_expr) const
 {
-
   expr2tc index;
 
-  if (sort->id == SMT_SORT_ARRAY) {
-    if (is_nil_expr(idx_expr)) {
-      unsigned int dom_width = (conv->int_encoding) ? 32 : sort->get_domain_width();
-      index = constant_int2tc(type2tc(new unsignedbv_type2t(dom_width)),
-            BigInt(idx));
-    } else {
-      index = idx_expr;
-    }
-
-    const smt_ast *args[3];
-    args[0] = this;
-    args[1] = conv->convert_ast(index);
-    args[2] = value;
-    return conv->mk_func_app(args[0]->sort, SMT_FUNC_STORE, args, 3);
-  } else {
+  if (sort->id == SMT_SORT_ARRAY)
+  {
+    return smt_ast::update(conv, value, idx, idx_expr);
+  }
+  else
+  {
     assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
     assert(is_nil_expr(idx_expr) &&
            "Can only update constant index tuple elems");
