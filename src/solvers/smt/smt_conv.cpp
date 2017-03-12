@@ -2557,7 +2557,7 @@ smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   // We're an array; just generate a 'with' operation.
   expr2tc index;
   if (is_nil_expr(idx_expr)) {
-    size_t dom_width = ctx->int_encoding ? 32 : sort->get_domain_width();
+    size_t dom_width = ctx->int_encoding ? config.ansi_c.int_width : sort->get_domain_width();
     index =
       constant_int2tc(type2tc(new unsignedbv_type2t(dom_width)), BigInt(idx));
   } else {
