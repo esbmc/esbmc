@@ -9,25 +9,27 @@ class yices_smt_sort : public smt_sort
 {
 public:
 #define yices_sort_downcast(x) static_cast<const yices_smt_sort *>(x)
-  yices_smt_sort(smt_sort_kind i, type_t _t)
-    : smt_sort(i), type(_t), tuple_type(), arr_range(NULL) { }
-  yices_smt_sort(smt_sort_kind i, type_t _t, unsigned int w)
-    : smt_sort(i, w), type(_t), tuple_type(), arr_range(NULL) { }
+  yices_smt_sort(smt_sort_kind i, type_t _s)
+    : smt_sort(i), s(_s), rangesort(NULL) { }
 
-  yices_smt_sort(smt_sort_kind i, type_t _t, unsigned long w,
-                 unsigned long d, const yices_smt_sort *rangetype)
-    : smt_sort(i, w, d), type(_t), tuple_type(), arr_range(rangetype) { }
+  yices_smt_sort(smt_sort_kind i, type_t _s, const type2tc &_tupletype)
+    : smt_sort(i), s(_s), rangesort(NULL), tupletype(_tupletype) { }
 
-  // Constructor for structs. Bitwidth is set to 1 as an estople
-  // that... it's a valid domain sort.
-  yices_smt_sort(smt_sort_kind i, type_t _t, const type2tc &s)
-    : smt_sort(i, 1), type(_t), tuple_type(s), arr_range(NULL) { }
+  yices_smt_sort(smt_sort_kind i, type_t _s, size_t w)
+    : smt_sort(i, w), s(_s), rangesort(NULL) { }
 
-  virtual ~yices_smt_sort() { }
+  yices_smt_sort(smt_sort_kind i, type_t _s, size_t w, size_t sw)
+    : smt_sort(i, w, sw), s(_s), rangesort(NULL) { }
 
-  type_t type;
-  type2tc tuple_type; // Only valid for tuples
-  const yices_smt_sort *arr_range;
+  yices_smt_sort(smt_sort_kind i, type_t _s, size_t w, size_t dw,
+                 const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
+
+  virtual ~yices_smt_sort() = default;
+
+  type_t s;
+  const smt_sort *rangesort;
+  type2tc tupletype;
 };
 
 class yices_smt_ast : public smt_ast
@@ -111,12 +113,12 @@ public:
   virtual void push_tuple_ctx();
   virtual void pop_tuple_ctx();
 
-  virtual expr2tc tuple_get_rec(term_t term, const type2tc &type);
-
-  expr2tc get_bool(smt_astt a);
-  expr2tc get_bv(const type2tc &t, smt_astt a);
-  expr2tc get_array_elem(smt_astt array, uint64_t index,
-                         const type2tc &subtype);
+  virtual expr2tc get_bool(const smt_ast *a);
+  virtual BigInt get_bv(const smt_ast *a);
+  virtual expr2tc get_array_elem(
+    const smt_ast *array,
+    uint64_t index,
+    const type2tc &subtype);
 
   inline smt_astt new_ast(smt_sortt s, term_t t) {
     return new yices_smt_ast(this, s, t);
