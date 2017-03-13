@@ -14,18 +14,22 @@ class boolector_smt_sort : public smt_sort
 {
 public:
 #define boolector_sort_downcast(x) static_cast<const boolector_smt_sort *>(x)
-  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t) : smt_sort(i), t(_t) { }
-  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t, unsigned int w)
-    : smt_sort(i, w), t(_t) { }
-  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t, unsigned int r_w,
-                   unsigned int dom_w)
-    : smt_sort(i, r_w, dom_w), t(_t) { }
-  boolector_smt_sort(smt_sort_kind i, BoolectorSort _t, unsigned long w, unsigned long dw,
-                   const smt_sort *_rangesort)
-    : smt_sort(i, w, dw), t(_t), rangesort(_rangesort) {}
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _s)
+    : smt_sort(i), s(_s), rangesort(NULL) { }
+
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _s, size_t w)
+    : smt_sort(i, w), s(_s), rangesort(NULL) { }
+
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort _s, size_t w, size_t sw)
+    : smt_sort(i, w, sw), s(_s), rangesort(NULL) { }
+
+  boolector_smt_sort(smt_sort_kind i, BoolectorSort  _s, size_t w, size_t dw,
+                     const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
+
   virtual ~boolector_smt_sort() = default;
 
-  BoolectorSort t;
+  BoolectorSort s;
   const smt_sort *rangesort;
 };
 
@@ -83,10 +87,12 @@ public:
   void push_array_ctx(void);
   void pop_array_ctx(void);
 
-  expr2tc get_bool(const smt_ast *a);
-  expr2tc get_bv(const type2tc &t, const smt_ast *a);
-  expr2tc get_array_elem(const smt_ast *array, uint64_t index,
-                         const type2tc &subtype);
+  virtual expr2tc get_bool(const smt_ast *a);
+  virtual BigInt get_bv(const smt_ast *a);
+  virtual expr2tc get_array_elem(
+    const smt_ast *array,
+    uint64_t index,
+    const type2tc &subtype);
 
   virtual const smt_ast *overflow_arith(const expr2tc &expr);
 

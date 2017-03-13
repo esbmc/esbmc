@@ -193,7 +193,9 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
     case SMT_SORT_REAL:
       std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
       abort();
-    case SMT_SORT_BV:
+    case SMT_SORT_FIXEDBV:
+    case SMT_SORT_UBV:
+    case SMT_SORT_SBV:
     {
       unsigned long uint = va_arg(ap, unsigned long);
       return new boolector_smt_sort(k, boolector_bitvec_sort(btor, uint), uint);
@@ -211,7 +213,7 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
       if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
         data_width = 1;
 
-      return new boolector_smt_sort(k, boolector_array_sort(btor, dom->t, range->t),
+      return new boolector_smt_sort(k, boolector_array_sort(btor, dom->s, range->s),
           data_width, dom->get_data_width(), range);
     }
 
@@ -224,6 +226,9 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
       unsigned sw = va_arg(ap, unsigned long) + 1;
       return mk_fpbv_sort(ew, sw);
     }
+
+    default:
+      break;
   }
 
   std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
@@ -245,19 +250,16 @@ boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 }
 
 smt_ast *
-boolector_convt::mk_smt_bvint(
-  const mp_integer &theint,
-  bool sign,
-  unsigned int w)
+boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
-  const smt_sort *s = mk_sort(SMT_SORT_BV, w);
+  smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
 
-  if (w > 32) {
+  if (width > 32) {
     // We have to pass things around via means of strings, becausae boolector
     // uses native int types as arguments to its functions, rather than fixed
     // width integers. Seeing how amd64 is LP64, there's no way to pump 64 bit
     // ints to boolector natively.
-    if (w > 64) {
+    if (width > 64) {
       std::cerr <<  "Boolector backend assumes maximum bitwidth is 64, sorry"
                 << std::endl;
       abort();
@@ -268,8 +270,8 @@ boolector_convt::mk_smt_bvint(
 
     // Note that boolector has the most significant bit first in bit strings.
     int64_t num = theint.to_int64();
-    uint64_t bit = 1ULL << (w - 1);
-    for (unsigned int i = 0; i < w; i++) {
+    uint64_t bit = 1ULL << (width - 1);
+    for (unsigned int i = 0; i < width; i++) {
       if (num & bit)
         buffer[i] = '1';
       else
@@ -284,10 +286,10 @@ boolector_convt::mk_smt_bvint(
 
   BoolectorNode *node;
   if (sign) {
-    node = boolector_int(btor, theint.to_long(), boolector_sort_downcast(s)->t);
+    node = boolector_int(btor, theint.to_long(), boolector_sort_downcast(s)->s);
   } else {
     node =
-      boolector_unsigned_int(btor, theint.to_ulong(), boolector_sort_downcast(s)->t);
+      boolector_unsigned_int(btor, theint.to_ulong(), boolector_sort_downcast(s)->s);
   }
 
   return new_ast(s, node);
@@ -317,18 +319,24 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 
   BoolectorNode *node;
 
-  switch(s->id) {
-  case SMT_SORT_BV:
-    node = boolector_var(btor, boolector_sort_downcast(s)->t, name.c_str());
-    break;
-  case SMT_SORT_BOOL:
-    node = boolector_var(btor, boolector_sort_downcast(s)->t, name.c_str());
-    break;
-  case SMT_SORT_ARRAY:
-    node = boolector_array(btor, boolector_sort_downcast(s)->t, name.c_str());
-    break;
-  default:
-    return NULL; // Hax.
+  switch (s->id)
+  {
+    case SMT_SORT_SBV:
+    case SMT_SORT_UBV:
+    case SMT_SORT_FIXEDBV:
+      node = boolector_var(btor, boolector_sort_downcast(s)->s, name.c_str());
+      break;
+
+    case SMT_SORT_BOOL:
+      node = boolector_var(btor, boolector_sort_downcast(s)->s, name.c_str());
+      break;
+
+    case SMT_SORT_ARRAY:
+      node = boolector_array(btor, boolector_sort_downcast(s)->s, name.c_str());
+      break;
+
+    default:
+      return NULL; // Hax.
   }
 
   btor_smt_ast *ast = new_ast(s, node);
@@ -406,18 +414,17 @@ static int64_t read_btor_string(const char *result, unsigned int len)
   return res;
 }
 
-expr2tc
-boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
+BigInt
+boolector_convt::get_bv(const smt_ast *a)
 {
-  assert(a->sort->id == SMT_SORT_BV && a->sort->get_data_width() != 0);
+  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
   const btor_smt_ast *ast = btor_ast_downcast(a);
 
   const char *result = boolector_bv_assignment(btor, ast->e);
   int64_t val = read_btor_string(result, a->sort->get_data_width());
   boolector_free_bv_assignment(btor, result);
 
-  constant_int2tc exp(t, BigInt(val));
-  return exp;
+  return BigInt(val);
 }
 
 expr2tc
@@ -536,7 +543,7 @@ boolector_convt::fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
     bwidth++;
     unsigned int new_size = pow(2.0, bwidth);
     unsigned int diff = new_size - op0->sort->get_data_width();
-    smt_sortt newsort = mk_sort(SMT_SORT_BV, new_size);
+    smt_sortt newsort = mk_sort(SMT_SORT_UBV, new_size);
     smt_astt zeroext = convert_zero_ext(op0, newsort, diff);
     data_op = btor_ast_downcast(zeroext)->e;
     need_to_shift_down = true;
