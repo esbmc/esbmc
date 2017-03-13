@@ -9,14 +9,23 @@ class cvc_smt_sort : public smt_sort
 {
 public:
 #define cvc_sort_downcast(x) static_cast<const cvc_smt_sort *>(x)
-  cvc_smt_sort(smt_sort_kind i, CVC4::Type &_t) : smt_sort(i), t(_t) { }
-  cvc_smt_sort(smt_sort_kind i, CVC4::Type &_t, unsigned int w)
-    : smt_sort(i, w), t(_t) { }
-  cvc_smt_sort(smt_sort_kind i, CVC4::Type &_t, unsigned long w,unsigned long d)
-    : smt_sort(i, w, d), t(_t) { }
-  virtual ~cvc_smt_sort() { }
+  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s)
+    : smt_sort(i), s(_s), rangesort(NULL) { }
 
-  CVC4::Type t;
+  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w)
+    : smt_sort(i, w), s(_s), rangesort(NULL) { }
+
+  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w, size_t sw)
+    : smt_sort(i, w, sw), s(_s), rangesort(NULL) { }
+
+  cvc_smt_sort(smt_sort_kind i, CVC4::Type _s, size_t w, size_t dw,
+              const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
+
+  virtual ~cvc_smt_sort() = default;
+
+  CVC4::Type s;
+  const smt_sort *rangesort;
 };
 
 class cvc_smt_ast : public smt_ast
@@ -65,10 +74,12 @@ public:
   void push_array_ctx(void);
   void pop_array_ctx(void);
 
-  expr2tc get_bool(const smt_ast *a);
-  expr2tc get_bv(const type2tc &t, const smt_ast *a);
-  expr2tc get_array_elem(const smt_ast *array, uint64_t index,
-                         const type2tc &elem_sort);
+  virtual expr2tc get_bool(const smt_ast *a);
+  virtual BigInt get_bv(const smt_ast *a);
+  virtual expr2tc get_array_elem(
+    const smt_ast *array,
+    uint64_t index,
+    const type2tc &subtype);
 
   CVC4::ExprManager em;
   CVC4::SmtEngine smt;

@@ -57,35 +57,38 @@ cvc_convt::get_bool(const smt_ast *a)
   return constant_bool2tc(foo);
 }
 
-expr2tc
-cvc_convt::get_bv(const type2tc &t, const smt_ast *a)
+BigInt
+cvc_convt::get_bv(const smt_ast *a)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
   CVC4::BitVector foo = e.getConst<CVC4::BitVector>();
   // XXX, might croak on 32 bit machines. I'm not aware of a fixed-width api
   // for CVC right now.
-  uint64_t val = foo.toInteger().getUnsignedLong();
-  return constant_int2tc(t, BigInt(val));
+  return BigInt(foo.toInteger().getUnsignedLong());
 }
 
 expr2tc
-cvc_convt::get_array_elem(const smt_ast *array, uint64_t index,
-                          const type2tc &elem_sort)
+cvc_convt::get_array_elem(
+    const smt_ast *array,
+    uint64_t index,
+    const type2tc &subtype)
 {
-  const cvc_smt_ast *carray = cvc_ast_downcast(array);
-  size_t orig_w = array->sort->get_domain_width();
-
-  smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
-  const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
-  CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->e, tmpa->e);
-  free(tmpast);
-
-  cvc_smt_ast *tmpb = new cvc_smt_ast(this, convert_sort(elem_sort), e);
-  expr2tc result = get_bv(elem_sort, tmpb);
-  free(tmpb);
-
-  return result;
+  (void) array;
+  (void) index;
+  (void) subtype;
+//  const cvc_smt_ast *carray = cvc_ast_downcast(array);
+//  size_t orig_w = array->sort->get_domain_width();
+//
+//  smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
+//  const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
+//  CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->e, tmpa->e);
+//  free(tmpast);
+//
+//  cvc_smt_ast *tmpb = new cvc_smt_ast(this, convert_sort(elem_sort), e);
+//  expr2tc result = get_bv(elem_sort, tmpb);
+//  free(tmpb);
+  return expr2tc();
 }
 
 const std::string
@@ -240,22 +243,29 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
   va_start(ap, k);
   switch (k) {
   case SMT_SORT_BOOL:
-  {
-    CVC4::BooleanType t = em.booleanType();
-    return new cvc_smt_sort(k, t);
-  }
-  case SMT_SORT_BV:
+    return new cvc_smt_sort(k, em.booleanType());
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_UBV:
+  case SMT_SORT_SBV:
   {
     unsigned long uint = va_arg(ap, unsigned long);
-    CVC4::BitVectorType t = em.mkBitVectorType(uint);
-    return new cvc_smt_sort(k, t, uint);
+    return new cvc_smt_sort(k, em.mkBitVectorType(uint), uint);
   }
   case SMT_SORT_ARRAY:
   {
     const cvc_smt_sort *dom = va_arg(ap, const cvc_smt_sort*);
     const cvc_smt_sort *range = va_arg(ap, const cvc_smt_sort*);
-    CVC4::ArrayType t = em.mkArrayType(dom->t, range->t);
-    return new cvc_smt_sort(k, t, range->get_data_width(), dom->get_data_width());
+    assert(int_encoding || dom->get_data_width() != 0);
+
+    // The range data width is allowed to be zero, which happens if the range
+    // is not a bitvector / integer
+    unsigned int data_width = range->get_data_width();
+    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
+      data_width = 1;
+
+    return new cvc_smt_sort(k, em.mkArrayType(dom->s, range->s), data_width,
+                            dom->get_data_width(), range);
+    break;
   }
   case SMT_SORT_FLOATBV:
   {
@@ -283,13 +293,13 @@ cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 }
 
 smt_ast *
-cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
+cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
-  const smt_sort *s = mk_sort(SMT_SORT_BV, w, false);
+  smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv = CVC4::BitVector(w, (uint64_t)theint.to_int64());
+  CVC4::BitVector bv = CVC4::BitVector(width, (uint64_t)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
   return new cvc_smt_ast(this, s, e);
 }
@@ -327,7 +337,7 @@ cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   }
 
   // Time for a new one.
-  CVC4::Expr e = em.mkVar(name, sort->t); // "global", eh?
+  CVC4::Expr e = em.mkVar(name, sort->s); // "global", eh?
   sym_tab.bind(name, e, true);
   return new cvc_smt_ast(this, s, e);
 }
