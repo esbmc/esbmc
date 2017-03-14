@@ -11,19 +11,25 @@ class mathsat_smt_sort : public smt_sort
 {
 public:
 #define mathsat_sort_downcast(x) static_cast<const mathsat_smt_sort *>(x)
-  mathsat_smt_sort(smt_sort_kind i, msat_type _t) : smt_sort(i), t(_t), rangesort(NULL) { }
-  mathsat_smt_sort(smt_sort_kind i, msat_type _t, size_t w)
-    : smt_sort(i, w), t(_t), rangesort(NULL) { }
-  mathsat_smt_sort(smt_sort_kind i, msat_type _t, size_t r_w, size_t dom_w)
-    : smt_sort(i, r_w, dom_w), t(_t), rangesort(NULL) { }
-  mathsat_smt_sort(smt_sort_kind i, msat_type _t, size_t w, size_t dw,
-                   const smt_sort *_rangesort)
-    : smt_sort(i, w, dw), t(_t), rangesort(_rangesort) {}
-  virtual ~mathsat_smt_sort();
+  mathsat_smt_sort(smt_sort_kind i, msat_type _s)
+    : smt_sort(i), s(_s), rangesort(NULL) { }
 
-  msat_type t;
+  mathsat_smt_sort(smt_sort_kind i, msat_type _s, size_t w)
+    : smt_sort(i, w), s(_s), rangesort(NULL) { }
+
+  mathsat_smt_sort(smt_sort_kind i, msat_type _s, size_t w, size_t sw)
+    : smt_sort(i, w, sw), s(_s), rangesort(NULL) { }
+
+  mathsat_smt_sort(smt_sort_kind i, msat_type _s, size_t w, size_t dw,
+                   const smt_sort *_rangesort)
+    : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
+
+  virtual ~mathsat_smt_sort() = default;
+
+  msat_type s;
   const smt_sort *rangesort;
 };
+
 
 class mathsat_smt_ast : public smt_ast
 {
@@ -31,7 +37,7 @@ public:
 #define mathsat_ast_downcast(x) static_cast<const mathsat_smt_ast *>(x)
   mathsat_smt_ast(smt_convt *ctx, const smt_sort *_s, msat_term _t)
     : smt_ast(ctx, _s), t(_t) { }
-  virtual ~mathsat_smt_ast();
+  virtual ~mathsat_smt_ast() = default;
 
   virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
   virtual void dump() const;
@@ -79,13 +85,13 @@ public:
   void push_ctx();
   void pop_ctx();
 
-  expr2tc get_bool(const smt_ast *a);
-  expr2tc get_bv(const type2tc &t, const smt_ast *a);
+  virtual expr2tc get_bool(const smt_ast *a);
+  virtual BigInt get_bv(const smt_ast *a);
   virtual expr2tc get_fpbv(const type2tc &t, smt_astt a);
-  expr2tc get_array_elem(
+  virtual expr2tc get_array_elem(
     const smt_ast *array,
-    uint64_t idx,
-    const type2tc &elem_sort);
+    uint64_t index,
+    const type2tc &subtype);
 
   virtual const smt_ast *convert_array_of(smt_astt init_val,
                                           unsigned long domain_width);

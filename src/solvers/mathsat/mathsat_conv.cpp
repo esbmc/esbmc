@@ -136,10 +136,10 @@ mathsat_convt::get_bool(const smt_ast *a)
   msat_free(msat_term_repr(t));
 }
 
-expr2tc
-mathsat_convt::get_bv(const type2tc &_t, const smt_ast *a)
+BigInt
+mathsat_convt::get_bv(const smt_ast *a)
 {
-  assert(is_bv_type(_t));
+  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
 
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_get_model_value(env, mast->t);
@@ -168,7 +168,7 @@ mathsat_convt::get_bv(const type2tc &_t, const smt_ast *a)
     abort();
   }
 
-  return constant_int2tc(_t, BigInt(finval));
+  return BigInt(finval);
 }
 
 expr2tc mathsat_convt::get_fpbv(const type2tc& _t, smt_astt a)
@@ -204,26 +204,32 @@ expr2tc mathsat_convt::get_fpbv(const type2tc& _t, smt_astt a)
 }
 
 expr2tc
-mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
-                              const type2tc &elem_sort)
+mathsat_convt::get_array_elem(
+  const smt_ast *array,
+  uint64_t index,
+  const type2tc &subtype)
 {
-  size_t orig_w = array->sort->get_domain_width();
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(array);
+  (void) array;
+  (void) index;
+  (void) subtype;
+//  size_t orig_w = array->sort->get_domain_width();
+//  const mathsat_smt_ast *mast = mathsat_ast_downcast(array);
+//
+//  smt_ast *tmpast = mk_smt_bvint(BigInt(idx), false, orig_w);
+//  const mathsat_smt_ast *tmpa = mathsat_ast_downcast(tmpast);
+//
+//  msat_term t = msat_make_array_read(env, mast->t, tmpa->t);
+//  check_msat_error(t);
+//  free(tmpast);
+//
+//  mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(elem_sort), t);
+//  expr2tc result = get_bv(elem_sort, tmpb);
+//  free(tmpb);
+//
+//  msat_free(msat_term_repr(t));
 
-  smt_ast *tmpast = mk_smt_bvint(BigInt(idx), false, orig_w);
-  const mathsat_smt_ast *tmpa = mathsat_ast_downcast(tmpast);
-
-  msat_term t = msat_make_array_read(env, mast->t, tmpa->t);
-  check_msat_error(t);
-  free(tmpast);
-
-  mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(elem_sort), t);
-  expr2tc result = get_bv(elem_sort, tmpb);
-  free(tmpb);
-
-  msat_free(msat_term_repr(t));
-
-  return result;
+//  return result;
+  return expr2tc();
 }
 
 const std::string
@@ -503,7 +509,9 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
     return new mathsat_smt_sort(k, msat_get_integer_type(env));
   case SMT_SORT_REAL:
     return new mathsat_smt_sort(k, msat_get_rational_type(env));
-  case SMT_SORT_BV:
+  case SMT_SORT_FIXEDBV:
+  case SMT_SORT_UBV:
+  case SMT_SORT_SBV:
   {
     unsigned long uint = va_arg(ap, unsigned long);
     return new mathsat_smt_sort(k, msat_get_bv_type(env, uint), uint);
@@ -528,11 +536,16 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
     if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
       data_width = 1;
 
-    return new mathsat_smt_sort(k, msat_get_array_type(env, dom->t, range->t),
+    return new mathsat_smt_sort(k, msat_get_array_type(env, dom->s, range->s),
                                 data_width, dom->get_data_width(), range);
   }
   case SMT_SORT_BOOL:
-    return new mathsat_smt_sort(k, msat_get_bool_type(env));
+  {
+
+    auto b = new mathsat_smt_sort(k, msat_get_bool_type(env));
+    std::cout << b << std::endl;
+    return b;
+  }
   case SMT_SORT_STRUCT:
   case SMT_SORT_UNION:
     std::cerr << "MathSAT does not support tuples" << std::endl;
@@ -568,21 +581,18 @@ mathsat_convt::mk_smt_real(const std::string &str)
 }
 
 smt_ast *
-mathsat_convt::mk_smt_bvint(
-  const mp_integer &theint,
-  bool sign __attribute__((unused)),
-  unsigned int w)
+mathsat_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
   std::stringstream ss;
 
   // MathSAT refuses to parse negative integers. So, feed it binary.
-  std::string str = integer2binary(theint, w);
+  std::string str = integer2binary(theint, width);
 
   // Make bv int from textual representation.
-  msat_term t = msat_make_bv_number(env, str.c_str(), w, 2);
+  msat_term t = msat_make_bv_number(env, str.c_str(), width, 2);
   check_msat_error(t);
 
-  smt_sortt s = mk_sort(SMT_SORT_BV, w, false);
+  smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
   return new mathsat_smt_ast(this, s, t);
 }
 
@@ -666,7 +676,7 @@ smt_astt mathsat_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
   msat_term t;
   smt_sortt s;
   if(is_bv_type(cast.type)) {
-    s = mk_sort(SMT_SORT_BV);
+    s = mk_sort(is_signedbv_type(cast.type) ? SMT_SORT_SBV : SMT_SORT_UBV, cast.type->get_width());
 
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
@@ -816,7 +826,7 @@ mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   const mathsat_smt_sort *ms = mathsat_sort_downcast(s);
   // XXX - does 'd' leak?
-  msat_decl d = msat_declare_function(env, name.c_str(), ms->t);
+  msat_decl d = msat_declare_function(env, name.c_str(), ms->s);
   assert(!MSAT_ERROR_DECL(d) && "Invalid function symbol declaration sort");
 
   msat_term t = msat_make_constant(env, d);
@@ -895,7 +905,7 @@ mathsat_convt::get_exp_width(smt_sortt sort)
 {
   const mathsat_smt_sort *ms = mathsat_sort_downcast(sort);
   size_t exp_width, mant_width;
-  int ret = msat_is_fp_type(env, ms->t, &exp_width, &mant_width);
+  int ret = msat_is_fp_type(env, ms->s, &exp_width, &mant_width);
   assert(ret != 0 && "Non FP type passed to mathsat_convt::get_exp_width");
   return exp_width;
 }
@@ -905,19 +915,9 @@ mathsat_convt::get_mant_width(smt_sortt sort)
 {
   const mathsat_smt_sort *ms = mathsat_sort_downcast(sort);
   size_t exp_width, mant_width;
-  int ret = msat_is_fp_type(env, ms->t, &exp_width, &mant_width);
+  int ret = msat_is_fp_type(env, ms->s, &exp_width, &mant_width);
   assert(ret != 0 && "Non FP type passed to mathsat_convt::get_mant_width");
   return mant_width;
-}
-
-mathsat_smt_ast::~mathsat_smt_ast()
-{
-  // We don't need to free the AST or the sort,
-  // as freeing env does exactly the same
-}
-
-mathsat_smt_sort::~mathsat_smt_sort()
-{
 }
 
 smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
