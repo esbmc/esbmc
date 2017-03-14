@@ -286,7 +286,7 @@ public:
     return secondary_width;
   }
 
-  virtual ~smt_sort() { }
+  virtual ~smt_sort() = default;
 
 private:
   /** Data size of the sort.

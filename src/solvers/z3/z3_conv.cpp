@@ -732,7 +732,7 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
 
   smt_sortt s;
   if(is_unsignedbv_type(cast.type)) {
-    s = mk_sort(SMT_SORT_UBV);
+    s = mk_sort(SMT_SORT_UBV, cast.type->get_width());
 
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
@@ -741,7 +741,7 @@ smt_astt z3_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
 
     return new_ast(z3_ctx.fpa_to_ubv(mrm_const->e, mfrom->e, cast.type->get_width()), s);
   } else if(is_signedbv_type(cast.type)) {
-    s = mk_sort(SMT_SORT_SBV);
+    s = mk_sort(SMT_SORT_SBV, cast.type->get_width());
 
     // Conversion from float to integers always truncate, so we assume
     // the round mode to be toward zero
@@ -911,8 +911,8 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
     if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
       data_width = 1;
 
-    s = new z3_smt_sort(k, z3_ctx.array_sort(dom->s, range->s), data_width,
-                        dom->get_data_width(), range);
+    s = new z3_smt_sort(k, z3_ctx.array_sort(dom->s, range->s),
+                        data_width, dom->get_data_width(), range);
     break;
   }
   case SMT_SORT_BOOL:

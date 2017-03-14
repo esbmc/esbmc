@@ -52,7 +52,7 @@ public:
               const smt_sort *_rangesort)
     : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
 
-  virtual ~z3_smt_sort() { }
+  virtual ~z3_smt_sort() = default;
 
   z3::sort s;
   const smt_sort *rangesort;
