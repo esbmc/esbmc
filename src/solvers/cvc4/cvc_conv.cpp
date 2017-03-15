@@ -295,7 +295,7 @@ cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 smt_ast *
 cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
-  smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
+  smt_sortt s = mk_sort(ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.

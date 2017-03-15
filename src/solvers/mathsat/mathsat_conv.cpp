@@ -596,7 +596,7 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int wi
   msat_term t = msat_make_bv_number(env, str.c_str(), width, 2);
   check_msat_error(t);
 
-  smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
+  smt_sortt s = mk_sort(ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
   return new mathsat_smt_ast(this, s, t);
 }
 

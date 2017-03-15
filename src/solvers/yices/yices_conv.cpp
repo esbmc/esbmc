@@ -356,7 +356,7 @@ yices_convt::mk_smt_real(const std::string &str)
 smt_astt
 yices_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
-  smt_sortt s = mk_sort(sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
+  smt_sortt s = mk_sort(ctx->int_encoding ? SMT_SORT_INT : sign ? SMT_SORT_SBV : SMT_SORT_UBV, width);
   term_t term = yices_bvconst_uint64(width, theint.to_int64());
   return new yices_smt_ast(this, s, term);
 }
