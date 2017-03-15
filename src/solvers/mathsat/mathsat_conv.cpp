@@ -483,8 +483,12 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     r = msat_make_fp_equal(env, args[0]->t, args[1]->t);
     break;
   case SMT_FUNC_BV2FLOAT:
-    r = msat_make_fp_from_ieeebv(env, get_exp_width(s), get_mant_width(s), args[0]->t);
+  {
+    unsigned sw = s->get_significand_width();
+    unsigned ew = s->get_data_width() - sw;
+    r = msat_make_fp_from_ieeebv(env, ew, sw, args[0]->t);
     break;
+  }
   case SMT_FUNC_FLOAT2BV:
     r = msat_make_fp_as_ieeebv(env, args[0]->t);
     break;
@@ -519,7 +523,7 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_FLOATBV:
   {
     unsigned ew = va_arg(ap, unsigned long);
-    unsigned sw = va_arg(ap, unsigned long) + 1;
+    unsigned sw = va_arg(ap, unsigned long);
     return mk_fpbv_sort(ew, sw);
   }
   case SMT_SORT_FLOATBV_RM:
@@ -616,7 +620,10 @@ smt_astt mathsat_convt::mk_smt_fpbv(const ieee_floatt &thereal)
   msat_term t = msat_from_string(env, smt_str.c_str());
   check_msat_error(t);
 
-  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, thereal.spec.e, thereal.spec.f);
+  type2tc new_fp_type;
+  migrate_type(thereal.spec.to_type(), new_fp_type);
+  smt_sortt s = convert_sort(new_fp_type);
+
   return new mathsat_smt_ast(this, s, t);
 }
 
@@ -685,10 +692,9 @@ smt_astt mathsat_convt::mk_smt_typecast_from_fpbv(const typecast2t &cast)
 
     t = msat_make_fp_to_bv(env, cast.type->get_width(), mrm->t, mfrom->t);
   } else if(is_floatbv_type(cast.type)) {
-    unsigned ew = to_floatbv_type(cast.type).exponent;
-    unsigned sw = to_floatbv_type(cast.type).fraction;
-
-    s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+    s = convert_sort(cast.type);
+    unsigned sw = s->get_significand_width();
+    unsigned ew = s->get_data_width() - sw;
 
     // Use the round mode
     rm_const = convert_rounding_mode(cast.rounding_mode);
@@ -713,9 +719,9 @@ smt_astt mathsat_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
   smt_astt from = convert_ast(cast.from);
   const mathsat_smt_ast *mfrom = mathsat_ast_downcast(from);
 
-  unsigned ew = to_floatbv_type(cast.type).exponent;
-  unsigned sw = to_floatbv_type(cast.type).fraction;
-  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
+  smt_sortt s = convert_sort(cast.type);
+  unsigned sw = s->get_significand_width();
+  unsigned ew = s->get_data_width() - sw;
 
   msat_term t;
   if(is_bool_type(cast.from)) {
@@ -794,10 +800,7 @@ smt_astt mathsat_convt::mk_smt_fpbv_arith_ops(const expr2tc& expr)
   }
   check_msat_error(t);
 
-  unsigned ew = to_floatbv_type(expr->type).exponent;
-  unsigned sw = to_floatbv_type(expr->type).fraction;
-  smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
-
+  smt_sortt s = convert_sort(expr->type);
   return new mathsat_smt_ast(this, s, t);
 }
 
@@ -898,26 +901,6 @@ const smt_ast* mathsat_smt_ast::select(smt_convt* ctx, const expr2tc& idx) const
 void mathsat_smt_ast::dump() const
 {
   std::cout << msat_to_smtlib2(*_env, t) << std::endl;
-}
-
-size_t
-mathsat_convt::get_exp_width(smt_sortt sort)
-{
-  const mathsat_smt_sort *ms = mathsat_sort_downcast(sort);
-  size_t exp_width, mant_width;
-  int ret = msat_is_fp_type(env, ms->s, &exp_width, &mant_width);
-  assert(ret != 0 && "Non FP type passed to mathsat_convt::get_exp_width");
-  return exp_width;
-}
-
-size_t
-mathsat_convt::get_mant_width(smt_sortt sort)
-{
-  const mathsat_smt_sort *ms = mathsat_sort_downcast(sort);
-  size_t exp_width, mant_width;
-  int ret = msat_is_fp_type(env, ms->s, &exp_width, &mant_width);
-  assert(ret != 0 && "Non FP type passed to mathsat_convt::get_mant_width");
-  return mant_width;
 }
 
 smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)

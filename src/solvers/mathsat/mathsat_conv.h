@@ -100,9 +100,6 @@ public:
   void push_array_ctx(void);
   void pop_array_ctx(void);
 
-  size_t get_exp_width(smt_sortt sort);
-  size_t get_mant_width(smt_sortt sort);
-
   virtual void dump_SMT();
 
   // MathSAT data.
