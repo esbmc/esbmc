@@ -428,35 +428,42 @@ boolector_convt::get_bv(const smt_ast *a)
 }
 
 expr2tc
-boolector_convt::get_array_elem(const smt_ast *array, uint64_t index,
-                                const type2tc &subtype __attribute__((unused)))
+boolector_convt::get_array_elem(
+  const smt_ast *array,
+  uint64_t index,
+  const type2tc &subtype)
 {
-  // Super inefficient, but never mind.
-  assert(array->sort->id == SMT_SORT_ARRAY);
-  const btor_smt_ast *ast = btor_ast_downcast(array);
+  (void) array;
+  (void) index;
+  (void) subtype;
 
-  int size;
-  char **indicies, **values;
-  boolector_array_assignment(btor, ast->e, &indicies, &values, &size);
-
-  if (size == 0)
-    // Presumably no allocation occurred either.
-    return expr2tc();
-
-  expr2tc final_result;
-
-  for (int i = 0; i < size; i++) {
-    int64_t idx = read_btor_string(indicies[i], array->sort->get_domain_width());
-    if (idx == (int64_t)index) {
-      int64_t value = read_btor_string(values[i], array->sort->get_data_width());
-      final_result =
-        constant_int2tc(get_int_type(array->sort->get_data_width()), BigInt(value));
-      break;
-    }
-  }
-
-  boolector_free_array_assignment(btor, indicies, values, size);
-  return final_result;
+//  // Super inefficient, but never mind.
+//  assert(array->sort->id == SMT_SORT_ARRAY);
+//  const btor_smt_ast *ast = btor_ast_downcast(array);
+//
+//  int size;
+//  char **indicies, **values;
+//  boolector_array_assignment(btor, ast->e, &indicies, &values, &size);
+//
+//  if (size == 0)
+//    // Presumably no allocation occurred either.
+//    return expr2tc();
+//
+//  expr2tc final_result;
+//
+//  for (int i = 0; i < size; i++) {
+//    int64_t idx = read_btor_string(indicies[i], array->sort->get_domain_width());
+//    if (idx == (int64_t)index) {
+//      int64_t value = read_btor_string(values[i], array->sort->get_data_width());
+//      final_result =
+//        constant_int2tc(get_int_type(array->sort->get_data_width()), BigInt(value));
+//      break;
+//    }
+//  }
+//
+//  boolector_free_array_assignment(btor, indicies, values, size);
+//  return final_result;
+  return expr2tc();
 }
 
 const smt_ast *
