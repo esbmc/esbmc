@@ -307,7 +307,7 @@ cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 smt_ast *
 cvc_convt::mk_smt_bool(bool val)
 {
-  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  const smt_sort *s = boolean_sort;
   CVC4::Expr e = em.mkConst(val);
   return new cvc_smt_ast(this, s, e);
 }

@@ -299,7 +299,7 @@ smt_ast *
 boolector_convt::mk_smt_bool(bool val)
 {
   BoolectorNode *node = (val) ? boolector_true(btor) : boolector_false(btor);
-  const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+  const smt_sort *sort = boolean_sort;
   return new_ast(sort, node);
 }
 
@@ -498,7 +498,7 @@ boolector_convt::overflow_arith(const expr2tc &expr)
     abort();
   }
 
-  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  const smt_sort *s = boolean_sort;
   return new_ast(s, res);
 }
 

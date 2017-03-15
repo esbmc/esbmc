@@ -812,7 +812,7 @@ smt_astt mathsat_convt::mk_smt_fpbv_fma(const expr2tc& expr)
 smt_ast *
 mathsat_convt::mk_smt_bool(bool val)
 {
-  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  const smt_sort *s = boolean_sort;
   return new mathsat_smt_ast(this, s, (val) ? msat_make_true(env)
                                       : msat_make_false(env));
 }
