@@ -37,7 +37,7 @@ AS_IF([test "x$esbmc_has_awk" = "xno"], AC_MSG_ERROR([Cannot find awk]))
 dnl Don't seem to be able to test for sed
 
 dnl Transform version numbers into some integers...
-AS_VAR_SET(ver_numcomponents, `echo esbmcversion | awk 'BEGIN{RS="."}{print $0;}' | wc -l`)
+AS_VAR_SET(ver_numcomponents, `echo esbmcversion | awk 'BEGIN{RS="."}{print $0;}' | wc -l | xargs `)
 AS_IF([test "${ver_numcomponents}" != "4"], [
   AC_MSG_ERROR([Couldnt interpret esbmc version number in esbmc/version])
 ])
