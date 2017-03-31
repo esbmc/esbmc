@@ -1836,7 +1836,7 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
 smt_sortt
 smt_convt::make_array_domain_sort(const array_type2t &arr)
 {
-  return mk_sort(SMT_SORT_BV, make_array_domain_sort_exp(arr)->get_width(), false);
+  return mk_sort(int_encoding ? SMT_SORT_INT : SMT_SORT_BV, make_array_domain_sort_exp(arr)->get_width(), false);
 }
 
 type2tc
