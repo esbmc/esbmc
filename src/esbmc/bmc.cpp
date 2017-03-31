@@ -97,7 +97,6 @@ void bmct::successful_trace(symex_target_equationt &equation __attribute__((unus
 
   goto_tracet goto_trace;
   std::string witness_output = options.get_option("witness-output");
-  std::string programfile = options.get_option("witness-programfile");
   int specification = 0;
   if(!witness_output.empty())
     set_ui(ui_message_handlert::GRAPHML);
@@ -110,7 +109,6 @@ void bmct::successful_trace(symex_target_equationt &equation __attribute__((unus
       specification += options.get_bool_option("overflow-check") ? 1 : 0;
       specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
       generate_goto_trace_in_correctness_graphml_format(
-        programfile,
         witness_output,
         options.get_bool_option("witness-detailed"),
         specification,
@@ -173,7 +171,6 @@ void bmct::error_trace(smt_convt &smt_conv,
   build_goto_trace(equation, smt_conv, goto_trace);
 
   std::string witness_output = options.get_option("witness-output");
-  std::string programfile = options.get_option("witness-programfile");
   if(!witness_output.empty())
   {
     set_ui(ui_message_handlert::GRAPHML);
@@ -185,7 +182,6 @@ void bmct::error_trace(smt_convt &smt_conv,
       specification += options.get_bool_option("overflow-check") ? 1 : 0;
       specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
       generate_goto_trace_in_violation_graphml_format(
-        programfile,
         witness_output,
         options.get_bool_option("witness-detailed"),
         specification,

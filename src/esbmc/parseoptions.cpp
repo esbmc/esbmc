@@ -185,9 +185,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("witness-detailed"))
     options.set_option("witness-detailed", true);
 
-  if(cmdline.isset("witness-programfile"))
-    options.set_option("witness-programfile", cmdline.getval("witness-programfile"));
-
   if(cmdline.isset("git-hash"))
   {
     std::cout << esbmc_version_string << std::endl;
