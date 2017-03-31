@@ -237,9 +237,6 @@
 /* Define to 1 if you have the `opendir' function. */
 #undef HAVE_OPENDIR
 
-/* Define to 1 if you have the <openssl/sha.h> header file. */
-#undef HAVE_OPENSSL_SHA_H
-
 /* Define to 1 if you have the `pathconf' function. */
 #undef HAVE_PATHCONF
 
@@ -485,9 +482,6 @@
 
 /* Define if dlsym() requires a leading underscore in symbol names. */
 #undef NEED_USCORE
-
-/* Have openssl headers */
-#undef OPENSSL_HEADERS
 
 /* Name of package */
 #undef PACKAGE
