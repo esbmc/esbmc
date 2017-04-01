@@ -126,6 +126,7 @@ static const char *cpp_normal_defs[] = {
 NULL
 };
 
+#if !defined(WIN32) && !defined(__APPLE__)
 static const char *cpp_linux_defs[] = {
 "i386",
 "__i386",
@@ -142,6 +143,7 @@ static const char *cpp_linux_defs[] = {
 "__restrict=/**/",
 NULL
 };
+#endif
 
 #ifdef __APPLE__
 static const char *cpp_mac_defs[] = {
