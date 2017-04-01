@@ -166,9 +166,6 @@ extern "C" {
   extern char clang_mmintrin_buf[];
   extern unsigned int clang_mmintrin_buf_size;
 
-  extern char clang_module_buf[];
-  extern unsigned int clang_module_buf_size;
-
   extern char clang_msa_buf[];
   extern unsigned int clang_msa_buf_size;
 
@@ -334,7 +331,6 @@ extern "C" {
     { "mm3dnow.h", clang_mm3dnow_buf, &clang_mm3dnow_buf_size},
     { "mm_malloc.h", clang_mm_malloc_buf, &clang_mm_malloc_buf_size},
     { "mmintrin.h", clang_mmintrin_buf, &clang_mmintrin_buf_size},
-    { "module.h", clang_module_buf, &clang_module_buf_size},
     { "msa.h", clang_msa_buf, &clang_msa_buf_size},
     { "mwaitxintrin.h", clang_mwaitxintrin_buf, &clang_mwaitxintrin_buf_size},
     { "nmmintrin.h", clang_nmmintrin_buf, &clang_nmmintrin_buf_size},

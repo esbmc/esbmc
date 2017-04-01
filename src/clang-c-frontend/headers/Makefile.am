@@ -22,18 +22,17 @@ libclangheaders_la_SOURCES = clang___clang_cuda_builtin_vars.hs \
       clang_htmintrin.hs clang_htmxlintrin.hs clang_ia32intrin.hs \
       clang_immintrin.hs clang_intrin.hs clang_inttypes.hs clang_iso646.hs \
       clang_limits.hs clang_lzcntintrin.hs clang_mm3dnow.hs clang_mm_malloc.hs \
-      clang_mmintrin.hs clang_module.hs clang_msa.hs clang_mwaitxintrin.hs \
-      clang_nmmintrin.hs clang_omp.hs clang_opencl_c.hs clang_pkuintrin.hs \
-      clang_pmmintrin.hs clang_popcntintrin.hs clang_prfchwintrin.hs \
-      clang_rdseedintrin.hs clang_rtmintrin.hs clang_s390intrin.hs \
-      clang_shaintrin.hs clang_smmintrin.hs clang_stdalign.hs clang_stdarg.hs \
-      clang_stdatomic.hs clang_stdbool.hs clang_stddef.hs clang_stdint.hs \
-      clang_stdnoreturn.hs clang_tbmintrin.hs clang_tgmath.hs \
-      clang_tmmintrin.hs clang_unwind.hs clang_vadefs.hs clang_varargs.hs \
-      clang_vecintrin.hs clang_wmmintrin.hs clang_x86intrin.hs \
-      clang_xmmintrin.hs clang_xopintrin.hs clang_xsavecintrin.hs \
-      clang_xsaveintrin.hs clang_xsaveoptintrin.hs clang_xsavesintrin.hs \
-      clang_xtestintrin.hs
+      clang_mmintrin.hs clang_msa.hs clang_mwaitxintrin.hs clang_nmmintrin.hs \
+      clang_omp.hs clang_opencl_c.hs clang_pkuintrin.hs clang_pmmintrin.hs \
+      clang_popcntintrin.hs clang_prfchwintrin.hs clang_rdseedintrin.hs \
+      clang_rtmintrin.hs clang_s390intrin.hs clang_shaintrin.hs \
+      clang_smmintrin.hs clang_stdalign.hs clang_stdarg.hs clang_stdatomic.hs \
+      clang_stdbool.hs clang_stddef.hs clang_stdint.hs clang_stdnoreturn.hs \
+      clang_tbmintrin.hs clang_tgmath.hs clang_tmmintrin.hs clang_unwind.hs \
+      clang_vadefs.hs clang_varargs.hs clang_vecintrin.hs clang_wmmintrin.hs \
+      clang_x86intrin.hs clang_xmmintrin.hs clang_xopintrin.hs \
+      clang_xsavecintrin.hs clang_xsaveintrin.hs clang_xsaveoptintrin.hs \
+      clang_xsavesintrin.hs clang_xtestintrin.hs
 
 SUFFIXES = .hs
 
