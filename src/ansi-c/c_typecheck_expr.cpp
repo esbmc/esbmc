@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <assert.h>
 
 #include <arith_tools.h>
-#include <bitvector.h>
 #include <config.h>
 #include <expr_util.h>
 #include <std_types.h>
@@ -21,6 +20,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <string_constant.h>
 #include <c_types.h>
 
+#include "util/bitvector.h"
 #include "c_typecast.h"
 #include "c_typecheck_base.h"
 #include "c_sizeof.h"

@@ -13,11 +13,11 @@
 #include <mp_arith.h>
 #include <arith_tools.h>
 #include <i2string.h>
-#include <bitvector.h>
 #include <c_types.h>
 
 #include <ansi-c/type2name.h>
 
+#include "util/bitvector.h"
 #include "typecast.h"
 
 #include <clang/AST/Attr.h>

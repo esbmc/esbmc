@@ -8,14 +8,13 @@
 #include <arith_tools.h>
 #include <std_code.h>
 #include <expr_util.h>
-#include <bitvector.h>
 #include <prefix.h>
 #include <cprover_prefix.h>
 #include <c_types.h>
 
 #include <ansi-c/c_sizeof.h>
 #include "clang_c_adjust.h"
-
+#include "util/bitvector.h"
 #include "typecast.h"
 
 clang_c_adjust::clang_c_adjust(contextt &_context)

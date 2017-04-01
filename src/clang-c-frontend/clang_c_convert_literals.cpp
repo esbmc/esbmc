@@ -6,10 +6,10 @@
  */
 
 #include <arith_tools.h>
-#include <bitvector.h>
 #include <expr_util.h>
 #include <c_types.h>
 #include <string_constant.h>
+#include "util/bitvector.h"
 #include "clang_c_convert.h"
 
 bool clang_c_convertert::convert_character_literal(

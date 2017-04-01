@@ -14,7 +14,6 @@
 #include <std_code.h>
 #include <config.h>
 #include <message.h>
-#include <bitvector.h>
 #include <c_types.h>
 
 #include <ansi-c/c_main.h>

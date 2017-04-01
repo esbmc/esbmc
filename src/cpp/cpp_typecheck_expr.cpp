@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <i2string.h>
 #include <std_types.h>
 #include <arith_tools.h>
-#include <bitvector.h>
 #include <std_expr.h>
 #include <config.h>
 #include <simplify_expr.h>
@@ -19,7 +18,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <ansi-c/c_qualifiers.h>
 #include <ansi-c/c_sizeof.h>
-
+#include "util/bitvector.h"
 #include "cpp_type2name.h"
 #include "cpp_typecheck.h"
 #include "cpp_convert_type.h"
