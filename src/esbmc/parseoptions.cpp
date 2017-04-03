@@ -226,14 +226,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("deadlock-check", false);
 
-  if(cmdline.isset("smtlib-ileave-num"))
-  {
-    options.set_option("smtlib-ileave-num",
-        cmdline.getval("smtlib-ileave-num"));
-  }
-  else
-    options.set_option("smtlib-ileave-num", "1");
-
   if(cmdline.isset("smt-during-symex"))
   {
     std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
@@ -398,9 +390,6 @@ int cbmc_parseoptionst::doit()
 
   if(set_claims(goto_functions))
     return 7;
-
-  if (opts.get_bool_option("skip-bmc"))
-    return 0;
 
   bool res = false;
 
@@ -831,14 +820,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       (void)len; //ndebug
 
       std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
-
-      if(cmdline.isset("k-induction-busy-wait")
-          || opts.get_bool_option("k-induction-busy-wait"))
-      {
-        while(1)
-          sleep(1);
-      }
-
       break;
     }
 
@@ -908,14 +889,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       (void)len; //ndebug
 
       std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
-
-      if(cmdline.isset("k-induction-busy-wait")
-          || opts.get_bool_option("k-induction-busy-wait"))
-      {
-        while(1)
-          sleep(1);
-      }
-
       break;
     }
 
@@ -988,14 +961,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       (void)len; //ndebug
 
       std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
-
-      if(cmdline.isset("k-induction-busy-wait")
-         || opts.get_bool_option("k-induction-busy-wait"))
-      {
-        while(1)
-          sleep(1);
-      }
-
       break;
     }
 
@@ -1295,43 +1260,39 @@ bool cbmc_parseoptionst::get_goto_program(
       return true;
     }
 
+    // If the user is providing the GOTO functions, we don't need to parse
     if(cmdline.isset("binary"))
     {
       status("Reading GOTO program from file");
 
       if(read_goto_binary(goto_functions))
         return true;
-
-      if(cmdline.isset("show-symbol-table"))
-      {
-        show_symbol_table();
-        return true;
-      }
-    }
-    else if(cmdline.isset("show-parse-tree"))
-    {
-      if(parse()) return true;
-
-      assert(language_files.filemap.size());
-      languaget &language = *language_files.filemap.begin()->second.language;
-      language.show_parse(std::cout);
-
-      return true;
     }
     else
     {
+      // Parsing
       if(parse()) return true;
+      if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
+      {
+        assert(language_files.filemap.size());
+        languaget &language = *language_files.filemap.begin()->second.language;
+        language.show_parse(std::cout);
+
+        if(cmdline.isset("parse-tree-only")) return true;
+      }
+
+      // Typecheking (old frontend) or adjust (clang frontend)
       if(typecheck()) return true;
       if(final()) return true;
 
-      if(cmdline.isset("show-symbol-table"))
-      {
-        show_symbol_table();
-        return true;
-      }
-
       // we no longer need any parse trees or language files
       clear_parse();
+
+      if(cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
+      {
+        show_symbol_table();
+        if(cmdline.isset("symbol-table-only")) return true;
+      }
 
       status("Generating GOTO Program");
 
@@ -1835,10 +1796,10 @@ bool cbmc_parseoptionst::process_goto_program(
     }
 
     // show it?
-    if(cmdline.isset("show-goto-functions"))
+    if(cmdline.isset("goto-functions-too") || cmdline.isset("goto-functions-only"))
     {
       goto_functions.output(ns, std::cout);
-      return true;
+      if(cmdline.isset("goto-functions-only")) return true;
     }
   }
 

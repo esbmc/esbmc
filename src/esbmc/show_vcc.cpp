@@ -98,8 +98,8 @@ Function: bmct::show_vcc
 
 void bmct::show_vcc(symex_target_equationt &equation)
 {
-  const std::string &filename=options.get_option("outfile");
-  
+  const std::string &filename=options.get_option("output");
+
   if(filename.empty() || filename=="-")
     show_vcc(std::cout, equation);
   else

@@ -229,8 +229,7 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
   else
     logic = "integer/real arithmetic";
 
-  if (!options.get_bool_option("smt"))
-    std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
+  std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
 
   smt_conv.set_message_handler(message_handler);
   smt_conv.set_verbosity(get_verbosity());
@@ -239,17 +238,18 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
   do_cbmc(smt_conv, equation);
   fine_timet encode_stop = current_time();
 
-  if (!options.get_bool_option("smt"))
-  {
-    std::ostringstream str;
-    str << "Encoding to solver time: ";
-    output_time(encode_stop - encode_start, str);
-    str << "s";
-    status(str.str());
-  }
+  std::ostringstream str;
+  str << "Encoding to solver time: ";
+  output_time(encode_stop - encode_start, str);
+  str << "s";
+  status(str.str());
 
-  if(options.get_bool_option("dump-smt-formula"))
-    smt_conv.dump_SMT();
+  if(options.get_bool_option("smt-formula-too")
+     || options.get_bool_option("smt-formula-only"))
+  {
+    smt_conv.dump_smt();
+    if(options.get_bool_option("smt-formula-only")) return smt_convt::P_ERROR;
+  }
 
   std::stringstream ss;
   ss << "Solving with solver " << smt_conv.solver_text();
@@ -260,14 +260,11 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
   fine_timet sat_stop=current_time();
 
   // output runtime
-  if (!options.get_bool_option("smt"))
-  {
-    std::ostringstream str;
-    str << "Runtime decision procedure: ";
-    output_time(sat_stop-sat_start, str);
-    str << "s";
-    status(str.str());
-  }
+  str.clear();
+  str << "\nRuntime decision procedure: ";
+  output_time(sat_stop-sat_start, str);
+  str << "s";
+  status(str.str());
 
   return dec_result;
 }
@@ -388,7 +385,7 @@ void bmct::show_program(symex_target_equationt &equation)
 
   std::cout << "\n" << "Program constraints: " << equation.SSA_steps.size() << "\n";
 
-  bool print_guard = config.options.get_bool_option("dump-guards");
+  bool print_guard = config.options.get_bool_option("show-guards");
   bool sparse = config.options.get_bool_option("simple-ssa-printing");
 
   for(const auto &it : equation.SSA_steps)
@@ -499,18 +496,13 @@ bool bmct::run(void)
         }
 
       fine_timet bmc_start = current_time();
-      if(run_thread())
+      resp = run_thread();
+      if(resp)
       {
         ++interleaving_failed;
 
-        if (options.get_bool_option("checkpoint-on-cex")) {
+        if (options.get_bool_option("checkpoint-on-cex"))
           write_checkpoint();
-        }
-
-        if(!options.get_bool_option("all-runs"))
-        {
-          return true;
-        }
       }
       fine_timet bmc_stop = current_time();
 
@@ -520,9 +512,8 @@ bool bmct::run(void)
       str << "s";
       status(str.str());
 
-      if (checkpoint_sig) {
+      if (checkpoint_sig)
         write_checkpoint();
-      }
 
       // Only run for one run
       if (options.get_bool_option("interactive-ileaves"))
@@ -531,7 +522,7 @@ bool bmct::run(void)
     } while(symex->setup_next_formula());
   }
 
-  if (options.get_bool_option("all-runs"))
+  if(interleaving_number > 1)
   {
     std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
     std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
@@ -557,7 +548,7 @@ bool bmct::run(void)
     }
   }
 
-  return false;
+  return resp;
 }
 
 bool bmct::run_thread()
@@ -600,22 +591,18 @@ bool bmct::run_thread()
 
   fine_timet symex_stop = current_time();
 
+  auto equation =
+    boost::dynamic_pointer_cast<symex_target_equationt>(result->target);
+
   std::ostringstream str;
   str << "Symex completed in: ";
   output_time(symex_stop - symex_start, str);
   str << "s";
+  str << " (" << equation.get()->SSA_steps.size() << " assignments)";
   status(str.str());
 
-  auto equation =
-    boost::dynamic_pointer_cast<symex_target_equationt>(result->target);
-
-  print(8, "size of program expression: "+
-           i2string((unsigned long)equation.get()->SSA_steps.size())+
-           " assignments");
-
-  if (options.get_bool_option("double-assign-check")) {
+  if (options.get_bool_option("double-assign-check"))
     equation.get()->check_for_duplicate_assigns();
-  }
 
   try
   {
@@ -679,18 +666,12 @@ bool bmct::run_thread()
       return false;
     }
 
-    if (options.get_bool_option("smt"))
-      if (interleaving_number !=
-          (unsigned int) strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
-        return false;
-
     if (!options.get_bool_option("smt-during-symex")) {
       runtime_solver = std::shared_ptr<smt_convt>(
         create_solver_factory("", options.get_bool_option("int-encoding"), ns,options));
     }
 
     ret = run_solver(*equation, runtime_solver.get());
-
     return ret;
   }
 

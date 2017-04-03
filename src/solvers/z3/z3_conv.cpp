@@ -199,7 +199,7 @@ z3_convt::check2_z3_properties(void)
   if (result == z3::sat)
     model = solver.get_model();
 
-  if (config.options.get_bool_option("dump-z3-assigns") && result == z3::sat)
+  if (config.options.get_bool_option("show-smt-model") && result == z3::sat)
     std::cout << Z3_model_to_string(ctx, model);
 
   return result;
