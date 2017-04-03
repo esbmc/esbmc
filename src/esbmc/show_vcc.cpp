@@ -37,14 +37,14 @@ void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
   case ui_message_handlert::XML_UI:
     error("not supported");
     return;
-    
+
   case ui_message_handlert::PLAIN:
     break;
-    
+
   default:
     assert(false);
-  }   
-    
+  }
+
   out << std::endl << "VERIFICATION CONDITIONS:" << std::endl << std::endl;
 
   languagest languages(ns, MODE_C);
@@ -57,13 +57,13 @@ void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
 
     if(it->source.pc->location.is_not_nil())
       out << it->source.pc->location << std::endl;
-    
+
     if(it->comment!="")
       out << it->comment << std::endl;
-      
+
     symex_target_equationt::SSA_stepst::const_iterator
       p_it=equation.SSA_steps.begin();
-      
+
     for(unsigned count=1; p_it!=it; p_it++)
       if(p_it->is_assume() || p_it->is_assignment())
         if(!p_it->ignore)
@@ -79,7 +79,7 @@ void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
     std::string string_value;
     languages.from_expr(migrate_expr_back(it->cond), string_value);
     out << "{" << 1 << "} " << string_value << std::endl;
-    
+
     out << std::endl;
   }
 }
