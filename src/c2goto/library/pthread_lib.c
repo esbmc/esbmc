@@ -69,14 +69,11 @@ void
 pthread_trampoline(void)
 {
   __ESBMC_HIDE:;
-  struct __pthread_start_data startdata;
-  unsigned int threadid;
-  void *exit_val;
+  pthread_t threadid = __ESBMC_get_thread_id();
+  struct __pthread_start_data startdata =
+    __ESBMC_get_thread_internal_data(threadid);
 
-  threadid = __ESBMC_get_thread_id();
-  startdata = __ESBMC_get_thread_internal_data(threadid);
-
-  exit_val = startdata.func(startdata.start_arg);
+  void *exit_val = startdata.func(startdata.start_arg);
 
   __ESBMC_atomic_begin();
   threadid = __ESBMC_get_thread_id();
@@ -125,7 +122,7 @@ pthread_exit(void *retval)
 {
   __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  unsigned int threadid = __ESBMC_get_thread_id();
+  pthread_t threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[threadid] = retval;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
