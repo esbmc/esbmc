@@ -109,7 +109,7 @@ public:
   smt_ast *fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
       const btor_smt_ast *op1, smt_sortt res_sort);
 
-  virtual void dump_SMT();
+  virtual void dump_smt();
 
   // Members
 

@@ -626,7 +626,7 @@ const smt_ast* btor_smt_ast::select(smt_convt* ctx, const expr2tc& idx) const
   return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
 }
 
-void boolector_convt::dump_SMT()
+void boolector_convt::dump_smt()
 {
   boolector_dump_smt2(btor, stdout);
 }

@@ -178,7 +178,7 @@ public:
 
   virtual tvt l_get(const smt_ast *a);
 
-  virtual void dump_SMT();
+  virtual void dump_smt();
 
   // Some useful types
 public:

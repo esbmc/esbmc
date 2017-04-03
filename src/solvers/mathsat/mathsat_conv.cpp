@@ -914,7 +914,7 @@ mathsat_smt_sort::~mathsat_smt_sort()
 {
 }
 
-void mathsat_convt::dump_SMT()
+void mathsat_convt::dump_smt()
 {
   print_mathsat_formula();
 }
