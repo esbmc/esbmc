@@ -503,6 +503,8 @@ bool bmct::run(void)
 
         if (options.get_bool_option("checkpoint-on-cex"))
           write_checkpoint();
+
+        return resp;
       }
       fine_timet bmc_stop = current_time();
 
@@ -548,13 +550,12 @@ bool bmct::run(void)
     }
   }
 
-  return resp;
+  return false;
 }
 
 bool bmct::run_thread()
 {
   boost::shared_ptr<goto_symext::symex_resultt> result;
-  bool ret;
 
   fine_timet symex_start = current_time();
   try
@@ -671,8 +672,7 @@ bool bmct::run_thread()
         create_solver_factory("", options.get_bool_option("int-encoding"), ns,options));
     }
 
-    ret = run_solver(*equation, runtime_solver.get());
-    return ret;
+    return run_solver(*equation, runtime_solver.get());
   }
 
   catch(std::string &error_str)
