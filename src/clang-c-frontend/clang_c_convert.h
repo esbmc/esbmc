@@ -122,7 +122,8 @@ private:
     typet type,
     std::string base_name,
     std::string pretty_name,
-    locationt location);
+    locationt location,
+    bool is_used);
 
   void get_field_name(
     const clang::FieldDecl &fd,
@@ -203,8 +204,6 @@ private:
 
   const clang::Decl* get_top_FunctionDecl_from_Stmt(
     const clang::Stmt &stmt);
-
-  bool convert_this_decl(const clang::Decl &decl);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
