@@ -9,6 +9,50 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "symbol.h"
 #include "location.h"
 
+symbolt::symbolt()
+{
+  clear();
+}
+
+const irep_idt &symbolt::display_name() const
+{
+  return pretty_name.empty() ? name : pretty_name;
+}
+
+void symbolt::clear()
+{
+  value.make_nil();
+  location.make_nil();
+  lvalue=static_lifetime=file_local=is_extern=
+    is_type=is_parameter=is_macro=is_used=false;
+  name=module=base_name=mode=pretty_name="";
+}
+
+void symbolt::swap(symbolt &b)
+{
+#define SYM_SWAP1(x) x.swap(b.x)
+
+  SYM_SWAP1(type);
+  SYM_SWAP1(value);
+  SYM_SWAP1(name);
+  SYM_SWAP1(pretty_name);
+  SYM_SWAP1(module);
+  SYM_SWAP1(base_name);
+  SYM_SWAP1(mode);
+  SYM_SWAP1(location);
+
+#define SYM_SWAP2(x) std::swap(x, b.x)
+
+  SYM_SWAP2(is_type);
+  SYM_SWAP2(is_macro);
+  SYM_SWAP2(is_parameter);
+  SYM_SWAP2(lvalue);
+  SYM_SWAP2(static_lifetime);
+  SYM_SWAP2(file_local);
+  SYM_SWAP2(is_extern);
+  SYM_SWAP2(is_used);
+}
+
 void symbolt::dump() const
 {
   show(std::cout);
@@ -37,8 +81,7 @@ void symbolt::show(std::ostream &out) const
   out << std::endl;
 }
 
-std::ostream &operator<<(std::ostream &out,
-                         const symbolt &symbol)
+std::ostream &operator<<(std::ostream &out, const symbolt &symbol)
 {
   symbol.show(out);
   return out;
