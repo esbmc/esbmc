@@ -176,15 +176,36 @@ const struct opt_templ esbmc_options[] = {
   // LTL mode?
   { 0, "ltl", switc, "" },
 
-  // No idea:
+  // Verbosity of message, probably does nothing
   { 0, "verbosity", number, "" },
-  { 0, "direct-interleavings", switc, "" },
-  { 0, "show-ileave-points", switc, "" },
-  { 0, "checkpoint-file", string, "" },
-  { 0, "from-checkpoint", switc, "" },
-  { 0, "checkpoint-on-cex", switc, "" },
-  { 0, "print-stack-traces", switc, "" },
-  { 0, "interactive-ileaves", switc, "" },
+
+  // --break-at $insnnum will cause ESBMC to execute a trap
+  // instruction when it executes the designated GOTO instruction number.
+  // Now breaks into python, although you can
+  // break further into gdb by executing esbmc.trap().
   { 0, "break-at", string, "" },
+
+  // I added some intrinsics along the line of "__ESBMC_switch_to_thread"
+  // that immediately transitioned to a particular thread and didn't allow
+  // any other exploration from that point. Useful for constructing an
+  // explicit multithreading path
+  { 0, "direct-interleavings", switc, "" },
+
+  // Used to print out the instructions that had been identified as touching
+  // global variables, thus instructions that cause interleavings. Probably
+  // isn't sound any more seeing how we don't do the static pointer analysis
+  // any more.
+  { 0, "show-ileave-points", switc, "" },
+
+  // I think this dumps the current stack of all threads on an ileave point.
+  // Useful for working out the state of _all_ the threads and how they
+  // evolve, also see next flag,
+  { 0, "print-stack-traces", switc, "" },
+
+  // At every ileave point ESBMC stops and asks the user what thread to
+  // transition to. Useful again for trying to replicate a particular context
+  // switch order, or quickly explore what's reachable.
+  { 0, "interactive-ileaves", switc, "" },
+
   { 0, "", switc, "" }
 };
