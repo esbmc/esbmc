@@ -60,24 +60,27 @@ void symbolt::dump() const
 
 void symbolt::show(std::ostream &out) const
 {
-  out << "  " << name << std::endl;
-  out << "    type:  " << type.pretty(4) << std::endl
-      << "    value: " << value.pretty(4) << std::endl;
+  out << "Symbol......: " << name << std::endl;
+  out << "Pretty name.: " << pretty_name << std::endl;
+  out << "Module......: " << module << std::endl;
+  out << "Base name...: " << base_name << std::endl;
+  out << "Mode........: " << mode << " (" << mode << ")" << std::endl;
+  if(type.is_not_nil()) out << "Type........: " << type.pretty(4) << std::endl;
+  if(value.is_not_nil()) out << "Value.......: " << value.pretty(4) <<  std::endl;
 
-  out << "  flags:";
+  out << "Flags.......:";
+
   if(lvalue)          out << " lvalue";
   if(static_lifetime) out << " static_lifetime";
   if(file_local)      out << " file_local";
   if(is_type)         out << " type";
   if(is_extern)       out << " extern";
   if(is_macro)        out << " macro";
-  if(is_parameter)    out << " parameter";
-  if(mode!="")        out << " mode=" << mode;
-  if(base_name!="")   out << " base_name=" << base_name;
-  if(module!="")      out << " module=" << module;
-  if(pretty_name!="") out << " pretty_name=" << pretty_name;
+  if(is_used)         out << " used";
+
   out << std::endl;
-  out << "  location: " << location << std::endl;
+  out << "Location....: " << location << std::endl;
+
   out << std::endl;
 }
 
