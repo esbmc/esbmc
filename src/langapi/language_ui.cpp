@@ -320,6 +320,7 @@ void language_uit::show_symbol_table_plain(std::ostream &out)
       if(s.is_type)         out << " type";
       if(s.is_extern)       out << " extern";
       if(s.is_macro)        out << " macro";
+      if(s.is_used)         out << " used";
 
       out << std::endl;
       out << "Location....: " << s.location << std::endl;
