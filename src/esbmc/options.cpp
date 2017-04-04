@@ -139,6 +139,7 @@ const struct opt_templ esbmc_options[] = {
   { 0, "state-hashing", switc, "" },
   { 0, "control-flow-test", switc, "" },
   { 0, "no-por", switc, "" },
+  { 0, "all-runs", switc, "" },
 
   // Miscellaneous
   { 0, "memlimit", string, "" },

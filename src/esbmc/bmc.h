@@ -109,7 +109,6 @@ protected:
   virtual void show_program(symex_target_equationt &equation);
   virtual void report_success();
   virtual void report_failure();
-  virtual void write_checkpoint();
 
   virtual void error_trace(
     smt_convt &smt_conv, symex_target_equationt &equation);

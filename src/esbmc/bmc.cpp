@@ -43,16 +43,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include "document_subgoals.h"
 #include <ac_config.h>
 
-static volatile bool checkpoint_sig = false;
-
-void
-sigusr1_handler(int sig __attribute__((unused)))
-{
-
-  checkpoint_sig = true;
-  return;
-}
-
 /*******************************************************************\
 
 Function: bmct::do_cbmc
@@ -451,80 +441,43 @@ Function: bmct::run
 
 bool bmct::run(void)
 {
-#ifndef _WIN32
-  struct sigaction act;
-#endif
-  bool resp;
-
-#ifndef _WIN32
-  // Collect SIGUSR1, indicating that we're supposed to checkpoint.
-  act.sa_handler = sigusr1_handler;
-  sigemptyset(&act.sa_mask);
-  act.sa_flags = 0;
-  sigaction(SIGUSR1, &act, NULL);
-#endif
 
   symex->options.set_option("unwind", options.get_option("unwind"));
   symex->setup_for_new_explore();
 
   if(options.get_bool_option("schedule"))
-  {
-    resp = run_thread();
-    return resp;
-  }
-  else
-  {
-    if (options.get_bool_option("from-checkpoint")) {
-      if (options.get_option("checkpoint-file") == "") {
-        std::cerr << "Please provide a checkpoint file" << std::endl;
-        abort();
-      }
+    return run_thread();
 
-      reachability_treet::dfs_position pos(
-                                         options.get_option("checkpoint-file"));
-      symex->restore_from_dfs_state((void*)&pos);
+  do
+  {
+    if(++interleaving_number > 1)
+    {
+      std::cout << "*** Thread interleavings " << interleaving_number
+                << " ***" << std::endl;
     }
 
-    do
+    fine_timet bmc_start = current_time();
+    if(run_thread())
     {
-      if(!options.get_bool_option("k-induction")
-        && !options.get_bool_option("k-induction-parallel"))
-        if (++interleaving_number>1) {
-          print(8, "*** Thread interleavings "+
-            i2string((unsigned long)interleaving_number)+
-            " ***");
-        }
+      ++interleaving_failed;
+      if(!options.get_bool_option("all-runs"))
+        return true;
+    }
+    fine_timet bmc_stop = current_time();
 
-      fine_timet bmc_start = current_time();
-      resp = run_thread();
-      if(resp)
-      {
-        ++interleaving_failed;
+    std::ostringstream str;
+    str << "BMC program time: ";
+    output_time(bmc_stop-bmc_start, str);
+    str << "s";
+    status(str.str());
 
-        if (options.get_bool_option("checkpoint-on-cex"))
-          write_checkpoint();
+    // Only run for one run
+    if (options.get_bool_option("interactive-ileaves"))
+      return false;
 
-        return resp;
-      }
-      fine_timet bmc_stop = current_time();
+  } while(symex->setup_next_formula());
 
-      std::ostringstream str;
-      str << "BMC program time: ";
-      output_time(bmc_stop-bmc_start, str);
-      str << "s";
-      status(str.str());
-
-      if (checkpoint_sig)
-        write_checkpoint();
-
-      // Only run for one run
-      if (options.get_bool_option("interactive-ileaves"))
-        return false;
-
-    } while(symex->setup_next_formula());
-  }
-
-  if(interleaving_number > 1)
+  if(options.get_bool_option("all-runs"))
   {
     std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
     std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
@@ -607,7 +560,6 @@ bool bmct::run_thread()
 
   try
   {
-
     fine_timet slice_start = current_time();
     if(!options.get_bool_option("no-slice"))
     {
@@ -868,25 +820,4 @@ bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
       error("decision procedure failed");
       return true;
   }
-}
-
-void bmct::write_checkpoint(void)
-{
-  std::string f;
-
-  if (options.get_option("checkpoint-file") == "") {
-    char buffer[32];
-#ifndef _WIN32
-    pid_t pid = getpid();
-#else
-    unsigned long pid = GetCurrentProcessId();
-#endif
-    sprintf(buffer, "%d", pid);
-    f = "esbmc_checkpoint." + std::string(buffer);
-  } else {
-    f = options.get_option("checkpoint-file");
-  }
-
-  symex->save_checkpoint(f);
-  return;
 }

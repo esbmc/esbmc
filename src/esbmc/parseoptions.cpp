@@ -2000,6 +2000,7 @@ void cbmc_parseoptionst::help()
     " --state-hashing              enable state-hashing, prunes duplicate states\n"
     " --control-flow-test          enable context switch before control flow tests\n"
     " --no-por                     do not do partial order reduction\n"
+    " --all-runs                   check all interleavings, even if a bug was already found\n"
 
     "\nMiscellaneous options\n"
     " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
