@@ -65,6 +65,7 @@ public:
   const symbolt* find_symbol(irep_idt name) const;
 
   void erase_symbol(irep_idt name);
+  void remove_unused();
 
   template <typename T>
   void foreach_operand_in_order(T &&t) const
