@@ -106,22 +106,7 @@ pick_solver(bool int_encoding, const namespacet &ns,
   }
 
   if (the_solver == "")
-  {
-    if (options.get_bool_option("k-induction")
-        || options.get_bool_option("k-induction-parallel"))
-    {
-#ifdef Z3
-      std::cerr << "No solver specified; k-induction defaults to z3" << std::endl;
-      the_solver = "z3";
-#else
-      the_solver = pick_default_solver();
-#endif
-    }
-    else
-    {
-      the_solver = pick_default_solver();
-    }
-  }
+    the_solver = pick_default_solver();
 
   return create_solver(the_solver, int_encoding, ns,
                        options, tuple_api, array_api);
