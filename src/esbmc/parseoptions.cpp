@@ -365,9 +365,11 @@ int cbmc_parseoptionst::doit()
     return 0;
   }
 
-  if(cmdline.isset("k-induction")
-    || cmdline.isset("k-induction-parallel"))
+  if(cmdline.isset("k-induction"))
     return doit_k_induction();
+
+  if(cmdline.isset("k-induction-parallel"))
+    return doit_k_induction_parallel();
 
   if(cmdline.isset("falsification"))
     return doit_falsification();
@@ -973,9 +975,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
 int cbmc_parseoptionst::doit_k_induction()
 {
-  if(cmdline.isset("k-induction-parallel"))
-    return doit_k_induction_parallel();
-
   // Generate goto functions for base case and forward condition
   status("\n*** Generating Base Case and Forward Condition ***");
 
