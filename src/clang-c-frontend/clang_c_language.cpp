@@ -161,7 +161,14 @@ bool clang_c_languaget::typecheck(
   if(adjuster.adjust())
     return true;
 
-  return c_link(context, new_context, message_handler, module);
+  if(c_link(context, new_context, message_handler, module))
+    return true;
+
+  // Remove unused
+  if(!config.options.get_bool_option("keep-unused"))
+    context.remove_unused();
+
+  return false;
 }
 
 void clang_c_languaget::show_parse(std::ostream& out __attribute__((unused)))
