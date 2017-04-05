@@ -383,11 +383,8 @@ void goto_convertt::convert_block(
 
     // all the temp symbols are also local variables and they are gotten
     // via the convert process
-    for(tmp_symbolst::const_iterator
-        it=tmp_symbols.begin();
-        it!=tmp_symbols.end();
-        it++)
-      locals.push_back(*it);
+    for(auto it : tmp_symbols)
+      locals.push_back(it);
 
     tmp_symbols.clear();
 
@@ -2089,7 +2086,7 @@ symbolt &goto_convertt::new_tmp_symbol(const typet &type)
     new_symbol.type=type;
   } while (context.move(new_symbol, symbol_ptr));
 
-  tmp_symbols.push_back(symbol_ptr->name);
+  tmp_symbols.insert(symbol_ptr->name);
 
   return *symbol_ptr;
 }
@@ -2107,7 +2104,7 @@ symbolt &goto_convertt::new_cftest_symbol(const typet &type)
     new_symbol.type=type;
   } while (context.move(new_symbol, symbol_ptr));
 
-  tmp_symbols.push_back(symbol_ptr->name);
+  tmp_symbols.insert(symbol_ptr->name);
 
   return *symbol_ptr;
 }

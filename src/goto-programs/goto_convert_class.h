@@ -61,8 +61,7 @@ protected:
   symbolt &new_tmp_symbol(const typet &type);
   symbolt &new_cftest_symbol(const typet &type);
 
-  typedef std::list<irep_idt> tmp_symbolst;
-  tmp_symbolst tmp_symbols;
+  goto_programt::local_variablest tmp_symbols;
 
   //
   // side effect removal
