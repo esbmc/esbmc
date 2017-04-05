@@ -716,8 +716,17 @@ void goto_convertt::convert_decl(
 
   const irep_idt &identifier = op0.identifier();
 
-  const symbolt &symbol = ns.lookup(identifier);
-  if(symbol.static_lifetime || symbol.type.is_code())
+  const symbolt* s = context.find_symbol(identifier);
+  if(s == nullptr)
+  {
+    // If the symbol is not there, it might have been removed by the
+    // unused flag. In that case, we can safely ignore this declaration
+    return;
+  }
+
+  // A static variable will be declared in the global scope and
+  // a code type means a function declaration, we ignore both
+  if(s->static_lifetime || s->type.is_code())
     return; // this is a SKIP!
 
   if(code.operands().size() == 1)
