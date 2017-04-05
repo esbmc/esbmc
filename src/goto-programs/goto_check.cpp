@@ -612,24 +612,21 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       check(migrate_expr_back(ret.operand));
     }
 
-    for (goto_programt::instructionst::iterator i_it =
-        new_code.instructions.begin(); i_it != new_code.instructions.end();
-        i_it++)
+    for (auto i_it : new_code.instructions)
     {
-      i_it->local_variables = it->local_variables;
-      if (i_it->location.is_nil())
+      if (i_it.location.is_nil())
       {
-        if (!i_it->location.comment().as_string().empty())
-          it->location.comment(i_it->location.comment());
-        if (!i_it->location.property().as_string().empty())
-          it->location.property(i_it->location.property());
+        if (!i_it.location.comment().as_string().empty())
+          it->location.comment(i_it.location.comment());
+        if (!i_it.location.property().as_string().empty())
+          it->location.property(i_it.location.property());
 
-        i_it->location = it->location;
+        i_it.location = it->location;
       }
-      if (i_it->function == "")
-        i_it->function = it->function;
-      if (i_it->function == "")
-        i_it->function = it->function;
+      if (i_it.function == "")
+        i_it.function = it->function;
+      if (i_it.function == "")
+        i_it.function = it->function;
     }
 
     // insert new instructions -- make sure targets are not moved

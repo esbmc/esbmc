@@ -62,6 +62,7 @@ protected:
   symbolt &new_cftest_symbol(const typet &type);
 
   goto_programt::local_variablest tmp_symbols;
+  goto_programt::local_variablest local_symbols;
 
   //
   // side effect removal

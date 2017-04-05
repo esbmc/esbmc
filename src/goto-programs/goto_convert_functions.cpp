@@ -161,17 +161,14 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   const code_typet::argumentst &arguments=f.type.arguments();
 
-  std::list<irep_idt> arg_ids;
+  goto_programt::local_variablest arg_ids;
 
   // add as local variables
-  for(code_typet::argumentst::const_iterator
-      it=arguments.begin();
-      it!=arguments.end();
-      it++)
+  for(auto it : arguments)
   {
-    const irep_idt &identifier=it->get_identifier();
-    assert(identifier!="");
-    arg_ids.push_back(identifier);
+    const irep_idt &identifier = it.get_identifier();
+    assert(identifier != "");
+    arg_ids.insert(identifier);
   }
 
   if(!symbol.value.is_code())
@@ -185,8 +182,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   locationt end_location;
 
   if(to_code(symbol.value).get_statement()=="block")
-    end_location=static_cast<const locationt &>(
-        symbol.value.end_location());
+    end_location=static_cast<const locationt &>(symbol.value.end_location());
   else
     end_location.make_nil();
 
@@ -209,8 +205,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   t->location=end_location;
 
   if(to_code(symbol.value).get_statement()=="block")
-    t->location=static_cast<const locationt &>(
-        symbol.value.end_location());
+    t->location=static_cast<const locationt &>(symbol.value.end_location());
 
   // Wrap the body of functions name c::__VERIFIER_atomic_* with atomic_bengin
   // and atomic_end
@@ -236,10 +231,11 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     }
   }
 
+  f.body.add_local_variables(arg_ids);
+
   // do local variables
   Forall_goto_program_instructions(i_it, f.body)
   {
-    i_it->add_local_variables(arg_ids);
     i_it->function=identifier;
   }
 

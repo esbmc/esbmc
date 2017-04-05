@@ -47,17 +47,6 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
 
     irep.labels(lbls);
   }
-
-  if(!instruction.local_variables.empty())
-  {
-    irept vars;
-    irept::subt &subs = vars.get_sub();
-    subs.reserve(instruction.local_variables.size());
-    for(auto it : instruction.local_variables)
-      subs.push_back(irept(it));
-
-    irep.variables(vars);
-  }
 }
 
 void convert(const irept &irep, goto_programt::instructiont &instruction)
@@ -75,11 +64,6 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
   const irept::subt &lsubs = lbls.get_sub();
   for(auto it : lsubs)
     instruction.labels.push_back(it.id());
-
-  const irept &vars = irep.variables();
-  const irept::subt &vsubs = vars.get_sub();
-  for(auto it : vsubs)
-    instruction.local_variables.insert(it.id());
 }
 
 void convert(const goto_programt &program, irept &irep)
@@ -90,6 +74,17 @@ void convert(const goto_programt &program, irept &irep)
   {
     irep.get_sub().push_back(irept());
     convert(it, irep.get_sub().back());
+  }
+
+  if(!program.local_variables.empty())
+  {
+    irept vars;
+    irept::subt &subs = vars.get_sub();
+    subs.reserve(program.local_variables.size());
+    for(auto it : program.local_variables)
+      subs.push_back(irept(it));
+
+    irep.variables(vars);
   }
 }
 
@@ -147,4 +142,9 @@ void convert(const irept &irep, goto_programt &program)
   }
 
   program.update();
+
+  const irept &vars = irep.variables();
+  const irept::subt &vsubs = vars.get_sub();
+  for(auto it : vsubs)
+    program.local_variables.insert(it.id());
 }

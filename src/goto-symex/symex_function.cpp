@@ -487,13 +487,9 @@ goto_symext::locality(const goto_functiont &goto_function)
   goto_programt::local_variablest local_identifiers;
 
   // For all insns...
-  for (goto_programt::instructionst::const_iterator
-       it = goto_function.body.instructions.begin();
-       it != goto_function.body.instructions.end();
-       it++) {
-    local_identifiers.insert(it->local_variables.begin(),
-                             it->local_variables.end());
-  }
+  local_identifiers.insert(
+    goto_function.body.local_variables.begin(),
+    goto_function.body.local_variables.end());
 
   statet::framet &frame = cur_state->top();
 

@@ -21,8 +21,7 @@ void goto_programt::instructiont::output_instruction(
   const class namespacet& ns,
   const irep_idt& identifier,
   std::ostream& out,
-  bool show_location,
-  bool show_variables) const
+  bool show_location) const
 {
   if (show_location)
   {
@@ -34,18 +33,6 @@ void goto_programt::instructiont::output_instruction(
       out << "no location";
 
     out << "\n";
-  }
-
-  if(show_variables && !local_variables.empty())
-  {
-    out << "        // Variables:";
-    for(local_variablest::const_iterator
-        l_it = local_variables.begin();
-        l_it != local_variables.end();
-        l_it++)
-      out << " " << *l_it;
-
-    out << std::endl;
   }
 
   if(!labels.empty())

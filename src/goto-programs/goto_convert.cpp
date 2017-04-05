@@ -339,90 +339,45 @@ void goto_convertt::convert_block(
   const codet &code,
   goto_programt &dest)
 {
-  std::list<irep_idt> locals;
-  //extract all the local variables from the block
-
-  forall_operands(it, code)
+  // Convert each expression
+  for(auto it : code.operands())
   {
-    const codet &code_it=to_code(*it);
-
-    if(code_it.get_statement()=="decl")
-    {
-      // TODO: This should be removed when the clang frontend
-      // is enable by default, as all the decl are wrapped
-      // inside a decl-block
-      const exprt &op0=code_it.op0();
-      assert(op0.id()=="symbol");
-      const irep_idt &identifier=op0.identifier();
-      const symbolt &symbol=ns.lookup(identifier);
-
-      if(!symbol.static_lifetime &&
-         !symbol.type.is_code())
-        locals.push_back(identifier);
-    }
-    else if(code_it.get_statement()=="decl-block")
-    {
-      forall_operands(it, code_it)
-      {
-        if(it->statement() == "skip")
-          continue;
-
-        const exprt &op0=it->op0();
-        assert(op0.id()=="symbol");
-        const irep_idt &identifier=op0.identifier();
-        const symbolt &symbol=ns.lookup(identifier);
-
-        if(!symbol.static_lifetime &&
-           !symbol.type.is_code())
-          locals.push_back(identifier);
-      }
-    }
+    const codet &code_it = to_code(it);
 
     goto_programt tmp;
     convert(code_it, tmp);
 
-    // all the temp symbols are also local variables and they are gotten
-    // via the convert process
-    for(auto it : tmp_symbols)
-      locals.push_back(it);
-
-    tmp_symbols.clear();
-
-    //add locals to instructions
-    if(!locals.empty())
-      Forall_goto_program_instructions(i_it, tmp)
-        i_it->add_local_variables(locals);
-
     dest.destructive_append(tmp);
   }
 
+  // all the temp symbols are also local variables and they are gotten
+  // via the convert process
+  local_symbols.insert(tmp_symbols.begin(), tmp_symbols.end());
+  tmp_symbols.clear();
+
   // see if we need to call any destructors
 
-  while(!locals.empty())
+  for(auto local : local_symbols)
   {
-    const symbolt &symbol=ns.lookup(locals.back());
+    const symbolt &symbol = ns.lookup(local);
 
-    code_function_callt destructor=get_destructor(ns, symbol.type);
-
+    code_function_callt destructor = get_destructor(ns, symbol.type);
     if(destructor.is_not_nil())
     {
       // add "this"
       exprt this_expr("address_of", pointer_typet());
-      this_expr.type().subtype()=symbol.type;
+      this_expr.type().subtype() = symbol.type;
       this_expr.copy_to_operands(symbol_expr(symbol));
       destructor.arguments().push_back(this_expr);
 
       goto_programt tmp;
       convert(destructor, tmp);
 
-      Forall_goto_program_instructions(i_it, tmp)
-        i_it->add_local_variables(locals);
-
       dest.destructive_append(tmp);
     }
-
-    locals.pop_back();
   }
+
+  local_symbols.clear();
 }
 
 void goto_convertt::convert_sideeffect(
@@ -725,6 +680,9 @@ void goto_convertt::convert_decl(
   // a code type means a function declaration, we ignore both
   if(s->static_lifetime || s->type.is_code())
     return; // this is a SKIP!
+
+  // Local variable, add to locals
+  local_symbols.insert(identifier);
 
   if(code.operands().size() == 1)
   {
