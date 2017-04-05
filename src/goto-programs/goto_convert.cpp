@@ -701,67 +701,63 @@ void goto_convertt::convert_decl(
   const codet &code,
   goto_programt &dest)
 {
-  if(code.operands().size()!=1 &&
-     code.operands().size()!=2)
+  if(code.operands().size() != 1 && code.operands().size() != 2)
   {
     err_location(code);
     throw "decl statement takes one or two operands";
   }
 
-  const exprt &op0=code.op0();
-
-  if(op0.id()!="symbol")
+  const exprt &op0 = code.op0();
+  if(!op0.is_symbol())
   {
     err_location(op0);
     throw "decl statement expects symbol as first operand";
   }
 
-  const irep_idt &identifier=op0.identifier();
+  const irep_idt &identifier = op0.identifier();
 
-  const symbolt &symbol=ns.lookup(identifier);
-  if(symbol.static_lifetime ||
-     symbol.type.is_code())
-	  return; // this is a SKIP!
+  const symbolt &symbol = ns.lookup(identifier);
+  if(symbol.static_lifetime || symbol.type.is_code())
+    return; // this is a SKIP!
 
-  if(code.operands().size()==1)
+  if(code.operands().size() == 1)
   {
     copy(code, OTHER, dest);
+    return;
   }
-  else
+
+  exprt initializer;
+
+  codet tmp(code);
+  initializer = code.op1();
+  tmp.operands().resize(1); // just resize the vector, this will get rid of op1
+
+  goto_programt sideeffects;
+
+  if(options.get_bool_option("atomicity-check"))
   {
-    exprt initializer;
-
-    codet tmp(code);
-    initializer=code.op1();
-    tmp.operands().resize(1); // just resize the vector, this will get rid of op1
-
-    goto_programt sideeffects;
-
-    if(options.get_bool_option("atomicity-check"))
-    {
-      unsigned int globals = get_expr_number_globals(initializer);
-      if(globals > 0)
-        break_globals2assignments(initializer, dest,code.location());
-    }
-
-    remove_sideeffects(initializer, sideeffects);
-    dest.destructive_append(sideeffects);
-
-    // break up into decl and assignment
-    copy(tmp, OTHER, dest);
-
-    code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
-    assign.location()=tmp.location();
-    copy(assign, ASSIGN, dest);
+    unsigned int globals = get_expr_number_globals(initializer);
+    if(globals > 0)
+      break_globals2assignments(initializer, dest, code.location());
   }
+
+  remove_sideeffects(initializer, sideeffects);
+  dest.destructive_append(sideeffects);
+
+  // break up into decl and assignment
+  copy(tmp, OTHER, dest);
+
+  code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
+  assign.location() = tmp.location();
+  copy(assign, ASSIGN, dest);
 }
 
 void goto_convertt::convert_decl_block(
   const codet& code,
   goto_programt& dest)
 {
-  forall_operands(it, code)
-    convert(to_code(*it), dest);
+  for(auto it : code.operands())
+    convert(to_code(it), dest);
 }
 
 void goto_convertt::convert_assign(
