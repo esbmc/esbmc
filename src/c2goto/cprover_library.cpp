@@ -7,10 +7,6 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 extern "C" {
-#include <cstdio>
-#include <cstdlib>
-#include <cstdint>
-#include <cstdint>
 #include <unistd.h>
 
 #ifdef _WIN32
@@ -23,7 +19,10 @@ extern "C" {
 #include <sstream>
 #include <istream>
 #include <fstream>
-
+#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
+#include <cstdint>
 #include <config.h>
 
 #include <goto-programs/read_goto_binary.h>

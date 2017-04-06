@@ -13,10 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #ifndef _WIN32
 extern "C" {
-#include <cctype>
 #include <fcntl.h>
-#include <cstdlib>
-#include <csignal>
 #include <unistd.h>
 
 #ifdef HAVE_SENDFILE_ESBMC
@@ -63,6 +60,8 @@ extern "C" {
 #include <ac_config.h>
 #include <fstream>
 
+#include <cctype>
+#include <cstdlib>
 #include <csignal>
 #include <sys/wait.h>
 
