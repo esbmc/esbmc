@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <irep2.h>
 
 extern "C" {
-#include <stdio.h>
+#include <cstdio>
 }
 
 #include <list>
@@ -31,8 +31,8 @@ extern "C" {
 #include "goto_trace.h"
 
 extern "C" {
-#include <stdint.h>
-#include <string.h>
+#include <cstdint>
+#include <cstring>
 }
 
 class symex_target_equationt:public symex_targett

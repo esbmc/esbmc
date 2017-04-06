@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <irep2.h>
 #include <migrate.h>
 
-#include <assert.h>
+#include <cassert>
 #include <global.h>
 #include <map>
 #include <sstream>

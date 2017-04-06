@@ -26,15 +26,15 @@ Notes:
 #ifndef __Z3PP_H_
 #define __Z3PP_H_
 
-#include <stdarg.h>
-#include <stdint.h>
+#include <cstdarg>
+#include <cstdint>
 
 #include<cassert>
 #include<iostream>
 #include<string>
 #include<sstream>
 #include<z3.h>
-#include<limits.h>
+#include<climits>
 
 // jmorse
 #include <config.h>

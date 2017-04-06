@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_STD_TYPES_H
 #define CPROVER_STD_TYPES_H
 
-#include <assert.h>
+#include <cassert>
 
 #include <type.h>
 #include <std_expr.h>

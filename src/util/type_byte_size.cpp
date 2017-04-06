@@ -6,7 +6,7 @@
 
 \*******************************************************************/
 
-#include <assert.h>
+#include <cassert>
 
 #include <expr.h>
 #include <arith_tools.h>

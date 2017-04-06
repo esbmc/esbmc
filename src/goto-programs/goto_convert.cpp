@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
+#include <cassert>
 
 #include <i2string.h>
 #include <cprover_prefix.h>

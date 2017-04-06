@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_UNION_FIND_H
 #define CPROVER_UNION_FIND_H
 
-#include <assert.h>
+#include <cassert>
 
 #include <vector>
 

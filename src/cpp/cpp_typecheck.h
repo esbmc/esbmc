@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_TYPECHECK_H
 #define CPROVER_CPP_TYPECHECK_H
 
-#include <assert.h>
+#include <cassert>
 
 #include <set>
 #include <list>

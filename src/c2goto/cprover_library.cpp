@@ -7,10 +7,10 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 extern "C" {
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <stdint.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
+#include <cstdint>
 #include <unistd.h>
 
 #ifdef _WIN32

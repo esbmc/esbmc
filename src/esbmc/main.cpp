@@ -18,7 +18,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 */
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <irep2.h>
 

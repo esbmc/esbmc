@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <irep2.h>
-#include <assert.h>
+#include <cassert>
 
 #include <cprover_prefix.h>
 #include <expr_util.h>

@@ -12,7 +12,7 @@
 
 #include <irep2.h>
 #include <migrate.h>
-#include <assert.h>
+#include <cassert>
 #include <prefix.h>
 
 #include <expr_util.h>

@@ -12,7 +12,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <irep2.h>
 #include <namespace.h>
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <map>
 #include <set>
@@ -22,7 +22,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple.h>
 #include <vector>
-#include <string.h>
+#include <cstring>
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>

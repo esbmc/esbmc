@@ -5,7 +5,7 @@
  *  Classes and definitions for non-stringy internal representation.
  */
 
-#include <stdarg.h>
+#include <cstdarg>
 
 #include <vector>
 #include <functional>

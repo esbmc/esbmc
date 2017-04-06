@@ -1,7 +1,7 @@
 #ifndef _ESBMC_PROP_SMT_SMT_CONV_H_
 #define _ESBMC_PROP_SMT_SMT_CONV_H_
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <irep2.h>
 #include <message.h>

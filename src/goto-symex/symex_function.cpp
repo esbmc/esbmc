@@ -7,7 +7,7 @@
 
 \*******************************************************************/
 
-#include <assert.h>
+#include <cassert>
 
 #include <expr_util.h>
 #include <i2string.h>

@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-#include <ctype.h>
+#include <cassert>
+#include <cctype>
 
 #include <map>
 #include <set>

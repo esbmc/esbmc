@@ -8,7 +8,7 @@ Author: Daniel Kroening
 
 \*******************************************************************/
 
-#include <assert.h>
+#include <cassert>
 
 #include <xml_irep.h>
 #include <i2string.h>
