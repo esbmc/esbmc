@@ -3935,7 +3935,6 @@ extern char *crypt (__const char *__key, __const char *__salt)
 
 
 
-extern void encrypt (char *__block, int __edflag) __attribute__ ((__nothrow__)) __attribute__ ((__nonnull__ (1)));
 
 
 
