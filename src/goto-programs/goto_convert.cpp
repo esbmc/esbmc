@@ -671,12 +671,7 @@ void goto_convertt::convert_decl(
   const irep_idt &identifier = op0.identifier();
 
   const symbolt* s = context.find_symbol(identifier);
-  if(s == nullptr)
-  {
-    // If the symbol is not there, it might have been removed by the
-    // unused flag. In that case, we can safely ignore this declaration
-    return;
-  }
+  assert(s != nullptr);
 
   // A static variable will be declared in the global scope and
   // a code type means a function declaration, we ignore both
@@ -1587,8 +1582,7 @@ void goto_convertt::convert_return(
     throw "return without target";
   }
 
-  if(code.operands().size()!=0 &&
-     code.operands().size()!=1)
+  if(code.operands().size()!=0 && code.operands().size()!=1)
   {
     err_location(code);
     throw "return takes none or one operand";
