@@ -566,11 +566,12 @@ void clang_c_adjust::adjust_side_effect_function_call(
       // let's just add it
       symbolt new_symbol;
 
-      new_symbol.name=identifier;
-      new_symbol.base_name=f_op.name();
-      new_symbol.location=expr.location();
-      new_symbol.type=f_op.type();
-      new_symbol.mode="C";
+      new_symbol.name = identifier;
+      new_symbol.base_name = f_op.name();
+      new_symbol.location = expr.location();
+      new_symbol.type = f_op.type();
+      new_symbol.mode = "C";
+      new_symbol.is_used = true;
 
       // Adjust type
       to_code_type(new_symbol.type).make_ellipsis();
@@ -1115,15 +1116,15 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
   const exprt &op0 = arguments[0];
   const exprt &op1 = arguments[1];
 
-  symbolt *argc_new_symbol;
-
   symbolt argc_symbol;
   argc_symbol.base_name = "argc";
   argc_symbol.name = "c::argc'";
   argc_symbol.type = op0.type();
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
+  argc_symbol.is_used = true;
 
+  symbolt *argc_new_symbol;
   context.move(argc_symbol, argc_new_symbol);
 
   // need to add one to the size -- the array is terminated
@@ -1139,6 +1140,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
   argv_symbol.type = array_typet(op1.type().subtype(), size_expr);
   argv_symbol.static_lifetime = true;
   argv_symbol.lvalue = true;
+  argv_symbol.is_used = true;
 
   symbolt *argv_new_symbol;
   context.move(argv_symbol, argv_new_symbol);
@@ -1147,19 +1149,21 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
   {
     const exprt &op2 = arguments[2];
 
+    symbolt envp_size_symbol;
+    envp_size_symbol.base_name = "envp_size";
+    envp_size_symbol.name = "c::envp_size'";
+    envp_size_symbol.type = op0.type(); // same type as argc!
+    envp_size_symbol.static_lifetime = true;
+
+    symbolt *envp_new_size_symbol;
+    context.move(envp_size_symbol, envp_new_size_symbol);
+
     symbolt envp_symbol;
     envp_symbol.base_name = "envp";
     envp_symbol.name = "c::envp'";
     envp_symbol.type = op2.type();
     envp_symbol.static_lifetime = true;
-
-    symbolt envp_size_symbol, *envp_new_size_symbol;
-    envp_size_symbol.base_name = "envp_size";
-    envp_size_symbol.name = "c::envp_size'";
-    envp_size_symbol.type = op0.type(); // same type as argc!
-    envp_size_symbol.static_lifetime = true;
-    context.move(envp_size_symbol, envp_new_size_symbol);
-
+    envp_symbol.is_used = true;
     exprt size_expr = symbol_expr(*envp_new_size_symbol);
     envp_symbol.type = array_typet(envp_symbol.type.subtype(), size_expr);
 
