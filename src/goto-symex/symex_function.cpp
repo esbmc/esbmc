@@ -50,6 +50,7 @@ goto_symext::get_unwind_recursion(
 
 void
 goto_symext::argument_assignments(
+  const irep_idt &function_identifier,
   const code_type2t &function_type,
   const std::vector<expr2tc> &arguments)
 {
@@ -131,8 +132,35 @@ goto_symext::argument_assignments(
 
   if(function_type.ellipsis)
   {
-    for(; it1 != arguments.end(); it1++)
+    // These are va_arg arguments; their types may differ from call to call
+    unsigned va_count = 0;
+    while(
+      new_context.find_symbol(
+        id2string(function_identifier) + "::va_arg" + std::to_string(va_count)) != nullptr)
+      ++va_count;
+
+    for(; it1 != arguments.end(); it1++, va_count++)
     {
+      irep_idt id =
+        id2string(function_identifier) + "::va_arg" + std::to_string(va_count);
+
+      // add to symbol table
+      symbolt symbol;
+      symbol.name = id;
+      symbol.base_name = "va_arg" + std::to_string(va_count);
+      symbol.type = migrate_type_back((*it1)->type);
+
+      if(new_context.move(symbol))
+      {
+        std::cerr << "Couldn't add new va_arg symbol" << std::endl;
+        abort();
+      }
+
+      symbol2tc va_lhs(
+        (*it1)->type, id, symbol2t::level1, 0, 0,
+        cur_state->top().level1.thread_id, 0);
+
+      symex_assign(code_assign2tc(va_lhs, *it1));
     }
   }
   else if(it1 != arguments.end())
@@ -258,7 +286,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     abort();
   }
 
-  argument_assignments(to_code_type(tmp_type), arguments);
+  argument_assignments(identifier, to_code_type(tmp_type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;

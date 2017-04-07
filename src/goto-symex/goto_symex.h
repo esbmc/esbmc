@@ -343,6 +343,7 @@ protected:
    *  @param arguments The arguments to assign to function arg variables.
    */
   void argument_assignments(
+    const irep_idt &function_identifier,
     const code_type2t &function_type,
     const std::vector<expr2tc> &arguments);
 
