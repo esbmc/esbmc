@@ -1,4 +1,4 @@
-#include <stdio.h>
+#include <cstdio>
 
 #include <irep2.h>
 #include <namespace.h>

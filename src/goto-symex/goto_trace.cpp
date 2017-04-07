@@ -8,8 +8,8 @@
 
 \*******************************************************************/
 
-#include <assert.h>
-#include <string.h>
+#include <cassert>
+#include <cstring>
 #include <iostream>
 
 #include <ansi-c/printf_formatter.h>

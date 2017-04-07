@@ -3,8 +3,8 @@
 
 #include <irep2.h>
 
-#include <stdint.h>
-#include <string.h>
+#include <cstdint>
+#include <cstring>
 
 #include <string>
 #include <stack>

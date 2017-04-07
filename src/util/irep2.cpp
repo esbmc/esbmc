@@ -1,6 +1,6 @@
 #include "irep2.h"
-#include <stdarg.h>
-#include <string.h>
+#include <cstdarg>
+#include <cstring>
 #include <sstream>
 
 #include "std_types.h"

@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_LANGUAGE_H
 
 #include <set>
-#include <stdio.h>
+#include <cstdio>
 #include "context.h"
 #include "namespace.h"
 #include "message.h"

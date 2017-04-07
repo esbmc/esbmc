@@ -14,10 +14,10 @@
 
 #include <irep2.h>
 
-#include <assert.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <guard.h>
 #include <pointer-analysis/value_set.h>
 #include <goto-programs/goto_functions.h>

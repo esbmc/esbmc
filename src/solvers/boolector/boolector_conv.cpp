@@ -1,4 +1,4 @@
-#include <string.h>
+#include <cstring>
 
 #include "boolector_conv.h"
 

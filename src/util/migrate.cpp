@@ -1,7 +1,7 @@
 #include "migrate.h"
 #include "prefix.h"
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <namespace.h>
 #include <config.h>

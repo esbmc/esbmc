@@ -8,7 +8,7 @@ Date: June 2003
 
 \*******************************************************************/
 
-#include <assert.h>
+#include <cassert>
 
 #include <base_type.h>
 #include <prefix.h>

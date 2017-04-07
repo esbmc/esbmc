@@ -12,7 +12,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <irep2.h>
 #include <namespace.h>
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <map>
 #include <set>
@@ -22,7 +22,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple.h>
 #include <vector>
-#include <string.h>
+#include <cstring>
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
@@ -61,11 +61,11 @@ public:
   virtual ~z3_smt_ast() { }
   z3::expr e;
 
-  virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
+  virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const override;
   virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
-                                unsigned int idx, expr2tc idx_expr) const;
-  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
-  virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
+                                unsigned int idx, expr2tc idx_expr) const override;
+  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const override;
+  virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const override;
 
   virtual void dump() const override;
 };

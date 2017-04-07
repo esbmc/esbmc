@@ -9,7 +9,7 @@
 
 #include <irep2.h>
 #include <migrate.h>
-#include <assert.h>
+#include <cassert>
 #include <iostream>
 #include <vector>
 

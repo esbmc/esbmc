@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_ID_H
 #define CPROVER_CPP_ID_H
 
-#include <assert.h>
+#include <cassert>
 
 #include <list>
 #include <map>

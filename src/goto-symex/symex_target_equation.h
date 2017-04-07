@@ -11,9 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <irep2.h>
 
-extern "C" {
-#include <stdio.h>
-}
+#include <cstdio>
 
 #include <list>
 #include <map>
@@ -30,10 +28,8 @@ extern "C" {
 #include "symex_target.h"
 #include "goto_trace.h"
 
-extern "C" {
-#include <stdint.h>
-#include <string.h>
-}
+#include <cstdint>
+#include <cstring>
 
 class symex_target_equationt:public symex_targett
 {

@@ -2,7 +2,7 @@
 #define __STDC_FORMAT_MACROS
 
 #include <unistd.h>
-#include <inttypes.h>
+#include <cinttypes>
 
 #include <sstream>
 

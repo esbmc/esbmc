@@ -21,7 +21,8 @@
 #define _BITS_PTHREADTYPES_H	1
 
 #include <stdint.h>
-#include <bits/wordsize.h>
+
+#define NULL 0
 
 #if __WORDSIZE == 64
 # define __SIZEOF_PTHREAD_ATTR_T 56

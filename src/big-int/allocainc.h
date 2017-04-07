@@ -21,11 +21,6 @@
 
 # include <malloc.h>
 
-#elif defined __vax
-
-// In vax-alloca.mar.
-extern "C" void *alloca (unsigned);
-
 #elif defined __VMS
 
 // DEC CXX on VMS alpha.

@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef STRING_CONTAINER_H
 #define STRING_CONTAINER_H
 
-#include <assert.h>
+#include <cassert>
 
 #include <list>
 #include <vector>

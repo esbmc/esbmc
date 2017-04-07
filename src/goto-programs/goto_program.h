@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_PROGRAM_H
 
 #include <irep2.h>
-#include <assert.h>
+#include <cassert>
 /*! \defgroup gr_goto_programs Goto programs */
 
 #include <cassert>

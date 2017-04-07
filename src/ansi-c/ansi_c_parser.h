@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_SPECC_PARSER_H
 #define CPROVER_SPECC_PARSER_H
 
-#include <assert.h>
+#include <cassert>
 
 #include <util/parser.h>
 #include <expr.h>

@@ -5,8 +5,8 @@
 
  \*******************************************************************/
 
-#include <assert.h>
-#include <ctype.h>
+#include <cassert>
+#include <cctype>
 #include <fstream>
 #include <sstream>
 #include <std_expr.h>

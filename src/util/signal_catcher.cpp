@@ -11,8 +11,8 @@ Date:
 #if defined(_WIN32)
 
 #else
-#include <signal.h>
-#include <stdlib.h>
+#include <csignal>
+#include <cstdlib>
 
 #include <csignal>
 #endif

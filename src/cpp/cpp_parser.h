@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_PARSER_H
 #define CPROVER_CPP_PARSER_H
 
-#include <assert.h>
+#include <cassert>
 
 #include <hash_cont.h>
 #include <string_hash.h>

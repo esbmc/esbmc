@@ -9,7 +9,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 #include <sys/types.h>
 
-#include <signal.h>
+#include <csignal>
 #ifndef _WIN32
 #include <unistd.h>
 #else

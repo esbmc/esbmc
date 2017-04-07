@@ -23,7 +23,7 @@
    is<name>() looks ahead and returns true if the next symbol is <name>.
 */
 
-#include <assert.h>
+#include <cassert>
 
 #include <expr.h>
 #include <std_code.h>

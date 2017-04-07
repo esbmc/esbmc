@@ -93,6 +93,12 @@ void clang_c_languaget::build_compiler_string(
   // Ignore ctype defined by the system
   compiler_string.push_back("-D__NO_CTYPE");
 
+#ifdef __APPLE__
+  compiler_string.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
+  compiler_string.push_back("-D_SECURE__STRING_H_");
+  compiler_string.push_back("-U__BLOCKS__");
+#endif
+
   // Force clang see all files as .c
   // This forces the preprocessor to be called even in preprocessed files
   // which allow us to perform transformations using -D

@@ -13,10 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #ifndef _WIN32
 extern "C" {
-#include <ctype.h>
 #include <fcntl.h>
-#include <stdlib.h>
-#include <signal.h>
 #include <unistd.h>
 
 #ifdef HAVE_SENDFILE_ESBMC
@@ -63,7 +60,9 @@ extern "C" {
 #include <ac_config.h>
 #include <fstream>
 
-#include <signal.h>
+#include <cctype>
+#include <cstdlib>
+#include <csignal>
 #include <sys/wait.h>
 
 enum PROCESS_TYPE { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP, PARENT };

@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_PROPDEC_LITERAL_H
 
 #include <vector>
-#include <stdint.h>
+#include <cstdint>
 
 class literalt
 {
