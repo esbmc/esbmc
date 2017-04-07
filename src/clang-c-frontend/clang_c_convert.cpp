@@ -402,7 +402,7 @@ bool clang_c_convertert::get_var(
     vd.getName().str(),
     identifier,
     location_begin,
-    vd.isUsed());
+    true);
 
   symbol.lvalue = true;
   symbol.static_lifetime = (vd.getStorageClass() == clang::SC_Static)
@@ -597,7 +597,7 @@ bool clang_c_convertert::get_function_params(
     name,
     pretty_name,
     location_begin,
-    pdecl.isUsed()); // function parameter cannot be static
+    true); // function parameter cannot be static
 
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
