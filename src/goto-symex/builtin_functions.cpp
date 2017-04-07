@@ -21,6 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <base_type.h>
 #include <c_types.h>
 #include <dcutil.h>
+#include <prefix.h>
 
 #include "goto_symex.h"
 #include "execution_state.h"
@@ -710,8 +711,46 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
 
 void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
 {
-  (void) lhs;
-  (void) code;
-  std::cerr << "Sorry, no support for va_args\n";
-  abort();
+  // Get symbol
+  expr2tc symbol = code.operand;
+  assert(is_symbol2t(symbol));
+
+  // to allow constant propagation
+  cur_state->rename(symbol);
+  do_simplify(symbol);
+
+  expr2tc next_symbol = symbol;
+  if(is_typecast2t(next_symbol))
+    next_symbol = to_typecast2t(symbol).from;
+
+  if(is_address_of2t(next_symbol))
+    next_symbol = to_address_of2t(next_symbol).ptr_obj;
+
+  assert(is_symbol2t(next_symbol));
+  irep_idt id = to_symbol2t(next_symbol).thename;
+  std::string base = id2string(cur_state->top().function_identifier) + "::va_arg";
+
+  int64_t va_index = 0;
+  if(has_prefix(id2string(id), base))
+  {
+    va_index =
+      string2integer(
+        std::string(id2string(id), base.size(), std::string::npos)).to_int64() + 1;
+  }
+  id = base + std::to_string(va_index);
+
+  const symbolt *s = new_context.find_symbol(id);
+  assert(s != nullptr);
+
+  type2tc symbol_type;
+  migrate_type(s->type, symbol_type);
+
+  expr2tc va_rhs = symbol2tc(
+    symbol_type, s->name, symbol2t::level1, 0, 0,
+    cur_state->top().level1.thread_id, 0);
+
+  va_rhs = address_of2tc(symbol_type, va_rhs);
+  va_rhs = typecast2tc(lhs->type, va_rhs);
+
+  symex_assign(code_assign2tc(lhs, va_rhs));
 }
