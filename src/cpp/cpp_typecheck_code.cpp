@@ -493,7 +493,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     return;
   }
 
-  codet new_code("block");
+  codet new_code("decl-block");
   new_code.reserve_operands(declaration.declarators().size());
 
   // Do the declarators (optional).
