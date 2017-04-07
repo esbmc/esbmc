@@ -159,15 +159,13 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     throw "got invalid code for function `"+id2string(identifier)+"'";
   }
 
-  const code_typet::argumentst &arguments=f.type.arguments();
-
+  // Get parameter names
   goto_programt::local_variablest arg_ids;
-
-  // add as local variables
+  const code_typet::argumentst &arguments=f.type.arguments();
   for(auto it : arguments)
   {
     const irep_idt &identifier = it.get_identifier();
-    assert(identifier != "");
+    assert(!identifier.empty());
     arg_ids.insert(identifier);
   }
 
@@ -231,7 +229,9 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     }
   }
 
+  // Add parameter and local variables
   f.body.add_local_variables(arg_ids);
+  f.body.add_local_variables(local_variables);
 
   // do local variables
   Forall_goto_program_instructions(i_it, f.body)

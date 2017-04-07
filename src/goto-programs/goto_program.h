@@ -89,8 +89,6 @@ public:
   // local variables
   typedef std::set<irep_idt> local_variablest;
 
-  // valid local variables at this point
-  // this is obsolete and will be removed in future versions
   local_variablest local_variables;
 
   void add_local_variable(const irep_idt &id)
@@ -295,11 +293,6 @@ public:
 
   //! The list of instructions in the goto program
   instructionst instructions;
-
-  bool has_local_variable(const irep_idt &identifier)
-  {
-    return local_variables.count(identifier);
-  }
 
   void get_successors(
     targett target,

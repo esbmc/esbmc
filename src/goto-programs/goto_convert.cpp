@@ -339,6 +339,10 @@ void goto_convertt::convert_block(
   const codet &code,
   goto_programt &dest)
 {
+  // Save local symbols
+  goto_programt::local_variablest old_scoped_vars = scoped_variables;
+  scoped_variables.clear();
+
   // Convert each expression
   for(auto it : code.operands())
   {
@@ -350,14 +354,8 @@ void goto_convertt::convert_block(
     dest.destructive_append(tmp);
   }
 
-  // all the temp symbols are also local variables and they are gotten
-  // via the convert process
-  local_symbols.insert(tmp_symbols.begin(), tmp_symbols.end());
-  tmp_symbols.clear();
-
   // see if we need to call any destructors
-
-  for(auto local : local_symbols)
+  for(auto local : scoped_variables)
   {
     const symbolt &symbol = ns.lookup(local);
 
@@ -377,7 +375,11 @@ void goto_convertt::convert_block(
     }
   }
 
-  local_symbols.clear();
+  // Add scoped variables to the list of function variables
+  local_variables.insert(scoped_variables.begin(), scoped_variables.end());
+
+  // Add old symbols to the list of locals
+  scoped_variables = old_scoped_vars;
 }
 
 void goto_convertt::convert_sideeffect(
@@ -682,7 +684,7 @@ void goto_convertt::convert_decl(
     return; // this is a SKIP!
 
   // Local variable, add to locals
-  local_symbols.insert(identifier);
+  scoped_variables.insert(identifier);
 
   if(code.operands().size() == 1)
   {
@@ -2044,7 +2046,7 @@ symbolt &goto_convertt::new_tmp_symbol(const typet &type)
     new_symbol.type=type;
   } while (context.move(new_symbol, symbol_ptr));
 
-  tmp_symbols.insert(symbol_ptr->name);
+  scoped_variables.insert(symbol_ptr->name);
 
   return *symbol_ptr;
 }
@@ -2062,7 +2064,7 @@ symbolt &goto_convertt::new_cftest_symbol(const typet &type)
     new_symbol.type=type;
   } while (context.move(new_symbol, symbol_ptr));
 
-  tmp_symbols.insert(symbol_ptr->name);
+  scoped_variables.insert(symbol_ptr->name);
 
   return *symbol_ptr;
 }
