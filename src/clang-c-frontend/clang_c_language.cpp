@@ -303,6 +303,7 @@ void clang_c_languaget::internal_additions()
     "double nondet_double();"
 
     // And again, for TACAS VERIFIER versions,
+    "__attribute__((used))\n"
     "int __VERIFIER_nondet_int();\n"
     "__attribute__((used))\n"
     "unsigned int __VERIFIER_nondet_uint();\n"
