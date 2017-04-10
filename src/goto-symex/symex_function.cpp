@@ -48,7 +48,7 @@ goto_symext::get_unwind_recursion(
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
-void
+unsigned
 goto_symext::argument_assignments(
   const irep_idt &function_identifier,
   const code_type2t &function_type,
@@ -130,6 +130,7 @@ goto_symext::argument_assignments(
     it1++;
   }
 
+  unsigned va_index = UINT_MAX;
   if(function_type.ellipsis)
   {
     // These are va_arg arguments; their types may differ from call to call
@@ -139,6 +140,7 @@ goto_symext::argument_assignments(
         id2string(function_identifier) + "::va_arg" + std::to_string(va_count)) != nullptr)
       ++va_count;
 
+    va_index = va_count;
     for(; it1 != arguments.end(); it1++, va_count++)
     {
       irep_idt id =
@@ -167,6 +169,8 @@ goto_symext::argument_assignments(
   {
     // we got too many arguments, but we will just ignore them
   }
+
+  return va_index;
 }
 
 void
@@ -286,7 +290,8 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     abort();
   }
 
-  argument_assignments(identifier, to_code_type(tmp_type), arguments);
+  frame.va_index =
+    argument_assignments(identifier, to_code_type(tmp_type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;

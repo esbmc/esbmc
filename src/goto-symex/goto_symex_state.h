@@ -200,6 +200,11 @@ public:
     typedef hash_map_cont<unsigned, unsigned> loop_iterationst;
     loop_iterationst loop_iterations;
 
+    /** Record the first va_args index used in this function call, if any,
+     *  otherwise UINT_MAX
+     */
+    unsigned int va_index;
+
     guardt entry_guard;
 
     framet(unsigned int thread_id) :
