@@ -1223,6 +1223,7 @@ void clang_c_adjust::adjust_builtin_va_arg(exprt& expr)
   symbol.base_name = "builtin_va_arg";
   symbol.name = "builtin_va_arg";
   symbol.type = symbol_type;
+  symbol.is_used = true;
 
   context.move(symbol);
 }
