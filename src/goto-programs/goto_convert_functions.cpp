@@ -187,9 +187,9 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   targets=targetst();
   targets.return_set=true;
   targets.return_value=
-      f.type.return_type().id()!="empty" &&
-      f.type.return_type().id()!="constructor" &&
-      f.type.return_type().id()!="destructor";
+    f.type.return_type().id()!="empty" &&
+    f.type.return_type().id()!="constructor" &&
+    f.type.return_type().id()!="destructor";
 
   goto_convert_rec(tmp, f.body);
 
