@@ -180,7 +180,7 @@ bool clang_c_languaget::typecheck(
 void clang_c_languaget::show_parse(std::ostream& out __attribute__((unused)))
 {
   for (auto &translation_unit : ASTs)
-    (*translation_unit).getASTContext().getTranslationUnitDecl()->dumpColor();
+    (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
 }
 
 bool clang_c_languaget::preprocess(
