@@ -529,6 +529,7 @@ goto_symext::locality(const goto_functiont &goto_function)
 
   // For all insns...
   local_identifiers.insert(
+    local_identifiers.begin(),
     goto_function.body.local_variables.begin(),
     goto_function.body.local_variables.end());
 

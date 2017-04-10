@@ -87,27 +87,18 @@ public:
   }
 
   // local variables
-  typedef std::set<irep_idt> local_variablest;
+  typedef std::list<irep_idt> local_variablest;
 
   local_variablest local_variables;
 
   void add_local_variable(const irep_idt &id)
   {
-    local_variables.insert(id);
+    local_variables.push_front(id);
   }
 
   void add_local_variables(const local_variablest &locals)
   {
-    local_variables.insert(locals.begin(), locals.end());
-  }
-
-  void add_local_variables(const std::list<irep_idt> &locals)
-  {
-    for(std::list<irep_idt>::const_iterator
-        it=locals.begin();
-        it!=locals.end();
-        it++)
-      local_variables.insert(*it);
+    local_variables.insert(local_variables.begin(), locals.begin(), locals.end());
   }
 
   /*! \brief Container for an instruction of the goto-program

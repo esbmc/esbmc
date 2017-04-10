@@ -431,7 +431,7 @@ void goto_convertt::remove_function_call(
 
     new_name(new_symbol);
 
-    scoped_variables.insert(new_symbol.name);
+    scoped_variables.push_front(new_symbol.name);
 
     call=code_assignt(symbol_expr(new_symbol), expr);
 
@@ -478,7 +478,7 @@ void goto_convertt::remove_cpp_new(
     new_symbol.name=tmp_symbol_prefix+id2string(new_symbol.base_name);
 
     new_name(new_symbol);
-    scoped_variables.insert(new_symbol.name);
+    scoped_variables.push_front(new_symbol.name);
 
     call=code_assignt(symbol_expr(new_symbol), expr);
 

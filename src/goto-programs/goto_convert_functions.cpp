@@ -166,7 +166,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   {
     const irep_idt &identifier = it.get_identifier();
     assert(!identifier.empty());
-    arg_ids.insert(identifier);
+    arg_ids.push_front(identifier);
   }
 
   if(!symbol.value.is_code())

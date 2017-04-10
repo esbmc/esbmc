@@ -376,7 +376,10 @@ void goto_convertt::convert_block(
   }
 
   // Add scoped variables to the list of function variables
-  local_variables.insert(scoped_variables.begin(), scoped_variables.end());
+  local_variables.insert(
+    local_variables.begin(),
+    scoped_variables.begin(),
+    scoped_variables.end());
 
   // Add old symbols to the list of locals
   scoped_variables = old_scoped_vars;
@@ -679,7 +682,7 @@ void goto_convertt::convert_decl(
     return; // this is a SKIP!
 
   // Local variable, add to locals
-  scoped_variables.insert(identifier);
+  scoped_variables.push_front(identifier);
 
   if(code.operands().size() == 1)
   {
@@ -2040,7 +2043,7 @@ symbolt &goto_convertt::new_tmp_symbol(const typet &type)
     new_symbol.type=type;
   } while (context.move(new_symbol, symbol_ptr));
 
-  scoped_variables.insert(symbol_ptr->name);
+  scoped_variables.push_front(symbol_ptr->name);
 
   return *symbol_ptr;
 }
@@ -2058,7 +2061,7 @@ symbolt &goto_convertt::new_cftest_symbol(const typet &type)
     new_symbol.type=type;
   } while (context.move(new_symbol, symbol_ptr));
 
-  scoped_variables.insert(symbol_ptr->name);
+  scoped_variables.push_front(symbol_ptr->name);
 
   return *symbol_ptr;
 }

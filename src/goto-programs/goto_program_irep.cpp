@@ -146,5 +146,5 @@ void convert(const irept &irep, goto_programt &program)
   const irept &vars = irep.variables();
   const irept::subt &vsubs = vars.get_sub();
   for(auto it : vsubs)
-    program.local_variables.insert(it.id());
+    program.local_variables.push_front(it.id());
 }

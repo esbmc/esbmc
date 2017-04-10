@@ -69,7 +69,7 @@ void goto_inlinet::parameter_assignments(
       decl->function=location.get_function();
     }
 
-    local_variables.insert(identifier);
+    local_variables.push_front(identifier);
 
     // nil means "don't assign"
     if(it1->is_nil())
