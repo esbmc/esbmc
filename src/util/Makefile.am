@@ -14,7 +14,8 @@ libutil_la_SOURCES = \
       pointer_arithmetic.cpp signal_catcher.cpp migrate.cpp \
       thread.cpp crypto_hash.cpp type_byte_size.cpp dcutil.cpp \
       string_constant.cpp c_types.cpp ieee_float.cpp
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/utils \
+      -Wno-bool-compare
 
 utilincludedir = $(includedir)/util
 utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
