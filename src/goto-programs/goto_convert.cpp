@@ -676,7 +676,7 @@ void goto_convertt::convert_decl(
 
   const irep_idt &identifier = var.identifier();
 
-  const symbolt* s = context.find_symbol(identifier);
+  symbolt* s = context.find_symbol(identifier);
   assert(s != nullptr);
 
   // A static variable will be declared in the global scope and
@@ -693,9 +693,13 @@ void goto_convertt::convert_decl(
     exprt &size = to_array_type(var.type()).size();
     if(has_sideeffect(size))
     {
+      // Remove side effect
       goto_programt sideeffects;
       remove_sideeffects(size, sideeffects);
       dest.destructive_append(sideeffects);
+
+      // Update symbol
+      to_array_type(s->type).size() = size;
     }
   }
 
