@@ -307,7 +307,7 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
     return;  // done by the pointer code
   else if (array_type.id() == "incomplete_array")
   {
-    std::cerr << expr.pretty() << std::endl;
+    expr.dump();
     throw "index got incomplete array";
   }
   else if (!array_type.is_array())

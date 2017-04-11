@@ -749,13 +749,11 @@ void goto_convertt::convert_assign(
     throw "assignment statement takes two operands";
   }
 
-  exprt lhs=code.lhs(),
-        rhs=code.rhs();
+  exprt lhs=code.lhs(), rhs=code.rhs();
 
   remove_sideeffects(lhs, dest);
 
-  if(rhs.id()=="sideeffect" &&
-     rhs.statement()=="function_call")
+  if(rhs.id()=="sideeffect" && rhs.statement()=="function_call")
   {
     if(rhs.operands().size()!=2)
     {
@@ -822,7 +820,12 @@ void goto_convertt::convert_assign(
   }
 }
 
-void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rhs, goto_programt &dest, const locationt &location)
+void goto_convertt::break_globals2assignments(
+  int &atomic,
+  exprt &lhs,
+  exprt &rhs,
+  goto_programt &dest,
+  const locationt &location)
 {
 
   if(!options.get_bool_option("atomicity-check"))
