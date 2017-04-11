@@ -22,7 +22,11 @@ bool crypto_hash::operator<(const crypto_hash h2) const
 
 std::string crypto_hash::to_string() const
 {
-  return std::string(hash);
+  std::ostringstream buf;
+  for(int i = 0; i < 5; ++i)
+    buf << std::hex << std::setfill('0') << std::setw(8) << hash[i];
+
+  return buf.str();
 }
 
 crypto_hash::crypto_hash()
@@ -38,9 +42,5 @@ void crypto_hash::ingest(void const *data, unsigned int size)
 
 void crypto_hash::fin()
 {
-  unsigned int digest[5];
-  p_crypto->s.get_digest(digest);
-
-  for (int i = 0; i < 5; i++)
-    std::sprintf(hash + (i << 3), "%08x", digest[i]);
+  p_crypto->s.get_digest(hash);
 }
