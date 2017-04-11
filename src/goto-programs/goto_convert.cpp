@@ -664,14 +664,17 @@ void goto_convertt::convert_decl(
     throw "decl statement takes one or two operands";
   }
 
-  const exprt &op0 = code.op0();
-  if(!op0.is_symbol())
+  // We might change the symbol
+  codet new_code(code);
+
+  exprt &var = new_code.op0();
+  if(!var.is_symbol())
   {
-    err_location(op0);
+    err_location(var);
     throw "decl statement expects symbol as first operand";
   }
 
-  const irep_idt &identifier = op0.identifier();
+  const irep_idt &identifier = var.identifier();
 
   const symbolt* s = context.find_symbol(identifier);
   assert(s != nullptr);
@@ -684,35 +687,43 @@ void goto_convertt::convert_decl(
   // Local variable, add to locals
   scoped_variables.push_front(identifier);
 
-  if(code.operands().size() == 1)
+  // We need to check if there an sideeffect on the array size
+  if(var.type().is_array())
   {
-    copy(code, OTHER, dest);
+    exprt &size = to_array_type(var.type()).size();
+    if(has_sideeffect(size))
+    {
+      goto_programt sideeffects;
+      remove_sideeffects(size, sideeffects);
+      dest.destructive_append(sideeffects);
+    }
+  }
+
+  if(new_code.operands().size() == 1)
+  {
+    copy(new_code, OTHER, dest);
     return;
   }
 
-  exprt initializer;
-
-  codet tmp(code);
-  initializer = code.op1();
-  tmp.operands().resize(1); // just resize the vector, this will get rid of op1
-
-  goto_programt sideeffects;
+  exprt initializer = new_code.op1();
+  new_code.operands().resize(1); // just resize the vector, this will get rid of op1
 
   if(options.get_bool_option("atomicity-check"))
   {
     unsigned int globals = get_expr_number_globals(initializer);
     if(globals > 0)
-      break_globals2assignments(initializer, dest, code.location());
+      break_globals2assignments(initializer, dest, new_code.location());
   }
 
+  goto_programt sideeffects;
   remove_sideeffects(initializer, sideeffects);
   dest.destructive_append(sideeffects);
 
   // break up into decl and assignment
-  copy(tmp, OTHER, dest);
+  copy(new_code, OTHER, dest);
 
   code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
-  assign.location() = tmp.location();
+  assign.location() = new_code.location();
   copy(assign, ASSIGN, dest);
 }
 
