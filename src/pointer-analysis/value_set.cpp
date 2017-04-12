@@ -216,9 +216,8 @@ void value_sett::get_value_set(
 void value_sett::get_value_set(const expr2tc &expr, object_mapt &dest) const
 {
   // Simplify expr if possible,
-  expr2tc new_expr = expr->simplify();
-  if (is_nil_expr(new_expr))
-    new_expr = expr;
+  expr2tc new_expr = expr;
+  simplify(new_expr);
 
   // Then, start fetching values.
   get_value_set_rec(new_expr, dest, "", new_expr->type);
