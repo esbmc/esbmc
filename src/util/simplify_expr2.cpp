@@ -232,11 +232,12 @@ simplify_arith_2ops(
         simplied_side_1, simplied_side_2, is_constant, get_value);
 
     // Fix rounding when an overflow occurs
-    migrate_expr(
-      from_integer(
-        to_constant_int2t(simpl_res).value,
-        migrate_type_back(simpl_res->type)),
-        simpl_res);
+    if(!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+      migrate_expr(
+        from_integer(
+          to_constant_int2t(simpl_res).value,
+          migrate_type_back(simpl_res->type)),
+          simpl_res);
   }
   else if(is_fixedbv_type(simplied_side_1) || is_fixedbv_type(simplied_side_2))
   {
