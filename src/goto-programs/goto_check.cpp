@@ -350,7 +350,7 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
         inequality.copy_to_operands(index, zero);
 
         add_guarded_claim(inequality, name + " lower bound", "array bounds",
-            expr.find_location(), guard);
+          expr.find_location(), guard);
       }
     }
   }
@@ -367,7 +367,7 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
       inequality.copy_to_operands(index, size);
 
       // typecast size
-      if (inequality.op1().type() != inequality.op0().type())
+      if(inequality.op1().type() != inequality.op0().type())
         inequality.op1().make_typecast(inequality.op0().type());
 
       add_guarded_claim(

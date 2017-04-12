@@ -337,25 +337,28 @@ void goto_symext::symex_printf(
 
   const expr2tc &format = *new_rhs->get_sub_expr(0);
 
-  if (is_address_of2t(format)) {
+  if (is_address_of2t(format))
+  {
     const address_of2t &addrof = to_address_of2t(format);
-    if (is_index2t(addrof.ptr_obj)) {
+    if (is_index2t(addrof.ptr_obj))
+    {
       const index2t &idx = to_index2t(addrof.ptr_obj);
-      if (is_constant_string2t(idx.source_value) &&
-          is_constant_int2t(idx.index) &&
-          to_constant_int2t(idx.index).as_ulong() == 0) {
+      if(is_constant_string2t(idx.source_value)
+         && is_constant_int2t(idx.index)
+         && to_constant_int2t(idx.index).as_ulong() == 0)
+      {
         const std::string &fmt =
           to_constant_string2t(idx.source_value).value.as_string();
 
         std::list<expr2tc> args;
-        new_rhs->foreach_operand([this, &args] (const expr2tc &e) {
-          expr2tc tmp = e;
-          do_simplify(tmp);
-          args.push_back(tmp);
-          }
-        );
+        new_rhs->foreach_operand([this, &args] (const expr2tc &e)
+          {
+            expr2tc tmp = e;
+            do_simplify(tmp);
+            args.push_back(tmp);
+          });
 
-        target->output(cur_state->guard.as_expr(), cur_state->source, fmt,args);
+        target->output(cur_state->guard.as_expr(), cur_state->source, fmt, args);
       }
     }
   }
