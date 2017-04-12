@@ -114,16 +114,8 @@ bool check_c_implicit_typecast(
 
   const std::string &src_type_id=src_type.id_string();
 
-  if(src_type_id=="real")
+  if(src_type_id=="bool")
   {
-    if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="complex") return false;
-    if(dest_type.id()=="floatbv") return false;
-    if(dest_type.id()=="fixedbv") return false;
-  }
-  else if(src_type_id=="bool")
-  {
-    if(dest_type.id()=="real") return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="pointer") return false;
@@ -138,7 +130,6 @@ bool check_c_implicit_typecast(
   {
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="floatbv") return false;
     if(dest_type.id()=="fixedbv") return false;
@@ -150,7 +141,6 @@ bool check_c_implicit_typecast(
           src_type_id=="fixedbv")
   {
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="floatbv") return false;

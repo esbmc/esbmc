@@ -52,8 +52,6 @@ std::string type2name(const typet &type)
     result+='U' + type.width().as_string();
   else if(type.is_bool())
     result+='B';
-  else if(type.id()=="real")
-    result+='R';
   else if(type.id()=="complex")
     result+='C';
   else if(type.id()=="floatbv")

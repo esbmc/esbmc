@@ -144,9 +144,6 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
         return false;
       }
     }
-    else if(op_type_id=="real")
-    {
-    }
     else if(op_type_id=="bool")
     {
       if(expr_type_id=="unsignedbv" ||
@@ -2992,13 +2989,11 @@ struct saj_tablet
   const char *type_id;
 } const saj_table[]=
 {
-  { "+",      "real"       },
   { "+",      "complex"    },
   { "+",      "unsignedbv" },
   { "+",      "signedbv"   },
   { "+",      "floatbv"    },
   { "+",      "pointer"    },
-  { "*",      "real"       },
   { "*",      "complex"    },
   { "*",      "unsignedbv" },
   { "*",      "signedbv"   },
