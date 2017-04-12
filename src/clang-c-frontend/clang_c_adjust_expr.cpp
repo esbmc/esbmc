@@ -312,8 +312,6 @@ void clang_c_adjust::adjust_index(index_exprt& index)
       std::swap(array_expr, index_expr);
   }
 
-  make_index_type(index_expr);
-
   const typet &final_array_type=ns.follow(array_expr.type());
 
   if(final_array_type.is_array() ||
@@ -1226,11 +1224,6 @@ void clang_c_adjust::adjust_builtin_va_arg(exprt& expr)
   symbol.is_used = true;
 
   context.move(symbol);
-}
-
-void clang_c_adjust::make_index_type(exprt& expr)
-{
-  gen_typecast(ns, expr, index_type());
 }
 
 void clang_c_adjust::adjust_operands(exprt& expr)

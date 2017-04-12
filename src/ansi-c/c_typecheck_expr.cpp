@@ -746,8 +746,6 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
       std::swap(array_expr, index_expr);
   }
 
-  make_index_type(index_expr);
-
   const typet &final_array_type=follow(array_expr.type());
 
   if(final_array_type.is_array() ||

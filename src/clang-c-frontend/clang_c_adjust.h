@@ -65,7 +65,6 @@ class clang_c_adjust
 
     void adjust_argc_argv(const symbolt &main_symbol);
 
-    void make_index_type(exprt &expr);
     void do_special_functions(side_effect_expr_function_callt &expr);
 };
 
