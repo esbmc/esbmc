@@ -656,6 +656,9 @@ with2t::do_simplify(bool second __attribute__((unused))) const
 
     // Index may be out of bounds. That's an error in the program, but not in
     // the model we're generating, so permit it. Can't simplify it though.
+    if (index.value.is_negative())
+      return expr2tc();
+
     if (index.as_ulong() >= array.datatype_members.size())
       return expr2tc();
 
@@ -867,6 +870,9 @@ index2t::do_simplify(bool second __attribute__((unused))) const
     const constant_int2t &idx = to_constant_int2t(index);
 
     // Same index situation
+    if (idx.value.is_negative())
+      return expr2tc();
+
     unsigned long the_idx = idx.as_ulong();
     if (the_idx > str.value.as_string().size()) // allow reading null term.
       return expr2tc();
