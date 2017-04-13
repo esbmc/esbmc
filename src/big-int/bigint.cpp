@@ -5,8 +5,8 @@
 // The copyright at this source is owned Dirk Zoller.
 // You may however use and modify this without restriction.
 
-#include <bigint.hh>
-#include <allocainc.h>
+#include <big-int/bigint.hh>
+#include <big-int/allocainc.h>
 #include <cctype>
 #include <climits>
 #include <cstdio>
