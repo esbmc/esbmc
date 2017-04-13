@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <convert_integer_literal.h>
+#include <ansi-c/convert_integer_literal.h>
 #include <util/arith_tools.h>
 #include <cassert>
 #include <util/config.h>

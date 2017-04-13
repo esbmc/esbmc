@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi_c_convert.h>
-#include <ansi_c_convert_type.h>
-#include <ansi_c_declaration.h>
+#include <ansi-c/ansi_c_convert.h>
+#include <ansi-c/ansi_c_convert_type.h>
+#include <ansi-c/ansi_c_declaration.h>
 #include <util/config.h>
 #include <util/std_types.h>
 

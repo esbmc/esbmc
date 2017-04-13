@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <c_sizeof.h>
-#include <c_typecast.h>
+#include <ansi-c/c_sizeof.h>
+#include <ansi-c/c_typecast.h>
 #include <util/c_types.h>
 #include <util/arith_tools.h>
 #include <util/config.h>

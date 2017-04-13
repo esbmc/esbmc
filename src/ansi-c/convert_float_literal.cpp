@@ -7,8 +7,8 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/c_types.h>
-#include <convert_float_literal.h>
-#include <parse_float.h>
+#include <ansi-c/convert_float_literal.h>
+#include <ansi-c/parse_float.h>
 #include <util/arith_tools.h>
 #include <cassert>
 #include <util/config.h>

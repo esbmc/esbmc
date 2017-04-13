@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <util/c_types.h>
-#include <printf_formatter.h>
+#include <ansi-c/printf_formatter.h>
 #include <cassert>
 #include <util/format_constant.h>
 #include <util/simplify_expr.h>

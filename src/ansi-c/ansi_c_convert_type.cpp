@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi_c_convert_type.h>
+#include <ansi-c/ansi_c_convert_type.h>
 #include <util/arith_tools.h>
 #include <cassert>
 #include <util/config.h>

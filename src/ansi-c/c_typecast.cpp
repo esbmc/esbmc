@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <c_qualifiers.h>
-#include <c_typecast.h>
+#include <ansi-c/c_qualifiers.h>
+#include <ansi-c/c_typecast.h>
 #include <util/c_types.h>
-#include <type2name.h>
+#include <ansi-c/type2name.h>
 #include <util/base_type.h>
 #include <cassert>
 #include <util/config.h>

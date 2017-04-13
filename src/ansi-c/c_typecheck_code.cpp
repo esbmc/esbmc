@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <c_typecheck_base.h>
+#include <ansi-c/c_typecheck_base.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 

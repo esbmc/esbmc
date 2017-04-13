@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_SPECC_PARSER_H
 #define CPROVER_SPECC_PARSER_H
 
-#include <ansi_c_parse_tree.h>
+#include <ansi-c/ansi_c_parse_tree.h>
 #include <cassert>
 #include <util/expr.h>
 #include <util/hash_cont.h>

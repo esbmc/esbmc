@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <unescape_string.h>
+#include <ansi-c/unescape_string.h>
 #include <cctype>
 #include <cstdio>
 

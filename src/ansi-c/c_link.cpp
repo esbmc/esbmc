@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <c_link.h>
-#include <expr2c.h>
-#include <fix_symbol.h>
+#include <ansi-c/c_link.h>
+#include <ansi-c/expr2c.h>
+#include <ansi-c/fix_symbol.h>
 #include <util/base_type.h>
 #include <util/i2string.h>
 #include <util/location.h>
