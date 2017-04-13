@@ -1,5 +1,5 @@
 #include <c_types.h>
-#include "cvc_conv.h"
+#include <cvc_conv.h>
 
 smt_convt *
 create_new_cvc_solver(bool int_encoding, const namespacet &ns,

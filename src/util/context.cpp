@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "context.h"
+#include <context.h>
 
 bool contextt::add(const symbolt &symbol)
 {

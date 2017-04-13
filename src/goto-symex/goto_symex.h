@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
-#include "goto_symex_state.h"
-#include "symex_target.h"
+#include <goto_symex_state.h>
+#include <symex_target.h>
 #include <boost/shared_ptr.hpp>
 #include <goto-programs/goto_functions.h>
 #include <hash_cont.h>

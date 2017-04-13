@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 
-#include "object_numbering.h"
-#include "value_sets.h"
+#include <object_numbering.h>
+#include <value_sets.h>
 #include <irep2.h>
 #include <mp_arith.h>
 #include <namespace.h>

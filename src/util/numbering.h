@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_NUMBERING_H
 #define CPROVER_NUMBERING_H
 
-#include "hash_cont.h"
+#include <hash_cont.h>
 #include <cassert>
 #include <map>
 #include <vector>

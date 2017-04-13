@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "value_set.h"
+#include <value_set.h>
 #include <arith_tools.h>
 #include <base_type.h>
 #include <c_types.h>

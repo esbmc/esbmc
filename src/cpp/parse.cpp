@@ -23,11 +23,11 @@
    is<name>() looks ahead and returns true if the next symbol is <name>.
 */
 
-#include "cpp_enum_type.h"
-#include "cpp_member_spec.h"
-#include "cpp_parser.h"
-#include "cpp_token_buffer.h"
-#include "tokens.h"
+#include <cpp_enum_type.h>
+#include <cpp_member_spec.h>
+#include <cpp_parser.h>
+#include <cpp_token_buffer.h>
+#include <tokens.h>
 #include <cassert>
 #include <expr.h>
 #include <i2string.h>

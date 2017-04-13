@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "i2string.h"
-#include "irep.h"
-#include "string_hash.h"
+#include <i2string.h>
+#include <irep.h>
+#include <string_hash.h>
 #include <cassert>
 #include <cstdlib>
 

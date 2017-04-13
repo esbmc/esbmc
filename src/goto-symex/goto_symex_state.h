@@ -10,9 +10,9 @@
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
-#include "crypto_hash.h"
-#include "renaming.h"
-#include "symex_target.h"
+#include <crypto_hash.h>
+#include <renaming.h>
+#include <symex_target.h>
 #include <boost/shared_ptr.hpp>
 #include <cassert>
 #include <cstdint>

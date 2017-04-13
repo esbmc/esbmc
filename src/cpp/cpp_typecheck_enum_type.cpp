@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "cpp_enum_type.h"
-#include "cpp_typecheck.h"
+#include <cpp_enum_type.h>
+#include <cpp_typecheck.h>
 #include <ansi-c/c_qualifiers.h>
 #include <arith_tools.h>
 #include <i2string.h>

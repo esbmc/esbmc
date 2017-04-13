@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_IREP_H
 #define CPROVER_IREP_H
 
-#include "global.h"
+#include <global.h>
 #include <cassert>
 #include <list>
 #include <map>
@@ -19,7 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define USE_DSTRING
 #define SHARING
 
-#include "dstring.h"
+#include <dstring.h>
 
 typedef dstring irep_idt;
 typedef dstring irep_namet;

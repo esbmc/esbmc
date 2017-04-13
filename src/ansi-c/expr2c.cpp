@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "ansi_c_declaration.h"
-#include "c_typecast.h"
-#include "c_types.h"
-#include "expr2c.h"
+#include <ansi_c_declaration.h>
+#include <c_typecast.h>
+#include <c_types.h>
+#include <expr2c.h>
 #include <arith_tools.h>
 #include <c_misc.h>
 #include <cassert>

@@ -1,8 +1,8 @@
 #ifndef CPROVER_PARSER_H
 #define CPROVER_PARSER_H
 
-#include "expr.h"
-#include "message.h"
+#include <expr.h>
+#include <message.h>
 #include <iostream>
 #include <string>
 #include <vector>

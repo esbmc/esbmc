@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "goto_convert_class.h"
-#include "goto_functions.h"
+#include <goto_convert_class.h>
+#include <goto_functions.h>
 #include <c_types.h>
 #include <cassert>
 #include <cprover_prefix.h>

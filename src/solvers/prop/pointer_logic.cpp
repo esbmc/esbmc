@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "pointer_logic.h"
+#include <pointer_logic.h>
 #include <arith_tools.h>
 #include <cassert>
 #include <config.h>

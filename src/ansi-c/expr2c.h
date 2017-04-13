@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_EXPR2C_H
 #define CPROVER_EXPR2C_H
 
-#include "c_qualifiers.h"
+#include <c_qualifiers.h>
 #include <expr.h>
 #include <map>
 #include <namespace.h>

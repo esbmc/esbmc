@@ -25,7 +25,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple.h>
 #include <vector>
-#include "z3pp.h"
+#include <z3pp.h>
 
 class z3_smt_sort : public smt_sort {
 public:

@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "string2array.h"
+#include <string2array.h>
 #include <arith_tools.h>
 #include <config.h>
 #include <std_types.h>

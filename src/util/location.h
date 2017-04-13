@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_LOCATION_H
 #define CPROVER_LOCATION_H
 
-#include "irep.h"
+#include <irep.h>
 
 class locationt:public irept
 {

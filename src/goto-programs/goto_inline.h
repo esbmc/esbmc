@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_INLINE_H
 #define CPROVER_GOTO_INLINE_H
 
-#include "goto_functions.h"
+#include <goto_functions.h>
 #include <hash_cont.h>
 #include <message_stream.h>
 #include <std_types.h>

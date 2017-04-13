@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "c_types.h"
+#include <c_types.h>
 #include <config.h>
 #include <std_types.h>
 

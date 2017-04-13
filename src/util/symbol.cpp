@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "symbol.h"
-#include "location.h"
+#include <symbol.h>
+#include <location.h>
 
 symbolt::symbolt()
 {

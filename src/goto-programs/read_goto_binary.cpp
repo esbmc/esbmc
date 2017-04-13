@@ -6,8 +6,8 @@ Author:
 
 \*******************************************************************/
 
-#include "read_goto_binary.h"
-#include "read_bin_goto_object.h"
+#include <read_goto_binary.h>
+#include <read_bin_goto_object.h>
 
 void read_goto_binary(
   std::istream &in,

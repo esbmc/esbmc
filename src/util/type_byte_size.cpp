@@ -6,7 +6,7 @@
 
 \*******************************************************************/
 
-#include "type_byte_size.h"
+#include <type_byte_size.h>
 #include <arith_tools.h>
 #include <c_types.h>
 #include <cassert>

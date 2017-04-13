@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_SLICE_H
 #define CPROVER_GOTO_SYMEX_SLICE_H
 
-#include "renaming.h"
-#include "symex_target_equation.h"
+#include <renaming.h>
+#include <symex_target_equation.h>
 #include <hash_cont.h>
 
 void slice(symex_target_equationt &equation);

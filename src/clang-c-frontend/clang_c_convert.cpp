@@ -5,9 +5,9 @@
  *      Author: mramalho
  */
 
-#include "clang_c_convert.h"
-#include "typecast.h"
-#include "util/bitvector.h"
+#include <clang_c_convert.h>
+#include <typecast.h>
+#include <util/bitvector.h>
 #include <clang/AST/Attr.h>
 #include <ansi-c/type2name.h>
 #include <arith_tools.h>

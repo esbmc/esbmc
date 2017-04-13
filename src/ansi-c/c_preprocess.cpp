@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #undef ERROR
 #endif
 
-#include "c_preprocess.h"
+#include <c_preprocess.h>
 #include <config.h>
 #include <cstdio>
 #include <cstdlib>
@@ -22,7 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <message_stream.h>
 
 extern "C" {
-#include "cpp/iface.h"
+#include <cpp/iface.h>
 }
 
 static const char *cpp_defines_16[] ={

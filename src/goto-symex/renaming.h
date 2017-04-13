@@ -1,7 +1,7 @@
 #ifndef _GOTO_SYMEX_RENAMING_H_
 #define _GOTO_SYMEX_RENAMING_H_
 
-#include "crypto_hash.h"
+#include <crypto_hash.h>
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
 #include <cstdint>

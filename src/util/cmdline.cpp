@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "cmdline.h"
+#include <cmdline.h>
 #include <cassert>
 #include <cstdlib>
 #include <iostream>

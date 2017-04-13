@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "value_set_analysis.h"
+#include <value_set_analysis.h>
 #include <cprover_prefix.h>
 #include <langapi/language_util.h>
 #include <prefix.h>

@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "convert_character_literal.h"
+#include <convert_character_literal.h>
 #include <ansi-c/unescape_string.h>
 #include <arith_tools.h>
 #include <c_types.h>

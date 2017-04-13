@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "string_container.h"
+#include <string_container.h>
 #include <cassert>
 #include <cstring>
 #include <iostream>
@@ -75,6 +75,6 @@ unsigned string_containert::get(const std::string &s)
 // translation unit. This ensures that the string_container object is
 // initialized before all of the attribute-name globals are. Somewhat miserable.
 
-#include "expr.cpp"
-#include "irep.cpp"
-#include "type.cpp"
+#include <expr.cpp>
+#include <irep.cpp>
+#include <type.cpp>

@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_MP_ARITH_H
 #define CPROVER_MP_ARITH_H
 
-#include "big-int/bigint.hh"
+#include <big-int/bigint.hh>
 #include <iostream>
 #include <string>
 

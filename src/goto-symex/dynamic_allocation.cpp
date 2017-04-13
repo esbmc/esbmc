@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "dynamic_allocation.h"
-#include "goto_symex.h"
+#include <dynamic_allocation.h>
+#include <goto_symex.h>
 #include <c_types.h>
 #include <cassert>
 #include <cprover_prefix.h>

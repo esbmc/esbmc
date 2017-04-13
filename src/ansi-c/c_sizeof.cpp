@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "c_sizeof.h"
-#include "c_typecast.h"
-#include "c_types.h"
+#include <c_sizeof.h>
+#include <c_typecast.h>
+#include <c_types.h>
 #include <arith_tools.h>
 #include <config.h>
 #include <irep2.h>

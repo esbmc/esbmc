@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "cpp_convert_type.h"
-#include "cpp_declarator.h"
-#include "cpp_typecheck.h"
-#include "expr2cpp.h"
+#include <cpp_convert_type.h>
+#include <cpp_declarator.h>
+#include <cpp_typecheck.h>
+#include <expr2cpp.h>
 #include <algorithm>
 #include <ansi-c/c_typecast.h>
 #include <arith_tools.h>

@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "namespace.h"
+#include <namespace.h>
 #include <cassert>
 #include <cstring>
 

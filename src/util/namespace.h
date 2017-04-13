@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_NAMESPACE_H
 #define CPROVER_NAMESPACE_H
 
-#include "context.h"
+#include <context.h>
 #include <irep2.h>
 #include <migrate.h>
 

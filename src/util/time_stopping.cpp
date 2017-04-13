@@ -15,7 +15,7 @@ Date: February 2004
 #include <sys/time.h>
 #endif
 
-#include "time_stopping.h"
+#include <time_stopping.h>
 #include <iomanip>
 #include <sstream>
 

@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "ui_message.h"
+#include <ui_message.h>
 #include <fstream>
 #include <i2string.h>
 #include <xml.h>

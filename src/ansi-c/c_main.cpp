@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "c_main.h"
-#include "c_types.h"
+#include <c_main.h>
+#include <c_types.h>
 #include <arith_tools.h>
 #include <cassert>
 #include <config.h>

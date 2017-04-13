@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "c_sizeof.h"
-#include "c_typecast.h"
-#include "c_typecheck_base.h"
-#include "util/bitvector.h"
+#include <c_sizeof.h>
+#include <c_typecast.h>
+#include <c_typecheck_base.h>
+#include <util/bitvector.h>
 #include <arith_tools.h>
 #include <base_type.h>
 #include <c_types.h>

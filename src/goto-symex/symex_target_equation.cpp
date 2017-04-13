@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "goto_symex.h"
-#include "goto_symex_state.h"
-#include "symex_target_equation.h"
+#include <goto_symex.h>
+#include <goto_symex_state.h>
+#include <symex_target_equation.h>
 #include <cassert>
 #include <expr_util.h>
 #include <i2string.h>

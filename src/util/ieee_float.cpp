@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "ieee_float.h"
+#include <ieee_float.h>
 #include <arith_tools.h>
 #include <cassert>
 #include <limits>

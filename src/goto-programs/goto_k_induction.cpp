@@ -5,8 +5,8 @@
  *      Author: mramalho
  */
 
-#include "goto_k_induction.h"
-#include "remove_skip.h"
+#include <goto_k_induction.h>
+#include <remove_skip.h>
 #include <c_types.h>
 #include <expr_util.h>
 #include <i2string.h>

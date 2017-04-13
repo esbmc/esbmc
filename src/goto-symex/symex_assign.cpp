@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "dynamic_allocation.h"
-#include "execution_state.h"
-#include "goto_symex.h"
+#include <dynamic_allocation.h>
+#include <execution_state.h>
+#include <goto_symex.h>
 #include <boost/shared_ptr.hpp>
 #include <c_types.h>
 #include <cassert>

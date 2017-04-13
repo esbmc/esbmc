@@ -1,5 +1,5 @@
-#include "solve.h"
-#include "solver_config.h"
+#include <solve.h>
+#include <solver_config.h>
 #include <solvers/smt/array_conv.h>
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_tuple.h>

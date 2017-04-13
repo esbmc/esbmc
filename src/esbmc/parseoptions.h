@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_CBMC_PARSEOPTIONS_H
 #define CPROVER_CBMC_PARSEOPTIONS_H
 
-#include "bmc.h"
-#include "parseoptions.h"
+#include <bmc.h>
+#include <parseoptions.h>
 #include <cmdline.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <langapi/language_ui.h>

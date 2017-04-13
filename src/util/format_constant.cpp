@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "format_constant.h"
-#include "arith_tools.h"
-#include "fixedbv.h"
-#include "ieee_float.h"
+#include <format_constant.h>
+#include <arith_tools.h>
+#include <fixedbv.h>
+#include <ieee_float.h>
 
 std::string format_constantt::operator()(const exprt &expr)
 {

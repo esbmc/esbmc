@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "cpp_namespace_spec.h"
-#include "cpp_item.h"
+#include <cpp_namespace_spec.h>
+#include <cpp_item.h>
 
 /*******************************************************************\
 

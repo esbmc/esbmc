@@ -7,11 +7,11 @@
 
 \*******************************************************************/
 
-#include "execution_state.h"
-#include "goto_symex.h"
-#include "goto_symex_state.h"
-#include "reachability_tree.h"
-#include "symex_target_equation.h"
+#include <execution_state.h>
+#include <goto_symex.h>
+#include <goto_symex_state.h>
+#include <reachability_tree.h>
+#include <symex_target_equation.h>
 #include <boost/shared_ptr.hpp>
 #include <c_types.h>
 #include <cassert>

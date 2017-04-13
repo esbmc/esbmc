@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "language.h"
-#include "language_file.h"
+#include <language.h>
+#include <language_file.h>
 #include <fstream>
 #include <std_types.h>
 

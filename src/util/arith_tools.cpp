@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "arith_tools.h"
-#include "bitvector.h"
+#include <arith_tools.h>
+#include <bitvector.h>
 #include <cassert>
 
 bool to_integer(const exprt &expr, mp_integer &int_value)

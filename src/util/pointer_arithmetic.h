@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ARITHMETIC_H
 #define CPROVER_POINTER_ARITHMETIC_H
 
-#include "expr.h"
+#include <expr.h>
 
 struct pointer_arithmetict
 {

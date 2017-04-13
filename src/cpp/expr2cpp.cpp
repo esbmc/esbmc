@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "expr2cpp.h"
+#include <expr2cpp.h>
 #include <ansi-c/expr2c.h>
 #include <cassert>
 #include <std_types.h>

@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_DECLARATOR_CONVERTER_H
 #define CPROVER_CPP_DECLARATOR_CONVERTER_H
 
-#include "cpp_declaration.h"
-#include "cpp_declarator.h"
-#include "cpp_scope.h"
+#include <cpp_declaration.h>
+#include <cpp_declarator.h>
+#include <cpp_scope.h>
 #include <symbol.h>
 
 // converts a cpp_declator plus some

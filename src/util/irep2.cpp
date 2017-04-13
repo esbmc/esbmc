@@ -1,7 +1,7 @@
-#include "irep2.h"
-#include "i2string.h"
-#include "migrate.h"
-#include "std_types.h"
+#include <irep2.h>
+#include <i2string.h>
+#include <migrate.h>
+#include <std_types.h>
 #include <ac_config.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>

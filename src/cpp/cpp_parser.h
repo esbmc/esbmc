@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_PARSER_H
 #define CPROVER_CPP_PARSER_H
 
-#include "cpp_parse_tree.h"
-#include "cpp_token_buffer.h"
+#include <cpp_parse_tree.h>
+#include <cpp_token_buffer.h>
 #include <cassert>
 #include <expr.h>
 #include <hash_cont.h>

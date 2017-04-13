@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "message_stream.h"
+#include <message_stream.h>
 #include <cstring>
 
 void message_streamt::error_parse_line(

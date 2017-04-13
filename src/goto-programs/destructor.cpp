@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "destructor.h"
+#include <destructor.h>
 
 code_function_callt get_destructor(
   const namespacet &ns,

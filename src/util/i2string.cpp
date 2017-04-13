@@ -9,12 +9,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #define USE_SPRINTF
 
 #ifdef USE_SPRINTF
-#include "i2string.h"
+#include <i2string.h>
 #include <cstdio>
 #include <cstring>
 #else
 #include <sstream>
-#include "i2string.h"
+#include <i2string.h>
 #endif
 
 std::string i2string(int i)

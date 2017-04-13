@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "goto_convert_class.h"
+#include <goto_convert_class.h>
 #include <rename.h>
 
 void goto_convertt::new_name(symbolt &symbol)

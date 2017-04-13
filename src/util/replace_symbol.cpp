@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "replace_symbol.h"
+#include <replace_symbol.h>
 #include <std_types.h>
 
 replace_symbolt::replace_symbolt()

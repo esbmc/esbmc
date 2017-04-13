@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_LANGUAGE_FILE_H
 #define CPROVER_LANGUAGE_FILE_H
 
-#include "context.h"
-#include "message.h"
+#include <context.h>
+#include <message.h>
 #include <iostream>
 #include <set>
 

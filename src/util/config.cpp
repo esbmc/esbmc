@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "config.h"
+#include <config.h>
 #include <iostream>
 #include <irep2.h>
 

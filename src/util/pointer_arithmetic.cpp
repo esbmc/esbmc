@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "std_expr.h"
-#include "expr_util.h"
-#include "pointer_arithmetic.h"
+#include <std_expr.h>
+#include <expr_util.h>
+#include <pointer_arithmetic.h>
 
 pointer_arithmetict::pointer_arithmetict(const exprt &src)
 {

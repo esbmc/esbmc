@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAMS_SHOW_VALUE_SETS_H
 #define CPROVER_GOTO_PROGRAMS_SHOW_VALUE_SETS_H
 
-#include "value_set_analysis.h"
+#include <value_set_analysis.h>
 #include <goto-programs/goto_functions.h>
 #include <namespace.h>
 #include <ui_message.h>

@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_OPTIONS_H
 #define CPROVER_OPTIONS_H
 
-#include "cmdline.h"
+#include <cmdline.h>
 #include <list>
 #include <map>
 #include <string>

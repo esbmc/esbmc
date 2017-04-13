@@ -8,10 +8,10 @@ Date: June 2003
 
 \*******************************************************************/
 
-#include "goto_convert_functions.h"
-#include "goto_inline.h"
-#include "i2string.h"
-#include "remove_skip.h"
+#include <goto_convert_functions.h>
+#include <goto_inline.h>
+#include <i2string.h>
+#include <remove_skip.h>
 #include <base_type.h>
 #include <c_types.h>
 #include <cassert>

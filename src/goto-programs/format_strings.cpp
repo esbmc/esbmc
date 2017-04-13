@@ -6,7 +6,7 @@ Author: CM Wintersteiger
 
 \*******************************************************************/
 
-#include "format_strings.h"
+#include <format_strings.h>
 #include <cctype>
 
 void parse_flags(

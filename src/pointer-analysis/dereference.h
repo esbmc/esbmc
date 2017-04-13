@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_DEREFERENCE_H
 #define CPROVER_POINTER_ANALYSIS_DEREFERENCE_H
 
-#include "value_sets.h"
+#include <value_sets.h>
 #include <expr.h>
 #include <guard.h>
 #include <hash_cont.h>

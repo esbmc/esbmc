@@ -5,7 +5,7 @@
  *      Author: mramalho
  */
 
-#include "typecast.h"
+#include <typecast.h>
 #include <ansi-c/c_typecast.h>
 #include <c_types.h>
 #include <simplify_expr_class.h>

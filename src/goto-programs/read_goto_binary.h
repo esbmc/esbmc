@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAMS_READ_GOTO_BINARY_H
 #define CPROVER_GOTO_PROGRAMS_READ_GOTO_BINARY_H
 
-#include "goto_functions.h"
+#include <goto_functions.h>
 #include <context.h>
 #include <message.h>
 #include <options.h>

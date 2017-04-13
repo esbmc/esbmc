@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_SCOPE_H
 #define CPROVER_CPP_SCOPE_H
 
-#include "cpp_id.h"
+#include <cpp_id.h>
 #include <set>
 
 class cpp_scopet:public cpp_idt

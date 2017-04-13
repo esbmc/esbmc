@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "unescape_string.h"
-#include "preprocessor_line.h"
+#include <unescape_string.h>
+#include <preprocessor_line.h>
 #include <cctype>
 #include <cstdlib>
 

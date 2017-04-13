@@ -9,8 +9,8 @@ Date: May 2007
  
 \*******************************************************************/
 
-#include "goto_program_irep.h"
-#include "goto_program_serialization.h"
+#include <goto_program_irep.h>
+#include <goto_program_serialization.h>
 #include <irep_serialization.h>
 #include <sstream>
 

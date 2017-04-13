@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "mp_arith.h"
-#include "arith_tools.h"
+#include <mp_arith.h>
+#include <arith_tools.h>
 #include <cassert>
 #include <cctype>
 #include <cstdlib>

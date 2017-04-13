@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "goto_convert_class.h"
+#include <goto_convert_class.h>
 #include <c_types.h>
 #include <cprover_prefix.h>
 #include <expr_util.h>

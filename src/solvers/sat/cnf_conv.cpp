@@ -1,4 +1,4 @@
-#include "cnf_conv.h"
+#include <cnf_conv.h>
 
 cnf_convt::cnf_convt(cnf_iface *_cnf_api)
   : sat_iface(), cnf_api(_cnf_api)

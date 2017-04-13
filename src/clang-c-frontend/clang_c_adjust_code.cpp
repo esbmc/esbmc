@@ -5,9 +5,9 @@
  *      Author: mramalho
  */
 
-#include "clang_c_adjust.h"
-#include "typecast.h"
-#include "util/bitvector.h"
+#include <clang_c_adjust.h>
+#include <typecast.h>
+#include <util/bitvector.h>
 #include <ansi-c/c_sizeof.h>
 #include <c_types.h>
 #include <cprover_prefix.h>

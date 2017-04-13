@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "simplify_utils.h"
+#include <simplify_utils.h>
 #include <algorithm>
 
 /*******************************************************************\

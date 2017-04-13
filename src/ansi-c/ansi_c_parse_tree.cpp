@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "ansi_c_parse_tree.h"
+#include <ansi_c_parse_tree.h>
 
 /*******************************************************************\
 

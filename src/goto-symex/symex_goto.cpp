@@ -7,9 +7,9 @@
 
 \*******************************************************************/
 
-#include "goto_symex.h"
-#include "slice.h"
-#include "symex_target_equation.h"
+#include <goto_symex.h>
+#include <slice.h>
+#include <symex_target_equation.h>
 #include <cassert>
 #include <expr_util.h>
 #include <fstream>

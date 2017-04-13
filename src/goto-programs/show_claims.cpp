@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "show_claims.h"
+#include <show_claims.h>
 #include <i2string.h>
 #include <langapi/language_util.h>
 #include <xml.h>

@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "cpp_convert_type.h"
-#include "cpp_declaration.h"
-#include "cpp_name.h"
+#include <cpp_convert_type.h>
+#include <cpp_declaration.h>
+#include <cpp_name.h>
 #include <arith_tools.h>
 #include <c_types.h>
 #include <cassert>

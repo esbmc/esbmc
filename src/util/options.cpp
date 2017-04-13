@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "options.h"
+#include <options.h>
 #include <cstdlib>
 #include <i2string.h>
 

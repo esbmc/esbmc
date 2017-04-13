@@ -8,7 +8,7 @@ Author: Daniel Kroening
 
 \*******************************************************************/
 
-#include "xml_goto_trace.h"
+#include <xml_goto_trace.h>
 #include <ansi-c/printf_formatter.h>
 #include <cassert>
 #include <i2string.h>

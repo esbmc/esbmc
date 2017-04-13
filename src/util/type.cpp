@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "type.h"
+#include <type.h>
 
 void typet::move_to_subtypes(typet &type)
 {

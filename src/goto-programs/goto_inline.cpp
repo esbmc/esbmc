@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "goto_inline.h"
-#include "remove_skip.h"
+#include <goto_inline.h>
+#include <remove_skip.h>
 #include <base_type.h>
 #include <cassert>
 #include <cprover_prefix.h>

@@ -6,7 +6,7 @@ Author: CM Wintersteiger
 
 \*******************************************************************/
 
-#include "write_goto_binary.h"
+#include <write_goto_binary.h>
 #include <fstream>
 #include <goto-programs/goto_function_serialization.h>
 #include <irep_serialization.h>

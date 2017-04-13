@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "cpp_type2name.h"
-#include "cpp_typecheck.h"
+#include <cpp_type2name.h>
+#include <cpp_typecheck.h>
 #include <arith_tools.h>
 #include <base_type.h>
 #include <c_types.h>

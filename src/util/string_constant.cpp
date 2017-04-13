@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "string_constant.h"
+#include <string_constant.h>
 #include <arith_tools.h>
 #include <bitvector.h>
 #include <c_types.h>

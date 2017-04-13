@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "cpp_exception_id.h"
+#include <cpp_exception_id.h>
 #include <std_types.h>
 
 /*******************************************************************\

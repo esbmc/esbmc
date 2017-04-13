@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "c_types.h"
-#include "convert_string_literal.h"
-#include "string_constant.h"
-#include "unescape_string.h"
+#include <c_types.h>
+#include <convert_string_literal.h>
+#include <string_constant.h>
+#include <unescape_string.h>
 #include <arith_tools.h>
 #include <cassert>
 

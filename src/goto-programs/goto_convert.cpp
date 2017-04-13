@@ -7,9 +7,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "destructor.h"
-#include "goto_convert_class.h"
-#include "remove_skip.h"
+#include <destructor.h>
+#include <goto_convert_class.h>
+#include <remove_skip.h>
 #include <arith_tools.h>
 #include <c_types.h>
 #include <cassert>

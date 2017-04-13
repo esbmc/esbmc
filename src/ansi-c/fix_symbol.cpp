@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "fix_symbol.h"
+#include <fix_symbol.h>
 
 /*******************************************************************\
 

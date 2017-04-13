@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "value_set_domain.h"
+#include <value_set_domain.h>
 #include <irep2.h>
 #include <migrate.h>
 #include <std_code.h>
