@@ -40,7 +40,7 @@ esbmc_LDADD = ./libmain.la $(libs_to_link_in) $(ESBMC_SOLVER_LIBS) @ESBMC_PYTHON
 esbmc_SOURCES = main.cpp buildidstring.c
 EXTRA_esbmc_DEPENDENCIES = @ESBMC_PYTHON_OBJ@
 
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
 
 buildidstring.c: $(libs_to_link_in) $(esbmc_SOURCES) $(libmain_la_SOURCES) python.cpp
 	$(top_srcdir)/scripts/buildidobj.sh .

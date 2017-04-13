@@ -285,7 +285,7 @@ AS_IF([test "${enable_libesbmc}" = "yes"], [
 
 AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 $ESBMC_CLANG_CXXFLAGS ")
 dnl A necessary evil due to the presence of rubbish in boost::python's headers.
-dnl local typedefs because that's hwo boost python works
+dnl local typedefs because that's how boost python works
 dnl deprecated decls because it uses auto ptrs
 dnl field initializers due to a, uh, totally legitimate initializer mismatch
 dnl       with later versions of python headers
