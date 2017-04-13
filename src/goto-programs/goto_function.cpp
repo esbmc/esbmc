@@ -7,14 +7,12 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
 #include <i2string.h>
 #include <expr_util.h>
 #include <location.h>
 #include <cprover_prefix.h>
 #include <prefix.h>
 #include <c_types.h>
-
 #include "goto_convert_class.h"
 #include "goto_functions.h"
 

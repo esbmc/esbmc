@@ -7,9 +7,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <cstring>
-
-// Prototypes
-
 #include "mode.h"
 
 const char *extensions_ansi_c  []={ "c", "i", NULL };

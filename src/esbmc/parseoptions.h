@@ -14,10 +14,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ui_message.h>
 #include <util/parseoptions.h>
 #include "parseoptions.h"
-
 #include <options.h>
 #include <cmdline.h>
-
 #include "bmc.h"
 
 extern const struct opt_templ esbmc_options[];

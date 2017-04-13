@@ -9,9 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <xml.h>
 #include <i2string.h>
 #include <xml_irep.h>
-
 #include <langapi/language_util.h>
-
 #include "show_claims.h"
 
 void show_claims(

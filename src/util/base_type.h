@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <irep2.h>
 #include <migrate.h>
-
 #include <type.h>
 #include <namespace.h>
 #include <union_find.h>

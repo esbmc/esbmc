@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <i2string.h>
 #include <simplify_expr_class.h>
 #include <simplify_expr.h>
-
 #include "cpp_type2name.h"
 #include "cpp_typecheck.h"
 #include "cpp_declarator_converter.h"

@@ -11,9 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <std_types.h>
 #include <hash_cont.h>
-
 #include <message_stream.h>
-
 #include "goto_functions.h"
 
 // do a full inlining

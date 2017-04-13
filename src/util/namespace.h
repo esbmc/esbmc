@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_NAMESPACE_H
 
 #include "context.h"
-
 #include <irep2.h>
 #include <migrate.h>
 

@@ -4,10 +4,8 @@
 #include <solvers/smt/smt_conv.h>
 #include <langapi/mode.h>
 #include <goto-programs/goto_functions.h>
-
 #include <boost/python.hpp>
 #include <boost/python/object/find_instance.hpp>
-
 #include <bp_converter.h>
 
 using namespace boost::python;

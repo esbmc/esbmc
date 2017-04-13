@@ -94,9 +94,11 @@ public:
 #ifdef _MSC_VER
 #include <unordered_set>
 #include <unordered_map>
+
 #else
 #include <tr1/unordered_set>
 #include <tr1/unordered_map>
+
 #endif
 
 #define hash_map_cont std::tr1::unordered_map

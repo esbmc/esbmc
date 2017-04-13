@@ -6,9 +6,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <fstream>
-#include <memory>
-
 #include <ac_config.h>
 
 #ifndef _WIN32
@@ -19,18 +16,20 @@ extern "C" {
 #ifdef HAVE_SENDFILE_ESBMC
 #include <sys/sendfile.h>
 #endif
+
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
 }
 #endif
 
+#include <fstream>
+#include <memory>
 #include <irep.h>
 #include <config.h>
 #include <expr_util.h>
 #include <time_stopping.h>
 #include <symbol.h>
-
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_check.h>
 #include <goto-programs/goto_inline.h>
@@ -43,23 +42,17 @@ extern "C" {
 #include <goto-programs/remove_skip.h>
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/add_race_assertions.h>
-
 #include <pointer-analysis/value_set_analysis.h>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
-
 #include <langapi/mode.h>
 #include <langapi/languages.h>
-
 #include <ansi-c/c_preprocess.h>
-
 #include <clang-c-frontend/clang_c_language.h>
-
 #include "parseoptions.h"
 #include "bmc.h"
 #include <ac_config.h>
 #include <fstream>
-
 #include <cctype>
 #include <cstdlib>
 #include <csignal>

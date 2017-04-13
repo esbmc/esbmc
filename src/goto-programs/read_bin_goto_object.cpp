@@ -11,9 +11,7 @@ Date: June 2006
 #include <namespace.h>
 #include <base_type.h>
 #include <message_stream.h>
-
 #include <langapi/mode.h>
-
 #include "read_bin_goto_object.h"
 #include "goto_function_serialization.h"
 #include "symbol_serialization.h"

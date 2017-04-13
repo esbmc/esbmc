@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <set>
 #include <stack>
-
 #include "remove_unreachable.h"
 
 /*******************************************************************\

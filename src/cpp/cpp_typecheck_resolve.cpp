@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <utility>
-
 #include <expr_util.h>
 #include <std_types.h>
 #include <std_expr.h>
@@ -15,7 +14,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <arith_tools.h>
 #include <prefix.h>
 #include <string_constant.h>
-
 #include "cpp_typecheck.h"
 #include "cpp_typecheck_resolve.h"
 #include "cpp_template_type.h"

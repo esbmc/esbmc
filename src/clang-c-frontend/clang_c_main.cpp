@@ -6,7 +6,6 @@
  */
 
 #include <cassert>
-
 #include <namespace.h>
 #include <expr_util.h>
 #include <std_expr.h>
@@ -15,7 +14,6 @@
 #include <config.h>
 #include <message.h>
 #include <c_types.h>
-
 #include <ansi-c/c_main.h>
 
 bool clang_main(

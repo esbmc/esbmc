@@ -11,11 +11,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <set>
 #include <map>
-
 #include <expr.h>
 #include <std_code.h>
 #include <namespace.h>
-
 #include "c_qualifiers.h"
 
 std::string expr2c(const exprt &expr, const namespacet &ns);

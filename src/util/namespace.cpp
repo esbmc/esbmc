@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cstring>
 #include <cassert>
-
 #include "namespace.h"
 
 unsigned get_max(const std::string &prefix, const contextt *context)

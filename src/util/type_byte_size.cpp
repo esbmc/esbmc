@@ -7,12 +7,10 @@
 \*******************************************************************/
 
 #include <cassert>
-
 #include <expr.h>
 #include <arith_tools.h>
 #include <std_types.h>
 #include <c_types.h>
-
 #include "type_byte_size.h"
 
 static inline void

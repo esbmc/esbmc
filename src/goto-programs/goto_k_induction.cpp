@@ -9,7 +9,6 @@
 #include <i2string.h>
 #include <std_expr.h>
 #include <expr_util.h>
-
 #include "goto_k_induction.h"
 #include "remove_skip.h"
 

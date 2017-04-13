@@ -7,13 +7,10 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
 #include <memory>
-
 #include <std_expr.h>
 #include <std_code.h>
 #include <expr_util.h>
-
 #include "static_analysis.h"
 
 expr2tc abstract_domain_baset::get_guard(

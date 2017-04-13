@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cctype>
 #include <cstdio>
-
 #include "unescape_string.h"
 
 /*******************************************************************\

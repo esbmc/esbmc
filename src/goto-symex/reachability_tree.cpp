@@ -22,7 +22,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <std_expr.h>
 #include <config.h>
 #include <message.h>
-
 #include "crypto_hash.h"
 
 reachability_treet::reachability_treet(

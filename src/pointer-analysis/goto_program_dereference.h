@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <namespace.h>
 #include <goto-programs/goto_functions.h>
-
 #include "value_sets.h"
 #include "dereference.h"
 

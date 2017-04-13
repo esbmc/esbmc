@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_TYPECHECK_FARGS_H
 
 #include <std_code.h>
+
 class cpp_typecheckt;
 class cpp_typecast_rank;
 

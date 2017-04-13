@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ui_message.h>
 #include <namespace.h>
-
 #include <goto-programs/goto_functions.h>
 
 void show_claims(

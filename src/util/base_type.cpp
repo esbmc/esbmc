@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
 #include "std_types.h"
 #include "base_type.h"
 #include "union_find.h"

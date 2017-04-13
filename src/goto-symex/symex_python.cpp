@@ -1,6 +1,5 @@
 #ifdef WITH_PYTHON
 #include <sstream>
-
 #include <boost/python.hpp>
 #include <boost/python/class.hpp>
 #include <boost/python/init.hpp>
@@ -9,12 +8,9 @@
 #include <boost/python/return_internal_reference.hpp>
 #include <boost/python/operators.hpp>
 #include <boost/python/override.hpp>
-
 #include <util/bp_opaque_ptr.h>
 #include <util/bp_converter.h>
-
 #include <solvers/smt_python.h>
-
 #include "reachability_tree.h"
 #include "execution_state.h"
 #include "goto_symex.h"

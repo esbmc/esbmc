@@ -11,20 +11,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <list>
 #include <map>
-
 #include <hash_cont.h>
 #include <options.h>
-
 #include <solvers/solve.h>
 #include <solvers/smt/smt_conv.h>
-#ifdef Z3
-#include <solvers/z3/z3_conv.h>
-#endif
 #include <solvers/smtlib/smtlib_conv.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
 #include <goto-symex/reachability_tree.h>
-
 #include <boost/shared_ptr.hpp>
 
 class bmct:public messaget

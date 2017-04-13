@@ -13,13 +13,10 @@ Date: July 2005
 
 #include <irep2.h>
 #include <migrate.h>
-
 #include <iostream>
 #include <vector>
-
 #include <fstream>
 #include <map>
-
 #include <goto-programs/goto_program.h>
 #include <goto-symex/symex_target.h>
 

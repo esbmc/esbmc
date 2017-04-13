@@ -1,9 +1,7 @@
 #include <irep2.h>
 #include <migrate.h>
 #include <prefix.h>
-
 #include <langapi/language_util.h>
-
 #include "renaming.h"
 
 unsigned renaming::level2t::current_number(const expr2tc &symbol) const

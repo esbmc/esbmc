@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
 #include <string2array.h>
 #include <config.h>
 #include <simplify_expr_class.h>
@@ -15,7 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <base_type.h>
 #include <std_expr.h>
 #include "type2name.h"
-
 #include "c_typecast.h"
 #include "c_types.h"
 #include "c_qualifiers.h"

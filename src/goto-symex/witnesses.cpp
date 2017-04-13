@@ -10,14 +10,11 @@
  */
 
 #include <boost/property_tree/ptree.hpp>
-
 #include <map>
 #include <fstream>
-
 #include <irep2.h>
 #include <langapi/languages.h>
 #include <witnesses.h>
-
 #include <ac_config.h>
 
 int generate_sha1_hash_for_file(const char * path, std::string & output)

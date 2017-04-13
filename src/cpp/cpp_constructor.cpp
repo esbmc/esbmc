@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <arith_tools.h>
 #include <std_types.h>
 #include <c_types.h>
-
 #include "cpp_typecheck.h"
 #include "cpp_util.h"
 

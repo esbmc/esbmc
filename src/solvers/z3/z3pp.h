@@ -28,15 +28,12 @@ Notes:
 
 #include <cstdarg>
 #include <cstdint>
-
 #include<cassert>
 #include<iostream>
 #include<string>
 #include<sstream>
 #include<z3.h>
 #include<climits>
-
-// jmorse
 #include <config.h>
 
 /**

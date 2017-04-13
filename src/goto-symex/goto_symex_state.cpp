@@ -9,15 +9,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <irep2.h>
 #include <migrate.h>
-
 #include <cassert>
 #include <global.h>
 #include <map>
 #include <sstream>
-
 #include <i2string.h>
 #include "../util/expr_util.h"
-
 #include "reachability_tree.h"
 #include "execution_state.h"
 #include "goto_symex_state.h"

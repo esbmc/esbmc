@@ -10,10 +10,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <arith_tools.h>
 #include <std_expr.h>
 #include <c_types.h>
-
 #include <ansi-c/c_sizeof.h>
 #include <util/simplify_expr_class.h>
-
 #include "cpp_typecheck.h"
 #include "cpp_util.h"
 #include <std_expr.h>

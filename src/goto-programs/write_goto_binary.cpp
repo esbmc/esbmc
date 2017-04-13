@@ -7,13 +7,10 @@ Author: CM Wintersteiger
 \*******************************************************************/
 
 #include <fstream>
-
 #include <message.h>
 #include <irep_serialization.h>
 #include <symbol_serialization.h>
-
 #include <goto-programs/goto_function_serialization.h>
-
 #include "write_goto_binary.h"
 
 bool write_goto_binary(

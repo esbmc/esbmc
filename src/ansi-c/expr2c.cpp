@@ -8,10 +8,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <cctype>
-
 #include <map>
 #include <set>
-
 #include <arith_tools.h>
 #include <c_misc.h>
 #include <config.h>
@@ -20,7 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <i2string.h>
 #include <fixedbv.h>
 #include <prefix.h>
-
 #include "ansi_c_declaration.h"
 #include "expr2c.h"
 #include "c_typecast.h"

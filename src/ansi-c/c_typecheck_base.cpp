@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <std_types.h>
 #include <prefix.h>
-
 #include "c_typecheck_base.h"
 #include "expr2c.h"
 #include "type2name.h"

@@ -20,9 +20,7 @@ Date: June 2003
       it!=(functions).function_map.end(); it++)
 
 #include <iostream>
-
 #include <std_types.h>
-
 #include "goto_program.h"
 
 class goto_functiont

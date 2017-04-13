@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cstdlib>
 #include <i2string.h>
-
 #include "options.h"
 
 void optionst::set_option(const std::string &option,

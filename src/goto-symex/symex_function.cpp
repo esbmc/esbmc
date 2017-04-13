@@ -8,7 +8,6 @@
 \*******************************************************************/
 
 #include <cassert>
-
 #include <expr_util.h>
 #include <i2string.h>
 #include <cprover_prefix.h>
@@ -17,9 +16,7 @@
 #include <base_type.h>
 #include <std_expr.h>
 #include <c_types.h>
-
 #include <langapi/language_util.h>
-
 #include "goto_symex.h"
 #include "execution_state.h"
 

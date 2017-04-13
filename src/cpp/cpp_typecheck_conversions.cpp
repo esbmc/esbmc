@@ -12,9 +12,7 @@ Author:
 #include <expr_util.h>
 #include <simplify_expr_class.h>
 #include <c_types.h>
-
 #include <ansi-c/c_qualifiers.h>
-
 #include "cpp_typecheck.h"
 
 /*******************************************************************\

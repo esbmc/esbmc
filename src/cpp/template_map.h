@@ -11,9 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <map>
 #include <iostream>
-
 #include <expr.h>
-
 #include "cpp_template_type.h"
 #include "cpp_template_args.h"
 

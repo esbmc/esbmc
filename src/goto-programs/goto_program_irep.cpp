@@ -8,7 +8,6 @@
 \*******************************************************************/
 
 #include <i2string.h>
-
 #include "goto_program_irep.h"
 
 void convert(const goto_programt::instructiont &instruction, irept &irep)

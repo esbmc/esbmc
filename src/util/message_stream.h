@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ERROR_HANDLER_H
 
 #include <sstream>
-
 #include "message.h"
 #include "expr.h"
 

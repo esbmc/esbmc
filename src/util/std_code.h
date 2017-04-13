@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_STD_CODE_H
 
 #include <cassert>
-
 #include <expr.h>
 
 class codet:public exprt

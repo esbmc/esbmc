@@ -12,7 +12,6 @@ Date: May 2007
 #define IREP_SERIALIZATION_H_
 
 #include <map>
-
 #include "irep.h"
 #include "hash_cont.h"
 

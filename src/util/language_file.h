@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <iostream>
 #include <set>
-
 #include "message.h"
 #include "context.h"
 

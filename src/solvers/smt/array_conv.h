@@ -17,7 +17,6 @@
 // As a result, this particular class is due some serious maintenence.
 
 #include <set>
-
 #include <irep2.h>
 #include "smt_conv.h"
 

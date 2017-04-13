@@ -14,7 +14,6 @@
 #include <array_name.h>
 #include <arith_tools.h>
 #include <base_type.h>
-
 #include "goto_check.h"
 
 class goto_checkt

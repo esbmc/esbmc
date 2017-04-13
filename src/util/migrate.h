@@ -6,7 +6,6 @@
 // There's a full mapping in both directions.
 
 #include "irep2.h"
-
 #include "std_expr.h"
 #include "std_types.h"
 

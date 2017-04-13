@@ -7,17 +7,14 @@
 
 #include "bigint.hh"
 #include "allocainc.h"
-
 #include <iostream>
 #include <cctype>
 #include <climits>
 #include <cstring>
-
-// How to report errors.
 #include <cstdio>
 #include <cstdlib>
-#define error(x) fprintf (stderr, "%s\n", x)
 
+#define error(x) fprintf (stderr, "%s\n", x)
 
 // Shortcut access to BigInt scoped things.
 typedef BigInt::llong_t  llong_t;
@@ -1319,6 +1316,7 @@ BigInt::setPower2 (unsigned exponent) {
 #ifdef WITH_PYTHON
 #undef error
 #include <boost/python.hpp>
+
 // Build simplest BigInt wrapper: can construct, can get value. Nothing more.
 using namespace boost::python;
 void

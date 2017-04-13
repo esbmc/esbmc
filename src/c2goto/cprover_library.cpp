@@ -24,9 +24,7 @@ extern "C" {
 #include <cstdint>
 #include <cstdint>
 #include <config.h>
-
 #include <goto-programs/read_goto_binary.h>
-
 #include "cprover_library.h"
 #include "../ansi-c/ansi_c_language.h"
 #include "../clang-c-frontend/clang_c_language.h"

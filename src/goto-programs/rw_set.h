@@ -16,7 +16,6 @@ Date: February 2006
 #include <std_code.h>
 #include <namespace.h>
 #include <expr_util.h>
-
 #include <pointer-analysis/value_sets.h>
 
 class rw_sett

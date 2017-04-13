@@ -10,13 +10,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_ID_H
 
 #include <cassert>
-
 #include <list>
 #include <map>
 #include <string>
 #include <set>
 #include <iostream>
-
 #include <expr.h>
 #include <std_types.h>
 

@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <message.h>
 #include <options.h>
 #include <context.h>
-
 #include "goto_functions.h"
 
 void read_goto_binary(

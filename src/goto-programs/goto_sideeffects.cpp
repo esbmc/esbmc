@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cprover_prefix.h>
 #include <i2string.h>
 #include <c_types.h>
-
 #include "goto_convert_class.h"
 
 void goto_convertt::make_temp_symbol(

@@ -13,7 +13,6 @@ Date: February 2006
 #include <namespace.h>
 #include <arith_tools.h>
 #include <pointer-analysis/goto_program_dereference.h>
-
 #include "rw_set.h"
 
 void rw_sett::compute(const codet &code)

@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <list>
 #include <map>
 #include <string>
-
 #include <cassert>
 #include "global.h"
 

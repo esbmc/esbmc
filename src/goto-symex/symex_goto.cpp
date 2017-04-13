@@ -9,19 +9,14 @@
 
 #include <iostream>
 #include <fstream>
-
 #include <irep2.h>
 #include <migrate.h>
 #include <cassert>
 #include <prefix.h>
-
 #include <expr_util.h>
 #include <std_expr.h>
-
 #include <langapi/language_ui.h>
-
 #include <solvers/smtlib/smtlib_conv.h>
-
 #include "goto_symex.h"
 #include "symex_target_equation.h"
 #include "slice.h"

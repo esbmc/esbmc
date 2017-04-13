@@ -6,10 +6,8 @@
  */
 
 #include "typecast.h"
-
 #include <simplify_expr_class.h>
 #include <c_types.h>
-
 #include <ansi-c/c_typecast.h>
 
 void gen_typecast(namespacet ns, exprt &dest, typet type)

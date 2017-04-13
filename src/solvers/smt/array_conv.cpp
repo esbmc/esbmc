@@ -1,7 +1,6 @@
 #include <algorithm>
 #include <set>
 #include <utility>
-
 #include <c_types.h>
 #include "array_conv.h"
 

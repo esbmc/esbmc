@@ -14,7 +14,6 @@
 #include <context.h>
 #include <namespace.h>
 #include <std_types.h>
-
 #include <clang/Frontend/ASTUnit.h>
 #include <clang/AST/Type.h>
 #include <clang/AST/Expr.h>

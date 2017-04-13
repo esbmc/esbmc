@@ -8,17 +8,14 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
 #include <i2string.h>
 #include <cprover_prefix.h>
 #include <prefix.h>
 #include <std_expr.h>
 #include <c_types.h>
-
 #include "goto_convert_class.h"
 #include "remove_skip.h"
 #include "destructor.h"
-
 #include <arith_tools.h>
 
 //#define DEBUG

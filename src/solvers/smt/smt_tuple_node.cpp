@@ -1,9 +1,6 @@
 #include <sstream>
-
 #include <c_types.h>
-
 #include <base_type.h>
-
 #include "smt_conv.h"
 #include "smt_tuple.h"
 #include "smt_tuple_flat.h"

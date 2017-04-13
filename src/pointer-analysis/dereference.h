@@ -10,13 +10,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_POINTER_ANALYSIS_DEREFERENCE_H
 
 #include <set>
-
 #include <expr.h>
 #include <hash_cont.h>
 #include <guard.h>
 #include <namespace.h>
 #include <options.h>
-
 #include "value_sets.h"
 
 /** @file dereference.h

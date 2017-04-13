@@ -10,24 +10,17 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_BASIC_SYMEX_EQUATION_H
 
 #include <irep2.h>
-
 #include <cstdio>
-
 #include <list>
 #include <map>
 #include <vector>
-
 #include <boost/shared_ptr.hpp>
-
 #include <namespace.h>
-
 #include <config.h>
 #include <goto-programs/goto_program.h>
 #include <solvers/smt/smt_conv.h>
-
 #include "symex_target.h"
 #include "goto_trace.h"
-
 #include <cstdint>
 #include <cstring>
 

@@ -2,10 +2,8 @@
 #define _ESBMC_SOLVERS_SOLVE_H_
 
 #include <string>
-
 #include <config.h>
 #include <namespace.h>
-
 #include <solvers/smt/smt_conv.h>
 
 typedef smt_convt *(solver_creator)

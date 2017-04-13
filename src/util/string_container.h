@@ -10,10 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define STRING_CONTAINER_H
 
 #include <cassert>
-
 #include <list>
 #include <vector>
-
 #include "hash_cont.h"
 #include "string_hash.h"
 

@@ -23,7 +23,6 @@
 #include <fixedbv.h>
 #include <base_type.h>
 #include <c_types.h>
-
 #include "z3_conv.h"
 
 #ifdef DEBUG

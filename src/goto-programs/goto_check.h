@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <namespace.h>
 #include <options.h>
-
 #include "goto_program.h"
 #include "goto_functions.h"
 

@@ -9,10 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdlib>
 #include <cctype>
 #include <cassert>
-
 #include <sstream>
 #include <limits>
-
 #include "mp_arith.h"
 #include "arith_tools.h"
 

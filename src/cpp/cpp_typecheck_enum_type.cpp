@@ -8,9 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <i2string.h>
 #include <arith_tools.h>
-
 #include <ansi-c/c_qualifiers.h>
-
 #include "cpp_typecheck.h"
 #include "cpp_enum_type.h"
 

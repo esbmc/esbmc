@@ -11,7 +11,6 @@ Author: CM Wintersteiger
 
 #include <string>
 #include <list>
-
 #include <expr.h>
 #include <mp_arith.h>
 

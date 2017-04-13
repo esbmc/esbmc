@@ -8,11 +8,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <cstdlib>
-
 #include <arith_tools.h>
 #include <config.h>
 #include <std_types.h>
-
 #include "c_types.h"
 #include "parse_float.h"
 #include "convert_float_literal.h"

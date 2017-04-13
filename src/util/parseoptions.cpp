@@ -6,8 +6,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <iostream>
-
 #if defined (_WIN32)
 #define EX_OK 0
 #define EX_USAGE 1
@@ -15,6 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <sysexits.h>
 #endif
 
+#include <iostream>
 #include "cmdline.h"
 #include "parseoptions.h"
 #include "signal_catcher.h"

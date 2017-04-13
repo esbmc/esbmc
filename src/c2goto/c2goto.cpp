@@ -1,11 +1,8 @@
 #include <cstdio>
 #include <cwchar>
-
 #include <ostream>
 #include <fstream>
-
 #include <irep2.h>
-
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/write_goto_binary.h>
 #include <langapi/language_ui.h>
@@ -13,7 +10,6 @@
 #include <ui_message.h>
 #include <parseoptions.h>
 #include <util/config.h>
-
 #include <cmdline.h>
 
 const struct opt_templ c2goto_options[] = {

@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <xml.h>
 #include <xml_irep.h>
 #include <i2string.h>
-
 #include "loop_numbers.h"
 
 void show_loop_numbers(

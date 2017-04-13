@@ -24,13 +24,11 @@
 */
 
 #include <cassert>
-
 #include <expr.h>
 #include <std_code.h>
 #include <std_expr.h>
 #include <std_types.h>
 #include <i2string.h>
-
 #include "tokens.h"
 #include "cpp_token_buffer.h"
 #include "cpp_parser.h"

@@ -17,7 +17,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cprover_prefix.h>
 #include <prefix.h>
 #include <std_types.h>
-
 #include "c_types.h"
 #include "c_typecheck_base.h"
 

@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_expr.h>
 #include <c_types.h>
 #include <bitvector.h>
-
 #include "string_constant.h"
 
 string_constantt::string_constantt(const irep_idt &value)

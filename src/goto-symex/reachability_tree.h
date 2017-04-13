@@ -21,7 +21,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include "renaming.h"
 #include "crypto_hash.h"
 #include <goto-programs/goto_program.h>
-
 #include <boost/shared_ptr.hpp>
 
 /**

@@ -15,13 +15,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-
 #include <fstream>
-
 #include <config.h>
 #include <i2string.h>
 #include <message_stream.h>
-
 #include "c_preprocess.h"
 
 extern "C" {

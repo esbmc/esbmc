@@ -7,10 +7,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <cctype>
-
 #include <i2string.h>
 #include <std_types.h>
-
 #include "type2name.h"
 
 /*******************************************************************\

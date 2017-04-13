@@ -11,19 +11,15 @@
 #include <cassert>
 #include <cstring>
 #include <iostream>
-
 #include <ansi-c/printf_formatter.h>
 #include <langapi/language_util.h>
 #include <arith_tools.h>
 #include <boost/version.hpp>
-
 #include "goto_trace.h"
 #include <std_types.h>
-
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
-
 #include "langapi/languages.h"
 #include "witnesses.h"
 

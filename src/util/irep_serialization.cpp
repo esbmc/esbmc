@@ -9,7 +9,6 @@ Date: May 2007
 \*******************************************************************/
 
 #include <sstream>
-
 #include "irep_serialization.h" 
 #include "string_hash.h"
 

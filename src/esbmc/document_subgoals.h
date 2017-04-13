@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <iostream>
-
 #include <goto-symex/symex_target_equation.h>
 
 void document_subgoals(

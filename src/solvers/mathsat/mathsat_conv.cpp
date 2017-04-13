@@ -1,11 +1,7 @@
 #include <string>
 #include <sstream>
-
 #include "mathsat_conv.h"
-
-// :|
 #include <gmp.h>
-
 #include <c_types.h>
 #include <expr_util.h>
 

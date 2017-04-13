@@ -7,10 +7,8 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
 #include <arith_tools.h>
 #include <config.h>
-
 #include "convert_integer_literal.h"
 
 /*******************************************************************\

@@ -7,14 +7,11 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <migrate.h>
-
 #include <iostream>
 #include <fstream>
-
 #include <langapi/mode.h>
 #include <langapi/languages.h>
 #include <langapi/language_util.h>
-
 #include "bmc.h"
 
 /*******************************************************************\

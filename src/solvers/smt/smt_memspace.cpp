@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <sstream>
-
 #include "smt_conv.h"
 
 /** @file smt_memspace.cpp

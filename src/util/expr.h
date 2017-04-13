@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_EXPR_H
 
 #include <iostream>
-
 #include "type.h"
 #include "location.h"
 

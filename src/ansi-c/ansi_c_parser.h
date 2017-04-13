@@ -10,13 +10,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_SPECC_PARSER_H
 
 #include <cassert>
-
 #include <util/parser.h>
 #include <expr.h>
 #include <hash_cont.h>
 #include <string_hash.h>
 #include <i2string.h>
-
 #include "ansi_c_parse_tree.h"
 
 typedef enum { ANSI_C_UNKNOWN, ANSI_C_SYMBOL, ANSI_C_TYPEDEF,

@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_types.h>
 #include <i2string.h>
 #include <expr_util.h>
-
 #include "c_typecheck_base.h"
 #include "c_types.h"
 

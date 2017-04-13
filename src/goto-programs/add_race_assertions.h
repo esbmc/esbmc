@@ -12,7 +12,6 @@ Date: February 2006
 #define CPROVER_GOTO_PROGRAMS_RACE_DETECTION_H
 
 #include <pointer-analysis/value_sets.h>
-
 #include "goto_program.h"
 #include "goto_functions.h"
 

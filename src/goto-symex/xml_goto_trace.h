@@ -12,7 +12,6 @@ Date: November 2005
 #define CPROVER_GOTO_SYMEX_XML_GOTO_TRACE_H
 
 #include <xml.h>
-
 #include "goto_trace.h"
 
 void convert(

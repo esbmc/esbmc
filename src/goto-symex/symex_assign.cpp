@@ -9,16 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <irep2.h>
 #include <migrate.h>
 #include <cassert>
-
 #include <boost/shared_ptr.hpp>
-
 #include <simplify_expr.h>
 #include <i2string.h>
 #include <cprover_prefix.h>
 #include <expr_util.h>
 #include <std_expr.h>
 #include <c_types.h>
-
 #include "goto_symex.h"
 #include "dynamic_allocation.h"
 #include "execution_state.h"

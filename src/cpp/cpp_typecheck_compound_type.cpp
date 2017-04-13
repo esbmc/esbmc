@@ -11,9 +11,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <expr_util.h>
 #include <simplify_expr.h>
 #include <simplify_expr_class.h>
-
 #include <ansi-c/c_qualifiers.h>
-
 #include "cpp_type2name.h"
 #include "cpp_declarator_converter.h"
 #include "cpp_typecheck.h"

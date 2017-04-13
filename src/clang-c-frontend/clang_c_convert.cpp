@@ -6,7 +6,6 @@
  */
 
 #include "clang_c_convert.h"
-
 #include <std_code.h>
 #include <std_expr.h>
 #include <expr_util.h>
@@ -14,12 +13,9 @@
 #include <arith_tools.h>
 #include <i2string.h>
 #include <c_types.h>
-
 #include <ansi-c/type2name.h>
-
 #include "util/bitvector.h"
 #include "typecast.h"
-
 #include <clang/AST/Attr.h>
 
 clang_c_convertert::clang_c_convertert(

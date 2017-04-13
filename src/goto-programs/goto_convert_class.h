@@ -17,9 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_code.h>
 #include <options.h>
 #include <message_stream.h>
-
 #include <expr_util.h>
-
 #include "goto_program.h"
 
 class goto_convertt:public message_streamt

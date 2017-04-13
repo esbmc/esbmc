@@ -1,5 +1,4 @@
 #include <c_types.h>
-
 #include "cvc_conv.h"
 
 smt_convt *

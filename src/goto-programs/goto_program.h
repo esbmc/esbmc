@@ -9,14 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAM_H
 #define CPROVER_GOTO_PROGRAM_H
 
-#include <irep2.h>
-#include <cassert>
 /*! \defgroup gr_goto_programs Goto programs */
 
+#include <irep2.h>
+#include <cassert>
 #include <cassert>
 #include <ostream>
 #include <set>
-
 #include <namespace.h>
 #include <location.h>
 #include <std_code.h>

@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_NAMESPACE_SPEC_H
 
 #include <expr.h>
-
 #include "cpp_name.h"
 
 class cpp_namespace_spect:public exprt

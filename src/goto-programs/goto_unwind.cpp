@@ -6,7 +6,6 @@
  */
 
 #include <util/std_expr.h>
-
 #include "goto_unwind.h"
 #include "remove_skip.h"
 

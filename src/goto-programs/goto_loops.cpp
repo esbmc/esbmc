@@ -6,7 +6,6 @@
  */
 
 #include "goto_loops.h"
-
 #include <util/expr_util.h>
 
 void goto_loopst::find_function_loops()

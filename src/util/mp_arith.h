@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <string>
 #include <iostream>
-
 #include "big-int/bigint.hh"
 
 typedef BigInt mp_integer;

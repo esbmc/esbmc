@@ -7,10 +7,8 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <iostream>
-
 #include <cassert>
 #include <cstring>
-
 #include "string_container.h"
 
 string_containert string_container __attribute__((init_priority(101)));

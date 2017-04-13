@@ -7,9 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <iostream>
-
 #include <irep2.h>
-
 #include "config.h"
 
 configt config;

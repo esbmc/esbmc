@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <i2string.h>
 #include <expr_util.h>
-
 #include "cpp_typecheck.h"
 #include "cpp_declarator_converter.h"
 

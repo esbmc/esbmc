@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cstdlib>
 #include <cassert>
-
 #include "irep.h"
 #include "i2string.h"
 #include "string_hash.h"

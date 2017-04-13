@@ -11,9 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <irep2.h>
 #include <migrate.h>
-
 #include <iostream>
-
 #include <expr.h>
 
 class guardt

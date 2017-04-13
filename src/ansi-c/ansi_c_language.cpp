@@ -7,13 +7,10 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cstring>
-
 #include <sstream>
 #include <fstream>
-
 #include <config.h>
 #include <expr_util.h>
-
 #include "ansi_c_language.h"
 #include "ansi_c_convert.h"
 #include "ansi_c_typecheck.h"

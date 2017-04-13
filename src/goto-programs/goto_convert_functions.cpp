@@ -9,14 +9,12 @@ Date: June 2003
 \*******************************************************************/
 
 #include <cassert>
-
 #include <base_type.h>
 #include <prefix.h>
 #include <std_code.h>
 #include <std_expr.h>
 #include <type_byte_size.h>
 #include <c_types.h>
-
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
 #include "remove_skip.h"

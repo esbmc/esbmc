@@ -15,7 +15,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <simplify_expr.h>
 #include <std_types.h>
 #include <c_types.h>
-
 #include <ansi-c/c_qualifiers.h>
 #include <ansi-c/c_sizeof.h>
 #include "util/bitvector.h"

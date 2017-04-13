@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <expr_util.h>
-
 #include "c_typecast.h"
 #include "c_typecheck_base.h"
 #include "c_types.h"

@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <simplify_expr.h>
 #include <base_type.h>
 #include <std_code.h>
-
 #include "goto_program_dereference.h"
 
 bool goto_program_dereferencet::has_failed_symbol(

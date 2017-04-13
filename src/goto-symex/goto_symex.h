@@ -10,20 +10,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
 #include <irep2.h>
-
 #include <map>
 #include <stack>
 #include <std_types.h>
 #include <i2string.h>
 #include <hash_cont.h>
 #include <options.h>
-
 #include <boost/shared_ptr.hpp>
-
 #include <goto-programs/goto_functions.h>
-
 #include <pointer-analysis/dereference.h>
-
 #include "goto_symex_state.h"
 #include "symex_target.h"
 

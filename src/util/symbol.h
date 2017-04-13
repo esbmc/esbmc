@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <iostream>
 #include <algorithm>
 #include <list>
-
 #include "expr.h"
 #include "location.h"
 

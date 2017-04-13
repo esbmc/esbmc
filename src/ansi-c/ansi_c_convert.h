@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_code.h>
 #include <hash_cont.h>
 #include <string_hash.h>
-
 #include "c_storage_spec.h"
 #include "ansi_c_parse_tree.h"
 

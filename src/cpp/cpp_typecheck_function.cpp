@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <i2string.h>
 #include <ansi-c/c_qualifiers.h>
 #include <expr_util.h>
-
 #include "cpp_template_type.h"
 #include "cpp_typecheck.h"
 #include "cpp_type2name.h"

@@ -7,16 +7,13 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
 #include <prefix.h>
 #include <cprover_prefix.h>
 #include <base_type.h>
 #include <std_code.h>
 #include <std_expr.h>
 #include <expr_util.h>
-
 #include <langapi/language_util.h>
-
 #include "remove_skip.h"
 #include "goto_inline.h"
 

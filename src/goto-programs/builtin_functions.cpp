@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
 #include <i2string.h>
 #include <expr_util.h>
 #include <location.h>
@@ -19,10 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_expr.h>
 #include <type_byte_size.h>
 #include <c_types.h>
-
-
 #include "goto_convert_class.h"
-
 
 static void get_alloc_type_rec(
   const exprt &src,

@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_ENUM_TYPE_H
 
 #include <cassert>
-
 #include <config.h>
 #include <type.h>
 

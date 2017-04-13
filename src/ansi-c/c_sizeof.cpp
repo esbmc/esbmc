@@ -9,11 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <config.h>
 #include <arith_tools.h>
 #include <simplify_expr.h>
-
 #include "c_sizeof.h"
 #include "c_typecast.h"
 #include "c_types.h"
-
 #include <irep2.h>
 #include <migrate.h>
 #include <type_byte_size.h>

@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <std_expr.h>
 #include <expr_util.h>
 #include <c_types.h>
-
 #include "cpp_typecheck.h"
 #include "cpp_util.h"
 

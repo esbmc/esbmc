@@ -8,9 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <irep2.h>
 #include <migrate.h>
-
 #include <cassert>
-
 #include <config.h>
 #include <context.h>
 #include <simplify_expr.h>
@@ -23,9 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <arith_tools.h>
 #include <type_byte_size.h>
 #include <c_types.h>
-
 #include <langapi/language_util.h>
-
 #include "value_set.h"
 
 const value_sett::object_map_dt value_sett::object_map_dt::empty = { };

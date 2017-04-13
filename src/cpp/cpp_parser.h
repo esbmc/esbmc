@@ -10,12 +10,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_PARSER_H
 
 #include <cassert>
-
 #include <hash_cont.h>
 #include <string_hash.h>
 #include <parser.h>
 #include <expr.h>
-
 #include "cpp_parse_tree.h"
 #include "cpp_token_buffer.h"
 

@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <std_types.h>
 #include <config.h>
-
 #include "c_types.h"
 
 typet build_float_type(unsigned width)

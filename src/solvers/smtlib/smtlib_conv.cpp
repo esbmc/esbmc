@@ -3,9 +3,7 @@
 
 #include <unistd.h>
 #include <cinttypes>
-
 #include <sstream>
-
 #include "smtlib_conv.h"
 #include "smtlib.hpp"
 #include "smtlib_tok.hpp"

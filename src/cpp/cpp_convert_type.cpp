@@ -7,14 +7,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <cassert>
-
 #include <iostream>
-
 #include <config.h>
 #include <arith_tools.h>
 #include <std_types.h>
 #include <c_types.h>
-
 #include "cpp_convert_type.h"
 #include "cpp_declaration.h"
 #include "cpp_name.h"

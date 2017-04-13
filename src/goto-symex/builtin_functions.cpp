@@ -7,12 +7,9 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <sstream>
-
 #include <irep2.h>
 #include <migrate.h>
-
 #include <cassert>
-
 #include <expr_util.h>
 #include <i2string.h>
 #include <arith_tools.h>
@@ -22,11 +19,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <c_types.h>
 #include <dcutil.h>
 #include <prefix.h>
-
 #include "goto_symex.h"
 #include "execution_state.h"
 #include "reachability_tree.h"
-
 #include <iomanip>
 #include <limits>
 #include <string>

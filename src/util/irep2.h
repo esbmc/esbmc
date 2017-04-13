@@ -6,17 +6,14 @@
  */
 
 #include <cstdarg>
-
 #include <vector>
 #include <functional>
-
 #include <boost/mpl/if.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/crc.hpp>
 #include <boost/utility/enable_if.hpp>
 #include <boost/fusion/include/equal_to.hpp>
 #include <boost/functional/hash_fwd.hpp>
-
 #include <boost/mpl/vector.hpp>
 #include <boost/mpl/front.hpp>
 #include <boost/mpl/equal.hpp>
@@ -30,18 +27,14 @@
 #include <boost/mpl/set.hpp>
 #include <boost/mpl/insert.hpp>
 #include <boost/bind/placeholders.hpp>
-
 #include <boost/static_assert.hpp>
-
 #include <boost/preprocessor/list/adt.hpp>
 #include <boost/preprocessor/list/for_each.hpp>
-
 #include <config.h>
 #include <irep.h>
 #include <fixedbv.h>
 #include <big-int/bigint.hh>
 #include <dstring.h>
-
 #include <crypto_hash.h>
 
 // Ahead of time: a list of all expressions and types, in a preprocessing

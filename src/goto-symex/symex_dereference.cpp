@@ -8,10 +8,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <irep2.h>
 #include <migrate.h>
-
 #include <pointer-analysis/dereference.h>
 #include <langapi/language_util.h>
-
 #include "goto_symex.h"
 
 class symex_dereference_statet:

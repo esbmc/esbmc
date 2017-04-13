@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
 #include <arith_tools.h>
 #include <config.h>
 #include <expr_util.h>
@@ -19,7 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_expr.h>
 #include <string_constant.h>
 #include <c_types.h>
-
 #include "util/bitvector.h"
 #include "c_typecast.h"
 #include "c_typecheck_base.h"

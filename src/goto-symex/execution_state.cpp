@@ -7,13 +7,11 @@
 \*******************************************************************/
 
 #include <boost/shared_ptr.hpp>
-
 #include <irep2.h>
 #include <migrate.h>
 #include <langapi/mode.h>
 #include <langapi/languages.h>
 #include <langapi/language_ui.h>
-
 #include "execution_state.h"
 #include "reachability_tree.h"
 #include <string>

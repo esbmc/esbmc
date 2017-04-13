@@ -2,17 +2,13 @@
 #define _ESBMC_PROP_SMT_SMT_CONV_H_
 
 #include <cstdint>
-
 #include <irep2.h>
 #include <message.h>
 #include <namespace.h>
 #include <threeval.h>
-
 #include <util/type_byte_size.h>
-
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/prop/literal.h>
-
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
@@ -363,6 +359,7 @@ public:
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
 #include "smt_tuple.h"
+
 // Also, array interface
 #include "smt_array.h"
 

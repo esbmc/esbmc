@@ -10,10 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_NUMBERING_H
 
 #include <cassert>
-
 #include <map>
 #include <vector>
-
 #include "hash_cont.h"
 
 template <typename T>

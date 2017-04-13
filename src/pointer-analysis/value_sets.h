@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <irep2.h>
 #include <set>
-
 #include <goto-programs/goto_program.h>
 
 // an abstract base class

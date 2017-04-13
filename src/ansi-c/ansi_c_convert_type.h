@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <message_stream.h>
 #include <c_types.h>
-
 #include <ansi-c/c_qualifiers.h>
 #include <ansi-c/c_storage_spec.h>
 

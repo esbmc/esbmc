@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <arith_tools.h>
 #include <config.h>
 #include <std_types.h>
-
 #include "string2array.h"
 
 void string2array(const exprt &src, exprt &dest)

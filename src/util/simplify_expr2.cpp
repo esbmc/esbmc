@@ -1,9 +1,6 @@
 #include "irep2.h"
-
 #include <cstring>
-
 #include <boost/static_assert.hpp>
-
 #include <arith_tools.h>
 #include <c_types.h>
 #include <base_type.h>

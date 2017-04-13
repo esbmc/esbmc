@@ -3,9 +3,7 @@
 
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple_flat.h>
-
 #include <util/threeval.h>
-
 #include <mathsat.h>
 
 class mathsat_smt_sort : public smt_sort

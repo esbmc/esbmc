@@ -11,9 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ui_message.h>
 #include <namespace.h>
-
 #include <goto-programs/goto_functions.h>
-
 #include "value_set_analysis.h"
 
 void show_value_sets(

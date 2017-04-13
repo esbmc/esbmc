@@ -12,7 +12,6 @@
 #define EXECUTION_STATE_H_
 
 #include <irep2.h>
-
 #include <iostream>
 #include <deque>
 #include <set>
@@ -21,9 +20,7 @@
 #include <algorithm>
 #include <std_expr.h>
 #include <message.h>
-
 #include <boost/shared_ptr.hpp>
-
 #include "symex_target.h"
 #include "goto_symex_state.h"
 #include "goto_symex.h"

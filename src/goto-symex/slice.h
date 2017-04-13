@@ -10,7 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_SYMEX_SLICE_H
 
 #include <hash_cont.h>
-
 #include "renaming.h"
 #include "symex_target_equation.h"
 

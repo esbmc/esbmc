@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <i2string.h>
 #include <expr_util.h>
-
 #include "c_typecheck_base.h"
 
 /*******************************************************************\
