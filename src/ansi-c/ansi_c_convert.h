@@ -9,12 +9,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_ANSI_C_CONVERT_H
 #define CPROVER_ANSI_C_CONVERT_H
 
+#include "ansi_c_parse_tree.h"
+#include "c_storage_spec.h"
+#include <hash_cont.h>
 #include <message_stream.h>
 #include <std_code.h>
-#include <hash_cont.h>
 #include <string_hash.h>
-#include "c_storage_spec.h"
-#include "ansi_c_parse_tree.h"
 
 bool ansi_c_convert(
   ansi_c_parse_treet &ansi_c_parse_tree,

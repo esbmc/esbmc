@@ -11,12 +11,12 @@ Date: February 2006
 #ifndef CPROVER_GOTO_PROGRAMS_RW_SET
 #define CPROVER_GOTO_PROGRAMS_RW_SET
 
-#include <hash_cont.h>
-#include <guard.h>
-#include <std_code.h>
-#include <namespace.h>
 #include <expr_util.h>
+#include <guard.h>
+#include <hash_cont.h>
+#include <namespace.h>
 #include <pointer-analysis/value_sets.h>
+#include <std_code.h>
 
 class rw_sett
 {

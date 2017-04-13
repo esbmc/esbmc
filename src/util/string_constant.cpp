@@ -6,12 +6,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <arith_tools.h>
-#include <std_types.h>
-#include <std_expr.h>
-#include <c_types.h>
-#include <bitvector.h>
 #include "string_constant.h"
+#include <arith_tools.h>
+#include <bitvector.h>
+#include <c_types.h>
+#include <std_expr.h>
+#include <std_types.h>
 
 string_constantt::string_constantt(const irep_idt &value)
   : string_constantt(value, array_typet(char_type()))

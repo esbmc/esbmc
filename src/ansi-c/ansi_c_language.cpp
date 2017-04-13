@@ -6,22 +6,22 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cstring>
-#include <sstream>
-#include <fstream>
-#include <config.h>
-#include <expr_util.h>
-#include "ansi_c_language.h"
 #include "ansi_c_convert.h"
-#include "ansi_c_typecheck.h"
+#include "ansi_c_language.h"
 #include "ansi_c_parser.h"
-#include "expr2c.h"
+#include "ansi_c_typecheck.h"
 #include "c_final.h"
-#include "trans_unit.h"
 #include "c_link.h"
-#include "c_preprocess.h"
 #include "c_main.h"
+#include "c_preprocess.h"
+#include "expr2c.h"
 #include "gcc_builtin_headers.h"
+#include "trans_unit.h"
+#include <config.h>
+#include <cstring>
+#include <expr_util.h>
+#include <fstream>
+#include <sstream>
 
 /*******************************************************************\
 

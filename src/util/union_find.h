@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_UNION_FIND_H
 #define CPROVER_UNION_FIND_H
 
+#include "numbering.h"
 #include <cassert>
 #include <vector>
-#include "numbering.h"
 
 class unsigned_union_find
 {

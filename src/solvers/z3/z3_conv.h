@@ -9,25 +9,23 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef CPROVER_PROP_Z3_CONV_H
 #define CPROVER_PROP_Z3_CONV_H
 
-#include <irep2.h>
-#include <namespace.h>
-#include <cstdint>
-#include <map>
-#include <set>
-#include <hash_cont.h>
-#include <solvers/smt/smt_conv.h>
-#include <solvers/prop/pointer_logic.h>
-#include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_tuple.h>
-#include <vector>
-#include <cstring>
-#include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index_container.hpp>
+#include <cstdint>
+#include <cstring>
+#include <hash_cont.h>
+#include <irep2.h>
+#include <map>
+#include <namespace.h>
+#include <set>
+#include <solvers/prop/pointer_logic.h>
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple.h>
+#include <vector>
 #include "z3pp.h"
-
-typedef unsigned int uint;
 
 class z3_smt_sort : public smt_sort {
 public:

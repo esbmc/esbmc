@@ -9,10 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef XML_H
 #define XML_H
 
+#include <iostream>
 #include <list>
 #include <map>
 #include <string>
-#include <iostream>
 
 class xmlt
 {

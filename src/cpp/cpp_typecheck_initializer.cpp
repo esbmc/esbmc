@@ -6,15 +6,15 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <expr_util.h>
-#include <arith_tools.h>
-#include <std_expr.h>
-#include <c_types.h>
-#include <ansi-c/c_sizeof.h>
-#include <util/simplify_expr_class.h>
 #include "cpp_typecheck.h"
 #include "cpp_util.h"
+#include <ansi-c/c_sizeof.h>
+#include <arith_tools.h>
+#include <c_types.h>
+#include <expr_util.h>
 #include <std_expr.h>
+#include <std_expr.h>
+#include <util/simplify_expr_class.h>
 
 /*******************************************************************\
 

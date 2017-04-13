@@ -6,12 +6,12 @@
 
 \*******************************************************************/
 
+#include "type_byte_size.h"
+#include <arith_tools.h>
+#include <c_types.h>
 #include <cassert>
 #include <expr.h>
-#include <arith_tools.h>
 #include <std_types.h>
-#include <c_types.h>
-#include "type_byte_size.h"
 
 static inline void
 round_up_to_word(mp_integer &mp)

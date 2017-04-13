@@ -9,10 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_INLINE_H
 #define CPROVER_GOTO_INLINE_H
 
-#include <std_types.h>
+#include "goto_functions.h"
 #include <hash_cont.h>
 #include <message_stream.h>
-#include "goto_functions.h"
+#include <std_types.h>
 
 // do a full inlining
 void goto_inline(

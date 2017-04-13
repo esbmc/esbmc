@@ -6,14 +6,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <config.h>
-#include <simplify_expr.h>
-#include <arith_tools.h>
-#include <std_types.h>
-#include <i2string.h>
-#include <expr_util.h>
 #include "c_typecheck_base.h"
 #include "c_types.h"
+#include <arith_tools.h>
+#include <config.h>
+#include <expr_util.h>
+#include <i2string.h>
+#include <simplify_expr.h>
+#include <std_types.h>
 
 /*******************************************************************\
 

@@ -12,14 +12,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #undef ERROR
 #endif
 
+#include "c_preprocess.h"
+#include <config.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <config.h>
 #include <i2string.h>
 #include <message_stream.h>
-#include "c_preprocess.h"
 
 extern "C" {
 #include "cpp/iface.h"
@@ -190,9 +190,9 @@ void setup_cpp_defs(const char **defs)
 
 #ifndef _WIN32
 
-#include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 bool c_preprocess(
   const std::string &path,

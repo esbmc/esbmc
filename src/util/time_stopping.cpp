@@ -15,9 +15,9 @@ Date: February 2004
 #include <sys/time.h>
 #endif
 
-#include <sstream>
-#include <iomanip>
 #include "time_stopping.h"
+#include <iomanip>
+#include <sstream>
 
 #if defined(_WIN32) && !defined(__MINGW32__)
 struct timezone {

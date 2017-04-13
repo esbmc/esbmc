@@ -7,24 +7,24 @@
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include <cassert>
-#include <iostream>
-#include <vector>
-#include <boost/shared_ptr.hpp>
-#include <prefix.h>
-#include <std_expr.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <c_types.h>
-#include <simplify_expr.h>
-#include <config.h>
+#include "execution_state.h"
 #include "goto_symex.h"
 #include "goto_symex_state.h"
-#include "execution_state.h"
-#include "symex_target_equation.h"
 #include "reachability_tree.h"
+#include "symex_target_equation.h"
+#include <boost/shared_ptr.hpp>
+#include <c_types.h>
+#include <cassert>
+#include <config.h>
+#include <expr_util.h>
+#include <iostream>
+#include <irep2.h>
+#include <migrate.h>
+#include <prefix.h>
+#include <simplify_expr.h>
+#include <std_expr.h>
+#include <std_expr.h>
+#include <vector>
 
 void
 goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {

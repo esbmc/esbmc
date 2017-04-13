@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_DECLARATOR_H
 #define CPROVER_CPP_DECLARATOR_H
 
-#include <expr.h>
 #include "cpp_name.h"
+#include <expr.h>
 
 class cpp_declaratort:public exprt
 {

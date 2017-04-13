@@ -10,10 +10,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #define CPROVER_MESSAGE_H
 
-#include <string>
-#include <iostream>
 #include "global.h"
 #include "location.h"
+#include <iostream>
+#include <string>
 
 class message_handlert
 {

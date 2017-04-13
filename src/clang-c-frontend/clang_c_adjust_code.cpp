@@ -5,15 +5,15 @@
  *      Author: mramalho
  */
 
-#include <std_code.h>
+#include "clang_c_adjust.h"
+#include "typecast.h"
+#include "util/bitvector.h"
+#include <ansi-c/c_sizeof.h>
+#include <c_types.h>
+#include <cprover_prefix.h>
 #include <expr_util.h>
 #include <prefix.h>
-#include <cprover_prefix.h>
-#include <c_types.h>
-#include <ansi-c/c_sizeof.h>
-#include "clang_c_adjust.h"
-#include "util/bitvector.h"
-#include "typecast.h"
+#include <std_code.h>
 
 void clang_c_adjust::adjust_code(codet& code)
 {

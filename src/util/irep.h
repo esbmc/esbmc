@@ -9,12 +9,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_IREP_H
 #define CPROVER_IREP_H
 
-#include <vector>
+#include "global.h"
+#include <cassert>
 #include <list>
 #include <map>
 #include <string>
-#include <cassert>
-#include "global.h"
+#include <vector>
 
 #define USE_DSTRING
 #define SHARING

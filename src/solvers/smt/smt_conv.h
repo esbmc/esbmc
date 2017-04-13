@@ -1,18 +1,18 @@
 #ifndef _ESBMC_PROP_SMT_SMT_CONV_H_
 #define _ESBMC_PROP_SMT_SMT_CONV_H_
 
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index_container.hpp>
 #include <cstdint>
 #include <irep2.h>
 #include <message.h>
 #include <namespace.h>
+#include <solvers/prop/literal.h>
+#include <solvers/prop/pointer_logic.h>
 #include <threeval.h>
 #include <util/type_byte_size.h>
-#include <solvers/prop/pointer_logic.h>
-#include <solvers/prop/literal.h>
-#include <boost/multi_index_container.hpp>
-#include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/member.hpp>
-#include <boost/multi_index/ordered_index.hpp>
 
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.

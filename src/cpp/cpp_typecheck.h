@@ -9,20 +9,20 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_TYPECHECK_H
 #define CPROVER_CPP_TYPECHECK_H
 
-#include <cassert>
-#include <set>
-#include <list>
-#include <map>
-#include <std_code.h>
-#include <std_types.h>
-#include <ansi-c/c_typecheck_base.h>
+#include "cpp_member_spec.h"
 #include "cpp_parse_tree.h"
 #include "cpp_scopes.h"
-#include "cpp_typecheck_resolve.h"
-#include "template_map.h"
-#include "cpp_member_spec.h"
 #include "cpp_template_type.h"
+#include "cpp_typecheck_resolve.h"
 #include "cpp_util.h"
+#include "template_map.h"
+#include <ansi-c/c_typecheck_base.h>
+#include <cassert>
+#include <list>
+#include <map>
+#include <set>
+#include <std_code.h>
+#include <std_types.h>
 
 bool cpp_typecheck(
   cpp_parse_treet &cpp_parse_tree,

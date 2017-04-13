@@ -7,8 +7,8 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <sys/types.h>
 #include <csignal>
+#include <sys/types.h>
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -19,25 +19,25 @@ Authors: Daniel Kroening, kroening@kroening.com
 #undef small
 #endif
 
-#include <sstream>
-#include <fstream>
-#include <irep2.h>
-#include <i2string.h>
-#include <location.h>
-#include <time_stopping.h>
-#include <message_stream.h>
-#include <migrate.h>
-#include <langapi/mode.h>
-#include <langapi/languages.h>
-#include <langapi/language_util.h>
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/build_goto_trace.h>
-#include <goto-symex/slice.h>
-#include <goto-symex/xml_goto_trace.h>
-#include <goto-symex/reachability_tree.h>
 #include "bmc.h"
 #include "document_subgoals.h"
 #include <ac_config.h>
+#include <fstream>
+#include <goto-symex/build_goto_trace.h>
+#include <goto-symex/goto_trace.h>
+#include <goto-symex/reachability_tree.h>
+#include <goto-symex/slice.h>
+#include <goto-symex/xml_goto_trace.h>
+#include <i2string.h>
+#include <irep2.h>
+#include <langapi/language_util.h>
+#include <langapi/languages.h>
+#include <langapi/mode.h>
+#include <location.h>
+#include <message_stream.h>
+#include <migrate.h>
+#include <sstream>
+#include <time_stopping.h>
 
 /*******************************************************************\
 

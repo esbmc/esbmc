@@ -5,9 +5,9 @@
  *      Author: mramalho
  */
 
-#include <util/std_expr.h>
 #include "goto_unwind.h"
 #include "remove_skip.h"
+#include <util/std_expr.h>
 
 void goto_unwind(
   contextt &context,

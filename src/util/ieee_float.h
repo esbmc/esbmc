@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_IEEE_FLOAT_H
 #define CPROVER_IEEE_FLOAT_H
 
+#include <format_spec.h>
 #include <mp_arith.h>
 #include <std_expr.h>
-#include <format_spec.h>
 
 class ieee_float_spect
 {

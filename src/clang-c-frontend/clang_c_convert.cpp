@@ -6,17 +6,17 @@
  */
 
 #include "clang_c_convert.h"
+#include "typecast.h"
+#include "util/bitvector.h"
+#include <clang/AST/Attr.h>
+#include <ansi-c/type2name.h>
+#include <arith_tools.h>
+#include <c_types.h>
+#include <expr_util.h>
+#include <i2string.h>
+#include <mp_arith.h>
 #include <std_code.h>
 #include <std_expr.h>
-#include <expr_util.h>
-#include <mp_arith.h>
-#include <arith_tools.h>
-#include <i2string.h>
-#include <c_types.h>
-#include <ansi-c/type2name.h>
-#include "util/bitvector.h"
-#include "typecast.h"
-#include <clang/AST/Attr.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,

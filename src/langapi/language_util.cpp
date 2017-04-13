@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <memory>
 #include "language_util.h"
 #include "mode.h"
+#include <memory>
 
 /*******************************************************************\
 

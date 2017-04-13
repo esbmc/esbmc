@@ -7,16 +7,16 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cassert>
-#include <i2string.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <std_expr.h>
-#include <c_types.h>
+#include "destructor.h"
 #include "goto_convert_class.h"
 #include "remove_skip.h"
-#include "destructor.h"
 #include <arith_tools.h>
+#include <c_types.h>
+#include <cassert>
+#include <cprover_prefix.h>
+#include <i2string.h>
+#include <prefix.h>
+#include <std_expr.h>
 
 //#define DEBUG
 

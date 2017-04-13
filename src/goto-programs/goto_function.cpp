@@ -6,15 +6,15 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cassert>
-#include <i2string.h>
-#include <expr_util.h>
-#include <location.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <c_types.h>
 #include "goto_convert_class.h"
 #include "goto_functions.h"
+#include <c_types.h>
+#include <cassert>
+#include <cprover_prefix.h>
+#include <expr_util.h>
+#include <i2string.h>
+#include <location.h>
+#include <prefix.h>
 
 void goto_convertt::convert_function_call(
   const code_function_callt &function_call,

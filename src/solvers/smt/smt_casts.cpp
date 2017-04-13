@@ -1,7 +1,7 @@
-#include <sstream>
+#include "smt_conv.h"
 #include <base_type.h>
 #include <expr_util.h>
-#include "smt_conv.h"
+#include <sstream>
 
 smt_astt
 smt_convt::convert_typecast_to_bool(const typecast2t &cast)

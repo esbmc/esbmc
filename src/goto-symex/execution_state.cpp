@@ -6,24 +6,24 @@
 
 \*******************************************************************/
 
-#include <boost/shared_ptr.hpp>
-#include <irep2.h>
-#include <migrate.h>
-#include <langapi/mode.h>
-#include <langapi/languages.h>
-#include <langapi/language_ui.h>
+#include "config.h"
 #include "execution_state.h"
 #include "reachability_tree.h"
-#include <string>
-#include <sstream>
-#include <vector>
-#include <i2string.h>
-#include <string2array.h>
-#include <std_expr.h>
-#include <expr_util.h>
+#include <boost/shared_ptr.hpp>
 #include <c_types.h>
+#include <expr_util.h>
+#include <i2string.h>
+#include <irep2.h>
+#include <langapi/language_ui.h>
+#include <langapi/languages.h>
+#include <langapi/mode.h>
+#include <migrate.h>
 #include <simplify_expr.h>
-#include "config.h"
+#include <sstream>
+#include <std_expr.h>
+#include <string>
+#include <string2array.h>
+#include <vector>
 
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;

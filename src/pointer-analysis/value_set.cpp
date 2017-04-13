@@ -6,23 +6,23 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
+#include "value_set.h"
+#include <arith_tools.h>
+#include <base_type.h>
+#include <c_types.h>
 #include <cassert>
 #include <config.h>
 #include <context.h>
-#include <simplify_expr.h>
 #include <expr_util.h>
-#include <base_type.h>
-#include <std_expr.h>
 #include <i2string.h>
-#include <prefix.h>
-#include <std_code.h>
-#include <arith_tools.h>
-#include <type_byte_size.h>
-#include <c_types.h>
+#include <irep2.h>
 #include <langapi/language_util.h>
-#include "value_set.h"
+#include <migrate.h>
+#include <prefix.h>
+#include <simplify_expr.h>
+#include <std_code.h>
+#include <std_expr.h>
+#include <type_byte_size.h>
 
 const value_sett::object_map_dt value_sett::object_map_dt::empty = { };
 object_numberingt value_sett::object_numbering;

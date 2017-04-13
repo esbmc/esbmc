@@ -6,11 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cassert>
-#include <iostream>
-#include <config.h>
-#include <arith_tools.h>
 #include "ansi_c_convert_type.h"
+#include <arith_tools.h>
+#include <cassert>
+#include <config.h>
+#include <iostream>
 
 /*******************************************************************\
 

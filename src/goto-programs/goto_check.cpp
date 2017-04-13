@@ -6,15 +6,15 @@
 
  \*******************************************************************/
 
-#include <location.h>
-#include <i2string.h>
+#include "goto_check.h"
+#include <arith_tools.h>
+#include <array_name.h>
+#include <base_type.h>
 #include <expr_util.h>
 #include <guard.h>
+#include <i2string.h>
+#include <location.h>
 #include <simplify_expr.h>
-#include <array_name.h>
-#include <arith_tools.h>
-#include <base_type.h>
-#include "goto_check.h"
 
 class goto_checkt
 {

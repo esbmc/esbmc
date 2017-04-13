@@ -6,14 +6,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <config.h>
-#include <arith_tools.h>
-#include <simplify_expr.h>
 #include "c_sizeof.h"
 #include "c_typecast.h"
 #include "c_types.h"
+#include <arith_tools.h>
+#include <config.h>
 #include <irep2.h>
 #include <migrate.h>
+#include <simplify_expr.h>
 #include <type_byte_size.h>
 
 exprt c_sizeof(const typet &src, const namespacet &ns)

@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <i2string.h>
 #include "cpp_scopes.h"
+#include <i2string.h>
 
 /*******************************************************************\
 

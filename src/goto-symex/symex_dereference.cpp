@@ -6,11 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include "goto_symex.h"
 #include <irep2.h>
+#include <langapi/language_util.h>
 #include <migrate.h>
 #include <pointer-analysis/dereference.h>
-#include <langapi/language_util.h>
-#include "goto_symex.h"
 
 class symex_dereference_statet:
   public dereference_callbackt

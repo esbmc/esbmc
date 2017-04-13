@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <i2string.h>
+#include <std_types.h>
 #include <string>
 #include <type.h>
-#include <std_types.h>
-#include <i2string.h>
 
 /*******************************************************************\
 

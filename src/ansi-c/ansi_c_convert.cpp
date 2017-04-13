@@ -6,11 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <std_types.h>
-#include <config.h>
 #include "ansi_c_convert.h"
 #include "ansi_c_convert_type.h"
 #include "ansi_c_declaration.h"
+#include <config.h>
+#include <std_types.h>
 
 /*******************************************************************\
 

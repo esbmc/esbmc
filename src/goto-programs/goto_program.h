@@ -11,13 +11,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 /*! \defgroup gr_goto_programs Goto programs */
 
+#include <cassert>
+#include <cassert>
 #include <irep2.h>
-#include <cassert>
-#include <cassert>
+#include <location.h>
+#include <namespace.h>
 #include <ostream>
 #include <set>
-#include <namespace.h>
-#include <location.h>
 #include <std_code.h>
 
 #define forall_goto_program_instructions(it, program) \

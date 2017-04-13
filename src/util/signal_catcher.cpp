@@ -12,8 +12,8 @@ Date:
 
 #else
 #include <csignal>
-#include <cstdlib>
 #include <csignal>
+#include <cstdlib>
 #endif
 
 #include "signal_catcher.h"

@@ -7,18 +7,18 @@
 
 \*******************************************************************/
 
-#include <cassert>
-#include <expr_util.h>
-#include <i2string.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
+#include "execution_state.h"
+#include "goto_symex.h"
 #include <arith_tools.h>
 #include <base_type.h>
-#include <std_expr.h>
 #include <c_types.h>
+#include <cassert>
+#include <cprover_prefix.h>
+#include <expr_util.h>
+#include <i2string.h>
 #include <langapi/language_util.h>
-#include "goto_symex.h"
-#include "execution_state.h"
+#include <prefix.h>
+#include <std_expr.h>
 
 bool
 goto_symext::get_unwind_recursion(

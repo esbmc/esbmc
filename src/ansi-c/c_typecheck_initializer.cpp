@@ -6,19 +6,19 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <arith_tools.h>
-#include <string2array.h>
-#include <config.h>
-#include <i2string.h>
-#include <type_eq.h>
-#include <std_types.h>
-#include <expr_util.h>
-#include <simplify_expr.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <std_types.h>
-#include "c_types.h"
 #include "c_typecheck_base.h"
+#include "c_types.h"
+#include <arith_tools.h>
+#include <config.h>
+#include <cprover_prefix.h>
+#include <expr_util.h>
+#include <i2string.h>
+#include <prefix.h>
+#include <simplify_expr.h>
+#include <std_types.h>
+#include <std_types.h>
+#include <string2array.h>
+#include <type_eq.h>
 
 /*******************************************************************\
 

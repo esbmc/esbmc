@@ -8,12 +8,12 @@ Author: Daniel Kroening
 
 \*******************************************************************/
 
-#include <cassert>
-#include <xml_irep.h>
-#include <i2string.h>
-#include <ansi-c/printf_formatter.h>
-#include <langapi/language_util.h>
 #include "xml_goto_trace.h"
+#include <ansi-c/printf_formatter.h>
+#include <cassert>
+#include <i2string.h>
+#include <langapi/language_util.h>
+#include <xml_irep.h>
 
 void convert(
   const namespacet &ns,

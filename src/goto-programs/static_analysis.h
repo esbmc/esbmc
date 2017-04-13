@@ -9,10 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAMS_STATIC_ANALYSIS_H
 #define CPROVER_GOTO_PROGRAMS_STATIC_ANALYSIS_H
 
+#include "goto_functions.h"
+#include <iostream>
 #include <irep2.h>
 #include <map>
-#include <iostream>
-#include "goto_functions.h"
 
 // don't use me -- I am just a base class
 // please derive from me

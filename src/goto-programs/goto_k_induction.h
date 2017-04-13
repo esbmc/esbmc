@@ -8,11 +8,11 @@
 #ifndef GOTO_PROGRAMS_GOTO_K_INDUCTION_H_
 #define GOTO_PROGRAMS_GOTO_K_INDUCTION_H_
 
-#include <std_types.h>
-#include <hash_cont.h>
-#include <message_stream.h>
 #include "goto_functions.h"
 #include "goto_loops.h"
+#include <hash_cont.h>
+#include <message_stream.h>
+#include <std_types.h>
 
 void goto_k_induction(
   goto_functionst &goto_functions,

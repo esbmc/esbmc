@@ -6,13 +6,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include "goto_program_dereference.h"
+#include <base_type.h>
 #include <irep2.h>
 #include <migrate.h>
 #include <prefix.h>
 #include <simplify_expr.h>
-#include <base_type.h>
 #include <std_code.h>
-#include "goto_program_dereference.h"
 
 bool goto_program_dereferencet::has_failed_symbol(
   const expr2tc &expr,

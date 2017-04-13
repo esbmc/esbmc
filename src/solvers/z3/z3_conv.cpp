@@ -5,25 +5,25 @@
 
  \*******************************************************************/
 
-#include <cassert>
-#include <cctype>
-#include <fstream>
-#include <sstream>
-#include <std_expr.h>
-#include <irep2.h>
-#include <migrate.h>
+#include "z3_conv.h"
 #include <arith_tools.h>
-#include <std_types.h>
-#include <config.h>
-#include <i2string.h>
-#include <expr_util.h>
-#include <string2array.h>
-#include <type_byte_size.h>
-#include <prefix.h>
-#include <fixedbv.h>
 #include <base_type.h>
 #include <c_types.h>
-#include "z3_conv.h"
+#include <cassert>
+#include <cctype>
+#include <config.h>
+#include <expr_util.h>
+#include <fixedbv.h>
+#include <fstream>
+#include <i2string.h>
+#include <irep2.h>
+#include <migrate.h>
+#include <prefix.h>
+#include <sstream>
+#include <std_expr.h>
+#include <std_types.h>
+#include <string2array.h>
+#include <type_byte_size.h>
 
 #ifdef DEBUG
 #define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \

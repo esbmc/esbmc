@@ -8,12 +8,12 @@ Date: February 2006
 
 \*******************************************************************/
 
-#include <expr_util.h>
-#include <std_expr.h>
-#include <namespace.h>
-#include <arith_tools.h>
-#include <pointer-analysis/goto_program_dereference.h>
 #include "rw_set.h"
+#include <arith_tools.h>
+#include <expr_util.h>
+#include <namespace.h>
+#include <pointer-analysis/goto_program_dereference.h>
+#include <std_expr.h>
 
 void rw_sett::compute(const codet &code)
 {

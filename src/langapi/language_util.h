@@ -10,9 +10,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_LANGUAGE_UTIL_H
 
 #include <irep2.h>
+#include <language.h>
 #include <migrate.h>
 #include <namespace.h>
-#include <language.h>
 
 std::string from_expr(
   const namespacet &ns,

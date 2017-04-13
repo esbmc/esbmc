@@ -6,13 +6,13 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <base_type.h>
-#include <arith_tools.h>
-#include <simplify_expr_class.h>
-#include <simplify_expr.h>
-#include <c_types.h>
 #include "cpp_type2name.h"
 #include "cpp_typecheck.h"
+#include <arith_tools.h>
+#include <base_type.h>
+#include <c_types.h>
+#include <simplify_expr.h>
+#include <simplify_expr_class.h>
 
 /*******************************************************************\
 

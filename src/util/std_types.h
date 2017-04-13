@@ -10,9 +10,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_STD_TYPES_H
 
 #include <cassert>
-#include <type.h>
-#include <std_expr.h>
 #include <mp_arith.h>
+#include <std_expr.h>
+#include <type.h>
 
 class bool_typet:public typet
 {

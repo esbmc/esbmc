@@ -6,8 +6,8 @@ Author: CM Wintersteiger
 
 \*******************************************************************/
 
-#include <cctype>
 #include "format_strings.h"
+#include <cctype>
 
 void parse_flags(
   std::string::const_iterator &it,

@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_TYPE_H
 #define CPROVER_TYPE_H
 
-#include <list>
 #include "irep.h"
 #include "location.h"
+#include <list>
 
 class typet:public irept
 {

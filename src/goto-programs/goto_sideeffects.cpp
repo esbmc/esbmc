@@ -6,13 +6,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <expr_util.h>
-#include <std_expr.h>
-#include <rename.h>
-#include <cprover_prefix.h>
-#include <i2string.h>
-#include <c_types.h>
 #include "goto_convert_class.h"
+#include <c_types.h>
+#include <cprover_prefix.h>
+#include <expr_util.h>
+#include <i2string.h>
+#include <rename.h>
+#include <std_expr.h>
 
 void goto_convertt::make_temp_symbol(
   exprt &expr,

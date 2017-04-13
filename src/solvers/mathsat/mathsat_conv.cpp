@@ -1,9 +1,9 @@
-#include <string>
-#include <sstream>
 #include "mathsat_conv.h"
-#include <gmp.h>
 #include <c_types.h>
 #include <expr_util.h>
+#include <gmp.h>
+#include <sstream>
+#include <string>
 
 static const char* mathsat_config =
   "preprocessor.toplevel_propagation = true\n"

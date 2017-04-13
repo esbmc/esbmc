@@ -8,20 +8,20 @@
 
 \*******************************************************************/
 
-#include <cassert>
-#include <cstring>
-#include <iostream>
-#include <ansi-c/printf_formatter.h>
-#include <langapi/language_util.h>
-#include <arith_tools.h>
-#include <boost/version.hpp>
 #include "goto_trace.h"
-#include <std_types.h>
+#include <langapi/languages.h>
+#include "witnesses.h"
+#include <ansi-c/printf_formatter.h>
+#include <arith_tools.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
-#include "langapi/languages.h"
-#include "witnesses.h"
+#include <boost/version.hpp>
+#include <cassert>
+#include <cstring>
+#include <iostream>
+#include <langapi/language_util.h>
+#include <std_types.h>
 
 extern std::string verification_file;
 

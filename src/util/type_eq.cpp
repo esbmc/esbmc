@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cassert>
 #include "type_eq.h"
+#include <cassert>
 
 bool type_eq(const typet &type1, const typet &type2, const namespacet &ns)
 {

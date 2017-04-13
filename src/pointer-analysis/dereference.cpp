@@ -6,27 +6,27 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include <cassert>
-#include <sstream>
-#include <prefix.h>
-#include <expr_util.h>
-#include <c_misc.h>
-#include <base_type.h>
-#include <arith_tools.h>
-#include <rename.h>
-#include <i2string.h>
-#include <array_name.h>
-#include <config.h>
-#include <std_expr.h>
-#include <cprover_prefix.h>
-#include <type_byte_size.h>
-#include <c_types.h>
-#include <ansi-c/c_typecast.h>
-#include <pointer-analysis/value_set.h>
-#include <langapi/language_util.h>
 #include "dereference.h"
+#include <ansi-c/c_typecast.h>
+#include <arith_tools.h>
+#include <array_name.h>
+#include <base_type.h>
+#include <c_misc.h>
+#include <c_types.h>
+#include <cassert>
+#include <config.h>
+#include <cprover_prefix.h>
+#include <expr_util.h>
+#include <i2string.h>
+#include <irep2.h>
+#include <langapi/language_util.h>
+#include <migrate.h>
+#include <pointer-analysis/value_set.h>
+#include <prefix.h>
+#include <rename.h>
+#include <sstream>
+#include <std_expr.h>
+#include <type_byte_size.h>
 
 // global data, horrible
 unsigned int dereferencet::invalid_counter=0;

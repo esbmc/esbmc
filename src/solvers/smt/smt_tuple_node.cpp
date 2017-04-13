@@ -1,9 +1,9 @@
-#include <sstream>
-#include <c_types.h>
-#include <base_type.h>
 #include "smt_conv.h"
 #include "smt_tuple.h"
 #include "smt_tuple_flat.h"
+#include <base_type.h>
+#include <c_types.h>
+#include <sstream>
 
 /* An optimisation of the tuple flattening technique found in smt_tuple_sym.cpp,
  * where we separate out tuple elements into their own variables without any

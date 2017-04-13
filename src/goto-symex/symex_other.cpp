@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
+#include "goto_symex.h"
 #include <cassert>
 #include <expr_util.h>
-#include "goto_symex.h"
+#include <irep2.h>
 
 void goto_symext::symex_other(void)
 {

@@ -6,16 +6,16 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cassert>
-#include <prefix.h>
-#include <cprover_prefix.h>
+#include "goto_inline.h"
+#include "remove_skip.h"
 #include <base_type.h>
-#include <std_code.h>
-#include <std_expr.h>
+#include <cassert>
+#include <cprover_prefix.h>
 #include <expr_util.h>
 #include <langapi/language_util.h>
-#include "remove_skip.h"
-#include "goto_inline.h"
+#include <prefix.h>
+#include <std_code.h>
+#include <std_expr.h>
 
 void goto_inlinet::parameter_assignments(
   const locationt &location,

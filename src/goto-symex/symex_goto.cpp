@@ -7,19 +7,19 @@
 
 \*******************************************************************/
 
-#include <iostream>
-#include <fstream>
-#include <irep2.h>
-#include <migrate.h>
-#include <cassert>
-#include <prefix.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <langapi/language_ui.h>
-#include <solvers/smtlib/smtlib_conv.h>
 #include "goto_symex.h"
-#include "symex_target_equation.h"
 #include "slice.h"
+#include "symex_target_equation.h"
+#include <cassert>
+#include <expr_util.h>
+#include <fstream>
+#include <iostream>
+#include <irep2.h>
+#include <langapi/language_ui.h>
+#include <migrate.h>
+#include <prefix.h>
+#include <solvers/smtlib/smtlib_conv.h>
+#include <std_expr.h>
 
 void
 goto_symext::symex_goto(const expr2tc &old_guard)

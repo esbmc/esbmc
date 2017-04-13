@@ -9,10 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_OPTIONS_H
 #define CPROVER_OPTIONS_H
 
-#include <string>
+#include "cmdline.h"
 #include <list>
 #include <map>
-#include "cmdline.h"
+#include <string>
 
 class optionst
 {

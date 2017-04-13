@@ -9,17 +9,17 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_CBMC_BMC_H
 #define CPROVER_CBMC_BMC_H
 
+#include <boost/shared_ptr.hpp>
+#include <goto-symex/reachability_tree.h>
+#include <goto-symex/symex_target_equation.h>
+#include <hash_cont.h>
+#include <langapi/language_ui.h>
 #include <list>
 #include <map>
-#include <hash_cont.h>
 #include <options.h>
-#include <solvers/solve.h>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smtlib/smtlib_conv.h>
-#include <langapi/language_ui.h>
-#include <goto-symex/symex_target_equation.h>
-#include <goto-symex/reachability_tree.h>
-#include <boost/shared_ptr.hpp>
+#include <solvers/solve.h>
 
 class bmct:public messaget
 {

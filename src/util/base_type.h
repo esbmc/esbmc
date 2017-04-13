@@ -11,8 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <irep2.h>
 #include <migrate.h>
-#include <type.h>
 #include <namespace.h>
+#include <type.h>
 #include <union_find.h>
 
 void base_type(type2tc &type, const namespacet &ns);

@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <iostream>
+#include "string_container.h"
 #include <cassert>
 #include <cstring>
-#include "string_container.h"
+#include <iostream>
 
 string_containert string_container __attribute__((init_priority(101)));
 
@@ -75,6 +75,6 @@ unsigned string_containert::get(const std::string &s)
 // translation unit. This ensures that the string_container object is
 // initialized before all of the attribute-name globals are. Somewhat miserable.
 
-#include "irep.cpp"
 #include "expr.cpp"
+#include "irep.cpp"
 #include "type.cpp"

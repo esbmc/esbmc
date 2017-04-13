@@ -6,14 +6,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
+#include "dynamic_allocation.h"
+#include "goto_symex.h"
+#include <c_types.h>
 #include <cassert>
 #include <cprover_prefix.h>
 #include <expr_util.h>
+#include <irep2.h>
 #include <std_expr.h>
-#include <c_types.h>
-#include "goto_symex.h"
-#include "dynamic_allocation.h"
 
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {

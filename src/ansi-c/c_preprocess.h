@@ -10,8 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_C_PREPROCESS_H
 
 #include <iostream>
-#include <string>
 #include <message.h>
+#include <string>
 
 bool c_preprocess(
   const std::string &path,

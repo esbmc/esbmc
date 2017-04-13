@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include "cpp_final.h"
 #include <ansi-c/c_final.h>
 #include <c2goto/cprover_library.h>
-#include "cpp_final.h"
 
 /*******************************************************************\
 

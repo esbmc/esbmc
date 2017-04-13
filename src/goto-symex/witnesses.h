@@ -10,6 +10,9 @@
  */
 
 #include <string>
+#include <boost/algorithm/string.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/xml_parser.hpp>
 
 typedef struct graph_props
 {

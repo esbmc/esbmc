@@ -6,12 +6,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cstdlib>
-#include <cassert>
-#include "mp_arith.h"
+#include "expr.h"
 #include "fixedbv.h"
 #include "ieee_float.h"
-#include "expr.h"
+#include "mp_arith.h"
+#include <cassert>
+#include <cstdlib>
 
 void exprt::move_to_operands(exprt &expr)
 {

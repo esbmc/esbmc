@@ -5,16 +5,16 @@
  *      Author: mramalho
  */
 
-#include <cassert>
-#include <namespace.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <arith_tools.h>
-#include <std_code.h>
-#include <config.h>
-#include <message.h>
-#include <c_types.h>
 #include <ansi-c/c_main.h>
+#include <arith_tools.h>
+#include <c_types.h>
+#include <cassert>
+#include <config.h>
+#include <expr_util.h>
+#include <message.h>
+#include <namespace.h>
+#include <std_code.h>
+#include <std_expr.h>
 
 bool clang_main(
   contextt &context,

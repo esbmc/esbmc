@@ -9,10 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_ANSI_C_CONVERT_TYPE_H
 #define CPROVER_ANSI_C_CONVERT_TYPE_H
 
-#include <message_stream.h>
-#include <c_types.h>
 #include <ansi-c/c_qualifiers.h>
 #include <ansi-c/c_storage_spec.h>
+#include <c_types.h>
+#include <message_stream.h>
 
 class ansi_c_convert_typet:public message_streamt
 {

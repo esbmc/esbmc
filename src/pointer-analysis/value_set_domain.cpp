@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include "value_set_domain.h"
 #include <irep2.h>
 #include <migrate.h>
 #include <std_code.h>
-#include "value_set_domain.h"
 
 void value_set_domaint::transform(
   const namespacet &ns,

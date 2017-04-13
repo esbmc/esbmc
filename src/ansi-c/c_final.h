@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_C_FINAL_H
 #define CPROVER_C_FINAL_H
 
-#include <iostream>
 #include <context.h>
+#include <iostream>
 #include <message.h>
 
 void c_finalize_expression(

@@ -6,17 +6,17 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cassert>
-#include <string2array.h>
-#include <config.h>
-#include <simplify_expr_class.h>
-#include <expr_util.h>
-#include <base_type.h>
-#include <std_expr.h>
-#include "type2name.h"
+#include "c_qualifiers.h"
 #include "c_typecast.h"
 #include "c_types.h"
-#include "c_qualifiers.h"
+#include "type2name.h"
+#include <base_type.h>
+#include <cassert>
+#include <config.h>
+#include <expr_util.h>
+#include <simplify_expr_class.h>
+#include <std_expr.h>
+#include <string2array.h>
 
 /*******************************************************************\
 

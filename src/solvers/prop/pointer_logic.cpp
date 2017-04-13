@@ -6,14 +6,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include "pointer_logic.h"
+#include <arith_tools.h>
 #include <cassert>
 #include <config.h>
 #include <i2string.h>
-#include <arith_tools.h>
-#include <type_byte_size.h>
-#include <std_expr.h>
 #include <prefix.h>
-#include "pointer_logic.h"
+#include <std_expr.h>
+#include <type_byte_size.h>
 
 /*******************************************************************\
 

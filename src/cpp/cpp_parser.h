@@ -9,13 +9,13 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_PARSER_H
 #define CPROVER_CPP_PARSER_H
 
-#include <cassert>
-#include <hash_cont.h>
-#include <string_hash.h>
-#include <parser.h>
-#include <expr.h>
 #include "cpp_parse_tree.h"
 #include "cpp_token_buffer.h"
+#include <cassert>
+#include <expr.h>
+#include <hash_cont.h>
+#include <parser.h>
+#include <string_hash.h>
 
 class cpp_parsert:public parsert
 {

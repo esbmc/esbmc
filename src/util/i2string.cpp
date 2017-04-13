@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #define USE_SPRINTF
 
 #ifdef USE_SPRINTF
+#include "i2string.h"
 #include <cstdio>
 #include <cstring>
-#include "i2string.h"
 #else
 #include <sstream>
 #include "i2string.h"

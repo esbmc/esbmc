@@ -6,22 +6,22 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cassert>
-#include <arith_tools.h>
-#include <config.h>
-#include <expr_util.h>
-#include <std_types.h>
-#include <prefix.h>
-#include <cprover_prefix.h>
-#include <simplify_expr.h>
-#include <base_type.h>
-#include <std_expr.h>
-#include <string_constant.h>
-#include <c_types.h>
-#include "util/bitvector.h"
+#include "c_sizeof.h"
 #include "c_typecast.h"
 #include "c_typecheck_base.h"
-#include "c_sizeof.h"
+#include "util/bitvector.h"
+#include <arith_tools.h>
+#include <base_type.h>
+#include <c_types.h>
+#include <cassert>
+#include <config.h>
+#include <cprover_prefix.h>
+#include <expr_util.h>
+#include <prefix.h>
+#include <simplify_expr.h>
+#include <std_expr.h>
+#include <std_types.h>
+#include <string_constant.h>
 
 /*******************************************************************\
 

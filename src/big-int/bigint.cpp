@@ -7,12 +7,12 @@
 
 #include "bigint.hh"
 #include "allocainc.h"
-#include <iostream>
 #include <cctype>
 #include <climits>
-#include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <iostream>
 
 #define error(x) fprintf (stderr, "%s\n", x)
 

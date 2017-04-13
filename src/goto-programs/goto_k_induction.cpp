@@ -5,12 +5,12 @@
  *      Author: mramalho
  */
 
-#include <c_types.h>
-#include <i2string.h>
-#include <std_expr.h>
-#include <expr_util.h>
 #include "goto_k_induction.h"
 #include "remove_skip.h"
+#include <c_types.h>
+#include <expr_util.h>
+#include <i2string.h>
+#include <std_expr.h>
 
 static unsigned int state_counter = 1;
 

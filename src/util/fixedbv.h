@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_FIXEDBV_UTIL_H
 #define CPROVER_FIXEDBV_UTIL_H
 
+#include <format_spec.h>
 #include <mp_arith.h>
 #include <std_expr.h>
-#include <format_spec.h>
 
 class fixedbv_spect
 {

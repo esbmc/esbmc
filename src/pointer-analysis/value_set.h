@@ -9,14 +9,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 
-#include <irep2.h>
-#include <set>
-#include <namespace.h>
-#include <mp_arith.h>
-#include <reference_counting.h>
-#include <type_byte_size.h>
 #include "object_numbering.h"
 #include "value_sets.h"
+#include <irep2.h>
+#include <mp_arith.h>
+#include <namespace.h>
+#include <reference_counting.h>
+#include <set>
+#include <type_byte_size.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.
  *

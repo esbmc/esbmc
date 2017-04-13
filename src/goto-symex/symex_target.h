@@ -10,12 +10,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_SYMEX_SYMEX_TARGET_H
 
 #include <boost/shared_ptr.hpp>
-#include <irep2.h>
-#include <vector>
 #include <expr.h>
-#include <symbol.h>
-#include <guard.h>
 #include <goto-programs/goto_program.h>
+#include <guard.h>
+#include <irep2.h>
+#include <symbol.h>
+#include <vector>
 
 class stack_framet;
 

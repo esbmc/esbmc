@@ -6,18 +6,18 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include <cassert>
-#include <i2string.h>
-#include <std_expr.h>
-#include <expr_util.h>
-#include <irep2.h>
-#include <migrate.h>
-#include <langapi/language_util.h>
+#include "goto_symex.h"
 #include "goto_symex_state.h"
 #include "symex_target_equation.h"
-#include "goto_symex.h"
+#include <cassert>
+#include <expr_util.h>
+#include <i2string.h>
+#include <irep2.h>
+#include <irep2.h>
+#include <langapi/language_util.h>
+#include <migrate.h>
+#include <migrate.h>
+#include <std_expr.h>
 
 void symex_target_equationt::assignment(
   const expr2tc &guard,

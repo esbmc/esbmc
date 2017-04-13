@@ -8,11 +8,11 @@
 #ifndef GOTO_PROGRAMS_GOTO_LOOPS_H_
 #define GOTO_PROGRAMS_GOTO_LOOPS_H_
 
-#include <std_types.h>
-#include <hash_cont.h>
-#include <message_stream.h>
 #include "goto_functions.h"
 #include "loopst.h"
+#include <hash_cont.h>
+#include <message_stream.h>
+#include <std_types.h>
 
 class goto_loopst : public message_streamt
 {

@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <type_eq.h>
 #include "cpp_typecheck.h"
+#include <type_eq.h>
 
 /*******************************************************************\
 

@@ -1,8 +1,8 @@
+#include "array_conv.h"
 #include <algorithm>
+#include <c_types.h>
 #include <set>
 #include <utility>
-#include <c_types.h>
-#include "array_conv.h"
 
 static inline bool
 array_indexes_are_same(

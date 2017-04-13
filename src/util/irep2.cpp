@@ -1,14 +1,14 @@
 #include "irep2.h"
+#include "i2string.h"
+#include "migrate.h"
+#include "std_types.h"
+#include <ac_config.h>
+#include <boost/algorithm/string.hpp>
+#include <boost/functional/hash.hpp>
+#include <boost/static_assert.hpp>
 #include <cstdarg>
 #include <cstring>
 #include <sstream>
-#include "std_types.h"
-#include "migrate.h"
-#include "i2string.h"
-#include <boost/algorithm/string.hpp>
-#include <boost/static_assert.hpp>
-#include <boost/functional/hash.hpp>
-#include <ac_config.h>
 
 #ifdef WITH_PYTHON
 #include <boost/python.hpp>

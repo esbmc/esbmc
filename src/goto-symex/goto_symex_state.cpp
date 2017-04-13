@@ -7,18 +7,18 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
+#include "../util/expr_util.h"
+#include "execution_state.h"
+#include "goto_symex.h"
+#include "goto_symex_state.h"
+#include "reachability_tree.h"
 #include <cassert>
 #include <global.h>
-#include <map>
-#include <sstream>
 #include <i2string.h>
-#include "../util/expr_util.h"
-#include "reachability_tree.h"
-#include "execution_state.h"
-#include "goto_symex_state.h"
-#include "goto_symex.h"
+#include <irep2.h>
+#include <map>
+#include <migrate.h>
+#include <sstream>
 
 goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
                                      const namespacet &_ns)

@@ -9,18 +9,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
-#include <irep2.h>
-#include <map>
-#include <stack>
-#include <std_types.h>
-#include <i2string.h>
-#include <hash_cont.h>
-#include <options.h>
-#include <boost/shared_ptr.hpp>
-#include <goto-programs/goto_functions.h>
-#include <pointer-analysis/dereference.h>
 #include "goto_symex_state.h"
 #include "symex_target.h"
+#include <boost/shared_ptr.hpp>
+#include <goto-programs/goto_functions.h>
+#include <hash_cont.h>
+#include <i2string.h>
+#include <irep2.h>
+#include <map>
+#include <options.h>
+#include <pointer-analysis/dereference.h>
+#include <stack>
+#include <std_types.h>
 
 class reachability_treet; // Forward dec
 class execution_statet; // Forward dec

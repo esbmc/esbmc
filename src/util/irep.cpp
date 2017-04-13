@@ -6,11 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cstdlib>
-#include <cassert>
-#include "irep.h"
 #include "i2string.h"
+#include "irep.h"
 #include "string_hash.h"
+#include <cassert>
+#include <cstdlib>
 
 irept nil_rep_storage;
 

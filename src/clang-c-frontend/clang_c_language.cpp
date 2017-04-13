@@ -7,16 +7,16 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include "clang_c_language.h"
-#include <sstream>
-#include <fstream>
-#include <c2goto/cprover_library.h>
-#include <ansi-c/c_preprocess.h>
-#include <ansi-c/c_link.h>
-#include <clang/Tooling/CommonOptionsParser.h>
-#include <clang/Tooling/Tooling.h>
 #include "clang_c_adjust.h"
 #include "clang_c_convert.h"
 #include "clang_c_main.h"
+#include <clang/Tooling/CommonOptionsParser.h>
+#include <clang/Tooling/Tooling.h>
+#include <ansi-c/c_link.h>
+#include <ansi-c/c_preprocess.h>
+#include <c2goto/cprover_library.h>
+#include <fstream>
+#include <sstream>
 
 languaget *new_clang_c_language()
 {

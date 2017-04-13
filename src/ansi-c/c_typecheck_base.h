@@ -10,10 +10,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_C_TYPECHECK_BASE_H
 
 #include <context.h>
-#include <typecheck.h>
 #include <namespace.h>
 #include <std_code.h>
 #include <std_types.h>
+#include <typecheck.h>
 
 class c_typecheck_baset:
   public typecheckt,

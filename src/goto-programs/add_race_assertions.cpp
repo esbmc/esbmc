@@ -10,14 +10,14 @@ Date: February 2006
 
 \*******************************************************************/
 
-#include <hash_cont.h>
-#include <std_expr.h>
+#include "add_race_assertions.h"
+#include "remove_skip.h"
+#include "rw_set.h"
 #include <expr_util.h>
 #include <guard.h>
+#include <hash_cont.h>
 #include <pointer-analysis/value_sets.h>
-#include "remove_skip.h"
-#include "add_race_assertions.h"
-#include "rw_set.h"
+#include <std_expr.h>
 
 class w_guardst
 {

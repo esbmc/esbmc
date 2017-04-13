@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <set>
 #include "cpp_typecheck.h"
+#include <set>
 
 /*******************************************************************\
 

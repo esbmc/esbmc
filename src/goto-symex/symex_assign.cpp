@@ -6,19 +6,19 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include <cassert>
-#include <boost/shared_ptr.hpp>
-#include <simplify_expr.h>
-#include <i2string.h>
-#include <cprover_prefix.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <c_types.h>
-#include "goto_symex.h"
 #include "dynamic_allocation.h"
 #include "execution_state.h"
+#include "goto_symex.h"
+#include <boost/shared_ptr.hpp>
+#include <c_types.h>
+#include <cassert>
+#include <cprover_prefix.h>
+#include <expr_util.h>
+#include <i2string.h>
+#include <irep2.h>
+#include <migrate.h>
+#include <simplify_expr.h>
+#include <std_expr.h>
 
 goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
                          const goto_functionst &_goto_functions,

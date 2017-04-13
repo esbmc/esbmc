@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cstdlib>
 #include "arith_tools.h"
-#include "std_types.h"
 #include "std_expr.h"
+#include "std_types.h"
+#include <cstdlib>
 
 unsigned bv_typet::get_width() const
 {

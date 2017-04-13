@@ -1,16 +1,16 @@
+#include <cmdline.h>
 #include <cstdio>
 #include <cwchar>
-#include <ostream>
 #include <fstream>
-#include <irep2.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/write_goto_binary.h>
+#include <irep2.h>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
-#include <ui_message.h>
+#include <ostream>
 #include <parseoptions.h>
+#include <ui_message.h>
 #include <util/config.h>
-#include <cmdline.h>
 
 const struct opt_templ c2goto_options[] = {
 { 0,	"16",		switc,		"" },

@@ -6,12 +6,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cassert>
-#include <memory>
-#include <std_expr.h>
-#include <std_code.h>
-#include <expr_util.h>
 #include "static_analysis.h"
+#include <cassert>
+#include <expr_util.h>
+#include <memory>
+#include <std_code.h>
+#include <std_expr.h>
 
 expr2tc abstract_domain_baset::get_guard(
   locationt from,

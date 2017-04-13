@@ -23,40 +23,40 @@ extern "C" {
 }
 #endif
 
-#include <fstream>
-#include <memory>
-#include <irep.h>
+#include "bmc.h"
+#include "parseoptions.h"
+#include <ac_config.h>
+#include <ansi-c/c_preprocess.h>
+#include <cctype>
+#include <clang-c-frontend/clang_c_language.h>
 #include <config.h>
+#include <csignal>
+#include <cstdlib>
 #include <expr_util.h>
-#include <time_stopping.h>
-#include <symbol.h>
-#include <goto-programs/goto_convert_functions.h>
+#include <fstream>
+#include <fstream>
+#include <goto-programs/add_race_assertions.h>
 #include <goto-programs/goto_check.h>
+#include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
-#include <goto-programs/goto_unwind.h>
-#include <goto-programs/show_claims.h>
-#include <goto-programs/set_claims.h>
-#include <goto-programs/read_goto_binary.h>
-#include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_unwind.h>
+#include <goto-programs/loop_numbers.h>
+#include <goto-programs/read_goto_binary.h>
 #include <goto-programs/remove_skip.h>
 #include <goto-programs/remove_unreachable.h>
-#include <goto-programs/add_race_assertions.h>
-#include <pointer-analysis/value_set_analysis.h>
+#include <goto-programs/set_claims.h>
+#include <goto-programs/show_claims.h>
+#include <irep.h>
+#include <langapi/languages.h>
+#include <langapi/mode.h>
+#include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
-#include <langapi/mode.h>
-#include <langapi/languages.h>
-#include <ansi-c/c_preprocess.h>
-#include <clang-c-frontend/clang_c_language.h>
-#include "parseoptions.h"
-#include "bmc.h"
-#include <ac_config.h>
-#include <fstream>
-#include <cctype>
-#include <cstdlib>
-#include <csignal>
+#include <pointer-analysis/value_set_analysis.h>
+#include <symbol.h>
 #include <sys/wait.h>
+#include <time_stopping.h>
 
 enum PROCESS_TYPE { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP, PARENT };
 
