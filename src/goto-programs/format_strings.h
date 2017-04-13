@@ -9,9 +9,9 @@ Author: CM Wintersteiger
 #ifndef CPROVER_GOTO_PROGRAMS_FORMAT_STRINGS_H_
 #define CPROVER_GOTO_PROGRAMS_FORMAT_STRINGS_H_
 
-#include <expr.h>
+#include <util/expr.h>
 #include <list>
-#include <mp_arith.h>
+#include <util/mp_arith.h>
 #include <string>
 
 class format_tokent 

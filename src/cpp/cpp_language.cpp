@@ -15,10 +15,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <ansi-c/c_main.h>
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
-#include <config.h>
+#include <util/config.h>
 #include <cstring>
 #include <fstream>
-#include <replace_symbol.h>
+#include <util/replace_symbol.h>
 #include <sstream>
 
 /*******************************************************************\

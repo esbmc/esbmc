@@ -19,12 +19,12 @@
 #include <boost/shared_ptr.hpp>
 #include <deque>
 #include <iostream>
-#include <irep2.h>
+#include <util/irep2.h>
 #include <list>
 #include <map>
-#include <message.h>
+#include <util/message.h>
 #include <set>
-#include <std_expr.h>
+#include <util/std_expr.h>
 
 class reachability_treet;
 

@@ -21,7 +21,7 @@ Date: June 2003
 
 #include <goto_program.h>
 #include <iostream>
-#include <std_types.h>
+#include <util/std_types.h>
 
 class goto_functiont
 {

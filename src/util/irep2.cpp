@@ -1,7 +1,7 @@
-#include <irep2.h>
-#include <i2string.h>
-#include <migrate.h>
-#include <std_types.h>
+#include <util/irep2.h>
+#include <util/i2string.h>
+#include <util/migrate.h>
+#include <util/std_types.h>
 #include <ac_config.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>
@@ -15,7 +15,7 @@
 #include <boost/python/operators.hpp>
 #include <boost/python/object/find_instance.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
-#include <bp_converter.h>
+#include <util/bp_converter.h>
 
 // Additional python infrastructure: our irep containers don't quite match
 // the pointer ownership model that boost.python expects. Specifically: it

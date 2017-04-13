@@ -12,13 +12,13 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp_typecheck.h>
 #include <cpp_typecheck_resolve.h>
 #include <cpp_util.h>
-#include <arith_tools.h>
-#include <expr_util.h>
-#include <i2string.h>
-#include <prefix.h>
-#include <std_expr.h>
-#include <std_types.h>
-#include <string_constant.h>
+#include <util/arith_tools.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
+#include <util/string_constant.h>
 #include <utility>
 
 /*******************************************************************\

@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_C_TYPECAST_H
 #define CPROVER_C_TYPECAST_H
 
-#include <expr.h>
-#include <namespace.h>
+#include <util/expr.h>
+#include <util/namespace.h>
 
 // try a type cast from expr.type() to type
 //

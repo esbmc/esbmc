@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <xml.h>
+#include <util/xml.h>
 #include <cstdlib>
-#include <i2string.h>
+#include <util/i2string.h>
 
 void xmlt::clear()
 {

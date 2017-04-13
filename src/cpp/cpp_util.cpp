@@ -7,8 +7,8 @@ Author:
 \*******************************************************************/
 
 #include <cpp_util.h>
-#include <expr.h>
-#include <symbol.h>
+#include <util/expr.h>
+#include <util/symbol.h>
 
 /*******************************************************************\
 

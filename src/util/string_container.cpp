@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <string_container.h>
+#include <util/string_container.h>
 #include <cassert>
 #include <cstring>
 #include <iostream>

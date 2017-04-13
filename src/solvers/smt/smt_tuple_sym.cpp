@@ -1,7 +1,7 @@
 #include <smt_conv.h>
 #include <smt_tuple_flat.h>
-#include <base_type.h>
-#include <c_types.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
 #include <sstream>
 
 /** @file smt_tuple.cpp

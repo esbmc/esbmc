@@ -1,5 +1,5 @@
-#include <parseoptions.h>
-#include <cmdline.h>
+#include <util/parseoptions.h>
+#include <util/cmdline.h>
 #include <fstream>
 
 const struct opt_templ esbmc_options[] = {

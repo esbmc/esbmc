@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_LANGUAGE_H
 
 #include <cpp_parse_tree.h>
-#include <language.h>
+#include <util/language.h>
 
 class cpp_languaget:public languaget
 {

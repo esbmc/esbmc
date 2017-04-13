@@ -7,8 +7,8 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <c_typecheck_base.h>
-#include <arith_tools.h>
-#include <expr_util.h>
+#include <util/arith_tools.h>
+#include <util/expr_util.h>
 
 /*******************************************************************\
 

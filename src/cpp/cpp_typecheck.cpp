@@ -12,11 +12,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <expr2cpp.h>
 #include <algorithm>
 #include <ansi-c/c_typecast.h>
-#include <arith_tools.h>
-#include <expr_util.h>
-#include <i2string.h>
-#include <location.h>
-#include <symbol.h>
+#include <util/arith_tools.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/location.h>
+#include <util/symbol.h>
 
 /*******************************************************************\
 

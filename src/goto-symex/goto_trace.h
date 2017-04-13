@@ -15,9 +15,9 @@ Date: July 2005
 #include <goto-programs/goto_program.h>
 #include <goto-symex/symex_target.h>
 #include <iostream>
-#include <irep2.h>
+#include <util/irep2.h>
 #include <map>
-#include <migrate.h>
+#include <util/migrate.h>
 #include <vector>
 
 class goto_trace_stept

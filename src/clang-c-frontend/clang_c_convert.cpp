@@ -10,13 +10,13 @@
 #include <util/bitvector.h>
 #include <clang/AST/Attr.h>
 #include <ansi-c/type2name.h>
-#include <arith_tools.h>
-#include <c_types.h>
-#include <expr_util.h>
-#include <i2string.h>
-#include <mp_arith.h>
-#include <std_code.h>
-#include <std_expr.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/mp_arith.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,

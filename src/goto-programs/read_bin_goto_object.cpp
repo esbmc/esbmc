@@ -10,13 +10,13 @@ Date: June 2006
 
 #include <goto_function_serialization.h>
 #include <goto_program_irep.h>
-#include <irep_serialization.h>
+#include <util/irep_serialization.h>
 #include <read_bin_goto_object.h>
-#include <symbol_serialization.h>
-#include <base_type.h>
+#include <util/symbol_serialization.h>
+#include <util/base_type.h>
 #include <langapi/mode.h>
-#include <message_stream.h>
-#include <namespace.h>
+#include <util/message_stream.h>
+#include <util/namespace.h>
 
 #define BINARY_VERSION 1
 

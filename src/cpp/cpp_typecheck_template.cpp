@@ -12,10 +12,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp_template_type.h>
 #include <cpp_type2name.h>
 #include <cpp_typecheck.h>
-#include <expr_util.h>
-#include <i2string.h>
-#include <simplify_expr.h>
-#include <simplify_expr_class.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/simplify_expr.h>
+#include <util/simplify_expr_class.h>
 
 /*******************************************************************\
 

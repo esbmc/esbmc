@@ -9,7 +9,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef REACHABILITY_TREE_H_
 #define REACHABILITY_TREE_H_
 
-#include <crypto_hash.h>
+#include <util/crypto_hash.h>
 #include <execution_state.h>
 #include <goto_symex.h>
 #include <renaming.h>
@@ -19,8 +19,8 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <goto-programs/goto_program.h>
 #include <iostream>
 #include <map>
-#include <message.h>
-#include <options.h>
+#include <util/message.h>
+#include <util/options.h>
 #include <set>
 
 /**

@@ -7,12 +7,12 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <goto_program_dereference.h>
-#include <base_type.h>
-#include <irep2.h>
-#include <migrate.h>
-#include <prefix.h>
-#include <simplify_expr.h>
-#include <std_code.h>
+#include <util/base_type.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_code.h>
 
 bool goto_program_dereferencet::has_failed_symbol(
   const expr2tc &expr,

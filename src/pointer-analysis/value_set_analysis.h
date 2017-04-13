@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <value_set_domain.h>
 #include <value_sets.h>
 #include <goto-programs/static_analysis.h>
-#include <xml.h>
+#include <util/xml.h>
 
 class value_set_analysist:
   public value_setst,

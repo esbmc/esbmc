@@ -9,11 +9,11 @@
 #include <typecast.h>
 #include <util/bitvector.h>
 #include <ansi-c/c_sizeof.h>
-#include <c_types.h>
-#include <cprover_prefix.h>
-#include <expr_util.h>
-#include <prefix.h>
-#include <std_code.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
 
 void clang_c_adjust::adjust_code(codet& code)
 {

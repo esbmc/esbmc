@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp_declarator_converter.h>
 #include <cpp_type2name.h>
 #include <cpp_typecheck.h>
-#include <c_types.h>
-#include <location.h>
-#include <std_types.h>
+#include <util/c_types.h>
+#include <util/location.h>
+#include <util/std_types.h>
 
 /*******************************************************************\
 

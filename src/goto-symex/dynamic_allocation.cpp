@@ -8,12 +8,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <dynamic_allocation.h>
 #include <goto_symex.h>
-#include <c_types.h>
+#include <util/c_types.h>
 #include <cassert>
-#include <cprover_prefix.h>
-#include <expr_util.h>
-#include <irep2.h>
-#include <std_expr.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/irep2.h>
+#include <util/std_expr.h>
 
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {

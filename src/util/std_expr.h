@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_STD_EXPR_H
 
 #include <cassert>
-#include <expr.h>
+#include <util/expr.h>
 
 class transt:public exprt
 {

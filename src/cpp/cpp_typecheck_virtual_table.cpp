@@ -11,9 +11,9 @@ Purpose:
 \*******************************************************************/
 
 #include <cpp_typecheck.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <std_types.h>
+#include <util/expr_util.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
 
 void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
 {

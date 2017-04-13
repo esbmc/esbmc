@@ -12,7 +12,7 @@
 #include <langapi/languages.h>
 #include <witnesses.h>
 #include <ansi-c/printf_formatter.h>
-#include <arith_tools.h>
+#include <util/arith_tools.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
@@ -21,7 +21,7 @@
 #include <cstring>
 #include <iostream>
 #include <langapi/language_util.h>
-#include <std_types.h>
+#include <util/std_types.h>
 
 extern std::string verification_file;
 

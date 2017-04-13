@@ -12,11 +12,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp_type2name.h>
 #include <cpp_typecheck.h>
 #include <ansi-c/c_qualifiers.h>
-#include <arith_tools.h>
-#include <expr_util.h>
-#include <i2string.h>
-#include <simplify_expr.h>
-#include <simplify_expr_class.h>
+#include <util/arith_tools.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/simplify_expr.h>
+#include <util/simplify_expr_class.h>
 
 /*******************************************************************\
 

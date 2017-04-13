@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_TEMPLATE_ARGS_H
 #define CPROVER_CPP_TEMPLATE_ARGS_H
 
-#include <std_expr.h>
+#include <util/std_expr.h>
 
 // A data structures for template arguments, i.e.,
 // expressions of the form <E1, T2, ...>.

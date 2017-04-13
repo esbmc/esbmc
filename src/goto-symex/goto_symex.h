@@ -13,14 +13,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <symex_target.h>
 #include <boost/shared_ptr.hpp>
 #include <goto-programs/goto_functions.h>
-#include <hash_cont.h>
-#include <i2string.h>
-#include <irep2.h>
+#include <util/hash_cont.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
 #include <map>
-#include <options.h>
+#include <util/options.h>
 #include <pointer-analysis/dereference.h>
 #include <stack>
-#include <std_types.h>
+#include <util/std_types.h>
 
 class reachability_treet; // Forward dec
 class execution_statet; // Forward dec

@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
-#include <migrate.h>
+#include <util/migrate.h>
 
 /*******************************************************************\
 

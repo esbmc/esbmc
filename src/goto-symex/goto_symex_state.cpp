@@ -13,11 +13,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto_symex_state.h>
 #include <reachability_tree.h>
 #include <cassert>
-#include <global.h>
-#include <i2string.h>
-#include <irep2.h>
+#include <util/global.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
 #include <map>
-#include <migrate.h>
+#include <util/migrate.h>
 #include <sstream>
 
 goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,

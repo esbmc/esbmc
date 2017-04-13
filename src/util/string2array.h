@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_STRING2ARRAY_H
 #define CPROVER_STRING2ARRAY_H
 
-#include <expr.h>
+#include <util/expr.h>
 
 void string2array(const exprt &src, exprt &dest);
 

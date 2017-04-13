@@ -11,15 +11,15 @@
 #include <slice.h>
 #include <symex_target_equation.h>
 #include <cassert>
-#include <expr_util.h>
+#include <util/expr_util.h>
 #include <fstream>
 #include <iostream>
-#include <irep2.h>
+#include <util/irep2.h>
 #include <langapi/language_ui.h>
-#include <migrate.h>
-#include <prefix.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
 #include <solvers/smtlib/smtlib_conv.h>
-#include <std_expr.h>
+#include <util/std_expr.h>
 
 void
 goto_symext::symex_goto(const expr2tc &old_guard)

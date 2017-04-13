@@ -9,10 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GUARD_H
 #define CPROVER_GUARD_H
 
-#include <expr.h>
+#include <util/expr.h>
 #include <iostream>
-#include <irep2.h>
-#include <migrate.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
 
 class guardt
 {

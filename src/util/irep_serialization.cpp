@@ -8,8 +8,8 @@ Date: May 2007
  
 \*******************************************************************/
 
-#include <irep_serialization.h>
-#include <string_hash.h>
+#include <util/irep_serialization.h>
+#include <util/string_hash.h>
 #include <sstream>
 
 void irep_serializationt::write_irep(

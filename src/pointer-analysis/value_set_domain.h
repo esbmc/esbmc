@@ -11,8 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <value_set.h>
 #include <goto-programs/static_analysis.h>
-#include <irep2.h>
-#include <migrate.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
 
 class value_set_domaint:public abstract_domain_baset
 {

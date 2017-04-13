@@ -8,8 +8,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <type2name.h>
 #include <cctype>
-#include <i2string.h>
-#include <std_types.h>
+#include <util/i2string.h>
+#include <util/std_types.h>
 
 /*******************************************************************\
 

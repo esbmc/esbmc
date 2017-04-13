@@ -7,13 +7,13 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <pointer_logic.h>
-#include <arith_tools.h>
+#include <util/arith_tools.h>
 #include <cassert>
-#include <config.h>
-#include <i2string.h>
-#include <prefix.h>
-#include <std_expr.h>
-#include <type_byte_size.h>
+#include <util/config.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 /*******************************************************************\
 

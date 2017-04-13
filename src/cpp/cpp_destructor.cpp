@@ -7,8 +7,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <cpp_typecheck.h>
-#include <arith_tools.h>
-#include <c_types.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
 
 /*******************************************************************\
 

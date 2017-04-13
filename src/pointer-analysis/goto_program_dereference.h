@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <dereference.h>
 #include <value_sets.h>
 #include <goto-programs/goto_functions.h>
-#include <namespace.h>
+#include <util/namespace.h>
 
 class goto_program_dereferencet:protected dereference_callbackt
 {

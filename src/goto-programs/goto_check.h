@@ -11,8 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto_functions.h>
 #include <goto_program.h>
-#include <namespace.h>
-#include <options.h>
+#include <util/namespace.h>
+#include <util/options.h>
 
 void goto_check(
   const namespacet &ns,

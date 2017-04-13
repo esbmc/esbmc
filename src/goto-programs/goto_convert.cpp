@@ -10,13 +10,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <destructor.h>
 #include <goto_convert_class.h>
 #include <remove_skip.h>
-#include <arith_tools.h>
-#include <c_types.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
 #include <cassert>
-#include <cprover_prefix.h>
-#include <i2string.h>
-#include <prefix.h>
-#include <std_expr.h>
+#include <util/cprover_prefix.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
 
 //#define DEBUG
 

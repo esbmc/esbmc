@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <renaming.h>
 #include <symex_target_equation.h>
-#include <hash_cont.h>
+#include <util/hash_cont.h>
 
 void slice(symex_target_equationt &equation);
 void simple_slice(symex_target_equationt &equation);

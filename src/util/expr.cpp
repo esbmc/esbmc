@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <expr.h>
-#include <fixedbv.h>
-#include <ieee_float.h>
-#include <mp_arith.h>
+#include <util/expr.h>
+#include <util/fixedbv.h>
+#include <util/ieee_float.h>
+#include <util/mp_arith.h>
 #include <cassert>
 #include <cstdlib>
 

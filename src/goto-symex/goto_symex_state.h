@@ -10,7 +10,7 @@
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
-#include <crypto_hash.h>
+#include <util/crypto_hash.h>
 #include <renaming.h>
 #include <symex_target.h>
 #include <boost/shared_ptr.hpp>
@@ -19,9 +19,9 @@
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_functions.h>
-#include <guard.h>
-#include <i2string.h>
-#include <irep2.h>
+#include <util/guard.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
 #include <pointer-analysis/value_set.h>
 #include <stack>
 #include <string>

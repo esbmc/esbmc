@@ -6,11 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ieee_float.h>
-#include <arith_tools.h>
+#include <util/ieee_float.h>
+#include <util/arith_tools.h>
 #include <cassert>
 #include <limits>
-#include <std_types.h>
+#include <util/std_types.h>
 
 /*******************************************************************\
 

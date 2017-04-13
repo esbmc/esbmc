@@ -7,14 +7,14 @@
  \*******************************************************************/
 
 #include <goto_check.h>
-#include <arith_tools.h>
-#include <array_name.h>
-#include <base_type.h>
-#include <expr_util.h>
-#include <guard.h>
-#include <i2string.h>
-#include <location.h>
-#include <simplify_expr.h>
+#include <util/arith_tools.h>
+#include <util/array_name.h>
+#include <util/base_type.h>
+#include <util/expr_util.h>
+#include <util/guard.h>
+#include <util/i2string.h>
+#include <util/location.h>
+#include <util/simplify_expr.h>
 
 class goto_checkt
 {

@@ -9,11 +9,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <c_link.h>
 #include <expr2c.h>
 #include <fix_symbol.h>
-#include <base_type.h>
-#include <i2string.h>
-#include <location.h>
-#include <namespace.h>
-#include <typecheck.h>
+#include <util/base_type.h>
+#include <util/i2string.h>
+#include <util/location.h>
+#include <util/namespace.h>
+#include <util/typecheck.h>
 
 class c_linkt:public typecheckt
 {

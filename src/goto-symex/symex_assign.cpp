@@ -10,15 +10,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <execution_state.h>
 #include <goto_symex.h>
 #include <boost/shared_ptr.hpp>
-#include <c_types.h>
+#include <util/c_types.h>
 #include <cassert>
-#include <cprover_prefix.h>
-#include <expr_util.h>
-#include <i2string.h>
-#include <irep2.h>
-#include <migrate.h>
-#include <simplify_expr.h>
-#include <std_expr.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/simplify_expr.h>
+#include <util/std_expr.h>
 
 goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
                          const goto_functionst &_goto_functions,

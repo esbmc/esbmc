@@ -10,18 +10,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <c_typecast.h>
 #include <c_typecheck_base.h>
 #include <util/bitvector.h>
-#include <arith_tools.h>
-#include <base_type.h>
-#include <c_types.h>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
 #include <cassert>
-#include <config.h>
-#include <cprover_prefix.h>
-#include <expr_util.h>
-#include <prefix.h>
-#include <simplify_expr.h>
-#include <std_expr.h>
-#include <std_types.h>
-#include <string_constant.h>
+#include <util/config.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
+#include <util/string_constant.h>
 
 /*******************************************************************\
 

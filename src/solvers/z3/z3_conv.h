@@ -15,10 +15,10 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <boost/multi_index_container.hpp>
 #include <cstdint>
 #include <cstring>
-#include <hash_cont.h>
-#include <irep2.h>
+#include <util/hash_cont.h>
+#include <util/irep2.h>
 #include <map>
-#include <namespace.h>
+#include <util/namespace.h>
 #include <set>
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/smt/smt_conv.h>

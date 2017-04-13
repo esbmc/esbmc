@@ -11,10 +11,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi_c_parse_tree.h>
 #include <cassert>
-#include <expr.h>
-#include <hash_cont.h>
-#include <i2string.h>
-#include <string_hash.h>
+#include <util/expr.h>
+#include <util/hash_cont.h>
+#include <util/i2string.h>
+#include <util/string_hash.h>
 #include <util/parser.h>
 
 typedef enum { ANSI_C_UNKNOWN, ANSI_C_SYMBOL, ANSI_C_TYPEDEF,

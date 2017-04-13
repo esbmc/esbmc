@@ -9,11 +9,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp_typecheck.h>
 #include <cpp_util.h>
 #include <ansi-c/c_sizeof.h>
-#include <arith_tools.h>
-#include <c_types.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <std_expr.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/std_expr.h>
+#include <util/std_expr.h>
 #include <util/simplify_expr_class.h>
 
 /*******************************************************************\

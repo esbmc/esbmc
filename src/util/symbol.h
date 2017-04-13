@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_SYMBOL_H
 #define CPROVER_SYMBOL_H
 
-#include <expr.h>
-#include <location.h>
+#include <util/expr.h>
+#include <util/location.h>
 #include <algorithm>
 #include <iostream>
 #include <list>

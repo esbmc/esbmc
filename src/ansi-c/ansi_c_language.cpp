@@ -17,9 +17,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <expr2c.h>
 #include <gcc_builtin_headers.h>
 #include <trans_unit.h>
-#include <config.h>
+#include <util/config.h>
 #include <cstring>
-#include <expr_util.h>
+#include <util/expr_util.h>
 #include <fstream>
 #include <sstream>
 

@@ -6,7 +6,7 @@ AM_YFLAGS = -d -pyycpp
 AM_LFLAGS = --header-file=scanner.hpp -Pyycpp -o scanner.cpp
 
 libcxxscanner_la_SOURCES = scanner.lpp
-libcxxscanner_la_CXXFLAGS = -Wno-error $(ESBMC_CXXFLAGS_WARNINGS) 
+libcxxscanner_la_CXXFLAGS = -Wno-error $(ESBMC_CXXFLAGS_WARNINGS) \
       -I$(top_srcdir)
 
 libcxx_la_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \

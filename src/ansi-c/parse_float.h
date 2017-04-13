@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_ANSI_C_PARSE_FLOAT_H
 #define CPROVER_ANSI_C_PARSE_FLOAT_H
 
-#include <mp_arith.h>
+#include <util/mp_arith.h>
 #include <string>
 
 void parse_float(

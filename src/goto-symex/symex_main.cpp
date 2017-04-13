@@ -13,17 +13,17 @@
 #include <reachability_tree.h>
 #include <symex_target_equation.h>
 #include <boost/shared_ptr.hpp>
-#include <c_types.h>
+#include <util/c_types.h>
 #include <cassert>
-#include <config.h>
-#include <expr_util.h>
+#include <util/config.h>
+#include <util/expr_util.h>
 #include <iostream>
-#include <irep2.h>
-#include <migrate.h>
-#include <prefix.h>
-#include <simplify_expr.h>
-#include <std_expr.h>
-#include <std_expr.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_expr.h>
+#include <util/std_expr.h>
 #include <vector>
 
 void

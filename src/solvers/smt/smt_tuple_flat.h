@@ -1,5 +1,5 @@
 #include <smt_conv.h>
-#include <namespace.h>
+#include <util/namespace.h>
 #include <solvers/smt/array_conv.h>
 
 class tuple_node_smt_ast;

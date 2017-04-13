@@ -12,15 +12,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto_trace.h>
 #include <symex_target.h>
 #include <boost/shared_ptr.hpp>
-#include <config.h>
+#include <util/config.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_program.h>
-#include <irep2.h>
+#include <util/irep2.h>
 #include <list>
 #include <map>
-#include <namespace.h>
+#include <util/namespace.h>
 #include <solvers/smt/smt_conv.h>
 #include <vector>
 

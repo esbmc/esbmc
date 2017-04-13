@@ -16,13 +16,13 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #endif
 
 #include <reachability_tree.h>
-#include <crypto_hash.h>
+#include <util/crypto_hash.h>
 #include <goto_symex.h>
-#include <config.h>
-#include <expr_util.h>
-#include <i2string.h>
-#include <message.h>
-#include <std_expr.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/message.h>
+#include <util/std_expr.h>
 
 reachability_treet::reachability_treet(
     const goto_functionst &goto_functions,

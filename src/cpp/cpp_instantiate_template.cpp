@@ -8,11 +8,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <cpp_type2name.h>
 #include <cpp_typecheck.h>
-#include <arith_tools.h>
-#include <base_type.h>
-#include <c_types.h>
-#include <simplify_expr.h>
-#include <simplify_expr_class.h>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/simplify_expr.h>
+#include <util/simplify_expr_class.h>
 
 /*******************************************************************\
 

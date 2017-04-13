@@ -10,9 +10,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_PROGRAMS_READ_GOTO_BINARY_H
 
 #include <goto_functions.h>
-#include <context.h>
-#include <message.h>
-#include <options.h>
+#include <util/context.h>
+#include <util/message.h>
+#include <util/options.h>
 
 void read_goto_binary(
   std::istream &in,

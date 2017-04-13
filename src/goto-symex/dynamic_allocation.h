@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_DYNAMIC_ALLOCATION_H
 #define CPROVER_DYNAMIC_ALLOCATION_H
 
-#include <irep2.h>
-#include <namespace.h>
+#include <util/irep2.h>
+#include <util/namespace.h>
 
 void default_replace_dynamic_allocation(
   const namespacet &ns,

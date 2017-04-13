@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <options.h>
+#include <util/options.h>
 #include <cstdlib>
-#include <i2string.h>
+#include <util/i2string.h>
 
 void optionst::set_option(const std::string &option,
                           const std::string &value)

@@ -8,14 +8,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto_inline.h>
 #include <remove_skip.h>
-#include <base_type.h>
+#include <util/base_type.h>
 #include <cassert>
-#include <cprover_prefix.h>
-#include <expr_util.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
 #include <langapi/language_util.h>
-#include <prefix.h>
-#include <std_code.h>
-#include <std_expr.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 
 void goto_inlinet::parameter_assignments(
   const locationt &location,

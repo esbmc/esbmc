@@ -29,7 +29,7 @@ Notes:
 #include <z3.h>
 #include <cassert>
 #include <climits>
-#include <config.h>
+#include <util/config.h>
 #include <cstdarg>
 #include <cstdint>
 #include <iostream>

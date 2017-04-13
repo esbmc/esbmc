@@ -1,8 +1,8 @@
 #ifndef _ESBMC_SOLVERS_SOLVE_H_
 #define _ESBMC_SOLVERS_SOLVE_H_
 
-#include <config.h>
-#include <namespace.h>
+#include <util/config.h>
+#include <util/namespace.h>
 #include <solvers/smt/smt_conv.h>
 #include <string>
 

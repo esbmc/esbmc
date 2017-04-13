@@ -11,8 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/c_qualifiers.h>
 #include <ansi-c/c_storage_spec.h>
-#include <c_types.h>
-#include <message_stream.h>
+#include <util/c_types.h>
+#include <util/message_stream.h>
 
 class ansi_c_convert_typet:public message_streamt
 {

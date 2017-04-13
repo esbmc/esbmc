@@ -14,7 +14,7 @@ Date: May 2007
 
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_program_serialization.h>
-#include <irep_serialization.h>
+#include <util/irep_serialization.h>
 
 class goto_function_serializationt {
   private:

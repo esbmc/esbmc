@@ -11,7 +11,7 @@ Author: CM Wintersteiger
 
 #define GOTO_BINARY_VERSION 1
 
-#include <context.h>
+#include <util/context.h>
 #include <goto-programs/goto_functions.h>
 #include <ostream>
 

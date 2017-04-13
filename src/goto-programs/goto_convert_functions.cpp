@@ -10,15 +10,15 @@ Date: June 2003
 
 #include <goto_convert_functions.h>
 #include <goto_inline.h>
-#include <i2string.h>
+#include <util/i2string.h>
 #include <remove_skip.h>
-#include <base_type.h>
-#include <c_types.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
 #include <cassert>
-#include <prefix.h>
-#include <std_code.h>
-#include <std_expr.h>
-#include <type_byte_size.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,

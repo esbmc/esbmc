@@ -17,7 +17,7 @@
 // As a result, this particular class is due some serious maintenence.
 
 #include <smt_conv.h>
-#include <irep2.h>
+#include <util/irep2.h>
 #include <set>
 
 static inline bool

@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp_typecheck.h>
 #include <expr2cpp.h>
 #include <ansi-c/c_qualifiers.h>
-#include <location.h>
+#include <util/location.h>
 
 /*******************************************************************\
 

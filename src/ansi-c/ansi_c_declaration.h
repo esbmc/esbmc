@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ANSI_C_DECLARATION_H
 
 #include <cassert>
-#include <symbol.h>
+#include <util/symbol.h>
 
 class ansi_c_declarationt:public exprt
 {

@@ -11,8 +11,8 @@ Date: May 2007
 #ifndef IREP_SERIALIZATION_H_
 #define IREP_SERIALIZATION_H_
 
-#include <hash_cont.h>
-#include <irep.h>
+#include <util/hash_cont.h>
+#include <util/irep.h>
 #include <map>
 
 void write_long( std::ostream&, unsigned ); 

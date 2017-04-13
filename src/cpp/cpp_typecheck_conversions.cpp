@@ -9,11 +9,11 @@ Author:
 #include <cpp_typecheck.h>
 #include <util/bitvector.h>
 #include <ansi-c/c_qualifiers.h>
-#include <arith_tools.h>
-#include <c_types.h>
-#include <config.h>
-#include <expr_util.h>
-#include <simplify_expr_class.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/simplify_expr_class.h>
 
 /*******************************************************************\
 

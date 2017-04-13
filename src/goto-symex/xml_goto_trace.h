@@ -12,7 +12,7 @@ Date: November 2005
 #define CPROVER_GOTO_SYMEX_XML_GOTO_TRACE_H
 
 #include <goto_trace.h>
-#include <xml.h>
+#include <util/xml.h>
 
 void convert(
   const namespacet &ns,

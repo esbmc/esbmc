@@ -11,10 +11,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi_c_parse_tree.h>
 #include <c_storage_spec.h>
-#include <hash_cont.h>
-#include <message_stream.h>
-#include <std_code.h>
-#include <string_hash.h>
+#include <util/hash_cont.h>
+#include <util/message_stream.h>
+#include <util/std_code.h>
+#include <util/string_hash.h>
 
 bool ansi_c_convert(
   ansi_c_parse_treet &ansi_c_parse_tree,

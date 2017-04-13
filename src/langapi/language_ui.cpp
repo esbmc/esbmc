@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <language_ui.h>
 #include <mode.h>
 #include <fstream>
-#include <i2string.h>
+#include <util/i2string.h>
 #include <memory>
 
 /*******************************************************************\

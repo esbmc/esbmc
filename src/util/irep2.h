@@ -28,13 +28,13 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/static_assert.hpp>
 #include <boost/utility/enable_if.hpp>
-#include <config.h>
-#include <crypto_hash.h>
+#include <util/config.h>
+#include <util/crypto_hash.h>
 #include <cstdarg>
-#include <dstring.h>
-#include <fixedbv.h>
+#include <util/dstring.h>
+#include <util/fixedbv.h>
 #include <functional>
-#include <irep.h>
+#include <util/irep.h>
 #include <vector>
 
 // Ahead of time: a list of all expressions and types, in a preprocessing

@@ -7,18 +7,18 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <c_typecheck_base.h>
-#include <c_types.h>
-#include <arith_tools.h>
-#include <config.h>
-#include <cprover_prefix.h>
-#include <expr_util.h>
-#include <i2string.h>
-#include <prefix.h>
-#include <simplify_expr.h>
-#include <std_types.h>
-#include <std_types.h>
-#include <string2array.h>
-#include <type_eq.h>
+#include <util/c_types.h>
+#include <util/arith_tools.h>
+#include <util/config.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_types.h>
+#include <util/std_types.h>
+#include <util/string2array.h>
+#include <util/type_eq.h>
 
 /*******************************************************************\
 

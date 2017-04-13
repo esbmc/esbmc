@@ -9,12 +9,12 @@
 #include <typecast.h>
 #include <util/bitvector.h>
 #include <ansi-c/c_sizeof.h>
-#include <arith_tools.h>
-#include <c_types.h>
-#include <cprover_prefix.h>
-#include <expr_util.h>
-#include <prefix.h>
-#include <std_code.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context),

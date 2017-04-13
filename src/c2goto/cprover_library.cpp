@@ -19,7 +19,7 @@ extern "C" {
 #include <../ansi-c/ansi_c_language.h>
 #include <../clang-c-frontend/clang_c_language.h>
 #include <cprover_library.h>
-#include <config.h>
+#include <util/config.h>
 #include <cstdint>
 #include <cstdint>
 #include <cstdio>

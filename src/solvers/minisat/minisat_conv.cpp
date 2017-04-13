@@ -1,6 +1,6 @@
 #include <set>
 #include <sstream>
-#include <c_types.h>
+#include <util/c_types.h>
 #include <minisat_conv.h>
 
 smt_convt *

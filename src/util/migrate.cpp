@@ -1,11 +1,11 @@
-#include <migrate.h>
-#include <prefix.h>
-#include <c_types.h>
-#include <config.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/c_types.h>
+#include <util/config.h>
 #include <cstdint>
-#include <namespace.h>
-#include <simplify_expr.h>
-#include <type_byte_size.h>
+#include <util/namespace.h>
+#include <util/simplify_expr.h>
+#include <util/type_byte_size.h>
 
 // File for old irep -> new irep conversions.
 

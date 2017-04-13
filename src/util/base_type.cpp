@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <std_types.h>
-#include <base_type.h>
-#include <union_find.h>
+#include <util/std_types.h>
+#include <util/base_type.h>
+#include <util/union_find.h>
 #include <cassert>
 
 void base_type(type2tc &type, const namespacet &ns)

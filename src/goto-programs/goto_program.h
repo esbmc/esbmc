@@ -13,12 +13,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <cassert>
-#include <irep2.h>
-#include <location.h>
-#include <namespace.h>
+#include <util/irep2.h>
+#include <util/location.h>
+#include <util/namespace.h>
 #include <ostream>
 #include <set>
-#include <std_code.h>
+#include <util/std_code.h>
 
 #define forall_goto_program_instructions(it, program) \
   for(goto_programt::instructionst::const_iterator it=(program).instructions.begin(); \

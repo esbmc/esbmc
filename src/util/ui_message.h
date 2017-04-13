@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_UI_LANGUAGE_H
 
 #include <iostream>
-#include <message.h>
+#include <util/message.h>
 
 class ui_message_handlert:public message_handlert
 {

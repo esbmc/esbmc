@@ -7,9 +7,9 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <value_set_domain.h>
-#include <irep2.h>
-#include <migrate.h>
-#include <std_code.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/std_code.h>
 
 void value_set_domaint::transform(
   const namespacet &ns,

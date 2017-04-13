@@ -6,15 +6,15 @@
  */
 
 #include <ansi-c/c_main.h>
-#include <arith_tools.h>
-#include <c_types.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
 #include <cassert>
-#include <config.h>
-#include <expr_util.h>
-#include <message.h>
-#include <namespace.h>
-#include <std_code.h>
-#include <std_expr.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/message.h>
+#include <util/namespace.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 
 bool clang_main(
   contextt &context,

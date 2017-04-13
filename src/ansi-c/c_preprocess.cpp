@@ -13,13 +13,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #endif
 
 #include <c_preprocess.h>
-#include <config.h>
+#include <util/config.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
-#include <i2string.h>
-#include <message_stream.h>
+#include <util/i2string.h>
+#include <util/message_stream.h>
 
 extern "C" {
 #include <cpp/iface.h>

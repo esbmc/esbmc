@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <expr2cpp.h>
 #include <ansi-c/expr2c.h>
 #include <cassert>
-#include <std_types.h>
-#include <symbol.h>
+#include <util/std_types.h>
+#include <util/symbol.h>
 
 class expr2cppt:public expr2ct
 {

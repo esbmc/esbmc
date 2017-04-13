@@ -12,10 +12,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp_parse_tree.h>
 #include <cpp_token_buffer.h>
 #include <cassert>
-#include <expr.h>
-#include <hash_cont.h>
-#include <parser.h>
-#include <string_hash.h>
+#include <util/expr.h>
+#include <util/hash_cont.h>
+#include <util/parser.h>
+#include <util/string_hash.h>
 
 class cpp_parsert:public parsert
 {

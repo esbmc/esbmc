@@ -8,15 +8,15 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <c_qualifiers.h>
 #include <c_typecast.h>
-#include <c_types.h>
+#include <util/c_types.h>
 #include <type2name.h>
-#include <base_type.h>
+#include <util/base_type.h>
 #include <cassert>
-#include <config.h>
-#include <expr_util.h>
-#include <simplify_expr_class.h>
-#include <std_expr.h>
-#include <string2array.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/simplify_expr_class.h>
+#include <util/std_expr.h>
+#include <util/string2array.h>
 
 /*******************************************************************\
 

@@ -10,9 +10,9 @@
 
 #include <goto_functions.h>
 #include <loopst.h>
-#include <hash_cont.h>
-#include <message_stream.h>
-#include <std_types.h>
+#include <util/hash_cont.h>
+#include <util/message_stream.h>
+#include <util/std_types.h>
 
 class goto_loopst : public message_streamt
 {

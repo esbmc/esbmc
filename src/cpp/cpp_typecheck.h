@@ -21,8 +21,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <list>
 #include <map>
 #include <set>
-#include <std_code.h>
-#include <std_types.h>
+#include <util/std_code.h>
+#include <util/std_types.h>
 
 bool cpp_typecheck(
   cpp_parse_treet &cpp_parse_tree,

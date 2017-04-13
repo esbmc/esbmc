@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto_functions.h>
 #include <iostream>
-#include <irep2.h>
+#include <util/irep2.h>
 #include <map>
 
 // don't use me -- I am just a base class

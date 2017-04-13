@@ -13,11 +13,11 @@ Date: February 2006
 #include <add_race_assertions.h>
 #include <remove_skip.h>
 #include <rw_set.h>
-#include <expr_util.h>
-#include <guard.h>
-#include <hash_cont.h>
+#include <util/expr_util.h>
+#include <util/guard.h>
+#include <util/hash_cont.h>
 #include <pointer-analysis/value_sets.h>
-#include <std_expr.h>
+#include <util/std_expr.h>
 
 class w_guardst
 {

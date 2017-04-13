@@ -1,6 +1,6 @@
 #include <mathsat_conv.h>
-#include <c_types.h>
-#include <expr_util.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
 #include <gmp.h>
 #include <sstream>
 #include <string>

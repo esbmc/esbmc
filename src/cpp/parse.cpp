@@ -29,11 +29,11 @@
 #include <cpp_token_buffer.h>
 #include <tokens.h>
 #include <cassert>
-#include <expr.h>
-#include <i2string.h>
-#include <std_code.h>
-#include <std_expr.h>
-#include <std_types.h>
+#include <util/expr.h>
+#include <util/i2string.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
 
 //#define DEBUG
 

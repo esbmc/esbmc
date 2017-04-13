@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 #define _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 
-#include <irep2.h>
+#include <util/irep2.h>
 #include <list>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple.h>

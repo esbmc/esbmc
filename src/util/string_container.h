@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef STRING_CONTAINER_H
 #define STRING_CONTAINER_H
 
-#include <hash_cont.h>
-#include <string_hash.h>
+#include <util/hash_cont.h>
+#include <util/string_hash.h>
 #include <cassert>
 #include <list>
 #include <vector>

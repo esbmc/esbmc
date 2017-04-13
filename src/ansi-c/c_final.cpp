@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <c_final.h>
 #include <c2goto/cprover_library.h>
-#include <message_stream.h>
+#include <util/message_stream.h>
 
 /*******************************************************************\
 

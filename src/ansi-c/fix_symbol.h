@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <context.h>
-#include <replace_symbol.h>
+#include <util/context.h>
+#include <util/replace_symbol.h>
 
 class fix_symbolt:public replace_symbolt
 {

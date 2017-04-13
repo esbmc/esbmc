@@ -12,7 +12,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp_declaration.h>
 #include <cpp_declarator.h>
 #include <cpp_scope.h>
-#include <symbol.h>
+#include <util/symbol.h>
 
 // converts a cpp_declator plus some
 // additional information stored in the class

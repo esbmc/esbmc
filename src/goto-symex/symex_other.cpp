@@ -8,8 +8,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto_symex.h>
 #include <cassert>
-#include <expr_util.h>
-#include <irep2.h>
+#include <util/expr_util.h>
+#include <util/irep2.h>
 
 void goto_symext::symex_other(void)
 {

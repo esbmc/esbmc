@@ -28,16 +28,16 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/xml_goto_trace.h>
-#include <i2string.h>
-#include <irep2.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
-#include <location.h>
-#include <message_stream.h>
-#include <migrate.h>
+#include <util/location.h>
+#include <util/message_stream.h>
+#include <util/migrate.h>
 #include <sstream>
-#include <time_stopping.h>
+#include <util/time_stopping.h>
 
 /*******************************************************************\
 

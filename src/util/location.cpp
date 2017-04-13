@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <location.h>
+#include <util/location.h>
 #include <iostream>
 
 std::string locationt::as_string() const

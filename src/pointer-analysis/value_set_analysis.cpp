@@ -7,10 +7,10 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <value_set_analysis.h>
-#include <cprover_prefix.h>
+#include <util/cprover_prefix.h>
 #include <langapi/language_util.h>
-#include <prefix.h>
-#include <xml_irep.h>
+#include <util/prefix.h>
+#include <util/xml_irep.h>
 
 void value_set_analysist::initialize(
   const goto_programt &goto_program)

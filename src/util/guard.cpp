@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <std_expr.h>
-#include <guard.h>
+#include <util/std_expr.h>
+#include <util/guard.h>
 
 expr2tc guardt::as_expr() const
 {

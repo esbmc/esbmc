@@ -10,8 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #define CPROVER_MESSAGE_H
 
-#include <global.h>
-#include <location.h>
+#include <util/global.h>
+#include <util/location.h>
 #include <iostream>
 #include <string>
 

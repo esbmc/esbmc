@@ -12,7 +12,7 @@
 #include <ac_config.h>
 #include <boost/property_tree/ptree.hpp>
 #include <fstream>
-#include <irep2.h>
+#include <util/irep2.h>
 #include <langapi/languages.h>
 #include <map>
 #include <witnesses.h>

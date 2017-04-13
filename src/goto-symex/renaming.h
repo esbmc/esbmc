@@ -1,18 +1,18 @@
 #ifndef _GOTO_SYMEX_RENAMING_H_
 #define _GOTO_SYMEX_RENAMING_H_
 
-#include <crypto_hash.h>
+#include <util/crypto_hash.h>
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
 #include <cstdint>
 #include <cstring>
-#include <expr_util.h>
-#include <guard.h>
-#include <i2string.h>
-#include <irep2.h>
+#include <util/expr_util.h>
+#include <util/guard.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
 #include <set>
 #include <stack>
-#include <std_expr.h>
+#include <util/std_expr.h>
 #include <string>
 #include <vector>
 

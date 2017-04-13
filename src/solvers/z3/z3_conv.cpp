@@ -6,24 +6,24 @@
  \*******************************************************************/
 
 #include <z3_conv.h>
-#include <arith_tools.h>
-#include <base_type.h>
-#include <c_types.h>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
 #include <cassert>
 #include <cctype>
-#include <config.h>
-#include <expr_util.h>
-#include <fixedbv.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/fixedbv.h>
 #include <fstream>
-#include <i2string.h>
-#include <irep2.h>
-#include <migrate.h>
-#include <prefix.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
 #include <sstream>
-#include <std_expr.h>
-#include <std_types.h>
-#include <string2array.h>
-#include <type_byte_size.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
+#include <util/string2array.h>
+#include <util/type_byte_size.h>
 
 #ifdef DEBUG
 #define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
