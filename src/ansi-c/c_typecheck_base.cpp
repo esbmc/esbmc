@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/type2name.h>
 #include <util/prefix.h>
 #include <util/std_types.h>
-#include <util/std_types.h>
 
 /*******************************************************************\
 

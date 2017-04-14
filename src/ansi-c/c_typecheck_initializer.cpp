@@ -16,7 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/std_types.h>
-#include <util/std_types.h>
 #include <util/string2array.h>
 #include <util/type_eq.h>
 

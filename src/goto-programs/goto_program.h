@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 /*! \defgroup gr_goto_programs Goto programs */
 
 #include <cassert>
-#include <cassert>
 #include <ostream>
 #include <set>
 #include <util/irep2.h>

@@ -19,7 +19,6 @@ extern "C" {
 #include <ansi-c/c_link.h>
 #include <c2goto/cprover_library.h>
 #include <cstdint>
-#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>

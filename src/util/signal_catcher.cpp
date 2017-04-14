@@ -12,7 +12,6 @@ Date:
 
 #else
 #include <csignal>
-#include <csignal>
 #include <cstdlib>
 #endif
 

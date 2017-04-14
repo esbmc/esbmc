@@ -23,7 +23,6 @@
 #include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
-#include <util/std_expr.h>
 #include <vector>
 
 void

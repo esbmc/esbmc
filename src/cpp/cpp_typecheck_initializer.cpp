@@ -14,7 +14,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/expr_util.h>
 #include <util/simplify_expr_class.h>
 #include <util/std_expr.h>
-#include <util/std_expr.h>
 
 /*******************************************************************\
 
