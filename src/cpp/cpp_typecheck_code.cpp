@@ -6,12 +6,12 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <cpp_convert_type.h>
-#include <cpp_declarator_converter.h>
-#include <cpp_exception_id.h>
-#include <cpp_template_type.h>
-#include <cpp_typecheck.h>
-#include <cpp_util.h>
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_declarator_converter.h>
+#include <cpp/cpp_exception_id.h>
+#include <cpp/cpp_template_type.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/cpp_util.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/location.h>

@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <cpp_token_buffer.h>
-#include <tokens.h>
+#include <cpp/cpp_token_buffer.h>
+#include <cpp/tokens.h>
 #include <cassert>
 
 /*******************************************************************\

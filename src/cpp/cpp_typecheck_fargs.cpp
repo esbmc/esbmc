@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <cpp_typecheck.h>
-#include <cpp_typecheck_fargs.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/cpp_typecheck_fargs.h>
 #include <ansi-c/c_qualifiers.h>
 #include <cassert>
 #include <util/std_types.h>

@@ -6,11 +6,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <cpp_final.h>
-#include <cpp_language.h>
-#include <cpp_parser.h>
-#include <cpp_typecheck.h>
-#include <expr2cpp.h>
+#include <cpp/cpp_final.h>
+#include <cpp/cpp_language.h>
+#include <cpp/cpp_parser.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/expr2cpp.h>
 #include <ansi-c/c_link.h>
 #include <ansi-c/c_main.h>
 #include <ansi-c/c_preprocess.h>

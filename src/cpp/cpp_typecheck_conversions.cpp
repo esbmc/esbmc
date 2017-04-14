@@ -6,7 +6,7 @@ Author:
 
 \*******************************************************************/
 
-#include <cpp_typecheck.h>
+#include <cpp/cpp_typecheck.h>
 #include <util/bitvector.h>
 #include <ansi-c/c_qualifiers.h>
 #include <util/arith_tools.h>

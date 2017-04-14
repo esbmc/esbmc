@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <cpp_typecheck.h>
+#include <cpp/cpp_typecheck.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 

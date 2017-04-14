@@ -6,11 +6,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <cpp_convert_type.h>
-#include <cpp_declarator_converter.h>
-#include <cpp_name.h>
-#include <cpp_type2name.h>
-#include <cpp_typecheck.h>
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_declarator_converter.h>
+#include <cpp/cpp_name.h>
+#include <cpp/cpp_type2name.h>
+#include <cpp/cpp_typecheck.h>
 #include <ansi-c/c_qualifiers.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>

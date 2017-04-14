@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <cpp_scopes.h>
+#include <cpp/cpp_scopes.h>
 #include <util/i2string.h>
 
 /*******************************************************************\

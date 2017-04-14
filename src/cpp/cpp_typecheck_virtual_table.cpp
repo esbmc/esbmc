@@ -10,7 +10,7 @@ Purpose:
 
 \*******************************************************************/
 
-#include <cpp_typecheck.h>
+#include <cpp/cpp_typecheck.h>
 #include <util/expr_util.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>

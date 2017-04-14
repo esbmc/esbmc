@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_SCOPES_H
 #define CPROVER_CPP_SCOPES_H
 
-#include <cpp_scope.h>
+#include <cpp/cpp_scope.h>
 #include <util/hash_cont.h>
 #include <set>
 #include <util/string_hash.h>

@@ -6,7 +6,7 @@ Author:
 
 \*******************************************************************/
 
-#include <cpp_util.h>
+#include <cpp/cpp_util.h>
 #include <util/expr.h>
 #include <util/symbol.h>
 
