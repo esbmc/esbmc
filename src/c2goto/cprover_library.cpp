@@ -16,8 +16,7 @@ extern "C" {
 #endif
 }
 
-#include <../ansi-c/ansi_c_language.h>
-#include <../clang-c-frontend/clang_c_language.h>
+#include <ansi-c/c_link.h>
 #include <c2goto/cprover_library.h>
 #include <util/config.h>
 #include <cstdint>
@@ -145,7 +144,6 @@ void add_cprover_library(
   goto_functionst goto_functions;
   std::multimap<irep_idt, irep_idt> symbol_deps;
   std::list<irep_idt> to_include;
-  ansi_c_languaget ansi_c_language;
   char symname_buffer[288];
   FILE *f;
   uint8_t **this_clib_ptrs;
@@ -260,8 +258,7 @@ void add_cprover_library(
     }
   }
 
-  if (ansi_c_language.merge_context(
-      context, store_ctx, message_handler, "<built-in-library>")) {
+  if (c_link(context, store_ctx, message_handler, "<built-in-library>")) {
     // Merging failed
     std::cerr << "Failed to merge C library" << std::endl;
     abort();
