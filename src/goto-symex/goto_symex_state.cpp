@@ -8,10 +8,10 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <../util/expr_util.h>
-#include <execution_state.h>
-#include <goto_symex.h>
-#include <goto_symex_state.h>
-#include <reachability_tree.h>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/reachability_tree.h>
 #include <cassert>
 #include <util/global.h>
 #include <util/i2string.h>

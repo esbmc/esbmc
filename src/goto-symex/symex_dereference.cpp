@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <goto_symex.h>
+#include <goto-symex/goto_symex.h>
 #include <util/irep2.h>
 #include <langapi/language_util.h>
 #include <util/migrate.h>

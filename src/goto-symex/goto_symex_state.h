@@ -11,8 +11,8 @@
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
 #include <util/crypto_hash.h>
-#include <renaming.h>
-#include <symex_target.h>
+#include <goto-symex/renaming.h>
+#include <goto-symex/symex_target.h>
 #include <boost/shared_ptr.hpp>
 #include <cassert>
 #include <cstdint>

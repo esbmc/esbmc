@@ -8,9 +8,9 @@
 
 \*******************************************************************/
 
-#include <goto_trace.h>
+#include <goto-symex/goto_trace.h>
 #include <langapi/languages.h>
-#include <witnesses.h>
+#include <goto-symex/witnesses.h>
 #include <ansi-c/printf_formatter.h>
 #include <util/arith_tools.h>
 #include <boost/algorithm/string.hpp>

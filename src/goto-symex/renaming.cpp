@@ -1,4 +1,4 @@
-#include <renaming.h>
+#include <goto-symex/renaming.h>
 #include <util/irep2.h>
 #include <langapi/language_util.h>
 #include <util/migrate.h>

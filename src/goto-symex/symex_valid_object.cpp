@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <dynamic_allocation.h>
-#include <goto_symex.h>
+#include <goto-symex/dynamic_allocation.h>
+#include <goto-symex/goto_symex.h>
 #include <util/std_expr.h>
 
 static const expr2tc *get_object(const expr2tc &expr)

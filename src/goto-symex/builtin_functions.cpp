@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <execution_state.h>
-#include <goto_symex.h>
-#include <reachability_tree.h>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/reachability_tree.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>

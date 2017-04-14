@@ -11,12 +11,12 @@
 #include <util/bp_opaque_ptr.h>
 #include <util/bp_converter.h>
 #include <solvers/smt_python.h>
-#include <reachability_tree.h>
-#include <execution_state.h>
-#include <goto_symex.h>
-#include <slice.h>
-#include <goto_trace.h>
-#include <build_goto_trace.h>
+#include <goto-symex/reachability_tree.h>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/slice.h>
+#include <goto-symex/goto_trace.h>
+#include <goto-symex/build_goto_trace.h>
 
 class dummy_renaming_class {};
 

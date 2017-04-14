@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_BASIC_SYMEX_EQUATION_H
 #define CPROVER_BASIC_SYMEX_EQUATION_H
 
-#include <goto_trace.h>
-#include <symex_target.h>
+#include <goto-symex/goto_trace.h>
+#include <goto-symex/symex_target.h>
 #include <boost/shared_ptr.hpp>
 #include <util/config.h>
 #include <cstdint>

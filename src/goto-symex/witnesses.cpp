@@ -15,7 +15,7 @@
 #include <util/irep2.h>
 #include <langapi/languages.h>
 #include <map>
-#include <witnesses.h>
+#include <goto-symex/witnesses.h>
 
 int generate_sha1_hash_for_file(const char * path, std::string & output)
 {

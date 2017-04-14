@@ -7,8 +7,8 @@
 \*******************************************************************/
 
 #include <util/config.h>
-#include <execution_state.h>
-#include <reachability_tree.h>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/reachability_tree.h>
 #include <boost/shared_ptr.hpp>
 #include <util/c_types.h>
 #include <util/expr_util.h>

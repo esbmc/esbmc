@@ -10,10 +10,10 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #define REACHABILITY_TREE_H_
 
 #include <util/crypto_hash.h>
-#include <execution_state.h>
-#include <goto_symex.h>
-#include <renaming.h>
-#include <symex_target_equation.h>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/renaming.h>
+#include <goto-symex/symex_target_equation.h>
 #include <boost/shared_ptr.hpp>
 #include <deque>
 #include <goto-programs/goto_program.h>
