@@ -1,4 +1,4 @@
-#include <clang_c_language.h>
+#include <clang-c-frontend/clang_c_language.h>
 
 struct hooked_header {
   const char *basename;

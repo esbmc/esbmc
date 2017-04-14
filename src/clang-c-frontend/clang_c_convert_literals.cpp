@@ -5,7 +5,7 @@
  *      Author: mramalho
  */
 
-#include <clang_c_convert.h>
+#include <clang-c-frontend/clang_c_convert.h>
 #include <util/bitvector.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>

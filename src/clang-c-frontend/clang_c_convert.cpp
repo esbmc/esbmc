@@ -5,8 +5,8 @@
  *      Author: mramalho
  */
 
-#include <clang_c_convert.h>
-#include <typecast.h>
+#include <clang-c-frontend/clang_c_convert.h>
+#include <clang-c-frontend/typecast.h>
 #include <util/bitvector.h>
 #include <clang/AST/Attr.h>
 #include <ansi-c/type2name.h>

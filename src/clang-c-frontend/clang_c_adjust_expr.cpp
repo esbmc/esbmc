@@ -5,8 +5,8 @@
  *      Author: mramalho
  */
 
-#include <clang_c_adjust.h>
-#include <typecast.h>
+#include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/typecast.h>
 #include <util/bitvector.h>
 #include <ansi-c/c_sizeof.h>
 #include <util/arith_tools.h>
