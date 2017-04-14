@@ -24,7 +24,7 @@ libs_to_link_in = ../cpp/libcxx.la ../goto-symex/libsymex.la \
 
 # Libmain: a library of all the functional stuff in the esbmc directory,
 # aside from functions like main and the build id string.
-libmain_la_SOURCES = parseoptions.cpp bmc.cpp globals.cpp \
+libmain_la_SOURCES = esbmc_parseoptions.cpp bmc.cpp globals.cpp \
                 document_subgoals.cpp  show_vcc.cpp options.cpp
 EXTRA_libmain_la_SOURCES = python.cpp
 
@@ -51,5 +51,5 @@ ltbuildidstring.c: $(libs_to_link_in) $(esbmc_SOURCES) $(libmain_la_SOURCES) pyt
 	$(top_srcdir)/c2goto/headers/flail.sh buildidstring .//buildidobj.txt > $@
 
 esbmcincludedir = $(includedir)/esbmc
-esbmcinclude_HEADERS = bmc.h document_subgoals.h parseoptions.h version.h
+esbmcinclude_HEADERS = bmc.h document_subgoals.h esbmc_parseoptions.h version.h
 

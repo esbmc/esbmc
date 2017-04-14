@@ -16,7 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <langapi/language_ui.h>
 #include <util/options.h>
 #include <util/ui_message.h>
-#include <util/parseoptions.h>
 
 extern const struct opt_templ esbmc_options[];
 

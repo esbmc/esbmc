@@ -24,8 +24,7 @@ extern "C" {
 #endif
 
 #include <esbmc/bmc.h>
-#include <util/parseoptions.h>
-#include <ac_config.h>
+#include <esbmc/esbmc_parseoptions.h>
 #include <ansi-c/c_preprocess.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
@@ -33,7 +32,6 @@ extern "C" {
 #include <csignal>
 #include <cstdlib>
 #include <util/expr_util.h>
-#include <fstream>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
 #include <goto-programs/goto_check.h>
