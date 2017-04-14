@@ -10,9 +10,9 @@ Date: February 2006
 
 \*******************************************************************/
 
-#include <add_race_assertions.h>
-#include <remove_skip.h>
-#include <rw_set.h>
+#include <goto-programs/add_race_assertions.h>
+#include <goto-programs/remove_skip.h>
+#include <goto-programs/rw_set.h>
 #include <util/expr_util.h>
 #include <util/guard.h>
 #include <util/hash_cont.h>

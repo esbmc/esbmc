@@ -8,7 +8,7 @@ Date: February 2006
 
 \*******************************************************************/
 
-#include <rw_set.h>
+#include <goto-programs/rw_set.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
 #include <util/namespace.h>

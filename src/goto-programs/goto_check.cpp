@@ -6,7 +6,7 @@
 
  \*******************************************************************/
 
-#include <goto_check.h>
+#include <goto-programs/goto_check.h>
 #include <util/arith_tools.h>
 #include <util/array_name.h>
 #include <util/base_type.h>

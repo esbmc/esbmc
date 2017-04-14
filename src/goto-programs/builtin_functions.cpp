@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <goto_convert_class.h>
+#include <goto-programs/goto_convert_class.h>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <cassert>

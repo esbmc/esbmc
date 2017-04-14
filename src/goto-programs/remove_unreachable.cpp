@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <remove_unreachable.h>
+#include <goto-programs/remove_unreachable.h>
 #include <set>
 #include <stack>
 

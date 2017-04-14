@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <static_analysis.h>
+#include <goto-programs/static_analysis.h>
 #include <cassert>
 #include <util/expr_util.h>
 #include <memory>

@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <set_claims.h>
+#include <goto-programs/set_claims.h>
 #include <util/i2string.h>
 
 void convert_claims(

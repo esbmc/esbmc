@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <goto_program.h>
+#include <goto-programs/goto_program.h>
 #include <iomanip>
 #include <langapi/language_util.h>
 

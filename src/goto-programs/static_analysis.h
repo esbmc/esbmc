@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAMS_STATIC_ANALYSIS_H
 #define CPROVER_GOTO_PROGRAMS_STATIC_ANALYSIS_H
 
-#include <goto_functions.h>
+#include <goto-programs/goto_functions.h>
 #include <iostream>
 #include <util/irep2.h>
 #include <map>

@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAMS_GOTO_CONVERT_CLASS_H
 #define CPROVER_GOTO_PROGRAMS_GOTO_CONVERT_CLASS_H
 
-#include <goto_program.h>
+#include <goto-programs/goto_program.h>
 #include <util/expr_util.h>
 #include <util/guard.h>
 #include <list>
