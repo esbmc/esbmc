@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <mode.h>
+#include <langapi/mode.h>
 #include <cstring>
 
 const char *extensions_ansi_c  []={ "c", "i", NULL };

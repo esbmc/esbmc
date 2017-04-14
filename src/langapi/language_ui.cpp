@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <language_ui.h>
-#include <mode.h>
+#include <langapi/language_ui.h>
+#include <langapi/mode.h>
 #include <fstream>
 #include <util/i2string.h>
 #include <memory>
