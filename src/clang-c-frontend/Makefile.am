@@ -1,4 +1,4 @@
-SUBDIRS = headers
+SUBDIRS = headers AST
 
 noinst_LTLIBRARIES = libclangcfrontend.la
 
