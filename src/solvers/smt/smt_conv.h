@@ -358,10 +358,10 @@ public:
 };
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
-#include <smt_tuple.h>
+#include <solvers/smt/smt_tuple.h>
 
 // Also, array interface
-#include <smt_array.h>
+#include <solvers/smt/smt_array.h>
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when

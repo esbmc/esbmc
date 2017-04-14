@@ -1,4 +1,4 @@
-#include <array_conv.h>
+#include <solvers/smt/array_conv.h>
 #include <algorithm>
 #include <util/c_types.h>
 #include <set>

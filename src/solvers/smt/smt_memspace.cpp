@@ -1,4 +1,4 @@
-#include <smt_conv.h>
+#include <solvers/smt/smt_conv.h>
 #include <algorithm>
 #include <sstream>
 

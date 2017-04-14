@@ -7,7 +7,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <../util/expr_util.h>
+#include <util/expr_util.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>

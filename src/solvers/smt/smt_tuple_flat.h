@@ -1,4 +1,4 @@
-#include <smt_conv.h>
+#include <solvers/smt/smt_conv.h>
 #include <util/namespace.h>
 #include <solvers/smt/array_conv.h>
 
