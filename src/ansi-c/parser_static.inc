@@ -1,9 +1,9 @@
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
 #include <util/std_expr.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/c_types.h>
 
 #define mto(x, y) (x)->move_to_operands(*(y))
 #define mts(x, y) (x)->move_to_subtypes(*(y))
