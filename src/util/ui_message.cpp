@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <util/ui_message.h>
 #include <fstream>
 #include <util/i2string.h>
+#include <util/ui_message.h>
 #include <util/xml.h>
 #include <util/xml_irep.h>
 

@@ -6,14 +6,14 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <cassert>
 #include <cpp/cpp_convert_type.h>
 #include <cpp/cpp_declaration.h>
 #include <cpp/cpp_name.h>
+#include <iostream>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <cassert>
 #include <util/config.h>
-#include <iostream>
 #include <util/std_types.h>
 
 class cpp_convert_typet

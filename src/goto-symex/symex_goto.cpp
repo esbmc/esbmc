@@ -7,18 +7,18 @@
 
 \*******************************************************************/
 
+#include <cassert>
+#include <fstream>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/symex_target_equation.h>
-#include <cassert>
-#include <util/expr_util.h>
-#include <fstream>
 #include <iostream>
-#include <util/irep2.h>
 #include <langapi/language_ui.h>
+#include <solvers/smtlib/smtlib_conv.h>
+#include <util/expr_util.h>
+#include <util/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
-#include <solvers/smtlib/smtlib_conv.h>
 #include <util/std_expr.h>
 
 void

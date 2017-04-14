@@ -26,15 +26,15 @@ Notes:
 #ifndef __Z3PP_H_
 #define __Z3PP_H_
 
-#include <z3.h>
 #include <cassert>
 #include <climits>
-#include <util/config.h>
 #include <cstdarg>
 #include <cstdint>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <util/config.h>
+#include <z3.h>
 
 /**
    \defgroup cppapi C++ API

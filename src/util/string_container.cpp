@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <util/string_container.h>
 #include <cassert>
 #include <cstring>
 #include <iostream>
+#include <util/string_container.h>
 
 string_containert string_container __attribute__((init_priority(101)));
 

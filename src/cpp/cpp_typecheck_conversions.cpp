@@ -6,10 +6,10 @@ Author:
 
 \*******************************************************************/
 
-#include <cpp/cpp_typecheck.h>
-#include <util/bitvector.h>
 #include <ansi-c/c_qualifiers.h>
+#include <cpp/cpp_typecheck.h>
 #include <util/arith_tools.h>
+#include <util/bitvector.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/expr_util.h>

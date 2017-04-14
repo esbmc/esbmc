@@ -9,10 +9,10 @@ Date: February 2006
 \*******************************************************************/
 
 #include <goto-programs/rw_set.h>
+#include <pointer-analysis/goto_program_dereference.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
 #include <util/namespace.h>
-#include <pointer-analysis/goto_program_dereference.h>
 #include <util/std_expr.h>
 
 void rw_sett::compute(const codet &code)

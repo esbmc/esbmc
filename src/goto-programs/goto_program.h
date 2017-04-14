@@ -13,11 +13,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <cassert>
+#include <ostream>
+#include <set>
 #include <util/irep2.h>
 #include <util/location.h>
 #include <util/namespace.h>
-#include <ostream>
-#include <set>
 #include <util/std_code.h>
 
 #define forall_goto_program_instructions(it, program) \

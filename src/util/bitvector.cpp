@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <util/bitvector.h>
 #include <cstdlib>
+#include <util/bitvector.h>
 
 unsigned bv_width(const typet &type)
 {

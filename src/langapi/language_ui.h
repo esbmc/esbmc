@@ -12,8 +12,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/language.h>
 #include <util/language_file.h>
 #include <util/message.h>
-#include <util/ui_message.h>
 #include <util/parseoptions.h>
+#include <util/ui_message.h>
 
 class language_uit:public messaget
 {

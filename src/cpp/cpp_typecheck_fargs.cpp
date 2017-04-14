@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <cpp/cpp_typecheck.h>
-#include <cpp/cpp_typecheck_fargs.h>
 #include <ansi-c/c_qualifiers.h>
 #include <cassert>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/cpp_typecheck_fargs.h>
 #include <util/std_types.h>
 
 std::ostream &operator<<(std::ostream &out,

@@ -1,13 +1,13 @@
 #ifndef _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 #define _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 
-#include <util/irep2.h>
 #include <list>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple.h>
 #include <solvers/smt/smt_tuple_flat.h>
 #include <string>
 #include <unistd.h>
+#include <util/irep2.h>
 
 class sexpr {
 public:

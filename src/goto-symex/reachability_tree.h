@@ -9,19 +9,19 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef REACHABILITY_TREE_H_
 #define REACHABILITY_TREE_H_
 
-#include <util/crypto_hash.h>
+#include <boost/shared_ptr.hpp>
+#include <deque>
+#include <goto-programs/goto_program.h>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/renaming.h>
 #include <goto-symex/symex_target_equation.h>
-#include <boost/shared_ptr.hpp>
-#include <deque>
-#include <goto-programs/goto_program.h>
 #include <iostream>
 #include <map>
+#include <set>
+#include <util/crypto_hash.h>
 #include <util/message.h>
 #include <util/options.h>
-#include <set>
 
 /**
  *  Class to explore states reachable through threading.

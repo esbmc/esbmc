@@ -17,11 +17,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/expr2c.h>
 #include <ansi-c/gcc_builtin_headers.h>
 #include <ansi-c/trans_unit.h>
-#include <util/config.h>
 #include <cstring>
-#include <util/expr_util.h>
 #include <fstream>
 #include <sstream>
+#include <util/config.h>
+#include <util/expr_util.h>
 
 /*******************************************************************\
 

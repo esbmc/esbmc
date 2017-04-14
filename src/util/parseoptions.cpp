@@ -13,10 +13,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <sysexits.h>
 #endif
 
+#include <iostream>
 #include <util/cmdline.h>
 #include <util/parseoptions.h>
 #include <util/signal_catcher.h>
-#include <iostream>
 
 parseoptions_baset::parseoptions_baset(
   const struct opt_templ *opts, int argc, const char **argv)

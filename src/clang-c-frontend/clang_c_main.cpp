@@ -6,9 +6,9 @@
  */
 
 #include <ansi-c/c_main.h>
+#include <cassert>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <cassert>
 #include <util/config.h>
 #include <util/expr_util.h>
 #include <util/message.h>

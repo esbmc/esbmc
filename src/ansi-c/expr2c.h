@@ -10,10 +10,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_EXPR2C_H
 
 #include <ansi-c/c_qualifiers.h>
-#include <util/expr.h>
 #include <map>
-#include <util/namespace.h>
 #include <set>
+#include <util/expr.h>
+#include <util/namespace.h>
 #include <util/std_code.h>
 
 std::string expr2c(const exprt &expr, const namespacet &ns);

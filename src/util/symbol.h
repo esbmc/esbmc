@@ -9,11 +9,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_SYMBOL_H
 #define CPROVER_SYMBOL_H
 
-#include <util/expr.h>
-#include <util/location.h>
 #include <algorithm>
 #include <iostream>
 #include <list>
+#include <util/expr.h>
+#include <util/location.h>
 
 class symbolt
 {

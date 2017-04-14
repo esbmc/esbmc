@@ -9,10 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef STRING_CONTAINER_H
 #define STRING_CONTAINER_H
 
-#include <util/hash_cont.h>
-#include <util/string_hash.h>
 #include <cassert>
 #include <list>
+#include <util/hash_cont.h>
+#include <util/string_hash.h>
 #include <vector>
 
 struct string_ptrt

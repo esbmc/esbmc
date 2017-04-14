@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <goto-symex/goto_symex.h>
 #include <cassert>
+#include <goto-symex/goto_symex.h>
 #include <util/expr_util.h>
 #include <util/irep2.h>
 

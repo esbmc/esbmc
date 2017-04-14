@@ -1,9 +1,9 @@
-#include <util/migrate.h>
-#include <util/prefix.h>
+#include <cstdint>
 #include <util/c_types.h>
 #include <util/config.h>
-#include <cstdint>
+#include <util/migrate.h>
 #include <util/namespace.h>
+#include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/type_byte_size.h>
 

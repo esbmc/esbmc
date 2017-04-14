@@ -7,10 +7,10 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <goto-symex/goto_symex.h>
-#include <util/irep2.h>
 #include <langapi/language_util.h>
-#include <util/migrate.h>
 #include <pointer-analysis/dereference.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
 
 class symex_dereference_statet:
   public dereference_callbackt

@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <langapi/language_util.h>
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/cprover_prefix.h>
-#include <langapi/language_util.h>
 #include <util/prefix.h>
 #include <util/xml_irep.h>
 

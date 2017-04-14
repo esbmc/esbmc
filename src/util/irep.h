@@ -9,11 +9,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_IREP_H
 #define CPROVER_IREP_H
 
-#include <util/global.h>
 #include <cassert>
 #include <list>
 #include <map>
 #include <string>
+#include <util/global.h>
 #include <vector>
 
 #define USE_DSTRING

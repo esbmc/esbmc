@@ -6,15 +6,15 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <cassert>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target_equation.h>
-#include <cassert>
+#include <langapi/language_util.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/irep2.h>
 #include <util/irep2.h>
-#include <langapi/language_util.h>
 #include <util/migrate.h>
 #include <util/migrate.h>
 #include <util/std_expr.h>

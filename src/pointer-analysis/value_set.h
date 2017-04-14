@@ -11,11 +11,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <pointer-analysis/object_numbering.h>
 #include <pointer-analysis/value_sets.h>
+#include <set>
 #include <util/irep2.h>
 #include <util/mp_arith.h>
 #include <util/namespace.h>
 #include <util/reference_counting.h>
-#include <set>
 #include <util/type_byte_size.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.

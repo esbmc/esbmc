@@ -8,11 +8,11 @@ Author: Daniel Kroening
 
 \*******************************************************************/
 
-#include <goto-symex/xml_goto_trace.h>
 #include <ansi-c/printf_formatter.h>
 #include <cassert>
-#include <util/i2string.h>
+#include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
+#include <util/i2string.h>
 #include <util/xml_irep.h>
 
 void convert(

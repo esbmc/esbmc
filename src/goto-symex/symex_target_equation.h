@@ -9,19 +9,19 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_BASIC_SYMEX_EQUATION_H
 #define CPROVER_BASIC_SYMEX_EQUATION_H
 
-#include <goto-symex/goto_trace.h>
-#include <goto-symex/symex_target.h>
 #include <boost/shared_ptr.hpp>
-#include <util/config.h>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_program.h>
-#include <util/irep2.h>
+#include <goto-symex/goto_trace.h>
+#include <goto-symex/symex_target.h>
 #include <list>
 #include <map>
-#include <util/namespace.h>
 #include <solvers/smt/smt_conv.h>
+#include <util/config.h>
+#include <util/irep2.h>
+#include <util/namespace.h>
 #include <vector>
 
 class symex_target_equationt:public symex_targett

@@ -6,11 +6,11 @@
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
 #include <cstdint>
+#include <solvers/prop/literal.h>
+#include <solvers/prop/pointer_logic.h>
 #include <util/irep2.h>
 #include <util/message.h>
 #include <util/namespace.h>
-#include <solvers/prop/literal.h>
-#include <solvers/prop/pointer_logic.h>
 #include <util/threeval.h>
 #include <util/type_byte_size.h>
 

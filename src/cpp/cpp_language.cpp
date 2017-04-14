@@ -6,20 +6,20 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <ansi-c/c_link.h>
+#include <ansi-c/c_main.h>
+#include <ansi-c/c_preprocess.h>
+#include <ansi-c/gcc_builtin_headers.h>
 #include <cpp/cpp_final.h>
 #include <cpp/cpp_language.h>
 #include <cpp/cpp_parser.h>
 #include <cpp/cpp_typecheck.h>
 #include <cpp/expr2cpp.h>
-#include <ansi-c/c_link.h>
-#include <ansi-c/c_main.h>
-#include <ansi-c/c_preprocess.h>
-#include <ansi-c/gcc_builtin_headers.h>
-#include <util/config.h>
 #include <cstring>
 #include <fstream>
-#include <util/replace_symbol.h>
 #include <sstream>
+#include <util/config.h>
+#include <util/replace_symbol.h>
 
 /*******************************************************************\
 

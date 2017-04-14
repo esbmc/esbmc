@@ -5,12 +5,12 @@
  *      Author: mramalho
  */
 
-#include <clang-c-frontend/clang_c_convert.h>
-#include <clang-c-frontend/typecast.h>
-#include <util/bitvector.h>
 #include <clang/AST/Attr.h>
 #include <ansi-c/type2name.h>
+#include <clang-c-frontend/clang_c_convert.h>
+#include <clang-c-frontend/typecast.h>
 #include <util/arith_tools.h>
+#include <util/bitvector.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>

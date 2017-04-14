@@ -10,12 +10,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_POINTER_ANALYSIS_DEREFERENCE_H
 
 #include <pointer-analysis/value_sets.h>
+#include <set>
 #include <util/expr.h>
 #include <util/guard.h>
 #include <util/hash_cont.h>
 #include <util/namespace.h>
 #include <util/options.h>
-#include <set>
 
 /** @file dereference.h
  *  The dereferencing code's purpose is to take a symbol with pointer type that

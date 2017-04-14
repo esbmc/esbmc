@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GUARD_H
 #define CPROVER_GUARD_H
 
-#include <util/expr.h>
 #include <iostream>
+#include <util/expr.h>
 #include <util/irep2.h>
 #include <util/migrate.h>
 

@@ -6,22 +6,22 @@
 
 \*******************************************************************/
 
-#include <util/config.h>
+#include <boost/shared_ptr.hpp>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/reachability_tree.h>
-#include <boost/shared_ptr.hpp>
-#include <util/c_types.h>
-#include <util/expr_util.h>
-#include <util/i2string.h>
-#include <util/irep2.h>
 #include <langapi/language_ui.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
+#include <sstream>
+#include <string>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
 #include <util/migrate.h>
 #include <util/simplify_expr.h>
-#include <sstream>
 #include <util/std_expr.h>
-#include <string>
 #include <util/string2array.h>
 #include <vector>
 

@@ -7,17 +7,17 @@
 
 \*******************************************************************/
 
+#include <boost/shared_ptr.hpp>
+#include <cassert>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
-#include <boost/shared_ptr.hpp>
+#include <iostream>
 #include <util/c_types.h>
-#include <cassert>
 #include <util/config.h>
 #include <util/expr_util.h>
-#include <iostream>
 #include <util/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>

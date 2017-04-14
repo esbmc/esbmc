@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_NUMBERING_H
 #define CPROVER_NUMBERING_H
 
-#include <util/hash_cont.h>
 #include <cassert>
 #include <map>
+#include <util/hash_cont.h>
 #include <vector>
 
 template <typename T>

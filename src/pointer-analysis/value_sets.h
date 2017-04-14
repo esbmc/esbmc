@@ -10,8 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_POINTER_ANALYSIS_VALUE_SETS_H
 
 #include <goto-programs/goto_program.h>
-#include <util/irep2.h>
 #include <set>
+#include <util/irep2.h>
 
 // an abstract base class
 

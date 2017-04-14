@@ -6,26 +6,26 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <cassert>
+#include <complex>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
 #include <goto-symex/reachability_tree.h>
+#include <iomanip>
+#include <limits>
+#include <sstream>
+#include <string>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
-#include <cassert>
-#include <complex>
 #include <util/cprover_prefix.h>
 #include <util/dcutil.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <iomanip>
 #include <util/irep2.h>
-#include <limits>
 #include <util/migrate.h>
 #include <util/prefix.h>
-#include <sstream>
 #include <util/std_types.h>
-#include <string>
 #include <vector>
 
 expr2tc

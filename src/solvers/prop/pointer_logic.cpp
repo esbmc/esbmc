@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <cassert>
 #include <pointer_logic.h>
 #include <util/arith_tools.h>
-#include <cassert>
 #include <util/config.h>
 #include <util/i2string.h>
 #include <util/prefix.h>

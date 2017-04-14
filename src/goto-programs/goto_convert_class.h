@@ -10,14 +10,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_PROGRAMS_GOTO_CONVERT_CLASS_H
 
 #include <goto-programs/goto_program.h>
+#include <list>
+#include <queue>
+#include <stack>
 #include <util/expr_util.h>
 #include <util/guard.h>
-#include <list>
 #include <util/message_stream.h>
 #include <util/namespace.h>
 #include <util/options.h>
-#include <queue>
-#include <stack>
 #include <util/std_code.h>
 
 class goto_convertt:public message_streamt

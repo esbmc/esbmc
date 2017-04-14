@@ -15,8 +15,8 @@ Date: July 2005
 #include <goto-programs/goto_program.h>
 #include <goto-symex/symex_target.h>
 #include <iostream>
-#include <util/irep2.h>
 #include <map>
+#include <util/irep2.h>
 #include <util/migrate.h>
 #include <vector>
 

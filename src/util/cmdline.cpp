@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <util/cmdline.h>
 #include <cassert>
 #include <cstdlib>
 #include <iostream>
+#include <util/cmdline.h>
 
 std::string verification_file;
 

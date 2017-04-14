@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_TYPECHECK_H
 #define CPROVER_CPP_TYPECHECK_H
 
+#include <ansi-c/c_typecheck_base.h>
+#include <cassert>
 #include <cpp/cpp_member_spec.h>
 #include <cpp/cpp_parse_tree.h>
 #include <cpp/cpp_scopes.h>
@@ -16,8 +18,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_typecheck_resolve.h>
 #include <cpp/cpp_util.h>
 #include <cpp/template_map.h>
-#include <ansi-c/c_typecheck_base.h>
-#include <cassert>
 #include <list>
 #include <map>
 #include <set>

@@ -1,13 +1,13 @@
+#include <iomanip>
+#include <set>
+#include <solvers/prop/literal.h>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple_flat.h>
+#include <sstream>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
-#include <iomanip>
-#include <set>
-#include <solvers/prop/literal.h>
-#include <sstream>
 
 // Helpers extracted from z3_convt.
 

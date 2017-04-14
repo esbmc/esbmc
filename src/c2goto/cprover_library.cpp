@@ -18,7 +18,6 @@ extern "C" {
 
 #include <ansi-c/c_link.h>
 #include <c2goto/cprover_library.h>
-#include <util/config.h>
 #include <cstdint>
 #include <cstdint>
 #include <cstdio>
@@ -27,6 +26,7 @@ extern "C" {
 #include <goto-programs/read_goto_binary.h>
 #include <istream>
 #include <sstream>
+#include <util/config.h>
 
 #ifndef NO_CPROVER_LIBRARY
 

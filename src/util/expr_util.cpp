@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <util/expr_util.h>
 #include <util/bitvector.h>
+#include <util/expr_util.h>
 #include <util/fixedbv.h>
 #include <util/ieee_float.h>
 #include <util/std_expr.h>

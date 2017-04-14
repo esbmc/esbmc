@@ -6,13 +6,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <util/mp_arith.h>
-#include <util/arith_tools.h>
 #include <cassert>
 #include <cctype>
 #include <cstdlib>
 #include <limits>
 #include <sstream>
+#include <util/arith_tools.h>
+#include <util/mp_arith.h>
 
 mp_integer operator>>(const mp_integer &a, const mp_integer &b)
 {

@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_PROPAGATION_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_PROPAGATION_H
 
+#include <goto-programs/static_analysis.h>
 #include <pointer-analysis/value_set_domain.h>
 #include <pointer-analysis/value_sets.h>
-#include <goto-programs/static_analysis.h>
 #include <util/xml.h>
 
 class value_set_analysist:

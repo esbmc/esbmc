@@ -15,10 +15,10 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #undef small // mingw workaround
 #endif
 
-#include <goto-symex/reachability_tree.h>
-#include <util/crypto_hash.h>
 #include <goto-symex/goto_symex.h>
+#include <goto-symex/reachability_tree.h>
 #include <util/config.h>
+#include <util/crypto_hash.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
 #include <util/message.h>

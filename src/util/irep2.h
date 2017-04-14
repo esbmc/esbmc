@@ -28,12 +28,12 @@
 #include <boost/shared_ptr.hpp>
 #include <boost/static_assert.hpp>
 #include <boost/utility/enable_if.hpp>
+#include <cstdarg>
+#include <functional>
 #include <util/config.h>
 #include <util/crypto_hash.h>
-#include <cstdarg>
 #include <util/dstring.h>
 #include <util/fixedbv.h>
-#include <functional>
 #include <util/irep.h>
 #include <vector>
 

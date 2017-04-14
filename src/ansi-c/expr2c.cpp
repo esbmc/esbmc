@@ -8,18 +8,18 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/ansi_c_declaration.h>
 #include <ansi-c/c_typecast.h>
-#include <util/c_types.h>
 #include <ansi-c/expr2c.h>
-#include <util/arith_tools.h>
-#include <util/c_misc.h>
 #include <cassert>
 #include <cctype>
+#include <map>
+#include <set>
+#include <util/arith_tools.h>
+#include <util/c_misc.h>
+#include <util/c_types.h>
 #include <util/config.h>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
-#include <map>
 #include <util/prefix.h>
-#include <set>
 #include <util/std_code.h>
 #include <util/std_types.h>
 

@@ -1,5 +1,5 @@
-#include <solvers/smt/smt_conv.h>
 #include <algorithm>
+#include <solvers/smt/smt_conv.h>
 #include <sstream>
 
 /** @file smt_memspace.cpp

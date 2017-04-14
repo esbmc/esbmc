@@ -1,11 +1,11 @@
-#include <util/irep2.h>
-#include <util/arith_tools.h>
-#include <util/base_type.h>
 #include <boost/static_assert.hpp>
-#include <util/c_types.h>
 #include <climits>
 #include <cstring>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/irep2.h>
 #include <util/type_byte_size.h>
 
 expr2tc

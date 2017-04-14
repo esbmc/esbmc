@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <util/simplify_utils.h>
 #include <algorithm>
+#include <util/simplify_utils.h>
 
 /*******************************************************************\
 

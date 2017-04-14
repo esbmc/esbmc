@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <util/config.h>
 #include <iostream>
+#include <util/config.h>
 #include <util/irep2.h>
 
 configt config;

@@ -9,11 +9,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_SIMPLIFY_EXPR_CLASS_H
 #define CPROVER_SIMPLIFY_EXPR_CLASS_H
 
+#include <map>
+#include <set>
 #include <util/expr.h>
 #include <util/hash_cont.h>
-#include <map>
 #include <util/mp_arith.h>
-#include <set>
 #include <util/std_expr.h>
 #include <util/threeval.h>
 

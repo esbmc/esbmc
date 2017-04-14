@@ -10,21 +10,21 @@
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
-#include <util/crypto_hash.h>
-#include <goto-symex/renaming.h>
-#include <goto-symex/symex_target.h>
 #include <boost/shared_ptr.hpp>
 #include <cassert>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <goto-programs/goto_functions.h>
-#include <util/guard.h>
-#include <util/i2string.h>
-#include <util/irep2.h>
+#include <goto-symex/renaming.h>
+#include <goto-symex/symex_target.h>
 #include <pointer-analysis/value_set.h>
 #include <stack>
 #include <string>
+#include <util/crypto_hash.h>
+#include <util/guard.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
 #include <vector>
 
 class execution_statet; // foward dec

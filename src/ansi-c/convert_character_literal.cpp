@@ -8,9 +8,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/convert_character_literal.h>
 #include <ansi-c/unescape_string.h>
+#include <cassert>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
-#include <cassert>
 #include <util/i2string.h>
 
 /*******************************************************************\

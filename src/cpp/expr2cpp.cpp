@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <cpp/expr2cpp.h>
 #include <ansi-c/expr2c.h>
 #include <cassert>
+#include <cpp/expr2cpp.h>
 #include <util/std_types.h>
 #include <util/symbol.h>
 

@@ -10,8 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #define DBOX_PARSEOPTIONS_H
 
-#include <util/cmdline.h>
 #include <string>
+#include <util/cmdline.h>
 
 class parseoptions_baset
 {

@@ -13,11 +13,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #endif
 
 #include <ansi-c/c_preprocess.h>
-#include <util/config.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <util/config.h>
 #include <util/i2string.h>
 #include <util/message_stream.h>
 

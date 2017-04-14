@@ -10,8 +10,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_SCOPES_H
 
 #include <cpp/cpp_scope.h>
-#include <util/hash_cont.h>
 #include <set>
+#include <util/hash_cont.h>
 #include <util/string_hash.h>
 #include <util/symbol.h>
 

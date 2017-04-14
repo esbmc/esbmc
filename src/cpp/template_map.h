@@ -11,9 +11,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <cpp/cpp_template_args.h>
 #include <cpp/cpp_template_type.h>
-#include <util/expr.h>
 #include <iostream>
 #include <map>
+#include <util/expr.h>
 
 class template_mapt
 {

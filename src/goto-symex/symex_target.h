@@ -10,8 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_SYMEX_SYMEX_TARGET_H
 
 #include <boost/shared_ptr.hpp>
-#include <util/expr.h>
 #include <goto-programs/goto_program.h>
+#include <util/expr.h>
 #include <util/guard.h>
 #include <util/irep2.h>
 #include <util/symbol.h>

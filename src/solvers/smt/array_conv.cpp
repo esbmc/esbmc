@@ -1,7 +1,7 @@
-#include <solvers/smt/array_conv.h>
 #include <algorithm>
-#include <util/c_types.h>
 #include <set>
+#include <solvers/smt/array_conv.h>
+#include <util/c_types.h>
 #include <utility>
 
 static inline bool

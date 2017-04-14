@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <algorithm>
 #include <util/i2string.h>
 #include <util/rename.h>
-#include <algorithm>
 
 void get_new_name(symbolt &symbol, const namespacet &ns)
 {

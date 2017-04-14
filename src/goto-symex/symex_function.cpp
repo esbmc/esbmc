@@ -7,16 +7,16 @@
 
 \*******************************************************************/
 
+#include <cassert>
 #include <goto-symex/execution_state.h>
 #include <goto-symex/goto_symex.h>
+#include <langapi/language_util.h>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/c_types.h>
-#include <cassert>
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
 #include <util/i2string.h>
-#include <langapi/language_util.h>
 #include <util/prefix.h>
 #include <util/std_expr.h>
 

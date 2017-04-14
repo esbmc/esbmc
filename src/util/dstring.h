@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef DSTRING_H
 #define DSTRING_H
 
-#include <util/string_container.h>
 #include <iostream>
+#include <util/string_container.h>
 
 class dstring
 {

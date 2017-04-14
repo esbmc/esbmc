@@ -1,10 +1,10 @@
 // "Standards" workaround
 #define __STDC_FORMAT_MACROS
 
+#include <cinttypes>
 #include <smtlib_conv.h>
 #include <smtlib.hpp>
 #include <smtlib_tok.hpp>
-#include <cinttypes>
 #include <sstream>
 #include <unistd.h>
 

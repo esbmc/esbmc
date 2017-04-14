@@ -1,7 +1,3 @@
-#include <util/irep2.h>
-#include <util/i2string.h>
-#include <util/migrate.h>
-#include <util/std_types.h>
 #include <ac_config.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>
@@ -9,6 +5,10 @@
 #include <cstdarg>
 #include <cstring>
 #include <sstream>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/std_types.h>
 
 #ifdef WITH_PYTHON
 #include <boost/python.hpp>

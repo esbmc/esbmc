@@ -6,11 +6,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <fstream>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
-#include <fstream>
-#include <util/i2string.h>
 #include <memory>
+#include <util/i2string.h>
 
 /*******************************************************************\
 

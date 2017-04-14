@@ -6,21 +6,21 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <algorithm>
+#include <cassert>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
+#include <util/config.h>
 #include <util/expr_util.h>
 #include <util/fixedbv.h>
 #include <util/ieee_float.h>
 #include <util/mp_arith.h>
+#include <util/options.h>
 #include <util/simplify_expr.h>
 #include <util/simplify_expr_class.h>
 #include <util/simplify_utils.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
-#include <algorithm>
-#include <cassert>
-#include <util/config.h>
-#include <util/options.h>
 
 //#define USE_CACHE
 

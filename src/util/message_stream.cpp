@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <util/message_stream.h>
 #include <cstring>
+#include <util/message_stream.h>
 
 void message_streamt::error_parse_line(
   unsigned level,

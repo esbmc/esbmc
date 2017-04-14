@@ -7,10 +7,10 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <ansi-c/ansi_c_convert_type.h>
-#include <util/arith_tools.h>
 #include <cassert>
-#include <util/config.h>
 #include <iostream>
+#include <util/arith_tools.h>
+#include <util/config.h>
 
 /*******************************************************************\
 

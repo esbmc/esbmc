@@ -12,14 +12,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <boost/shared_ptr.hpp>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
-#include <util/hash_cont.h>
 #include <langapi/language_ui.h>
 #include <list>
 #include <map>
-#include <util/options.h>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smtlib/smtlib_conv.h>
 #include <solvers/solve.h>
+#include <util/hash_cont.h>
+#include <util/options.h>
 
 class bmct:public messaget
 {

@@ -12,10 +12,9 @@
 #include <ac_config.h>
 #include <boost/property_tree/ptree.hpp>
 #include <fstream>
-#include <util/irep2.h>
-#include <langapi/languages.h>
-#include <map>
 #include <goto-symex/witnesses.h>
+#include <langapi/languages.h>
+#include <util/irep2.h>
 
 int generate_sha1_hash_for_file(const char * path, std::string & output)
 {
