@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include "clang_c_language.h"
+#include "AST/build_ast.h"
 
 #include <sstream>
 #include <fstream>
@@ -139,7 +140,7 @@ bool clang_c_languaget::parse(
       ++it, ++it1)
     Tool.mapVirtualFile(*it, *it1);
 
-  Tool.buildASTs(ASTs);
+  buildASTs(Tool, ASTs);
 
   // Use diagnostics to find errors, rather than the return code.
   for (const auto &astunit : ASTs) {
