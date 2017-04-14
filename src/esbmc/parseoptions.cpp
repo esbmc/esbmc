@@ -23,7 +23,7 @@ extern "C" {
 }
 #endif
 
-#include <bmc.h>
+#include <esbmc/bmc.h>
 #include <util/parseoptions.h>
 #include <ac_config.h>
 #include <ansi-c/c_preprocess.h>

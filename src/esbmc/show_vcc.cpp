@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <bmc.h>
+#include <esbmc/bmc.h>
 #include <fstream>
 #include <iostream>
 #include <langapi/language_util.h>

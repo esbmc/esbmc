@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <document_subgoals.h>
+#include <esbmc/document_subgoals.h>
 #include <ansi-c/expr2c.h>
 #include <fstream>
 #include <util/i2string.h>

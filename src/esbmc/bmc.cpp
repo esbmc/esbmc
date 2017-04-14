@@ -19,8 +19,8 @@ Authors: Daniel Kroening, kroening@kroening.com
 #undef small
 #endif
 
-#include <bmc.h>
-#include <document_subgoals.h>
+#include <esbmc/bmc.h>
+#include <esbmc/document_subgoals.h>
 #include <ac_config.h>
 #include <fstream>
 #include <goto-symex/build_goto_trace.h>
