@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <goto_program_dereference.h>
+#include <pointer-analysis/goto_program_dereference.h>
 #include <util/base_type.h>
 #include <util/irep2.h>
 #include <util/migrate.h>

@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <dereference.h>
+#include <pointer-analysis/dereference.h>
 #include <ansi-c/c_typecast.h>
 #include <util/arith_tools.h>
 #include <util/array_name.h>
