@@ -2041,6 +2041,7 @@ inline bool is_multi_dimensional_array(const expr2tc &e) {
 class type_poolt {
 public:
   type_poolt(void);
+  type_poolt(bool yolo);
 
   type_poolt &operator=(type_poolt const &ref);
 
