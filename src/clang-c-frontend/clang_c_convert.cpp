@@ -1621,12 +1621,6 @@ bool clang_c_convertert::get_expr(
       break;
     }
 
-    // A NULL statement, we ignore it. An example is a lost semicolon on
-    // the program
-    case clang::Stmt::NullStmtClass:
-      new_expr = code_skipt();
-      break;
-
     // A compound statement is a scope/block
     case clang::Stmt::CompoundStmtClass:
     {
@@ -1981,6 +1975,10 @@ bool clang_c_convertert::get_expr(
       new_expr = ret_expr;
       break;
     }
+
+    // A NULL statement, we ignore it. An example is a lost semicolon on
+    // the program
+    case clang::Stmt::NullStmtClass:
 
     // GCC or MS Assembly instruction. We ignore them
     case clang::Stmt::GCCAsmStmtClass:
