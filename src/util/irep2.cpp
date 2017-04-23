@@ -2860,7 +2860,7 @@ std::string code_goto2t::field_names [esbmct::num_type_fields]  =
 std::string object_descriptor2t::field_names [esbmct::num_type_fields]  =
 { "object", "offset", "alignment", "", ""};
 std::string code_function_call2t::field_names [esbmct::num_type_fields]  =
-{ "return", "function", "operands", "", ""};
+{ "return_sym", "function", "operands", "", ""};
 std::string code_comma2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names [esbmct::num_type_fields]  =
