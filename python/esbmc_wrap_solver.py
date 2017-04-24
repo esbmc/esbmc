@@ -11,6 +11,11 @@ art = esbmc.symex.reachability_tree(po.goto_functions, ns, opts, eq, po.context,
 
 art.setup_for_new_explore()
 result = art.get_next_formula()
+if result.remaining_claims == 0:
+    print('No remaining claims')
+    print("VERIFICATION SUCCESSFUL")
+    sys.exit(0)
+
 esbmc.symex.slice(result.target)
 lolsolve = esbmc.solve.solvers.z3.make(False, ns, opts)
 result.target.convert(lolsolve)
