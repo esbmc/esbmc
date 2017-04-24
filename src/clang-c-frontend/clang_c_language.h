@@ -74,11 +74,12 @@ public:
 
 protected:
   std::string internal_additions();
+
   void add_clang_headers(
     std::vector<std::string> &names,
     std::vector<std::string> &content);
 
-  void build_compiler_string(std::vector<std::string> &compiler_string);
+  std::vector<std::string> get_compiler_args();
 
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 };

@@ -32,24 +32,25 @@ clang_c_languaget::clang_c_languaget()
 {
 }
 
-void clang_c_languaget::build_compiler_string(
-  std::vector<std::string> &compiler_string)
+std::vector<std::string> clang_c_languaget::get_compiler_args()
 {
-  compiler_string.push_back("-I.");
+  std::vector<std::string> compiler_args;
+
+  compiler_args.push_back("-I.");
 
   // Append mode arg
   switch(config.ansi_c.word_size)
   {
     case 16:
-      compiler_string.push_back("-m16");
+      compiler_args.push_back("-m16");
       break;
 
     case 32:
-      compiler_string.push_back("-m32");
+      compiler_args.push_back("-m32");
       break;
 
     case 64:
-      compiler_string.push_back("-m64");
+      compiler_args.push_back("-m64");
       break;
 
     default:
@@ -59,54 +60,56 @@ void clang_c_languaget::build_compiler_string(
   }
 
   if(config.ansi_c.char_is_unsigned)
-    compiler_string.push_back("-funsigned-char");
+    compiler_args.push_back("-funsigned-char");
 
   if(config.options.get_bool_option("deadlock-check"))
   {
-    compiler_string.push_back("-Dpthread_join=pthread_join_switch");
-    compiler_string.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
-    compiler_string.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
-    compiler_string.push_back("-Dpthread_cond_wait=pthread_cond_wait_check");
+    compiler_args.push_back("-Dpthread_join=pthread_join_switch");
+    compiler_args.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
+    compiler_args.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
+    compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {
-    compiler_string.push_back("-Dpthread_join=pthread_join_noswitch");
-    compiler_string.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_nocheck");
-    compiler_string.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_nocheck");
-    compiler_string.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
+    compiler_args.push_back("-Dpthread_join=pthread_join_noswitch");
+    compiler_args.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_nocheck");
+    compiler_args.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_nocheck");
+    compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
   else
   {
-    compiler_string.push_back("-Dpthread_join=pthread_join_noswitch");
-    compiler_string.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_noassert");
-    compiler_string.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_noassert");
-    compiler_string.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
+    compiler_args.push_back("-Dpthread_join=pthread_join_noswitch");
+    compiler_args.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_noassert");
+    compiler_args.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_noassert");
+    compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
   for(auto def : config.ansi_c.defines)
-    compiler_string.push_back("-D" + def);
+    compiler_args.push_back("-D" + def);
 
   for(auto inc : config.ansi_c.include_paths)
-    compiler_string.push_back("-I" + inc);
+    compiler_args.push_back("-I" + inc);
 
   // Ignore ctype defined by the system
-  compiler_string.push_back("-D__NO_CTYPE");
+  compiler_args.push_back("-D__NO_CTYPE");
 
 #ifdef __APPLE__
-  compiler_string.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
-  compiler_string.push_back("-D_SECURE__STRING_H_");
-  compiler_string.push_back("-U__BLOCKS__");
+  compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
+  compiler_args.push_back("-D_SECURE__STRING_H_");
+  compiler_args.push_back("-U__BLOCKS__");
 #endif
 
   // Force clang see all files as .c
   // This forces the preprocessor to be called even in preprocessed files
   // which allow us to perform transformations using -D
-  compiler_string.push_back("-x");
-  compiler_string.push_back("c");
+  compiler_args.push_back("-x");
+  compiler_args.push_back("c");
 
   // Add -Wunknown-attributes, preprocessed files with GCC generate a bunch
   // of __leaf__ attributes that we don't care about
-  compiler_string.push_back("-Wno-unknown-attributes");
+  compiler_args.push_back("-Wno-unknown-attributes");
+
+  return compiler_args;
 }
 
 bool clang_c_languaget::parse(
@@ -120,11 +123,10 @@ bool clang_c_languaget::parse(
     return true;
 
   // Finish the compiler string
-  std::vector<std::string> compiler_string;
-  build_compiler_string(compiler_string);
+  std::vector<std::string> compiler_args = get_compiler_args();
 
   // TODO: Change to JSONCompilationDatabase
-  clang::tooling::FixedCompilationDatabase Compilations("./", compiler_string);
+  clang::tooling::FixedCompilationDatabase Compilations("./", compiler_args);
 
   std::vector<std::string> sources;
   sources.push_back("/esbmc_intrinsics.h");
