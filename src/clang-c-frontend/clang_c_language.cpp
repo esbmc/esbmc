@@ -125,41 +125,31 @@ bool clang_c_languaget::parse(
   // Finish the compiler string
   std::vector<std::string> compiler_args = get_compiler_args();
 
-  // TODO: Change to JSONCompilationDatabase
-  clang::tooling::FixedCompilationDatabase Compilations("./", compiler_args);
-
-  std::vector<std::string> sources;
-  sources.push_back("/esbmc_intrinsics.h");
-  sources.push_back(path);
-
   // Get intrinsics
   std::string intrinsics = internal_additions();
 
   // Get headers
-
   // For some reason clang can't understand the string when we use
   // a vector of pairs strings (name, content)
   std::vector<std::string> clang_headers_name;
   std::vector<std::string> clang_headers_content;
   add_clang_headers(clang_headers_name, clang_headers_content);
 
-  clang::tooling::ClangTool Tool(Compilations, sources);
-  Tool.mapVirtualFile("/esbmc_intrinsics.h", intrinsics);
+  // Generate ASTUnit and add to our vector
+  auto AST =
+    buildASTs(
+      path,
+      intrinsics,
+      compiler_args,
+      clang_headers_name,
+      clang_headers_content);
 
-  for(auto it = clang_headers_name.begin(), it1 = clang_headers_content.begin();
-      (it != clang_headers_name.end()) && (it1 != clang_headers_content.end());
-      ++it, ++it1)
-    Tool.mapVirtualFile(*it, *it1);
-
-  buildASTs(Tool, ASTs);
+  ASTs.push_back(std::move(AST));
 
   // Use diagnostics to find errors, rather than the return code.
-  for (const auto &astunit : ASTs) {
-    if (astunit->getDiagnostics().hasErrorOccurred()) {
-      std::cerr << std::endl;
+  for (const auto &astunit : ASTs)
+    if (astunit->getDiagnostics().hasErrorOccurred())
       return true;
-    }
-  }
 
   return false;
 }
