@@ -31,7 +31,6 @@ languaget *new_clang_c_language()
 clang_c_languaget::clang_c_languaget()
 {
   add_clang_headers();
-  internal_additions();
 }
 
 void clang_c_languaget::build_compiler_string(
@@ -132,6 +131,8 @@ bool clang_c_languaget::parse(
   sources.push_back("/esbmc_intrinsics.h");
   sources.push_back(path);
 
+  std::string intrinsics = internal_additions();
+
   clang::tooling::ClangTool Tool(Compilations, sources);
   Tool.mapVirtualFile("/esbmc_intrinsics.h", intrinsics);
 
@@ -202,9 +203,10 @@ bool clang_c_languaget::final(contextt& context, message_handlert& message_handl
   return clang_main(context, "c::", "c::main", message_handler);
 }
 
-void clang_c_languaget::internal_additions()
+std::string clang_c_languaget::internal_additions()
 {
-  intrinsics +=
+  std::string intrinsics =
+    "# 1 \"<esbmc_intrinsics.h>\" 1\n"
     "__attribute__((used))\n"
     "void __ESBMC_assume(_Bool assumption);\n"
     "__attribute__((used))\n"
@@ -330,6 +332,8 @@ void clang_c_languaget::internal_additions()
     "double __VERIFIER_nondet_double();"
 
     "\n";
+
+  return intrinsics;
 }
 
 bool clang_c_languaget::from_expr(

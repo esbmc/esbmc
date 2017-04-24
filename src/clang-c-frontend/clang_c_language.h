@@ -73,12 +73,11 @@ public:
   clang_c_languaget();
 
 protected:
-  void internal_additions();
+  std::string internal_additions();
   void add_clang_headers();
 
   void build_compiler_string(std::vector<std::string> &compiler_string);
 
-  std::string intrinsics;
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 
   // For some reason clang can't understand the string when we use
