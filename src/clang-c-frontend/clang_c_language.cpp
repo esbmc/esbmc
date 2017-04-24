@@ -30,7 +30,6 @@ languaget *new_clang_c_language()
 
 clang_c_languaget::clang_c_languaget()
 {
-  add_clang_headers();
 }
 
 void clang_c_languaget::build_compiler_string(
@@ -131,7 +130,16 @@ bool clang_c_languaget::parse(
   sources.push_back("/esbmc_intrinsics.h");
   sources.push_back(path);
 
+  // Get intrinsics
   std::string intrinsics = internal_additions();
+
+  // Get headers
+
+  // For some reason clang can't understand the string when we use
+  // a vector of pairs strings (name, content)
+  std::vector<std::string> clang_headers_name;
+  std::vector<std::string> clang_headers_content;
+  add_clang_headers(clang_headers_name, clang_headers_content);
 
   clang::tooling::ClangTool Tool(Compilations, sources);
   Tool.mapVirtualFile("/esbmc_intrinsics.h", intrinsics);
