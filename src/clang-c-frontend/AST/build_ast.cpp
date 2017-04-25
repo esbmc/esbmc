@@ -6,6 +6,7 @@
  */
 
 #include "build_ast.h"
+#include "esbmc_action.h"
 
 #include <clang/Driver/Compilation.h>
 #include <clang/Driver/Driver.h>
@@ -15,8 +16,10 @@
 #include <clang/Frontend/CompilerInvocation.h>
 #include <clang/Frontend/FrontendActions.h>
 #include <clang/Frontend/TextDiagnosticPrinter.h>
+#include "clang/Lex/PreprocessorOptions.h"
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Option/ArgList.h>
+#include "llvm/Support/Path.h"
 
 std::unique_ptr<clang::ASTUnit> buildASTs(
   std::string intrinsics,
@@ -91,12 +94,23 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   std::unique_ptr<clang::CompilerInvocation> Invocation(
     clang::tooling::newInvocation(Diagnostics, *CC1Args));
 
+  // Show the invocation, with -v.
+  if (Invocation->getHeaderSearchOpts().Verbose) {
+    llvm::errs() << "clang Invocation:\n";
+    Compilation->getJobs().Print(llvm::errs(), "\n", true);
+    llvm::errs() << "\n";
+  }
+
+  // Create our custom action
+  auto action = new esbmc_action(intrinsics);
+
+  // Create ASTUnit
   std::unique_ptr<clang::ASTUnit> unit(
     clang::ASTUnit::LoadFromCompilerInvocationAction(
       std::move(Invocation),
       std::make_shared<clang::PCHContainerOperations>(),
       Diagnostics,
-      new clang::SyntaxOnlyAction));
+      action));
   assert(unit);
 
   return std::move(unit);
