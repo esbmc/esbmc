@@ -16,9 +16,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/c_link.h>
 
-#include <clang/Tooling/CommonOptionsParser.h>
-#include <clang/Tooling/Tooling.h>
-
 #include "clang_c_adjust.h"
 #include "clang_c_convert.h"
 #include "clang_c_main.h"
@@ -109,6 +106,9 @@ std::vector<std::string> clang_c_languaget::get_compiler_args()
   // of __leaf__ attributes that we don't care about
   compiler_args.push_back("-Wno-unknown-attributes");
 
+  // Option to avoid creating a linking command
+  compiler_args.push_back("-fsyntax-only");
+
   return compiler_args;
 }
 
@@ -122,8 +122,9 @@ bool clang_c_languaget::parse(
   if(preprocess(path, o_preprocessed, message_handler))
     return true;
 
-  // Finish the compiler string
+  // Generate the compiler arguments and add the file path
   std::vector<std::string> compiler_args = get_compiler_args();
+  compiler_args.push_back(path);
 
   // Get intrinsics
   std::string intrinsics = internal_additions();
@@ -138,7 +139,6 @@ bool clang_c_languaget::parse(
   // Generate ASTUnit and add to our vector
   auto AST =
     buildASTs(
-      path,
       intrinsics,
       compiler_args,
       clang_headers_name,

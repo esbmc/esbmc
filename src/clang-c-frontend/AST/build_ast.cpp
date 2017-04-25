@@ -10,7 +10,6 @@
 #include <clang/Frontend/ASTUnit.h>
 
 std::unique_ptr<clang::ASTUnit> buildASTs(
-  std::string path,
   std::string intrinsics,
   std::vector<std::string> compiler_args,
   std::vector<std::string> clang_headers_name,

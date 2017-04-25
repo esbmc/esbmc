@@ -8,8 +8,8 @@
 #ifndef CLANG_C_FRONTEND_AST_BUILD_AST_H_
 #define CLANG_C_FRONTEND_AST_BUILD_AST_H_
 
-#include <vector>
 #include <memory>
+#include <vector>
 
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -20,7 +20,6 @@ namespace clang {
 }
 
 std::unique_ptr<clang::ASTUnit> buildASTs(
-  std::string path,
   std::string intrinsics,
   std::vector<std::string> compiler_args,
   std::vector<std::string> clang_headers_name,
