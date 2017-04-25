@@ -21,8 +21,7 @@
 std::unique_ptr<clang::ASTUnit> buildASTs(
   std::string intrinsics,
   std::vector<std::string> compiler_args,
-  std::vector<std::string> clang_headers_name,
-  std::vector<std::string> clang_headers_content)
+  std::unordered_map<std::string, std::string> clang_headers)
 {
   // Create virtual file system to add clang's headers
   llvm::IntrusiveRefCntPtr<clang::vfs::OverlayFileSystem> OverlayFileSystem(
@@ -31,11 +30,18 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   llvm::IntrusiveRefCntPtr<clang::vfs::InMemoryFileSystem> InMemoryFileSystem(
     new clang::vfs::InMemoryFileSystem);
 
+  // Add clang's headers
+  for(auto it : clang_headers)
+    InMemoryFileSystem->addFile(
+      it.first, 0, llvm::MemoryBuffer::getMemBuffer(it.second));
+
   OverlayFileSystem->pushOverlay(InMemoryFileSystem);
 
   llvm::IntrusiveRefCntPtr<clang::FileManager> Files(
     new clang::FileManager(clang::FileSystemOptions(), OverlayFileSystem));
 
+  // Create everything needed to create a CompilerInvocation,
+  // copied from ToolInvocation::run
   llvm::IntrusiveRefCntPtr<clang::DiagnosticOptions> DiagOpts =
     new clang::DiagnosticOptions();
 
@@ -74,7 +80,6 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   // Since the input might only be virtual, don't check whether it exists.
   Driver->setCheckInputsExist(false);
-
   const std::unique_ptr<clang::driver::Compilation> Compilation(
     Driver->BuildCompilation(llvm::makeArrayRef(Argv)));
 

@@ -373,13 +373,12 @@ extern "C" {
   };
 }
 
-void clang_c_languaget::add_clang_headers(
-  std::vector<std::string> &names,
-  std::vector<std::string> &content)
+std::unordered_map<std::string, std::string> clang_c_languaget::add_clang_headers()
 {
+  std::unordered_map<std::string, std::string> headers;
+
   for (struct hooked_header *h = &clang_headers[0]; h->basename != nullptr; h++)
-  {
-    names.emplace_back(h->basename);
-    content.emplace_back(h->textstart, *h->textsize);
-  }
+    headers[std::string(h->basename)] = std::string(h->textstart, *h->textsize);
+
+  return headers;
 }

@@ -32,6 +32,7 @@ clang_c_languaget::clang_c_languaget()
 std::vector<std::string> clang_c_languaget::get_compiler_args()
 {
   std::vector<std::string> compiler_args;
+  compiler_args.push_back("clang-tool");
 
   compiler_args.push_back("-I.");
 
@@ -130,19 +131,14 @@ bool clang_c_languaget::parse(
   std::string intrinsics = internal_additions();
 
   // Get headers
-  // For some reason clang can't understand the string when we use
-  // a vector of pairs strings (name, content)
-  std::vector<std::string> clang_headers_name;
-  std::vector<std::string> clang_headers_content;
-  add_clang_headers(clang_headers_name, clang_headers_content);
+  auto clang_headers = add_clang_headers();
 
   // Generate ASTUnit and add to our vector
   auto AST =
     buildASTs(
       intrinsics,
       compiler_args,
-      clang_headers_name,
-      clang_headers_content);
+      clang_headers);
 
   ASTs.push_back(std::move(AST));
 

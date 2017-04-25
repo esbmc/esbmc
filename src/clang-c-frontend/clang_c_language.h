@@ -74,11 +74,7 @@ public:
 
 protected:
   std::string internal_additions();
-
-  void add_clang_headers(
-    std::vector<std::string> &names,
-    std::vector<std::string> &content);
-
+  std::unordered_map<std::string, std::string> add_clang_headers();
   std::vector<std::string> get_compiler_args();
 
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
