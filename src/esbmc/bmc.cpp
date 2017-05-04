@@ -238,7 +238,7 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
      || options.get_bool_option("smt-formula-only"))
   {
     smt_conv.dump_smt();
-    if(options.get_bool_option("smt-formula-only")) return smt_convt::P_ERROR;
+    if(options.get_bool_option("smt-formula-only")) return smt_convt::P_SMTLIB;
   }
 
   std::stringstream ss;
