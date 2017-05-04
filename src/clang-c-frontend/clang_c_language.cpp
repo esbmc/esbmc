@@ -207,19 +207,15 @@ std::string clang_c_languaget::internal_additions()
 {
   std::string intrinsics =
     "# 1 \"<esbmc_intrinsics.h>\" 1\n"
-    "__attribute__((used))\n"
     "void __ESBMC_assume(_Bool assumption);\n"
-    "__attribute__((used))\n"
     "void assert(_Bool assertion);\n"
-    "__attribute__((used))\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
-    "__attribute__((used))\n"
     "_Bool __ESBMC_same_object(const void *, const void *);\n"
+    "void __ESBMC_atomic_begin();\n"
+    "void __ESBMC_atomic_end();\n"
 
     // pointers
-    "__attribute__((used))\n"
     "unsigned __ESBMC_POINTER_OBJECT(const void *p);\n"
-    "__attribute__((used))\n"
     "signed __ESBMC_POINTER_OFFSET(const void *p);\n"
 
     // malloc
@@ -240,35 +236,22 @@ std::string clang_c_languaget::internal_additions()
     "unsigned long __ESBMC_alloc_size[1];\n"
 
     // float stuff
-    "__attribute__((used))\n"
     "_Bool __ESBMC_isnan(double f);\n"
-    "__attribute__((used))\n"
     "_Bool __ESBMC_isfinite(double f);\n"
-    "__attribute__((used))\n"
     "_Bool __ESBMC_isinf(double f);\n"
-    "__attribute__((used))\n"
     "_Bool __ESBMC_isnormal(double f);\n"
-    "__attribute__((used))\n"
     "int __ESBMC_rounding_mode = 0;\n"
 
     // absolute value
-    "__attribute__((used))\n"
     "int __ESBMC_abs(int x);\n"
-    "__attribute__((used))\n"
     "long int __ESBMC_labs(long int x);\n"
-    "__attribute__((used))\n"
     "double __ESBMC_fabs(double x);\n"
-    "__attribute__((used))\n"
     "long double __ESBMC_fabsl(long double x);\n"
-    "__attribute__((used))\n"
     "float __ESBMC_fabsf(float x);\n"
 
     // Digital controllers code
-    "__attribute__((used))\n"
     "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
-    "__attribute__((used))\n"
     "void __ESBMC_generate_delta_coefficients(float a[], double out[], float delta);\n"
-    "__attribute__((used))\n"
     "_Bool __ESBMC_check_delta_stability(double dc[], double sample_time, int iwidth, int precision);\n"
 
     // Forward decs for pthread main thread begin/end hooks. Because they're
@@ -293,7 +276,7 @@ std::string clang_c_languaget::internal_additions()
     "float nondet_float();\n"
     "double nondet_double();"
 
-    // And again, for TACAS VERIFIER versions,
+    // TACAS definitions,
     "int __VERIFIER_nondet_int();\n"
     "unsigned int __VERIFIER_nondet_uint();\n"
     "long __VERIFIER_nondet_long();\n"
@@ -306,6 +289,11 @@ std::string clang_c_languaget::internal_additions()
     "_Bool __VERIFIER_nondet_bool();\n"
     "float __VERIFIER_nondet_float();\n"
     "double __VERIFIER_nondet_double();"
+
+    "void __VERIFIER_error();\n"
+    "void __VERIFIER_assume(int);\n"
+    "void __VERIFIER_atomic_begin();\n"
+    "void __VERIFIER_atomic_end();\n"
 
     "\n";
 
