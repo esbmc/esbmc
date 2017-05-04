@@ -27,11 +27,11 @@ languaget *new_clang_c_language()
 
 clang_c_languaget::clang_c_languaget()
 {
+  build_compiler_args();
 }
 
-std::vector<std::string> clang_c_languaget::get_compiler_args()
+void clang_c_languaget::build_compiler_args()
 {
-  std::vector<std::string> compiler_args;
   compiler_args.push_back("clang-tool");
 
   compiler_args.push_back("-I.");
@@ -109,8 +109,6 @@ std::vector<std::string> clang_c_languaget::get_compiler_args()
 
   // Option to avoid creating a linking command
   compiler_args.push_back("-fsyntax-only");
-
-  return compiler_args;
 }
 
 bool clang_c_languaget::parse(
@@ -123,9 +121,9 @@ bool clang_c_languaget::parse(
   if(preprocess(path, o_preprocessed, message_handler))
     return true;
 
-  // Generate the compiler arguments and add the file path
-  std::vector<std::string> compiler_args = get_compiler_args();
-  compiler_args.push_back(path);
+  // Get compiler arguments and add the file path
+  std::vector<std::string> new_compiler_args(compiler_args);
+  new_compiler_args.push_back(path);
 
   // Get intrinsics
   std::string intrinsics = internal_additions();
@@ -137,7 +135,7 @@ bool clang_c_languaget::parse(
   auto AST =
     buildASTs(
       intrinsics,
-      compiler_args,
+      new_compiler_args,
       clang_headers);
 
   ASTs.push_back(std::move(AST));

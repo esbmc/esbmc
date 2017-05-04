@@ -75,8 +75,10 @@ public:
 protected:
   std::string internal_additions();
   std::unordered_map<std::string, std::string> add_clang_headers();
-  std::vector<std::string> get_compiler_args();
 
+  void build_compiler_args();
+
+  std::vector<std::string> compiler_args;
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
 };
 
