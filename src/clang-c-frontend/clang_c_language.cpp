@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "AST/build_ast.h"
 
 #include <sstream>
-#include <fstream>
+#include <boost/filesystem.hpp>
 
 #include <c2goto/cprover_library.h>
 #include <ansi-c/c_preprocess.h>
@@ -27,6 +27,14 @@ languaget *new_clang_c_language()
 
 clang_c_languaget::clang_c_languaget()
 {
+  // Create a temporary directory, to dump clang's headers
+  auto p = boost::filesystem::temp_directory_path();
+  if(!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
+  {
+    std::cerr << "Can't create directory to dump clang's headers" << std::endl;
+    abort();
+  }
+
   build_compiler_args();
 }
 
