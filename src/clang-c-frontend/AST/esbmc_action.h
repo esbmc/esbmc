@@ -21,9 +21,9 @@ class esbmc_action : public clang::ASTFrontendAction
 public:
   esbmc_action(std::string esbmc_instrinsics) : intrinsics(esbmc_instrinsics) {};
 
-  bool handleBeginSource(
+  bool BeginSourceFileAction(
     clang::CompilerInstance &CI,
-    llvm::StringRef Filename)
+    llvm::StringRef Filename) override
   {
     clang::Preprocessor &PP = CI.getPreprocessor();
 
