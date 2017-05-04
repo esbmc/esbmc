@@ -701,6 +701,22 @@ void goto_convertt::convert_decl(
       // Update symbol
       to_array_type(s->type).size() = size;
     }
+    else if(size.is_symbol())
+    {
+      // Replace the size by a new variable, to avoid wrong results
+      // when the symbol used to create the VLA is changed
+      size = symbol_expr(new_tmp_symbol(size.type()));
+
+      codet assignment("assign");
+      assignment.reserve_operands(2);
+      assignment.copy_to_operands(size);
+      assignment.copy_to_operands(to_array_type(s->type).size());
+      assignment.location() = code.location();
+      copy(assignment, ASSIGN, dest);
+
+      // Update symbol
+      to_array_type(s->type).size() = size;
+    }
   }
 
   if(new_code.operands().size() == 1)
