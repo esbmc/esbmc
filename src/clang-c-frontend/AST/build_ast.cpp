@@ -23,8 +23,7 @@
 
 std::unique_ptr<clang::ASTUnit> buildASTs(
   std::string intrinsics,
-  std::vector<std::string> compiler_args,
-  std::unordered_map<std::string, std::string> clang_headers)
+  std::vector<std::string> compiler_args)
 {
   // Create virtual file system to add clang's headers
   llvm::IntrusiveRefCntPtr<clang::vfs::OverlayFileSystem> OverlayFileSystem(
@@ -32,12 +31,6 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   llvm::IntrusiveRefCntPtr<clang::vfs::InMemoryFileSystem> InMemoryFileSystem(
     new clang::vfs::InMemoryFileSystem);
-
-  // Add clang's headers
-  for(auto it : clang_headers)
-    InMemoryFileSystem->addFile(
-      it.first, 0, llvm::MemoryBuffer::getMemBuffer(it.second));
-
   OverlayFileSystem->pushOverlay(InMemoryFileSystem);
 
   llvm::IntrusiveRefCntPtr<clang::FileManager> Files(

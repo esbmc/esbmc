@@ -132,11 +132,7 @@ bool clang_c_languaget::parse(
   auto clang_headers = add_clang_headers();
 
   // Generate ASTUnit and add to our vector
-  auto AST =
-    buildASTs(
-      intrinsics,
-      new_compiler_args,
-      clang_headers);
+  auto AST = buildASTs(intrinsics, new_compiler_args);
 
   ASTs.push_back(std::move(AST));
 

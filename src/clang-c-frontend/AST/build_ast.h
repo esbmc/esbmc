@@ -22,7 +22,6 @@ namespace clang {
 
 std::unique_ptr<clang::ASTUnit> buildASTs(
   std::string intrinsics,
-  std::vector<std::string> compiler_args,
-  std::unordered_map<std::string, std::string> clang_headers);
+  std::vector<std::string> compiler_args);
 
 #endif /* CLANG_C_FRONTEND_AST_BUILD_AST_H_ */
