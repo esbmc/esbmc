@@ -36,14 +36,18 @@ clang_c_languaget::clang_c_languaget()
     abort();
   }
 
-  build_compiler_args();
+  // Build the compile arguments
+  build_compiler_args(p.string());
+
+  // Dump clang headers on the temporary folder
+  dump_clang_headers(p.string());
 }
 
-void clang_c_languaget::build_compiler_args()
+void clang_c_languaget::build_compiler_args(std::string tmp_dir)
 {
   compiler_args.push_back("clang-tool");
 
-  compiler_args.push_back("-I.");
+  compiler_args.push_back("-I" + tmp_dir);
 
   // Append mode arg
   switch(config.ansi_c.word_size)
@@ -136,9 +140,6 @@ bool clang_c_languaget::parse(
 
   // Get intrinsics
   std::string intrinsics = internal_additions();
-
-  // Get headers
-  auto clang_headers = add_clang_headers();
 
   // Generate ASTUnit and add to our vector
   auto AST = buildASTs(intrinsics, new_compiler_args);

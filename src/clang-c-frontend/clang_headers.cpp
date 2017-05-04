@@ -1,4 +1,5 @@
 #include "clang_c_language.h"
+#include <fstream>
 
 struct hooked_header {
   const char *basename;
@@ -373,12 +374,13 @@ extern "C" {
   };
 }
 
-std::unordered_map<std::string, std::string> clang_c_languaget::add_clang_headers()
+void clang_c_languaget::dump_clang_headers(std::string tmp_dir)
 {
-  std::unordered_map<std::string, std::string> headers;
-
   for (struct hooked_header *h = &clang_headers[0]; h->basename != nullptr; h++)
-    headers[std::string(h->basename)] = std::string(h->textstart, *h->textsize);
-
-  return headers;
+  {
+    std::ofstream header;
+    header.open(tmp_dir + "/" + std::string(h->basename));
+    header << std::string(h->textstart, *h->textsize);
+    header.close();
+  }
 }
