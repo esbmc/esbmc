@@ -19,11 +19,9 @@ Date: June 2003
   for(goto_functionst::function_mapt::const_iterator it=(functions).function_map.begin(); \
       it!=(functions).function_map.end(); it++)
 
+#include <goto-programs/goto_program.h>
 #include <iostream>
-
-#include <std_types.h>
-
-#include "goto_program.h"
+#include <util/std_types.h>
 
 class goto_functiont
 {

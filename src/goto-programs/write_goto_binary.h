@@ -11,10 +11,9 @@ Author: CM Wintersteiger
 
 #define GOTO_BINARY_VERSION 1
 
-#include <ostream>
-
-#include <context.h>
 #include <goto-programs/goto_functions.h>
+#include <ostream>
+#include <util/context.h>
 
 bool write_goto_binary(
   std::ostream &out,

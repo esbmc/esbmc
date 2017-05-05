@@ -19,12 +19,9 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 */
 
 #include <cstdint>
-
-#include <irep2.h>
-
+#include <esbmc/esbmc_parseoptions.h>
 #include <langapi/mode.h>
-
-#include "parseoptions.h"
+#include <util/irep2.h>
 
 /*******************************************************************\
 

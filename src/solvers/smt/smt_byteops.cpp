@@ -1,4 +1,4 @@
-#include "smt_conv.h"
+#include <solvers/smt/smt_conv.h>
 
 smt_astt
 smt_convt::convert_byte_extract(const expr2tc &expr)

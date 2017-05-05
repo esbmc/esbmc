@@ -1,7 +1,6 @@
-#include "smt_conv.h"
-#include <namespace.h>
-
 #include <solvers/smt/array_conv.h>
+#include <solvers/smt/smt_conv.h>
+#include <util/namespace.h>
 
 class tuple_node_smt_ast;
 class tuple_sym_smt_ast;

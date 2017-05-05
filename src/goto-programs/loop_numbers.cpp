@@ -6,11 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <xml.h>
-#include <xml_irep.h>
-#include <i2string.h>
-
-#include "loop_numbers.h"
+#include <goto-programs/loop_numbers.h>
+#include <util/i2string.h>
+#include <util/xml.h>
+#include <util/xml_irep.h>
 
 void show_loop_numbers(
   ui_message_handlert::uit ui,

@@ -6,31 +6,27 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <sstream>
-
-#include <irep2.h>
-#include <migrate.h>
-
 #include <cassert>
-
-#include <expr_util.h>
-#include <i2string.h>
-#include <arith_tools.h>
-#include <cprover_prefix.h>
-#include <std_types.h>
-#include <base_type.h>
-#include <c_types.h>
-#include <dcutil.h>
-
-#include "goto_symex.h"
-#include "execution_state.h"
-#include "reachability_tree.h"
-
+#include <complex>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/reachability_tree.h>
 #include <iomanip>
 #include <limits>
+#include <sstream>
 #include <string>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/dcutil.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/std_types.h>
 #include <vector>
-#include <complex>
 
 expr2tc
 goto_symext::symex_malloc(
@@ -336,25 +332,28 @@ void goto_symext::symex_printf(
 
   const expr2tc &format = *new_rhs->get_sub_expr(0);
 
-  if (is_address_of2t(format)) {
+  if (is_address_of2t(format))
+  {
     const address_of2t &addrof = to_address_of2t(format);
-    if (is_index2t(addrof.ptr_obj)) {
+    if (is_index2t(addrof.ptr_obj))
+    {
       const index2t &idx = to_index2t(addrof.ptr_obj);
-      if (is_constant_string2t(idx.source_value) &&
-          is_constant_int2t(idx.index) &&
-          to_constant_int2t(idx.index).as_ulong() == 0) {
+      if(is_constant_string2t(idx.source_value)
+         && is_constant_int2t(idx.index)
+         && to_constant_int2t(idx.index).as_ulong() == 0)
+      {
         const std::string &fmt =
           to_constant_string2t(idx.source_value).value.as_string();
 
         std::list<expr2tc> args;
-        new_rhs->foreach_operand([this, &args] (const expr2tc &e) {
-          expr2tc tmp = e;
-          do_simplify(tmp);
-          args.push_back(tmp);
-          }
-        );
+        new_rhs->foreach_operand([this, &args] (const expr2tc &e)
+          {
+            expr2tc tmp = e;
+            do_simplify(tmp);
+            args.push_back(tmp);
+          });
 
-        target->output(cur_state->guard.as_expr(), cur_state->source, fmt,args);
+        target->output(cur_state->guard.as_expr(), cur_state->source, fmt, args);
       }
     }
   }
@@ -710,8 +709,46 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
 
 void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
 {
-  (void) lhs;
-  (void) code;
-  std::cerr << "Sorry, no support for va_args\n";
-  abort();
+  // Get symbol
+  expr2tc symbol = code.operand;
+  assert(is_symbol2t(symbol));
+
+  // to allow constant propagation
+  cur_state->rename(symbol);
+  do_simplify(symbol);
+
+  expr2tc next_symbol = symbol;
+  if(is_typecast2t(next_symbol))
+    next_symbol = to_typecast2t(symbol).from;
+
+  if(is_address_of2t(next_symbol))
+    next_symbol = to_address_of2t(next_symbol).ptr_obj;
+
+  assert(is_symbol2t(next_symbol));
+  irep_idt id = to_symbol2t(next_symbol).thename;
+  std::string base = id2string(cur_state->top().function_identifier) + "::va_arg";
+
+  id = base + std::to_string(cur_state->top().va_index++);
+
+  expr2tc va_rhs;
+
+  const symbolt *s = new_context.find_symbol(id);
+  if(s != nullptr)
+  {
+    type2tc symbol_type;
+    migrate_type(s->type, symbol_type);
+
+    va_rhs = symbol2tc(
+      symbol_type, s->name, symbol2t::level1, 0, 0,
+      cur_state->top().level1.thread_id, 0);
+
+    va_rhs = address_of2tc(symbol_type, va_rhs);
+    va_rhs = typecast2tc(lhs->type, va_rhs);
+  }
+  else
+  {
+    migrate_expr(gen_zero(migrate_type_back(lhs->type)), va_rhs);
+  }
+
+  symex_assign(code_assign2tc(lhs, va_rhs));
 }

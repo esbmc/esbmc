@@ -6,10 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <cstring>
 #include <cassert>
-
-#include "namespace.h"
+#include <cstring>
+#include <util/namespace.h>
 
 unsigned get_max(const std::string &prefix, const contextt *context)
 {

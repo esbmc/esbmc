@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_ANSI_C_EXPR_H
 #define CPROVER_ANSI_C_EXPR_H
 
-#include <expr.h>
+#include <util/expr.h>
 
 class string_constantt:public exprt
 {

@@ -1,5 +1,5 @@
-#include <langapi/mode.h>
 #include <esbmc/version.h>
+#include <langapi/mode.h>
 
 const mode_table_et mode_table[] =
 {

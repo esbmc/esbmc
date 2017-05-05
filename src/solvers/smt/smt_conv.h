@@ -1,22 +1,18 @@
 #ifndef _ESBMC_PROP_SMT_SMT_CONV_H_
 #define _ESBMC_PROP_SMT_SMT_CONV_H_
 
-#include <cstdint>
-
-#include <irep2.h>
-#include <message.h>
-#include <namespace.h>
-#include <threeval.h>
-
-#include <util/type_byte_size.h>
-
-#include <solvers/prop/pointer_logic.h>
-#include <solvers/prop/literal.h>
-
-#include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index_container.hpp>
+#include <cstdint>
+#include <solvers/prop/literal.h>
+#include <solvers/prop/pointer_logic.h>
+#include <util/irep2.h>
+#include <util/message.h>
+#include <util/namespace.h>
+#include <util/threeval.h>
+#include <util/type_byte_size.h>
 
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
@@ -362,9 +358,10 @@ public:
 };
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
-#include "smt_tuple.h"
+#include <solvers/smt/smt_tuple.h>
+
 // Also, array interface
-#include "smt_array.h"
+#include <solvers/smt/smt_array.h>
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when

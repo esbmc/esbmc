@@ -7,18 +7,15 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
-#include <prefix.h>
-#include <cprover_prefix.h>
-#include <base_type.h>
-#include <std_code.h>
-#include <std_expr.h>
-#include <expr_util.h>
-
+#include <goto-programs/goto_inline.h>
+#include <goto-programs/remove_skip.h>
 #include <langapi/language_util.h>
-
-#include "remove_skip.h"
-#include "goto_inline.h"
+#include <util/base_type.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 
 void goto_inlinet::parameter_assignments(
   const locationt &location,
@@ -67,10 +64,9 @@ void goto_inlinet::parameter_assignments(
       migrate_expr(tmp, decl->code);
       decl->location=location;
       decl->function=location.get_function();
-      decl->local_variables=local_variables;
     }
 
-    local_variables.insert(identifier);
+    local_variables.push_front(identifier);
 
     // nil means "don't assign"
     if(it1->is_nil())
@@ -128,7 +124,6 @@ void goto_inlinet::parameter_assignments(
       dest.add_instruction(ASSIGN);
       dest.instructions.back().location=location;
       migrate_expr(assignment, dest.instructions.back().code);
-      dest.instructions.back().local_variables=local_variables;
       dest.instructions.back().function=location.get_function();
     }
 
@@ -169,9 +164,7 @@ void goto_inlinet::replace_return(
 
         migrate_expr(code_assign, assignment->code);
         assignment->location=it->location;
-        assignment->local_variables=it->local_variables;
         assignment->function=it->location.get_function();
-
 
         assert(constrain.is_nil()); // bp_constrain gumpf reomved
 
@@ -189,7 +182,6 @@ void goto_inlinet::replace_return(
         expression->make_other();
         expression->location=it->location;
         expression->function=it->location.get_function();
-        expression->local_variables=it->local_variables;
         const code_return2t &ret = to_code_return2t(it->code);
         expression->code = code_expression2tc(ret.operand);
 
@@ -286,11 +278,6 @@ void goto_inlinet::expand_function_call(
     parameter_assignments(tmp2.instructions.front().location, f.type, arguments, tmp);
     tmp.destructive_append(tmp2);
 
-    // set local variables
-    Forall_goto_program_instructions(it, tmp)
-      it->local_variables.insert(target->local_variables.begin(),
-                                 target->local_variables.end());
-
     if(f.type.hide())
     {
       const locationt &new_location=function.find_location();
@@ -344,7 +331,6 @@ void goto_inlinet::expand_function_call(
       t->make_other();
       t->location=target->location;
       t->function=target->location.get_function();
-      t->local_variables=target->local_variables;
       expr2tc tmp_expr;
       migrate_expr(*it, tmp_expr);
       t->code = code_expression2tc(tmp_expr);
@@ -363,7 +349,6 @@ void goto_inlinet::expand_function_call(
       goto_programt::targett t=tmp.add_instruction(ASSIGN);
       t->location=target->location;
       t->function=target->location.get_function();
-      t->local_variables=target->local_variables;
       migrate_expr(code, t->code);
     }
 

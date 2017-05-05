@@ -5,10 +5,9 @@
 // string-based internal representation to the newer typed representation.
 // There's a full mapping in both directions.
 
-#include "irep2.h"
-
-#include "std_expr.h"
-#include "std_types.h"
+#include <util/irep2.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
 
 // Don't ask
 class namespacet;

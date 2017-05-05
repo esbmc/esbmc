@@ -8,7 +8,7 @@
 #ifndef GOTO_PROGRAMS_LOOPST_H_
 #define GOTO_PROGRAMS_LOOPST_H_
 
-#include "goto_functions.h"
+#include <goto-programs/goto_functions.h>
 
 class loopst
 {

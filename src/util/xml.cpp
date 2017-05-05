@@ -7,10 +7,8 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cstdlib>
-
-#include <i2string.h>
-
-#include "xml.h"
+#include <util/i2string.h>
+#include <util/xml.h>
 
 void xmlt::clear()
 {

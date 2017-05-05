@@ -6,15 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-//#include <assert.h>
-
-#include <prefix.h>
-#include <cprover_prefix.h>
-#include <xml_irep.h>
-
 #include <langapi/language_util.h>
-
-#include "value_set_analysis.h"
+#include <pointer-analysis/value_set_analysis.h>
+#include <util/cprover_prefix.h>
+#include <util/prefix.h>
+#include <util/xml_irep.h>
 
 void value_set_analysist::initialize(
   const goto_programt &goto_program)
@@ -49,22 +45,18 @@ void value_set_analysist::add_vars(
       i_it++)
   {
     value_sett &v=*(*this)[i_it].value_set;
-
     v.add_vars(globals);
 
-    for(goto_programt::local_variablest::const_iterator
-        l_it=i_it->local_variables.begin();
-        l_it!=i_it->local_variables.end();
-        l_it++)
+    for(auto l_it : goto_program.local_variables)
     {
       // cache hit?
-      entry_cachet::const_iterator e_it=entry_cache.find(*l_it);
+      entry_cachet::const_iterator e_it = entry_cache.find(l_it);
 
-      if(e_it==entry_cache.end())
+      if(e_it == entry_cache.end())
       {
-        const symbolt &symbol=ns.lookup(*l_it);
+        const symbolt &symbol = ns.lookup(l_it);
 
-        std::list<value_sett::entryt> &entries=entry_cache[*l_it];
+        std::list<value_sett::entryt> &entries = entry_cache[l_it];
         get_entries(symbol, entries);
         v.add_vars(entries);
       }
@@ -89,8 +81,7 @@ void value_set_analysist::get_entries_rec(
 {
   const typet &t=ns.follow(type);
 
-  if(t.id()=="struct" ||
-     t.id()=="union")
+  if(t.id()=="struct" || t.id()=="union")
   {
     const struct_typet &struct_type=to_struct_type(t);
 
@@ -129,18 +120,15 @@ void value_set_analysist::add_vars(
       f_it=goto_functions.function_map.begin();
       f_it!=goto_functions.function_map.end();
       f_it++)
+
     forall_goto_program_instructions(i_it, f_it->second.body)
     {
       value_sett &v=*(*this)[i_it].value_set;
-
       v.add_vars(globals);
 
-      for(goto_programt::local_variablest::const_iterator
-          l_it=i_it->local_variables.begin();
-          l_it!=i_it->local_variables.end();
-          l_it++)
+      for(auto l_it : f_it->second.body.local_variables)
       {
-        const symbolt &symbol=ns.lookup(*l_it);
+        const symbolt &symbol=ns.lookup(l_it);
 
         std::list<value_sett::entryt> entries;
         get_entries(symbol, entries);

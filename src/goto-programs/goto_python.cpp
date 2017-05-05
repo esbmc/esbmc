@@ -1,9 +1,7 @@
 #ifdef WITH_PYTHON
 
 #include <sstream>
-
-#include "goto_functions.h"
-
+#include <goto-programs/goto_functions.h>
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
 #include <boost/python.hpp>

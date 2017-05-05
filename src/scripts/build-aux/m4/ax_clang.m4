@@ -119,7 +119,7 @@ AC_DEFUN([AX_CLANG],
     fi
 
     dnl Look for clang libs
-    clanglibs="Tooling Driver Frontend Parse Serialization Sema Analysis Edit Lex AST Basic"
+    clanglibs="Tooling Frontend Parse Sema Edit Analysis AST Lex Basic Driver Serialization"
     for lib in $clanglibs ; do
         AC_MSG_CHECKING(if we can find libclang$lib.$lib_ext)
         if ls "$clang_libs_path/libclang$lib"* >/dev/null 2>&1 ; then

@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_CPP_CLASS_TYPE_H
 #define CPROVER_CPP_CLASS_TYPE_H
 
-#include <std_types.h>
+#include <util/std_types.h>
 
 // used for C++ structs and classes
 

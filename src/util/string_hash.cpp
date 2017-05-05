@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "string_hash.h"
+#include <util/string_hash.h>
 
 size_t hash_string(const std::string &s)
 {

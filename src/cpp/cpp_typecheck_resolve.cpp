@@ -6,22 +6,20 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_template_type.h>
+#include <cpp/cpp_type2name.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/cpp_typecheck_resolve.h>
+#include <cpp/cpp_util.h>
+#include <util/arith_tools.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
+#include <util/string_constant.h>
 #include <utility>
-
-#include <expr_util.h>
-#include <std_types.h>
-#include <std_expr.h>
-#include <i2string.h>
-#include <arith_tools.h>
-#include <prefix.h>
-#include <string_constant.h>
-
-#include "cpp_typecheck.h"
-#include "cpp_typecheck_resolve.h"
-#include "cpp_template_type.h"
-#include "cpp_type2name.h"
-#include "cpp_util.h"
-#include "cpp_convert_type.h"
 
 /*******************************************************************\
 

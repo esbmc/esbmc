@@ -1,9 +1,7 @@
 #include <set>
 #include <sstream>
-
-#include <c_types.h>
-
-#include "minisat_conv.h"
+#include <util/c_types.h>
+#include <minisat_conv.h>
 
 smt_convt *
 create_new_minisat_solver(bool int_encoding, const namespacet &ns,

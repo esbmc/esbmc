@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "dstring.h"
+#include <util/dstring.h>
 
 #ifdef WITH_PYTHON
 #include <boost/python/class.hpp>

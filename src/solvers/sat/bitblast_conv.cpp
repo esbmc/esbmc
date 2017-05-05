@@ -1,6 +1,5 @@
 #include <set>
-
-#include "bitblast_conv.h"
+#include <bitblast_conv.h>
 
 bitblast_convt::bitblast_convt(bool int_encoding, const namespacet &_ns,
     sat_iface *_sat_api)

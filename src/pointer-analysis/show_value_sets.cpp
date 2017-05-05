@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "show_value_sets.h"
+#include <pointer-analysis/show_value_sets.h>
 
 void show_value_sets(
   ui_message_handlert::uit ui,

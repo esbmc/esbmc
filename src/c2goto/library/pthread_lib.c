@@ -3,6 +3,10 @@
 #include "../headers/pthreadtypes.hs"
 #include "intrinsics.h"
 
+typedef void *(*__ESBMC_thread_start_func_type)(void *);
+void __ESBMC_terminate_thread(void);
+unsigned int __ESBMC_spawn_thread(void (*)(void));
+
 struct __pthread_start_data {
   __ESBMC_thread_start_func_type func;
   void *start_arg;
@@ -95,23 +99,20 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
   void *arg)
 {
   __ESBMC_HIDE:;
-  unsigned int thread_id;
-  struct __pthread_start_data startdata = {
-    start_routine, arg
-  };
+  struct __pthread_start_data startdata = { start_routine, arg };
 
   __ESBMC_atomic_begin();
-  thread_id = __ESBMC_spawn_thread(pthread_trampoline);
+  pthread_t threadid = __ESBMC_spawn_thread(pthread_trampoline);
   __ESBMC_num_total_threads++;
   __ESBMC_num_threads_running++;
-  __ESBMC_pthread_thread_running[thread_id] = 1;
-  __ESBMC_pthread_thread_ended[thread_id] = 0;
-  __ESBMC_pthread_end_values[thread_id] = NULL;
-  __ESBMC_set_thread_internal_data(thread_id, startdata);
+  __ESBMC_pthread_thread_running[threadid] = 1;
+  __ESBMC_pthread_thread_ended[threadid] = 0;
+  __ESBMC_pthread_end_values[threadid] = NULL;
+  __ESBMC_set_thread_internal_data(threadid, startdata);
 
   // pthread_t is actually an unsigned long int; identify a thread using just
   // its thread number.
-  *thread = thread_id;
+  *thread = threadid;
 
   __ESBMC_atomic_end();
   return 0; // We never fail

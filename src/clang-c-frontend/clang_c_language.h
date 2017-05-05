@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 #define CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 
-#include <language.h>
+#include <util/language.h>
 
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
@@ -73,18 +73,13 @@ public:
   clang_c_languaget();
 
 protected:
-  void internal_additions();
-  void add_clang_headers();
+  std::string internal_additions();
 
-  void build_compiler_string(std::vector<std::string> &compiler_string);
+  void dump_clang_headers(std::string tmp_dir);
+  void build_compiler_args(std::string tmp_dir);
 
-  std::string intrinsics;
+  std::vector<std::string> compiler_args;
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;
-
-  // For some reason clang can't understand the string when we use
-  // a vector of pairs strings (name, content)
-  std::vector<std::string> clang_headers_name;
-  std::vector<std::string> clang_headers_content;
 };
 
 languaget *new_clang_c_language();

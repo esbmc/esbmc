@@ -9,23 +9,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
-#include <irep2.h>
-
-#include <map>
-#include <stack>
-#include <std_types.h>
-#include <i2string.h>
-#include <hash_cont.h>
-#include <options.h>
-
 #include <boost/shared_ptr.hpp>
-
 #include <goto-programs/goto_functions.h>
-
+#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/symex_target.h>
+#include <map>
 #include <pointer-analysis/dereference.h>
-
-#include "goto_symex_state.h"
-#include "symex_target.h"
+#include <stack>
+#include <util/hash_cont.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/options.h>
+#include <util/std_types.h>
 
 class reachability_treet; // Forward dec
 class execution_statet; // Forward dec
@@ -341,8 +336,10 @@ protected:
    *  variables of the function being called.
    *  @param function_type type containing argument types of func call.
    *  @param arguments The arguments to assign to function arg variables.
+   *  @return the va_index for this function, if any, otherwise UINT_MAX
    */
-  void argument_assignments(
+  unsigned int argument_assignments(
+    const irep_idt &function_identifier,
     const code_type2t &function_type,
     const std::vector<expr2tc> &arguments);
 

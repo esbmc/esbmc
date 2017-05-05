@@ -1,10 +1,8 @@
-#include <irep2.h>
-#include <migrate.h>
-#include <prefix.h>
-
+#include <goto-symex/renaming.h>
 #include <langapi/language_util.h>
-
-#include "renaming.h"
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
 
 unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 {

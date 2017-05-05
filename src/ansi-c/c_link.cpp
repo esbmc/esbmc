@@ -6,15 +6,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <location.h>
-#include <namespace.h>
-#include <typecheck.h>
-#include <base_type.h>
-#include <i2string.h>
-
-#include "expr2c.h"
-#include "c_link.h"
-#include "fix_symbol.h"
+#include <ansi-c/c_link.h>
+#include <ansi-c/expr2c.h>
+#include <ansi-c/fix_symbol.h>
+#include <util/base_type.h>
+#include <util/i2string.h>
+#include <util/location.h>
+#include <util/namespace.h>
+#include <util/typecheck.h>
 
 class c_linkt:public typecheckt
 {

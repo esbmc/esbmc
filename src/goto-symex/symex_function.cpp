@@ -8,20 +8,17 @@
 \*******************************************************************/
 
 #include <cassert>
-
-#include <expr_util.h>
-#include <i2string.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <arith_tools.h>
-#include <base_type.h>
-#include <std_expr.h>
-#include <c_types.h>
-
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
 #include <langapi/language_util.h>
-
-#include "goto_symex.h"
-#include "execution_state.h"
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
 
 bool
 goto_symext::get_unwind_recursion(
@@ -48,8 +45,9 @@ goto_symext::get_unwind_recursion(
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
-void
+unsigned
 goto_symext::argument_assignments(
+  const irep_idt &function_identifier,
   const code_type2t &function_type,
   const std::vector<expr2tc> &arguments)
 {
@@ -61,11 +59,12 @@ goto_symext::argument_assignments(
 
   // iterates over the types of the arguments
   unsigned int name_idx = 0;
-  for (std::vector<type2tc>::const_iterator it2 = argument_types.begin();
-       it2 != argument_types.end(); it2++, name_idx++)
+  for(std::vector<type2tc>::const_iterator it2 = argument_types.begin();
+      it2 != argument_types.end(); it2++, name_idx++)
   {
     // if you run out of actual arguments there was a mismatch
-    if (it1 == arguments.end()) {
+    if(it1 == arguments.end())
+    {
       std::cerr << "function call: not enough arguments" << std::endl;
       abort();
     }
@@ -73,43 +72,52 @@ goto_symext::argument_assignments(
     const type2tc &arg_type = *it2;
     const irep_idt &identifier = function_type.argument_names[name_idx];
 
-    if (identifier == "") {
+    if(identifier == "")
+    {
       std::cerr << "no identifier for function argument" << std::endl;
       abort();
     }
 
-    const symbolt &symbol = ns.lookup(identifier);
-    exprt tmp_lhs = symbol_expr(symbol);
+    const symbolt *symbol = ns.get_context().find_symbol(identifier);
+    assert(symbol != nullptr);
+
+    exprt tmp_lhs = symbol_expr(*symbol);
     expr2tc lhs;
     migrate_expr(tmp_lhs, lhs);
 
-    if (is_nil_expr(*it1)) {
+    if(is_nil_expr(*it1))
+    {
       ; // XXX jmorse, is this valid?
-    } else {
+    }
+    else
+    {
       expr2tc rhs = *it1;
 
       // it should be the same exact type
-      if (!base_type_eq(arg_type, rhs->type, ns)) {
-	const type2tc &f_arg_type = arg_type;
-	const type2tc &f_rhs_type = rhs->type;
+      if(!base_type_eq(arg_type, rhs->type, ns))
+      {
+        const type2tc &f_arg_type = arg_type;
+        const type2tc &f_rhs_type = rhs->type;
 
-	// we are willing to do some limited conversion
-	if ((is_number_type(f_arg_type) ||
+        // we are willing to do some limited conversion
+        if ((is_number_type(f_arg_type) ||
              is_bool_type(f_arg_type) ||
              is_pointer_type(f_arg_type)) &&
-	    (is_number_type(f_rhs_type) ||
+            (is_number_type(f_rhs_type) ||
              is_bool_type(f_rhs_type) ||
-             is_pointer_type(f_rhs_type))) {
+             is_pointer_type(f_rhs_type)))
+        {
           rhs = typecast2tc(arg_type, rhs);
-	} else   {
-	  std::string error = "function call: argument \"" +
-	                      id2string(identifier) +
-	                      "\" type mismatch: got " +
-	                      get_type_id((*it1)->type)+ ", expected " +
-	                      get_type_id(arg_type);
+        }
+        else
+        {
+          std::string error = "function call: argument \""
+              + id2string(identifier) + "\" type mismatch: got "
+              + get_type_id((*it1)->type) + ", expected "
+              + get_type_id(arg_type);
           std::cerr << error << std::endl;
           abort();
-	}
+        }
       }
 
       guardt guard;
@@ -119,13 +127,47 @@ goto_symext::argument_assignments(
     it1++;
   }
 
-  if (function_type.ellipsis) {
-    for (; it1 != arguments.end(); it1++)
+  unsigned va_index = UINT_MAX;
+  if(function_type.ellipsis)
+  {
+    // These are va_arg arguments; their types may differ from call to call
+    unsigned va_count = 0;
+    while(
+      new_context.find_symbol(
+        id2string(function_identifier) + "::va_arg" + std::to_string(va_count)) != nullptr)
+      ++va_count;
+
+    va_index = va_count;
+    for(; it1 != arguments.end(); it1++, va_count++)
     {
+      irep_idt id =
+        id2string(function_identifier) + "::va_arg" + std::to_string(va_count);
+
+      // add to symbol table
+      symbolt symbol;
+      symbol.name = id;
+      symbol.base_name = "va_arg" + std::to_string(va_count);
+      symbol.type = migrate_type_back((*it1)->type);
+
+      if(new_context.move(symbol))
+      {
+        std::cerr << "Couldn't add new va_arg symbol" << std::endl;
+        abort();
+      }
+
+      symbol2tc va_lhs(
+        (*it1)->type, id, symbol2t::level1, 0, 0,
+        cur_state->top().level1.thread_id, 0);
+
+      symex_assign(code_assign2tc(va_lhs, *it1));
     }
-  } else if (it1 != arguments.end())      {
+  }
+  else if(it1 != arguments.end())
+  {
     // we got too many arguments, but we will just ignore them
   }
+
+  return va_index;
 }
 
 void
@@ -245,7 +287,8 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     abort();
   }
 
-  argument_assignments(to_code_type(tmp_type), arguments);
+  frame.va_index =
+    argument_assignments(identifier, to_code_type(tmp_type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;
@@ -487,27 +530,21 @@ goto_symext::locality(const goto_functiont &goto_function)
   goto_programt::local_variablest local_identifiers;
 
   // For all insns...
-  for (goto_programt::instructionst::const_iterator
-       it = goto_function.body.instructions.begin();
-       it != goto_function.body.instructions.end();
-       it++) {
-    local_identifiers.insert(it->local_variables.begin(),
-                             it->local_variables.end());
-  }
+  local_identifiers.insert(
+    local_identifiers.begin(),
+    goto_function.body.local_variables.begin(),
+    goto_function.body.local_variables.end());
 
   statet::framet &frame = cur_state->top();
 
   // For each local variable, set its frame number to frame_nr, ensuring all new
   // references to it look up a new variable.
-  for (goto_programt::local_variablest::const_iterator
-       it = local_identifiers.begin();
-       it != local_identifiers.end();
-       it++)
+  for (auto it : local_identifiers)
   {
     // Temporary, for symbol migration,
-    symbol2tc tmp_sym(get_empty_type(), *it);
+    symbol2tc tmp_sym(get_empty_type(), it);
 
-    unsigned int &frame_nr = cur_state->variable_instance_nums[*it];
+    unsigned int &frame_nr = cur_state->variable_instance_nums[it];
     frame.level1.rename(tmp_sym, ++frame_nr);
     frame.level1.get_ident_name(tmp_sym);
     frame.local_variables.insert(renaming::level2t::name_record(to_symbol2t(tmp_sym)));

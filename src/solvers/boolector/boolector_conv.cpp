@@ -1,6 +1,5 @@
+#include <boolector_conv.h>
 #include <cstring>
-
-#include "boolector_conv.h"
 
 extern "C" {
 #include <btorcore.h>

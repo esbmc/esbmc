@@ -9,13 +9,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_TEMPLATE_MAP_H
 #define CPROVER_CPP_TEMPLATE_MAP_H
 
-#include <map>
+#include <cpp/cpp_template_args.h>
+#include <cpp/cpp_template_type.h>
 #include <iostream>
-
-#include <expr.h>
-
-#include "cpp_template_type.h"
-#include "cpp_template_args.h"
+#include <map>
+#include <util/expr.h>
 
 class template_mapt
 {

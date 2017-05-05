@@ -5,7 +5,7 @@ AM_YFLAGS = -d -psmtlib
 AM_LFLAGS = --header-file=smtlib_tok.hpp -Psmtlib_tok -osmtlib_tok.cpp
 # Use warnings because:
 # smtlib_tok.lpp:39:3: error: implicit conversion of NULL constant to 'bool' [-Werror,-Wnull-conversion]
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS_WARNINGS) -I$(top_srcdir) -I$(top_srcdir)/util
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS_WARNINGS) -I$(top_srcdir)
 
 smtlibincludedir = $(includedir)/solvers/smtlib
 smtlibinclude_HEADERS = smtlib_conv.h

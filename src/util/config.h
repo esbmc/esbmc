@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_UTIL_CONFIG_H
 #define CPROVER_UTIL_CONFIG_H
 
-#include "cmdline.h"
-#include "options.h"
-#include "ieee_float.h"
+#include <util/cmdline.h>
+#include <util/ieee_float.h>
+#include <util/options.h>
 
 class configt
 {

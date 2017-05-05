@@ -7,10 +7,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <cassert>
-
+#include <cpp/cpp_name.h>
 #include <sstream>
-
-#include "cpp_name.h"
 
 /*******************************************************************\
 

@@ -1,13 +1,13 @@
 SUBDIRS = library
 noinst_LTLIBRARIES = libcxxscanner.la libcxx.la
 
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
 AM_YFLAGS = -d -pyycpp
 AM_LFLAGS = --header-file=scanner.hpp -Pyycpp -o scanner.cpp
 
 libcxxscanner_la_SOURCES = scanner.lpp
 libcxxscanner_la_CXXFLAGS = -Wno-error $(ESBMC_CXXFLAGS_WARNINGS) \
-      -I$(top_srcdir) -I$(top_srcdir)/util
+      -I$(top_srcdir)
 
 libcxx_la_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck.cpp cpp_convert_type.cpp \

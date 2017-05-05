@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "language.h"
+#include <util/language.h>
 
 bool languaget::from_expr(
   const exprt &expr,

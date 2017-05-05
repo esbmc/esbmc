@@ -7,9 +7,9 @@ Authors: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <csignal>
 #include <sys/types.h>
 
-#include <csignal>
 #ifndef _WIN32
 #include <unistd.h>
 #else
@@ -19,29 +19,25 @@ Authors: Daniel Kroening, kroening@kroening.com
 #undef small
 #endif
 
-#include <sstream>
+#include <ac_config.h>
+#include <esbmc/bmc.h>
+#include <esbmc/document_subgoals.h>
 #include <fstream>
-
-#include <irep2.h>
-#include <i2string.h>
-#include <location.h>
-#include <time_stopping.h>
-#include <message_stream.h>
-#include <migrate.h>
-
-#include <langapi/mode.h>
-#include <langapi/languages.h>
-#include <langapi/language_util.h>
-
-#include <goto-symex/goto_trace.h>
 #include <goto-symex/build_goto_trace.h>
+#include <goto-symex/goto_trace.h>
+#include <goto-symex/reachability_tree.h>
 #include <goto-symex/slice.h>
 #include <goto-symex/xml_goto_trace.h>
-#include <goto-symex/reachability_tree.h>
-
-#include "bmc.h"
-#include "document_subgoals.h"
-#include <ac_config.h>
+#include <langapi/language_util.h>
+#include <langapi/languages.h>
+#include <langapi/mode.h>
+#include <sstream>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/location.h>
+#include <util/message_stream.h>
+#include <util/migrate.h>
+#include <util/time_stopping.h>
 
 /*******************************************************************\
 
@@ -238,7 +234,7 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
      || options.get_bool_option("smt-formula-only"))
   {
     smt_conv.dump_smt();
-    if(options.get_bool_option("smt-formula-only")) return smt_convt::P_ERROR;
+    if(options.get_bool_option("smt-formula-only")) return smt_convt::P_SMTLIB;
   }
 
   std::stringstream ss;

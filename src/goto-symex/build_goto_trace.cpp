@@ -9,7 +9,7 @@ Author: Daniel Kroening
 \*******************************************************************/
 
 #include <cassert>
-#include "build_goto_trace.h"
+#include <goto-symex/build_goto_trace.h>
 
 extern bool is_valid_witness_expr(const namespacet & ns, const irep_container<expr2t> & exp);
 

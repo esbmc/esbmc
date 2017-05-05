@@ -2,7 +2,7 @@
 #define _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
-#include "sat_iface.h"
+#include <sat_iface.h>
 
 class bitblast_smt_sort : public smt_sort {
   // Record all the things.

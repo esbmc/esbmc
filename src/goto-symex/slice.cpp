@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "slice.h"
+#include <goto-symex/slice.h>
 
 symex_slicet::symex_slicet()
 {

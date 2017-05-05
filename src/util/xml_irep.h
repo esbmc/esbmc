@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef XML_IREP_H
 #define XML_IREP_H
 
-#include "xml.h"
-#include "irep.h"
+#include <util/irep.h>
+#include <util/xml.h>
 
 void convert(
   const irept &irep,

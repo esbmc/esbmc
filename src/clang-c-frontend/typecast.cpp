@@ -5,12 +5,10 @@
  *      Author: mramalho
  */
 
-#include "typecast.h"
-
-#include <simplify_expr_class.h>
-#include <c_types.h>
-
 #include <ansi-c/c_typecast.h>
+#include <clang-c-frontend/typecast.h>
+#include <util/c_types.h>
+#include <util/simplify_expr_class.h>
 
 void gen_typecast(namespacet ns, exprt &dest, typet type)
 {

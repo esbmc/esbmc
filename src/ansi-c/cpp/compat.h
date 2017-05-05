@@ -7,7 +7,6 @@
 #define COMPAT_H
 
 #include <ac_config.h>
-
 #include <string.h>
 
 #ifndef __APPLE__

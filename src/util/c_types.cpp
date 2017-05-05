@@ -6,10 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <std_types.h>
-#include <config.h>
-
-#include "c_types.h"
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/std_types.h>
 
 typet build_float_type(unsigned width)
 {

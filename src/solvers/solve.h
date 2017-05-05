@@ -1,12 +1,10 @@
 #ifndef _ESBMC_SOLVERS_SOLVE_H_
 #define _ESBMC_SOLVERS_SOLVE_H_
 
-#include <string>
-
-#include <config.h>
-#include <namespace.h>
-
 #include <solvers/smt/smt_conv.h>
+#include <string>
+#include <util/config.h>
+#include <util/namespace.h>
 
 typedef smt_convt *(solver_creator)
     (bool int_encoding, const namespacet &ns, const optionst &opts,

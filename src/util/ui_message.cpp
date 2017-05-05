@@ -7,12 +7,10 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <fstream>
-
-#include <i2string.h>
-#include <xml.h>
-#include <xml_irep.h>
-
-#include "ui_message.h"
+#include <util/i2string.h>
+#include <util/ui_message.h>
+#include <util/xml.h>
+#include <util/xml_irep.h>
 
 const char *ui_message_handlert::level_string(unsigned level)
 {

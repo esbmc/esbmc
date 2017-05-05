@@ -6,13 +6,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <location.h>
-
 #include <ansi-c/c_qualifiers.h>
-
-#include "cpp_typecheck.h"
-#include "cpp_convert_type.h"
-#include "expr2cpp.h"
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/expr2cpp.h>
+#include <util/location.h>
 
 /*******************************************************************\
 
