@@ -52,7 +52,7 @@ years of life left, new projects should avoid using it.
 
 Two switches to the configure script are required to build the python bindings:
  * --enable-python
- * --enable-shared
+ * --enable-libesbmc
 The former is self explanatory, the latter causes a shared object (.so) library
 of ESBMC functions to be build. If you're not interested in the ESBMC command
 line too, you might want to add --disable-esbmc to the configure command line,
