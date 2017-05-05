@@ -1,5 +1,13 @@
 Release Notes of the ESBMC model checker
 
+*** Version 4.2
++ Full support for va_args
++ Dropped openssl dependency
++ Update clang headers to clang 4.0
++ Cleanup ESBMC options
++ Fix build on MacOS
++ Fix creation of multidimensional arrays
+
 *** Version 4.1
 + Support for Boolector 2.4.1
 + Fix static libesbmc not being built
