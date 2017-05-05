@@ -20,9 +20,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <type_byte_size.h>
 #include <c_types.h>
 
-
 #include "goto_convert_class.h"
-
 
 static void get_alloc_type_rec(
   const exprt &src,
@@ -156,18 +154,6 @@ void goto_convertt::do_atomic_end(
   t->location=function.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_mem
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_mem(
   bool is_malloc,
   const exprt &lhs,
@@ -227,18 +213,6 @@ void goto_convertt::do_mem(
   t_n->location=location;
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_alloca
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_alloca(
   const exprt &lhs,
   const exprt &function,
@@ -248,18 +222,6 @@ void goto_convertt::do_alloca(
   do_mem(false, lhs, function, arguments, dest);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_malloc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_malloc(
   const exprt &lhs,
   const exprt &function,
@@ -268,18 +230,6 @@ void goto_convertt::do_malloc(
 {
   do_mem(true, lhs, function, arguments, dest);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_realloc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_realloc(
   const exprt &lhs,
@@ -384,7 +334,7 @@ void goto_convertt::do_cpp_new(
 
   // set size
   //nec: ex37.c
-  exprt dynamic_size("dynamic_size", int_type()/*uint_type()*/);
+  exprt dynamic_size("dynamic_size", int_type());
   dynamic_size.copy_to_operands(lhs);
   dynamic_size.location()=rhs.find_location();
   goto_programt::targett t_s_s=dest.add_instruction(ASSIGN);
