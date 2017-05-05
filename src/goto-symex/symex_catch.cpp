@@ -6,13 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include "goto_symex.h"
-
-#include <simplify_expr.h>
-
-#include "goto_symex.h"
+#include <goto-symex/goto_symex.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/simplify_expr.h>
 
 /*******************************************************************\
 

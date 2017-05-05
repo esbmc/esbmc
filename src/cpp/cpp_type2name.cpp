@@ -7,9 +7,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <string>
-#include <type.h>
-#include <std_types.h>
-#include <i2string.h>
+#include <util/i2string.h>
+#include <util/std_types.h>
+#include <util/type.h>
 
 /*******************************************************************\
 

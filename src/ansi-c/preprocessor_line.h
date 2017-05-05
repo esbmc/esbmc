@@ -10,8 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ANSI_C_LANGUAGE_PREPROCESSOR_LINE_H
 
 #include <string>
-
-#include <irep.h>
+#include <util/irep.h>
 
 void preprocessor_line(
   const char *text,

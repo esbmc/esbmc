@@ -7,20 +7,18 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
-#include <i2string.h>
-#include <expr_util.h>
-#include <location.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <arith_tools.h>
-#include <simplify_expr.h>
-#include <std_code.h>
-#include <std_expr.h>
-#include <type_byte_size.h>
-#include <c_types.h>
-
-#include "goto_convert_class.h"
+#include <goto-programs/goto_convert_class.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/location.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 static void get_alloc_type_rec(
   const exprt &src,

@@ -8,18 +8,15 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #include <cassert>
-
-#include <i2string.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <std_expr.h>
-#include <c_types.h>
-
-#include "goto_convert_class.h"
-#include "remove_skip.h"
-#include "destructor.h"
-
-#include <arith_tools.h>
+#include <goto-programs/destructor.h>
+#include <goto-programs/goto_convert_class.h>
+#include <goto-programs/remove_skip.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
 
 //#define DEBUG
 

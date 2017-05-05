@@ -11,23 +11,20 @@
 #ifndef EXECUTION_STATE_H_
 #define EXECUTION_STATE_H_
 
-#include <irep2.h>
-
-#include <iostream>
-#include <deque>
-#include <set>
-#include <map>
-#include <list>
 #include <algorithm>
-#include <std_expr.h>
-#include <message.h>
-
 #include <boost/shared_ptr.hpp>
-
-#include "symex_target.h"
-#include "goto_symex_state.h"
-#include "goto_symex.h"
-#include "renaming.h"
+#include <deque>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/renaming.h>
+#include <goto-symex/symex_target.h>
+#include <iostream>
+#include <list>
+#include <map>
+#include <set>
+#include <util/irep2.h>
+#include <util/message.h>
+#include <util/std_expr.h>
 
 class reachability_treet;
 

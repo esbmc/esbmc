@@ -6,15 +6,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <cassert>
-
-#include <std_types.h>
-
 #include <ansi-c/expr2c.h>
-
-#include "expr2cpp.h"
-
-#include <symbol.h>
+#include <cassert>
+#include <cpp/expr2cpp.h>
+#include <util/std_types.h>
+#include <util/symbol.h>
 
 class expr2cppt:public expr2ct
 {

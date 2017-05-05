@@ -8,8 +8,8 @@
 #ifndef TYPECAST_H_
 #define TYPECAST_H_
 
-#include <std_expr.h>
-#include <namespace.h>
+#include <util/namespace.h>
+#include <util/std_expr.h>
 
 extern void gen_typecast(
   namespacet ns,

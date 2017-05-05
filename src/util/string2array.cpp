@@ -6,11 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <arith_tools.h>
-#include <config.h>
-#include <std_types.h>
-
-#include "string2array.h"
+#include <util/arith_tools.h>
+#include <util/config.h>
+#include <util/std_types.h>
+#include <util/string2array.h>
 
 void string2array(const exprt &src, exprt &dest)
 {

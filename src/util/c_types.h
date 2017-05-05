@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_C_TYPES_H
 #define CPROVER_C_TYPES_H
 
-#include <irep2.h>
-#include <expr.h>
+#include <util/expr.h>
+#include <util/irep2.h>
 
 typet index_type();
 type2tc index_type2();

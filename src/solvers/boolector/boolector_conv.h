@@ -1,10 +1,8 @@
 #include <cstdio>
-
-#include <irep2.h>
-#include <namespace.h>
-
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple_flat.h>
+#include <util/irep2.h>
+#include <util/namespace.h>
 
 extern "C" {
 #include <boolector.h>

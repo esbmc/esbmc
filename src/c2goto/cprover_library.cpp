@@ -16,19 +16,13 @@ extern "C" {
 #endif
 }
 
-#include <sstream>
-#include <istream>
-#include <fstream>
-#include <cstdio>
-#include <cstdlib>
-#include <cstdint>
-#include <cstdint>
-#include <config.h>
-
 #include <ansi-c/c_link.h>
+#include <c2goto/cprover_library.h>
+#include <cstdlib>
+#include <fstream>
 #include <goto-programs/read_goto_binary.h>
-
-#include "cprover_library.h"
+#include <sstream>
+#include <util/config.h>
 
 #ifndef NO_CPROVER_LIBRARY
 

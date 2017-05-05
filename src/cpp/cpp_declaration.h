@@ -10,12 +10,11 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_DECLARATION_H
 
 #include <cassert>
-
-#include "cpp_declarator.h"
-#include "cpp_storage_spec.h"
-#include "cpp_member_spec.h"
-#include "cpp_template_type.h"
-#include "cpp_template_args.h"
+#include <cpp/cpp_declarator.h>
+#include <cpp/cpp_member_spec.h>
+#include <cpp/cpp_storage_spec.h>
+#include <cpp/cpp_template_args.h>
+#include <cpp/cpp_template_type.h>
 
 class cpp_declarationt:public exprt
 {

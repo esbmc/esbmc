@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "replace_symbol.h"
-#include <std_types.h>
+#include <util/replace_symbol.h>
+#include <util/std_types.h>
 
 replace_symbolt::replace_symbolt()
 {

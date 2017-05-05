@@ -53,8 +53,8 @@ typedef std::multiset<T1> hash_multiset_cont;
 
 #ifdef GNU_HASH_CONT
 
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
 
 // for new g++ libraries >= 3.2
 
@@ -94,9 +94,11 @@ public:
 #ifdef _MSC_VER
 #include <unordered_set>
 #include <unordered_map>
+
 #else
 #include <tr1/unordered_set>
 #include <tr1/unordered_map>
+
 #endif
 
 #define hash_map_cont std::tr1::unordered_map

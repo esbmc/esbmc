@@ -10,9 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_ERROR_HANDLER_H
 
 #include <sstream>
-
-#include "message.h"
-#include "expr.h"
+#include <util/expr.h>
+#include <util/message.h>
 
 class message_streamt
 {

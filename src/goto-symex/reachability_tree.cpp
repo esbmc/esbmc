@@ -15,15 +15,14 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #undef small // mingw workaround
 #endif
 
-#include "reachability_tree.h"
-#include "goto_symex.h"
-#include <i2string.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <config.h>
-#include <message.h>
-
-#include "crypto_hash.h"
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/reachability_tree.h>
+#include <util/config.h>
+#include <util/crypto_hash.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/message.h>
+#include <util/std_expr.h>
 
 reachability_treet::reachability_treet(
     const goto_functionst &goto_functions,

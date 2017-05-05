@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "c_qualifiers.h"
+#include <ansi-c/c_qualifiers.h>
 
 /*******************************************************************\
 

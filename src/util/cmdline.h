@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_CMDLINE_H
 #define CPROVER_CMDLINE_H
 
-#include <vector>
 #include <list>
 #include <string>
+#include <vector>
 
 enum opt_types {
   switc, number, string

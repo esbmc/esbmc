@@ -9,16 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_CBMC_PARSEOPTIONS_H
 #define CPROVER_CBMC_PARSEOPTIONS_H
 
+#include <esbmc/bmc.h>
 #include <goto-programs/goto_convert_functions.h>
 #include <langapi/language_ui.h>
-#include <ui_message.h>
+#include <util/cmdline.h>
+#include <util/options.h>
 #include <util/parseoptions.h>
-#include "parseoptions.h"
-
-#include <options.h>
-#include <cmdline.h>
-
-#include "bmc.h"
+#include <util/ui_message.h>
 
 extern const struct opt_templ esbmc_options[];
 

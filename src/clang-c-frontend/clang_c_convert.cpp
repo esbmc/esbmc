@@ -5,22 +5,18 @@
  *      Author: mramalho
  */
 
-#include "clang_c_convert.h"
-
-#include <std_code.h>
-#include <std_expr.h>
-#include <expr_util.h>
-#include <mp_arith.h>
-#include <arith_tools.h>
-#include <i2string.h>
-#include <c_types.h>
-
-#include <ansi-c/type2name.h>
-
-#include "util/bitvector.h"
-#include "typecast.h"
-
 #include <clang/AST/Attr.h>
+#include <ansi-c/type2name.h>
+#include <clang-c-frontend/clang_c_convert.h>
+#include <clang-c-frontend/typecast.h>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/mp_arith.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,

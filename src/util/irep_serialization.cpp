@@ -9,9 +9,8 @@ Date: May 2007
 \*******************************************************************/
 
 #include <sstream>
-
-#include "irep_serialization.h" 
-#include "string_hash.h"
+#include <util/irep_serialization.h>
+#include <util/string_hash.h>
 
 void irep_serializationt::write_irep(
   std::ostream &out,

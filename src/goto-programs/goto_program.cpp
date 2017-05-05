@@ -6,11 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <goto-programs/goto_program.h>
 #include <iomanip>
-
 #include <langapi/language_util.h>
-
-#include "goto_program.h"
 
 void goto_programt::instructiont::dump() const
 {

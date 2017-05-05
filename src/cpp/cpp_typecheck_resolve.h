@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_TYPECHECK_RESOLVE_H
 #define CPROVER_CPP_TYPECHECK_RESOLVE_H
 
-#include "cpp_typecheck_fargs.h"
-#include "cpp_name.h"
-#include "cpp_template_args.h"
+#include <cpp/cpp_name.h>
+#include <cpp/cpp_template_args.h>
+#include <cpp/cpp_typecheck_fargs.h>
 
 class cpp_typecheck_resolvet
 {

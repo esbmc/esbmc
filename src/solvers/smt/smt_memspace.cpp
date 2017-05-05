@@ -1,7 +1,6 @@
 #include <algorithm>
+#include <solvers/smt/smt_conv.h>
 #include <sstream>
-
-#include "smt_conv.h"
 
 /** @file smt_memspace.cpp
  *  Modelling the memory address space of C isn't something that is handled

@@ -11,13 +11,12 @@
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-#include <context.h>
-#include <namespace.h>
-#include <std_types.h>
-
-#include <clang/Frontend/ASTUnit.h>
-#include <clang/AST/Type.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/Type.h>
+#include <clang/Frontend/ASTUnit.h>
+#include <util/context.h>
+#include <util/namespace.h>
+#include <util/std_types.h>
 
 class clang_c_convertert
 {

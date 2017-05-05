@@ -9,12 +9,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_BASE_TYPE_H
 #define CPROVER_BASE_TYPE_H
 
-#include <irep2.h>
-#include <migrate.h>
-
-#include <type.h>
-#include <namespace.h>
-#include <union_find.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/namespace.h>
+#include <util/type.h>
+#include <util/union_find.h>
 
 void base_type(type2tc &type, const namespacet &ns);
 void base_type(expr2tc &expr, const namespacet &ns);

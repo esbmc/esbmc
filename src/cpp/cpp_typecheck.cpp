@@ -7,18 +7,16 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <algorithm>
-#include <expr_util.h>
-#include <arith_tools.h>
-#include <i2string.h>
-#include <location.h>
-#include <symbol.h>
-
 #include <ansi-c/c_typecast.h>
-
-#include "cpp_typecheck.h"
-#include "expr2cpp.h"
-#include "cpp_convert_type.h"
-#include "cpp_declarator.h"
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_declarator.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/expr2cpp.h>
+#include <util/arith_tools.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/location.h>
+#include <util/symbol.h>
 
 /*******************************************************************\
 

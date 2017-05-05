@@ -6,10 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "std_types.h"
-#include "fixedbv.h"
-#include "arith_tools.h"
-#include "irep2.h"
+#include <util/arith_tools.h>
+#include <util/fixedbv.h>
+#include <util/irep2.h>
+#include <util/std_types.h>
 
 fixedbv_spect::fixedbv_spect(const fixedbv_typet &type)
 {

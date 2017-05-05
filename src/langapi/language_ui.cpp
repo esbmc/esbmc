@@ -7,12 +7,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <fstream>
+#include <langapi/language_ui.h>
+#include <langapi/mode.h>
 #include <memory>
-
-#include <i2string.h>
-
-#include "language_ui.h"
-#include "mode.h"
+#include <util/i2string.h>
 
 /*******************************************************************\
 

@@ -11,17 +11,14 @@ Date: July 2005
 #ifndef CPROVER_GOTO_SYMEX_GOTO_TRACE_H
 #define CPROVER_GOTO_SYMEX_GOTO_TRACE_H
 
-#include <irep2.h>
-#include <migrate.h>
-
-#include <iostream>
-#include <vector>
-
 #include <fstream>
-#include <map>
-
 #include <goto-programs/goto_program.h>
 #include <goto-symex/symex_target.h>
+#include <iostream>
+#include <map>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <vector>
 
 class goto_trace_stept
 {

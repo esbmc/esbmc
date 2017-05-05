@@ -6,15 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-//#include <assert.h>
-
-#include <prefix.h>
-#include <cprover_prefix.h>
-#include <xml_irep.h>
-
 #include <langapi/language_util.h>
-
-#include "value_set_analysis.h"
+#include <pointer-analysis/value_set_analysis.h>
+#include <util/cprover_prefix.h>
+#include <util/prefix.h>
+#include <util/xml_irep.h>
 
 void value_set_analysist::initialize(
   const goto_programt &goto_program)

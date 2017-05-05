@@ -9,22 +9,21 @@
 #include <cctype>
 #include <fstream>
 #include <sstream>
-#include <std_expr.h>
-#include <irep2.h>
-#include <migrate.h>
-#include <arith_tools.h>
-#include <std_types.h>
-#include <config.h>
-#include <i2string.h>
-#include <expr_util.h>
-#include <string2array.h>
-#include <type_byte_size.h>
-#include <prefix.h>
-#include <fixedbv.h>
-#include <base_type.h>
-#include <c_types.h>
-
-#include "z3_conv.h"
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/fixedbv.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
+#include <util/string2array.h>
+#include <util/type_byte_size.h>
+#include <z3_conv.h>
 
 #ifdef DEBUG
 #define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \

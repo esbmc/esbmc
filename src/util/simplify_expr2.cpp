@@ -1,15 +1,12 @@
-#include "irep2.h"
-
-#include <cstring>
-
 #include <boost/static_assert.hpp>
-
-#include <arith_tools.h>
-#include <c_types.h>
-#include <base_type.h>
-#include <expr_util.h>
-#include <type_byte_size.h>
 #include <climits>
+#include <cstring>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/irep2.h>
+#include <util/type_byte_size.h>
 
 expr2tc
 expr2t::do_simplify(bool second __attribute__((unused))) const

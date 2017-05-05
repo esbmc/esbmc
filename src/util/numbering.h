@@ -10,11 +10,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_NUMBERING_H
 
 #include <cassert>
-
 #include <map>
+#include <util/hash_cont.h>
 #include <vector>
-
-#include "hash_cont.h"
 
 template <typename T>
 class numbering:public std::vector<T>

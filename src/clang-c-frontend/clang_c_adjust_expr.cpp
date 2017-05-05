@@ -5,17 +5,16 @@
  *      Author: mramalho
  */
 
-#include <arith_tools.h>
-#include <std_code.h>
-#include <expr_util.h>
-#include <prefix.h>
-#include <cprover_prefix.h>
-#include <c_types.h>
-
 #include <ansi-c/c_sizeof.h>
-#include "clang_c_adjust.h"
-#include "util/bitvector.h"
-#include "typecast.h"
+#include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/typecast.h>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context),

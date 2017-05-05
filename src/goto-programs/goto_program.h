@@ -9,17 +9,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAM_H
 #define CPROVER_GOTO_PROGRAM_H
 
-#include <irep2.h>
-#include <cassert>
 /*! \defgroup gr_goto_programs Goto programs */
 
 #include <cassert>
 #include <ostream>
 #include <set>
-
-#include <namespace.h>
-#include <location.h>
-#include <std_code.h>
+#include <util/irep2.h>
+#include <util/location.h>
+#include <util/namespace.h>
+#include <util/std_code.h>
 
 #define forall_goto_program_instructions(it, program) \
   for(goto_programt::instructionst::const_iterator it=(program).instructions.begin(); \

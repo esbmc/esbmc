@@ -1,14 +1,12 @@
-#include "parseoptions.h"
-#include <irep2.h>
-#include <migrate.h>
+#include <util/parseoptions.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
 #include <solvers/smt/smt_conv.h>
 #include <langapi/mode.h>
 #include <goto-programs/goto_functions.h>
-
 #include <boost/python.hpp>
 #include <boost/python/object/find_instance.hpp>
-
-#include <bp_converter.h>
+#include <util/bp_converter.h>
 
 using namespace boost::python;
 

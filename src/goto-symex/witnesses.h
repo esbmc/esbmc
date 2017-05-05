@@ -9,7 +9,11 @@
  *
  */
 
-#include <string>
+#include <boost/algorithm/string.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/xml_parser.hpp>
+#include <util/namespace.h>
+#include <util/irep2.h>
 
 typedef struct graph_props
 {

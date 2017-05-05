@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "parse_float.h"
+#include <ansi-c/parse_float.h>
 
 /*******************************************************************\
 

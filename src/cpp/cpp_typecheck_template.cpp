@@ -6,17 +6,16 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <expr_util.h>
-#include <i2string.h>
-#include <simplify_expr_class.h>
-#include <simplify_expr.h>
-
-#include "cpp_type2name.h"
-#include "cpp_typecheck.h"
-#include "cpp_declarator_converter.h"
-#include "cpp_template_type.h"
-#include "cpp_convert_type.h"
-#include "cpp_template_args.h"
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_declarator_converter.h>
+#include <cpp/cpp_template_args.h>
+#include <cpp/cpp_template_type.h>
+#include <cpp/cpp_type2name.h>
+#include <cpp/cpp_typecheck.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/simplify_expr.h>
+#include <util/simplify_expr_class.h>
 
 /*******************************************************************\
 

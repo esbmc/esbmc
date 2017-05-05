@@ -8,11 +8,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <limits>
-
-#include <arith_tools.h>
-#include <std_types.h>
-
-#include "ieee_float.h"
+#include <util/arith_tools.h>
+#include <util/ieee_float.h>
+#include <util/std_types.h>
 
 /*******************************************************************\
 

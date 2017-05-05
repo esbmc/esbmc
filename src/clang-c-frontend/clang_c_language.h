@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 #define CLANG_C_FRONTEND_CLANG_C_LANGUAGE_H_
 
-#include <language.h>
+#include <util/language.h>
 
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS

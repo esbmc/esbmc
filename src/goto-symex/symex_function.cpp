@@ -8,20 +8,17 @@
 \*******************************************************************/
 
 #include <cassert>
-
-#include <expr_util.h>
-#include <i2string.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <arith_tools.h>
-#include <base_type.h>
-#include <std_expr.h>
-#include <c_types.h>
-
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
 #include <langapi/language_util.h>
-
-#include "goto_symex.h"
-#include "execution_state.h"
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
 
 bool
 goto_symext::get_unwind_recursion(

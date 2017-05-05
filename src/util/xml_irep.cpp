@@ -8,7 +8,7 @@ Author: Daniel Kroening
  
 \*******************************************************************/
 
-#include "xml_irep.h"
+#include <util/xml_irep.h>
 
 void convert(
   const irept &irep,

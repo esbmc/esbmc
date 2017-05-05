@@ -7,7 +7,7 @@ libsymex_la_SOURCES = symex_python.cpp \
       xml_goto_trace.cpp symex_valid_object.cpp \
       dynamic_allocation.cpp symex_catch.cpp renaming.cpp \
       execution_state.cpp reachability_tree.cpp witnesses.cpp
-AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -I$(top_srcdir)/util
+AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
 
 symexincludedir = $(includedir)/goto-symex
 symexinclude_HEADERS = build_goto_trace.h dynamic_allocation.h \

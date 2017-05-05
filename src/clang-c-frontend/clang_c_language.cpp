@@ -6,19 +6,17 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "clang_c_language.h"
-#include "AST/build_ast.h"
-
-#include <sstream>
-#include <boost/filesystem.hpp>
-
-#include <c2goto/cprover_library.h>
-#include <ansi-c/c_preprocess.h>
+#include <AST/build_ast.h>
 #include <ansi-c/c_link.h>
-
-#include "clang_c_adjust.h"
-#include "clang_c_convert.h"
-#include "clang_c_main.h"
+#include <ansi-c/c_preprocess.h>
+#include <boost/filesystem.hpp>
+#include <c2goto/cprover_library.h>
+#include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/clang_c_convert.h>
+#include <clang-c-frontend/clang_c_language.h>
+#include <clang-c-frontend/clang_c_main.h>
+#include <fstream>
+#include <sstream>
 
 languaget *new_clang_c_language()
 {

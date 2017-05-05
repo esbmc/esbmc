@@ -10,11 +10,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_ITEM_H
 
 #include <cassert>
-
-#include "cpp_declaration.h"
-#include "cpp_linkage_spec.h"
-#include "cpp_namespace_spec.h"
-#include "cpp_using.h"
+#include <cpp/cpp_declaration.h>
+#include <cpp/cpp_linkage_spec.h>
+#include <cpp/cpp_namespace_spec.h>
+#include <cpp/cpp_using.h>
 
 class cpp_itemt:public irept
 {

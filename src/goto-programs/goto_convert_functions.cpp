@@ -9,18 +9,16 @@ Date: June 2003
 \*******************************************************************/
 
 #include <cassert>
-
-#include <base_type.h>
-#include <prefix.h>
-#include <std_code.h>
-#include <std_expr.h>
-#include <type_byte_size.h>
-#include <c_types.h>
-
-#include "goto_convert_functions.h"
-#include "goto_inline.h"
-#include "remove_skip.h"
-#include "i2string.h"
+#include <goto-programs/goto_convert_functions.h>
+#include <goto-programs/goto_inline.h>
+#include <goto-programs/remove_skip.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,

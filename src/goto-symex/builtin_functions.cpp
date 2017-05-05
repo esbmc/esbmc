@@ -6,32 +6,27 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <sstream>
-
-#include <irep2.h>
-#include <migrate.h>
-
 #include <cassert>
-
-#include <expr_util.h>
-#include <i2string.h>
-#include <arith_tools.h>
-#include <cprover_prefix.h>
-#include <std_types.h>
-#include <base_type.h>
-#include <c_types.h>
-#include <dcutil.h>
-#include <prefix.h>
-
-#include "goto_symex.h"
-#include "execution_state.h"
-#include "reachability_tree.h"
-
+#include <complex>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/reachability_tree.h>
 #include <iomanip>
 #include <limits>
+#include <sstream>
 #include <string>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/dcutil.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/std_types.h>
 #include <vector>
-#include <complex>
 
 expr2tc
 goto_symext::symex_malloc(

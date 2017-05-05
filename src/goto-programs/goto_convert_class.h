@@ -9,18 +9,16 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAMS_GOTO_CONVERT_CLASS_H
 #define CPROVER_GOTO_PROGRAMS_GOTO_CONVERT_CLASS_H
 
+#include <goto-programs/goto_program.h>
 #include <list>
 #include <queue>
 #include <stack>
-#include <namespace.h>
-#include <guard.h>
-#include <std_code.h>
-#include <options.h>
-#include <message_stream.h>
-
-#include <expr_util.h>
-
-#include "goto_program.h"
+#include <util/expr_util.h>
+#include <util/guard.h>
+#include <util/message_stream.h>
+#include <util/namespace.h>
+#include <util/options.h>
+#include <util/std_code.h>
 
 class goto_convertt:public message_streamt
 {

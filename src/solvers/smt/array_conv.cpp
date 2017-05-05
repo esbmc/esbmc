@@ -1,9 +1,8 @@
 #include <algorithm>
 #include <set>
+#include <solvers/smt/array_conv.h>
+#include <util/c_types.h>
 #include <utility>
-
-#include <c_types.h>
-#include "array_conv.h"
 
 static inline bool
 array_indexes_are_same(

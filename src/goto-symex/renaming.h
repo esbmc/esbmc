@@ -1,25 +1,20 @@
 #ifndef _GOTO_SYMEX_RENAMING_H_
 #define _GOTO_SYMEX_RENAMING_H_
 
-#include <irep2.h>
-
-#include <cstdint>
-#include <cstring>
-
-#include <string>
-#include <stack>
-#include <vector>
-#include <set>
-
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
-
-#include <guard.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <i2string.h>
-
-#include "crypto_hash.h"
+#include <cstdint>
+#include <cstring>
+#include <set>
+#include <stack>
+#include <string>
+#include <util/crypto_hash.h>
+#include <util/expr_util.h>
+#include <util/guard.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/std_expr.h>
+#include <vector>
 
 namespace renaming {
 

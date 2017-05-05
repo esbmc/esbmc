@@ -13,11 +13,9 @@ Date:
 #else
 #include <csignal>
 #include <cstdlib>
-
-#include <csignal>
 #endif
 
-#include "signal_catcher.h"
+#include <util/signal_catcher.h>
 
 void install_signal_catcher()
 {

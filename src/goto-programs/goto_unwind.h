@@ -8,13 +8,11 @@
 #ifndef GOTO_PROGRAMS_GOTO_UNWIND_H_
 #define GOTO_PROGRAMS_GOTO_UNWIND_H_
 
-#include <std_types.h>
-#include <hash_cont.h>
-
-#include <message_stream.h>
-
-#include "goto_functions.h"
-#include "goto_loops.h"
+#include <goto-programs/goto_functions.h>
+#include <goto-programs/goto_loops.h>
+#include <util/hash_cont.h>
+#include <util/message_stream.h>
+#include <util/std_types.h>
 
 void goto_unwind(
   contextt &context,

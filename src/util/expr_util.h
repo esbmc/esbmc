@@ -6,9 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "expr.h"
-#include "symbol.h"
-#include "std_types.h"
+#include <util/expr.h>
+#include <util/std_types.h>
+#include <util/symbol.h>
 
 //
 // WARNING: The following functions are depreciated, and will

@@ -1,8 +1,8 @@
 #ifndef _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 #define _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 
-#include <string>
 #include <memory>
+#include <string>
 
 class crypto_hash_private;
 

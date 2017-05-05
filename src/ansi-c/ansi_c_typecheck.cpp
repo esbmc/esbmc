@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "ansi_c_typecheck.h"
+#include <ansi-c/ansi_c_typecheck.h>
 
 /*******************************************************************\
 

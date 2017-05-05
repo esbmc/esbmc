@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_TOKEN_BUFFER_H
 #define CPROVER_CPP_TOKEN_BUFFER_H
 
-#include "cpp_token.h"
+#include <cpp/cpp_token.h>
 
 class cpp_token_buffert
 {
