@@ -719,32 +719,53 @@ void goto_convertt::convert_decl(
     }
   }
 
-  if(new_code.operands().size() == 1)
+  exprt initializer = nil_exprt();
+  if(new_code.operands().size() == 2)
   {
-    copy(new_code, OTHER, dest);
-    return;
+    initializer = new_code.op1();
+
+    // just resize the vector, this will get rid of op1
+    new_code.operands().pop_back();
+
+    if(options.get_bool_option("atomicity-check"))
+    {
+      unsigned int globals = get_expr_number_globals(initializer);
+      if(globals > 0)
+        break_globals2assignments(initializer, dest, new_code.location());
+    }
+
+    goto_programt sideeffects;
+    remove_sideeffects(initializer, sideeffects);
+    dest.destructive_append(sideeffects);
   }
-
-  exprt initializer = new_code.op1();
-  new_code.operands().resize(1); // just resize the vector, this will get rid of op1
-
-  if(options.get_bool_option("atomicity-check"))
-  {
-    unsigned int globals = get_expr_number_globals(initializer);
-    if(globals > 0)
-      break_globals2assignments(initializer, dest, new_code.location());
-  }
-
-  goto_programt sideeffects;
-  remove_sideeffects(initializer, sideeffects);
-  dest.destructive_append(sideeffects);
 
   // break up into decl and assignment
   copy(new_code, OTHER, dest);
 
-  code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
-  assign.location() = new_code.location();
-  copy(assign, ASSIGN, dest);
+  if(var.type().is_array())
+  {
+    exprt &size = to_array_type(var.type()).size();
+    if(size.is_symbol())
+    {
+      // Set the array to have a dynamic size
+      exprt dynamic_size("dynamic_size", int_type());
+      dynamic_size.copy_to_operands(var);
+      dynamic_size.location() = code.location();
+
+      goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
+      exprt assign = code_assignt(dynamic_size, size);
+      migrate_expr(assign, t_s_s->code);
+      t_s_s->location = code.location();
+    }
+  }
+
+  if(initializer.is_not_nil())
+  {
+    // initializer is without sideeffect now
+    code_assignt assign(var, initializer);
+    assign.location() = new_code.location();
+    copy(assign, ASSIGN, dest);
+  }
 }
 
 void goto_convertt::convert_decl_block(
