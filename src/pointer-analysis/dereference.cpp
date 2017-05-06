@@ -1632,6 +1632,7 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
   unsigned long access_size = type_byte_size(type).to_ulong();
 
   assert(is_array_type(expr) || is_string_type(expr));
+  const array_type2t arr_type = get_arr_type(expr);
 
   expr2tc arrsize;
   if (!is_constant_array2t(expr) &&
@@ -1639,12 +1640,15 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
     // Construct a dynamic_size irep.
     address_of2tc addrof(expr->type, expr);
     arrsize = dynamic_size2tc(addrof);
+  } else if (!is_constant_int2t(arr_type.array_size)) {
+    // Also a dynamic_size irep.
+    address_of2tc addrof(expr->type, expr);
+    arrsize = dynamic_size2tc(addrof);
   } else {
     // Calculate size from type.
 
     // Dance around getting the array type normalised.
     type2tc new_string_type;
-    const array_type2t arr_type = get_arr_type(expr);
 
     // XXX -- arrays were assigned names, but we're skipping that for the moment
     // std::string name = array_name(ns, expr.source_value);
