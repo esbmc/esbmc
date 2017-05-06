@@ -8,7 +8,6 @@
 #include <boost/python.hpp>
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
-#include <util/bp_opaque_ptr.h>
 #include <solve.h>
 #include <smt_python.h>
 
