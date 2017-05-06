@@ -745,8 +745,9 @@ void goto_convertt::convert_decl(
     if(size.is_symbol())
     {
       // Set the array to have a dynamic size
+      address_of_exprt addrof(var);
       exprt dynamic_size("dynamic_size", int_type());
-      dynamic_size.copy_to_operands(var);
+      dynamic_size.copy_to_operands(addrof);
       dynamic_size.location() = code.location();
 
       goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
