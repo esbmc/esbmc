@@ -56,8 +56,7 @@ class Gotoinsns(unittest.TestCase):
 
         norm = theinsn.to_string()
         wloc = theinsn.to_string(True)
-        wvars = theinsn.to_string(True, True)
-        self.assertTrue(norm != wloc and norm != wvars and wloc != wvars, "var changing flags should change to_string output")
+        self.assertTrue(norm != wloc, "var changing flags should change to_string output")
 
         self.assertTrue(theinsn.is_other(), "is_other method of insn should work")
 
