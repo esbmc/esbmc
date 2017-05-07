@@ -1,0 +1,5 @@
+This examples dir should contain examples of how to use the ESBMC api. No
+rules as to exactly what's demonstrated: read the python file to find out.
+
+One pre-requisite is that esbmc.so is symlinked to your libesbmc.so binary,
+see the readme for the dir above.

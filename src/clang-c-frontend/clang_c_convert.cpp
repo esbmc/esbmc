@@ -1211,11 +1211,11 @@ bool clang_c_convertert::get_expr(
         return true;
 
       exprt array;
-      if(get_expr(*arr.getLHS(), array))
+      if(get_expr(*arr.getBase(), array))
         return true;
 
       exprt pos;
-      if(get_expr(*arr.getRHS(), pos))
+      if(get_expr(*arr.getIdx(), pos))
         return true;
 
       new_expr = index_exprt(array, pos, t);

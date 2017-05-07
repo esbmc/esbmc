@@ -123,7 +123,10 @@ if clangdir:
 if llvmdir:
   configure_str += "--with-llvm=" + llvmdir + " "
 
-configure_str += "--enable-esbmc --enable-libesbmc "
+if boostpython:
+  configure_str += "--with-boost-python-libname=" + boostpython + " "
+
+configure_str += "--enable-esbmc --enable-libesbmc --enable-python "
 
 # Build dynamic
 do_build('esbmc-v' + esbmcversion + '-linux-' + str(arch), configure_str)
@@ -131,12 +134,9 @@ do_build('esbmc-v' + esbmcversion + '-linux-' + str(arch), configure_str)
 # Build static
 do_build('esbmc-v' + esbmcversion + '-linux-static-' + str(arch), configure_str + " --enable-static-link --disable-shared")
 
-if boostpython:
-  configure_str += "--with-boost-python-libname=" + boostpython + " "
-  configure_str += "--enable-python "
+# Build dynamic
+do_build('esbmc+python-v' + esbmcversion + '-linux-' + str(arch), configure_str)
 
-  # Build dynamic
-  do_build('esbmc+python-v' + esbmcversion + '-linux-' + str(arch), configure_str)
+# Build static
+do_build('esbmc+python-v' + esbmcversion + '-linux-static-' + str(arch), configure_str + " --enable-static-link --disable-shared")
 
-  # Build static
-  do_build('esbmc+python-v' + esbmcversion + '-linux-static-' + str(arch), configure_str + " --enable-static-link --disable-shared")

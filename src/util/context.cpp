@@ -80,7 +80,11 @@ const symbolt* contextt::find_symbol(irep_idt name) const
 void contextt::erase_symbol(irep_idt name)
 {
   symbolst::iterator it = symbols.find(name);
-  assert(it != symbols.end());
+  if(it == symbols.end())
+  {
+    std::cerr << "Couldn't find symbol to erase"  << std::endl;
+    abort();
+  }
 
   symbols.erase(name);
   ordered_symbols.erase(

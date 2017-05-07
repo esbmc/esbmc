@@ -383,6 +383,9 @@ int cbmc_parseoptionst::doit()
   if(set_claims(goto_functions))
     return 7;
 
+  if (opts.get_bool_option("skip-bmc"))
+    return 0;
+
   bool res = false;
 
   // do actual BMC
