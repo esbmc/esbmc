@@ -23,15 +23,13 @@ extern "C" {
 }
 #endif
 
-#include <esbmc/bmc.h>
-#include <esbmc/esbmc_parseoptions.h>
 #include <ansi-c/c_preprocess.h>
 #include <cctype>
 #include <clang-c-frontend/clang_c_language.h>
-#include <util/config.h>
 #include <csignal>
 #include <cstdlib>
-#include <util/expr_util.h>
+#include <esbmc/bmc.h>
+#include <esbmc/esbmc_parseoptions.h>
 #include <fstream>
 #include <goto-programs/add_race_assertions.h>
 #include <goto-programs/goto_check.h>
@@ -45,15 +43,17 @@ extern "C" {
 #include <goto-programs/remove_unreachable.h>
 #include <goto-programs/set_claims.h>
 #include <goto-programs/show_claims.h>
-#include <util/irep.h>
 #include <langapi/languages.h>
 #include <langapi/mode.h>
 #include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
 #include <pointer-analysis/value_set_analysis.h>
-#include <util/symbol.h>
 #include <sys/wait.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/irep.h>
+#include <util/symbol.h>
 #include <util/time_stopping.h>
 
 enum PROCESS_TYPE { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP, PARENT };
