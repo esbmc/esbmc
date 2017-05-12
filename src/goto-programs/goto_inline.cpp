@@ -310,6 +310,9 @@ void goto_inlinet::expand_function_call(
     target=next_target;
 
     recursion_set.erase(recursion_it);
+
+    // Copy local variables
+    dest.add_local_variables(f.body.local_variables);
   }
   else
   {
