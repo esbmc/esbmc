@@ -1,5 +1,10 @@
 Release Notes of the ESBMC model checker
 
+*** Version 4.2.1
++ Fix bug when inlining functions and esbmc would assume that
+the variables from the inlined function were global
++ Fix python compilation on MacOS
+
 *** Version 4.2
 + Full support for va_args
 + Dropped openssl dependency
