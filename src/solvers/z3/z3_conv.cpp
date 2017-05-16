@@ -850,11 +850,7 @@ smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
 smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol
-  smt_astt rm;
-  if(is_ieee_sqrt2t(expr))
-    rm = convert_rounding_mode(*expr->get_sub_expr(1));
-  else
-    rm = convert_rounding_mode(*expr->get_sub_expr(2));
+  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
   const z3_smt_ast *mrm = z3_smt_downcast(rm);
 
   unsigned ew = to_floatbv_type(expr->type).exponent;
@@ -862,7 +858,7 @@ smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
 
   // Sides
-  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
+  smt_astt s1 = convert_ast(*expr->get_sub_expr(1));
   const z3_smt_ast *ms1 = z3_smt_downcast(s1);
 
   if(is_ieee_sqrt2t(expr))
@@ -870,7 +866,7 @@ smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
     return new_ast(ctx.fpa_sqrt(mrm->e, ms1->e), s);
   }
 
-  smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
+  smt_astt s2 = convert_ast(*expr->get_sub_expr(2));
   const z3_smt_ast *ms2 = z3_smt_downcast(s2);
 
   switch (expr->expr_id) {

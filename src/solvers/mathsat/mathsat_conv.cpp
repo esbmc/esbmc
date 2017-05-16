@@ -743,15 +743,11 @@ smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
 smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol
-  smt_astt rm;
-  if(is_ieee_sqrt2t(expr))
-    rm = convert_rounding_mode(*expr->get_sub_expr(1));
-  else
-    rm = convert_rounding_mode(*expr->get_sub_expr(2));
+  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
   const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
 
   // Sides
-  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
+  smt_astt s1 = convert_ast(*expr->get_sub_expr(1));
   const mathsat_smt_ast *ms1 = mathsat_ast_downcast(s1);
 
   msat_term t;
@@ -761,7 +757,7 @@ smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   }
   else
   {
-    smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
+    smt_astt s2 = convert_ast(*expr->get_sub_expr(2));
     const mathsat_smt_ast *ms2 = mathsat_ast_downcast(s2);
 
     switch (expr->expr_id)
