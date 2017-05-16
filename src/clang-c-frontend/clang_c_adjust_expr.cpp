@@ -1009,6 +1009,16 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
+    else if(identifier==CPROVER_PREFIX "floatbv_mode")
+    {
+      exprt new_expr;
+      if(config.ansi_c.use_fixed_for_float)
+        new_expr = false_exprt();
+      else
+        new_expr = true_exprt();
+
+      expr.swap(new_expr);
+    }
   }
 
   // Restore location
