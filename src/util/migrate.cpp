@@ -1162,6 +1162,23 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     ieee_fma2t *a = new ieee_fma2t(type, v1, v2, v3, rm);
     new_expr_ref = expr2tc(a);
+  } else if (expr.id() == "ieee_sqrt") {
+    migrate_type(expr.type(), type);
+
+    expr2tc value;
+    migrate_expr(expr.op0(), value);
+
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
+
+    ieee_sqrt2t *a = new ieee_sqrt2t(type, value, rm);
+    new_expr_ref = expr2tc(a);
   } else if (expr.id() == exprt::mod) {
     migrate_type(expr.type(), type);
 
@@ -2188,6 +2205,17 @@ migrate_expr_back(const expr2tc &ref)
     fmaval.copy_to_operands(migrate_expr_back(ref2.value_1),
                             migrate_expr_back(ref2.value_2),
                             migrate_expr_back(ref2.value_3));
+
+    // Add rounding mode
+    fmaval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return fmaval;
+  }
+  case expr2t::ieee_sqrt_id:
+  {
+    const ieee_sqrt2t &ref2 = to_ieee_sqrt2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt fmaval("ieee_sqrt", thetype);
+    fmaval.copy_to_operands(migrate_expr_back(ref2.value));
 
     // Add rounding mode
     fmaval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));

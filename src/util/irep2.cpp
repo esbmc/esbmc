@@ -795,6 +795,7 @@ static const char *expr_names[] = {
   "ieee_mul",
   "ieee_div",
   "ieee_fma",
+  "ieee_sqrt",
   "modulus",
   "shl",
   "ashr",
@@ -2784,6 +2785,8 @@ std::string ieee_div2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "rounding_mode", "", "", ""};
 std::string ieee_fma2t::field_names [esbmct::num_type_fields]  =
 { "value_1", "value_2", "value_3", "rounding_mode", "", ""};
+std::string ieee_sqrt2t::field_names [esbmct::num_type_fields]  =
+{ "value", "rounding_mode", "", "", ""};
 std::string modulus2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string shl2t::field_names [esbmct::num_type_fields]  =
@@ -3082,6 +3085,7 @@ expr_typedefs3(ieee_sub, ieee_arith_2ops);
 expr_typedefs3(ieee_mul, ieee_arith_2ops);
 expr_typedefs3(ieee_div, ieee_arith_2ops);
 expr_typedefs4(ieee_fma, ieee_arith_3ops);
+expr_typedefs2(ieee_sqrt, ieee_arith_1op);
 expr_typedefs2(modulus, arith_2ops);
 expr_typedefs2(shl, arith_2ops);
 expr_typedefs2(ashr, arith_2ops);
