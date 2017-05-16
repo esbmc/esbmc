@@ -589,6 +589,13 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = mk_smt_bvfloat_arith_ops(expr);
     break;
   }
+  case expr2t::ieee_sqrt_id:
+  {
+    assert(is_floatbv_type(expr));
+    assert(expr->get_num_sub_exprs() == 2);
+    a = mk_smt_bvfloat_arith_ops(expr);
+    break;
+  }
   case expr2t::modulus_id:
   {
     assert(expr->get_num_sub_exprs() == 2);
