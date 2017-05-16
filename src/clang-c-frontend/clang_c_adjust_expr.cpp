@@ -1019,6 +1019,21 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 
       expr.swap(new_expr);
     }
+    else if(identifier==CPROVER_PREFIX "sqrtf" ||
+            identifier==CPROVER_PREFIX "sqrtd" ||
+            identifier==CPROVER_PREFIX "sqrtld")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "sqrt expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt new_expr("ieee_sqrt", expr.type());
+      new_expr.operands() = expr.arguments();
+      expr.swap(new_expr);
+    }
   }
 
   // Restore location
