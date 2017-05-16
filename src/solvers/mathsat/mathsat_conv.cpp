@@ -742,8 +742,8 @@ smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
 
 smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 {
-  smt_astt rm;
   // Rounding mode symbol
+  smt_astt rm;
   if(is_ieee_sqrt2t(expr))
     rm = convert_rounding_mode(*expr->get_sub_expr(1));
   else
