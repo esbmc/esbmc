@@ -234,18 +234,8 @@ std::string clang_c_languaget::internal_additions()
     "unsigned long __ESBMC_alloc_size[1];\n"
 
     // float stuff
-    "_Bool __ESBMC_isnan(double f);\n"
-    "_Bool __ESBMC_isfinite(double f);\n"
-    "_Bool __ESBMC_isinf(double f);\n"
-    "_Bool __ESBMC_isnormal(double f);\n"
     "int __ESBMC_rounding_mode = 0;\n"
-
-    // absolute value
-    "int __ESBMC_abs(int x);\n"
-    "long int __ESBMC_labs(long int x);\n"
-    "double __ESBMC_fabs(double x);\n"
-    "long double __ESBMC_fabsl(long double x);\n"
-    "float __ESBMC_fabsf(float x);\n"
+    "_Bool __ESBMC_floatbv_mode();\n"
 
     // Digital controllers code
     "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
