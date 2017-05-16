@@ -6,8 +6,52 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "symbol.h"
-#include "location.h"
+#include <util/location.h>
+#include <util/symbol.h>
+
+symbolt::symbolt()
+{
+  clear();
+}
+
+const irep_idt &symbolt::display_name() const
+{
+  return pretty_name.empty() ? name : pretty_name;
+}
+
+void symbolt::clear()
+{
+  value.make_nil();
+  location.make_nil();
+  lvalue=static_lifetime=file_local=is_extern=
+    is_type=is_parameter=is_macro=is_used=false;
+  name=module=base_name=mode=pretty_name="";
+}
+
+void symbolt::swap(symbolt &b)
+{
+#define SYM_SWAP1(x) x.swap(b.x)
+
+  SYM_SWAP1(type);
+  SYM_SWAP1(value);
+  SYM_SWAP1(name);
+  SYM_SWAP1(pretty_name);
+  SYM_SWAP1(module);
+  SYM_SWAP1(base_name);
+  SYM_SWAP1(mode);
+  SYM_SWAP1(location);
+
+#define SYM_SWAP2(x) std::swap(x, b.x)
+
+  SYM_SWAP2(is_type);
+  SYM_SWAP2(is_macro);
+  SYM_SWAP2(is_parameter);
+  SYM_SWAP2(lvalue);
+  SYM_SWAP2(static_lifetime);
+  SYM_SWAP2(file_local);
+  SYM_SWAP2(is_extern);
+  SYM_SWAP2(is_used);
+}
 
 void symbolt::dump() const
 {
@@ -16,29 +60,31 @@ void symbolt::dump() const
 
 void symbolt::show(std::ostream &out) const
 {
-  out << "  " << name << std::endl;
-  out << "    type:  " << type.pretty(4) << std::endl
-      << "    value: " << value.pretty(4) << std::endl;
+  out << "Symbol......: " << name << std::endl;
+  out << "Pretty name.: " << pretty_name << std::endl;
+  out << "Module......: " << module << std::endl;
+  out << "Base name...: " << base_name << std::endl;
+  out << "Mode........: " << mode << " (" << mode << ")" << std::endl;
+  if(type.is_not_nil()) out << "Type........: " << type.pretty(4) << std::endl;
+  if(value.is_not_nil()) out << "Value.......: " << value.pretty(4) <<  std::endl;
 
-  out << "  flags:";
+  out << "Flags.......:";
+
   if(lvalue)          out << " lvalue";
   if(static_lifetime) out << " static_lifetime";
   if(file_local)      out << " file_local";
   if(is_type)         out << " type";
   if(is_extern)       out << " extern";
   if(is_macro)        out << " macro";
-  if(is_parameter)    out << " parameter";
-  if(mode!="")        out << " mode=" << mode;
-  if(base_name!="")   out << " base_name=" << base_name;
-  if(module!="")      out << " module=" << module;
-  if(pretty_name!="") out << " pretty_name=" << pretty_name;
+  if(is_used)         out << " used";
+
   out << std::endl;
-  out << "  location: " << location << std::endl;
+  out << "Location....: " << location << std::endl;
+
   out << std::endl;
 }
 
-std::ostream &operator<<(std::ostream &out,
-                         const symbolt &symbol)
+std::ostream &operator<<(std::ostream &out, const symbolt &symbol)
 {
   symbol.show(out);
   return out;

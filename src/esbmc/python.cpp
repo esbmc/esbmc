@@ -1,14 +1,12 @@
-#include "parseoptions.h"
-#include <irep2.h>
-#include <migrate.h>
+#include <esbmc/esbmc_parseoptions.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
 #include <solvers/smt/smt_conv.h>
 #include <langapi/mode.h>
 #include <goto-programs/goto_functions.h>
-
 #include <boost/python.hpp>
 #include <boost/python/object/find_instance.hpp>
-
-#include <bp_converter.h>
+#include <util/bp_converter.h>
 
 using namespace boost::python;
 
@@ -38,6 +36,7 @@ public:
 };
 
 void build_bigint_python_class();
+void build_guard_python_class();
 void build_base_expr2t_python_class();
 void build_base_type2t_python_class();
 void build_type2t_container_converters();
@@ -183,6 +182,10 @@ init_esbmc_process(boost::python::object o)
   // Add skip-bmc option: causes all usual processing to happen, but we bail
   // out of parseoptions at the point where we would usually start BMC.
   argv[i++] = "--skip-bmc";
+
+  // Init esbmc Stuff. First the static order initialization fiasco.
+  tp = new type_poolt(true);
+  type_pool = *tp;
 
   python_module_engaged = true;
   po = new cbmc_parseoptionst(argc, argv);
@@ -369,6 +372,7 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_EXPR_DOWNCASTING, foo, ESBMC_LIST_OF_EXPRS)
 
   // Register BigInt globally
   build_bigint_python_class();
+  build_guard_python_class();
   build_dstring_python_class();
 
   // Alas, we need to pass handles to optionst, namespace, goto funcs around.

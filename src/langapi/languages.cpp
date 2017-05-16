@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "languages.h"
-#include "mode.h"
+#include <langapi/languages.h>
+#include <langapi/mode.h>
 
 /*******************************************************************\
 

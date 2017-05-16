@@ -1,10 +1,8 @@
-#include <stdio.h>
-
-#include <irep2.h>
-#include <namespace.h>
-
+#include <cstdio>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple_flat.h>
+#include <util/irep2.h>
+#include <util/namespace.h>
 
 extern "C" {
 #include <boolector.h>
@@ -105,7 +103,7 @@ public:
   smt_ast *fix_up_shift(shift_func_ptr fptr, const btor_smt_ast *op0,
       const btor_smt_ast *op1, smt_sortt res_sort);
 
-  virtual void dump_SMT();
+  virtual void dump_smt();
 
   // Members
 

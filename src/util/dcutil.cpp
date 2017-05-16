@@ -1,7 +1,7 @@
 
-#include "dcutil.h"
-#include <math.h>
-#include <stdlib.h>
+#include <cmath>
+#include <cstdlib>
+#include <util/dcutil.h>
 
 dcutil::dcutil() {
 }

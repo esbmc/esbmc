@@ -6,29 +6,27 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include <assert.h>
-#include <sstream>
-#include <prefix.h>
-#include <expr_util.h>
-#include <c_misc.h>
-#include <base_type.h>
-#include <arith_tools.h>
-#include <rename.h>
-#include <i2string.h>
-#include <array_name.h>
-#include <config.h>
-#include <std_expr.h>
-#include <cprover_prefix.h>
-#include <type_byte_size.h>
-#include <c_types.h>
-
 #include <ansi-c/c_typecast.h>
-#include <pointer-analysis/value_set.h>
+#include <cassert>
 #include <langapi/language_util.h>
-
-#include "dereference.h"
+#include <pointer-analysis/dereference.h>
+#include <pointer-analysis/value_set.h>
+#include <sstream>
+#include <util/arith_tools.h>
+#include <util/array_name.h>
+#include <util/base_type.h>
+#include <util/c_misc.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/rename.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 // global data, horrible
 unsigned int dereferencet::invalid_counter=0;
@@ -1634,6 +1632,7 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
   unsigned long access_size = type_byte_size(type).to_ulong();
 
   assert(is_array_type(expr) || is_string_type(expr));
+  const array_type2t arr_type = get_arr_type(expr);
 
   expr2tc arrsize;
   if (!is_constant_array2t(expr) &&
@@ -1641,12 +1640,15 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
     // Construct a dynamic_size irep.
     address_of2tc addrof(expr->type, expr);
     arrsize = dynamic_size2tc(addrof);
+  } else if (!is_constant_int2t(arr_type.array_size)) {
+    // Also a dynamic_size irep.
+    address_of2tc addrof(expr->type, expr);
+    arrsize = dynamic_size2tc(addrof);
   } else {
     // Calculate size from type.
 
     // Dance around getting the array type normalised.
     type2tc new_string_type;
-    const array_type2t arr_type = get_arr_type(expr);
 
     // XXX -- arrays were assigned names, but we're skipping that for the moment
     // std::string name = array_name(ns, expr.source_value);

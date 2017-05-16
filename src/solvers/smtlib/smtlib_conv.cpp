@@ -1,14 +1,12 @@
 // "Standards" workaround
 #define __STDC_FORMAT_MACROS
 
-#include <unistd.h>
-#include <inttypes.h>
-
+#include <cinttypes>
+#include <smtlib_conv.h>
+#include <smtlib.hpp>
+#include <smtlib_tok.hpp>
 #include <sstream>
-
-#include "smtlib_conv.h"
-#include "smtlib.hpp"
-#include "smtlib_tok.hpp"
+#include <unistd.h>
 
 // Dec of external lexer input stream
 int smtlibparse(int startval);

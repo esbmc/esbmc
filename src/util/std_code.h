@@ -9,9 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_STD_CODE_H
 #define CPROVER_STD_CODE_H
 
-#include <assert.h>
-
-#include <expr.h>
+#include <cassert>
+#include <util/expr.h>
 
 class codet:public exprt
 {

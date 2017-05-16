@@ -1,7 +1,11 @@
 #include <errno.h>
-#include <pthread.h>
 
+#include "../headers/pthreadtypes.hs"
 #include "intrinsics.h"
+
+typedef void *(*__ESBMC_thread_start_func_type)(void *);
+void __ESBMC_terminate_thread(void);
+unsigned int __ESBMC_spawn_thread(void (*)(void));
 
 struct __pthread_start_data {
   __ESBMC_thread_start_func_type func;
@@ -69,19 +73,16 @@ void
 pthread_trampoline(void)
 {
   __ESBMC_HIDE:;
-  struct __pthread_start_data startdata;
-  unsigned int threadid;
-  void *exit_val;
+  pthread_t threadid = __ESBMC_get_thread_id();
+  struct __pthread_start_data startdata =
+    __ESBMC_get_thread_internal_data(threadid);
 
-  threadid = __ESBMC_get_thread_id();
-  startdata = __ESBMC_get_thread_internal_data(threadid);
-
-  exit_val = startdata.func(startdata.start_arg);
+  void *exit_val = startdata.func(startdata.start_arg);
 
   __ESBMC_atomic_begin();
   threadid = __ESBMC_get_thread_id();
-  __ESBMC_pthread_end_values[threadid] = exit_val;
-  __ESBMC_pthread_thread_ended[threadid] = 1;
+  __ESBMC_pthread_end_values[(int)threadid] = exit_val;
+  __ESBMC_pthread_thread_ended[(int)threadid] = 1;
   __ESBMC_num_threads_running--;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -98,23 +99,20 @@ pthread_create(pthread_t *thread, const pthread_attr_t *attr,
   void *arg)
 {
   __ESBMC_HIDE:;
-  unsigned int thread_id;
-  struct __pthread_start_data startdata = {
-    start_routine, arg
-  };
+  struct __pthread_start_data startdata = { start_routine, arg };
 
   __ESBMC_atomic_begin();
-  thread_id = __ESBMC_spawn_thread(pthread_trampoline);
+  pthread_t threadid = __ESBMC_spawn_thread(pthread_trampoline);
   __ESBMC_num_total_threads++;
   __ESBMC_num_threads_running++;
-  __ESBMC_pthread_thread_running[thread_id] = 1;
-  __ESBMC_pthread_thread_ended[thread_id] = 0;
-  __ESBMC_pthread_end_values[thread_id] = NULL;
-  __ESBMC_set_thread_internal_data(thread_id, startdata);
+  __ESBMC_pthread_thread_running[threadid] = 1;
+  __ESBMC_pthread_thread_ended[threadid] = 0;
+  __ESBMC_pthread_end_values[threadid] = NULL;
+  __ESBMC_set_thread_internal_data(threadid, startdata);
 
   // pthread_t is actually an unsigned long int; identify a thread using just
   // its thread number.
-  *thread = thread_id;
+  *thread = threadid;
 
   __ESBMC_atomic_end();
   return 0; // We never fail
@@ -125,9 +123,9 @@ pthread_exit(void *retval)
 {
   __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  unsigned int threadid = __ESBMC_get_thread_id();
-  __ESBMC_pthread_end_values[threadid] = retval;
-  __ESBMC_pthread_thread_ended[threadid] = 1;
+  pthread_t threadid = __ESBMC_get_thread_id();
+  __ESBMC_pthread_end_values[(int)threadid] = retval;
+  __ESBMC_pthread_thread_ended[(int)threadid] = 1;
   __ESBMC_num_threads_running--;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -152,7 +150,7 @@ pthread_join_switch(pthread_t thread, void **retval)
   // Detect whether the target thread has ended or not. If it isn't, mark us as
   // waiting for its completion. That fact can be used for deadlock detection
   // elsewhere.
-  _Bool ended = __ESBMC_pthread_thread_ended[thread];
+  _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
   if (!ended) {
     __ESBMC_blocked_threads_count++;
     // If there are now no more threads unblocked, croak.
@@ -162,7 +160,7 @@ pthread_join_switch(pthread_t thread, void **retval)
 
   // Fetch exit code
   if (retval != NULL)
-    *retval = __ESBMC_pthread_end_values[thread];
+    *retval = __ESBMC_pthread_end_values[(int)thread];
 
   // In all circumstances, allow a switch away from this thread to permit
   // deadlock checking,
@@ -183,12 +181,12 @@ pthread_join_noswitch(pthread_t thread, void **retval)
   // If the other thread hasn't ended, assume false, because further progress
   // isn't going to be made. Wait for an interleaving where this is true
   // instead. This function isn't designed for deadlock detection.
-  _Bool ended = __ESBMC_pthread_thread_ended[thread];
+  _Bool ended = __ESBMC_pthread_thread_ended[(int)thread];
   __ESBMC_assume(ended);
 
   // Fetch exit code
   if (retval != NULL)
-    *retval = __ESBMC_pthread_end_values[thread];
+    *retval = __ESBMC_pthread_end_values[(int)thread];
 
   __ESBMC_really_atomic_end();
 

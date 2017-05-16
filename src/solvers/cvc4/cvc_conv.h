@@ -2,7 +2,6 @@
 #define _ESBMC_SOLVERS_CVC_CVC_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
-
 #include <cvc4/cvc4.h>
 
 class cvc_smt_sort : public smt_sort

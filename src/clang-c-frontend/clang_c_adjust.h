@@ -9,10 +9,10 @@
 #ifndef CLANG_C_FRONTEND_CLANG_C_ADJUST_H_
 #define CLANG_C_FRONTEND_CLANG_C_ADJUST_H_
 
-#include <context.h>
-#include <namespace.h>
-#include <std_expr.h>
-#include <std_code.h>
+#include <util/context.h>
+#include <util/namespace.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 
 class clang_c_adjust
 {
@@ -65,7 +65,6 @@ class clang_c_adjust
 
     void adjust_argc_argv(const symbolt &main_symbol);
 
-    void make_index_type(exprt &expr);
     void do_special_functions(side_effect_expr_function_callt &expr);
 };
 

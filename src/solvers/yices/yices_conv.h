@@ -2,7 +2,6 @@
 #define _ESBMC_SOLVERS_YICES_YICES_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
-
 #include <yices.h>
 
 class yices_smt_sort : public smt_sort

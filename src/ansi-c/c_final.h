@@ -10,9 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_C_FINAL_H
 
 #include <iostream>
-
-#include <context.h>
-#include <message.h>
+#include <util/context.h>
+#include <util/message.h>
 
 void c_finalize_expression(
   const contextt &context,

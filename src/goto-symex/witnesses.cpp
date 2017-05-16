@@ -9,60 +9,33 @@
  *
  */
 
-#include <boost/property_tree/ptree.hpp>
-#include <map>
-#include <fstream>
-
-#include <irep2.h>
-#include <langapi/languages.h>
-#include <witnesses.h>
-
 #include <ac_config.h>
+#include <boost/property_tree/ptree.hpp>
+#include <fstream>
+#include <goto-symex/witnesses.h>
+#include <langapi/languages.h>
+#include <util/irep2.h>
 
-
-#ifndef HAVE_OPENSSL
-
-extern "C" {
-  #include <openssl/sha.h>
-}
-
-#define SHA1_DIGEST_LENGTH 20
 int generate_sha1_hash_for_file(const char * path, std::string & output)
 {
   FILE * file = fopen(path, "rb");
-
   if(!file)
     return -1;
 
-  unsigned char hash[SHA1_DIGEST_LENGTH];
-  SHA_CTX sha1;
-  SHA1_Init(&sha1);
   const int bufSize = 32768;
   char * buffer = (char *) alloca(bufSize);
-  char * output_hex_hash = (char *) alloca(sizeof(char) * SHA1_DIGEST_LENGTH * 2);
-  if(!buffer || !output_hex_hash)
-    return -1;
 
+  crypto_hash c;
   int bytesRead = 0;
   while((bytesRead = fread(buffer, 1, bufSize, file)))
-	  SHA1_Update(&sha1, buffer, bytesRead);
+    c.ingest(buffer, bytesRead);
 
-  SHA1_Final(hash, &sha1);
-  int i = 0;
-  for(i = 0; i < SHA1_DIGEST_LENGTH; i++)
-    sprintf(output_hex_hash + (i * 2), "%02x", hash[i]);
+  c.fin();
+  output = c.to_string();
 
-  output.append(output_hex_hash);
   fclose(file);
   return 0;
 }
-#else
-int generate_sha1_hash_for_file(const char * path, std::string & output)
-{
-  std::cerr << "ESBMC was not built with openssl, we can't generate sha1 for the witness\n";
-  return 0;
-}
-#endif /* !NO_OPENSSL */
 
 int node_count;
 int edge_count;

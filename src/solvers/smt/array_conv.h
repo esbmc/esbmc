@@ -17,9 +17,8 @@
 // As a result, this particular class is due some serious maintenence.
 
 #include <set>
-
-#include <irep2.h>
-#include "smt_conv.h"
+#include <solvers/smt/smt_conv.h>
+#include <util/irep2.h>
 
 static inline bool
 is_unbounded_array(const smt_sort *s)

@@ -6,11 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include "std_types.h"
-#include "base_type.h"
-#include "union_find.h"
+#include <cassert>
+#include <util/base_type.h>
+#include <util/std_types.h>
+#include <util/union_find.h>
 
 void base_type(type2tc &type, const namespacet &ns)
 {

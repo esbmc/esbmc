@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_TYPECHECK_H
 #define CPROVER_TYPECHECK_H
 
-#include "message_stream.h"
-#include "expr.h"
+#include <util/expr.h>
+#include <util/message_stream.h>
 
 class typecheckt:public message_streamt
 {

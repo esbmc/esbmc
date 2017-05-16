@@ -13,7 +13,7 @@ AC_DEFINE([ESBMC_VERSION], ["AC_PACKAGE_VERSION"], [ESBMC version number])
 AC_SUBST([ESBMC_VERSION_STR], esbmcversion)
 dnl Numerous things croak unless we do this immediately:
 AC_CONFIG_AUX_DIR([scripts/build-aux])
-AC_CONFIG_MACRO_DIRS([scripts/build-aux/m4 /usr/share/aclocal])
+AC_CONFIG_MACRO_DIRS([scripts/build-aux/m4])
 
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADER(ac_config.h:scripts/ac_config.in)
@@ -37,7 +37,7 @@ AS_IF([test "x$esbmc_has_awk" = "xno"], AC_MSG_ERROR([Cannot find awk]))
 dnl Don't seem to be able to test for sed
 
 dnl Transform version numbers into some integers...
-AS_VAR_SET(ver_numcomponents, `echo esbmcversion | awk 'BEGIN{RS="."}{print $0;}' | wc -l`)
+AS_VAR_SET(ver_numcomponents, `echo esbmcversion | awk 'BEGIN{RS="."}{print $0;}' | wc -l | xargs `)
 AS_IF([test "${ver_numcomponents}" != "4"], [
   AC_MSG_ERROR([Couldnt interpret esbmc version number in esbmc/version])
 ])
@@ -66,9 +66,11 @@ dnl Continue looking at our compilation situation
 AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
 
 AX_BOOST_BASE(1.47, [], AC_MSG_ERROR([Cannot find boost base dir; please pass it in --with-boost argument or set BOOST_ROOT]))
+AX_BOOST_FILESYSTEM
+AX_BOOST_SYSTEM
 
 AS_VAR_APPEND(CPPFLAGS, " $BOOST_CPPFLAGS")
-AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS")
+AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS $BOOST_FILESYSTEM_LIB $BOOST_SYSTEM_LIB")
 
 AS_VAR_SET(C2GOTO_LIBS, "")
 
@@ -86,12 +88,6 @@ AC_CHECK_LIB([pthread], [pthread_create],
     [AS_VAR_APPEND(LIBS, " -lpthread ")]
 )
 
-dnl Some librt's depend on pthread, so prepend it to the libs
-AC_CHECK_LIB([rt], [timer_create],
-    [AS_VAR_SET(LIBS, " -lrt $LIBS")],
-    AC_MSG_ERROR([No librt found]), []
-)
-
 AC_CHECK_LIB([gomp], [omp_get_num_threads],
     [AS_VAR_SET(LIBS, " -lgomp $LIBS")],
     [AC_MSG_WARN([No libgomp found: Z3 may want this])], []
@@ -107,17 +103,12 @@ AC_CHECK_LIB([gmp], [__gmpz_cmp],
     [AC_MSG_WARN([No libgmp found: various solvers require it])], []
 )
 
-AC_CHECK_LIB([crypto], [SHA1_Init],
-    [AS_VAR_APPEND(LIBS, " -lcrypto")],
-    [AC_MSG_WARN([No libgmp found: various solvers require it])], []
-)
-
 # Define what to do when clang is enabled
 m4_define(ESBMC_ENABLE_CLANG, [
-  AX_CLANG(3.9.0, [], AC_MSG_ERROR([Cannot find clang lib dir; please pass it in --with-clang argument or set CLANG_ROOT]))
+  AX_CLANG(4.0.0, [], AC_MSG_ERROR([Cannot find clang lib dir; please pass it in --with-clang argument or set CLANG_ROOT]))
   AX_LLVM(,AC_MSG_FAILURE(Cannot find llvm dir, please pass it in --with-llvm argument))
   AC_SUBST([ESBMC_CLANG_SUBDIRS], " clang-c-frontend clang-cpp-frontend ")
-  AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ../clang-c-frontend/headers/libclangheaders.la")
+  AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ../clang-c-frontend/headers/libclangheaders.la ../clang-c-frontend/AST/libclangcfrontendast.la")
   ])
 
 AC_ARG_ENABLE(clang, [AS_HELP_STRING([--disable-clang], Build ESBMC without clang. (On by default))],
@@ -145,10 +136,6 @@ AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], AC_MSG_ERROR([No boost
 AC_CHECK_HEADERS([sys/sendfile.h], AC_DEFINE([HAVE_SENDFILE_ESBMC], [], [Has sendfile header]), [])
 
 AC_CHECK_HEADERS([unistd.h], [AC_DEFINE([HAVE_UNISTD], [], [Has unistd.h header])], [])
-
-dnl We don't link directly against openssl, instead chosing to open at runtime.
-dnl However, don't try and build for it without openssl headers
-AC_CHECK_HEADERS([openssl/sha.h], [AC_DEFINE([OPENSSL_HEADERS], [], [Have openssl headers])], [])
 
 AC_HEADER_STDBOOL
 AC_TYPE_UID_T
@@ -224,12 +211,17 @@ AS_IF([test "${enable_python}" = "yes"], [
   AS_IF([test "${enable_static_link}" = "yes"], [
     AC_CHECK_LIB([expat], [XML_ExpatVersion],
       [AS_VAR_APPEND(LIBS, " -lexpat")],
-      AC_MSG_ERROR([No libexpat found]), []
+      AC_MSG_ERROR([No libexpat found: libpython may want this]), []
     )
 
     AC_CHECK_LIB([util], [openpty],
       [AS_VAR_APPEND(LIBS, " -lutil")],
-      AC_MSG_ERROR([No libutil found]), []
+      AC_MSG_ERROR([No libutil found: libpython may want this]), []
+    )
+
+    AC_CHECK_LIB([z], [zlibVersion],
+      [AS_VAR_APPEND(LIBS, " -lz")],
+      AC_MSG_ERROR([No libz found: libpython may want this]), []
     )
   ])
 
@@ -295,7 +287,7 @@ AS_IF([test "${enable_libesbmc}" = "yes"], [
 
 AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 $ESBMC_CLANG_CXXFLAGS ")
 dnl A necessary evil due to the presence of rubbish in boost::python's headers.
-dnl local typedefs because that's hwo boost python works
+dnl local typedefs because that's how boost python works
 dnl deprecated decls because it uses auto ptrs
 dnl field initializers due to a, uh, totally legitimate initializer mismatch
 dnl       with later versions of python headers
@@ -570,7 +562,7 @@ AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 AC_SUBST([ESBMC_SOLVER_LIBS], "$ESBMC_SOLVER_LIBS")
 
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-cpp-frontend/Makefile c2goto/headers/Makefile c2goto/Makefile esbmc/Makefile solvers/solver_config.h esbmc/version.h])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-c-frontend/AST/Makefile clang-cpp-frontend/Makefile c2goto/headers/Makefile c2goto/Makefile esbmc/Makefile solvers/solver_config.h esbmc/version.h])
 AC_OUTPUT
 
 AS_ECHO(["----------------------------------------"])

@@ -6,23 +6,19 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <i2string.h>
-#include <expr_util.h>
-#include <location.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <arith_tools.h>
-#include <simplify_expr.h>
-#include <std_code.h>
-#include <std_expr.h>
-#include <type_byte_size.h>
-#include <c_types.h>
-
-
-#include "goto_convert_class.h"
-
+#include <cassert>
+#include <goto-programs/goto_convert_class.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/location.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 static void get_alloc_type_rec(
   const exprt &src,
@@ -156,18 +152,6 @@ void goto_convertt::do_atomic_end(
   t->location=function.location();
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_mem
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_mem(
   bool is_malloc,
   const exprt &lhs,
@@ -227,18 +211,6 @@ void goto_convertt::do_mem(
   t_n->location=location;
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_alloca
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_alloca(
   const exprt &lhs,
   const exprt &function,
@@ -248,18 +220,6 @@ void goto_convertt::do_alloca(
   do_mem(false, lhs, function, arguments, dest);
 }
 
-/*******************************************************************\
-
-Function: goto_convertt::do_malloc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convertt::do_malloc(
   const exprt &lhs,
   const exprt &function,
@@ -268,18 +228,6 @@ void goto_convertt::do_malloc(
 {
   do_mem(true, lhs, function, arguments, dest);
 }
-
-/*******************************************************************\
-
-Function: goto_convertt::do_realloc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_convertt::do_realloc(
   const exprt &lhs,
@@ -384,7 +332,7 @@ void goto_convertt::do_cpp_new(
 
   // set size
   //nec: ex37.c
-  exprt dynamic_size("dynamic_size", int_type()/*uint_type()*/);
+  exprt dynamic_size("dynamic_size", int_type());
   dynamic_size.copy_to_operands(lhs);
   dynamic_size.location()=rhs.find_location();
   goto_programt::targett t_s_s=dest.add_instruction(ASSIGN);

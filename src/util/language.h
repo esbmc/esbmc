@@ -9,11 +9,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_LANGUAGE_H
 #define CPROVER_LANGUAGE_H
 
+#include <cstdio>
 #include <set>
-#include <stdio.h>
-#include "context.h"
-#include "namespace.h"
-#include "message.h"
+#include <util/context.h>
+#include <util/message.h>
+#include <util/namespace.h>
 
 class languaget
 {

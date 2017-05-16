@@ -5,13 +5,6 @@ if test ! -e esbmc; then
   exit 1
 fi
 
-libtoolize
-
-# /usr/share contains PKG macros
-aclocal -I scripts/build-aux/m4 -I /usr/share/aclocal
-
-automake --add-missing --foreign
-
-autoconf
+autoreconf -fi
 
 rm -rf autom4te.cache

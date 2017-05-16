@@ -11,13 +11,12 @@
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-#include <context.h>
-#include <namespace.h>
-#include <std_types.h>
-
-#include <clang/Frontend/ASTUnit.h>
-#include <clang/AST/Type.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/Type.h>
+#include <clang/Frontend/ASTUnit.h>
+#include <util/context.h>
+#include <util/namespace.h>
+#include <util/std_types.h>
 
 class clang_c_convertert
 {
@@ -122,7 +121,8 @@ private:
     typet type,
     std::string base_name,
     std::string pretty_name,
-    locationt location);
+    locationt location,
+    bool is_used);
 
   void get_field_name(
     const clang::FieldDecl &fd,
@@ -203,8 +203,6 @@ private:
 
   const clang::Decl* get_top_FunctionDecl_from_Stmt(
     const clang::Stmt &stmt);
-
-  bool convert_this_decl(const clang::Decl &decl);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

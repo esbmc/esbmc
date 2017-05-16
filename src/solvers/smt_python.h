@@ -2,7 +2,6 @@
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple.h>
 #include <solvers/smt/smt_array.h>
-
 #include <boost/python/class.hpp>
 
 class smt_sort_wrapper : public smt_sort, public boost::python::wrapper<smt_sort>

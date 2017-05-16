@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "cpp_parse_tree.h"
+#include <cpp/cpp_parse_tree.h>
 
 /*******************************************************************\
 

@@ -9,29 +9,22 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef CPROVER_PROP_Z3_CONV_H
 #define CPROVER_PROP_Z3_CONV_H
 
-#include <irep2.h>
-#include <namespace.h>
-
-#include <stdint.h>
-
-#include <map>
-#include <set>
-#include <hash_cont.h>
-#include <solvers/smt/smt_conv.h>
-#include <solvers/prop/pointer_logic.h>
-#include <solvers/smt/smt_conv.h>
-#include <solvers/smt/smt_tuple.h>
-#include <vector>
-#include <string.h>
-
-#include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
-
-#include "z3pp.h"
-
-typedef unsigned int uint;
+#include <boost/multi_index_container.hpp>
+#include <cstdint>
+#include <cstring>
+#include <map>
+#include <set>
+#include <solvers/prop/pointer_logic.h>
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple.h>
+#include <util/hash_cont.h>
+#include <util/irep2.h>
+#include <util/namespace.h>
+#include <vector>
+#include <z3pp.h>
 
 class z3_smt_sort : public smt_sort {
 public:
@@ -68,9 +61,9 @@ public:
   z3::expr e;
 
   virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
-                                unsigned int idx, expr2tc idx_expr) const;
-  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
-  virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
+                                unsigned int idx, expr2tc idx_expr) const override;
+  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const override;
+  virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const override;
 
   virtual void dump() const override;
 };
@@ -185,7 +178,7 @@ public:
     return ss.str();
   }
 
-  virtual void dump_SMT();
+  virtual void dump_smt();
 
   // Some useful types
 public:

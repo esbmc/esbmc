@@ -1,25 +1,20 @@
 #ifndef _GOTO_SYMEX_RENAMING_H_
 #define _GOTO_SYMEX_RENAMING_H_
 
-#include <irep2.h>
-
-#include <stdint.h>
-#include <string.h>
-
-#include <string>
-#include <stack>
-#include <vector>
-#include <set>
-
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
-
-#include <guard.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <i2string.h>
-
-#include "crypto_hash.h"
+#include <cstdint>
+#include <cstring>
+#include <set>
+#include <stack>
+#include <string>
+#include <util/crypto_hash.h>
+#include <util/expr_util.h>
+#include <util/guard.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/std_expr.h>
+#include <vector>
 
 namespace renaming {
 
@@ -288,7 +283,7 @@ namespace renaming {
 
     friend void build_goto_symex_classes();
     // Repeat of the above ignored friend directive.
-    typedef hash_map_cont<const name_record, valuet, name_rec_hash> current_namest;
+    typedef hash_map_cont<name_record, valuet, name_rec_hash> current_namest;
 
     current_namest current_names;
     typedef std::map<const expr2tc, crypto_hash> current_state_hashest;

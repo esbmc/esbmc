@@ -1,109 +1,44 @@
 
-#include "crypto_hash.h"
-#include <ac_config.h>
-
-#ifndef HAVE_OPENSSL
-
-extern "C" {
-#include <openssl/sha.h>
-}
-
+#include <boost/algorithm/hex.hpp>
+#include <boost/uuid/sha1.hpp>
 #include <cstring>
+#include <util/crypto_hash.h>
 
 class crypto_hash_private {
 public:
-#ifndef HAVE_OPENSSL
-  SHA_CTX c;
-#endif
+  boost::uuids::detail::sha1 s;
 };
 
-bool
-crypto_hash::operator<(const crypto_hash h2) const
+bool crypto_hash::operator<(const crypto_hash h2) const
 {
 
-  if (memcmp(hash, h2.hash, 32) < 0)
+  if (memcmp(hash, h2.hash, CRYPTO_HASH_SIZE) < 0)
     return true;
 
   return false;
 }
 
-std::string
-crypto_hash::to_string() const
+std::string crypto_hash::to_string() const
 {
-  int i;
-  char hex[65];
+  std::ostringstream buf;
+  for(int i = 0; i < 5; ++i)
+    buf << std::hex << std::setfill('0') << std::setw(8) << hash[i];
 
-  for (i = 0; i < 32; i++)
-    sprintf(&hex[i*2], "%02X", (unsigned char)hash[i]);
-
-  hex[64] = '\0';
-  return std::string(hex);
-}
-
-crypto_hash::crypto_hash() : p_crypto(std::make_shared<crypto_hash_private>())
-{
-  SHA1_Init(&p_crypto->c);
-}
-
-void
-crypto_hash::ingest(void const *data, unsigned int size)
-{
-  SHA1_Update(&p_crypto->c, data, size);
-  return;
-}
-
-void
-crypto_hash::fin(void)
-{
-  SHA1_Final(hash, &p_crypto->c);
-}
-
-#else /* !NO_OPENSSL */
-
-extern "C" {
-  #include <stdlib.h>
-  #include <string.h>
-};
-
-#include <iostream>
-
-/* Generate some dummy implementations that complain and abort if used */
-
-bool
-crypto_hash::operator<(const crypto_hash h2 __attribute__((unused))) const
-{
-
-  abort();
-  return false;
-}
-
-std::string
-crypto_hash::to_string() const
-{
-
-  abort();
+  return buf.str();
 }
 
 crypto_hash::crypto_hash()
+  : p_crypto(std::make_shared<crypto_hash_private>()),
+    hash{0}
 {
-  // Valid; some exist as default constructions within other parts of ESBMC.
-  // Preventing this constructor running leads to *all* runtimes being blocked
-  // by errors thrown from here.
 }
 
-void
-crypto_hash::ingest(const void *data __attribute__((unused)),
-                    unsigned int size __attribute__((unused)))
+void crypto_hash::ingest(void const *data, unsigned int size)
 {
-  abort();
+  p_crypto->s.process_bytes(data, size);
 }
 
-void
-crypto_hash::fin(void)
+void crypto_hash::fin()
 {
-  abort();
+  p_crypto->s.get_digest(hash);
 }
-
-
-
-#endif /* NO_OPENSSL */

@@ -6,24 +6,22 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <arith_tools.h>
-#include <bitvector.h>
-#include <config.h>
-#include <expr_util.h>
-#include <std_types.h>
-#include <prefix.h>
-#include <cprover_prefix.h>
-#include <simplify_expr.h>
-#include <base_type.h>
-#include <std_expr.h>
-#include <string_constant.h>
-#include <c_types.h>
-
-#include "c_typecast.h"
-#include "c_typecheck_base.h"
-#include "c_sizeof.h"
+#include <ansi-c/c_sizeof.h>
+#include <ansi-c/c_typecast.h>
+#include <ansi-c/c_typecheck_base.h>
+#include <cassert>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
+#include <util/string_constant.h>
 
 /*******************************************************************\
 
@@ -745,8 +743,6 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
         index_full_type.id()=="pointer"))
       std::swap(array_expr, index_expr);
   }
-
-  make_index_type(index_expr);
 
   const typet &final_array_type=follow(array_expr.type());
 

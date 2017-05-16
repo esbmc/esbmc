@@ -1,11 +1,10 @@
 #ifndef _ESBMC_SOLVERS_MATHSAT_MATHSAT_CONV_H_
 #define _ESBMC_SOLVERS_MATHSAT_MATHSAT_CONV_H_
 
+#include <mathsat.h>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple_flat.h>
 #include <solvers/smt/fp_conv.h>
-
-#include <mathsat.h>
 
 class mathsat_smt_sort : public smt_sort
 {
@@ -100,7 +99,7 @@ public:
   void push_array_ctx(void);
   void pop_array_ctx(void);
 
-  virtual void dump_SMT();
+  virtual void dump_smt();
 
   // MathSAT data.
   msat_config cfg;

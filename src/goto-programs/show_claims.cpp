@@ -6,13 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <xml.h>
-#include <i2string.h>
-#include <xml_irep.h>
-
+#include <goto-programs/show_claims.h>
 #include <langapi/language_util.h>
-
-#include "show_claims.h"
+#include <util/i2string.h>
+#include <util/xml.h>
+#include <util/xml_irep.h>
 
 void show_claims(
   const namespacet &ns,

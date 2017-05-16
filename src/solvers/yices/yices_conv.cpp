@@ -1,10 +1,8 @@
-#include <stddef.h>
-#include <stdarg.h>
-#include <stdint.h>
-
+#include <cstddef>
+#include <cstdarg>
+#include <cstdint>
 #include <sstream>
-
-#include "yices_conv.h"
+#include <yices_conv.h>
 
 // From yices 2.3 (I think) various API calls have had new non-binary
 // operand versions added. The maintainers have chosen to break backwards

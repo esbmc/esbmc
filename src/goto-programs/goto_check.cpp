@@ -6,16 +6,15 @@
 
  \*******************************************************************/
 
-#include <location.h>
-#include <i2string.h>
-#include <expr_util.h>
-#include <guard.h>
-#include <simplify_expr.h>
-#include <array_name.h>
-#include <arith_tools.h>
-#include <base_type.h>
-
-#include "goto_check.h"
+#include <goto-programs/goto_check.h>
+#include <util/arith_tools.h>
+#include <util/array_name.h>
+#include <util/base_type.h>
+#include <util/expr_util.h>
+#include <util/guard.h>
+#include <util/i2string.h>
+#include <util/location.h>
+#include <util/simplify_expr.h>
 
 class goto_checkt
 {
@@ -307,7 +306,7 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
     return;  // done by the pointer code
   else if (array_type.id() == "incomplete_array")
   {
-    std::cerr << expr.pretty() << std::endl;
+    expr.dump();
     throw "index got incomplete array";
   }
   else if (!array_type.is_array())
@@ -350,7 +349,7 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
         inequality.copy_to_operands(index, zero);
 
         add_guarded_claim(inequality, name + " lower bound", "array bounds",
-            expr.find_location(), guard);
+          expr.find_location(), guard);
       }
     }
   }
@@ -367,7 +366,7 @@ void goto_checkt::bounds_check(const exprt &expr, const guardt &guard)
       inequality.copy_to_operands(index, size);
 
       // typecast size
-      if (inequality.op1().type() != inequality.op0().type())
+      if(inequality.op1().type() != inequality.op0().type())
         inequality.op1().make_typecast(inequality.op0().type());
 
       add_guarded_claim(
@@ -612,24 +611,21 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       check(migrate_expr_back(ret.operand));
     }
 
-    for (goto_programt::instructionst::iterator i_it =
-        new_code.instructions.begin(); i_it != new_code.instructions.end();
-        i_it++)
+    for (auto i_it : new_code.instructions)
     {
-      i_it->local_variables = it->local_variables;
-      if (i_it->location.is_nil())
+      if (i_it.location.is_nil())
       {
-        if (!i_it->location.comment().as_string().empty())
-          it->location.comment(i_it->location.comment());
-        if (!i_it->location.property().as_string().empty())
-          it->location.property(i_it->location.property());
+        if (!i_it.location.comment().as_string().empty())
+          it->location.comment(i_it.location.comment());
+        if (!i_it.location.property().as_string().empty())
+          it->location.property(i_it.location.property());
 
-        i_it->location = it->location;
+        i_it.location = it->location;
       }
-      if (i_it->function == "")
-        i_it->function = it->function;
-      if (i_it->function == "")
-        i_it->function = it->function;
+      if (i_it.function == "")
+        i_it.function = it->function;
+      if (i_it.function == "")
+        i_it.function = it->function;
     }
 
     // insert new instructions -- make sure targets are not moved

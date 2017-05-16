@@ -9,11 +9,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_LOGIC_H
 #define CPROVER_POINTER_LOGIC_H
 
-#include <irep2.h>
-#include <mp_arith.h>
-#include <hash_cont.h>
-#include <expr.h>
-#include <numbering.h>
+#include <util/expr.h>
+#include <util/hash_cont.h>
+#include <util/irep2.h>
+#include <util/mp_arith.h>
+#include <util/numbering.h>
 
 class pointer_logict
 {

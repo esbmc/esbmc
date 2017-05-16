@@ -6,11 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "expr_util.h"
-#include "fixedbv.h"
-#include "bitvector.h"
-#include "std_expr.h"
-#include "ieee_float.h"
+#include <util/bitvector.h>
+#include <util/expr_util.h>
+#include <util/fixedbv.h>
+#include <util/ieee_float.h>
+#include <util/std_expr.h>
 
 exprt gen_zero(const typet &type)
 {
@@ -25,8 +25,7 @@ exprt gen_zero(const typet &type, bool array_as_array_of)
 
   result=exprt("constant", type);
 
-  if(type_id=="real" ||
-     type_id=="complex")
+  if(type_id=="complex")
   {
     result.value("0");
   }
@@ -96,7 +95,6 @@ exprt gen_one(const typet &type)
   exprt result=exprt("constant", type);
 
   if(type_id=="bool" ||
-     type_id=="real" ||
      type_id=="complex")
   {
     result.value("1");

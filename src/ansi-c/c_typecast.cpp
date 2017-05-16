@@ -6,19 +6,17 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <string2array.h>
-#include <config.h>
-#include <simplify_expr_class.h>
-#include <expr_util.h>
-#include <base_type.h>
-#include <std_expr.h>
-#include "type2name.h"
-
-#include "c_typecast.h"
-#include "c_types.h"
-#include "c_qualifiers.h"
+#include <ansi-c/c_qualifiers.h>
+#include <ansi-c/c_typecast.h>
+#include <ansi-c/type2name.h>
+#include <cassert>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/simplify_expr_class.h>
+#include <util/std_expr.h>
+#include <util/string2array.h>
 
 /*******************************************************************\
 
@@ -114,16 +112,8 @@ bool check_c_implicit_typecast(
 
   const std::string &src_type_id=src_type.id_string();
 
-  if(src_type_id=="real")
+  if(src_type_id=="bool")
   {
-    if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="complex") return false;
-    if(dest_type.id()=="floatbv") return false;
-    if(dest_type.id()=="fixedbv") return false;
-  }
-  else if(src_type_id=="bool")
-  {
-    if(dest_type.id()=="real") return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="pointer") return false;
@@ -138,7 +128,6 @@ bool check_c_implicit_typecast(
   {
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="floatbv") return false;
     if(dest_type.id()=="fixedbv") return false;
@@ -150,7 +139,6 @@ bool check_c_implicit_typecast(
           src_type_id=="fixedbv")
   {
     if(dest_type.is_bool()) return false;
-    if(dest_type.id()=="real") return false;
     if(dest_type.id()=="signedbv") return false;
     if(dest_type.id()=="unsignedbv") return false;
     if(dest_type.id()=="floatbv") return false;

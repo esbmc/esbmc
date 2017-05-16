@@ -8,24 +8,20 @@
 
 \*******************************************************************/
 
-#include <assert.h>
-#include <string.h>
-#include <iostream>
-
 #include <ansi-c/printf_formatter.h>
-#include <langapi/language_util.h>
-#include <arith_tools.h>
-#include <boost/version.hpp>
-
-#include "goto_trace.h"
-#include <std_types.h>
-
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
-
-#include "langapi/languages.h"
-#include "witnesses.h"
+#include <boost/version.hpp>
+#include <cassert>
+#include <cstring>
+#include <goto-symex/goto_trace.h>
+#include <goto-symex/witnesses.h>
+#include <iostream>
+#include <langapi/language_util.h>
+#include <langapi/languages.h>
+#include <util/arith_tools.h>
+#include <util/std_types.h>
 
 extern std::string verification_file;
 
@@ -275,7 +271,6 @@ get_varname_from_guard (
 }
 
 void generate_goto_trace_in_violation_graphml_format(
-  std::string & witness_programfile __attribute__((unused)),
   std::string & witness_output,
   bool is_detailed_mode,
   int & specification,
@@ -293,10 +288,7 @@ void generate_goto_trace_in_violation_graphml_format(
   std::string last_ver_filename = "";
   bool already_initialized = false;
 
-  bool use_program_file = !witness_programfile.empty();
-  std::string program_file = use_program_file ? witness_programfile : verification_file;
-
-  create_graph(graph, program_file, specification, false);
+  create_graph(graph, verification_file, specification, false);
   boost::property_tree::ptree first_node;
   node_p first_node_p;
   first_node_p.isEntryNode = true;
@@ -345,13 +337,6 @@ void generate_goto_trace_in_violation_graphml_format(
 	int line_number = std::atoi(it->pc->location.get_line().c_str());
 	if(line_number != 0)
 	{
-	  if (use_program_file)
-	  {
-	    int relative_line_number = 0;
-	    get_relative_line_in_programfile(current_ver_file, line_number, witness_programfile, relative_line_number);
-	    current_ver_file = program_file;
-	    line_number = relative_line_number;
-	  }
 	  current_edge_p.startline = line_number;
 	  if (is_detailed_mode)
 	  {
@@ -436,11 +421,6 @@ void generate_goto_trace_in_violation_graphml_format(
       }
     }
 
-    /* skip no assumption edges (avoid problems with equivalence) */
-    if (use_program_file && current_edge_p.assumption.length() == 0){
-    	continue;
-    }
-
     /* creating node and edge */
     boost::property_tree::ptree current_node;
     node_p current_node_p;
@@ -468,7 +448,7 @@ void generate_goto_trace_in_violation_graphml_format(
   }
 
   /* write graphml */
-  create_graphml(graphml, program_file);
+  create_graphml(graphml, verification_file);
   graphml.add_child("graphml.graph", graph);
 
 #if (BOOST_VERSION >= 105700)
@@ -480,7 +460,6 @@ void generate_goto_trace_in_violation_graphml_format(
 }
 
 void generate_goto_trace_in_correctness_graphml_format(
-  std::string & witness_programfile __attribute__((unused)),
   std::string & witness_output,
   bool is_detailed_mode,
   int & specification,
@@ -496,10 +475,7 @@ void generate_goto_trace_in_correctness_graphml_format(
   std::string last_function = "";
   std::string last_ver_file = "";
 
-  bool use_program_file = !witness_programfile.empty();
-  std::string program_file = use_program_file ? witness_programfile : verification_file;
-
-  create_graph(graph, program_file, specification, true);
+  create_graph(graph, verification_file, specification, true);
   boost::property_tree::ptree first_node;
   node_p first_node_p;
   first_node_p.isEntryNode = true;
@@ -515,8 +491,8 @@ void generate_goto_trace_in_correctness_graphml_format(
       it->pc->location.to_string().find("built-in", 0);
     std::string::size_type find_lib =
       it->pc->location.to_string().find("library", 0);
-    bool is_internal_call = (find_bt != std::string::npos)
-        || (find_lib != std::string::npos);
+    bool is_internal_call =
+      (find_bt != std::string::npos) || (find_lib != std::string::npos);
 
     /** ignore internal calls and non assignments */
     if(!(it->type == goto_trace_stept::ASSIGNMENT)
@@ -525,9 +501,9 @@ void generate_goto_trace_in_correctness_graphml_format(
 
     /* checking other restrictions */
     if (!is_valid_witness_expr(ns, it->lhs))
-	  continue;
+      continue;
 
-	/** ignore internal calls and non assignments */
+    /** ignore internal calls and non assignments */
     if(!(it->is_assignment() || it->is_assume() || it->is_assert()))
       continue;
 
@@ -552,13 +528,6 @@ void generate_goto_trace_in_correctness_graphml_format(
     int line_number = std::atoi(it->pc->location.get_line().c_str());
     if(line_number != 0)
     {
-      if (use_program_file)
-      {
-        int relative_line_number = 0;
-        get_relative_line_in_programfile(current_ver_file, line_number, witness_programfile, relative_line_number);
-        current_ver_file = program_file;
-        line_number = relative_line_number;
-      }
       current_edge_p.startline = line_number;
       if (is_detailed_mode)
       {
@@ -585,9 +554,9 @@ void generate_goto_trace_in_correctness_graphml_format(
       else
       {
         /* it is backing from another function */
-		current_edge_p.returnFromFunction = last_function;
-		current_edge_p.enterFunction = function_name;
-		last_function = function_name;
+        current_edge_p.returnFromFunction = last_function;
+        current_edge_p.enterFunction = function_name;
+        last_function = function_name;
       }
     }
 
@@ -599,7 +568,7 @@ void generate_goto_trace_in_correctness_graphml_format(
       std::string codeline = line_content_map[line_number];
       if ((codeline.find("__VERIFIER_assume") != std::string::npos ) ||
           (codeline.find("__ESBMC_assume") != std::string::npos ) ||
-		  (codeline.find("assume") != std::string::npos))
+          (codeline.find("assume") != std::string::npos))
       {
         codeline = w_string_replace(codeline, "__VERIFIER_assume", "");
         codeline = w_string_replace(codeline, "__ESBMC_assume", "");

@@ -9,11 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_GOTO_PROGRAM_DEREFERENCE_H
 #define CPROVER_POINTER_ANALYSIS_GOTO_PROGRAM_DEREFERENCE_H
 
-#include <namespace.h>
 #include <goto-programs/goto_functions.h>
-
-#include "value_sets.h"
-#include "dereference.h"
+#include <pointer-analysis/dereference.h>
+#include <pointer-analysis/value_sets.h>
+#include <util/namespace.h>
 
 class goto_program_dereferencet:protected dereference_callbackt
 {
@@ -42,11 +41,11 @@ public:
   void dereference_expression(
     goto_programt::const_targett target,
     expr2tc &expr);
-    
+
   virtual ~goto_program_dereferencet()
   {
   }
-    
+
 protected:
   const optionst &options;
   const namespacet &ns;
@@ -73,11 +72,11 @@ protected:
 protected:
   void dereference_expr(expr2tc &expr, const bool checks_only,
                         const dereferencet::modet mode);
-  
-  const std::set<irep_idt> *valid_local_variables;
+
+  goto_programt::local_variablest *valid_local_variables;
   locationt dereference_location;
   goto_programt::const_targett current_target;
-  
+
   std::set<expr2tc> assertions;
   goto_programt new_code;
 };

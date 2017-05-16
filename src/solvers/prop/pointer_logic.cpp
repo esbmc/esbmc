@@ -6,16 +6,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <config.h>
-#include <i2string.h>
-#include <arith_tools.h>
-#include <type_byte_size.h>
-#include <std_expr.h>
-#include <prefix.h>
-
-#include "pointer_logic.h"
+#include <cassert>
+#include <pointer_logic.h>
+#include <util/arith_tools.h>
+#include <util/config.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 /*******************************************************************\
 

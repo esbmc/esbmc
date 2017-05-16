@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "template_map.h"
+#include <cpp/template_map.h>
 
 /*******************************************************************\
 

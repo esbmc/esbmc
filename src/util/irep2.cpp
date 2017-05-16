@@ -1,24 +1,21 @@
-#include "irep2.h"
-#include <stdarg.h>
-#include <string.h>
-#include <sstream>
-
-#include "std_types.h"
-#include "migrate.h"
-#include "i2string.h"
-
-#include <boost/algorithm/string.hpp>
-#include <boost/static_assert.hpp>
-#include <boost/functional/hash.hpp>
-
 #include <ac_config.h>
+#include <boost/algorithm/string.hpp>
+#include <boost/functional/hash.hpp>
+#include <boost/static_assert.hpp>
+#include <cstdarg>
+#include <cstring>
+#include <sstream>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/std_types.h>
 
 #ifdef WITH_PYTHON
 #include <boost/python.hpp>
 #include <boost/python/operators.hpp>
 #include <boost/python/object/find_instance.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
-#include <bp_converter.h>
+#include <util/bp_converter.h>
 
 // Additional python infrastructure: our irep containers don't quite match
 // the pointer ownership model that boost.python expects. Specifically: it
@@ -1139,6 +1136,11 @@ object_descriptor2t::get_root_object(void) const
 }
 
 type_poolt::type_poolt(void)
+{
+  // This space is deliberately left blank
+}
+
+type_poolt::type_poolt(bool yolo __attribute__((unused)))
 {
   bool_type = type2tc(new bool_type2t());
   empty_type = type2tc(new empty_type2t());
@@ -2855,7 +2857,7 @@ std::string code_goto2t::field_names [esbmct::num_type_fields]  =
 std::string object_descriptor2t::field_names [esbmct::num_type_fields]  =
 { "object", "offset", "alignment", "", ""};
 std::string code_function_call2t::field_names [esbmct::num_type_fields]  =
-{ "return", "function", "operands", "", ""};
+{ "return_sym", "function", "operands", "", ""};
 std::string code_comma2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string invalid_pointer2t::field_names [esbmct::num_type_fields]  =

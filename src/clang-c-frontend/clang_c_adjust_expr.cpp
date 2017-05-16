@@ -5,18 +5,16 @@
  *      Author: mramalho
  */
 
-#include <arith_tools.h>
-#include <std_code.h>
-#include <expr_util.h>
-#include <bitvector.h>
-#include <prefix.h>
-#include <cprover_prefix.h>
-#include <c_types.h>
-
 #include <ansi-c/c_sizeof.h>
-#include "clang_c_adjust.h"
-
-#include "typecast.h"
+#include <clang-c-frontend/clang_c_adjust.h>
+#include <clang-c-frontend/typecast.h>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
 
 clang_c_adjust::clang_c_adjust(contextt &_context)
   : context(_context),
@@ -313,8 +311,6 @@ void clang_c_adjust::adjust_index(index_exprt& index)
       std::swap(array_expr, index_expr);
   }
 
-  make_index_type(index_expr);
-
   const typet &final_array_type=ns.follow(array_expr.type());
 
   if(final_array_type.is_array() ||
@@ -567,11 +563,12 @@ void clang_c_adjust::adjust_side_effect_function_call(
       // let's just add it
       symbolt new_symbol;
 
-      new_symbol.name=identifier;
-      new_symbol.base_name=f_op.name();
-      new_symbol.location=expr.location();
-      new_symbol.type=f_op.type();
-      new_symbol.mode="C";
+      new_symbol.name = identifier;
+      new_symbol.base_name = f_op.name();
+      new_symbol.location = expr.location();
+      new_symbol.type = f_op.type();
+      new_symbol.mode = "C";
+      new_symbol.is_used = true;
 
       // Adjust type
       to_code_type(new_symbol.type).make_ellipsis();
@@ -1116,15 +1113,15 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
   const exprt &op0 = arguments[0];
   const exprt &op1 = arguments[1];
 
-  symbolt *argc_new_symbol;
-
   symbolt argc_symbol;
   argc_symbol.base_name = "argc";
   argc_symbol.name = "c::argc'";
   argc_symbol.type = op0.type();
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
+  argc_symbol.is_used = true;
 
+  symbolt *argc_new_symbol;
   context.move(argc_symbol, argc_new_symbol);
 
   // need to add one to the size -- the array is terminated
@@ -1140,6 +1137,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
   argv_symbol.type = array_typet(op1.type().subtype(), size_expr);
   argv_symbol.static_lifetime = true;
   argv_symbol.lvalue = true;
+  argv_symbol.is_used = true;
 
   symbolt *argv_new_symbol;
   context.move(argv_symbol, argv_new_symbol);
@@ -1148,19 +1146,21 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
   {
     const exprt &op2 = arguments[2];
 
+    symbolt envp_size_symbol;
+    envp_size_symbol.base_name = "envp_size";
+    envp_size_symbol.name = "c::envp_size'";
+    envp_size_symbol.type = op0.type(); // same type as argc!
+    envp_size_symbol.static_lifetime = true;
+
+    symbolt *envp_new_size_symbol;
+    context.move(envp_size_symbol, envp_new_size_symbol);
+
     symbolt envp_symbol;
     envp_symbol.base_name = "envp";
     envp_symbol.name = "c::envp'";
     envp_symbol.type = op2.type();
     envp_symbol.static_lifetime = true;
-
-    symbolt envp_size_symbol, *envp_new_size_symbol;
-    envp_size_symbol.base_name = "envp_size";
-    envp_size_symbol.name = "c::envp_size'";
-    envp_size_symbol.type = op0.type(); // same type as argc!
-    envp_size_symbol.static_lifetime = true;
-    context.move(envp_size_symbol, envp_new_size_symbol);
-
+    envp_symbol.is_used = true;
     exprt size_expr = symbol_expr(*envp_new_size_symbol);
     envp_symbol.type = array_typet(envp_symbol.type.subtype(), size_expr);
 
@@ -1220,13 +1220,9 @@ void clang_c_adjust::adjust_builtin_va_arg(exprt& expr)
   symbol.base_name = "builtin_va_arg";
   symbol.name = "builtin_va_arg";
   symbol.type = symbol_type;
+  symbol.is_used = true;
 
   context.move(symbol);
-}
-
-void clang_c_adjust::make_index_type(exprt& expr)
-{
-  gen_typecast(ns, expr, index_type());
 }
 
 void clang_c_adjust::adjust_operands(exprt& expr)

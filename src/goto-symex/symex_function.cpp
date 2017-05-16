@@ -7,21 +7,18 @@
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <expr_util.h>
-#include <i2string.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <arith_tools.h>
-#include <base_type.h>
-#include <std_expr.h>
-#include <c_types.h>
-
+#include <cassert>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
 #include <langapi/language_util.h>
-
-#include "goto_symex.h"
-#include "execution_state.h"
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
 
 bool
 goto_symext::get_unwind_recursion(
@@ -48,8 +45,9 @@ goto_symext::get_unwind_recursion(
   return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
-void
+unsigned
 goto_symext::argument_assignments(
+  const irep_idt &function_identifier,
   const code_type2t &function_type,
   const std::vector<expr2tc> &arguments)
 {
@@ -80,8 +78,10 @@ goto_symext::argument_assignments(
       abort();
     }
 
-    const symbolt &symbol = ns.lookup(identifier);
-    exprt tmp_lhs = symbol_expr(symbol);
+    const symbolt *symbol = ns.get_context().find_symbol(identifier);
+    assert(symbol != nullptr);
+
+    exprt tmp_lhs = symbol_expr(*symbol);
     expr2tc lhs;
     migrate_expr(tmp_lhs, lhs);
 
@@ -127,16 +127,47 @@ goto_symext::argument_assignments(
     it1++;
   }
 
+  unsigned va_index = UINT_MAX;
   if(function_type.ellipsis)
   {
-    for(; it1 != arguments.end(); it1++)
+    // These are va_arg arguments; their types may differ from call to call
+    unsigned va_count = 0;
+    while(
+      new_context.find_symbol(
+        id2string(function_identifier) + "::va_arg" + std::to_string(va_count)) != nullptr)
+      ++va_count;
+
+    va_index = va_count;
+    for(; it1 != arguments.end(); it1++, va_count++)
     {
+      irep_idt id =
+        id2string(function_identifier) + "::va_arg" + std::to_string(va_count);
+
+      // add to symbol table
+      symbolt symbol;
+      symbol.name = id;
+      symbol.base_name = "va_arg" + std::to_string(va_count);
+      symbol.type = migrate_type_back((*it1)->type);
+
+      if(new_context.move(symbol))
+      {
+        std::cerr << "Couldn't add new va_arg symbol" << std::endl;
+        abort();
+      }
+
+      symbol2tc va_lhs(
+        (*it1)->type, id, symbol2t::level1, 0, 0,
+        cur_state->top().level1.thread_id, 0);
+
+      symex_assign(code_assign2tc(va_lhs, *it1));
     }
   }
   else if(it1 != arguments.end())
   {
     // we got too many arguments, but we will just ignore them
   }
+
+  return va_index;
 }
 
 void
@@ -256,7 +287,8 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     abort();
   }
 
-  argument_assignments(to_code_type(tmp_type), arguments);
+  frame.va_index =
+    argument_assignments(identifier, to_code_type(tmp_type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;
@@ -498,27 +530,21 @@ goto_symext::locality(const goto_functiont &goto_function)
   goto_programt::local_variablest local_identifiers;
 
   // For all insns...
-  for (goto_programt::instructionst::const_iterator
-       it = goto_function.body.instructions.begin();
-       it != goto_function.body.instructions.end();
-       it++) {
-    local_identifiers.insert(it->local_variables.begin(),
-                             it->local_variables.end());
-  }
+  local_identifiers.insert(
+    local_identifiers.begin(),
+    goto_function.body.local_variables.begin(),
+    goto_function.body.local_variables.end());
 
   statet::framet &frame = cur_state->top();
 
   // For each local variable, set its frame number to frame_nr, ensuring all new
   // references to it look up a new variable.
-  for (goto_programt::local_variablest::const_iterator
-       it = local_identifiers.begin();
-       it != local_identifiers.end();
-       it++)
+  for (auto it : local_identifiers)
   {
     // Temporary, for symbol migration,
-    symbol2tc tmp_sym(get_empty_type(), *it);
+    symbol2tc tmp_sym(get_empty_type(), it);
 
-    unsigned int &frame_nr = cur_state->variable_instance_nums[*it];
+    unsigned int &frame_nr = cur_state->variable_instance_nums[it];
     frame.level1.rename(tmp_sym, ++frame_nr);
     frame.level1.get_ident_name(tmp_sym);
     frame.local_variables.insert(renaming::level2t::name_record(to_symbol2t(tmp_sym)));

@@ -1,16 +1,13 @@
-#include <sstream>
-#include <set>
 #include <iomanip>
-
-#include <base_type.h>
-#include <arith_tools.h>
-#include <c_types.h>
-#include <expr_util.h>
-
-#include "smt_conv.h"
+#include <set>
 #include <solvers/prop/literal.h>
-
-#include "smt_tuple_flat.h"
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple_flat.h>
+#include <sstream>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
 
 // Helpers extracted from z3_convt.
 
@@ -1854,7 +1851,7 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
 smt_sortt
 smt_convt::make_array_domain_sort(const array_type2t &arr)
 {
-  return mk_sort(int_encoding? SMT_SORT_INT : SMT_SORT_UBV, make_array_domain_sort_exp(arr)->get_width());
+  return mk_sort(int_encoding ? SMT_SORT_INT : SMT_SORT_UBV, make_array_domain_sort_exp(arr)->get_width());
 }
 
 type2tc
@@ -2602,7 +2599,7 @@ smt_ast::project(smt_convt *ctx __attribute__((unused)),
   abort();
 }
 
-void smt_convt::dump_SMT()
+void smt_convt::dump_smt()
 {
   std::cerr << "SMT dump not implemented for " << solver_text() << "\n";
 }

@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "type.h"
+#include <util/type.h>
 
 void typet::move_to_subtypes(typet &type)
 {
@@ -18,8 +18,7 @@ void typet::move_to_subtypes(typet &type)
 bool is_number(const typet &type)
 {
   const std::string &id=type.id_string();
-  return id=="real" ||
-         id=="complex" ||
+  return id=="complex" ||
          id=="unsignedbv" ||
          id=="signedbv" ||
          id=="floatbv" ||
@@ -28,7 +27,6 @@ bool is_number(const typet &type)
 
 irep_idt typet::t_signedbv = dstring("signedbv");
 irep_idt typet::t_unsignedbv = dstring("unsignedbv");
-irep_idt typet::t_real = dstring("real");
 irep_idt typet::t_complex = dstring("complex");
 irep_idt typet::t_floatbv = dstring("floatbv");
 irep_idt typet::t_fixedbv = dstring("fixedbv");

@@ -2,8 +2,8 @@
 #define _ESBMC_SOLVERS_SMT_CNF_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
-#include "bitblast_conv.h"
-#include "cnf_iface.h"
+#include <bitblast_conv.h>
+#include <cnf_iface.h>
 
 class cnf_convt : public sat_iface
 {

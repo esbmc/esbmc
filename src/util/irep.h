@@ -9,18 +9,17 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_IREP_H
 #define CPROVER_IREP_H
 
-#include <vector>
+#include <cassert>
 #include <list>
 #include <map>
 #include <string>
-
-#include <cassert>
-#include "global.h"
+#include <util/global.h>
+#include <vector>
 
 #define USE_DSTRING
 #define SHARING
 
-#include "dstring.h"
+#include <util/dstring.h>
 
 typedef dstring irep_idt;
 typedef dstring irep_namet;

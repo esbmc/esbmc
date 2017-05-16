@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_PROPDEC_LITERAL_H
 #define CPROVER_PROPDEC_LITERAL_H
 
+#include <cstdint>
 #include <vector>
-#include <stdint.h>
 
 class literalt
 {

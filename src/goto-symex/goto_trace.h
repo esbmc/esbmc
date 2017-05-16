@@ -11,17 +11,14 @@ Date: July 2005
 #ifndef CPROVER_GOTO_SYMEX_GOTO_TRACE_H
 #define CPROVER_GOTO_SYMEX_GOTO_TRACE_H
 
-#include <irep2.h>
-#include <migrate.h>
-
-#include <iostream>
-#include <vector>
-
 #include <fstream>
-#include <map>
-
 #include <goto-programs/goto_program.h>
 #include <goto-symex/symex_target.h>
+#include <iostream>
+#include <map>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <vector>
 
 class goto_trace_stept
 {
@@ -107,7 +104,6 @@ void show_goto_trace(
   const goto_tracet &goto_trace);
 
 void generate_goto_trace_in_violation_graphml_format(
-  std::string & witness_programfile,
   std::string & witness_output,
   bool is_detailed_mode,
   int & specification,
@@ -115,7 +111,6 @@ void generate_goto_trace_in_violation_graphml_format(
   const goto_tracet & goto_trace);
 
 void generate_goto_trace_in_correctness_graphml_format(
-  std::string & witness_programfile,
   std::string & witness_output,
   bool is_detailed_mode,
   int & specification,

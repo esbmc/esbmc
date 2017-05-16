@@ -6,10 +6,9 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include "cpp_token_buffer.h"
-#include "tokens.h"
+#include <cassert>
+#include <cpp/cpp_token_buffer.h>
+#include <cpp/tokens.h>
 
 /*******************************************************************\
 

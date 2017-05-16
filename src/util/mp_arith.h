@@ -9,10 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_MP_ARITH_H
 #define CPROVER_MP_ARITH_H
 
-#include <string>
+#include <big-int/bigint.hh>
 #include <iostream>
-
-#include "big-int/bigint.hh"
+#include <string>
 
 typedef BigInt mp_integer;
 typedef unsigned int u_int;

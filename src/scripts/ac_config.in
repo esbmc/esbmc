@@ -46,6 +46,9 @@
 /* Define to 1 if you have the <boost/crc.hpp> header file. */
 #undef HAVE_BOOST_CRC_HPP
 
+/* define if the Boost::Filesystem library is available */
+#undef HAVE_BOOST_FILESYSTEM
+
 /* Define to 1 if you have the <boost/fusion/include/equal_to.hpp> header
    file. */
 #undef HAVE_BOOST_FUSION_INCLUDE_EQUAL_TO_HPP
@@ -55,6 +58,9 @@
 
 /* Define to 1 if you have the <boost/shared_ptr.hpp> header file. */
 #undef HAVE_BOOST_SHARED_PTR_HPP
+
+/* define if the Boost::System library is available */
+#undef HAVE_BOOST_SYSTEM
 
 /* Define to 1 if you have the <boost/utility/enable_if.hpp> header file. */
 #undef HAVE_BOOST_UTILITY_ENABLE_IF_HPP
@@ -236,9 +242,6 @@
 
 /* Define to 1 if you have the `opendir' function. */
 #undef HAVE_OPENDIR
-
-/* Define to 1 if you have the <openssl/sha.h> header file. */
-#undef HAVE_OPENSSL_SHA_H
 
 /* Define to 1 if you have the `pathconf' function. */
 #undef HAVE_PATHCONF
@@ -485,9 +488,6 @@
 
 /* Define if dlsym() requires a leading underscore in symbol names. */
 #undef NEED_USCORE
-
-/* Have openssl headers */
-#undef OPENSSL_HEADERS
 
 /* Name of package */
 #undef PACKAGE

@@ -1,15 +1,12 @@
-#include "irep2.h"
-
-#include <string.h>
-
 #include <boost/static_assert.hpp>
-
-#include <arith_tools.h>
-#include <c_types.h>
-#include <base_type.h>
-#include <expr_util.h>
-#include <type_byte_size.h>
-#include <limits.h>
+#include <climits>
+#include <cstring>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/irep2.h>
+#include <util/type_byte_size.h>
 
 expr2tc
 expr2t::do_simplify(bool second __attribute__((unused))) const
@@ -230,6 +227,14 @@ simplify_arith_2ops(
     simpl_res =
       TFunctor<BigInt>::simplify(
         simplied_side_1, simplied_side_2, is_constant, get_value);
+
+    // Fix rounding when an overflow occurs
+    if(!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+      migrate_expr(
+        from_integer(
+          to_constant_int2t(simpl_res).value,
+          migrate_type_back(simpl_res->type)),
+          simpl_res);
   }
   else if(is_fixedbv_type(simplied_side_1) || is_fixedbv_type(simplied_side_2))
   {
@@ -656,6 +661,9 @@ with2t::do_simplify(bool second __attribute__((unused))) const
 
     // Index may be out of bounds. That's an error in the program, but not in
     // the model we're generating, so permit it. Can't simplify it though.
+    if (index.value.is_negative())
+      return expr2tc();
+
     if (index.as_ulong() >= array.datatype_members.size())
       return expr2tc();
 
@@ -867,6 +875,9 @@ index2t::do_simplify(bool second __attribute__((unused))) const
     const constant_int2t &idx = to_constant_int2t(index);
 
     // Same index situation
+    if (idx.value.is_negative())
+      return expr2tc();
+
     unsigned long the_idx = idx.as_ulong();
     if (the_idx > str.value.as_string().size()) // allow reading null term.
       return expr2tc();

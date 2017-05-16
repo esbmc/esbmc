@@ -1,4 +1,6 @@
 #include <stdlib.h>
+#include <string.h>
+
 #undef exit
 #undef abort
 #undef calloc
@@ -8,6 +10,8 @@
 
 #include "intrinsics.h"
 
+#pragma clang diagnostic push
+#pragma GCC diagnostic ignored "-Winvalid-noreturn"
 void exit(int status)
 {
   __ESBMC_assume(0);
@@ -17,6 +21,7 @@ void abort(void)
 {
   __ESBMC_assume(0);
 }
+#pragma clang diagnostic pop
 
 void __VERIFIER_error(void)
 {

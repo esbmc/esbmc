@@ -6,65 +6,55 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <fstream>
-#include <memory>
-
 #include <ac_config.h>
 
 #ifndef _WIN32
 extern "C" {
-#include <ctype.h>
 #include <fcntl.h>
-#include <stdlib.h>
-#include <signal.h>
 #include <unistd.h>
 
 #ifdef HAVE_SENDFILE_ESBMC
 #include <sys/sendfile.h>
 #endif
+
 #include <sys/resource.h>
 #include <sys/time.h>
 #include <sys/types.h>
 }
 #endif
 
-#include <irep.h>
-#include <config.h>
-#include <expr_util.h>
-#include <time_stopping.h>
-#include <symbol.h>
-
-#include <goto-programs/goto_convert_functions.h>
+#include <esbmc/bmc.h>
+#include <esbmc/esbmc_parseoptions.h>
+#include <ansi-c/c_preprocess.h>
+#include <cctype>
+#include <clang-c-frontend/clang_c_language.h>
+#include <util/config.h>
+#include <csignal>
+#include <cstdlib>
+#include <util/expr_util.h>
+#include <fstream>
+#include <goto-programs/add_race_assertions.h>
 #include <goto-programs/goto_check.h>
+#include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
-#include <goto-programs/goto_unwind.h>
-#include <goto-programs/show_claims.h>
-#include <goto-programs/set_claims.h>
-#include <goto-programs/read_goto_binary.h>
-#include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_unwind.h>
+#include <goto-programs/loop_numbers.h>
+#include <goto-programs/read_goto_binary.h>
 #include <goto-programs/remove_skip.h>
 #include <goto-programs/remove_unreachable.h>
-#include <goto-programs/add_race_assertions.h>
-
-#include <pointer-analysis/value_set_analysis.h>
+#include <goto-programs/set_claims.h>
+#include <goto-programs/show_claims.h>
+#include <util/irep.h>
+#include <langapi/languages.h>
+#include <langapi/mode.h>
+#include <memory>
 #include <pointer-analysis/goto_program_dereference.h>
 #include <pointer-analysis/show_value_sets.h>
-
-#include <langapi/mode.h>
-#include <langapi/languages.h>
-
-#include <ansi-c/c_preprocess.h>
-
-#include <clang-c-frontend/clang_c_language.h>
-
-#include "parseoptions.h"
-#include "bmc.h"
-#include <ac_config.h>
-#include <fstream>
-
-#include <signal.h>
+#include <pointer-analysis/value_set_analysis.h>
+#include <util/symbol.h>
 #include <sys/wait.h>
+#include <util/time_stopping.h>
 
 enum PROCESS_TYPE { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP, PARENT };
 
@@ -185,9 +175,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("witness-detailed"))
     options.set_option("witness-detailed", true);
 
-  if(cmdline.isset("witness-programfile"))
-    options.set_option("witness-programfile", cmdline.getval("witness-programfile"));
-
   if(cmdline.isset("git-hash"))
   {
     std::cout << esbmc_version_string << std::endl;
@@ -228,14 +215,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   }
   else
     options.set_option("deadlock-check", false);
-
-  if(cmdline.isset("smtlib-ileave-num"))
-  {
-    options.set_option("smtlib-ileave-num",
-        cmdline.getval("smtlib-ileave-num"));
-  }
-  else
-    options.set_option("smtlib-ileave-num", "1");
 
   if(cmdline.isset("smt-during-symex"))
   {
@@ -376,9 +355,11 @@ int cbmc_parseoptionst::doit()
     return 0;
   }
 
-  if(cmdline.isset("k-induction")
-    || cmdline.isset("k-induction-parallel"))
+  if(cmdline.isset("k-induction"))
     return doit_k_induction();
+
+  if(cmdline.isset("k-induction-parallel"))
+    return doit_k_induction_parallel();
 
   if(cmdline.isset("falsification"))
     return doit_falsification();
@@ -834,14 +815,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       (void)len; //ndebug
 
       std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
-
-      if(cmdline.isset("k-induction-busy-wait")
-          || opts.get_bool_option("k-induction-busy-wait"))
-      {
-        while(1)
-          sleep(1);
-      }
-
       break;
     }
 
@@ -911,14 +884,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       (void)len; //ndebug
 
       std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
-
-      if(cmdline.isset("k-induction-busy-wait")
-          || opts.get_bool_option("k-induction-busy-wait"))
-      {
-        while(1)
-          sleep(1);
-      }
-
       break;
     }
 
@@ -991,14 +956,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
       (void)len; //ndebug
 
       std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
-
-      if(cmdline.isset("k-induction-busy-wait")
-         || opts.get_bool_option("k-induction-busy-wait"))
-      {
-        while(1)
-          sleep(1);
-      }
-
       break;
     }
 
@@ -1011,9 +968,6 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
 
 int cbmc_parseoptionst::doit_k_induction()
 {
-  if(cmdline.isset("k-induction-parallel"))
-    return doit_k_induction_parallel();
-
   // Generate goto functions for base case and forward condition
   status("\n*** Generating Base Case and Forward Condition ***");
 
@@ -1298,43 +1252,39 @@ bool cbmc_parseoptionst::get_goto_program(
       return true;
     }
 
+    // If the user is providing the GOTO functions, we don't need to parse
     if(cmdline.isset("binary"))
     {
       status("Reading GOTO program from file");
 
       if(read_goto_binary(goto_functions))
         return true;
-
-      if(cmdline.isset("show-symbol-table"))
-      {
-        show_symbol_table();
-        return true;
-      }
-    }
-    else if(cmdline.isset("show-parse-tree"))
-    {
-      if(parse()) return true;
-
-      assert(language_files.filemap.size());
-      languaget &language = *language_files.filemap.begin()->second.language;
-      language.show_parse(std::cout);
-
-      return true;
     }
     else
     {
+      // Parsing
       if(parse()) return true;
+      if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
+      {
+        assert(language_files.filemap.size());
+        languaget &language = *language_files.filemap.begin()->second.language;
+        language.show_parse(std::cout);
+
+        if(cmdline.isset("parse-tree-only")) return true;
+      }
+
+      // Typecheking (old frontend) or adjust (clang frontend)
       if(typecheck()) return true;
       if(final()) return true;
 
-      if(cmdline.isset("show-symbol-table"))
-      {
-        show_symbol_table();
-        return true;
-      }
-
       // we no longer need any parse trees or language files
       clear_parse();
+
+      if(cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
+      {
+        show_symbol_table();
+        if(cmdline.isset("symbol-table-only")) return true;
+      }
 
       status("Generating GOTO Program");
 
@@ -1838,10 +1788,10 @@ bool cbmc_parseoptionst::process_goto_program(
     }
 
     // show it?
-    if(cmdline.isset("show-goto-functions"))
+    if(cmdline.isset("goto-functions-too") || cmdline.isset("goto-functions-only"))
     {
       goto_functions.output(ns, std::cout);
-      return true;
+      if(cmdline.isset("goto-functions-only")) return true;
     }
   }
 
@@ -1897,67 +1847,128 @@ void cbmc_parseoptionst::help()
     "\n"
     " esbmc [-?] [-h] [--help]      show help\n"
     " esbmc file.c ...              source file names\n"
-    "\n"
-    "Additonal options:\n\n"
-    "Front-end options\n"
+
+    "\nAdditonal options:\n"
+
+    "\nOutput options\n"
+    " --parse-tree-only            only show parse tree\n"
+    " --parse-tree-too             show parse tree and verify\n"
+    " --symbol-table-only          only show symbol table\n"
+    " --symbol-table-too           show symbol table and verify\n"
+    " --goto-functions-only        only show goto program\n"
+    " --goto-functions-too         show goto program and verify\n"
+    " --program-only               only show program expression\n"
+    " --program-too                show program expression and verify\n"
+    " --show-guards                print SSA's guards, if any\n"
+    " --simple-ssa-printing        do not print the SSA's original location\n"
+    " --smt-formula-only           only show SMT formula (not supported by all solvers)\n"
+    " --smt-formula-too            show SMT formula (not supported by all solvers) and verify\n"
+    " --show-smt-model             show SMT model (not supported by all solvers), if the formula is SAT\n"
+
+    "\nTrace options\n"
+    " --quiet                      do not print unwinding information during symbolic execution\n"
+    " --symex-trace                print instructions during symbolic execution\n"
+    " --symex-ssa-trace            print generated SSA during symbolic execution\n"
+    " --ssa-trace                  print SSA during SMT encoding\n"
+    " --show-goto-value-sets       show value-set analysis for the goto functions\n"
+    " --show-symex-value-sets      show value-set analysis during symbolic execution\n"
+
+    "\nFront-end options\n"
     " -I path                      set include path\n"
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
     " --no-inlining                disable inlining function calls\n"
     " --full-inlining              perform full inlining of function calls\n"
-    " --program-only               only show program expression\n"
     " --all-claims                 keep all claims\n"
     " --show-loops                 show the loops in the program\n"
     " --show-claims                only show claims\n"
     " --show-vcc                   show the verification conditions\n"
     " --document-subgoals          generate subgoals documentation\n"
+    " --no-arch                    don't set up an architecture\n"
     " --no-library                 disable built-in abstract C library\n"
-//    " --binary                     read goto program instead of source code\n"
+    " --binary                     read goto program instead of source code\n"
     " --little-endian              allow little-endian word-byte conversions\n"
     " --big-endian                 allow big-endian word-byte conversions\n"
-    " --16, --32, --64             set width of machine word\n"
+    " --16, --32, --64             set width of machine word (default is 64)\n"
     " --unsigned-char              make \"char\" unsigned by default\n"
-    " --show-parse-tree            show parse tree\n"
-    " --show-symbol-table          show symbol table\n"
-    " --show-goto-functions        show goto program\n"
-    " --extended-try-analysis      check all the try block, even when an exception is throw\n"
     " --version                    show current ESBMC version and exit\n"
-    " --witness-output <filename>  generate a verification result witness in GraphML format\n"
-    " --clang-frontend             parse source files using clang (beta)\n\n"
-    "BMC options\n"
+    " --witness-output filename    generate a verification result witness in GraphML format\n"
+    " --witness-detailed           generate line offset when generating a witness (linux only)\n"
+    " --clang-frontend             parse source files using clang (experimental)\n"
+    " --result-only                do not print the counter-example\n"
+    #ifdef _WIN32
+    " --i386-macos                 set MACOS/I386 architecture\n"
+    " --ppc-macos                  set PPC/I386 architecture\n"
+    " --i386-linux                 set Linux/I386 architecture\n"
+    " --i386-win32                 set Windows/I386 architecture (default)\n"
+    #elif __APPLE__
+    " --i386-macos                 set MACOS/I386 architecture (default)\n"
+    " --ppc-macos                  set PPC/I386 architecture\n"
+    " --i386-linux                 set Linux/I386 architecture\n"
+    " --i386-win32                 set Windows/I386 architecture\n"
+    #else
+    " --i386-macos                 set MACOS/I386 architecture\n"
+    " --ppc-macos                  set PPC/I386 architecture\n"
+    " --i386-linux                 set Linux/I386 architecture (default)\n"
+    " --i386-win32                 set Windows/I386 architecture\n"
+    #endif
+
+    "\nBMC options\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"
     " --depth nr                   limit search depth\n"
     " --unwind nr                  unwind nr times\n"
     " --unwindset nr               unwind given loop nr times\n"
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
+    " --partial-loops              permit paths with partial loops\n"
+    " --unroll-loops               unwind all loops by the value defined by the --unwind option\n"
     " --no-slice                   do not remove unused equations\n"
-    " --falsification              incremental loop unwinding for bug searching\n\n"
-    "Solver configuration\n"
+    " --extended-try-analysis      check all the try block, even when an exception is thrown\n"
+
+    "\nIncremental BMC\n"
+    " --falsification              incremental loop unwinding for bug searching\n"
+    " --incremental-bmc            incremental loop unwinding verification\n"
+    " --k-step nr                  set k increment (default is 1)\n"
+    " --max-k-step nr              set max number of iteration (default is 50)\n"
+    " --unlimited-k-steps          set max number of iteration to UINT_MAX\n"
+
+    "\nSolver configuration\n"
+    " --list-solvers               list available solvers and exit\n"
     " --boolector                  use Boolector (default)\n"
     " --z3                         use Z3\n"
+    " --mathsat                    use MathSAT\n"
+    " --cvc                        use CVC4\n"
+    " --yices                      use Yices\n"
     " --bv                         use solver with bit-vector arithmetic\n"
     " --ir                         use solver with integer/real arithmetic\n"
-    " --eager                      use eager instantiation\n"
-    " --lazy                       use lazy instantiation (default)\n"
     " --smtlib                     use SMT lib format\n"
-    " --output <filename>          output VCCs in SMT lib format to given file\n\n"
-    "Incremental SMT solving with Z3\n"
+    " --smtlib-solver-prog         SMT lib program name\n"
+    " --output <filename>          output VCCs in SMT lib format to given file\n"
+    " --fixedbv                    encode floating-point as fixed bitvectors (default)\n"
+    " --floatbv                    encode floating-point using the SMT floating-point theory\n"
+
+    "\nIncremental SMT solving\n"
     " --smt-during-symex           enable incremental SMT solving (experimental)\n"
     " --smt-thread-guard           call the solver during thread exploration (experimental)\n"
-    " --smt-symex-guard            call the solver during symbolic execution (experimental)\n\n"
-    "Property checking\n"
+    " --smt-symex-guard            call the solver during symbolic execution (experimental)\n"
+
+    "\nProperty checking\n"
     " --no-assertions              ignore assertions\n"
     " --no-bounds-check            do not do array bounds check\n"
     " --no-div-by-zero-check       do not do division by zero check\n"
     " --no-pointer-check           do not do pointer check\n"
+    " --no-align-check             do not check pointer alignment\n"
     " --memory-leak-check          enable memory leak check check\n"
+    " --nan-check                  check floating-point for NaN\n"
     " --overflow-check             enable arithmetic over- and underflow check\n"
     " --deadlock-check             enable global and local deadlock check with mutex\n"
     " --data-races-check           enable data races check\n"
     " --lock-order-check           enable for lock acquisition ordering check\n"
-    " --atomicity-check            enable atomicity check at visible assignments\n\n"
-    "K-induction\n"
+    " --atomicity-check            enable atomicity check at visible assignments\n"
+    " --error-label label          check if label is unreachable\n"
+    " --force-malloc-success       do not check for malloc/new failure\n"
+
+    "\nK-induction\n"
     " --base-case                  check the base case\n"
     " --forward-condition          check the forward condition\n"
     " --inductive-step             check the inductive step\n"
@@ -1967,33 +1978,27 @@ void cbmc_parseoptionst::help()
     " --constrain-all-states       remove all redundant states in the inductive step\n"
     " --k-step nr                  set k increment (default is 1)\n"
     " --max-k-step nr              set max number of iteration (default is 50)\n"
-    " --unlimited-k-steps          set max number of iteration to UINT_MAX\n\n"
-    "Scheduling approaches\n"
+    " --unlimited-k-steps          set max number of iteration to UINT_MAX\n"
+    " --show-counter-example       print the counter-example produced by the inductive step\n"
+
+    "\nScheduling approaches\n"
     " --schedule                   use schedule recording approach \n"
     " --round-robin                use the round robin scheduling approach\n"
     " --time-slice nr              set the time slice of the round robin algorithm\n"
-    "                              (default is 1) \n\n"
-    "Concurrency checking\n"
+    "                              (default is 1) \n"
+
+    "\nConcurrency checking\n"
     " --context-bound nr           limit number of context switches for each thread \n"
     " --state-hashing              enable state-hashing, prunes duplicate states\n"
     " --control-flow-test          enable context switch before control flow tests\n"
-    " --no-por                     do not do partial order reduction\n\n"
-    #ifdef _WIN32
-    " --i386-macos                 set MACOS/I386 architecture\n"
-    " --i386-linux                 set Linux/I386 architecture\n"
-    " --i386-win32                 set Windows/I386 architecture (default)\n"
-    #else
-    #ifdef __APPLE__
-    " --i386-macos                 set MACOS/I386 architecture (default)\n"
-    " --i386-linux                 set Linux/I386 architecture\n"
-    " --i386-win32                 set Windows/I386 architecture\n"
-    #else
-    #endif
-    #endif
-    "Miscellaneous options\n"
+    " --no-por                     do not do partial order reduction\n"
+    " --all-runs                   check all interleavings, even if a bug was already found\n"
+
+    "\nMiscellaneous options\n"
     " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
     " --timeout                    configure time limit, integer followed by {s,m,h}\n"
-    " --enable-core-dump           don't disable core dump output\n"
-    " --list-solvers               List available solvers and exit\n"
+    " --memstats                   print memory usage statistics\n"
+    " --no-simplify                do not simplify any expression\n"
+    " --enable-core-dump           do not disable core dump output\n"
     "\n";
 }

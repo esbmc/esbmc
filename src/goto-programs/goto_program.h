@@ -9,17 +9,15 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAM_H
 #define CPROVER_GOTO_PROGRAM_H
 
-#include <irep2.h>
-#include <assert.h>
 /*! \defgroup gr_goto_programs Goto programs */
 
 #include <cassert>
 #include <ostream>
 #include <set>
-
-#include <namespace.h>
-#include <location.h>
-#include <std_code.h>
+#include <util/irep2.h>
+#include <util/location.h>
+#include <util/namespace.h>
+#include <util/std_code.h>
 
 #define forall_goto_program_instructions(it, program) \
   for(goto_programt::instructionst::const_iterator it=(program).instructions.begin(); \
@@ -87,7 +85,19 @@ public:
   }
 
   // local variables
-  typedef std::set<irep_idt> local_variablest;
+  typedef std::list<irep_idt> local_variablest;
+
+  local_variablest local_variables;
+
+  void add_local_variable(const irep_idt &id)
+  {
+    local_variables.push_front(id);
+  }
+
+  void add_local_variables(const local_variablest &locals)
+  {
+    local_variables.insert(local_variables.begin(), locals.begin(), locals.end());
+  }
 
   /*! \brief Container for an instruction of the goto-program
   */
@@ -167,31 +177,6 @@ public:
       guard=g;
     }
 
-    // valid local variables at this point
-    // this is obsolete and will be removed in future versions
-    local_variablest local_variables;
-
-    void add_local_variable(const irep_idt &id)
-    {
-      local_variables.insert(id);
-    }
-
-    void add_local_variables(
-      const local_variablest &locals)
-    {
-      local_variables.insert(locals.begin(), locals.end());
-    }
-
-    void add_local_variables(
-      const std::list<irep_idt> &locals)
-    {
-      for(std::list<irep_idt>::const_iterator
-          it=locals.begin();
-          it!=locals.end();
-          it++)
-        local_variables.insert(*it);
-    }
-
     inline bool is_goto         () const { return type==GOTO;          }
     inline bool is_return       () const { return type==RETURN;        }
     inline bool is_assign       () const { return type==ASSIGN;        }
@@ -237,7 +222,6 @@ public:
       std::swap(instruction.type, type);
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
-      instruction.local_variables.swap(local_variables);
       instruction.function.swap(function);
       std::swap(inductive_step_instruction, instruction.inductive_step_instruction);
     }
@@ -286,8 +270,7 @@ public:
       const class namespacet &ns,
       const irep_idt &identifier,
       std::ostream &out,
-      bool show_location=true,
-      bool show_variables=false) const;
+      bool show_location=true) const;
   };
 
   typedef std::list<class instructiont> instructionst;
@@ -299,13 +282,6 @@ public:
 
   //! The list of instructions in the goto program
   instructionst instructions;
-
-  bool has_local_variable(
-    class instructiont &instruction,
-    const irep_idt &identifier)
-  {
-    return instruction.local_variables.count(identifier)!=0;
-  }
 
   void get_successors(
     targett target,
@@ -444,6 +420,7 @@ public:
   inline void swap(goto_programt &program)
   {
     program.instructions.swap(instructions);
+    program.local_variables.swap(local_variables);
   }
 
   //! Clear the goto program
@@ -457,14 +434,6 @@ public:
 
   //! Does the goto program have an assertion?
   bool has_assertion() const;
-
-  static std::ostream &output_instruction(
-    const class namespacet &ns,
-    const irep_idt &identifier,
-    std::ostream &out,
-    instructionst::const_iterator it,
-    bool show_location=true,
-    bool show_variables=false);
 
   // Template for extracting instructions /from/ a goto program, to a type
   // abstract something else.

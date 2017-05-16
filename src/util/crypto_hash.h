@@ -1,19 +1,17 @@
 #ifndef _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 #define _CPROVER_SRC_GOTO_SYMEX_CRYPTO_HASH_H_
 
-class crypto_hash_private;
-
-#include <string>
 #include <memory>
+#include <string>
 
 class crypto_hash_private;
 
-#define CRYPTO_HASH_SIZE  32
+#define CRYPTO_HASH_SIZE 32
 
 class crypto_hash {
 public:
-  uint8_t hash[32];
   std::shared_ptr<crypto_hash_private> p_crypto;
+  unsigned int hash[5];
 
   bool operator<(const crypto_hash h2) const;
 

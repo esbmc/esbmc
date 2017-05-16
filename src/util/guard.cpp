@@ -6,9 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "std_expr.h"
-
-#include "guard.h"
+#include <util/guard.h>
+#include <util/std_expr.h>
 
 expr2tc guardt::as_expr() const
 {
@@ -262,3 +261,25 @@ void guardt::clear_insert(const expr2tc& expr)
   clear();
   add(expr);
 }
+
+#ifdef WITH_PYTHON
+#include <boost/python.hpp>
+void
+build_guard_python_class()
+{
+  using namespace boost::python;
+
+  class_<guardt>("guardt")
+    .def("add", &guardt::add)
+    .def("append", &guardt::append)
+    .def("as_expr", &guardt::as_expr)
+    .def("guard_expr", &guardt::guard_expr)
+    .def("is_true", &guardt::is_true)
+    .def("is_false", &guardt::is_false)
+    .def("make_true", &guardt::make_true)
+    .def("make_false", &guardt::make_false)
+    .def("swap", &guardt::swap)
+    .def("dump", &guardt::dump)
+    .def("clear", &guardt::clear);
+}
+#endif

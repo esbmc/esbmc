@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "remove_skip.h"
+#include <goto-programs/remove_skip.h>
 
 static bool is_skip(goto_programt::instructionst::iterator it)
 {

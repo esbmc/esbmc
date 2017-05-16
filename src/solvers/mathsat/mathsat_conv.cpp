@@ -1,13 +1,9 @@
-#include <string>
-#include <sstream>
-
-#include "mathsat_conv.h"
-
-// :|
 #include <gmp.h>
-
-#include <c_types.h>
-#include <expr_util.h>
+#include <mathsat_conv.h>
+#include <sstream>
+#include <string>
+#include <util/c_types.h>
+#include <util/expr_util.h>
 
 static const char* mathsat_config =
   "preprocessor.toplevel_propagation = true\n"
@@ -909,7 +905,7 @@ smt_sortt mathsat_convt::mk_fpbv_sort(const unsigned ew, const unsigned sw)
     new mathsat_smt_sort(SMT_SORT_FLOATBV, msat_get_fp_type(env, ew, sw), ew + sw, sw);
 }
 
-void mathsat_convt::dump_SMT()
+void mathsat_convt::dump_smt()
 {
   print_mathsat_formula();
 }

@@ -1,9 +1,7 @@
 #ifdef WITH_PYTHON
 
 #include <sstream>
-
-#include "goto_functions.h"
-
+#include <goto-programs/goto_functions.h>
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/map_indexing_suite.hpp>
 #include <boost/python.hpp>
@@ -85,7 +83,7 @@ prog_to_string(const goto_programt &prog)
 
 std::string
 insn_to_string(const goto_programt::instructiont &insn,
-    bool show_location = true, bool show_variables = false)
+    bool show_location = true)
 {
   // Stuff this insn in a list and feed it to output_instruction.
   goto_programt::instructionst list;
@@ -93,7 +91,7 @@ insn_to_string(const goto_programt::instructiont &insn,
   contextt ctx;
 
   assert(pythonctx_ns != NULL);
-  insn.output_instruction(*pythonctx_ns, "", ss, show_location, show_variables);
+  insn.output_instruction(*pythonctx_ns, "", ss, show_location);
 
   return ss.str();
 }
@@ -160,8 +158,7 @@ build_goto_func_class()
     .def_readwrite("loop_number", &insnt::loop_number)
     .def_readwrite("target_number", &insnt::target_number)
   // No access here to the 'targets' field, see below.
-    .def("to_string", &insn_to_string, (arg("this"), arg("show_location")=false,
-                                        arg("show_variables")=false))
+    .def("to_string", &insn_to_string, (arg("this"), arg("show_location")=false))
     .def("clear", &insnt::clear, (arg("this"),
                             arg("type")=goto_program_instruction_typet::SKIP))
     .def("is_goto", &insnt::is_goto)

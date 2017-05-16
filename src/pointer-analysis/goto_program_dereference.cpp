@@ -6,14 +6,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include <prefix.h>
-#include <simplify_expr.h>
-#include <base_type.h>
-#include <std_code.h>
-
-#include "goto_program_dereference.h"
+#include <pointer-analysis/goto_program_dereference.h>
+#include <util/base_type.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_code.h>
 
 bool goto_program_dereferencet::has_failed_symbol(
   const expr2tc &expr,
@@ -54,8 +53,12 @@ bool goto_program_dereferencet::is_valid_object(
   if(symbol.static_lifetime)
     return true; // global/static
 
-  if(valid_local_variables->find(symbol.name)!=
-     valid_local_variables->end())
+  auto it = std::find(
+    valid_local_variables->begin(),
+    valid_local_variables->end(),
+    symbol.name);
+
+  if(it != valid_local_variables->end())
     return true; // valid local
 
   return false;
@@ -76,9 +79,7 @@ void goto_program_dereferencet::dereference_failure(
     if (!options.get_bool_option("no-simplify"))
     {
       base_type(guard_expr, ns);
-      expr2tc tmp_expr = guard_expr->simplify();
-      if (!is_nil_expr(tmp_expr))
-        guard_expr = tmp_expr;
+      simplify(guard_expr);
     }
 
     if (!is_constant_bool2t(guard_expr) ||
@@ -127,13 +128,8 @@ void goto_program_dereferencet::dereference_program(
     new_code.clear();
     assertions.clear();
 
+    valid_local_variables = &goto_program.local_variables;
     dereference_instruction(it, checks_only);
-
-    for(goto_programt::instructionst::iterator
-        i_it=new_code.instructions.begin();
-        i_it!=new_code.instructions.end();
-        i_it++)
-      i_it->local_variables=it->local_variables;
 
     // insert new instructions
     while(!new_code.instructions.empty())
@@ -143,6 +139,11 @@ void goto_program_dereferencet::dereference_program(
       it++;
     }
   }
+
+  goto_program.local_variables.insert(
+    goto_program.local_variables.begin(),
+    new_code.local_variables.begin(),
+    new_code.local_variables.end());
 }
 
 void goto_program_dereferencet::dereference_program(
@@ -161,7 +162,6 @@ void goto_program_dereferencet::dereference_instruction(
   bool checks_only)
 {
   current_target=target;
-  valid_local_variables=&target->local_variables;
   goto_programt::instructiont &i=*target;
   dereference_location = i.location;
 
@@ -177,13 +177,11 @@ void goto_program_dereferencet::dereference_instruction(
   {
     code_function_call2t &func_call = to_code_function_call2t(i.code);
 
-    if (!is_nil_expr(func_call.ret)) {
+    if (!is_nil_expr(func_call.ret))
       dereference_expr(func_call.ret, checks_only, dereferencet::WRITE);
-    }
 
-    for (std::vector<expr2tc>::iterator it = func_call.operands.begin();
-         it != func_call.operands.end(); it++)
-      dereference_expr(*it, checks_only, dereferencet::READ);
+    for (auto it : func_call.operands)
+      dereference_expr(it, checks_only, dereferencet::READ);
 
     if (is_dereference2t(func_call.function)) {
       // Rather than derefing function ptr, which we're moving to not collect
@@ -192,16 +190,11 @@ void goto_program_dereferencet::dereference_instruction(
       invalid_pointer2tc invalid_ptr(deref.value);
       guardt guard;
       guard.add(invalid_ptr);
-#if 1
       if(!options.get_bool_option("no-pointer-check"))
       {
         dereference_failure("function pointer dereference",
                             "invalid pointer", guard);
       }
-#else
-      dereference_failure("function pointer dereference",
-                          "invalid pointer", guard);
-#endif
     }
   }
   else if (i.is_return())
@@ -240,9 +233,7 @@ void goto_program_dereferencet::dereference_expression(
   goto_programt::const_targett target,
   expr2tc &expr)
 {
-  current_target=target;
-  valid_local_variables=&target->local_variables;
-
+  current_target = target;
   dereference_expr(expr, false, dereferencet::READ);
 }
 

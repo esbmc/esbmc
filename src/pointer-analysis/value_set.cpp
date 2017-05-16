@@ -6,27 +6,23 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-
-#include <assert.h>
-
-#include <config.h>
-#include <context.h>
-#include <simplify_expr.h>
-#include <expr_util.h>
-#include <base_type.h>
-#include <std_expr.h>
-#include <i2string.h>
-#include <prefix.h>
-#include <std_code.h>
-#include <arith_tools.h>
-#include <type_byte_size.h>
-#include <c_types.h>
-
+#include <cassert>
 #include <langapi/language_util.h>
-
-#include "value_set.h"
+#include <pointer-analysis/value_set.h>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/context.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 const value_sett::object_map_dt value_sett::object_map_dt::empty = { };
 object_numberingt value_sett::object_numbering;
@@ -216,9 +212,8 @@ void value_sett::get_value_set(
 void value_sett::get_value_set(const expr2tc &expr, object_mapt &dest) const
 {
   // Simplify expr if possible,
-  expr2tc new_expr = expr->simplify();
-  if (is_nil_expr(new_expr))
-    new_expr = expr;
+  expr2tc new_expr = expr;
+  simplify(new_expr);
 
   // Then, start fetching values.
   get_value_set_rec(new_expr, dest, "", new_expr->type);

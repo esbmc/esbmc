@@ -8,19 +8,17 @@ Date: June 2003
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <base_type.h>
-#include <prefix.h>
-#include <std_code.h>
-#include <std_expr.h>
-#include <type_byte_size.h>
-#include <c_types.h>
-
-#include "goto_convert_functions.h"
-#include "goto_inline.h"
-#include "remove_skip.h"
-#include "i2string.h"
+#include <cassert>
+#include <goto-programs/goto_convert_functions.h>
+#include <goto-programs/goto_inline.h>
+#include <goto-programs/remove_skip.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,
@@ -159,19 +157,14 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     throw "got invalid code for function `"+id2string(identifier)+"'";
   }
 
+  // Get parameter names
+  goto_programt::local_variablest arg_ids;
   const code_typet::argumentst &arguments=f.type.arguments();
-
-  std::list<irep_idt> arg_ids;
-
-  // add as local variables
-  for(code_typet::argumentst::const_iterator
-      it=arguments.begin();
-      it!=arguments.end();
-      it++)
+  for(auto it : arguments)
   {
-    const irep_idt &identifier=it->get_identifier();
-    assert(identifier!="");
-    arg_ids.push_back(identifier);
+    const irep_idt &identifier = it.get_identifier();
+    assert(!identifier.empty());
+    arg_ids.push_front(identifier);
   }
 
   if(!symbol.value.is_code())
@@ -185,17 +178,16 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   locationt end_location;
 
   if(to_code(symbol.value).get_statement()=="block")
-    end_location=static_cast<const locationt &>(
-        symbol.value.end_location());
+    end_location=static_cast<const locationt &>(symbol.value.end_location());
   else
     end_location.make_nil();
 
   targets=targetst();
   targets.return_set=true;
   targets.return_value=
-      f.type.return_type().id()!="empty" &&
-      f.type.return_type().id()!="constructor" &&
-      f.type.return_type().id()!="destructor";
+    f.type.return_type().id()!="empty" &&
+    f.type.return_type().id()!="constructor" &&
+    f.type.return_type().id()!="destructor";
 
   goto_convert_rec(tmp, f.body);
 
@@ -209,8 +201,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   t->location=end_location;
 
   if(to_code(symbol.value).get_statement()=="block")
-    t->location=static_cast<const locationt &>(
-        symbol.value.end_location());
+    t->location=static_cast<const locationt &>(symbol.value.end_location());
 
   // Wrap the body of functions name c::__VERIFIER_atomic_* with atomic_bengin
   // and atomic_end
@@ -236,10 +227,13 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
     }
   }
 
+  // Add parameter and local variables
+  f.body.add_local_variables(arg_ids);
+  f.body.add_local_variables(local_variables);
+
   // do local variables
   Forall_goto_program_instructions(i_it, f.body)
   {
-    i_it->add_local_variables(arg_ids);
     i_it->function=identifier;
   }
 

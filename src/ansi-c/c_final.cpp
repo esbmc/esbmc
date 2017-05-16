@@ -6,10 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <message_stream.h>
-
-#include "c_final.h"
+#include <ansi-c/c_final.h>
 #include <c2goto/cprover_library.h>
+#include <util/message_stream.h>
 
 /*******************************************************************\
 

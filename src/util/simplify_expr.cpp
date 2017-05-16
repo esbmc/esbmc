@@ -6,23 +6,21 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
 #include <algorithm>
-#include <config.h>
-#include <options.h>
-
-#include "simplify_expr_class.h"
-#include "simplify_expr.h"
-#include "mp_arith.h"
-#include "arith_tools.h"
-#include "std_types.h"
-#include "bitvector.h"
-#include "simplify_utils.h"
-#include "expr_util.h"
-#include "std_expr.h"
-#include "fixedbv.h"
-#include "ieee_float.h"
+#include <cassert>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/fixedbv.h>
+#include <util/ieee_float.h>
+#include <util/mp_arith.h>
+#include <util/options.h>
+#include <util/simplify_expr.h>
+#include <util/simplify_expr_class.h>
+#include <util/simplify_utils.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
 
 //#define USE_CACHE
 
@@ -143,9 +141,6 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
         expr.swap(new_expr);
         return false;
       }
-    }
-    else if(op_type_id=="real")
-    {
     }
     else if(op_type_id=="bool")
     {
@@ -2992,13 +2987,11 @@ struct saj_tablet
   const char *type_id;
 } const saj_table[]=
 {
-  { "+",      "real"       },
   { "+",      "complex"    },
   { "+",      "unsignedbv" },
   { "+",      "signedbv"   },
   { "+",      "floatbv"    },
   { "+",      "pointer"    },
-  { "*",      "real"       },
   { "*",      "complex"    },
   { "*",      "unsignedbv" },
   { "*",      "signedbv"   },

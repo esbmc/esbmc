@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "threeval.h"
+#include <util/threeval.h>
 
 const char *tvt::to_string() const
 {

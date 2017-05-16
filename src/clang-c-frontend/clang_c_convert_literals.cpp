@@ -5,12 +5,12 @@
  *      Author: mramalho
  */
 
-#include <arith_tools.h>
-#include <bitvector.h>
-#include <expr_util.h>
-#include <c_types.h>
-#include <string_constant.h>
-#include "clang_c_convert.h"
+#include <clang-c-frontend/clang_c_convert.h>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/string_constant.h>
 
 bool clang_c_convertert::convert_character_literal(
   const clang::CharacterLiteral &char_literal,

@@ -7,25 +7,23 @@
 \*******************************************************************/
 
 #include <boost/shared_ptr.hpp>
-
-#include <irep2.h>
-#include <migrate.h>
-#include <langapi/mode.h>
-#include <langapi/languages.h>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/reachability_tree.h>
 #include <langapi/language_ui.h>
-
-#include "execution_state.h"
-#include "reachability_tree.h"
-#include <string>
+#include <langapi/languages.h>
+#include <langapi/mode.h>
 #include <sstream>
+#include <string>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/simplify_expr.h>
+#include <util/std_expr.h>
+#include <util/string2array.h>
 #include <vector>
-#include <i2string.h>
-#include <string2array.h>
-#include <std_expr.h>
-#include <expr_util.h>
-#include <c_types.h>
-#include <simplify_expr.h>
-#include "config.h"
 
 unsigned int execution_statet::node_count = 0;
 unsigned int execution_statet::dynamic_counter = 0;
@@ -110,9 +108,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   check_ltl = false;
   mon_thread_warning = false;
 
-  bool ltl_mode =
-    (options.get_bool_option("ltl") || options.get_bool_option("ltl-dummy"));
-  thread_cswitch_threshold = (ltl_mode) ? 3 : 2;
+  thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
 }
 
 execution_statet::execution_statet(const execution_statet &ex) :

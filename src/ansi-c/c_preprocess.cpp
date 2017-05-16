@@ -12,20 +12,17 @@ Author: Daniel Kroening, kroening@kroening.com
 #undef ERROR
 #endif
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
+#include <ansi-c/c_preprocess.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
-
-#include <config.h>
-#include <i2string.h>
-#include <message_stream.h>
-
-#include "c_preprocess.h"
+#include <util/config.h>
+#include <util/i2string.h>
+#include <util/message_stream.h>
 
 extern "C" {
-#include "cpp/iface.h"
+#include <cpp/iface.h>
 }
 
 static const char *cpp_defines_16[] ={
@@ -126,6 +123,7 @@ static const char *cpp_normal_defs[] = {
 NULL
 };
 
+#if !defined(WIN32) && !defined(__APPLE__)
 static const char *cpp_linux_defs[] = {
 "i386",
 "__i386",
@@ -142,6 +140,7 @@ static const char *cpp_linux_defs[] = {
 "__restrict=/**/",
 NULL
 };
+#endif
 
 #ifdef __APPLE__
 static const char *cpp_mac_defs[] = {
@@ -191,9 +190,9 @@ void setup_cpp_defs(const char **defs)
 
 #ifndef _WIN32
 
-#include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 bool c_preprocess(
   const std::string &path,

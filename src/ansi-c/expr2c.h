@@ -9,14 +9,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_EXPR2C_H
 #define CPROVER_EXPR2C_H
 
-#include <set>
+#include <ansi-c/c_qualifiers.h>
 #include <map>
-
-#include <expr.h>
-#include <std_code.h>
-#include <namespace.h>
-
-#include "c_qualifiers.h"
+#include <set>
+#include <util/expr.h>
+#include <util/namespace.h>
+#include <util/std_code.h>
 
 std::string expr2c(const exprt &expr, const namespacet &ns);
 std::string type2c(const typet &type, const namespacet &ns);

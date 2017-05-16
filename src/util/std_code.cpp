@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "std_code.h"
+#include <util/std_code.h>
 
 code_blockt &codet::make_block()
 {

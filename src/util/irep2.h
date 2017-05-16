@@ -5,44 +5,37 @@
  *  Classes and definitions for non-stringy internal representation.
  */
 
-#include <stdarg.h>
-
-#include <vector>
-#include <functional>
-
-#include <boost/mpl/if.hpp>
-#include <boost/shared_ptr.hpp>
+#include <big-int/bigint.hh>
+#include <boost/bind/placeholders.hpp>
 #include <boost/crc.hpp>
-#include <boost/utility/enable_if.hpp>
-#include <boost/fusion/include/equal_to.hpp>
 #include <boost/functional/hash_fwd.hpp>
-
-#include <boost/mpl/vector.hpp>
-#include <boost/mpl/front.hpp>
-#include <boost/mpl/equal.hpp>
-#include <boost/mpl/not.hpp>
+#include <boost/fusion/include/equal_to.hpp>
 #include <boost/mpl/bool.hpp>
 #include <boost/mpl/empty.hpp>
-#include <boost/mpl/push_front.hpp>
+#include <boost/mpl/equal.hpp>
+#include <boost/mpl/front.hpp>
+#include <boost/mpl/if.hpp>
+#include <boost/mpl/insert.hpp>
+#include <boost/mpl/not.hpp>
 #include <boost/mpl/pop_front.hpp>
+#include <boost/mpl/push_front.hpp>
+#include <boost/mpl/set.hpp>
 #include <boost/mpl/size.hpp>
 #include <boost/mpl/transform.hpp>
-#include <boost/mpl/set.hpp>
-#include <boost/mpl/insert.hpp>
-#include <boost/bind/placeholders.hpp>
-
-#include <boost/static_assert.hpp>
-
+#include <boost/mpl/vector.hpp>
 #include <boost/preprocessor/list/adt.hpp>
 #include <boost/preprocessor/list/for_each.hpp>
-
-#include <config.h>
-#include <irep.h>
-#include <fixedbv.h>
-#include <big-int/bigint.hh>
-#include <dstring.h>
-
-#include <crypto_hash.h>
+#include <boost/shared_ptr.hpp>
+#include <boost/static_assert.hpp>
+#include <boost/utility/enable_if.hpp>
+#include <cstdarg>
+#include <functional>
+#include <util/config.h>
+#include <util/crypto_hash.h>
+#include <util/dstring.h>
+#include <util/fixedbv.h>
+#include <util/irep.h>
+#include <vector>
 
 // Ahead of time: a list of all expressions and types, in a preprocessing
 // list, for enumerating later. Should avoid manually enumerating anywhere
@@ -2041,6 +2034,7 @@ inline bool is_multi_dimensional_array(const expr2tc &e) {
 class type_poolt {
 public:
   type_poolt(void);
+  type_poolt(bool yolo);
 
   type_poolt &operator=(type_poolt const &ref);
 

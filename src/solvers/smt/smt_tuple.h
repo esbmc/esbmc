@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_SMT_SMT_TUPLE_H_
 #define _ESBMC_SOLVERS_SMT_SMT_TUPLE_H_
 
-#include "smt_conv.h"
+#include <solvers/smt/smt_conv.h>
 
 // Abstract class defining the interface required for creating tuples.
 class tuple_iface {

@@ -4,10 +4,8 @@
   // A parser for smtlib responses
 
 #include <string>
-
-#include "smtlib_conv.h"
-
-#include "smtlib_tok.hpp"
+#include <solvers/smtlib/smtlib_conv.h>
+#include <solvers/smtlib/smtlib_tok.hpp>
 
 #undef yylex
 #define yylex smtliblex

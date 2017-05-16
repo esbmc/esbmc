@@ -5,22 +5,18 @@
  *      Author: mramalho
  */
 
-#include "clang_c_convert.h"
-
-#include <std_code.h>
-#include <std_expr.h>
-#include <expr_util.h>
-#include <mp_arith.h>
-#include <arith_tools.h>
-#include <i2string.h>
-#include <bitvector.h>
-#include <c_types.h>
-
-#include <ansi-c/type2name.h>
-
-#include "typecast.h"
-
 #include <clang/AST/Attr.h>
+#include <ansi-c/type2name.h>
+#include <clang-c-frontend/clang_c_convert.h>
+#include <clang-c-frontend/typecast.h>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/mp_arith.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -277,9 +273,6 @@ bool clang_c_convertert::get_struct_union_class(
     // This should never be reached
     abort();
 
-  // Try to get the definition
-  clang::RecordDecl *record_def = recordd.getDefinition();
-
   std::string identifier;
   if(get_tag_name(recordd, identifier))
     return true;
@@ -296,7 +289,8 @@ bool clang_c_convertert::get_struct_union_class(
     t,
     identifier,
     "tag-" + identifier,
-    location_begin);
+    location_begin,
+    true);
 
   // Save the struct/union/class type address and name to the type map
   std::string symbol_name = symbol.name.as_string();
@@ -315,6 +309,8 @@ bool clang_c_convertert::get_struct_union_class(
   move_symbol_to_context(symbol);
 
   // Don't continue to parse if it doesn't have a complete definition
+  // Try to get the definition
+  clang::RecordDecl *record_def = recordd.getDefinition();
   if(!record_def)
     return false;
 
@@ -401,7 +397,8 @@ bool clang_c_convertert::get_var(
     t,
     vd.getName().str(),
     identifier,
-    location_begin);
+    location_begin,
+    true);
 
   symbol.lvalue = true;
   symbol.static_lifetime = (vd.getStorageClass() == clang::SC_Static)
@@ -480,11 +477,8 @@ bool clang_c_convertert::get_function(
   code_typet type;
 
   // Return type
-  typet return_type;
-  if(get_type(fd.getReturnType(), return_type))
+  if(get_type(fd.getReturnType(), type.return_type()))
     return true;
-
-  type.return_type() = return_type;
 
   if(fd.isVariadic())
     type.make_ellipsis();
@@ -498,6 +492,10 @@ bool clang_c_convertert::get_function(
   std::string base_name, pretty_name;
   get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
 
+  // special case for is_used: we'll always convert the entry point,
+  // either the main function or the user defined entry point
+  bool is_used = fd.isMain() || (fd.getName().str() == config.main) || fd.isUsed();
+
   symbolt symbol;
   get_default_symbol(
     symbol,
@@ -505,7 +503,8 @@ bool clang_c_convertert::get_function(
     type,
     base_name,
     pretty_name,
-    location_begin);
+    location_begin,
+    is_used);
 
   std::string symbol_name = symbol.name.as_string();
 
@@ -593,7 +592,8 @@ bool clang_c_convertert::get_function_params(
     param_type,
     name,
     pretty_name,
-    location_begin); // function parameter cannot be static
+    location_begin,
+    true); // function parameter cannot be static
 
   param_symbol.lvalue = true;
   param_symbol.is_parameter = true;
@@ -1211,11 +1211,11 @@ bool clang_c_convertert::get_expr(
         return true;
 
       exprt array;
-      if(get_expr(*arr.getLHS(), array))
+      if(get_expr(*arr.getBase(), array))
         return true;
 
       exprt pos;
-      if(get_expr(*arr.getRHS(), pos))
+      if(get_expr(*arr.getIdx(), pos))
         return true;
 
       new_expr = index_exprt(array, pos, t);
@@ -1617,12 +1617,6 @@ bool clang_c_convertert::get_expr(
       break;
     }
 
-    // A NULL statement, we ignore it. An example is a lost semicolon on
-    // the program
-    case clang::Stmt::NullStmtClass:
-      new_expr = code_skipt();
-      break;
-
     // A compound statement is a scope/block
     case clang::Stmt::CompoundStmtClass:
     {
@@ -1977,6 +1971,10 @@ bool clang_c_convertert::get_expr(
       new_expr = ret_expr;
       break;
     }
+
+    // A NULL statement, we ignore it. An example is a lost semicolon on
+    // the program
+    case clang::Stmt::NullStmtClass:
 
     // GCC or MS Assembly instruction. We ignore them
     case clang::Stmt::GCCAsmStmtClass:
@@ -2413,7 +2411,8 @@ void clang_c_convertert::get_default_symbol(
   typet type,
   std::string base_name,
   std::string pretty_name,
-  locationt location)
+  locationt location,
+  bool is_used)
 {
   symbol.mode = "C";
   symbol.module = module_name;
@@ -2422,6 +2421,7 @@ void clang_c_convertert::get_default_symbol(
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
   symbol.name = "c::" + pretty_name;
+  symbol.is_used = is_used;
 }
 
 void clang_c_convertert::get_field_name(
@@ -2687,36 +2687,21 @@ void clang_c_convertert::check_symbol_redefinition(
   // types that are code means functions
   if(old_symbol.type.is_code())
   {
-    if(new_symbol.value.is_not_nil())
+    if(new_symbol.value.is_not_nil() && !old_symbol.value.is_not_nil())
     {
-      if(old_symbol.value.is_not_nil())
-      {
-        // If this is a invalid redefinition, clang will complain and
-        // won't convert the program. We should safely to ignore this.
-      }
-      else
-      {
-        // overwrite
-        old_symbol.swap(new_symbol);
-      }
+      old_symbol.swap(new_symbol);
     }
   }
   else if(old_symbol.is_type)
   {
-    if(new_symbol.type.is_not_nil())
+    if(new_symbol.type.is_not_nil() && !old_symbol.type.is_not_nil())
     {
-      if(old_symbol.type.is_not_nil())
-      {
-        // If this is a invalid redefinition, clang will complain and
-        // won't convert the program. We should safely to ignore this.
-      }
-      else
-      {
-        // overwrite
-        old_symbol.swap(new_symbol);
-      }
+      old_symbol.swap(new_symbol);
     }
   }
+
+  // Update is_used
+  old_symbol.is_used |= new_symbol.is_used;
 }
 
 void clang_c_convertert::convert_expression_to_code(exprt& expr)
@@ -2787,35 +2772,4 @@ const clang::Decl* clang_c_convertert::get_top_FunctionDecl_from_Stmt(
   }
 
   return nullptr;
-}
-
-bool clang_c_convertert::convert_this_decl(const clang::Decl& decl)
-{
-  // If the flag to keep unused calls is set, we convert them all
-  if(config.options.get_bool_option("keep-unused"))
-    return true;
-
-  if(decl.isFunctionOrFunctionTemplate())
-  {
-    // TODO: We cannot activate this code until the language_file class
-    // is rewritten to parse/typecheck all files once, instead of a per
-    // file approach
-#if 0
-    const clang::FunctionDecl &fd =
-      static_cast<const clang::FunctionDecl&>(decl);
-
-    // If we're checking an function, passed through --function flag, we
-    // should convert it
-    if(fd.getName().str() == config.main)
-      return true;
-
-    if(fd.isMain())
-      return true;
-#else
-    return true;
-#endif
-  }
-
-  // Otherwise, don't convert it
-  return decl.isUsed();
 }

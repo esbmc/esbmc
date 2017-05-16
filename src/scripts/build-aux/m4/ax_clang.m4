@@ -60,6 +60,11 @@ AC_DEFUN([AX_CLANG],
         ;;
     esac
 
+    lib_ext="dylib"
+    if test `uname` != "Darwin" ; then
+        lib_ext="so"
+    fi
+
     _version=0
     dnl first we check the system location for clang libraries and version
     if test "$ac_clang_lib_path" != ""; then
@@ -68,8 +73,8 @@ AC_DEFUN([AX_CLANG],
             if ls "$ac_clang_lib_path/$libsubdir/libclang"* >/dev/null 2>&1 ; then break; fi
         done
 
-        for i in `ls -d $ac_clang_lib_path/$libsubdir/libclang.so.* 2>/dev/null`; do
-            _version_tmp=`echo $i | sed "s#$ac_clang_lib_path/$libsubdir/##" | sed 's/libclang.so.//'`
+        for i in `ls -d $ac_clang_lib_path/$libsubdir/libclang.$lib_ext.* 2>/dev/null`; do
+            _version_tmp=`echo $i | sed "s#$ac_clang_lib_path/$libsubdir/##" | sed "s/libclang.$lib_ext.//"`
             V_CHECK=`expr $_version_tmp \> $_version`
             if test "$V_CHECK" != "1" ; then
                     continue
@@ -88,8 +93,8 @@ AC_DEFUN([AX_CLANG],
                     if ls "$ac_clang_lib_path_tmp/$libsubdir/libclang"* >/dev/null 2>&1 ; then break; fi
                 done
 
-                for i in `ls -d $ac_clang_lib_path_tmp/$libsubdir/libclang.so.* 2>/dev/null`; do
-                    _version_tmp=`echo $i | sed "s#$ac_clang_lib_path_tmp/$libsubdir/##" | sed 's/libclang.so.//'`
+                for i in `ls -d $ac_clang_lib_path_tmp/$libsubdir/libclang.$lib_ext.* 2>/dev/null`; do
+                    _version_tmp=`echo $i | sed "s#$ac_clang_lib_path_tmp/$libsubdir/##" | sed "s/libclang.$lib_ext.//"`
                     V_CHECK=`expr $_version_tmp \> $_version`
                     if test "$V_CHECK" != "1" ; then
                             continue
@@ -114,9 +119,9 @@ AC_DEFUN([AX_CLANG],
     fi
 
     dnl Look for clang libs
-    clanglibs="Tooling Driver Frontend Parse Serialization Sema Analysis Edit Lex AST Basic"
+    clanglibs="Tooling Frontend Parse Sema Edit Analysis AST Lex Basic Driver Serialization"
     for lib in $clanglibs ; do
-        AC_MSG_CHECKING(if we can find libclang$lib)
+        AC_MSG_CHECKING(if we can find libclang$lib.$lib_ext)
         if ls "$clang_libs_path/libclang$lib"* >/dev/null 2>&1 ; then
             clang_LIBS="$clang_LIBS -lclang$lib"
             AC_MSG_RESULT(yes)

@@ -7,14 +7,11 @@ Author: CM Wintersteiger
 \*******************************************************************/
 
 #include <fstream>
-
-#include <message.h>
-#include <irep_serialization.h>
-#include <symbol_serialization.h>
-
 #include <goto-programs/goto_function_serialization.h>
-
-#include "write_goto_binary.h"
+#include <goto-programs/write_goto_binary.h>
+#include <util/irep_serialization.h>
+#include <util/message.h>
+#include <util/symbol_serialization.h>
 
 bool write_goto_binary(
   std::ostream &out,

@@ -9,8 +9,8 @@ Date: May 2007
  
 \*******************************************************************/
 
-#include "goto_function_serialization.h"
-#include "goto_program_serialization.h"
+#include <goto-programs/goto_function_serialization.h>
+#include <goto-programs/goto_program_serialization.h>
 
 /*******************************************************************\
  

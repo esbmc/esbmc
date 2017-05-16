@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include "cpp_declaration.h"
+#include <cpp/cpp_declaration.h>
 
 /*******************************************************************\
 

@@ -7,12 +7,10 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <fstream>
+#include <langapi/language_ui.h>
+#include <langapi/mode.h>
 #include <memory>
-
-#include <i2string.h>
-
-#include "language_ui.h"
-#include "mode.h"
+#include <util/i2string.h>
 
 /*******************************************************************\
 
@@ -320,6 +318,7 @@ void language_uit::show_symbol_table_plain(std::ostream &out)
       if(s.is_type)         out << " type";
       if(s.is_extern)       out << " extern";
       if(s.is_macro)        out << " macro";
+      if(s.is_used)         out << " used";
 
       out << std::endl;
       out << "Location....: " << s.location << std::endl;

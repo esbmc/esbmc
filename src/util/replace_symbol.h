@@ -14,8 +14,8 @@ Author: Daniel Kroening, kroening@kroening.com
 // false: replaced something
 //
 
-#include "hash_cont.h"
-#include "expr.h"
+#include <util/expr.h>
+#include <util/hash_cont.h>
 
 class replace_symbolt
 {

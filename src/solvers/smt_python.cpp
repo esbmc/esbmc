@@ -2,18 +2,14 @@
 // Don't compile... anything, otherwise.
 
 #include <functional>
-
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple.h>
 #include <solvers/smt/smt_array.h>
 #include <boost/python.hpp>
 #include <boost/python/class.hpp>
 #include <boost/python/suite/indexing/vector_indexing_suite.hpp>
-
-#include <util/bp_opaque_ptr.h>
-
-#include "solve.h"
-#include "smt_python.h"
+#include <solve.h>
+#include <smt_python.h>
 
 class dummy_solver_class { };
 class dummy_solver_class2 { };

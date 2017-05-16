@@ -1,20 +1,16 @@
-#include <stdio.h>
-#include <wchar.h>
-
-#include <ostream>
+#include <cstdio>
+#include <cwchar>
 #include <fstream>
-
-#include <irep2.h>
-
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/write_goto_binary.h>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
-#include <ui_message.h>
-#include <parseoptions.h>
+#include <ostream>
+#include <util/cmdline.h>
 #include <util/config.h>
-
-#include <cmdline.h>
+#include <util/irep2.h>
+#include <util/parseoptions.h>
+#include <util/ui_message.h>
 
 const struct opt_templ c2goto_options[] = {
 { 0,	"16",		switc,		"" },
@@ -63,6 +59,10 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 
 int main(int argc, const char **argv)
 {
+  // To avoid the static initialization fiasco,
+  type_poolt bees(true);
+  type_pool = bees;
+
   c2goto_parseopt parseopt(argc, argv);
   return parseopt.main();
 }

@@ -6,25 +6,22 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-#include <ctype.h>
-
+#include <ansi-c/ansi_c_declaration.h>
+#include <ansi-c/c_typecast.h>
+#include <ansi-c/expr2c.h>
+#include <cassert>
+#include <cctype>
 #include <map>
 #include <set>
-
-#include <arith_tools.h>
-#include <c_misc.h>
-#include <config.h>
-#include <std_types.h>
-#include <std_code.h>
-#include <i2string.h>
-#include <fixedbv.h>
-#include <prefix.h>
-
-#include "ansi_c_declaration.h"
-#include "expr2c.h"
-#include "c_typecast.h"
-#include "c_types.h"
+#include <util/arith_tools.h>
+#include <util/c_misc.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/fixedbv.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
+#include <util/std_types.h>
 
 /*******************************************************************\
 

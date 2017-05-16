@@ -9,13 +9,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef STRING_CONTAINER_H
 #define STRING_CONTAINER_H
 
-#include <assert.h>
-
+#include <cassert>
 #include <list>
+#include <util/hash_cont.h>
+#include <util/string_hash.h>
 #include <vector>
-
-#include "hash_cont.h"
-#include "string_hash.h"
 
 struct string_ptrt
 {
@@ -74,7 +72,6 @@ public:
   
   const std::string &get_string(unsigned no) const
   {
-	if (!(no < string_vector.size())) std::cout << "failed" << std::endl;
     assert(no < string_vector.size());
     return *string_vector[no];
   }
