@@ -6,9 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <i2string.h>
-
-#include "set_claims.h"
+#include <goto-programs/set_claims.h>
+#include <util/i2string.h>
 
 void convert_claims(
   const std::list<std::string> &claims,

@@ -6,35 +6,36 @@
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include <langapi/mode.h>
-#include <langapi/languages.h>
+#include <boost/shared_ptr.hpp>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/reachability_tree.h>
 #include <langapi/language_ui.h>
-
-#include "execution_state.h"
-#include "reachability_tree.h"
-#include <string>
+#include <langapi/languages.h>
+#include <langapi/mode.h>
 #include <sstream>
+#include <string>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/simplify_expr.h>
+#include <util/std_expr.h>
+#include <util/string2array.h>
 #include <vector>
-#include <i2string.h>
-#include <string2array.h>
-#include <std_expr.h>
-#include <expr_util.h>
-#include <c_types.h>
-#include <simplify_expr.h>
-#include "config.h"
 
 unsigned int execution_statet::node_count = 0;
+unsigned int execution_statet::dynamic_counter = 0;
 std::map<expr2tc, std::list<unsigned int>> vars_map;
 std::map<expr2tc, bool> is_global;
 
 execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    const namespacet &ns,
                                    reachability_treet *art,
-                                   std::shared_ptr<symex_targett> _target,
+                                   boost::shared_ptr<symex_targett> _target,
                                    contextt &context,
-                                   std::shared_ptr<ex_state_level2t> l2init,
+                                   boost::shared_ptr<ex_state_level2t> l2init,
                                    optionst &options,
                                    message_handlert &_message_handler) :
   goto_symext(ns, context, goto_functions, _target, options),
@@ -73,6 +74,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
              goto_program, 0);
 
   threads_state.push_back(state);
+  preserved_paths.push_back(std::list<std::pair<goto_programt::const_targett, goto_statet> >());
   cur_state = &threads_state.front();
   cur_state->global_guard.make_true();
   cur_state->global_guard.add(get_guard_identifier());
@@ -98,23 +100,21 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   cswitch_forced = false;
   active_thread = 0;
   last_active_thread = 0;
+  last_insn = NULL;
   node_count = 0;
   nondet_count = 0;
-  dynamic_counter = 0;
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
   check_ltl = false;
   mon_thread_warning = false;
 
-  bool ltl_mode =
-    (options.get_bool_option("ltl") || options.get_bool_option("ltl-dummy"));
-  thread_cswitch_threshold = (ltl_mode) ? 3 : 2;
+  thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
 }
 
 execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(std::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
+  state_level2(boost::dynamic_pointer_cast<ex_state_level2t>(ex.state_level2->clone())),
   global_value_set(ex.global_value_set),
   message_handler(ex.message_handler)
 {
@@ -140,14 +140,15 @@ execution_statet::operator=(const execution_statet &ex)
   //state_level2 = ex.state_level2;
 
   threads_state = ex.threads_state;
+  preserved_paths = ex.preserved_paths;
   atomic_numbers = ex.atomic_numbers;
   DFS_traversed = ex.DFS_traversed;
   thread_start_data = ex.thread_start_data;
   last_active_thread = ex.last_active_thread;
+  last_insn = ex.last_insn;
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
   nondet_count = ex.nondet_count;
-  dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
   interleaving_unviable = ex.interleaving_unviable;
@@ -202,21 +203,31 @@ execution_statet::~execution_statet()
 {
 };
 
+void trap_to_python(reachability_treet *art);
+
 void
 execution_statet::symex_step(reachability_treet &art)
 {
 
   statet &state = get_active_state();
   const goto_programt::instructiont &instruction = *state.source.pc;
+  last_insn = &instruction;
 
   merge_gotos();
 
   if (break_insn != 0 && break_insn == instruction.location_number) {
+    // This twisty turny passage of ifdefs traps to python if esbmc has been
+    // built with python support; otherwise it executes a trap instruction.
+#ifdef WITH_PYTHON
+    std::cerr << "Trapping to python; call esbmc.trap() to break if you have gdb attached, then walk back up to symex frames" << std::endl;
+    trap_to_python(owning_rt);
+#else
 #ifndef _WIN32
     __asm__("int $3");
 #else
     std::cerr << "Can't trap on windows, sorry" << std::endl;
     abort();
+#endif
 #endif
   }
 
@@ -228,7 +239,13 @@ execution_statet::symex_step(reachability_treet &art)
     return;
   }
 
-  if (symex_trace)
+  if(options.get_bool_option("show-symex-value-sets"))
+  {
+    std::cout << '\n';
+    state.value_set.dump();
+  }
+
+  if (symex_trace || options.get_bool_option("show-symex-value-sets"))
     state.source.pc->output_instruction(ns, "", std::cout, false);
 
   switch (instruction.type) {
@@ -281,7 +298,7 @@ execution_statet::symex_step(reachability_treet &art)
 void
 execution_statet::symex_assign(const expr2tc &code)
 {
-  pre_goto_guard = expr2tc();
+  pre_goto_guard = guardt();
 
   goto_symext::symex_assign(code);
 
@@ -294,7 +311,7 @@ execution_statet::symex_assign(const expr2tc &code)
 void
 execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
-  pre_goto_guard = expr2tc();
+  pre_goto_guard = guardt();
 
   goto_symext::claim(expr, msg);
 
@@ -307,11 +324,11 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 void
 execution_statet::symex_goto(const expr2tc &old_guard)
 {
-  pre_goto_guard = threads_state[active_thread].guard.as_expr();
+  pre_goto_guard = threads_state[active_thread].guard;
 
   goto_symext::symex_goto(old_guard);
 
-  if (!is_nil_expr(old_guard)) {
+  if (!pre_goto_guard.is_false() && !is_nil_expr(old_guard)) {
     if (threads_state.size() >= thread_cswitch_threshold) {
       analyze_read(old_guard);
     }
@@ -323,7 +340,7 @@ execution_statet::symex_goto(const expr2tc &old_guard)
 void
 execution_statet::assume(const expr2tc &assumption)
 {
-  pre_goto_guard = expr2tc();
+  pre_goto_guard = guardt();
 
   goto_symext::assume(assumption);
 
@@ -460,6 +477,168 @@ execution_statet::update_after_switch_point(void)
   thread_last_writes[active_thread].clear();
 
   cswitch_forced = false;
+
+  // If we've context switched, then wipe out all symbolic paths in the source
+  // thread that didn't context switch, otherwise they'll observe other thread
+  // PCs advancing with no change in state. However if we've hit a context
+  // switch point and _not_ switched, don't wipe those symbolic paths, they
+  // need to be preserved in at least one interleaving.
+  if (last_active_thread != active_thread) {
+    preserve_last_paths();
+    cull_all_paths();
+    restore_last_paths();
+  }
+}
+
+void
+execution_statet::preserve_last_paths(void)
+{
+  // If the thread terminated, there are no paths to preserve: this is the final
+  // switching away.
+  if (threads_state[last_active_thread].thread_ended)
+    return;
+
+  // Examine the current execution state and the last insn, deciding which paths
+  // are going to be preserved after this context switch. The current
+  // instruction and guard are guaranteed (unless the guard is false), but if
+  // we switched on a GOTO instruction, we may have forked. In that case we
+  // need to find the branch that was generated there.
+
+  auto &pp = preserved_paths[last_active_thread];
+  auto &ls = threads_state[last_active_thread];
+  assert(pp.size() == 0 && "Unmerged preserved paths in ex_state");
+  assert(last_insn != NULL && "Last insn unset in preserve_last_paths");
+
+  // Add the current path to the set of paths to be preserved. Don't do this
+  // if the current guard is false, though.
+  if (!ls.guard.is_false())
+    pp.push_back(std::make_pair(ls.source.pc, goto_statet(ls)));
+
+  // Now then -- was it a goto? And did we actually branch to it? Detect this
+  // by examining how the guard has changed: if there's no change, then the
+  // GOTO condition must have evaluated to false.
+  bool no_branch = (pre_goto_guard == ls.guard);
+  if (last_insn->type == GOTO && !no_branch) {
+
+    // We know where it branched to: fetch a reference to the list of all states
+    // to be merged in there
+    assert(last_insn->targets.size() == 1);
+    auto target_insn_it = *last_insn->targets.begin();
+    auto it = ls.top().goto_state_map.find(target_insn_it);
+    assert(it != ls.top().goto_state_map.end() &&
+        "Nonexistant preserved-path target?");
+    auto &statelist = it->second;
+
+    // There may be multiple paths in the map to be merged at that location,
+    // for example if it's the loop end. Detect two circumstances: first where
+    // the guard of the to-be-merged state is identical to the pre-goto guard,
+    // meaning that the GOTO we executed had an unconditionally-true guard.
+    // Second where the current-path guard plus the to-be-merged guard is equal
+    // to the pre-goto guard: in that case, these can only be the two descendent
+    // paths from the pre-goto state.
+    const goto_statet *tomerge = NULL;
+    for (const goto_statet &gs : statelist) {
+      bool merge = false;
+
+      if (gs.guard == pre_goto_guard) {
+        merge = true;
+      } else {
+        guardt tmp(ls.guard);
+        tmp |= gs.guard;
+
+        expr2tc foo = tmp.as_expr();
+        expr2tc bar = pre_goto_guard.as_expr();
+        do_simplify(foo);
+        do_simplify(bar);
+
+        if (foo == bar)
+          merge = true;
+      }
+
+      // Select merging this goto_statet with a sanity check
+      if (merge) {
+        assert(tomerge == NULL && "Multiple branching to-preserve paths?");
+        tomerge = &gs;
+      }
+    }
+
+    // We _must_ have found a path to merge, or the current-state guard would
+    // have matched pre_goto_guard earlier
+    assert(tomerge != NULL);
+
+    // Alas, copies.
+    pp.push_back(std::make_pair(target_insn_it, goto_statet(*tomerge)));
+  }
+
+  // We must have picked up at least one path to merge
+  if (pp.size() == 0) {
+    // Even better: if the guard is now false, and we're context switching away,
+    // then something like assume(0) occurred: no paths can continue in this
+    // thread from this point. And anything we context switch to will get a
+    // false guard too and thus expire.
+    // Ideally at this point we would bail and return our formula to the RT
+    // class, but that code is way too fragile. Instead, continue with an ended
+    // thread that infects all other threads with it's false guard until we
+    // complete.
+    // It's unclear how to distinguish this case from an error in this code
+    // here.
+    // XXX methodise this
+    threads_state[last_active_thread].thread_ended = true;
+    atomic_numbers[last_active_thread] = 0;
+  }
+
+  return;
+}
+
+void
+execution_statet::cull_all_paths(void)
+{
+  // Walk through _all_ symbolic paths in the program and wipe them out.
+  // Current path is easy: set the guard to false. phi_function will overwrite
+  // any different valuation left in the l2 map.
+  cur_state->guard.make_false();
+
+  // This completely removes all symbolic paths that were going to be merged
+  // back in at some point in the future.
+  for (auto &frame : cur_state->call_stack) {
+    frame.goto_state_map.clear();
+  }
+
+  return;
+}
+
+void
+execution_statet::restore_last_paths(void)
+{
+  // For each preserved path: create a fresh new goto_statet with data values
+  // created from the present values of l2-renaming and value set, as we
+  // (presumably) switch back in from a different thread. Then schedule the
+  // states to be merged in at their original locations.
+  // Given that we're discarding a lot of data here this could all be more
+  // efficient, but it's what we've got.
+
+  auto &list = preserved_paths[active_thread];
+  for (const auto &p : list) {
+    const auto &loc = p.first;
+    const auto &gs = p.second;
+
+    // Create a fresh new goto_statet to be merged in at the target insn
+    assert(cur_state->top().goto_state_map[loc].size() == 0);
+    cur_state->top().goto_state_map[loc].push_back(goto_statet(*cur_state));
+    // Get ref to it
+    auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
+
+    // Proceed to fill new_gs with old data. Ideally this would be a method...
+    new_gs.depth = gs.depth;
+    new_gs.guard = gs.guard;
+    assert(new_gs.thread_id == gs.thread_id);
+
+    // And that is it!
+  }
+
+  list.clear();
+
+  return;
 }
 
 bool
@@ -473,7 +652,7 @@ execution_statet::is_cur_state_guard_false(void)
     runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
                                                  (target.get());
 
-    equality2tc the_question(true_expr, parent_guard);
+    equality2tc the_question(gen_true_expr(), parent_guard);
 
     try {
       tvt res = rte->ask_solver_question(the_question);
@@ -504,8 +683,8 @@ execution_statet::execute_guard(void)
   // pre-goto thread guard that we stored at that time. This is so that the
   // thread we context switch to gets the guard of that context switch happening
   // rather than the guard of either branch of the GOTO.
-  if (!is_nil_expr(pre_goto_guard))
-    parent_guard = pre_goto_guard;
+  if (!pre_goto_guard.is_true())
+    parent_guard = pre_goto_guard.as_expr();
   else
     parent_guard = threads_state[last_active_thread].guard.as_expr();
 
@@ -551,10 +730,12 @@ execution_statet::add_thread(const goto_programt *prog)
   new_state.initialize(prog->instructions.begin(), prog->instructions.end(),
                       prog, threads_state.size());
 
-  new_state.source.thread_nr = threads_state.size();
+  unsigned int thread_nr = threads_state.size();
+  new_state.source.thread_nr = thread_nr;
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
+  preserved_paths.push_back(std::list<std::pair<goto_programt::const_targett, goto_statet> >());
   atomic_numbers.push_back(0);
 
   if (DFS_traversed.size() <= new_state.source.thread_nr) {
@@ -582,6 +763,11 @@ execution_statet::add_thread(const goto_programt *prog)
   dependancy_chain.push_back(std::vector<int>());
   for (unsigned int i = 0; i < dependancy_chain.size(); i++)
     dependancy_chain.back().push_back(0);
+
+  // While we've recorded the new thread as starting in the designated program,
+  // it might not run immediately, thus must have it's path preserved:
+  preserved_paths[thread_nr].push_back(std::make_pair(prog->instructions.begin(), goto_statet(threads_state[thread_nr])));
+
 
   return threads_state.size() - 1; // thread ID, zero based
 }
@@ -884,7 +1070,7 @@ execution_statet::generate_hash(void) const
 {
 
   auto l2 =
-    std::dynamic_pointer_cast<state_hashing_level2t>(state_level2);
+    boost::dynamic_pointer_cast<state_hashing_level2t>(state_level2);
   assert(l2 != nullptr);
 
   crypto_hash state = l2->generate_l2_state_hash();
@@ -1076,11 +1262,11 @@ execution_statet::ex_state_level2t::~ex_state_level2t(void)
 {
 }
 
-std::shared_ptr<renaming::level2t>
+boost::shared_ptr<renaming::level2t>
 execution_statet::ex_state_level2t::clone(void) const
 {
 
-  return std::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this));
+  return boost::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this));
 }
 
 void
@@ -1103,10 +1289,10 @@ dfs_execution_statet::~dfs_execution_statet(void)
     target->pop_ctx();
 }
 
-std::shared_ptr<execution_statet> dfs_execution_statet::clone(void) const
+boost::shared_ptr<execution_statet> dfs_execution_statet::clone(void) const
 {
-  std::shared_ptr<dfs_execution_statet> d =
-    std::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
+  boost::shared_ptr<dfs_execution_statet> d =
+    boost::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
 
   // Duplicate target equation; or if we're encoding at runtime, push a context.
   if (smt_during_symex) {
@@ -1129,10 +1315,10 @@ schedule_execution_statet::~schedule_execution_statet(void)
   // Don't delete equation. Schedule requires all this data.
 }
 
-std::shared_ptr<execution_statet> schedule_execution_statet::clone(void) const
+boost::shared_ptr<execution_statet> schedule_execution_statet::clone(void) const
 {
-  std::shared_ptr<schedule_execution_statet> s =
-    std::shared_ptr<schedule_execution_statet>(new schedule_execution_statet(*this));
+  boost::shared_ptr<schedule_execution_statet> s =
+    boost::shared_ptr<schedule_execution_statet>(new schedule_execution_statet(*this));
 
   // Don't duplicate target equation.
   s.get()->target = target;
@@ -1174,11 +1360,11 @@ execution_statet::state_hashing_level2t::~state_hashing_level2t(void)
 {
 }
 
-std::shared_ptr<renaming::level2t>
+boost::shared_ptr<renaming::level2t>
 execution_statet::state_hashing_level2t::clone(void) const
 {
 
-  return std::shared_ptr<state_hashing_level2t>(new state_hashing_level2t(*this));
+  return boost::shared_ptr<state_hashing_level2t>(new state_hashing_level2t(*this));
 }
 
 void

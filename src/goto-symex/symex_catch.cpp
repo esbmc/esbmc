@@ -6,13 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include "goto_symex.h"
-
-#include <simplify_expr.h>
-
-#include "goto_symex.h"
+#include <goto-symex/goto_symex.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/simplify_expr.h>
 
 /*******************************************************************\
 
@@ -117,7 +114,7 @@ bool goto_symext::symex_throw()
         const std::string &msg="Throwing an exception of type " +
             exceptions_thrown.begin()->as_string() +
             " but there is not catch for it.";
-        claim(false_expr, msg);
+        claim(gen_false_expr(), msg);
         return true;
       }
     }
@@ -215,7 +212,7 @@ bool goto_symext::symex_throw()
       // An un-caught exception. Error
       const std::string &msg="Throwing an exception of type " +
         exceptions_thrown.begin()->as_string() + " but there is not catch for it.";
-      claim(false_expr, msg);
+      claim(gen_false_expr(), msg);
       // Ensure no further execution along this path.
       cur_state->guard.make_false();
     }
@@ -424,7 +421,7 @@ int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
             ++s_it1)
           msg+= "\n   - " + std::string((*s_it1).c_str());
 
-        claim(false_expr, msg);
+        claim(gen_false_expr(), msg);
         return 0;
       }
       else
@@ -468,7 +465,7 @@ bool goto_symext::handle_rethrow(const expr2tc &operand,
     else
     {
       const std::string &msg="Trying to re-throw without last exception.";
-      claim(false_expr, msg);
+      claim(gen_false_expr(), msg);
       return true;
     }
   }
@@ -492,7 +489,7 @@ void goto_symext::symex_throw_decl()
   // Check if we have a previous try-block catch
   if(stack_catch.size())
   {
-    const goto_programt::instructiont &instruction= *cur_state->source.pc; 
+    const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
     // Get throw list
     const std::vector<irep_idt> &throw_decl_list =

@@ -18,13 +18,10 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 */
 
-#include <stdint.h>
-
-#include <irep2.h>
-
+#include <cstdint>
+#include <esbmc/esbmc_parseoptions.h>
 #include <langapi/mode.h>
-
-#include "parseoptions.h"
+#include <util/irep2.h>
 
 /*******************************************************************\
 
@@ -38,32 +35,12 @@ Function: main
 
 \*******************************************************************/
 
-void dereference_handlers_init(void);
-
 int main(int argc, const char **argv)
 {
   // To avoid the static initialization order fiasco:
   type_poolt bees(true);
   type_pool = bees;
-  init_expr_constants();
-  dereference_handlers_init();
 
   cbmc_parseoptionst parseoptions(argc, argv);
   return parseoptions.main();
 }
-
-const mode_table_et mode_table[] =
-{
-  LANGAPI_HAVE_MODE_C,
-#ifndef WITHOUT_CLANG
-  LANGAPI_HAVE_MODE_CLANG_C,
-#endif
-  LANGAPI_HAVE_MODE_CPP,
-#ifndef WITHOUT_CLANG
-  LANGAPI_HAVE_MODE_CLANG_CPP,
-#endif
-  LANGAPI_HAVE_MODE_END
-};
-
-extern "C" uint8_t buildidstring_buf[1];
-uint8_t *version_string = buildidstring_buf;

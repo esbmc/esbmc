@@ -1,16 +1,13 @@
-#include <sstream>
-#include <set>
 #include <iomanip>
-
-#include <base_type.h>
-#include <arith_tools.h>
-#include <c_types.h>
-#include <expr_util.h>
-
-#include "smt_conv.h"
+#include <set>
 #include <solvers/prop/literal.h>
-
-#include "smt_tuple_flat.h"
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple_flat.h>
+#include <sstream>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
 
 // Helpers extracted from z3_convt.
 
@@ -66,7 +63,7 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
+smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   : ctx_level(0), boolean_sort(NULL), int_encoding(intmode), ns(_ns)
 {
   tuple_api = NULL;
@@ -80,7 +77,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
   names.push_back(irep_idt("pointer_object"));
   names.push_back(irep_idt("pointer_offset"));
 
-  struct_type2t *tmp = new struct_type2t(members, names, "pointer_struct");
+  struct_type2t *tmp = new struct_type2t(members, names, names, "pointer_struct");
   pointer_type_data = tmp;
   pointer_struct = type2tc(tmp);
 
@@ -96,7 +93,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   names.push_back(irep_idt("start"));
   names.push_back(irep_idt("end"));
-  tmp = new struct_type2t(members, names, "addr_space_type");
+  tmp = new struct_type2t(members, names, names, "addr_space_type");
   addr_space_type_data = tmp;
   addr_space_type = type2tc(tmp);
 
@@ -114,11 +111,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
   // this is the one modelling array that absolutely _has_ to be initialized
   // to false for each element, which is going to be shoved into
   // convert_identifier_pointer.
-  if (is_cpp) {
-    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic&0#1";
-  } else {
-    dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
-  }
+  dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
 
   ptr_foo_inited = false;
 }
@@ -401,10 +394,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     case expr2t::index_id:
     case expr2t::address_of_id:
       break; // Don't convert their operands
-
-    case expr2t::equality_id:
-      if(is_array_type(to_equality2t(expr).side_1->type))
-        break;
 
     default:
       // Convert /all the arguments/. Via magical delegates.
@@ -904,8 +893,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     const lessthan2t &lt = to_lessthan2t(expr);
-    assert(lt.side_1->type == lt.side_2->type);
-
     // Pointer relation:
     if (is_pointer_type(lt.side_1)) {
       a = convert_ptr_cmp(lt.side_1, lt.side_2, expr);
@@ -925,8 +912,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     const lessthanequal2t &lte = to_lessthanequal2t(expr);
-    assert(lte.side_1->type == lte.side_2->type);
-
     // Pointer relation:
     if (is_pointer_type(lte.side_1)) {
       a = convert_ptr_cmp(lte.side_1, lte.side_2, expr);
@@ -946,8 +931,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     const greaterthan2t &gt = to_greaterthan2t(expr);
-    assert(gt.side_1->type == gt.side_2->type);
-
     // Pointer relation:
     if (is_pointer_type(gt.side_1)) {
       a = convert_ptr_cmp(gt.side_1, gt.side_2, expr);
@@ -967,8 +950,6 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(expr->get_num_sub_exprs() == 2);
 
     const greaterthanequal2t &gte = to_greaterthanequal2t(expr);
-    assert(gte.side_1->type == gte.side_2->type);
-
     // Pointer relation:
     if (is_pointer_type(gte.side_1)) {
       a = convert_ptr_cmp(gte.side_1, gte.side_2, expr);
@@ -1173,8 +1154,38 @@ smt_convt::convert_ast(const expr2tc &expr)
             SMT_FUNC_XOR});
     break;
   }
+  case expr2t::bitcast_id:
+  {
+    assert(expr->get_num_sub_exprs() == 2);
+    const bitcast2t &cast = to_bitcast2t(expr);
+    assert(is_scalar_type(cast.type) && is_scalar_type(cast.from));
+
+    // As it stands, the only circusmtance where bitcast can make a difference
+    // is where we're casting to or from a float, where casting by value means
+    // something different. Filter that case out, pass everything else to normal
+    // cast.
+    bool to_float = is_floatbv_type(cast.type);
+    bool from_float = is_floatbv_type(cast.from);
+
+    if ((to_float && !from_float) || (!to_float && from_float)) {
+      smt_func_kind k;
+
+      if (to_float)
+        k = SMT_FUNC_BV2FLOAT;
+      else
+        k = SMT_FUNC_FLOAT2BV;
+
+      a = convert_ast(expr, expr->type, args,
+            expr_op_convert{k, k, k, k, k});
+    } else {
+      // Cast by value is fine
+      typecast2tc tcast(cast.type, cast.from);
+      a = convert_ast(tcast);
+    }
+    break;
+  }
   default:
-    std::cerr << "Couldn't convert expression in unrecognized format"
+    std::cerr << "Couldn't convert expression in unrecognised format"
               << std::endl;
     expr->dump();
     abort();
@@ -1268,6 +1279,7 @@ smt_convt::convert_sort(const type2tc &type)
 
     if (is_tuple_ast_type(range)) {
       type2tc thetype = flatten_array_type(type);
+      rewrite_ptrs_to_structs(thetype);
       result = tuple_api->mk_struct_sort(thetype);
       break;
     }
@@ -1524,7 +1536,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
 
   // Since we can't extract the top bit, from the fpbv, we'll
   // convert it to return if(is_neg) ? 1 : 0;
-  auto value = convert_ast(signbit.value);
+  auto value = convert_ast(signbit.operand);
   auto sort = convert_sort(signbit.type);
 
   // Create is_neg
@@ -1535,7 +1547,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
   else
   {
     expr2tc zero_expr;
-    migrate_expr(gen_zero(migrate_type_back(signbit.value->type)), zero_expr);
+    migrate_expr(gen_zero(migrate_type_back(signbit.operand->type)), zero_expr);
 
     is_neg = mk_func_app(boolean_sort, SMT_FUNC_LT, value, convert_ast(zero_expr));
   }
@@ -1821,37 +1833,7 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
 smt_sortt
 smt_convt::make_array_domain_sort(const array_type2t &arr)
 {
-
-  // Start special casing if this is an array of arrays.
-  if (!is_array_type(arr.subtype)) {
-    // Normal array, work out what the domain sort is.
-    unsigned int domain_width = calculate_array_domain_width(arr);
-    return mk_int_bv_sort(domain_width);
-  } else {
-    // This is an array of arrays -- we're going to convert this into a single
-    // array that has an extended domain. Work out that width. Firstly, how
-    // many levels of array do we have?
-
-    unsigned int how_many_arrays = 1;
-    type2tc subarr = arr.subtype;
-    while (is_array_type(subarr)) {
-      how_many_arrays++;
-      subarr = to_array_type(subarr).subtype;
-    }
-
-    assert(how_many_arrays < 64 && "Suspiciously large number of array "
-                                   "dimensions");
-    unsigned int domwidth;
-    unsigned int i;
-    domwidth = calculate_array_domain_width(arr);
-    subarr = arr.subtype;
-    for (i = 1; i < how_many_arrays; i++) {
-      domwidth += calculate_array_domain_width(to_array_type(arr.subtype));
-      subarr = arr.subtype;
-    }
-
-    return mk_sort(SMT_SORT_BV, domwidth, false);
-  }
+  return mk_sort(int_encoding ? SMT_SORT_INT : SMT_SORT_BV, make_array_domain_sort_exp(arr)->get_width(), false);
 }
 
 type2tc
@@ -1865,27 +1847,19 @@ smt_convt::make_array_domain_sort_exp(const array_type2t &arr)
       return get_uint_type(config.ansi_c.int_width);
     else
       return get_uint_type(calculate_array_domain_width(arr));
-  } else {
+  }
+  else
+  {
     // This is an array of arrays -- we're going to convert this into a single
-    // array that has an extended domain. Work out that width. Firstly, how
-    // many levels of array do we have?
+    // array that has an extended domain. Work out that width.
 
-    unsigned int how_many_arrays = 1;
+    unsigned int domwidth = calculate_array_domain_width(arr);
+
     type2tc subarr = arr.subtype;
-    while (is_array_type(subarr)) {
-      how_many_arrays++;
+    while(is_array_type(subarr))
+    {
+      domwidth += calculate_array_domain_width(to_array_type(subarr));
       subarr = to_array_type(subarr).subtype;
-    }
-
-    assert(how_many_arrays < 64 && "Suspiciously large number of array "
-                                   "dimensions");
-    unsigned int domwidth;
-    unsigned int i;
-    domwidth = calculate_array_domain_width(arr);
-    subarr = arr.subtype;
-    for (i = 1; i < how_many_arrays; i++) {
-      domwidth += calculate_array_domain_width(to_array_type(arr.subtype));
-      subarr = arr.subtype;
     }
 
     return get_uint_type(domwidth);
@@ -2499,11 +2473,15 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
   // Take a constant_array2t or an array_of, and format the data from them into
   // a form palatable to tuple_array_create.
 
+  // Strip out any pointers
+  type2tc arr_type = expr->type;
+  rewrite_ptrs_to_structs(arr_type);
+
   if (is_constant_array_of2t(expr)) {
     const constant_array_of2t &arr = to_constant_array_of2t(expr);
     smt_astt arg = convert_ast(arr.initializer);
 
-    return tuple_api->tuple_array_create(arr.type, &arg, true, domain);
+    return tuple_api->tuple_array_create(arr_type, &arg, true, domain);
   } else {
     assert(is_constant_array2t(expr));
     const constant_array2t &arr = to_constant_array2t(expr);
@@ -2514,8 +2492,34 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
       i++;
     }
 
-    return tuple_api->tuple_array_create(arr.type, args, false, domain);
+    return tuple_api->tuple_array_create(arr_type, args, false, domain);
   }
+}
+
+void
+smt_convt::rewrite_ptrs_to_structs(type2tc &type)
+{
+  // Type may contain pointers; replace those with the structure equivalent.
+  // Ideally the real solver will never see pointer types.
+  // Create a delegate that recurses over all subtypes, replacing pointers
+  // as we go. Extra scaffolding is to work around the fact we can't refer
+  // to replace_w_ptr until after it's been defined, ho hum.
+  type2t::subtype_delegate *delegate = NULL;
+  auto replace_w_ptr = [this, &delegate](type2tc &e) {
+    if (is_pointer_type(e)) {
+      // Replace this field of the expr with a pointer struct :O:O:O:O
+      e = pointer_struct;
+    } else {
+      // Recurse
+      e.get()->Foreach_subtype(*delegate);
+    }
+  };
+
+  type2t::subtype_delegate del_wrap(std::ref(replace_w_ptr));
+  delegate = &del_wrap;
+  type.get()->Foreach_subtype(replace_w_ptr);
+
+  return;
 }
 
 // Default behaviours for SMT AST's
@@ -2550,10 +2554,9 @@ smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   // We're an array; just generate a 'with' operation.
   expr2tc index;
   if (is_nil_expr(idx_expr)) {
-    assert(sort->domain_width != 0 && "Array sort with zero-sized domain "
-           "width");
-    index = constant_int2tc(type2tc(new unsignedbv_type2t(sort->domain_width)),
-          BigInt(idx));
+    size_t dom_width = ctx->int_encoding ? config.ansi_c.int_width : sort->domain_width;
+    index =
+      constant_int2tc(type2tc(new unsignedbv_type2t(dom_width)), BigInt(idx));
   } else {
     index = idx_expr;
   }
@@ -2587,4 +2590,9 @@ smt_ast::project(smt_convt *ctx __attribute__((unused)),
 {
   std::cerr << "Projecting from non-tuple based AST" << std::endl;
   abort();
+}
+
+void smt_convt::dump_smt()
+{
+  std::cerr << "SMT dump not implemented for " << solver_text() << "\n";
 }

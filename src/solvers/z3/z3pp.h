@@ -26,18 +26,15 @@ Notes:
 #ifndef __Z3PP_H_
 #define __Z3PP_H_
 
-#include <stdarg.h>
-#include <stdint.h>
-
-#include<cassert>
-#include<iostream>
-#include<string>
-#include<sstream>
-#include<z3.h>
-#include<limits.h>
-
-// jmorse
-#include <config.h>
+#include <cassert>
+#include <climits>
+#include <cstdarg>
+#include <cstdint>
+#include <iostream>
+#include <sstream>
+#include <string>
+#include <util/config.h>
+#include <z3.h>
 
 /**
    \defgroup cppapi C++ API
@@ -167,7 +164,7 @@ namespace z3 {
         void init(config & c, bool use_ints);
         context(bool dummy __attribute__((unused))) : m_ctx(NULL), m_esbmc_int_sort(NULL), int_encoding(false) { }
         context(config & c, bool use_ints) : int_encoding(use_ints) { init(c, use_ints); }
-        ~context() { Z3_del_context(m_ctx); }
+        ~context() { Z3_del_context(m_ctx); Z3_finalize_memory(); }
         operator Z3_context() const { return m_ctx; }
 
         /**
@@ -331,6 +328,7 @@ namespace z3 {
         expr fpa_div(z3::expr rm, z3::expr s1, z3::expr s2);
         expr fpa_fma(z3::expr rm, z3::expr v1, z3::expr v2, z3::expr v3);
 
+        expr fpa_from_bv(z3::expr t, sort sort);
         expr fpa_to_ieeebv(z3::expr fp);
 
         expr string_val(char const* s);
@@ -2275,6 +2273,13 @@ namespace z3 {
     expr context::fpa_fma(z3::expr rm, z3::expr v1, z3::expr v2, z3::expr v3)
     {
       Z3_ast r = Z3_mk_fpa_fma(m_ctx, rm, v1, v2, v3);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_from_bv(z3::expr t, sort sort)
+    {
+      Z3_ast r = Z3_mk_fpa_to_fp_bv(m_ctx, t, sort);
       check_error();
       return expr(*this, r);
     }

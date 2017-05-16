@@ -1,9 +1,7 @@
+#include <solvers/smt/smt_conv.h>
 #include <sstream>
-
-#include <base_type.h>
-#include <expr_util.h>
-
-#include "smt_conv.h"
+#include <util/base_type.h>
+#include <util/expr_util.h>
 
 smt_astt
 smt_convt::convert_typecast_to_bool(const typecast2t &cast)
@@ -390,7 +388,7 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
     convert_terminal(
         constant_int2tc(int_type, pointer_logic.back().get_invalid_object()));
 
-  smt_astt one = convert_terminal(one_ulong);
+  smt_astt one = convert_terminal(gen_ulong(1));
   smt_astt offs = mk_func_app(int_sort, subk, target, one);
   smt_astt inv_obj = id;
   smt_astt inv_offs = offs;

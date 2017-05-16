@@ -8,24 +8,20 @@
 
 \*******************************************************************/
 
-#include <assert.h>
-#include <string.h>
-#include <iostream>
-
 #include <ansi-c/printf_formatter.h>
-#include <langapi/language_util.h>
-#include <arith_tools.h>
-#include <boost/version.hpp>
-
-#include "goto_trace.h"
-#include <std_types.h>
-
 #include <boost/algorithm/string.hpp>
 #include <boost/property_tree/ptree.hpp>
 #include <boost/property_tree/xml_parser.hpp>
-
-#include "langapi/languages.h"
-#include "witnesses.h"
+#include <boost/version.hpp>
+#include <cassert>
+#include <cstring>
+#include <goto-symex/goto_trace.h>
+#include <goto-symex/witnesses.h>
+#include <iostream>
+#include <langapi/language_util.h>
+#include <langapi/languages.h>
+#include <util/arith_tools.h>
+#include <util/std_types.h>
 
 extern std::string verification_file;
 
@@ -243,9 +239,14 @@ show_state_header(
 
   // Print stack trace
 
-  std::vector<dstring>::const_iterator it;
-  for (it = state.stack_trace.begin(); it != state.stack_trace.end(); it++)
-    out << it->as_string() << std::endl;
+  for (std::vector<stack_framet>::const_iterator it = state.stack_trace.begin();
+       it != state.stack_trace.end(); it++)
+  {
+    if (it->src == NULL)
+      out << it->function.as_string() << std::endl;
+    else
+      out << it->function.as_string() << " at " << it->src->pc->location.get_file().as_string() << " line " << it->src->pc->location.get_line().as_string() << std::endl;
+  }
 
   out << "----------------------------------------------------" << std::endl;
 }
@@ -277,20 +278,31 @@ get_varname_from_guard (
 }
 
 void generate_goto_trace_in_violation_graphml_format(
-  std::string & witness_programfile __attribute__((unused)),
   std::string & witness_output,
   bool is_detailed_mode,
   int & specification,
   const namespacet & ns,
   const goto_tracet & goto_trace)
 {
+  // Remove timeout when building witness
+  alarm(0);
+
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
   std::map<std::string, int> function_control_map;
-  bool already_initialized = false;
   boost::property_tree::ptree last_created_node;
   std::string last_function = "";
   std::string last_ver_filename = "";
+  bool already_initialized = false;
+
+  create_graph(graph, verification_file, specification, false);
+  boost::property_tree::ptree first_node;
+  node_p first_node_p;
+  first_node_p.isEntryNode = true;
+  create_node(first_node, first_node_p);
+  graph.add_child("node", first_node);
+  last_created_node = first_node;
+  already_initialized = true;
 
   for(goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
       it != goto_trace.steps.end(); it++)
@@ -324,30 +336,12 @@ void generate_goto_trace_in_violation_graphml_format(
     if (verification_file.find(current_ver_file) != std::string::npos)
       current_ver_file = verification_file;
 
-    if(already_initialized == false)
-    {
-      create_graph(graph, verification_file, specification, false);
-      boost::property_tree::ptree first_node;
-      node_p first_node_p;
-      first_node_p.isEntryNode = true;
-      create_node(first_node, first_node_p);
-      graph.add_child("node", first_node);
-      last_created_node = first_node;
-      already_initialized = true;
-    }
-
-    /* creating nodes and edges */
-    boost::property_tree::ptree current_node;
-    node_p current_node_p;
-    create_node(current_node, current_node_p);
-    graph.add_child("node", current_node);
-
-    boost::property_tree::ptree current_edge;
+    /* creating edge */
     edge_p current_edge_p;
     current_edge_p.originFileName = current_ver_file;
 
     /* check if it has a line number (getting tokens) */
-	const int line_number = std::atoi(it->pc->location.get_line().c_str());
+	int line_number = std::atoi(it->pc->location.get_line().c_str());
 	if(line_number != 0)
 	{
 	  current_edge_p.startline = line_number;
@@ -434,6 +428,12 @@ void generate_goto_trace_in_violation_graphml_format(
       }
     }
 
+    /* creating node and edge */
+    boost::property_tree::ptree current_node;
+    node_p current_node_p;
+    create_node(current_node, current_node_p);
+    graph.add_child("node", current_node);
+    boost::property_tree::ptree current_edge;
     create_edge(current_edge, current_edge_p, last_created_node, current_node);
     graph.add_child("edge", current_edge);
     last_created_node = current_node;
@@ -467,24 +467,49 @@ void generate_goto_trace_in_violation_graphml_format(
 }
 
 void generate_goto_trace_in_correctness_graphml_format(
-  std::string & graphml_path,
-  const namespacet & ns __attribute__((unused)),
-  const goto_tracet & goto_trace,
-  int & specification)
+  std::string & witness_output,
+  bool is_detailed_mode,
+  int & specification,
+  const namespacet & ns,
+  const goto_tracet & goto_trace)
 {
   boost::property_tree::ptree graphml;
   boost::property_tree::ptree graph;
   std::map<int, std::string> line_content_map;
   std::map<std::string, int> function_control_map;
 
-  bool already_initialized = false;
   boost::property_tree::ptree last_created_node;
   std::string last_function = "";
   std::string last_ver_file = "";
 
+  create_graph(graph, verification_file, specification, true);
+  boost::property_tree::ptree first_node;
+  node_p first_node_p;
+  first_node_p.isEntryNode = true;
+  create_node(first_node, first_node_p);
+  graph.add_child("node", first_node);
+  last_created_node = first_node;
+
   for(goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
       it != goto_trace.steps.end(); it++)
   {
+    /* check if it is an internal call */
+    std::string::size_type find_bt =
+      it->pc->location.to_string().find("built-in", 0);
+    std::string::size_type find_lib =
+      it->pc->location.to_string().find("library", 0);
+    bool is_internal_call =
+      (find_bt != std::string::npos) || (find_lib != std::string::npos);
+
+    /** ignore internal calls and non assignments */
+    if(!(it->type == goto_trace_stept::ASSIGNMENT)
+        || (is_internal_call == true))
+      continue;
+
+    /* checking other restrictions */
+    if (!is_valid_witness_expr(ns, it->lhs))
+      continue;
+
     /** ignore internal calls and non assignments */
     if(!(it->is_assignment() || it->is_assume() || it->is_assert()))
       continue;
@@ -492,18 +517,6 @@ void generate_goto_trace_in_correctness_graphml_format(
     std::string current_ver_file = it->pc->location.get_file().as_string();
     if (verification_file.find(current_ver_file) != std::string::npos)
       current_ver_file = verification_file;
-
-    if(already_initialized == false)
-    {
-      create_graph(graph, verification_file, specification, true);
-      boost::property_tree::ptree first_node;
-      node_p first_node_p;
-      first_node_p.isEntryNode = true;
-      create_node(first_node, first_node_p);
-      graph.add_child("node", first_node);
-      last_created_node = first_node;
-      already_initialized = true;
-    }
 
     /* creating nodes and edges */
     boost::property_tree::ptree current_node;
@@ -519,16 +532,19 @@ void generate_goto_trace_in_correctness_graphml_format(
     current_edge_p.originFileName = current_ver_file;
 
     /* check if has a line number (to get tokens) */
-    const int line_number = std::atoi(it->pc->location.get_line().c_str());
+    int line_number = std::atoi(it->pc->location.get_line().c_str());
     if(line_number != 0)
     {
       current_edge_p.startline = line_number;
-      current_edge_p.endline = line_number;
-      int p_startoffset = 0;
-      int p_endoffset = 0;
-      get_offsets_for_line_using_wc(current_ver_file, line_number, p_startoffset, p_endoffset);
-      current_edge_p.startoffset = p_startoffset;
-      current_edge_p.endoffset = p_endoffset;
+      if (is_detailed_mode)
+      {
+        current_edge_p.endline = line_number;
+        int p_startoffset = 0;
+        int p_endoffset = 0;
+        get_offsets_for_line_using_wc(current_ver_file, line_number, p_startoffset, p_endoffset);
+        current_edge_p.startoffset = p_startoffset;
+        current_edge_p.endoffset = p_endoffset;
+      }
     }
 
     /* check if it has entered or returned from a function */
@@ -545,9 +561,9 @@ void generate_goto_trace_in_correctness_graphml_format(
       else
       {
         /* it is backing from another function */
-		current_edge_p.returnFromFunction = last_function;
-		current_edge_p.enterFunction = function_name;
-		last_function = function_name;
+        current_edge_p.returnFromFunction = last_function;
+        current_edge_p.enterFunction = function_name;
+        last_function = function_name;
       }
     }
 
@@ -559,7 +575,7 @@ void generate_goto_trace_in_correctness_graphml_format(
       std::string codeline = line_content_map[line_number];
       if ((codeline.find("__VERIFIER_assume") != std::string::npos ) ||
           (codeline.find("__ESBMC_assume") != std::string::npos ) ||
-		  (codeline.find("assume") != std::string::npos))
+          (codeline.find("assume") != std::string::npos))
       {
         codeline = w_string_replace(codeline, "__VERIFIER_assume", "");
         codeline = w_string_replace(codeline, "__ESBMC_assume", "");
@@ -593,7 +609,7 @@ void generate_goto_trace_in_correctness_graphml_format(
 #else
   boost::property_tree::xml_writer_settings<char> settings('\t', 1);
 #endif
-  boost::property_tree::write_xml(graphml_path, graphml, std::locale(), settings);
+  boost::property_tree::write_xml(witness_output, graphml, std::locale(), settings);
 }
 
 void

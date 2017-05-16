@@ -9,7 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_ANSI_C_PARSE_TREE_H
 #define CPROVER_ANSI_C_PARSE_TREE_H
 
-#include "ansi_c_declaration.h"
+#include <ansi-c/ansi_c_declaration.h>
 
 class ansi_c_parse_treet
 {

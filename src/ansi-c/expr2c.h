@@ -9,14 +9,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_EXPR2C_H
 #define CPROVER_EXPR2C_H
 
-#include <set>
+#include <ansi-c/c_qualifiers.h>
 #include <map>
-
-#include <expr.h>
-#include <std_code.h>
-#include <namespace.h>
-
-#include "c_qualifiers.h"
+#include <set>
+#include <util/expr.h>
+#include <util/namespace.h>
+#include <util/std_code.h>
 
 std::string expr2c(const exprt &expr, const namespacet &ns);
 std::string type2c(const typet &type, const namespacet &ns);
@@ -49,6 +47,9 @@ protected:
   std::string id_shorthand(const exprt &expr) const;
 
   std::string convert_typecast(
+    const exprt &src, unsigned &precedence);
+
+  std::string convert_bitcast(
     const exprt &src, unsigned &precedence);
 
   std::string convert_implicit_address_of(
@@ -124,7 +125,8 @@ protected:
 
   std::string convert_code(const codet &src);
   virtual std::string convert_code(const codet &src, unsigned indent);
-  std::string convert_code_label(const codet &src, unsigned indent);
+  std::string convert_code_label(const code_labelt &src, unsigned indent);
+  std::string convert_code_switch_case(const code_switch_caset &src, unsigned indent);
   std::string convert_code_asm(const codet &src, unsigned indent);
   std::string convert_code_assign(const codet &src, unsigned indent);
   std::string convert_code_free(const codet &src, unsigned indent);

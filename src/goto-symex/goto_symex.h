@@ -9,22 +9,18 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
-#include <irep2.h>
-#include <ac_config.h>
-
-#include <map>
-#include <stack>
-#include <std_types.h>
-#include <i2string.h>
-#include <hash_cont.h>
-#include <options.h>
-
+#include <boost/shared_ptr.hpp>
 #include <goto-programs/goto_functions.h>
-
+#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/symex_target.h>
+#include <map>
 #include <pointer-analysis/dereference.h>
-
-#include "goto_symex_state.h"
-#include "symex_target.h"
+#include <stack>
+#include <util/hash_cont.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/options.h>
+#include <util/std_types.h>
 
 class reachability_treet; // Forward dec
 class execution_statet; // Forward dec
@@ -52,7 +48,7 @@ public:
    */
   goto_symext(const namespacet &_ns, contextt &_new_context,
               const goto_functionst &goto_functions,
-              std::shared_ptr<symex_targett> _target, optionst &opts);
+              boost::shared_ptr<symex_targett> _target, optionst &opts);
   goto_symext(const goto_symext &sym);
   goto_symext& operator=(const goto_symext &sym);
 
@@ -88,12 +84,12 @@ public:
   class symex_resultt {
   public:
     symex_resultt(
-      std::shared_ptr<symex_targett> t,
+      boost::shared_ptr<symex_targett> t,
       unsigned int claims,
       unsigned int remain)
       : target(t), total_claims(claims), remaining_claims(remain) { };
 
-    std::shared_ptr<symex_targett> target;
+    boost::shared_ptr<symex_targett> target;
     unsigned int total_claims;
     unsigned int remaining_claims;
   };
@@ -120,7 +116,7 @@ public:
   /**
    *  Create a symex result for this run.
    */
-  std::shared_ptr<goto_symext::symex_resultt> get_symex_result(void);
+  boost::shared_ptr<goto_symext::symex_resultt> get_symex_result(void);
 
   /**
    *  Symbolically execute one instruction.
@@ -340,8 +336,10 @@ protected:
    *  variables of the function being called.
    *  @param function_type type containing argument types of func call.
    *  @param arguments The arguments to assign to function arg variables.
+   *  @return the va_index for this function, if any, otherwise UINT_MAX
    */
-  void argument_assignments(
+  unsigned int argument_assignments(
+    const irep_idt &function_identifier,
     const code_type2t &function_type,
     const std::vector<expr2tc> &arguments);
 
@@ -374,10 +372,6 @@ protected:
    */
   void run_intrinsic(const code_function_call2t &call, reachability_treet &art,
                      const std::string symname);
-
-  /** Implementation of realloc. */
-  void intrinsic_realloc(const code_function_call2t &call,
-                         reachability_treet &arg);
 
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
@@ -579,6 +573,8 @@ protected:
 
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  /** Implementation of realloc. */
+  void symex_realloc(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of alloca. */
   expr2tc symex_alloca(const expr2tc &lhs, const sideeffect2t &code);
   /** Wrapper around for alloca and malloc. */
@@ -594,6 +590,8 @@ protected:
   void symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, const expr2tc &code);
+  /** Symbolic implementation of va_arg */
+  void symex_va_arg(const expr2tc &lhs,  const sideeffect2t &code);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -647,7 +645,7 @@ protected:
   /** GOTO functions that we're operating over. */
   const goto_functionst &goto_functions;
   /** Target listening to the execution trace */
-  std::shared_ptr<symex_targett> target;
+  boost::shared_ptr<symex_targett> target;
   /** Target thread we're currently operating upon */
   goto_symex_statet *cur_state;
   /** Symbol names for modelling arrays.
@@ -723,6 +721,8 @@ protected:
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
+
+  friend void build_goto_symex_classes();
 };
 
 #endif

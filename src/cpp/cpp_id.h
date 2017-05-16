@@ -9,16 +9,14 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #ifndef CPROVER_CPP_ID_H
 #define CPROVER_CPP_ID_H
 
-#include <assert.h>
-
+#include <cassert>
+#include <iostream>
 #include <list>
 #include <map>
-#include <string>
 #include <set>
-#include <iostream>
-
-#include <expr.h>
-#include <std_types.h>
+#include <string>
+#include <util/expr.h>
+#include <util/std_types.h>
 
 typedef std::multimap<irep_idt, class cpp_idt> cpp_id_mapt;
 

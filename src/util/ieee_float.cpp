@@ -8,11 +8,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <limits>
-
-#include <arith_tools.h>
-#include <std_types.h>
-
-#include "ieee_float.h"
+#include <util/arith_tools.h>
+#include <util/ieee_float.h>
+#include <util/std_types.h>
 
 /*******************************************************************\
 
@@ -1348,6 +1346,30 @@ bool operator >(const ieee_floatt &a, int i)
   other.spec=a.spec;
   other.from_integer(i);
   return a > other;
+}
+
+bool operator <(const ieee_floatt &a, int i)
+{
+  ieee_floatt other;
+  other.spec=a.spec;
+  other.from_integer(i);
+  return a < other;
+}
+
+bool operator >=(const ieee_floatt &a, int i)
+{
+  ieee_floatt other;
+  other.spec=a.spec;
+  other.from_integer(i);
+  return a >= other;
+}
+
+bool operator <=(const ieee_floatt &a, int i)
+{
+  ieee_floatt other;
+  other.spec=a.spec;
+  other.from_integer(i);
+  return a <= other;
 }
 
 /*******************************************************************\

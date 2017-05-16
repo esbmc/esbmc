@@ -6,9 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <stdio.h>
-
-#include <c_misc.h>
+#include <cstdio>
+#include <util/c_misc.h>
 
 void MetaChar(std::string &out, char c, bool inString)
 {

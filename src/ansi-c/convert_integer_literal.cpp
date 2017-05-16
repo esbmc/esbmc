@@ -6,12 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <arith_tools.h>
-#include <config.h>
-
-#include "convert_integer_literal.h"
+#include <ansi-c/convert_integer_literal.h>
+#include <cassert>
+#include <util/arith_tools.h>
+#include <util/config.h>
 
 /*******************************************************************\
 

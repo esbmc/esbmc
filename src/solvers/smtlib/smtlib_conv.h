@@ -1,15 +1,13 @@
 #ifndef _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 #define _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 
-#include <unistd.h>
-
-#include <string>
 #include <list>
-
-#include <irep2.h>
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple.h>
 #include <solvers/smt/smt_tuple_flat.h>
+#include <string>
+#include <unistd.h>
+#include <util/irep2.h>
 
 class sexpr {
 public:
@@ -53,7 +51,7 @@ public:
 
 class smtlib_convt : public smt_convt, public array_iface {
 public:
-  smtlib_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
+  smtlib_convt(bool int_encoding, const namespacet &_ns,
                const optionst &_options);
   ~smtlib_convt();
 

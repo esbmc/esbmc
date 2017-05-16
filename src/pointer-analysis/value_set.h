@@ -9,17 +9,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 #define CPROVER_POINTER_ANALYSIS_VALUE_SET_H
 
-#include <irep2.h>
-
+#include <pointer-analysis/object_numbering.h>
+#include <pointer-analysis/value_sets.h>
 #include <set>
-
-#include <namespace.h>
-#include <mp_arith.h>
-#include <reference_counting.h>
-#include <type_byte_size.h>
-
-#include "object_numbering.h"
-#include "value_sets.h"
+#include <util/irep2.h>
+#include <util/mp_arith.h>
+#include <util/namespace.h>
+#include <util/reference_counting.h>
+#include <util/type_byte_size.h>
 
 /** Code for tracking "value sets" across assignments in ESBMC.
  *
@@ -59,14 +56,17 @@ class value_sett
 {
 public:
   /** Primary constructor. Does approximately nothing non-standard. */
-  value_sett(const namespacet &_ns):location_number(0), ns(_ns)
+  value_sett(const namespacet &_ns):location_number(0), ns(_ns),
+    xchg_name("value_sett::__ESBMC_xchg_ptr"), xchg_num(0)
   {
   }
 
   value_sett(const value_sett &ref) :
     location_number(ref.location_number),
     values(ref.values),
-    ns(ref.ns)
+    ns(ref.ns),
+    xchg_name("value_sett::__ESBMC_xchg_ptr"),
+    xchg_num(0)
   {
   }
 
@@ -74,6 +74,8 @@ public:
   {
     location_number = ref.location_number;
     values = ref.values;
+    xchg_name = ref.xchg_name;
+    xchg_num = ref.xchg_num;
     // No need to copy ns, it should be the same in all contexts.
     return *this;
   }
@@ -96,6 +98,8 @@ public:
   class objectt
   {
   public:
+    objectt() : offset(0), offset_is_set(true), offset_alignment(0) { }
+
     objectt(bool offset_set, unsigned int operand)
     {
       if (offset_set) {
@@ -218,7 +222,7 @@ public:
     assert(!is_symbol_type(t));
     if (is_array_type(t)) {
       const array_type2t &arr = to_array_type(t);
-      return type_byte_size(*arr.subtype).to_ulong();
+      return type_byte_size_default(arr.subtype, 8).to_ulong();
     } else {
       return 8;
     }
@@ -529,6 +533,15 @@ protected:
     const std::string &suffix,
     const type2tc &original_type) const;
 
+  // Like get_value_set_rec, but dedicated to walking through the ireps that
+  // are produced by pointer deref byte stitching
+  void get_byte_stitching_value_set(
+    const expr2tc &expr,
+    object_mapt &dest,
+    const std::string &suffix,
+    const type2tc &original_type) const;
+
+
   /** Internal get_value_set method. Just the same as the other get_value_set
    *  method, but collects into an object_mapt instead of a list of exprs.
    *  @param expr The expression to evaluate the value set of.
@@ -596,6 +609,9 @@ public:
 
   /** Namespace for looking up types against. */
   const namespacet &ns;
+
+  irep_idt xchg_name;
+  unsigned long xchg_num;
 };
 
 #endif

@@ -33,14 +33,14 @@ main()
   assert(sizeof(iarr) == 492);
 
   // Test for padding
-  assert(sizeof(struct face) == 8);
+  assert(sizeof(struct face) == 12);
 
   // Test that trailing bytes are added to sizeof to align.
   assert(sizeof(struct loltrails) == 8);
 
   // Array size allocations
   struct face fa[123];
-  assert(sizeof(fa) == 984);
+  assert(sizeof(fa) == 1476);
 
   // Arrays also need to do trailing bytes
   struct loltrails fb[123];

@@ -6,12 +6,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <fstream>
-
-#include <i2string.h>
 #include <ansi-c/expr2c.h>
-
-#include "document_subgoals.h"
+#include <esbmc/document_subgoals.h>
+#include <fstream>
+#include <util/i2string.h>
 
 #define MAXWIDTH 62
 

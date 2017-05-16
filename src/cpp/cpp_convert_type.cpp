@@ -6,18 +6,15 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <assert.h>
-
+#include <cassert>
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_declaration.h>
+#include <cpp/cpp_name.h>
 #include <iostream>
-
-#include <config.h>
-#include <arith_tools.h>
-#include <std_types.h>
-#include <c_types.h>
-
-#include "cpp_convert_type.h"
-#include "cpp_declaration.h"
-#include "cpp_name.h"
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/std_types.h>
 
 class cpp_convert_typet
 {

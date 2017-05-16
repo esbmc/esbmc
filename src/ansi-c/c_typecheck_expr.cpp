@@ -6,24 +6,22 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <arith_tools.h>
-#include <bitvector.h>
-#include <config.h>
-#include <expr_util.h>
-#include <std_types.h>
-#include <prefix.h>
-#include <cprover_prefix.h>
-#include <simplify_expr.h>
-#include <base_type.h>
-#include <std_expr.h>
-#include <string_constant.h>
-#include <c_types.h>
-
-#include "c_typecast.h"
-#include "c_typecheck_base.h"
-#include "c_sizeof.h"
+#include <ansi-c/c_sizeof.h>
+#include <ansi-c/c_typecast.h>
+#include <ansi-c/c_typecheck_base.h>
+#include <cassert>
+#include <util/arith_tools.h>
+#include <util/base_type.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/prefix.h>
+#include <util/simplify_expr.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
+#include <util/string_constant.h>
 
 /*******************************************************************\
 
@@ -196,14 +194,47 @@ Function: c_typecheck_baset::typecheck_expr_builtin_va_arg
 
 void c_typecheck_baset::typecheck_expr_builtin_va_arg(exprt &expr)
 {
-  if(expr.operands().size()!=1)
-  {
-    err_location(expr);
-    str << "builtin_va_arg expects one operand";
-    throw 0;
-  }
+  // The first parameter is the va_list, and the second
+  // is the type, which will need to be fixed and checked.
+  // The type is given by the parser as type of the expression.
 
-  typecheck_type(expr.type());
+  typet arg_type = expr.type();
+  typecheck_type(arg_type);
+
+  code_typet new_type;
+  new_type.return_type().swap(arg_type);
+  new_type.arguments().resize(1);
+  new_type.arguments()[0].type() = pointer_typet(empty_typet());
+
+  assert(expr.operands().size() == 1);
+  exprt arg = expr.op0();
+
+  implicit_typecast(arg, pointer_typet(empty_typet()));
+
+  // turn into function call
+  side_effect_expr_function_callt result;
+  result.location() = expr.location();
+  result.function() = symbol_exprt("builtin_va_arg");
+  result.function().location() = expr.location();
+  result.function().type() = new_type;
+  result.arguments().push_back(arg);
+  result.type() = new_type.return_type();
+
+  expr.swap(result);
+
+  // Make sure symbol exists, but we have it return void
+  // to avoid collisions of the same symbol with different
+  // types.
+
+  code_typet symbol_type = new_type;
+  symbol_type.return_type() = empty_typet();
+
+  symbolt symbol;
+  symbol.base_name = "builtin_va_arg";
+  symbol.name = "builtin_va_arg";
+  symbol.type = symbol_type;
+
+  context.move(symbol);
 }
 
 /*******************************************************************\
@@ -501,7 +532,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 
   if(expr.operands().size()==0)
   {
-    type = ((typet &)expr.sizeof_type());
+    type = ((typet &)expr.c_sizeof_type());
     typecheck_type(type);
   }
   else if(expr.operands().size()==1)
@@ -528,7 +559,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
 
   new_expr.swap(expr);
 
-  expr.cmt_c_sizeof_type(type);
+  expr.c_sizeof_type(type);
 }
 
 /*******************************************************************\
@@ -712,8 +743,6 @@ void c_typecheck_baset::typecheck_expr_index(exprt &expr)
         index_full_type.id()=="pointer"))
       std::swap(array_expr, index_expr);
   }
-
-  make_index_type(index_expr);
 
   const typet &final_array_type=follow(array_expr.type());
 
@@ -2049,7 +2078,7 @@ void c_typecheck_baset::typecheck_expr_pointer_arithmetic(exprt &expr)
       intop=&op0;
     }
     else
-      assert(false);
+      abort();
 
     make_index_type(*intop);
     expr.type()=pop->type();

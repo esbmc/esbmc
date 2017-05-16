@@ -13,7 +13,7 @@ Date: July 2006
 #define GOTO_PROGRAM_SERIALIZATION_H_
 
 #include <goto-programs/goto_program.h>
-#include <irep_serialization.h>
+#include <util/irep_serialization.h>
 
 class goto_program_serializationt {
   private:

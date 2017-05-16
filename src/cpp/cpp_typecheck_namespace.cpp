@@ -6,9 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <location.h>
-
-#include "cpp_typecheck.h"
+#include <cpp/cpp_typecheck.h>
+#include <util/location.h>
 
 /*******************************************************************\
 

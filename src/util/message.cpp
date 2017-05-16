@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "message.h"
-#include "i2string.h"
+#include <util/i2string.h>
+#include <util/message.h>
 
 void message_handlert::print(
   unsigned level,

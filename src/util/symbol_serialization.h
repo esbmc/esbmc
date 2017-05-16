@@ -11,8 +11,8 @@ Date: May 2007
 #ifndef SYMBOL_SERIALIZATION_H_
 #define SYMBOL_SERIALIZATION_H_
 
-#include "symbol.h"
-#include "irep_serialization.h"
+#include <util/irep_serialization.h>
+#include <util/symbol.h>
 
 class symbol_serializationt {
   private:

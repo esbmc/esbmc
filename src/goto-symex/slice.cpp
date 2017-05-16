@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "slice.h"
+#include <goto-symex/slice.h>
 
 symex_slicet::symex_slicet()
 {
@@ -82,7 +82,7 @@ void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
     break;
 
   default:
-    assert(false);  
+    assert(false);
   }
 }
 
@@ -132,7 +132,7 @@ void simple_slice(symex_target_equationt &equation)
   // just find the last assertion
   symex_target_equationt::SSA_stepst::iterator
     last_assertion=equation.SSA_steps.end();
-  
+
   for(symex_target_equationt::SSA_stepst::iterator
       it=equation.SSA_steps.begin();
       it!=equation.SSA_steps.end();

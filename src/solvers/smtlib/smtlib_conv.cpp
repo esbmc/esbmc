@@ -1,14 +1,12 @@
 // "Standards" workaround
 #define __STDC_FORMAT_MACROS
 
-#include <unistd.h>
-#include <inttypes.h>
-
+#include <cinttypes>
+#include <smtlib_conv.h>
+#include <smtlib.hpp>
+#include <smtlib_tok.hpp>
 #include <sstream>
-
-#include "smtlib_conv.h"
-#include "smtlib.hpp"
-#include "smtlib_tok.hpp"
+#include <unistd.h>
 
 // Dec of external lexer input stream
 int smtlibparse(int startval);
@@ -16,19 +14,19 @@ extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
 
 smt_convt *
-create_new_smtlib_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+create_new_smtlib_solver(bool int_encoding, const namespacet &ns,
                           const optionst &opts __attribute__((unused)),
                           tuple_iface **tuple_api __attribute__((unused)),
                           array_iface **array_api)
 {
-  smtlib_convt *conv = new smtlib_convt(int_encoding, ns, is_cpp, opts);
+  smtlib_convt *conv = new smtlib_convt(int_encoding, ns, opts);
   *array_api = static_cast<array_iface*>(conv);
   return conv;
 }
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
-                           bool is_cpp, const optionst &_opts)
-  : smt_convt(int_encoding, _ns, is_cpp), array_iface(false, false),
+                           const optionst &_opts)
+  : smt_convt(int_encoding, _ns), array_iface(false, false),
     options(_opts)
 {
 
@@ -519,9 +517,9 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
 
       std::string data = respval.data.substr(2);
       if (data[0] == '0')
-        result = false_expr;
+        result = gen_false_expr();
       else if (data[0] == '1')
-        result = true_expr;
+        result = gen_true_expr();
       else {
         std::cerr << "Unrecognized boolean-typed binary number format";
         std::cerr << std::endl;
@@ -545,9 +543,9 @@ smtlib_convt::get_bool(smt_astt a)
 {
   tvt res = l_get(a);
   if (res.is_true())
-    return true_expr;
+    return gen_true_expr();
   else if (res.is_false())
-    return false_expr;
+    return gen_false_expr();
   else {
     std::cerr << "Non-true, non-false value read from smtlib model" <<std::endl;
     abort();

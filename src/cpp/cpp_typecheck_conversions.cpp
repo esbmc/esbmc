@@ -6,16 +6,14 @@ Author:
 
 \*******************************************************************/
 
-#include <config.h>
-#include <bitvector.h>
-#include <arith_tools.h>
-#include <expr_util.h>
-#include <simplify_expr_class.h>
-#include <c_types.h>
-
 #include <ansi-c/c_qualifiers.h>
-
-#include "cpp_typecheck.h"
+#include <cpp/cpp_typecheck.h>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/simplify_expr_class.h>
 
 /*******************************************************************\
 

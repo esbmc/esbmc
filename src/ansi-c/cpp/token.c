@@ -76,8 +76,6 @@ void ifstmt(void);
 char _yytext[CPPBUF];
 char *yytext = _yytext;
 
-struct includ *ifiles;
-
 /* some common special combos for init */
 #define C_NL	(C_SPEC|C_WSNL)
 #define C_DX	(C_SPEC|C_ID|C_DIGIT|C_HEX)

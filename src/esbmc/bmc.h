@@ -9,21 +9,17 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_CBMC_BMC_H
 #define CPROVER_CBMC_BMC_H
 
+#include <boost/shared_ptr.hpp>
+#include <goto-symex/reachability_tree.h>
+#include <goto-symex/symex_target_equation.h>
+#include <langapi/language_ui.h>
 #include <list>
 #include <map>
-
-#include <hash_cont.h>
-#include <options.h>
-
-#include <solvers/solve.h>
 #include <solvers/smt/smt_conv.h>
-#ifdef Z3
-#include <solvers/z3/z3_conv.h>
-#endif
 #include <solvers/smtlib/smtlib_conv.h>
-#include <langapi/language_ui.h>
-#include <goto-symex/symex_target_equation.h>
-#include <goto-symex/reachability_tree.h>
+#include <solvers/solve.h>
+#include <util/hash_cont.h>
+#include <util/options.h>
 
 class bmct:public messaget
 {
@@ -40,41 +36,32 @@ public:
     interleaving_failed = 0;
     uw_loop = 0;
 
-    const symbolt *sp;
-    if (ns.lookup(irep_idt("c::__ESBMC_alloc"), sp))
-      is_cpp = true;
-    else
-      is_cpp = false;
-
     ltl_results_seen[ltl_res_bad] = 0;
     ltl_results_seen[ltl_res_failing] = 0;
     ltl_results_seen[ltl_res_succeeding] = 0;
     ltl_results_seen[ltl_res_good] = 0;
 
-    runtime_solver = create_solver_factory("", is_cpp,
-                                           opts.get_bool_option("int-encoding"),
-                                           ns, options);
-
     if (options.get_bool_option("smt-during-symex")) {
-      symex =
-        new reachability_treet(
-          funcs,
-          ns,
-          options,
-          std::shared_ptr<runtime_encoded_equationt>(
-            new runtime_encoded_equationt(ns, *runtime_solver)),
-          _context,
-          _message_handler);
+      runtime_solver = std::shared_ptr<smt_convt>(
+        create_solver_factory("", opts.get_bool_option("int-encoding"), ns, options));
+
+      symex = std::make_shared<reachability_treet>(
+        funcs,
+        ns,
+        options,
+        boost::shared_ptr<runtime_encoded_equationt>(
+          new runtime_encoded_equationt(ns, *runtime_solver)),
+        _context,
+        _message_handler);
     } else {
-      symex =
-        new reachability_treet(
-          funcs,
-          ns,
-          options,
-          std::shared_ptr<symex_target_equationt>(
-            new symex_target_equationt(ns)),
-          _context,
-          _message_handler);
+      symex = std::make_shared<reachability_treet>(
+        funcs,
+        ns,
+        options,
+        boost::shared_ptr<symex_target_equationt>(
+          new symex_target_equationt(ns)),
+        _context,
+        _message_handler);
     }
   }
 
@@ -90,7 +77,6 @@ public:
   unsigned int interleaving_number;
   unsigned int interleaving_failed;
   unsigned int uw_loop;
-  bool is_cpp;
 
   virtual bool run(void);
   virtual ~bmct() { }
@@ -100,8 +86,8 @@ public:
 protected:
   const contextt &context;
   namespacet ns;
-  smt_convt *runtime_solver;
-  reachability_treet *symex;
+  std::shared_ptr<smt_convt> runtime_solver;
+  std::shared_ptr<reachability_treet> symex;
 
   // use gui format
   language_uit::uit ui;
@@ -117,12 +103,10 @@ protected:
   virtual void show_program(symex_target_equationt &equation);
   virtual void report_success();
   virtual void report_failure();
-  virtual void write_checkpoint();
 
   virtual void error_trace(
     smt_convt &smt_conv, symex_target_equationt &equation);
-  virtual void successful_trace(
-    smt_convt &smt_conv, symex_target_equationt &equation);
+  virtual void successful_trace(symex_target_equationt &equation);
     bool run_thread();
     int ltl_run_thread(symex_target_equationt *equation);
 };

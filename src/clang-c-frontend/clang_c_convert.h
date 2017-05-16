@@ -11,13 +11,12 @@
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
 
-#include <context.h>
-#include <namespace.h>
-#include <std_types.h>
-
-#include <clang/Frontend/ASTUnit.h>
-#include <clang/AST/Type.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/Type.h>
+#include <clang/Frontend/ASTUnit.h>
+#include <util/context.h>
+#include <util/namespace.h>
+#include <util/std_types.h>
 
 class clang_c_convertert
 {
@@ -36,8 +35,6 @@ private:
   std::vector<std::unique_ptr<clang::ASTUnit> > &ASTs;
 
   unsigned int current_scope_var_num;
-  unsigned int anon_var_counter;
-  unsigned int anon_tag_counter;
 
   clang::SourceManager *sm;
 
@@ -64,7 +61,8 @@ private:
     exprt &new_expr);
 
   bool get_function(
-    const clang::FunctionDecl &fd);
+    const clang::FunctionDecl &fd,
+    exprt &new_expr);
 
   bool get_function_params(
     const clang::ParmVarDecl &pdecl,
@@ -77,8 +75,16 @@ private:
     const clang::RecordDecl &recordd,
     struct_union_typet &type);
 
+  bool get_struct_union_class_methods(
+    const clang::RecordDecl &recordd,
+    struct_union_typet &type);
+
   bool get_type(
-    const clang::QualType &the_type,
+    const clang::QualType &type,
+    typet &new_type);
+
+  bool get_type(
+    const clang::Type &the_type,
     typet &new_type);
 
   bool get_builtin_type(
@@ -115,11 +121,13 @@ private:
     typet type,
     std::string base_name,
     std::string pretty_name,
-    locationt location);
+    locationt location,
+    bool is_used);
 
   void get_field_name(
     const clang::FieldDecl &fd,
-    std::string &name);
+    std::string &name,
+    std::string &pretty_name);
 
   void get_var_name(
     const clang::VarDecl &vd,
@@ -195,8 +203,6 @@ private:
 
   const clang::Decl* get_top_FunctionDecl_from_Stmt(
     const clang::Stmt &stmt);
-
-  bool convert_this_decl(const clang::Decl &decl);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

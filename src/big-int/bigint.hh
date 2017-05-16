@@ -5,7 +5,7 @@
 #ifndef BIGINT_HH
 #define BIGINT_HH
 
-#include <stdint.h>
+#include <cstdint>
 
 // This one is pretty simple but has a fair divide implementation.
 // Though I'm not ambitious enough to do that FFT-like stuff.

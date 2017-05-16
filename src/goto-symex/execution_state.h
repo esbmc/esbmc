@@ -11,21 +11,20 @@
 #ifndef EXECUTION_STATE_H_
 #define EXECUTION_STATE_H_
 
-#include <irep2.h>
-
-#include <iostream>
-#include <deque>
-#include <set>
-#include <map>
-#include <list>
 #include <algorithm>
-#include <std_expr.h>
-#include <message.h>
-
-#include "symex_target.h"
-#include "goto_symex_state.h"
-#include "goto_symex.h"
-#include "renaming.h"
+#include <boost/shared_ptr.hpp>
+#include <deque>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/renaming.h>
+#include <goto-symex/symex_target.h>
+#include <iostream>
+#include <list>
+#include <map>
+#include <set>
+#include <util/irep2.h>
+#include <util/message.h>
+#include <util/std_expr.h>
 
 class reachability_treet;
 
@@ -57,6 +56,8 @@ class reachability_treet;
 class execution_statet : public goto_symext
 {
   public: class ex_state_level2t; // Forward dec
+  // Convenience typedef
+  typedef goto_symex_statet::goto_statet goto_statet;
 
   public:
   /**
@@ -75,9 +76,9 @@ class execution_statet : public goto_symext
    */
   execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
                    reachability_treet *art,
-                   std::shared_ptr<symex_targett> _target,
+                   boost::shared_ptr<symex_targett> _target,
                    contextt &context,
-                   std::shared_ptr<ex_state_level2t> l2init,
+                   boost::shared_ptr<ex_state_level2t> l2init,
                    optionst &options,
                    message_handlert &message_handler);
 
@@ -108,7 +109,7 @@ class execution_statet : public goto_symext
   public:
     ex_state_level2t(execution_statet &ref);
     virtual ~ex_state_level2t();
-    virtual std::shared_ptr<renaming::level2t> clone(void) const;
+    virtual boost::shared_ptr<renaming::level2t> clone(void) const;
     virtual void rename(expr2tc &lhs_symbol, unsigned count);
     virtual void rename(expr2tc &identifier);
 
@@ -125,7 +126,7 @@ class execution_statet : public goto_symext
   public:
     state_hashing_level2t(execution_statet &ref);
     virtual ~state_hashing_level2t(void);
-    virtual std::shared_ptr<renaming::level2t> clone(void) const;
+    virtual boost::shared_ptr<renaming::level2t> clone(void) const;
     virtual void make_assignment(expr2tc &lhs_symbol,
                                      const expr2tc &const_value,
                                      const expr2tc &assigned_value);
@@ -219,7 +220,7 @@ class execution_statet : public goto_symext
    *  @see dfs_execution_statet
    *  @return New, duplicated execution state
    */
-  virtual std::shared_ptr<execution_statet> clone(void) const = 0;
+  virtual boost::shared_ptr<execution_statet> clone(void) const = 0;
 
   /**
    *  Make one symbolic execution step.
@@ -390,6 +391,10 @@ class execution_statet : public goto_symext
    */
   void update_after_switch_point(void);
 
+  void preserve_last_paths(void);
+  void cull_all_paths(void);
+  void restore_last_paths(void);
+
   /**
    *  Analyze the contents of an assignment for threading.
    *  If the assignment touches any kind of shared state, we track the accessed
@@ -515,6 +520,13 @@ class execution_statet : public goto_symext
   /** Stack of thread states. The index into this vector is the thread ID of
    *  the goto_symex_statet at that location */
   std::vector<goto_symex_statet> threads_state;
+  /** Preserved paths. After switching out of a thread, only the paths active
+   *  at the time the switch occurred are allowed to live, and are stored
+   *  here. Format is: for each thread, a list of paths, which are made up
+   *  of an insn number where the path merges and it's goto_statet when we
+   *  switched away. Preserved paths can only be in the top() frame.  */
+  std::vector<std::list<std::pair<goto_programt::const_targett, goto_statet> > >
+    preserved_paths;
   /** Atomic section count. Every time an atomic begin is executed, the
    *  atomic_number corresponding to the thread is incremented, allowing nested
    *  atomic begins and ends. A nonzero atomic number for a thread means that
@@ -531,9 +543,11 @@ class execution_statet : public goto_symext
   std::vector<expr2tc> thread_start_data;
   /** Last active thread's ID. */
   unsigned int last_active_thread;
+  /** Last executed insn -- sometimes necessary for analysis. */
+  const goto_programt::instructiont *last_insn;
   /** Global L2 state of this execution_statet. It's also copied as a reference
    *  into each threads own state. */
-  std::shared_ptr<ex_state_level2t> state_level2;
+  boost::shared_ptr<ex_state_level2t> state_level2;
   /** Global pointer tracking state record. */
   value_sett global_value_set;
   /** Current active states thread ID. */
@@ -545,7 +559,7 @@ class execution_statet : public goto_symext
   /** Number of nondeterministic symbols in this state. */
   unsigned nondet_count;
   /** Number of dynamic objects in this state. */
-  unsigned dynamic_counter;
+  static unsigned dynamic_counter;
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;
@@ -556,7 +570,7 @@ class execution_statet : public goto_symext
   /** State guard prior to a GOTO instruction causing a cswitch. Any thread
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */
-  expr2tc pre_goto_guard;
+  guardt pre_goto_guard;
   /** TID of monitor thread, for monitor intrinsics. */
   unsigned int monitor_tid;
   /** Whether monitor_tid is set. */
@@ -617,6 +631,8 @@ class execution_statet : public goto_symext
 
   public:
   static unsigned int node_count;
+
+  friend void build_goto_symex_classes(void);
 };
 
 /**
@@ -636,22 +652,22 @@ class dfs_execution_statet : public execution_statet
                    const goto_functionst &goto_functions,
                    const namespacet &ns,
                    reachability_treet *art,
-                   std::shared_ptr<symex_targett> _target,
+                   boost::shared_ptr<symex_targett> _target,
                    contextt &context,
                    optionst &options,
                    message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
                          options.get_bool_option("state-hashing")
-                             ? std::shared_ptr<state_hashing_level2t>(
+                             ? boost::shared_ptr<state_hashing_level2t>(
                                  new state_hashing_level2t(*this))
-                             : std::shared_ptr<ex_state_level2t>(
+                             : boost::shared_ptr<ex_state_level2t>(
                                  new ex_state_level2t(*this)),
                              options, _message_handler)
   {
   };
 
   dfs_execution_statet(const dfs_execution_statet &ref);
-  virtual std::shared_ptr<execution_statet> clone(void) const;
+  virtual boost::shared_ptr<execution_statet> clone(void) const;
   virtual ~dfs_execution_statet(void);
 };
 
@@ -668,14 +684,14 @@ class schedule_execution_statet : public execution_statet
                    const goto_functionst &goto_functions,
                    const namespacet &ns,
                    reachability_treet *art,
-                   std::shared_ptr<symex_targett> _target,
+                   boost::shared_ptr<symex_targett> _target,
                    contextt &context,
                    optionst &options,
                    unsigned int *ptotal_claims,
                    unsigned int *premaining_claims,
                    message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
-                         std::shared_ptr<ex_state_level2t>(
+                         boost::shared_ptr<ex_state_level2t>(
                            new ex_state_level2t(*this)),
                          options, _message_handler)
   {
@@ -686,7 +702,7 @@ class schedule_execution_statet : public execution_statet
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref);
-  virtual std::shared_ptr<execution_statet> clone(void) const;
+  virtual boost::shared_ptr<execution_statet> clone(void) const;
   virtual ~schedule_execution_statet(void);
   virtual void claim(const expr2tc &expr, const std::string &msg);
 

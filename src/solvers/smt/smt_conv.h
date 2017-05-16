@@ -1,22 +1,18 @@
 #ifndef _ESBMC_PROP_SMT_SMT_CONV_H_
 #define _ESBMC_PROP_SMT_SMT_CONV_H_
 
-#include <stdint.h>
-
-#include <irep2.h>
-#include <message.h>
-#include <namespace.h>
-#include <threeval.h>
-
-#include <util/type_byte_size.h>
-
-#include <solvers/prop/pointer_logic.h>
-#include <solvers/prop/literal.h>
-
-#include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index_container.hpp>
+#include <cstdint>
+#include <solvers/prop/literal.h>
+#include <solvers/prop/pointer_logic.h>
+#include <util/irep2.h>
+#include <util/message.h>
+#include <util/namespace.h>
+#include <util/threeval.h>
+#include <util/type_byte_size.h>
 
 /** @file smt_conv.h
  *  SMT conversion tools and utilities.
@@ -210,6 +206,9 @@ enum smt_func_kind {
   SMT_FUNC_IEEE_RM_ZR,
   SMT_FUNC_IEEE_RM_PI,
   SMT_FUNC_IEEE_RM_MI,
+
+  SMT_FUNC_BV2FLOAT,
+  SMT_FUNC_FLOAT2BV,
 };
 
 /** Class that will hold information about which operation
@@ -359,9 +358,10 @@ public:
 };
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
-#include "smt_tuple.h"
+#include <solvers/smt/smt_tuple.h>
+
 // Also, array interface
-#include "smt_array.h"
+#include <solvers/smt/smt_array.h>
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
@@ -410,10 +410,8 @@ public:
    *  before the object is used as a solver converter.
    *
    *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
-   *  @param _ns Namespace for looking up the type of certain symbols.
-   *  @param is_cpp Flag indicating whether memory modelling arrays have c:: or
-   *         cpp:: prefix to their symbols. */
-  smt_convt(bool int_encoding, const namespacet &_ns, bool is_cpp);
+   *  @param _ns Namespace for looking up the type of certain symbols. */
+  smt_convt(bool int_encoding, const namespacet &_ns);
   ~smt_convt();
 
   /** Post-constructor setup method. We must create various pieces of memory
@@ -731,6 +729,9 @@ public:
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_neg(const expr2tc &expr);
 
+  /** Method to dump the SMT formula */
+  virtual void dump_smt();
+
   /** @} */
 
   /** @{
@@ -945,6 +946,10 @@ public:
     else
       return mk_sort(SMT_SORT_BV, width, false);
   }
+
+  /** For the given type, replace all instances of a pointer type with the
+   *  struct representation of it. */
+  void rewrite_ptrs_to_structs(type2tc &type);
 
   /** When dealing with multi-dimensional arrays, and selecting one element
    *  out of several dimensions, reduce it to an expression on a single

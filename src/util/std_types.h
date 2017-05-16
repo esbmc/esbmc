@@ -9,11 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_STD_TYPES_H
 #define CPROVER_STD_TYPES_H
 
-#include <assert.h>
-
-#include <type.h>
-#include <std_expr.h>
-#include <mp_arith.h>
+#include <cassert>
+#include <util/mp_arith.h>
+#include <util/std_expr.h>
+#include <util/type.h>
 
 class bool_typet:public typet
 {
@@ -105,6 +104,16 @@ public:
     inline componentt(const irep_idt &_name, const typet &_type):exprt(a_component)
     {
       set_name(_name);
+      type()=_type;
+    }
+
+    inline componentt(
+      const irep_idt &_name,
+      const irep_idt &_pretty_name,
+      const typet &_type) : exprt(a_component)
+    {
+      set_name(_name);
+      set_pretty_name(_pretty_name);
       type()=_type;
     }
 

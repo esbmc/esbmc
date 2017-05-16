@@ -6,12 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <std_types.h>
-#include <config.h>
-
-#include "ansi_c_convert.h"
-#include "ansi_c_convert_type.h"
-#include "ansi_c_declaration.h"
+#include <ansi-c/ansi_c_convert.h>
+#include <ansi-c/ansi_c_convert_type.h>
+#include <ansi-c/ansi_c_declaration.h>
+#include <util/config.h>
+#include <util/std_types.h>
 
 /*******************************************************************\
 
@@ -101,9 +100,9 @@ void ansi_c_convertt::convert_expr(exprt &expr)
   {
     if(expr.operands().size()==0)
     {
-      typet type=static_cast<const typet &>(expr.sizeof_type());
+      typet type=static_cast<const typet &>(expr.c_sizeof_type());
       convert_type(type);
-      expr.sizeof_type(type);
+      expr.c_sizeof_type(type);
     }
   }
   else if(expr.id()=="builtin_va_arg")
@@ -157,12 +156,14 @@ void ansi_c_convertt::convert_code(codet &code)
   {
     assert(code.operands().size()==1);
     convert_code(to_code(code.op0()));
+  }
+  else if(statement=="switch_case")
+  {
+    assert(code.operands().size()==2);
+    if(code.op0().is_not_nil())
+      convert_expr(code.op0());
 
-    if(code.case_irep().is_not_nil()) {
-      exprt tmp = (exprt&)code.case_irep();
-      convert_expr(tmp);
-      code.case_irep(tmp);
-    }
+    convert_code(to_code(code.op1()));
   }
   else if(statement=="block")
   {

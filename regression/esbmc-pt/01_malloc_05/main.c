@@ -1,9 +1,6 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-void *malloc(unsigned size);
-void free(void *p);
-
 pthread_cond_t *cv;
 
 void *thread1(void *arg)

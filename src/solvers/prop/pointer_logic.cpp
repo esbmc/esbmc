@@ -6,16 +6,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <config.h>
-#include <i2string.h>
-#include <arith_tools.h>
-#include <type_byte_size.h>
-#include <std_expr.h>
-#include <prefix.h>
-
-#include "pointer_logic.h"
+#include <cassert>
+#include <pointer_logic.h>
+#include <util/arith_tools.h>
+#include <util/config.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 /*******************************************************************\
 
@@ -137,7 +135,7 @@ expr2tc pointer_logict::object_rec(
   {
     const array_type2t &arrtype = dynamic_cast<const array_type2t&>
                                               (*src->type.get());
-    mp_integer size=type_byte_size(*arrtype.subtype.get());
+    mp_integer size=type_byte_size(arrtype.subtype);
 
     if (size == 0)
       return src;
@@ -171,8 +169,8 @@ expr2tc pointer_logict::object_rec(
     forall_types(it, members) {
       assert(offset>=current_offset);
 
-      mp_integer sub_size=type_byte_size(**it);
-      
+      mp_integer sub_size=type_byte_size(*it);
+
       if(sub_size==0)
         return src;
       

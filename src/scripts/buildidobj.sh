@@ -23,4 +23,4 @@ else
   echo -n " (dirty tree)" >> $SFILE;
 fi
 
-dd if=/dev/zero bs=c count=1 >> $SFILE;
+dd if=/dev/zero count=1 >> $SFILE;

@@ -6,25 +6,22 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-#include <ctype.h>
-
+#include <ansi-c/ansi_c_declaration.h>
+#include <ansi-c/c_typecast.h>
+#include <ansi-c/expr2c.h>
+#include <cassert>
+#include <cctype>
 #include <map>
 #include <set>
-
-#include <arith_tools.h>
-#include <c_misc.h>
-#include <config.h>
-#include <std_types.h>
-#include <std_code.h>
-#include <i2string.h>
-#include <fixedbv.h>
-#include <prefix.h>
-
-#include "ansi_c_declaration.h"
-#include "expr2c.h"
-#include "c_typecast.h"
-#include "c_types.h"
+#include <util/arith_tools.h>
+#include <util/c_misc.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/fixedbv.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_code.h>
+#include <util/std_types.h>
 
 /*******************************************************************\
 
@@ -153,11 +150,6 @@ std::string expr2ct::convert_rec(
   if(src.is_bool())
   {
     return q+"_Bool";
-  }
-  else if(src.id()=="integer" ||
-          src.id()=="rational")
-  {
-    return q+src.id_string();
   }
   else if(src.id()=="empty")
   {
@@ -355,6 +347,38 @@ std::string expr2ct::convert_typecast(
     return "NULL";
 
   std::string dest="("+convert(type)+")";
+
+  std::string tmp=convert(src.op0(), precedence);
+
+  if(src.op0().id()=="member" ||
+     src.op0().id()=="constant" ||
+     src.op0().id()=="symbol") // better fix precedence
+    dest+=tmp;
+  else
+    dest+='('+tmp+')';
+
+  return dest;
+}
+
+std::string expr2ct::convert_bitcast(
+  const exprt &src,
+  unsigned &precedence)
+{
+  precedence=14;
+
+  if(src.id() == "bitcast" && src.operands().size()!=1)
+    return convert_norep(src, precedence);
+
+  // some special cases
+
+  const typet &type=ns.follow(src.type());
+
+  if(type.id()=="pointer" &&
+     ns.follow(type.subtype()).id()=="empty" && // to (void *)?
+     src.op0().is_zero())
+    return "NULL";
+
+  std::string dest="(BITCAST:"+convert(type)+")";
 
   std::string tmp=convert(src.op0(), precedence);
 
@@ -1356,8 +1380,6 @@ std::string expr2ct::convert_constant(
     MetaString(dest, value);
     dest+='"';
   }
-  else if(type.id()=="integer" || type.id()=="natural")
-    dest=value;
   else if(type.id()=="c_enum" ||
           type.id()=="incomplete_c_enum")
   {
@@ -1391,8 +1413,6 @@ std::string expr2ct::convert_constant(
 
     return dest;
   }
-  else if(type.id()=="rational")
-    return convert_norep(src, precedence);
   else if(type.id()=="bv")
     dest=value;
   else if(type.is_bool())
@@ -1501,7 +1521,7 @@ std::string expr2ct::convert_struct(
   bool newline=false;
   unsigned last_size=0;
 
-  forall_irep(c_it, components)
+  for(auto c_it : components)
   {
     if(o_it->type().is_code())
       continue;
@@ -1529,7 +1549,7 @@ std::string expr2ct::convert_struct(
       newline=false;
 
     dest+=".";
-    dest+=c_it->name().as_string();
+    dest+=c_it.pretty_name().as_string();
     dest+="=";
     dest+=tmp;
 
@@ -2366,7 +2386,10 @@ std::string expr2ct::convert_code(
     return convert_code_function_call(to_code_function_call(src), indent);
 
   if(statement=="label")
-    return convert_code_label(src, indent);
+    return convert_code_label(to_code_label(src), indent);
+
+  if(statement=="switch_case")
+    return convert_code_switch_case(to_code_switch_case(src), indent);
 
   if(statement=="free")
     return convert_code_free(src, indent);
@@ -2666,51 +2689,61 @@ Function: expr2ct::convert_code_label
 \*******************************************************************/
 
 std::string expr2ct::convert_code_label(
-  const codet &src,
+  const code_labelt &src,
   unsigned indent)
 {
-  bool first=true;
   std::string labels_string;
 
-  // XXX jmorse - labels irep isn't set anyhere, this code is pointless.
+  irep_idt label=src.get_label();
 
+  labels_string+="\n";
+  labels_string+=indent_str(indent);
+  labels_string+=name2string(label);
+  labels_string+=":\n";
+
+  std::string tmp=convert_code(src.code(), indent+2);
+
+  return labels_string+tmp;
+}
+
+/*******************************************************************\
+
+Function: expr2ct::convert_code_switch_case
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string expr2ct::convert_code_switch_case(
+  const code_switch_caset &src,
+  unsigned indent)
+{
+  std::string labels_string;
+
+  if(src.is_default())
   {
-    const irept::named_subt &labels=src.labels_irep().get_named_sub();
-
-    forall_named_irep(it, labels)
-    {
-      if(first) { labels_string+="\n"; first=false; }
-      labels_string+=indent_str(indent);
-      labels_string+=name2string(it->first);
-      labels_string+=":\n";
-    }
-
-    const exprt &case_expr=(exprt &)src.case_irep();
-
-    forall_operands(it, case_expr)
-    {
-      if(first) { labels_string+="\n"; first=false; }
-      labels_string+=indent_str(indent);
-      labels_string+="case ";
-      labels_string+=convert(*it);
-      labels_string+=":\n";
-    }
-
-    if(src.dfault())
-    {
-      if(first) { labels_string+="\n"; first=false; }
-      labels_string+=indent_str(indent);
-      labels_string+="default:\n";
-    }
+    labels_string+="\n";
+    labels_string+=indent_str(indent);
+    labels_string+="default:\n";
+  }
+  else
+  {
+    labels_string+="\n";
+    labels_string+=indent_str(indent);
+    labels_string+="case ";
+    labels_string+=convert(src.case_op());
+    labels_string+=":\n";
   }
 
-  if(src.operands().size()!=1)
-  {
-    unsigned precedence;
-    return convert_norep(src, precedence);
-  }
-
-  std::string tmp=convert_code(to_code(src.op0()), indent);
+  unsigned next_indent=indent;
+  if(src.code().get_statement()!="block" &&
+     src.code().get_statement()!="switch_case")
+    next_indent+=2;
+  std::string tmp=convert_code(src.code(), next_indent);
 
   return labels_string+tmp;
 }
@@ -2831,7 +2864,7 @@ std::string expr2ct::convert_sizeof(
   unsigned precedence __attribute__((unused)))
 {
   std::string dest="sizeof(";
-  dest+=convert(static_cast<const typet&>(src.find("sizeof-type")));
+  dest+=convert(static_cast<const typet&>(src.c_sizeof_type()));
   dest+=')';
 
   return dest;
@@ -3102,6 +3135,8 @@ std::string expr2ct::convert(
       return convert_nondet(src, precedence=15);
     else if(statement=="statement_expression")
       return convert_statement_expression(src, precedence=15);
+    else if(statement=="va_arg")
+      return convert_function(src, "va_arg", precedence=15);
     else
       return convert_norep(src, precedence);
   }
@@ -3241,6 +3276,9 @@ std::string expr2ct::convert(
 
   else if(src.id()=="typecast")
     return convert_typecast(src, precedence);
+
+  else if(src.id()=="bitcast")
+    return convert_bitcast(src, precedence);
 
   else if(src.id()=="implicit_address_of")
     return convert_implicit_address_of(src, precedence);

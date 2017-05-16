@@ -9,10 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_NAMESPACE_H
 #define CPROVER_NAMESPACE_H
 
-#include "context.h"
-
-#include <irep2.h>
-#include <migrate.h>
+#include <util/context.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
 
 // second: true <=> not found
 
@@ -24,7 +23,7 @@ public:
     const symbolt *symbol;
     if(lookup(name, symbol))
     {
-      std::cerr <<  "identifier "+id2string(name)+" not found";
+      std::cerr <<  "Failed to find symbol "+id2string(name)+" not found" << std::endl;
       abort();
     }
     return *symbol;

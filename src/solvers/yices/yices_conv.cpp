@@ -1,10 +1,8 @@
-#include <stddef.h>
-#include <stdarg.h>
-#include <stdint.h>
-
+#include <cstddef>
+#include <cstdarg>
+#include <cstdint>
 #include <sstream>
-
-#include "yices_conv.h"
+#include <yices_conv.h>
 
 // From yices 2.3 (I think) various API calls have had new non-binary
 // operand versions added. The maintainers have chosen to break backwards
@@ -19,12 +17,12 @@
 #endif
 
 smt_convt *
-create_new_yices_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+create_new_yices_solver(bool int_encoding, const namespacet &ns,
                               const optionst &opts __attribute__((unused)),
                               tuple_iface **tuple_api __attribute__((unused)),
                               array_iface **array_api)
 {
-  yices_convt *conv = new yices_convt(int_encoding, ns, is_cpp);
+  yices_convt *conv = new yices_convt(int_encoding, ns);
   *array_api = static_cast<array_iface*>(conv);
   // As illustrated by 01_cbmc_Pointer4, there is something broken in yices
   // tuples. Specifically, the implication of (p != NULL) doesn't seem to feed
@@ -33,8 +31,8 @@ create_new_yices_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
   return conv;
 }
 
-yices_convt::yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp)
-  : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false),
+yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
+  : smt_convt(int_encoding, ns), array_iface(false, false),
     sat_model(NULL)
 {
   yices_init();
@@ -56,7 +54,6 @@ yices_convt::yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp)
 yices_convt::~yices_convt()
 {
   yices_free_context(yices_ctx);
-  yices_garbage_collect(NULL, 0, NULL, 0, false);
 }
 
 void
@@ -113,9 +110,9 @@ yices_convt::l_get(smt_astt l)
   if (is_nil_expr(b))
     return tvt(tvt::TV_UNKNOWN);
 
-  if (b == true_expr)
+  if (b == gen_true_expr())
     return tvt(true);
-  else if (b == false_expr)
+  else if (b == gen_false_expr())
     return tvt(false);
   else
     return tvt(tvt::TV_UNKNOWN);
@@ -497,9 +494,9 @@ yices_convt::get_bool(smt_astt a)
     return expr2tc();
 
   if (val)
-    return true_expr;
+    return gen_true_expr();
   else
-    return false_expr;
+    return gen_false_expr();
 }
 
 expr2tc

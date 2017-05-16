@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "ansi_c_parser.h"
+#include <ansi-c/ansi_c_parser.h>
 
 ansi_c_parsert ansi_c_parser;
 

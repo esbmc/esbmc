@@ -6,23 +6,20 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <goto-programs/goto_program.h>
 #include <iomanip>
-
 #include <langapi/language_util.h>
-
-#include "goto_program.h"
 
 void goto_programt::instructiont::dump() const
 {
-  output_instruction(namespacet(contextt()), "", std::cout);
+  output_instruction(*migrate_namespace_lookup, "", std::cout);
 }
 
 void goto_programt::instructiont::output_instruction(
   const class namespacet& ns,
   const irep_idt& identifier,
   std::ostream& out,
-  bool show_location,
-  bool show_variables) const
+  bool show_location) const
 {
   if (show_location)
   {
@@ -34,18 +31,6 @@ void goto_programt::instructiont::output_instruction(
       out << "no location";
 
     out << "\n";
-  }
-
-  if(show_variables && !local_variables.empty())
-  {
-    out << "        // Variables:";
-    for(local_variablest::const_iterator
-        l_it = local_variables.begin();
-        l_it != local_variables.end();
-        l_it++)
-      out << " " << *l_it;
-
-    out << std::endl;
   }
 
   if(!labels.empty())
@@ -140,6 +125,10 @@ void goto_programt::instructiont::output_instruction(
 
   case END_FUNCTION:
     out << "END_FUNCTION" << std::endl;
+    break;
+
+  case LOCATION:
+    out << "LOCATION" << std::endl;
     break;
 
   case THROW:
@@ -476,6 +465,7 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case ASSERT: out << "ASSERT"; break;
   case OTHER: out << "OTHER"; break;
   case SKIP: out << "SKIP"; break;
+  case LOCATION: out << "LOCATION"; break;
   case END_FUNCTION: out << "END_FUNCTION"; break;
   case ATOMIC_BEGIN: out << "ATOMIC_BEGIN"; break;
   case ATOMIC_END: out << "ATOMIC_END"; break;
@@ -494,5 +484,5 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
 
 void goto_programt::dump() const
 {
-  output(namespacet(contextt()), "", std::cout);
+  output(*migrate_namespace_lookup, "", std::cout);
 }

@@ -7,19 +7,16 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <i2string.h>
-#include <cprover_prefix.h>
-#include <prefix.h>
-#include <std_expr.h>
-#include <c_types.h>
-
-#include "goto_convert_class.h"
-#include "remove_skip.h"
-#include "destructor.h"
-
-#include <arith_tools.h>
+#include <cassert>
+#include <goto-programs/destructor.h>
+#include <goto-programs/goto_convert_class.h>
+#include <goto-programs/remove_skip.h>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/i2string.h>
+#include <util/prefix.h>
+#include <util/std_expr.h>
 
 //#define DEBUG
 
@@ -116,7 +113,7 @@ void goto_convertt::convert_label(
   if(error_label!="" && label==error_label)
   {
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard = false_expr;
+    t->guard = gen_false_expr();
     t->location=code.location();
     t->location.property("error label");
     t->location.comment("error label");
@@ -137,25 +134,35 @@ void goto_convertt::convert_label(
                           (label, target));
     target->labels.push_back(label);
   }
+}
 
-  // cases?
-
-  const exprt::operandst &case_op=code.case_op();
-
-  if(!case_op.empty())
+void goto_convertt::convert_switch_case(
+  const code_switch_caset &code,
+  goto_programt &dest)
+{
+  if(code.operands().size()!=2)
   {
-    exprt::operandst &case_op_dest=targets.cases[target];
-
-    case_op_dest.reserve(case_op_dest.size()+case_op.size());
-
-    forall_expr(it, case_op)
-      case_op_dest.push_back(*it);
+    err_location(code);
+    throw "switch-case statement expected to have two operands";
   }
+
+  goto_programt tmp;
+  convert(code.code(), tmp);
+
+  goto_programt::targett target=tmp.instructions.begin();
+  dest.destructive_append(tmp);
 
   // default?
 
   if(code.is_default())
     targets.set_default(target);
+  else
+  {
+    // cases?
+
+    const exprt &case_op = code.case_op();
+    targets.cases[target].push_back(case_op);
+  }
 }
 
 void goto_convertt::convert(
@@ -184,6 +191,8 @@ void goto_convertt::convert(
     convert_function_call(to_code_function_call(code), dest);
   else if(statement=="label")
     convert_label(to_code_label(code), dest);
+  else if(statement=="switch_case")
+    convert_switch_case(to_code_switch_case(code), dest);
   else if(statement=="for")
     convert_for(code, dest);
   else if(statement=="while")
@@ -327,93 +336,50 @@ void goto_convertt::convert_block(
   const codet &code,
   goto_programt &dest)
 {
-  std::list<irep_idt> locals;
-  //extract all the local variables from the block
+  // Save local symbols
+  goto_programt::local_variablest old_scoped_vars = scoped_variables;
+  scoped_variables.clear();
 
-  forall_operands(it, code)
+  // Convert each expression
+  for(auto it : code.operands())
   {
-    const codet &code_it=to_code(*it);
-
-    if(code_it.get_statement()=="decl")
-    {
-      // TODO: This should be removed when the clang frontend
-      // is enable by default, as all the decl are wrapped
-      // inside a decl-block
-      const exprt &op0=code_it.op0();
-      assert(op0.id()=="symbol");
-      const irep_idt &identifier=op0.identifier();
-      const symbolt &symbol=lookup(identifier);
-
-      if(!symbol.static_lifetime &&
-         !symbol.type.is_code())
-        locals.push_back(identifier);
-    }
-    else if(code_it.get_statement()=="decl-block")
-    {
-      forall_operands(it, code_it)
-      {
-        if(it->statement() == "skip")
-          continue;
-
-        const exprt &op0=it->op0();
-        assert(op0.id()=="symbol");
-        const irep_idt &identifier=op0.identifier();
-        const symbolt &symbol=lookup(identifier);
-
-        if(!symbol.static_lifetime &&
-           !symbol.type.is_code())
-          locals.push_back(identifier);
-      }
-    }
+    const codet &code_it = to_code(it);
 
     goto_programt tmp;
     convert(code_it, tmp);
-
-    // all the temp symbols are also local variables and they are gotten
-    // via the convert process
-    for(tmp_symbolst::const_iterator
-        it=tmp_symbols.begin();
-        it!=tmp_symbols.end();
-        it++)
-      locals.push_back(*it);
-
-    tmp_symbols.clear();
-
-    //add locals to instructions
-    if(!locals.empty())
-      Forall_goto_program_instructions(i_it, tmp)
-        i_it->add_local_variables(locals);
 
     dest.destructive_append(tmp);
   }
 
   // see if we need to call any destructors
-
-  while(!locals.empty())
+  for(auto local : scoped_variables)
   {
-    const symbolt &symbol=ns.lookup(locals.back());
+    const symbolt &symbol = ns.lookup(local);
 
-    code_function_callt destructor=get_destructor(ns, symbol.type);
-
+    code_function_callt destructor = get_destructor(ns, symbol.type);
     if(destructor.is_not_nil())
     {
       // add "this"
       exprt this_expr("address_of", pointer_typet());
-      this_expr.type().subtype()=symbol.type;
+      this_expr.type().subtype() = symbol.type;
       this_expr.copy_to_operands(symbol_expr(symbol));
       destructor.arguments().push_back(this_expr);
 
       goto_programt tmp;
       convert(destructor, tmp);
 
-      Forall_goto_program_instructions(i_it, tmp)
-        i_it->add_local_variables(locals);
-
       dest.destructive_append(tmp);
     }
-
-    locals.pop_back();
   }
+
+  // Add scoped variables to the list of function variables
+  local_variables.insert(
+    local_variables.begin(),
+    scoped_variables.begin(),
+    scoped_variables.end());
+
+  // Add old symbols to the list of locals
+  scoped_variables = old_scoped_vars;
 }
 
 void goto_convertt::convert_sideeffect(
@@ -689,57 +655,113 @@ void goto_convertt::convert_decl(
   const codet &code,
   goto_programt &dest)
 {
-  if(code.operands().size()!=1 &&
-     code.operands().size()!=2)
+  if(code.operands().size() != 1 && code.operands().size() != 2)
   {
     err_location(code);
     throw "decl statement takes one or two operands";
   }
 
-  const exprt &op0=code.op0();
+  // We might change the symbol
+  codet new_code(code);
 
-  if(op0.id()!="symbol")
+  exprt &var = new_code.op0();
+  if(!var.is_symbol())
   {
-    err_location(op0);
+    err_location(var);
     throw "decl statement expects symbol as first operand";
   }
 
-  const irep_idt &identifier=op0.identifier();
+  const irep_idt &identifier = var.identifier();
 
-  const symbolt &symbol=lookup(identifier);
-  if(symbol.static_lifetime ||
-     symbol.type.is_code())
-	  return; // this is a SKIP!
+  symbolt* s = context.find_symbol(identifier);
+  assert(s != nullptr);
 
-  if(code.operands().size()==1)
+  // A static variable will be declared in the global scope and
+  // a code type means a function declaration, we ignore both
+  if(s->static_lifetime || s->type.is_code())
+    return; // this is a SKIP!
+
+  // Local variable, add to locals
+  scoped_variables.push_front(identifier);
+
+  // We need to check if there an sideeffect on the array size
+  if(var.type().is_array())
   {
-    copy(code, OTHER, dest);
+    exprt &size = to_array_type(var.type()).size();
+    if(has_sideeffect(size))
+    {
+      // Remove side effect
+      goto_programt sideeffects;
+      remove_sideeffects(size, sideeffects);
+      dest.destructive_append(sideeffects);
+
+      // Update symbol
+      to_array_type(s->type).size() = size;
+    }
+    else if(size.is_symbol())
+    {
+      // Replace the size by a new variable, to avoid wrong results
+      // when the symbol used to create the VLA is changed
+      size = symbol_expr(new_tmp_symbol(size.type()));
+
+      codet assignment("assign");
+      assignment.reserve_operands(2);
+      assignment.copy_to_operands(size);
+      assignment.copy_to_operands(to_array_type(s->type).size());
+      assignment.location() = code.location();
+      copy(assignment, ASSIGN, dest);
+
+      // Update symbol
+      to_array_type(s->type).size() = size;
+    }
   }
-  else
+
+  exprt initializer = nil_exprt();
+  if(new_code.operands().size() == 2)
   {
-    exprt initializer;
+    initializer = new_code.op1();
 
-    codet tmp(code);
-    initializer=code.op1();
-    tmp.operands().resize(1); // just resize the vector, this will get rid of op1
-
-    goto_programt sideeffects;
+    // just resize the vector, this will get rid of op1
+    new_code.operands().pop_back();
 
     if(options.get_bool_option("atomicity-check"))
     {
       unsigned int globals = get_expr_number_globals(initializer);
       if(globals > 0)
-        break_globals2assignments(initializer, dest,code.location());
+        break_globals2assignments(initializer, dest, new_code.location());
     }
 
+    goto_programt sideeffects;
     remove_sideeffects(initializer, sideeffects);
     dest.destructive_append(sideeffects);
+  }
 
-    // break up into decl and assignment
-    copy(tmp, OTHER, dest);
+  // break up into decl and assignment
+  copy(new_code, OTHER, dest);
 
-    code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
-    assign.location()=tmp.location();
+  if(var.type().is_array())
+  {
+    exprt &size = to_array_type(var.type()).size();
+    if(size.is_symbol())
+    {
+      // Set the array to have a dynamic size
+      address_of_exprt addrof(var);
+      exprt dynamic_size("dynamic_size", int_type());
+      dynamic_size.copy_to_operands(addrof);
+      dynamic_size.location() = code.location();
+
+      goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
+      exprt assign = code_assignt(dynamic_size, size);
+      migrate_expr(assign, t_s_s->code);
+      t_s_s->location = code.location();
+    }
+  }
+
+  if(initializer.is_not_nil())
+  {
+    // initializer is without sideeffect now
+    code_assignt assign(var, initializer);
+    assign.location() = new_code.location();
     copy(assign, ASSIGN, dest);
   }
 }
@@ -748,8 +770,8 @@ void goto_convertt::convert_decl_block(
   const codet& code,
   goto_programt& dest)
 {
-  forall_operands(it, code)
-    convert(to_code(*it), dest);
+  for(auto it : code.operands())
+    convert(to_code(it), dest);
 }
 
 void goto_convertt::convert_assign(
@@ -762,13 +784,11 @@ void goto_convertt::convert_assign(
     throw "assignment statement takes two operands";
   }
 
-  exprt lhs=code.lhs(),
-        rhs=code.rhs();
+  exprt lhs=code.lhs(), rhs=code.rhs();
 
   remove_sideeffects(lhs, dest);
 
-  if(rhs.id()=="sideeffect" &&
-     rhs.statement()=="function_call")
+  if(rhs.id()=="sideeffect" && rhs.statement()=="function_call")
   {
     if(rhs.operands().size()!=2)
     {
@@ -835,7 +855,12 @@ void goto_convertt::convert_assign(
   }
 }
 
-void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rhs, goto_programt &dest, const locationt &location)
+void goto_convertt::break_globals2assignments(
+  int &atomic,
+  exprt &lhs,
+  exprt &rhs,
+  goto_programt &dest,
+  const locationt &location)
 {
 
   if(!options.get_bool_option("atomicity-check"))
@@ -937,7 +962,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
     if (identifier.empty())
 	  return;
 
-	const symbolt &symbol=lookup(identifier);
+    const symbolt &symbol=ns.lookup(identifier);
 
     if (!(identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
           && (symbol.static_lifetime || symbol.type.is_dynamic_set()))
@@ -967,7 +992,7 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
   else if(rhs.id() == "symbol")
   {
 	const irep_idt &identifier=rhs.identifier();
-	const symbolt &symbol=lookup(identifier);
+	const symbolt &symbol=ns.lookup(identifier);
 	if(symbol.static_lifetime || symbol.type.is_dynamic_set())
 	{
 	  // make new assignment to temp for each global symbol
@@ -1013,7 +1038,7 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
   else if(expr.id() == "symbol")
   {
     const irep_idt &identifier=expr.identifier();
-  	const symbolt &symbol=lookup(identifier);
+  	const symbolt &symbol=ns.lookup(identifier);
 
     if (identifier == "c::__ESBMC_alloc"
     	|| identifier == "c::__ESBMC_alloc_size")
@@ -1051,7 +1076,7 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
   else if (is_symbol2t(expr))
   {
     irep_idt identifier = to_symbol2t(expr).get_symbol_name();
-    const symbolt &symbol = lookup(identifier);
+    const symbolt &symbol = ns.lookup(identifier);
 
     if (identifier == "c::__ESBMC_alloc"
     	|| identifier == "c::__ESBMC_alloc_size")
@@ -1322,7 +1347,7 @@ void goto_convertt::convert_for(
   goto_programt tmp_y;
   goto_programt::targett y=tmp_y.add_instruction();
   y->make_goto(u);
-  y->guard = true_expr;
+  y->guard = gen_true_expr();
   y->location=code.location();
 
   dest.destructive_append(sideeffects);
@@ -1386,7 +1411,7 @@ void goto_convertt::convert_while(
 
   // y: if(c) goto v;
   y->make_goto(v);
-  y->guard = true_expr;
+  y->guard = gen_true_expr();
   y->location=code.location();
 
   dest.destructive_append(tmp_branch);
@@ -1613,8 +1638,7 @@ void goto_convertt::convert_return(
     throw "return without target";
   }
 
-  if(code.operands().size()!=0 &&
-     code.operands().size()!=1)
+  if(code.operands().size()!=0 && code.operands().size()!=1)
   {
     err_location(code);
     throw "return takes none or one operand";
@@ -1966,7 +1990,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_false=dest.add_instruction();
     t_false->make_goto(target_false);
-    t_false->guard = true_expr;
+    t_false->guard = gen_true_expr();
     t_false->location=location;
     return;
   }
@@ -1989,7 +2013,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_true=dest.add_instruction();
     t_true->make_goto(target_true);
-    t_true->guard = true_expr;
+    t_true->guard = gen_true_expr();
     t_true->location=location;
 
     return;
@@ -2012,7 +2036,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_false=dest.add_instruction();
     t_false->make_goto(target_false);
-    t_false->guard = true_expr;
+    t_false->guard = gen_true_expr();
     t_false->location=guard.location();
 
     return;
@@ -2035,7 +2059,7 @@ void goto_convertt::generate_conditional_branch(
 
   goto_programt::targett t_false=dest.add_instruction();
   t_false->make_goto(target_false);
-  t_false->guard = true_expr;
+  t_false->guard = gen_true_expr();
   t_false->location=guard.location();
 }
 
@@ -2052,7 +2076,7 @@ const std::string &goto_convertt::get_string_constant(
      || expr.op0().operands().size()!=2)
   {
     err_location(expr);
-    str << "expected string constant, but got: "
+    std::cerr << "expected string constant, but got: "
           << expr.pretty() << std::endl;
     abort();
   }
@@ -2072,7 +2096,7 @@ symbolt &goto_convertt::new_tmp_symbol(const typet &type)
     new_symbol.type=type;
   } while (context.move(new_symbol, symbol_ptr));
 
-  tmp_symbols.push_back(symbol_ptr->name);
+  scoped_variables.push_front(symbol_ptr->name);
 
   return *symbol_ptr;
 }
@@ -2090,7 +2114,7 @@ symbolt &goto_convertt::new_cftest_symbol(const typet &type)
     new_symbol.type=type;
   } while (context.move(new_symbol, symbol_ptr));
 
-  tmp_symbols.push_back(symbol_ptr->name);
+  scoped_variables.push_front(symbol_ptr->name);
 
   return *symbol_ptr;
 }

@@ -7,21 +7,18 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-
-#include <assert.h>
-#include <global.h>
+#include <cassert>
+#include <goto-symex/execution_state.h>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/reachability_tree.h>
 #include <map>
 #include <sstream>
-
-#include <i2string.h>
-#include "../util/expr_util.h"
-
-#include "reachability_tree.h"
-#include "execution_state.h"
-#include "goto_symex_state.h"
-#include "goto_symex.h"
+#include <util/expr_util.h>
+#include <util/global.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
 
 goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
                                      const namespacet &_ns)
@@ -80,10 +77,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if (is_nil_expr(expr)) {
     return true; // It's fine to constant propagate something that's absent.
-  } else if (is_constant_expr(expr)) {
-    return true;
-  }
-  else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
+  } else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
   {
     // Null is also essentially a constant.
     return true;
@@ -149,6 +143,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return false;
 
     return constant_propagation(*e);
+  } else if (is_constant_expr(expr)) {
+    return true;
   }
 
   /* No difference
@@ -409,10 +405,10 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
   return;
 }
 
-std::vector<dstring>
-goto_symex_statet::gen_stack_trace(void) const
+std::vector<stack_framet>
+goto_symex_statet::gen_stack_trace() const
 {
-  std::vector<dstring> trace;
+  std::vector<stack_framet> trace;
   call_stackt::const_reverse_iterator it;
   symex_targett::sourcet src;
 
@@ -426,12 +422,9 @@ goto_symex_statet::gen_stack_trace(void) const
       break;
     } else if (it->function_identifier == "c::main" &&
                src.pc->location == get_nil_irep()) {
-      trace.push_back("<main invocation>");
+      trace.push_back(stack_framet(it->function_identifier));
     } else {
-      std::string loc = it->function_identifier.as_string();
-      loc += " at " + src.pc->location.get_file().as_string();
-      loc += " line " + src.pc->location.get_line().as_string();
-      trace.push_back(loc);
+      trace.push_back(stack_framet(irep_idt(it->function_identifier), src));
     }
   }
 

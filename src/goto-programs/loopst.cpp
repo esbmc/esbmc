@@ -5,7 +5,7 @@
  *      Author: mramalho
  */
 
-#include "loopst.h"
+#include <goto-programs/loopst.h>
 
 bool check_var_name(const exprt &expr)
 {

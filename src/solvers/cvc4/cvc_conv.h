@@ -2,7 +2,6 @@
 #define _ESBMC_SOLVERS_CVC_CVC_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
-
 #include <cvc4/cvc4.h>
 
 class cvc_smt_sort : public smt_sort
@@ -34,7 +33,7 @@ public:
 class cvc_convt : public smt_convt, public array_iface
 {
 public:
-  cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns);
+  cvc_convt(bool int_encoding, const namespacet &ns);
   ~cvc_convt();
 
   virtual resultt dec_solve();

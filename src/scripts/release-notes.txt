@@ -1,11 +1,44 @@
 Release Notes of the ESBMC model checker
 
+*** Version 4.2.1
++ Fix bug when inlining functions and esbmc would assume that
+the variables from the inlined function were global
++ Fix python compilation on MacOS
+
+*** Version 4.2
++ Full support for va_args
++ Dropped openssl dependency
++ Update clang headers to clang 4.0
++ Cleanup ESBMC options
++ Fix build on MacOS
++ Fix creation of multidimensional arrays
+
+*** Version 4.1
++ Support for Boolector 2.4.1
++ Fix static libesbmc not being built
++ Fix a static initialization order fiasco
++ Removed the need for ac_config.h when using libesbmc
+
+*** Version 4.0
++ 100% more python: new python API for faster prototyping
++ Support to build ESBMC as library
++ Improved guards generation: greatly decrease in memory usage
++ Fix support for addition, subtraction and multiplication for
+  MathSAT, when running in integer/real mode (no division for now)
++ Memory leak fixes in a number of places
++ General bug fixes
+
+*** Version 3.2
++ Support for integer/real arithmetic when using MathSAT
++ New option to dump the SMT formula (only Z3)
++ Partial support for va_args
+
 *** Version 3.1
-+ Rewritten k-induciton (should greatly reduce false positives)
++ Rewritten k-induction (should greatly reduce false positives)
 + Support for floating point with Z3 and Mathsat (use --floatbv)
 + Improved witness generation (no need for tokenizer anymore)
 + Correctness witness generation
-+ Shipping with Mathsat 5.3.13, Z3 4.4.2 and Boolector 2.2.0
++ Shipping with Mathsat 5.3.14, Z3 4.5.0 and Boolector 2.2.0
 + General bug fixes
 
 *** Version 3.0.2

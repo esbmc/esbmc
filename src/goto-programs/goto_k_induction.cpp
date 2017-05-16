@@ -5,13 +5,12 @@
  *      Author: mramalho
  */
 
-#include <c_types.h>
-#include <i2string.h>
-#include <std_expr.h>
-#include <expr_util.h>
-
-#include "goto_k_induction.h"
-#include "remove_skip.h"
+#include <goto-programs/goto_k_induction.h>
+#include <goto-programs/remove_skip.h>
+#include <util/c_types.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/std_expr.h>
 
 static unsigned int state_counter = 1;
 
@@ -213,7 +212,7 @@ void goto_k_inductiont::duplicate_loop_body(
       t_goto->make_goto(_loop_exit);
       t_goto->location = _loop_exit->location;
       t_goto->function = _loop_exit->function;
-      t_goto->guard = true_expr;
+      t_goto->guard = gen_true_expr();
     }
   }
 
@@ -601,7 +600,7 @@ void goto_k_inductiont::assume_all_state_vector(goto_programt::targett& loop_exi
   goto_programt tmp_y;
   goto_programt::targett y=tmp_y.add_instruction();
   y->make_goto(u);
-  y->guard = true_expr;
+  y->guard = gen_true_expr();
 
   dest.destructive_append(tmp_v);
   dest.destructive_append(tmp_w);

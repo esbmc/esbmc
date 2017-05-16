@@ -6,20 +6,16 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <irep2.h>
-#include <migrate.h>
-#include <assert.h>
-
-#include <i2string.h>
-#include <std_expr.h>
-#include <expr_util.h>
-#include <irep2.h>
-#include <migrate.h>
-
+#include <cassert>
+#include <goto-symex/goto_symex.h>
+#include <goto-symex/goto_symex_state.h>
+#include <goto-symex/symex_target_equation.h>
 #include <langapi/language_util.h>
-
-#include "goto_symex_state.h"
-#include "symex_target_equation.h"
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
+#include <util/migrate.h>
+#include <util/std_expr.h>
 
 void symex_target_equationt::assignment(
   const expr2tc &guard,
@@ -27,7 +23,7 @@ void symex_target_equationt::assignment(
   const expr2tc &original_lhs,
   const expr2tc &rhs,
   const sourcet &source,
-  std::vector<dstring> stack_trace,
+  std::vector<stack_framet> stack_trace,
   assignment_typet assignment_type)
 {
   assert(!is_nil_expr(lhs));
@@ -89,7 +85,7 @@ void symex_target_equationt::assertion(
   const expr2tc &guard,
   const expr2tc &cond,
   const std::string &msg,
-  std::vector<dstring> stack_trace,
+  std::vector<stack_framet> stack_trace,
   const sourcet &source)
 {
   SSA_steps.push_back(SSA_stept());
@@ -107,8 +103,11 @@ void symex_target_equationt::assertion(
 }
 
 void
-symex_target_equationt::renumber(const expr2tc &guard, const expr2tc &symbol,
-                                 const expr2tc &size, const sourcet &source)
+symex_target_equationt::renumber(
+  const expr2tc &guard,
+  const expr2tc &symbol,
+  const expr2tc &size,
+  const sourcet &source)
 {
   assert(is_symbol2t(symbol));
   assert(is_bv_type(size));
@@ -128,7 +127,7 @@ symex_target_equationt::renumber(const expr2tc &guard, const expr2tc &symbol,
 void symex_target_equationt::convert(smt_convt &smt_conv)
 {
   smt_convt::ast_vec assertions;
-  const smt_ast *assumpt_ast = smt_conv.convert_ast(true_expr);
+  const smt_ast *assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
   for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
     convert_internal_step(smt_conv, assumpt_ast, assertions, *it);
@@ -139,15 +138,16 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
   return;
 }
 
-void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
-                   const smt_ast *&assumpt_ast,
-                   smt_convt::ast_vec &assertions,
-                   SSA_stept &step)
+void symex_target_equationt::convert_internal_step(
+  smt_convt &smt_conv,
+  const smt_ast *&assumpt_ast,
+  smt_convt::ast_vec &assertions,
+  SSA_stept &step)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
   bvt assert_bv;
-  const smt_ast *true_val = smt_conv.convert_ast(true_expr);
-  const smt_ast *false_val = smt_conv.convert_ast(false_expr);
+  const smt_ast *true_val = smt_conv.convert_ast(gen_true_expr());
+  const smt_ast *false_val = smt_conv.convert_ast(gen_false_expr());
 
   if (step.ignore) {
     step.cond_ast = true_val;
@@ -270,7 +270,7 @@ void symex_target_equationt::SSA_stept::output(
   if(is_assert())
     out << comment << std::endl;
 
-  if(!config.options.get_bool_option("no-guard-printing"))
+  if(config.options.get_bool_option("show-guards"))
     out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << std::endl;
 }
 
@@ -360,7 +360,7 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
     conv(_conv)
 {
   assert_vec_list.push_back(smt_convt::ast_vec());
-  assumpt_chain.push_back(conv.convert_ast(true_expr));
+  assumpt_chain.push_back(conv.convert_ast(gen_true_expr()));
   cvt_progress = SSA_steps.end();
 }
 
@@ -445,7 +445,7 @@ runtime_encoded_equationt::convert(smt_convt &smt_conv)
   return;
 }
 
-std::shared_ptr<symex_targett>
+boost::shared_ptr<symex_targett>
 runtime_encoded_equationt::clone(void) const
 {
   // Only permit cloning at the start of a run - there should never be any data
@@ -455,7 +455,7 @@ runtime_encoded_equationt::clone(void) const
   assert(SSA_steps.size() == 0 && "runtime_encoded_equationt shouldn't be "
          "cloned when it contains data");
   auto nthis =
-    std::shared_ptr<runtime_encoded_equationt>(new runtime_encoded_equationt(*this));
+    boost::shared_ptr<runtime_encoded_equationt>(new runtime_encoded_equationt(*this));
   nthis.get()->cvt_progress = nthis.get()->SSA_steps.end();
   return nthis;
 }

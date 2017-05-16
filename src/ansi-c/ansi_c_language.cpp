@@ -6,25 +6,22 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <string.h>
-
-#include <sstream>
+#include <ansi-c/ansi_c_convert.h>
+#include <ansi-c/ansi_c_language.h>
+#include <ansi-c/ansi_c_parser.h>
+#include <ansi-c/ansi_c_typecheck.h>
+#include <ansi-c/c_final.h>
+#include <ansi-c/c_link.h>
+#include <ansi-c/c_main.h>
+#include <ansi-c/c_preprocess.h>
+#include <ansi-c/expr2c.h>
+#include <ansi-c/gcc_builtin_headers.h>
+#include <ansi-c/trans_unit.h>
+#include <cstring>
 #include <fstream>
-
-#include <config.h>
-#include <expr_util.h>
-
-#include "ansi_c_language.h"
-#include "ansi_c_convert.h"
-#include "ansi_c_typecheck.h"
-#include "ansi_c_parser.h"
-#include "expr2c.h"
-#include "c_final.h"
-#include "trans_unit.h"
-#include "c_link.h"
-#include "c_preprocess.h"
-#include "c_main.h"
-#include "gcc_builtin_headers.h"
+#include <sstream>
+#include <util/config.h>
+#include <util/expr_util.h>
 
 /*******************************************************************\
 
@@ -76,8 +73,6 @@ static void internal_additions(std::string &code)
     "_Bool __ESBMC_deallocated[__ESBMC_constant_infinity_uint];\n"
     "_Bool __ESBMC_is_dynamic[__ESBMC_constant_infinity_uint];\n"
     "unsigned long __ESBMC_alloc_size[__ESBMC_constant_infinity_uint];\n"
-
-    "void *__ESBMC_realloc(void *ptr, long unsigned int size);\n"
 
     // this is ANSI-C
     "extern const char __func__[];\n"

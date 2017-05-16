@@ -32,8 +32,8 @@ AC_DEFUN([AX_LLVM],
   old_LIBS=$LIBS
 
   AC_LANG_PUSH([C++])
-  dnl On ubuntu, llvm-config gets a special name with a 3.8 suffix.
-  AC_PATH_PROGS([LLVMCONFIG],[llvm-config llvm-config-3.8],[no],[$LLVMSEARCHPATH])
+  dnl On ubuntu, llvm-config gets a special name with a 3.9 suffix.
+  AC_PATH_PROGS([LLVMCONFIG],[llvm-config llvm-config-3.9],[no],[$LLVMSEARCHPATH])
 
   if test "x$LLVMCONFIG" = "xno"; then
     ax_llvm_ok='no'

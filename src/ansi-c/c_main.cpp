@@ -6,17 +6,15 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include <namespace.h>
-#include <expr_util.h>
-#include <std_expr.h>
-#include <arith_tools.h>
-#include <std_code.h>
-#include <config.h>
-
-#include "c_types.h"
-#include "c_main.h"
+#include <ansi-c/c_main.h>
+#include <cassert>
+#include <util/arith_tools.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/namespace.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 
 /*******************************************************************\
 

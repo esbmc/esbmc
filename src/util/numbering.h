@@ -9,12 +9,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_NUMBERING_H
 #define CPROVER_NUMBERING_H
 
-#include <assert.h>
-
+#include <cassert>
 #include <map>
+#include <util/hash_cont.h>
 #include <vector>
-
-#include "hash_cont.h"
 
 template <typename T>
 class numbering:public std::vector<T>
@@ -56,6 +54,9 @@ template <typename T, class hash_fkt>
 class hash_numbering:public std::vector<T>
 {
 public:
+  template <typename ...Args>
+  hash_numbering(Args... args) : std::vector<T>(args...) { }
+
   unsigned number(const T &a)
   {
     std::pair<typename numberst::const_iterator, bool> result=

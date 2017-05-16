@@ -24,6 +24,10 @@ public:
   string_wrapper(const std::string &str)
     : the_string(str), hash(hash_string(str)) { }
 
+  // Appease boost.python's error paths
+  string_wrapper()
+    : the_string(""), hash(hash_string("")) { }
+
   bool operator==(const string_wrapper &ref) const
   {
     if (hash != ref.hash)

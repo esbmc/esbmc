@@ -6,22 +6,19 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
+#include <cassert>
+#include <goto-programs/static_analysis.h>
 #include <memory>
-
-#include <std_expr.h>
-#include <std_code.h>
-#include <expr_util.h>
-
-#include "static_analysis.h"
+#include <util/expr_util.h>
+#include <util/std_code.h>
+#include <util/std_expr.h>
 
 expr2tc abstract_domain_baset::get_guard(
   locationt from,
   locationt to) const
 {
   if(!from->is_goto())
-    return true_expr;
+    return gen_true_expr();
 
   locationt next=from;
   next++;

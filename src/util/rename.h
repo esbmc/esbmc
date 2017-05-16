@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 // automated variable renaming
 //
 
-#include "namespace.h"
+#include <util/namespace.h>
 
 void get_new_name(symbolt &symbol,
                   const namespacet &ns);

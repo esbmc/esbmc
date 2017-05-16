@@ -1,0 +1,5 @@
+#include <stdint.h>
+
+#define ESBMC_VERSION_CONST @ESBMC_VERSION_HEX@
+
+extern "C" uint64_t esbmc_version;

@@ -10,9 +10,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_EXPR_H
 
 #include <iostream>
-
-#include "type.h"
-#include "location.h"
+#include <util/location.h>
+#include <util/type.h>
 
 #define forall_operands(it, expr) \
   if((expr).has_operands()) \

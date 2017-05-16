@@ -1,19 +1,19 @@
 #ifndef _ESBMC_SOLVERS_SMTLIB_CONV_H_
 #define _ESBMC_SOLVERS_SMTLIB_CONV_H_
 
-#include <limits.h>
+
 // For the sake of...
 #define __STDC_LIMIT_MACROS
 #define __STDC_FORMAT_MACROS
+
+#include <limits.h>
 #include <stdint.h>
 #include <inttypes.h>
-
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/smt_tuple_flat.h>
 #include <solvers/smt/array_conv.h>
 #include <solvers/sat/bitblast_conv.h>
 #include <solvers/sat/cnf_conv.h>
-
 #include <core/Solver.h>
 
 typedef Minisat::Lit Lit;
@@ -26,7 +26,7 @@ public:
     LEFT, LRIGHT, ARIGHT
   } shiftt;
 
-  minisat_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
+  minisat_convt(bool int_encoding, const namespacet &_ns,
                 const optionst &opts);
   ~minisat_convt();
 

@@ -1,4 +1,5 @@
-#include "clang_c_language.h"
+#include <clang-c-frontend/clang_c_language.h>
+#include <fstream>
 
 struct hooked_header {
   const char *basename;
@@ -7,11 +8,14 @@ struct hooked_header {
 };
 
 extern "C" {
-  extern char clang_Intrin_buf[];
-  extern unsigned int clang_Intrin_buf_size;
+  extern char clang___clang_cuda_builtin_vars_buf[];
+  extern unsigned int clang___clang_cuda_builtin_vars_buf_size;
 
   extern char clang___clang_cuda_cmath_buf[];
   extern unsigned int clang___clang_cuda_cmath_buf_size;
+
+  extern char clang___clang_cuda_complex_builtins_buf[];
+  extern unsigned int clang___clang_cuda_complex_builtins_buf_size;
 
   extern char clang___clang_cuda_intrinsics_buf[];
   extern unsigned int clang___clang_cuda_intrinsics_buf_size;
@@ -34,11 +38,68 @@ extern "C" {
   extern char clang_adxintrin_buf[];
   extern unsigned int clang_adxintrin_buf_size;
 
+  extern char clang_altivec_buf[];
+  extern unsigned int clang_altivec_buf_size;
+
   extern char clang_ammintrin_buf[];
   extern unsigned int clang_ammintrin_buf_size;
 
   extern char clang_arm_acle_buf[];
   extern unsigned int clang_arm_acle_buf_size;
+
+  extern char clang_arm_neon_buf[];
+  extern unsigned int clang_arm_neon_buf_size;
+
+  extern char clang_armintr_buf[];
+  extern unsigned int clang_armintr_buf_size;
+
+  extern char clang_avx2intrin_buf[];
+  extern unsigned int clang_avx2intrin_buf_size;
+
+  extern char clang_avx512bwintrin_buf[];
+  extern unsigned int clang_avx512bwintrin_buf_size;
+
+  extern char clang_avx512cdintrin_buf[];
+  extern unsigned int clang_avx512cdintrin_buf_size;
+
+  extern char clang_avx512dqintrin_buf[];
+  extern unsigned int clang_avx512dqintrin_buf_size;
+
+  extern char clang_avx512erintrin_buf[];
+  extern unsigned int clang_avx512erintrin_buf_size;
+
+  extern char clang_avx512fintrin_buf[];
+  extern unsigned int clang_avx512fintrin_buf_size;
+
+  extern char clang_avx512ifmaintrin_buf[];
+  extern unsigned int clang_avx512ifmaintrin_buf_size;
+
+  extern char clang_avx512ifmavlintrin_buf[];
+  extern unsigned int clang_avx512ifmavlintrin_buf_size;
+
+  extern char clang_avx512pfintrin_buf[];
+  extern unsigned int clang_avx512pfintrin_buf_size;
+
+  extern char clang_avx512vbmiintrin_buf[];
+  extern unsigned int clang_avx512vbmiintrin_buf_size;
+
+  extern char clang_avx512vbmivlintrin_buf[];
+  extern unsigned int clang_avx512vbmivlintrin_buf_size;
+
+  extern char clang_avx512vlbwintrin_buf[];
+  extern unsigned int clang_avx512vlbwintrin_buf_size;
+
+  extern char clang_avx512vlcdintrin_buf[];
+  extern unsigned int clang_avx512vlcdintrin_buf_size;
+
+  extern char clang_avx512vldqintrin_buf[];
+  extern unsigned int clang_avx512vldqintrin_buf_size;
+
+  extern char clang_avx512vlintrin_buf[];
+  extern unsigned int clang_avx512vlintrin_buf_size;
+
+  extern char clang_avxintrin_buf[];
+  extern unsigned int clang_avxintrin_buf_size;
 
   extern char clang_bmi2intrin_buf[];
   extern unsigned int clang_bmi2intrin_buf_size;
@@ -51,9 +112,6 @@ extern "C" {
 
   extern char clang_cpuid_buf[];
   extern unsigned int clang_cpuid_buf_size;
-
-  extern char clang_cuda_builtin_vars_buf[];
-  extern unsigned int clang_cuda_builtin_vars_buf_size;
 
   extern char clang_emmintrin_buf[];
   extern unsigned int clang_emmintrin_buf_size;
@@ -108,6 +166,9 @@ extern "C" {
 
   extern char clang_mmintrin_buf[];
   extern unsigned int clang_mmintrin_buf_size;
+
+  extern char clang_msa_buf[];
+  extern unsigned int clang_msa_buf_size;
 
   extern char clang_mwaitxintrin_buf[];
   extern unsigned int clang_mwaitxintrin_buf_size;
@@ -187,6 +248,9 @@ extern "C" {
   extern char clang_varargs_buf[];
   extern unsigned int clang_varargs_buf_size;
 
+  extern char clang_vecintrin_buf[];
+  extern unsigned int clang_vecintrin_buf_size;
+
   extern char clang_wmmintrin_buf[];
   extern unsigned int clang_wmmintrin_buf_size;
 
@@ -214,39 +278,10 @@ extern "C" {
   extern char clang_xtestintrin_buf[];
   extern unsigned int clang_xtestintrin_buf_size;
 
-  extern char clang_allocator_interface_buf[];
-  extern unsigned int clang_allocator_interface_buf_size;
-
-  extern char clang_asan_interface_buf[];
-  extern unsigned int clang_asan_interface_buf_size;
-
-  extern char clang_common_interface_defs_buf[];
-  extern unsigned int clang_common_interface_defs_buf_size;
-
-  extern char clang_coverage_interface_buf[];
-  extern unsigned int clang_coverage_interface_buf_size;
-
-  extern char clang_dfsan_interface_buf[];
-  extern unsigned int clang_dfsan_interface_buf_size;
-
-  extern char clang_esan_interface_buf[];
-  extern unsigned int clang_esan_interface_buf_size;
-
-  extern char clang_linux_syscall_hooks_buf[];
-  extern unsigned int clang_linux_syscall_hooks_buf_size;
-
-  extern char clang_lsan_interface_buf[];
-  extern unsigned int clang_lsan_interface_buf_size;
-
-  extern char clang_msan_interface_buf[];
-  extern unsigned int clang_msan_interface_buf_size;
-
-  extern char clang_tsan_interface_atomic_buf[];
-  extern unsigned int clang_tsan_interface_atomic_buf_size;
-
   struct hooked_header clang_headers[] = {
-    { "Intrin.h", clang_Intrin_buf, &clang_Intrin_buf_size},
+    { "__clang_cuda_builtin_vars.h", clang___clang_cuda_builtin_vars_buf, &clang___clang_cuda_builtin_vars_buf_size},
     { "__clang_cuda_cmath.h", clang___clang_cuda_cmath_buf, &clang___clang_cuda_cmath_buf_size},
+    { "__clang_cuda_complex_builtins.h", clang___clang_cuda_complex_builtins_buf, &clang___clang_cuda_complex_builtins_buf_size},
     { "__clang_cuda_intrinsics.h", clang___clang_cuda_intrinsics_buf, &clang___clang_cuda_intrinsics_buf_size},
     { "__clang_cuda_math_forward_declares.h", clang___clang_cuda_math_forward_declares_buf, &clang___clang_cuda_math_forward_declares_buf_size},
     { "__clang_cuda_runtime_wrapper.h", clang___clang_cuda_runtime_wrapper_buf, &clang___clang_cuda_runtime_wrapper_buf_size},
@@ -254,13 +289,31 @@ extern "C" {
     { "__wmmintrin_aes.h", clang___wmmintrin_aes_buf, &clang___wmmintrin_aes_buf_size},
     { "__wmmintrin_pclmul.h", clang___wmmintrin_pclmul_buf, &clang___wmmintrin_pclmul_buf_size},
     { "adxintrin.h", clang_adxintrin_buf, &clang_adxintrin_buf_size},
+    { "altivec.h", clang_altivec_buf, &clang_altivec_buf_size},
     { "ammintrin.h", clang_ammintrin_buf, &clang_ammintrin_buf_size},
     { "arm_acle.h", clang_arm_acle_buf, &clang_arm_acle_buf_size},
+    { "arm_neon.h", clang_arm_neon_buf, &clang_arm_neon_buf_size},
+    { "armintr.h", clang_armintr_buf, &clang_armintr_buf_size},
+    { "avx2intrin.h", clang_avx2intrin_buf, &clang_avx2intrin_buf_size},
+    { "avx512bwintrin.h", clang_avx512bwintrin_buf, &clang_avx512bwintrin_buf_size},
+    { "avx512cdintrin.h", clang_avx512cdintrin_buf, &clang_avx512cdintrin_buf_size},
+    { "avx512dqintrin.h", clang_avx512dqintrin_buf, &clang_avx512dqintrin_buf_size},
+    { "avx512erintrin.h", clang_avx512erintrin_buf, &clang_avx512erintrin_buf_size},
+    { "avx512fintrin.h", clang_avx512fintrin_buf, &clang_avx512fintrin_buf_size},
+    { "avx512ifmaintrin.h", clang_avx512ifmaintrin_buf, &clang_avx512ifmaintrin_buf_size},
+    { "avx512ifmavlintrin.h", clang_avx512ifmavlintrin_buf, &clang_avx512ifmavlintrin_buf_size},
+    { "avx512pfintrin.h", clang_avx512pfintrin_buf, &clang_avx512pfintrin_buf_size},
+    { "avx512vbmiintrin.h", clang_avx512vbmiintrin_buf, &clang_avx512vbmiintrin_buf_size},
+    { "avx512vbmivlintrin.h", clang_avx512vbmivlintrin_buf, &clang_avx512vbmivlintrin_buf_size},
+    { "avx512vlbwintrin.h", clang_avx512vlbwintrin_buf, &clang_avx512vlbwintrin_buf_size},
+    { "avx512vlcdintrin.h", clang_avx512vlcdintrin_buf, &clang_avx512vlcdintrin_buf_size},
+    { "avx512vldqintrin.h", clang_avx512vldqintrin_buf, &clang_avx512vldqintrin_buf_size},
+    { "avx512vlintrin.h", clang_avx512vlintrin_buf, &clang_avx512vlintrin_buf_size},
+    { "avxintrin.h", clang_avxintrin_buf, &clang_avxintrin_buf_size},
     { "bmi2intrin.h", clang_bmi2intrin_buf, &clang_bmi2intrin_buf_size},
     { "bmiintrin.h", clang_bmiintrin_buf, &clang_bmiintrin_buf_size},
     { "clflushoptintrin.h", clang_clflushoptintrin_buf, &clang_clflushoptintrin_buf_size},
     { "cpuid.h", clang_cpuid_buf, &clang_cpuid_buf_size},
-    { "cuda_builtin_vars.h", clang_cuda_builtin_vars_buf, &clang_cuda_builtin_vars_buf_size},
     { "emmintrin.h", clang_emmintrin_buf, &clang_emmintrin_buf_size},
     { "f16cintrin.h", clang_f16cintrin_buf, &clang_f16cintrin_buf_size},
     { "float.h", clang_float_buf, &clang_float_buf_size},
@@ -279,6 +332,7 @@ extern "C" {
     { "mm3dnow.h", clang_mm3dnow_buf, &clang_mm3dnow_buf_size},
     { "mm_malloc.h", clang_mm_malloc_buf, &clang_mm_malloc_buf_size},
     { "mmintrin.h", clang_mmintrin_buf, &clang_mmintrin_buf_size},
+    { "msa.h", clang_msa_buf, &clang_msa_buf_size},
     { "mwaitxintrin.h", clang_mwaitxintrin_buf, &clang_mwaitxintrin_buf_size},
     { "nmmintrin.h", clang_nmmintrin_buf, &clang_nmmintrin_buf_size},
     { "omp.h", clang_omp_buf, &clang_omp_buf_size},
@@ -305,6 +359,7 @@ extern "C" {
     { "unwind.h", clang_unwind_buf, &clang_unwind_buf_size},
     { "vadefs.h", clang_vadefs_buf, &clang_vadefs_buf_size},
     { "varargs.h", clang_varargs_buf, &clang_varargs_buf_size},
+    { "vecintrin.h", clang_vecintrin_buf, &clang_vecintrin_buf_size},
     { "wmmintrin.h", clang_wmmintrin_buf, &clang_wmmintrin_buf_size},
     { "x86intrin.h", clang_x86intrin_buf, &clang_x86intrin_buf_size},
     { "xmmintrin.h", clang_xmmintrin_buf, &clang_xmmintrin_buf_size},
@@ -315,27 +370,17 @@ extern "C" {
     { "xsavesintrin.h", clang_xsavesintrin_buf, &clang_xsavesintrin_buf_size},
     { "xtestintrin.h", clang_xtestintrin_buf, &clang_xtestintrin_buf_size},
 
-    // Sanitizer headers, do we really need them?
-    { "allocator_interface.h", clang_allocator_interface_buf, &clang_allocator_interface_buf_size},
-    { "asan_interface.h", clang_asan_interface_buf, &clang_asan_interface_buf_size},
-    { "common_interface_defs.h", clang_common_interface_defs_buf, &clang_common_interface_defs_buf_size},
-    { "coverage_interface.h", clang_coverage_interface_buf, &clang_coverage_interface_buf_size},
-    { "dfsan_interface.h", clang_dfsan_interface_buf, &clang_dfsan_interface_buf_size},
-    { "esan_interface.h", clang_esan_interface_buf, &clang_esan_interface_buf_size},
-    { "linux_syscall_hooks.h", clang_linux_syscall_hooks_buf, &clang_linux_syscall_hooks_buf_size},
-    { "lsan_interface.h", clang_lsan_interface_buf, &clang_lsan_interface_buf_size},
-    { "msan_interface.h", clang_msan_interface_buf, &clang_msan_interface_buf_size},
-    { "tsan_interface_atomic.h", clang_tsan_interface_atomic_buf, &clang_tsan_interface_atomic_buf_size},
-
     { NULL, NULL, NULL}
   };
 }
 
-void clang_c_languaget::add_clang_headers()
+void clang_c_languaget::dump_clang_headers(std::string tmp_dir)
 {
-  struct hooked_header *h;
-  for (h = &clang_headers[0]; h->basename != NULL; h++) {
-    clang_headers_name.emplace_back(h->basename);
-    clang_headers_content.emplace_back(h->textstart, *h->textsize);
+  for (struct hooked_header *h = &clang_headers[0]; h->basename != nullptr; h++)
+  {
+    std::ofstream header;
+    header.open(tmp_dir + "/" + std::string(h->basename));
+    header << std::string(h->textstart, *h->textsize);
+    header.close();
   }
 }

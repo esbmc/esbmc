@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include "array_name.h"
+#include <util/array_name.h>
 
 std::string array_name(
   const namespacet &ns,

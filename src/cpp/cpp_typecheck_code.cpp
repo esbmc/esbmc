@@ -6,16 +6,15 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <i2string.h>
-#include <expr_util.h>
-#include <location.h>
-
-#include "cpp_typecheck.h"
-#include "cpp_convert_type.h"
-#include "cpp_declarator_converter.h"
-#include "cpp_template_type.h"
-#include "cpp_util.h"
-#include "cpp_exception_id.h"
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_declarator_converter.h>
+#include <cpp/cpp_exception_id.h>
+#include <cpp/cpp_template_type.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/cpp_util.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/location.h>
 
 /*******************************************************************\
 
@@ -493,7 +492,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
     return;
   }
 
-  codet new_code("block");
+  codet new_code("decl-block");
   new_code.reserve_operands(declaration.declarators().size());
 
   // Do the declarators (optional).

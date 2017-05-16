@@ -6,23 +6,21 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <assert.h>
-
 #include <algorithm>
-#include <config.h>
-#include <options.h>
-
-#include "simplify_expr_class.h"
-#include "simplify_expr.h"
-#include "mp_arith.h"
-#include "arith_tools.h"
-#include "std_types.h"
-#include "bitvector.h"
-#include "simplify_utils.h"
-#include "expr_util.h"
-#include "std_expr.h"
-#include "fixedbv.h"
-#include "ieee_float.h"
+#include <cassert>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/fixedbv.h>
+#include <util/ieee_float.h>
+#include <util/mp_arith.h>
+#include <util/options.h>
+#include <util/simplify_expr.h>
+#include <util/simplify_expr_class.h>
+#include <util/simplify_utils.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
 
 //#define USE_CACHE
 
@@ -90,17 +88,6 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
     return false;
   }
 
-  // eliminate typecasts from NULL
-  if(expr.type().id()=="pointer" &&
-     expr.op0().is_constant() &&
-     expr.op0().value().as_string()=="NULL")
-  {
-    exprt tmp=expr.op0();
-    tmp.type()=expr.type();
-    expr.swap(tmp);
-    return false;
-  }
-
   // eliminate duplicate pointer typecasts
   if(expr.type().id()=="pointer" &&
      expr.op0().id()=="typecast" &&
@@ -128,9 +115,7 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
 
     exprt new_expr("constant", expr.type());
 
-    if(op_type_id=="integer" ||
-       op_type_id=="natural" ||
-       op_type_id=="c_enum" ||
+    if(op_type_id=="c_enum" ||
        op_type_id=="incomplete_c_enum")
     {
       mp_integer int_value=string2integer(id2string(value));
@@ -149,13 +134,6 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
         return false;
       }
 
-      if(expr_type_id=="integer")
-      {
-        new_expr.value(value);
-        expr.swap(new_expr);
-        return false;
-      }
-
       if(expr_type_id=="c_enum" ||
          expr_type_id=="incomplete_c_enum")
       {
@@ -164,18 +142,10 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
         return false;
       }
     }
-    else if(op_type_id=="rational")
-    {
-    }
-    else if(op_type_id=="real")
-    {
-    }
     else if(op_type_id=="bool")
     {
       if(expr_type_id=="unsignedbv" ||
-         expr_type_id=="signedbv" ||
-         expr_type_id=="integer" ||
-         expr_type_id=="natural")
+         expr_type_id=="signedbv")
       {
         if(operand.is_true())
         {
@@ -200,23 +170,6 @@ bool simplify_exprt::simplify_typecast(exprt &expr)
         new_expr.make_bool(int_value!=0);
         expr.swap(new_expr);
         return false;
-      }
-
-      if(expr_type_id=="integer")
-      {
-        new_expr=from_integer(int_value, expr.type());
-        expr.swap(new_expr);
-        return false;
-      }
-
-      if(expr_type_id=="natural")
-      {
-        if(int_value>=0)
-        {
-          new_expr=from_integer(int_value, expr.type());
-          expr.swap(new_expr);
-          return false;
-        }
       }
 
       if(expr_type_id=="unsignedbv" ||
@@ -712,10 +665,7 @@ bool simplify_exprt::simplify_division(exprt &expr)
      expr.type()!=expr.op1().type())
     return true;
 
-  if(expr.type().is_signedbv() ||
-     expr.type().is_unsignedbv() ||
-     expr.type().id()=="natural" ||
-     expr.type().id()=="integer")
+  if(expr.type().is_signedbv() || expr.type().is_unsignedbv())
   {
     mp_integer int_value0, int_value1;
     bool ok0, ok1;
@@ -817,10 +767,7 @@ bool simplify_exprt::simplify_modulo(exprt &expr)
   if(expr.operands().size()!=2)
     return true;
 
-  if(expr.type().is_signedbv() ||
-     expr.type().is_unsignedbv() ||
-     expr.type().id()=="natural" ||
-     expr.type().id()=="integer")
+  if(expr.type().is_signedbv() || expr.type().is_unsignedbv())
   {
     if(expr.type()==expr.op0().type() &&
        expr.type()==expr.op1().type())
@@ -1244,40 +1191,6 @@ bool simplify_exprt::simplify_shifts(exprt &expr)
       }
     }
   }
-  else if(expr.op0().type().id()=="integer" ||
-	  expr.op0().type().id()=="natural")
-  {
-    if(expr.id()=="lshr")
-    {
-      if(distance>=0)
-      {
-        value/=power(2, distance);
-        expr=from_integer(value, expr.type());
-        return false;
-      }
-    }
-    else if(expr.id()=="ashr")
-    {
-      // this is to simulate an arithmetic right shift
-      if(distance>=0)
-      {
-        mp_integer new_value=value/power(2, distance);
-        if(value<0 && new_value==0) new_value=-1;
-
-        expr=from_integer(new_value, expr.type());
-        return false;
-      }
-    }
-    else if(expr.id()=="shl")
-    {
-      if(distance>=0)
-      {
-        value*=power(2, distance);
-        expr=from_integer(value, expr.type());
-        return false;
-      }
-    }
-  }
 
   return true;
 }
@@ -1313,16 +1226,7 @@ bool simplify_exprt::simplify_if_implies(
 	cond.op1().type() == expr.op1().type())
     {
       const irep_idt &type_id = cond.op1().type().id();
-      if(type_id=="integer" || type_id=="natural")
-      {
-	if(string2integer(cond.op1().value().as_string()) >=
-	  string2integer(expr.op1().value().as_string()))
-	 {
-	  new_truth = true;
-	  return false;
-	 }
-      }
-      else if(type_id=="unsignedbv")
+      if(type_id=="unsignedbv")
       {
 	const mp_integer i1, i2;
 	if(binary2integer(cond.op1().value().as_string(), false) >=
@@ -1349,16 +1253,7 @@ bool simplify_exprt::simplify_if_implies(
 	cond.op0().type() == expr.op0().type())
     {
       const irep_idt &type_id = cond.op1().type().id();
-      if(type_id=="integer" || type_id=="natural")
-      {
-	if(string2integer(cond.op1().value().as_string()) <=
-	  string2integer(expr.op1().value().as_string()))
-	 {
-	  new_truth = true;
-	  return false;
-	 }
-      }
-      else if(type_id=="unsignedbv")
+      if(type_id=="unsignedbv")
       {
 	const mp_integer i1, i2;
 	if(binary2integer(cond.op1().value().as_string(), false) <=
@@ -2290,7 +2185,7 @@ bool simplify_exprt::simplify_inequality_not_constant(
     forall_value_list(it0, values0)
       forall_value_list(it1, values1)
       {
-        bool tmp;
+        bool tmp = false;
         const mp_integer &int_value0=*it0;
         const mp_integer &int_value1=*it1;
 
@@ -3092,20 +2987,12 @@ struct saj_tablet
   const char *type_id;
 } const saj_table[]=
 {
-  { "+",      "integer"    },
-  { "+",      "natural"    },
-  { "+",      "real"       },
   { "+",      "complex"    },
-  { "+",      "rational"   },
   { "+",      "unsignedbv" },
   { "+",      "signedbv"   },
   { "+",      "floatbv"    },
   { "+",      "pointer"    },
-  { "*",      "integer"    },
-  { "*",      "natural"    },
-  { "*",      "real"       },
   { "*",      "complex"    },
-  { "*",      "rational"   },
   { "*",      "unsignedbv" },
   { "*",      "signedbv"   },
   { "*",      "floatbv"    },

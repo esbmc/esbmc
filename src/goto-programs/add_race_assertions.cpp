@@ -10,16 +10,14 @@ Date: February 2006
 
 \*******************************************************************/
 
-#include <hash_cont.h>
-#include <std_expr.h>
-#include <expr_util.h>
-#include <guard.h>
-
+#include <goto-programs/add_race_assertions.h>
+#include <goto-programs/remove_skip.h>
+#include <goto-programs/rw_set.h>
 #include <pointer-analysis/value_sets.h>
-
-#include "remove_skip.h"
-#include "add_race_assertions.h"
-#include "rw_set.h"
+#include <util/expr_util.h>
+#include <util/guard.h>
+#include <util/hash_cont.h>
+#include <util/std_expr.h>
 
 class w_guardst
 {
@@ -91,7 +89,7 @@ void w_guardst::add_initialization(goto_programt &goto_program) const
 
     t=goto_program.insert(t);
     t->type=ASSIGN;
-    t->code = code_assign2tc(new_sym, false_expr);
+    t->code = code_assign2tc(new_sym, gen_false_expr());
 
     t++;
   }

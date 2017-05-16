@@ -6,10 +6,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <std_types.h>
-#include <config.h>
-
-#include "c_types.h"
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/std_types.h>
 
 typet build_float_type(unsigned width)
 {
@@ -139,6 +138,11 @@ typet char32_type()
 typet wchar_type()
 {
   return signedbv_typet(config.ansi_c.int_width);
+}
+
+typet unsigned_wchar_type()
+{
+  return unsignedbv_typet(config.ansi_c.int_width);
 }
 
 type2tc char_type2()

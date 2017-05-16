@@ -9,15 +9,13 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_POINTER_ANALYSIS_DEREFERENCE_H
 #define CPROVER_POINTER_ANALYSIS_DEREFERENCE_H
 
+#include <pointer-analysis/value_sets.h>
 #include <set>
-
-#include <expr.h>
-#include <hash_cont.h>
-#include <guard.h>
-#include <namespace.h>
-#include <options.h>
-
-#include "value_sets.h"
+#include <util/expr.h>
+#include <util/guard.h>
+#include <util/hash_cont.h>
+#include <util/namespace.h>
+#include <util/options.h>
 
 /** @file dereference.h
  *  The dereferencing code's purpose is to take a symbol with pointer type that
@@ -361,6 +359,8 @@ private:
     const guardt &guard,
     const expr2tc &lexical_offset,
     expr2tc &pointer_guard);
+
+  void deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode);
 
   static const expr2tc &get_symbol(const expr2tc &object);
   void bounds_check(const expr2tc &expr, const expr2tc &offset,

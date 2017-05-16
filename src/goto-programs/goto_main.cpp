@@ -6,9 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <rename.h>
-
-#include "goto_convert_class.h"
+#include <goto-programs/goto_convert_class.h>
+#include <util/rename.h>
 
 void goto_convertt::new_name(symbolt &symbol)
 {
@@ -17,14 +16,6 @@ void goto_convertt::new_name(symbolt &symbol)
 
   // store in context
   context.add(symbol);
-}
-
-const symbolt &goto_convertt::lookup(const irep_idt &identifier) const
-{
-  const symbolt *symbol;
-  if(ns.lookup(identifier, symbol))
-    throw "failed to find symbol "+id2string(identifier);
-  return *symbol;
 }
 
 void goto_convert(

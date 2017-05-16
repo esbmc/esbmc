@@ -9,11 +9,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_C_TYPECHECK_BASE_H
 #define CPROVER_C_TYPECHECK_BASE_H
 
-#include <context.h>
-#include <typecheck.h>
-#include <namespace.h>
-#include <std_code.h>
-#include <std_types.h>
+#include <util/context.h>
+#include <util/namespace.h>
+#include <util/std_code.h>
+#include <util/std_types.h>
+#include <util/typecheck.h>
 
 class c_typecheck_baset:
   public typecheckt,
@@ -182,6 +182,7 @@ protected:
   virtual void typecheck_goto(codet &code);
   virtual void typecheck_ifthenelse(codet &code);
   virtual void typecheck_label(code_labelt &code);
+  virtual void typecheck_switch_case(code_switch_caset &code);
   virtual void typecheck_return(codet &code);
   virtual void typecheck_switch(codet &code);
   virtual void typecheck_while(codet &code);

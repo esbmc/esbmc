@@ -10,24 +10,22 @@
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
-#include <irep2.h>
-
-#include <assert.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-#include <guard.h>
-#include <pointer-analysis/value_set.h>
+#include <boost/shared_ptr.hpp>
+#include <cassert>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
 #include <goto-programs/goto_functions.h>
-#include <string>
+#include <goto-symex/renaming.h>
+#include <goto-symex/symex_target.h>
+#include <pointer-analysis/value_set.h>
 #include <stack>
+#include <string>
+#include <util/crypto_hash.h>
+#include <util/guard.h>
+#include <util/i2string.h>
+#include <util/irep2.h>
 #include <vector>
-
-#include "symex_target.h"
-#include "crypto_hash.h"
-#include "renaming.h"
-
-#include <i2string.h>
 
 class execution_statet; // foward dec
 
@@ -93,7 +91,7 @@ public:
   {
   public:
     unsigned depth;
-    std::shared_ptr<renaming::level2t> level2_ptr;
+    boost::shared_ptr<renaming::level2t> level2_ptr;
     renaming::level2t &level2;
     value_sett value_set;
     guardt guard;
@@ -197,6 +195,13 @@ public:
      *  it. */
     typedef hash_map_cont<unsigned, unsigned> loop_iterationst;
     loop_iterationst loop_iterations;
+
+    /** Record the first va_args index used in this function call, if any,
+     *  otherwise UINT_MAX
+     */
+    unsigned int va_index;
+
+    guardt entry_guard;
 
     framet(unsigned int thread_id) :
       return_value(expr2tc())
@@ -395,7 +400,7 @@ public:
    *  current function invocations on the stack, and returns them.
    *  @return Vector of strings describing the current function calls in state.
    */
-  std::vector<dstring> gen_stack_trace(void) const;
+  std::vector<stack_framet> gen_stack_trace(void) const;
 
   /**
    *  Fixup types after renaming: we might rename a symbol that we

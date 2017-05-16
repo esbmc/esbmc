@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_IEEE_FLOAT_H
 #define CPROVER_IEEE_FLOAT_H
 
-#include <mp_arith.h>
-#include <std_expr.h>
-#include <format_spec.h>
+#include <util/format_spec.h>
+#include <util/mp_arith.h>
+#include <util/std_expr.h>
 
 class ieee_float_spect
 {
@@ -232,8 +232,12 @@ public:
   // e.g., NAN==NAN
   friend bool operator ==(const ieee_floatt &a, const ieee_floatt &b);
   friend bool operator !=(const ieee_floatt &a, const ieee_floatt &b);
+
   friend bool operator ==(const ieee_floatt &a, int i);
   friend bool operator >(const ieee_floatt &a, int i);
+  friend bool operator <(const ieee_floatt &a, int i);
+  friend bool operator >=(const ieee_floatt &a, int i);
+  friend bool operator <=(const ieee_floatt &a, int i);
 
 protected:
   void divide_and_round(mp_integer &fraction, const mp_integer &factor);

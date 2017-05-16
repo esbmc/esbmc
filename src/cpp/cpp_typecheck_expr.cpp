@@ -6,26 +6,23 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <expr_util.h>
-#include <i2string.h>
-#include <std_types.h>
-#include <arith_tools.h>
-#include <bitvector.h>
-#include <std_expr.h>
-#include <config.h>
-#include <simplify_expr.h>
-#include <std_types.h>
-#include <c_types.h>
-
 #include <ansi-c/c_qualifiers.h>
 #include <ansi-c/c_sizeof.h>
-
-#include "cpp_type2name.h"
-#include "cpp_typecheck.h"
-#include "cpp_convert_type.h"
-#include "cpp_class_type.h"
-#include "cpp_exception_id.h"
-#include "expr2cpp.h"
+#include <cpp/cpp_class_type.h>
+#include <cpp/cpp_convert_type.h>
+#include <cpp/cpp_exception_id.h>
+#include <cpp/cpp_type2name.h>
+#include <cpp/cpp_typecheck.h>
+#include <cpp/expr2cpp.h>
+#include <util/arith_tools.h>
+#include <util/bitvector.h>
+#include <util/c_types.h>
+#include <util/config.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/simplify_expr.h>
+#include <util/std_expr.h>
+#include <util/std_types.h>
 
 /*******************************************************************\
 
@@ -912,7 +909,7 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
 
   exprt &sizeof_expr=static_cast<exprt &>(expr.add("sizeof"));
   sizeof_expr=c_sizeof(expr.type().subtype(), *this);
-  sizeof_expr.add("#c_sizeof_type")=expr.type().subtype();
+  sizeof_expr.c_sizeof_type(expr.type().subtype());
 }
 
 /*******************************************************************\

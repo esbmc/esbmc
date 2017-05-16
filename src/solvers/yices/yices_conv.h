@@ -2,7 +2,6 @@
 #define _ESBMC_SOLVERS_YICES_YICES_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
-
 #include <yices.h>
 
 class yices_smt_sort : public smt_sort
@@ -63,7 +62,7 @@ public:
 class yices_convt : public smt_convt, public array_iface, public tuple_iface
 {
 public:
-  yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp);
+  yices_convt(bool int_encoding, const namespacet &ns);
   virtual ~yices_convt();
 
   virtual resultt dec_solve();

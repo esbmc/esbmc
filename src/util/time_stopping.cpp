@@ -8,9 +8,6 @@ Date: February 2004
 
 \*******************************************************************/
 
-#include <sstream>
-#include <iomanip>
-
 #if defined(_WIN32) && !defined(__MINGW32__)
 #include <windows.h>
 #include <winbase.h>
@@ -18,7 +15,9 @@ Date: February 2004
 #include <sys/time.h>
 #endif
 
-#include "time_stopping.h"
+#include <iomanip>
+#include <sstream>
+#include <util/time_stopping.h>
 
 #if defined(_WIN32) && !defined(__MINGW32__)
 struct timezone {

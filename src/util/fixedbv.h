@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_FIXEDBV_UTIL_H
 #define CPROVER_FIXEDBV_UTIL_H
 
-#include <mp_arith.h>
-#include <std_expr.h>
-#include <format_spec.h>
+#include <util/format_spec.h>
+#include <util/mp_arith.h>
+#include <util/std_expr.h>
 
 class fixedbv_spect
 {
@@ -89,6 +89,9 @@ public:
   friend bool operator !=(const fixedbvt &a, const fixedbvt &b) { return a.v!=b.v; }
 
   friend bool operator > (const fixedbvt &a, int i);
+  friend bool operator < (const fixedbvt &a, int i);
+  friend bool operator >= (const fixedbvt &a, int i);
+  friend bool operator <= (const fixedbvt &a, int i);
 
   const mp_integer &get_value() const { return v; }
   void set_value(const mp_integer &_v) { v=_v; }

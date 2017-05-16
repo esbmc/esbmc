@@ -6,14 +6,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <expr_util.h>
-#include <std_expr.h>
-#include <rename.h>
-#include <cprover_prefix.h>
-#include <i2string.h>
-#include <c_types.h>
-
-#include "goto_convert_class.h"
+#include <goto-programs/goto_convert_class.h>
+#include <util/c_types.h>
+#include <util/cprover_prefix.h>
+#include <util/expr_util.h>
+#include <util/i2string.h>
+#include <util/rename.h>
+#include <util/std_expr.h>
 
 void goto_convertt::make_temp_symbol(
   exprt &expr,
@@ -120,7 +119,7 @@ void goto_convertt::remove_sideeffects(
       if(s[i]) last=i;
     }
 
-    unsigned old_guards=guard.size();
+    guardt old_guards(guard);
 
     for(unsigned i=0; i<=last; i++)
     {
@@ -155,7 +154,7 @@ void goto_convertt::remove_sideeffects(
       }
     }
 
-    guard.resize(old_guards);
+    guard.swap(old_guards);
 
     return;
   }
@@ -182,24 +181,24 @@ void goto_convertt::remove_sideeffects(
 
     if(o1)
     {
-      unsigned old_guard=guard.size();
+      guardt old_guards(guard);
       expr2tc tmp;
       migrate_expr(expr.op0(), tmp);
       guard.add(tmp);
       remove_sideeffects(expr.op1(), guard, dest);
-      guard.resize(old_guard);
+      guard.swap(old_guards);
     }
 
     if(o2)
     {
-      unsigned old_guard=guard.size();
+      guardt old_guards(guard);
       exprt tmp(expr.op0());
       tmp.make_not();
       expr2tc tmp_expr;
       migrate_expr(tmp, tmp_expr);
       guard.add(tmp_expr);
       remove_sideeffects(expr.op2(), guard, dest);
-      guard.resize(old_guard);
+      guard.swap(old_guards);
     }
 
     return;
@@ -415,7 +414,7 @@ void goto_convertt::remove_function_call(
     if(expr.op0().id()=="symbol")
     {
       const irep_idt &identifier=expr.op0().identifier();
-      const symbolt &symbol=lookup(identifier);
+      const symbolt &symbol=ns.lookup(identifier);
 
       std::string new_base_name=id2string(new_symbol.base_name);
 
@@ -431,7 +430,7 @@ void goto_convertt::remove_function_call(
 
     new_name(new_symbol);
 
-    tmp_symbols.push_back(new_symbol.name);
+    scoped_variables.push_front(new_symbol.name);
 
     call=code_assignt(symbol_expr(new_symbol), expr);
 
@@ -478,7 +477,7 @@ void goto_convertt::remove_cpp_new(
     new_symbol.name=tmp_symbol_prefix+id2string(new_symbol.base_name);
 
     new_name(new_symbol);
-    tmp_symbols.push_back(new_symbol.name);
+    scoped_variables.push_front(new_symbol.name);
 
     call=code_assignt(symbol_expr(new_symbol), expr);
 

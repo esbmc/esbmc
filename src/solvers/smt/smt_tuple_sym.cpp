@@ -1,8 +1,8 @@
+#include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple_flat.h>
 #include <sstream>
-#include <c_types.h>
-#include <base_type.h>
-#include "smt_conv.h"
-#include "smt_tuple_flat.h"
+#include <util/base_type.h>
+#include <util/c_types.h>
 
 /** @file smt_tuple.cpp
  * So, the SMT-encoding-with-no-tuple-support. SMT itself doesn't support

@@ -9,8 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_C_TYPES_H
 #define CPROVER_C_TYPES_H
 
-#include <irep2.h>
-#include <expr.h>
+#include <util/expr.h>
+#include <util/irep2.h>
 
 typet index_type();
 type2tc index_type2();
@@ -30,6 +30,7 @@ typet unsigned_char_type();
 typet signed_char_type();
 typet char16_type();
 typet char32_type();
+typet unsigned_wchar_type();
 typet wchar_type();
 type2tc char_type2();
 typet float_type();

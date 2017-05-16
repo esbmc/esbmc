@@ -9,20 +9,17 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_IREP_H
 #define CPROVER_IREP_H
 
-#include <vector>
+#include <cassert>
 #include <list>
 #include <map>
 #include <string>
-
-#include <ac_config.h>
-
-#include <assert.h>
-#include "global.h"
+#include <util/global.h>
+#include <vector>
 
 #define USE_DSTRING
 #define SHARING
 
-#include "dstring.h"
+#include <util/dstring.h>
 
 typedef dstring irep_idt;
 typedef dstring irep_namet;
@@ -283,10 +280,6 @@ public:
     return find(a_cmt_type);
   }
 
-  inline const irept &case_irep(void) const {
-    return find(s_case);
-  }
-
   inline const irept &return_type(void) const {
     return find(s_return_type);
   }
@@ -304,7 +297,7 @@ public:
   }
 
   inline const irept &c_sizeof_type(void) const {
-    return find(s_c_sizeof_type);
+    return find(a_c_sizeof_type);
   }
 
   inline const irept &bv(void) const {
@@ -402,10 +395,6 @@ public:
 
   inline const irep_idt &cmt_width(void) const {
     return get(a_cmt_width);
-  }
-
-  inline const irept &sizeof_type(void) const {
-    return find(s_sizeof_type);
   }
 
   inline const irept &offsetof_type(void) const {
@@ -832,18 +821,6 @@ public:
     set(s_components, val);
   }
 
-  inline void case_irep(const irept &val) {
-    set(s_case, val);
-  }
-
-  inline void sizeof_type(const irept &val) {
-    set(s_sizeof_type, val);
-  }
-
-  inline void cmt_c_sizeof_type(const irept &val) {
-    set(s_c_sizeof_type, val);
-  }
-
   inline void offsetof_type(const irept &val) {
     set(s_offsetof_type, val);
   }
@@ -950,12 +927,12 @@ protected:
   { return !name.empty() && name[0]=='#'; }
 
 public:
-  static const irep_idt s_type, s_arguments, s_components, s_case;
+  static const irep_idt s_type, s_arguments, s_components;
   static const irep_idt s_return_type, s_body, s_member, s_labels;
-  static const irep_idt s_c_sizeof_type, s_bv, s_targets, s_variables;
+  static const irep_idt s_bv, s_targets, s_variables;
   static const irep_idt s_initializer, s_declaration_type, s_decl_value;
   static const irep_idt s_symvalue, s_cmt_location, s_decl_ident;
-  static const irep_idt s_elements, s_sizeof_type, s_offsetof_type;
+  static const irep_idt s_elements, s_offsetof_type;
   static const irep_idt a_width, a_name, a_statement, a_identifier, a_comp_name;
   static const irep_idt a_tag, a_from, a_file, a_line, a_function, a_column;
   static const irep_idt a_access, a_destination, a_base_name, a_comment,a_event;

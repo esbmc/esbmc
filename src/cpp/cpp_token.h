@@ -10,8 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_CPP_TOKEN_H
 
 #include <algorithm>
-
-#include <expr.h>
+#include <util/expr.h>
 
 class cpp_tokent
 {

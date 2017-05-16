@@ -6,9 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <assert.h>
-
-#include "cpp_declarator.h"
+#include <cassert>
+#include <cpp/cpp_declarator.h>
 
 /*******************************************************************\
 

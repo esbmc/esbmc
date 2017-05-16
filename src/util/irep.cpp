@@ -6,12 +6,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <stdlib.h>
-#include <assert.h>
-
-#include "irep.h"
-#include "i2string.h"
-#include "string_hash.h"
+#include <cassert>
+#include <cstdlib>
+#include <util/i2string.h>
+#include <util/irep.h>
+#include <util/string_hash.h>
 
 irept nil_rep_storage;
 
@@ -587,12 +586,10 @@ const irep_idt irept::a_type_id = dstring("typeid");
 const irep_idt irept::s_type = dstring("type");
 const irep_idt irept::s_arguments = dstring("arguments");
 const irep_idt irept::s_components = dstring("components");
-const irep_idt irept::s_case = dstring("case");
 const irep_idt irept::s_return_type = dstring("return_type");
 const irep_idt irept::s_body = dstring("body");
 const irep_idt irept::s_member = dstring("member");
 const irep_idt irept::s_labels = dstring("labels");
-const irep_idt irept::s_c_sizeof_type = dstring("#c_sizeof_type");
 const irep_idt irept::s_bv = dstring("bv");
 const irep_idt irept::s_targets = dstring("targets");
 const irep_idt irept::s_variables = dstring("variables");
@@ -603,7 +600,6 @@ const irep_idt irept::s_symvalue = dstring("symvalue");
 const irep_idt irept::s_cmt_location = dstring("#location");
 const irep_idt irept::s_decl_ident = dstring("decl_ident");
 const irep_idt irept::s_elements = dstring("elements");
-const irep_idt irept::s_sizeof_type = dstring("sizeof-type");
 const irep_idt irept::s_offsetof_type = dstring("offsetof_type");
 
 const irep_idt irept::id_address_of = dstring("address_of");

@@ -10,9 +10,10 @@
 m4_define([esbmcversion], m4_include([esbmc/version]))
 AC_INIT([ESBMC], [esbmcversion], [esbmc-users@googlegroups.com])
 AC_DEFINE([ESBMC_VERSION], ["AC_PACKAGE_VERSION"], [ESBMC version number])
+AC_SUBST([ESBMC_VERSION_STR], esbmcversion)
 dnl Numerous things croak unless we do this immediately:
 AC_CONFIG_AUX_DIR([scripts/build-aux])
-AC_CONFIG_MACRO_DIR([scripts/build-aux/m4])
+AC_CONFIG_MACRO_DIRS([scripts/build-aux/m4])
 
 AC_USE_SYSTEM_EXTENSIONS
 AC_CONFIG_HEADER(ac_config.h:scripts/ac_config.in)
@@ -28,24 +29,55 @@ AC_PROG_LEX
 AC_PROG_MAKE_SET
 
 AC_CHECK_PROG(esbmc_has_yacc, $YACC, "yes", "no")
-AS_IF([test "x$esbmc_has_yacc" = "xno"], [AC_MSG_ERROR([Cannot find yacc])])
+AS_IF([test "x$esbmc_has_yacc" = "xno"], AC_MSG_ERROR([Cannot find yacc]))
 AC_CHECK_PROG(esbmc_has_lex, $LEX, "yes", "no")
-AS_IF([test "x$esbmc_has_lex" = "xno"], [AC_MSG_ERROR([Cannot find lex])])
+AS_IF([test "x$esbmc_has_lex" = "xno"], AC_MSG_ERROR([Cannot find lex]))
 AC_CHECK_PROG(esbmc_has_awk, $AWK, "yes", "no")
-AS_IF([test "x$esbmc_has_awk" = "xno"], [AC_MSG_ERROR([Cannot find awk])])
+AS_IF([test "x$esbmc_has_awk" = "xno"], AC_MSG_ERROR([Cannot find awk]))
 dnl Don't seem to be able to test for sed
+
+dnl Transform version numbers into some integers...
+AS_VAR_SET(ver_numcomponents, `echo esbmcversion | awk 'BEGIN{RS="."}{print $0;}' | wc -l | xargs `)
+AS_IF([test "${ver_numcomponents}" != "4"], [
+  AC_MSG_ERROR([Couldnt interpret esbmc version number in esbmc/version])
+])
+dnl Could use cut; too bad.
+AS_VAR_SET(ver_majversion, `echo esbmcversion | awk 'BEGIN{FS="."}{print $1;}'`)
+AS_VAR_SET(ver_minversion, `echo esbmcversion | awk 'BEGIN{FS="."}{print $2;}'`)
+AS_VAR_SET(ver_pversion, `echo esbmcversion | awk 'BEGIN{FS="."}{print $3;}'`)
+AS_ECHO("ESBMC version is ${ver_majversion}.${ver_minversion}.${ver_pversion}")
+
+AS_IF([test "${ver_minversion}" -gt "255"], [
+  AC_MSG_ERROR([Min version component is too large])
+])
+AS_IF([test "${ver_pversion}" -gt "255"], [
+  AC_MSG_ERROR([Patch version component is too large])
+])
+
+AS_VAR_SET(ver_majhex, `printf "%X" ${ver_majversion}`)
+AS_VAR_SET(ver_minhex, `printf "%02X" ${ver_minversion}`)
+AS_VAR_SET(ver_phex, `printf "%02X" ${ver_pversion}`)
+AS_VAR_SET(ver_hexstr, `printf "0x${ver_majhex}${ver_minhex}${ver_phex}"`)
+
+AC_SUBST([ESBMC_VERSION_HEX], "${ver_hexstr}")
+
+dnl Continue looking at our compilation situation
 
 AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
 
-AX_BOOST_BASE(1.47, [], [AC_MSG_ERROR([Cannot find boost base dir, please pass it in --with-boost argument or set BOOST_ROOT])])
+AX_BOOST_BASE(1.47, [], AC_MSG_ERROR([Cannot find boost base dir; please pass it in --with-boost argument or set BOOST_ROOT]))
+AX_BOOST_FILESYSTEM
+AX_BOOST_SYSTEM
 
 AS_VAR_APPEND(CPPFLAGS, " $BOOST_CPPFLAGS")
-AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS")
+AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS $BOOST_FILESYSTEM_LIB $BOOST_SYSTEM_LIB")
+
+AS_VAR_SET(C2GOTO_LIBS, "")
 
 AM_PROG_AR
 AM_PROG_LEX
 
-LT_INIT(static)
+LT_INIT(static shared)
 LTDL_INIT
 
 AC_LANG(C++)
@@ -54,12 +86,6 @@ AC_CHECK_LIB([m], [fabs])
 
 AC_CHECK_LIB([pthread], [pthread_create],
     [AS_VAR_APPEND(LIBS, " -lpthread ")]
-)
-
-dnl Some librt's depend on pthread, so prepend it to the libs
-AC_CHECK_LIB([rt], [timer_create],
-    [AS_VAR_SET(LIBS, " -lrt $LIBS")],
-    [AC_MSG_ERROR([No librt found])], []
 )
 
 AC_CHECK_LIB([gomp], [omp_get_num_threads],
@@ -79,10 +105,10 @@ AC_CHECK_LIB([gmp], [__gmpz_cmp],
 
 # Define what to do when clang is enabled
 m4_define(ESBMC_ENABLE_CLANG, [
-  AX_CLANG(3.8.0, [], [AC_MSG_ERROR([Cannot find clang lib dir, please pass it in --with-clang-libdir argument or set CLANG_ROOT])])
-  AX_LLVM(,[AC_MSG_FAILURE(LLVM is required.)])
+  AX_CLANG(4.0.0, [], AC_MSG_ERROR([Cannot find clang lib dir; please pass it in --with-clang argument or set CLANG_ROOT]))
+  AX_LLVM(,AC_MSG_FAILURE(Cannot find llvm dir, please pass it in --with-llvm argument))
   AC_SUBST([ESBMC_CLANG_SUBDIRS], " clang-c-frontend clang-cpp-frontend ")
-  AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.a ../clang-cpp-frontend/libclangcppfrontend.a ../clang-c-frontend/headers/libclangheaders.a")
+  AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ../clang-c-frontend/headers/libclangheaders.la ../clang-c-frontend/AST/libclangcfrontendast.la")
   ])
 
 AC_ARG_ENABLE(clang, [AS_HELP_STRING([--disable-clang], Build ESBMC without clang. (On by default))],
@@ -102,18 +128,14 @@ AC_ARG_ENABLE(clang, [AS_HELP_STRING([--disable-clang], Build ESBMC without clan
 ]
 )
 
-AC_CHECK_HEADERS([boost/mpl/if.hpp], [], [AC_MSG_ERROR([No boost mpl found])])
-AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], [AC_MSG_ERROR([No boost shared ptr found])])
-AC_CHECK_HEADERS([boost/crc.hpp], [], [AC_MSG_ERROR([No boost CRC library found])])
-AC_CHECK_HEADERS([boost/utility/enable_if.hpp], [], [AC_MSG_ERROR([No boost enable_if utility found])])
-AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], [AC_MSG_ERROR([No boost fusion library found])])
-AC_CHECK_HEADERS([sys/sendfile.h], [AC_DEFINE([HAVE_SENDFILE], [], [Has sendfile header])], [])
+AC_CHECK_HEADERS([boost/mpl/if.hpp], [], AC_MSG_ERROR([No boost mpl found]))
+AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], AC_MSG_ERROR([No boost shared ptr found]))
+AC_CHECK_HEADERS([boost/crc.hpp], [], AC_MSG_ERROR([No boost CRC library found]))
+AC_CHECK_HEADERS([boost/utility/enable_if.hpp], [], AC_MSG_ERROR([No boost enable_if utility found]))
+AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp], [], AC_MSG_ERROR([No boost fusion library found]))
+AC_CHECK_HEADERS([sys/sendfile.h], AC_DEFINE([HAVE_SENDFILE_ESBMC], [], [Has sendfile header]), [])
 
 AC_CHECK_HEADERS([unistd.h], [AC_DEFINE([HAVE_UNISTD], [], [Has unistd.h header])], [])
-
-dnl We don't link directly against openssl, instead chosing to open at runtime.
-dnl However, don't try and build for it without openssl headers
-AC_CHECK_HEADERS([openssl/sha.h], [AC_DEFINE([OPENSSL_HEADERS], [], [Have openssl headers])], [])
 
 AC_HEADER_STDBOOL
 AC_TYPE_UID_T
@@ -166,16 +188,112 @@ LT_LIB_DLLOAD
 
 AC_ARG_ENABLE(static-link, [AS_HELP_STRING([--enable-static-link], Build a static version of esbmc)])
 AS_VAR_SET(ESBMC_LDFLAGS, "")
+AS_VAR_SET(LIBESBMC_LDFLAGS, "")
 AS_IF([test "${enable_static_link}" = "yes"], [
   AS_VAR_SET(ESBMC_LDFLAGS, " -all-static ")
+], [
+    AS_VAR_SET(LIBESBMC_LDFLAGS, " -shared ")
 ])
+AC_SUBST([LIBESBMC_LDFLAGS], $LIBESBMC_LDFLAGS)
 AC_SUBST([ESBMC_LDFLAGS], $ESBMC_LDFLAGS)
 
 AC_ARG_ENABLE(werror, [AS_HELP_STRING([--disable-werror], Disable werror build flag)])
 
+dnl on by default...
+AC_ARG_ENABLE(enable-esbmc, [AS_HELP_STRING([--enable-esbmc], Build main ESBMC binary)])
+AS_IF([test "${enable_esbmc}" = "yes"], [
+  AC_SUBST([ESBMC_BINARY], "esbmc")
+], [])
+
+AC_ARG_ENABLE(enable-python, [AS_HELP_STRING([--enable-python], Build python support into ESBMC)])
+AS_IF([test "${enable_python}" = "yes"], [
+  dnl check for dependencies when building the static library
+  AS_IF([test "${enable_static_link}" = "yes"], [
+    AC_CHECK_LIB([expat], [XML_ExpatVersion],
+      [AS_VAR_APPEND(LIBS, " -lexpat")],
+      AC_MSG_ERROR([No libexpat found: libpython may want this]), []
+    )
+
+    AC_CHECK_LIB([util], [openpty],
+      [AS_VAR_APPEND(LIBS, " -lutil")],
+      AC_MSG_ERROR([No libutil found: libpython may want this]), []
+    )
+
+    AC_CHECK_LIB([z], [zlibVersion],
+      [AS_VAR_APPEND(LIBS, " -lz")],
+      AC_MSG_ERROR([No libz found: libpython may want this]), []
+    )
+  ])
+
+  dnl Check for python. Hardcoded to python 3: I was going to make this
+  dnl selectable, but then realised that everyone (even I) need a little
+  dnl knudging towards python3 now and then.
+  PKG_CHECK_MODULES([LIBPYTHON3], [python3], [
+    dnl Add flags to build python in; enable build of libesbmc
+    AS_VAR_APPEND(CXXFLAGS, " $LIBPYTHON3_CFLAGS -DWITH_PYTHON ")
+    AS_VAR_APPEND(CFLAGS, " $LIBPYTHON3_CFLAGS -DWITH_PYTHON ")
+
+    dnl Misery: debian wants -py34 on the end, autoconf library stuff doesn't
+    dnl detect that. Attempt to build the version number by frobbing pkgconfig
+
+    _PKG_CONFIG(PYTHON3_VERSION, modversion, python3)
+
+    AS_VAR_SET(py3suffix, `echo $pkg_cv_PYTHON3_VERSION | sed -e 's/\.//g'`)
+    AS_VAR_SET(py3libname, "boost_python-py${py3suffix}")
+
+    dnl Alternately, if the user overrides with a --with-boost-python= spec,
+    dnl the set the libname to that
+    AC_ARG_WITH([boost-python-libname], [AS_HELP_STRING([--with-boost-python-libname], [Specify basename of boost-pythons shared object])], [
+      AS_VAR_SET(py3libname, "${with_boost_python_libname}")],
+    [])
+
+    AS_VAR_SET(LIBS, " $LIBPYTHON3_LIBS $LIBS")
+    AS_VAR_SET(C2GOTO_LIBS, " $LIBPYTHON3_LIBS $C2GOTO_LIBS")
+
+    dnl Check if we can actually compile in boost-python. Needs to be after
+    dnl python libs added to LIBS
+    AC_CHECK_LIB(["${py3libname}"], [no_init],
+    [
+      dnl Alright, add the lib name to that
+      AS_VAR_SET(LIBS, " -l${py3libname} $LIBS")
+      AS_VAR_SET(C2GOTO_LIBS, " -l${py3libname} $C2GOTO_LIBS")
+    ],
+    [
+      dnl Fedora just has -lboost_python3
+      AC_CHECK_LIB(["boost_python3"], [no_init],
+      [
+        AS_VAR_SET(LIBS, " -lboost_python3 $LIBS")
+        AS_VAR_SET(C2GOTO_LIBS, " -lboost_python3 $C2GOTO_LIBS")
+      ],
+      
+        AC_MSG_ERROR([Python supported requested but boost-python not found. Alternately: packaging sketchyness means I couldn't deduce the base soname and you can specify it with --with-boost-python-libname=boost_python-foobar'])
+      )
+    ])
+
+    AC_SUBST([ESBMC_PYTHON_OBJ], "python.lo")
+  ],
+    AC_MSG_ERROR(Asked for python support but pkgconfig finds no python library. You need to install python 3 development packages.)
+  )
+], [
+    AC_SUBST([ESBMC_PYTHON_OBJ], "")
+])
+
+dnl If --enable-libesbmc was supplied, then enable building of libesbmc.
+AS_IF([test "${enable_libesbmc}" = "yes"], [
+  AC_SUBST([ESBMC_LIB], "libesbmc.la")
+], [
+  AC_SUBST([ESBMC_LIB], "")
+])
+
 AS_VAR_SET(BASE_CXXFLAGS, "-Wall -Wextra -W -std=c++11 $ESBMC_CLANG_CXXFLAGS ")
-dnl A necessary evil due to the presence of rubbish in boost::python's headers
-AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations ")
+dnl A necessary evil due to the presence of rubbish in boost::python's headers.
+dnl local typedefs because that's how boost python works
+dnl deprecated decls because it uses auto ptrs
+dnl field initializers due to a, uh, totally legitimate initializer mismatch
+dnl       with later versions of python headers
+dnl String aliasing... the following knackers that:
+dnl       return (*(void**)m_result.bytes == Py_None)
+AS_VAR_APPEND(BASE_CXXFLAGS, " -Wno-unused-local-typedefs -Wno-deprecated-declarations -Wno-missing-field-initializers -Wno-strict-aliasing $ESBMC_CLANG_CFLAGS ")
 
 dnl # Do not turn -Werror off: your code is wrong, not -Werror.
 dnl Unless of course you're on a mac, in which case clang will frequently
@@ -327,7 +445,7 @@ m4_define(ESBMC_OPTIONAL_SOLVER, [
       AS_VAR_SET(esbmc_with_dir_path, "$with_$3")
       ESBMC_CHECK_SOLVER([$esbmc_with_dir_path], [$2], $3, $4, $5, $6, [$7], $8)
       AS_IF([test "$esbmc_found_solver_$3" != "yes"],
-            [ AC_MSG_ERROR(["Path to $3 given on command line (with --with-$3), but can't use $3 installation there"])])
+            AC_MSG_ERROR(["Path to $3 given on command line (with --with-$3); but can't use $3 installation there"]))
       ], [
         ESBMC_CHECK_SOLVER([$1], [$2], $3, $4, $5, $6, [$7], $8)
       ]
@@ -359,9 +477,9 @@ m4_define(z3_possible_libdirs, [lib, bin, x64])
 dnl Only boolector 1.6 and later are supported -- prior versions of boolector
 dnl do not have a structure for knowing where lingeling / minisat are.
 
-m4_define(btor_build_headers, [boolector/boolector.h])
+m4_define(btor_build_headers, [boolector/src/boolector.h])
 m4_define(btor_possible_locs, [$SATDIR64/boolector, $SATDIR32/boolector, $SATDIR/boolector, $HOME/boolector])
-m4_define(btor_possible_libdirs, [boolector])
+m4_define(btor_possible_libdirs, [boolector/build])
 
 m4_define(yices_build_headers, [include/yices.h])
 m4_define(yices_possible_locs, [$SATDIR64/yices, $SATDIR32/yices, $SATDIR/yices, $HOME/yices])
@@ -401,10 +519,10 @@ m4_define([$$ESBMC_YICES_EXTRA_CONFIG], [
   dnl appropriate version symlinks are not installed, and bail.
   AS_IF([test -d $1], [
     AS_IF([test ! -z "`ls $2 | grep libyices.so.2*`"], [
-      AS_IF([test ! -e "$2/libyices.so"], [
-        AC_MSG_ERROR([Found yices, but cannot link against it. A shared object exists in $2, however you need to symlink a "libyices.so" to it to work. Or, specify --disable-yices])
+      AS_IF([test ! -e "$2/libyices.so"],
+        AC_MSG_ERROR([Found yices but cannot link against it. A shared object exists in $2; however you need to symlink a "libyices.so" to it to work. Or, specify --disable-yices])
         exit 1
-      ])
+      )
     ])
   ])
 ])dnl
@@ -417,7 +535,7 @@ ESBMC_OPTIONAL_SOLVER([z3_possible_locs], [z3_build_headers], z3, z3, Z3_mk_cont
 ])
 
 AS_IF([test "$esbmc_disable_solver_boolector" != "yes"], [
-ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, boolector, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
+ESBMC_OPTIONAL_SOLVER([btor_possible_locs], [btor_build_headers], boolector, boolector, boolector_new, boolector/src, [btor_possible_libdirs], $$ESBMC_BOOLECTOR_EXTRA_CONFIG)
 ])
 
 AS_IF([test "$esbmc_disable_solver_yices" != "yes"], [
@@ -444,7 +562,7 @@ AC_SUBST([ESBMC_SOLVER_BACKENDS], ["$esbmc_list_of_backends"])
 AC_SUBST([ESBMC_SOLVER_DIRS], ["$esbmc_list_of_solvers"])
 AC_SUBST([ESBMC_SOLVER_LIBS], "$ESBMC_SOLVER_LIBS")
 
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile ansi-c/headers/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-cpp-frontend/Makefile esbmc/Makefile solvers/solver_config.h])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/smt/Makefile solvers/z3/Makefile solvers/boolector/Makefile solvers/yices/Makefile solvers/cvc4/Makefile solvers/mathsat/Makefile solvers/smtlib/Makefile goto-symex/Makefile goto-programs/Makefile pointer-analysis/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile cpp/library/Makefile clang-c-frontend/Makefile clang-c-frontend/headers/Makefile clang-c-frontend/AST/Makefile clang-cpp-frontend/Makefile c2goto/headers/Makefile c2goto/Makefile esbmc/Makefile solvers/solver_config.h esbmc/version.h])
 AC_OUTPUT
 
 AS_ECHO(["----------------------------------------"])
