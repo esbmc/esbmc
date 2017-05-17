@@ -2246,9 +2246,22 @@ smt_convt::get(const expr2tc &expr)
     case expr2t::constant_string_id:
     case expr2t::constant_struct_id:
     case expr2t::constant_union_id:
-    case expr2t::constant_array_id:
     case expr2t::constant_array_of_id:
       return expr;
+
+    case expr2t::constant_array_id:
+    {
+      constant_array2t a = to_constant_array2t(expr);
+      a.Foreach_operand(
+        [this] (expr2tc &e)
+        {
+          expr2tc new_e = get(e);
+          e.swap(new_e);
+        }
+      );
+
+      return constant_array2tc(a.type, a.datatype_members);
+    }
 
     case expr2t::symbol_id:
       return get_by_type(expr);

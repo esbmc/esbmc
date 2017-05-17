@@ -32,16 +32,22 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
   if(is_nil_expr(rhs))
     return expr2tc();
 
-  // An array subscription, we should be able to get the value directly,
-  // as lhs should have been resolved already
-  if(is_index2t(lhs) && is_constant_array2t(rhs))
+  if(is_constant_array2t(rhs))
   {
-    index2t i = to_index2t(lhs);
-    assert(is_bv_type(i.index));
+    // An array subscription, we should be able to get the value directly,
+    // as lhs should have been resolved already
+    if(is_index2t(lhs))
+    {
+      index2t i = to_index2t(lhs);
+      assert(is_bv_type(i.index));
 
-    constant_int2t v = to_constant_int2t(i.index);
-    expr2tc elem = to_constant_array2t(rhs).datatype_members[v.value.to_uint64()];
-    return smt_conv.get(elem);
+      constant_int2t v = to_constant_int2t(i.index);
+      expr2tc elem = to_constant_array2t(rhs).datatype_members[v.value.to_uint64()];
+      return smt_conv.get(elem);
+    }
+
+    // It should be an array initialization
+    return smt_conv.get(rhs);
   }
 
   if(is_if2t(rhs))
