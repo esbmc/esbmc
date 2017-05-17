@@ -19,6 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/irep2.h>
 #include <util/migrate.h>
+#include <util/prefix.h>
 
 goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
                                      const namespacet &_ns)
@@ -77,10 +78,14 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if (is_nil_expr(expr)) {
     return true; // It's fine to constant propagate something that's absent.
-  } else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
+  }
+  else if (is_symbol2t(expr))
   {
-    // Null is also essentially a constant.
-    return true;
+    if(to_symbol2t(expr).thename == "NULL")
+      return true;
+
+    if (has_prefix(to_symbol2t(expr).thename.as_string(), "nondet$symex::nondet"))
+      return true;
   }
   else if (is_address_of2t(expr))
   {
