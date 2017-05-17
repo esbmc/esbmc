@@ -114,25 +114,6 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
   return expr2tc();
 }
 
-expr2tc build_value(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
-{
-  if(is_nil_expr(rhs))
-    return expr2tc();
-
-  if(is_constant_expr(rhs))
-    return rhs;
-
-  if(is_symbol2t(rhs))
-    return get_value(smt_conv, rhs);
-
-  if(is_with2t(rhs))
-    return get_value(smt_conv, to_with2t(rhs).update_value);
-
-  (void) lhs;
-  abort();
-  return expr2tc();
-}
-
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
@@ -165,7 +146,8 @@ void build_goto_trace(
     goto_trace_step.stack_trace = SSA_step.stack_trace;
     goto_trace_step.lhs =
       build_lhs(smt_conv, SSA_step.original_lhs, SSA_step.rhs);
-    goto_trace_step.value = build_value(smt_conv, SSA_step.lhs, SSA_step.rhs);
+
+    goto_trace_step.value = get_value(smt_conv, SSA_step.rhs);
 
     for(auto it : SSA_step.converted_output_args)
     {
