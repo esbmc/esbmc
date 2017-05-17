@@ -10,48 +10,71 @@ expr2tc get_value(smt_convt &smt_conv, const expr2tc &expr)
   if(is_symbol2t(expr))
     return smt_conv.get(expr);
 
-  if(is_equality2t(expr))
+  switch(expr->expr_id)
   {
-    equality2t eq = to_equality2t(expr);
-    expr2tc side1 = get_value(smt_conv, eq.side_1);
-    assert(!is_nil_expr(side1));
+    case expr2t::equality_id:
+    {
+      equality2t eq = to_equality2t(expr);
 
-    expr2tc side2 = get_value(smt_conv, eq.side_2);
-    assert(!is_nil_expr(side2));
+      expr2tc side1 = get_value(smt_conv, eq.side_1);
+      if(is_nil_expr(side1)) break;
 
-    equality2tc new_eq(side1, side2);
-    simplify(new_eq);
+      expr2tc side2 = get_value(smt_conv, eq.side_2);
+      if(is_nil_expr(side2)) break;
 
-    return new_eq;
+      equality2tc new_eq(side1, side2);
+      simplify(new_eq);
+
+      return new_eq;
+    }
+
+    case expr2t::not_id:
+    {
+      not2t n = to_not2t(expr);
+      assert(is_bool_type(n.value));
+
+      expr2tc value = get_value(smt_conv, n.value);
+      if(is_nil_expr(value)) break;
+
+      make_not(value);
+      return value;
+    }
+
+    case expr2t::if_id:
+    {
+      if2t i = to_if2t(expr);
+
+      expr2tc cond = get_value(smt_conv, i.cond);
+      if(is_nil_expr(cond)) break;
+
+      if(is_true(cond))
+        return get_value(smt_conv, i.true_value);
+
+      if(is_false(cond))
+        return get_value(smt_conv, i.false_value);
+
+      break;
+    }
+
+    case expr2t::with_id:
+      return get_value(smt_conv, to_with2t(expr).update_value);
+
+    case expr2t::typecast_id:
+    {
+      typecast2t t = to_typecast2t(expr);
+
+      expr2tc from = get_value(smt_conv, t.from);
+      if(is_nil_expr(from)) break;
+
+      typecast2tc new_t(expr->type, from, t.rounding_mode);
+      simplify(new_t);
+
+      return new_t;
+    }
+
+    default:;
   }
 
-  if(is_not2t(expr))
-  {
-    not2t n = to_not2t(expr);
-    assert(is_bool_type(n.value));
-
-    expr2tc value = get_value(smt_conv, n.value);
-    assert(is_bool_type(value));
-    make_not(value);
-
-    return value;
-  }
-
-  if(is_if2t(expr))
-  {
-    if2t i = to_if2t(expr);
-
-    expr2tc cond = get_value(smt_conv, i.cond);
-    assert(is_bool_type(cond));
-
-    if(is_true(cond))
-      return get_value(smt_conv, i.true_value);
-
-    if(is_false(cond))
-      return get_value(smt_conv, i.false_value);
-  }
-
-  abort();
   return expr2tc();
 }
 
