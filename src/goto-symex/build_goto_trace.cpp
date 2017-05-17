@@ -40,8 +40,12 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
     assert(is_bv_type(i.index));
 
     constant_int2t v = to_constant_int2t(i.index);
-    return to_constant_array2t(rhs).datatype_members[v.value.to_uint64()];
+    expr2tc elem = to_constant_array2t(rhs).datatype_members[v.value.to_uint64()];
+    return smt_conv.get(elem);
   }
+
+  if(is_if2t(rhs))
+    return smt_conv.get(rhs);
 
   if(is_constant_expr(rhs))
     return rhs;
