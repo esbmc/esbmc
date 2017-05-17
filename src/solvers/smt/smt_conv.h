@@ -530,6 +530,13 @@ public:
 
   void pre_solve();
 
+  /** Get the satisfying assignment using the type.
+   *  @param expr Variable to get the value of. Must be a symbol expression.
+   *  @return Explicit assigned value of expr in the solver. May be nil, in
+   *          which case the solver did not assign a value to it for some
+   *          reason. */
+  virtual expr2tc get_by_type(const expr2tc &expr);
+
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
