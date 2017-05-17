@@ -1169,18 +1169,29 @@ z3_convt::get_bool(const smt_ast *a)
   return gen_false_expr();
 }
 
-BigInt
-z3_convt::get_bv(const smt_ast *a)
+expr2tc
+z3_convt::get_bv(const type2tc &type, smt_astt a)
 {
   assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
 
   const z3_smt_ast *za = z3_smt_downcast(a);
   z3::expr e = model.eval(za->e, false);
 
-  assert (Z3_get_ast_kind(z3_ctx, e) == Z3_NUMERAL_AST);
+  // Not a numeral? Let's not try to convert it
+  if(Z3_get_ast_kind(z3_ctx, e) != Z3_NUMERAL_AST)
+    return expr2tc();
 
-  std::string value = Z3_get_numeral_string(z3_ctx, e);
-  return mp_integer(BigInt(value.c_str()));
+  BigInt m(Z3_get_numeral_string(z3_ctx, e));
+  if(is_fixedbv_type(type))
+  {
+    fixedbvt fbv(
+      constant_exprt(
+        integer2binary(m, type->get_width()),
+        integer2string(m),
+        migrate_type_back(type)));
+    return constant_fixedbv2tc(type, fbv);
+  }
+  return constant_int2tc(type, m);
 }
 
 expr2tc z3_convt::get_fpbv(const type2tc& t, smt_astt a)

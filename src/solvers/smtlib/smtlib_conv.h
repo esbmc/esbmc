@@ -85,7 +85,7 @@ public:
   void pop_array_ctx(void);
 
   virtual expr2tc get_bool(const smt_ast *a);
-  virtual BigInt get_bv(const smt_ast *a);
+  virtual expr2tc get_bv(const type2tc &type, smt_astt a);
   virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
                                  const type2tc &type);
 

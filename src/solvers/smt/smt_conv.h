@@ -682,7 +682,7 @@ public:
   /** Extract the assignment to a bitvector from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
    *  @return Expression representation of a's value, as a constant_int2tc */
-  virtual BigInt get_bv(smt_astt a) = 0;
+  virtual expr2tc get_bv(const type2tc &type, smt_astt a) = 0;
 
   /** @} */
 

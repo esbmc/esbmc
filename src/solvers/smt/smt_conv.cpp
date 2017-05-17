@@ -2244,19 +2244,8 @@ smt_convt::get(const expr2tc &expr)
 
     case type2t::unsignedbv_id:
     case type2t::signedbv_id:
-      return constant_int2tc(expr->type, get_bv(convert_ast(expr)));
-
     case type2t::fixedbv_id:
-    {
-      BigInt val = get_bv(convert_ast(expr));
-
-      fixedbvt fbv(
-        constant_exprt(
-          integer2binary(val, expr->type->get_width()),
-          integer2string(val),
-          migrate_type_back(expr->type)));
-      return constant_fixedbv2tc(expr->type, fbv);
-    }
+      return get_bv(expr->type, convert_ast(expr));
 
     case type2t::floatbv_id:
       return fp_api->get_fpbv(expr->type, convert_ast(expr));
