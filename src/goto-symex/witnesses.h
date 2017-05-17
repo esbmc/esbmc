@@ -46,6 +46,8 @@ typedef struct edge_props
   std::string returnFromFunction = "";
 } edge_p;
 
+bool is_valid_witness_expr(const namespacet & ns, const expr2tc &expr);
+
 int generate_sha1_hash_for_file(const char * path, std::string & output);
 
 void map_line_number_to_content(

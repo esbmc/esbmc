@@ -643,18 +643,13 @@ void get_offsets_for_line_using_wc(
   p_endoffset = endoffset;
 }
 
-bool is_valid_witness_expr(
-  const namespacet &ns,
-	const irep_container<expr2t> & exp)
+
+bool is_valid_witness_expr(const namespacet &ns, const expr2tc &expr)
 {
   languagest languages(ns, "C");
   std::string value;
-  languages.from_expr(migrate_expr_back(exp), value);
-  return (value.find("__ESBMC") &
-    value.find("stdin")         &
-    value.find("stdout")        &
-    value.find("stderr")        &
-    value.find("sys_")) == std::string::npos;
+  languages.from_expr(migrate_expr_back(expr), value);
+  return (value.find("__ESBMC")) == std::string::npos;
 }
 
 void get_relative_line_in_programfile(
