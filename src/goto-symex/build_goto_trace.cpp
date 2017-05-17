@@ -2,6 +2,17 @@
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/witnesses.h>
 
+expr2tc get_value(smt_convt &smt_conv, const expr2tc &expr)
+{
+  if(is_constant_expr(expr))
+    return expr;
+
+  if(is_symbol2t(expr))
+    return smt_conv.get(expr);
+
+  return expr2tc();
+}
+
 expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
 {
   if(is_nil_expr(lhs))
