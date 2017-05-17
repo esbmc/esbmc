@@ -27,6 +27,34 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
   return expr2tc();
 }
 
+expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
+{
+  if(is_nil_expr(rhs))
+    return expr2tc();
+
+  // An array subscription, we should be able to get the value directly,
+  // as lhs should have been resolved already
+  if(is_index2t(lhs) && is_constant_array2t(rhs))
+  {
+    index2t i = to_index2t(lhs);
+    assert(is_bv_type(i.index));
+
+    constant_int2t v = to_constant_int2t(i.index);
+    return to_constant_array2t(rhs).datatype_members[v.value.to_uint64()];
+  }
+
+  if(is_constant_expr(rhs))
+    return rhs;
+
+  if(is_symbol2t(rhs))
+    return smt_conv.get(rhs);
+
+  if(is_with2t(rhs))
+    return smt_conv.get(to_with2t(rhs).update_value);
+
+  return expr2tc();
+}
+
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
@@ -59,8 +87,7 @@ void build_goto_trace(
     goto_trace_step.stack_trace = SSA_step.stack_trace;
     goto_trace_step.lhs =
       build_lhs(smt_conv, SSA_step.original_lhs, SSA_step.rhs);
-
-    goto_trace_step.value = get_value(smt_conv, SSA_step.rhs);
+    goto_trace_step.value = build_rhs(smt_conv, goto_trace_step.lhs, SSA_step.rhs);
 
     for(auto it : SSA_step.converted_output_args)
     {
