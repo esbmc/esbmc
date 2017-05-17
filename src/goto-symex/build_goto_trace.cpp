@@ -2,6 +2,32 @@
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/witnesses.h>
 
+expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
+{
+  if(is_nil_expr(lhs))
+    return expr2tc();
+
+  if(is_symbol2t(lhs))
+    return lhs;
+
+  (void) smt_conv;
+  (void) rhs;
+  return expr2tc();
+}
+
+expr2tc build_value(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
+{
+  if(is_nil_expr(rhs))
+    return expr2tc();
+
+  if(is_constant_expr(rhs))
+    return rhs;
+
+  (void) smt_conv;
+  (void) lhs;
+  return expr2tc();
+}
+
 void build_goto_trace(
   const symex_target_equationt &target,
   smt_convt &smt_conv,
@@ -25,8 +51,6 @@ void build_goto_trace(
     goto_trace_stept &goto_trace_step = goto_trace.steps.back();
 
     goto_trace_step.thread_nr = SSA_step.source.thread_nr;
-    goto_trace_step.lhs = SSA_step.lhs;
-    goto_trace_step.rhs = SSA_step.rhs;
     goto_trace_step.pc = SSA_step.source.pc;
     goto_trace_step.comment = SSA_step.comment;
     goto_trace_step.original_lhs = SSA_step.original_lhs;
@@ -34,12 +58,9 @@ void build_goto_trace(
     goto_trace_step.step_nr = step_nr;
     goto_trace_step.format_string = SSA_step.format_string;
     goto_trace_step.stack_trace = SSA_step.stack_trace;
-
-    // If we're dealing with an array_of, there's no need to fetch the rhs
-    if(!is_nil_expr(SSA_step.rhs) && is_constant_array_of2t(SSA_step.rhs))
-      goto_trace_step.value = SSA_step.rhs;
-    else if(!is_nil_expr(SSA_step.lhs))
-      goto_trace_step.value = smt_conv.get(SSA_step.lhs);
+    goto_trace_step.lhs =
+      build_lhs(smt_conv, SSA_step.original_lhs, SSA_step.rhs);
+    goto_trace_step.value = build_value(smt_conv, SSA_step.lhs, SSA_step.rhs);
 
     for(auto it : SSA_step.converted_output_args)
     {
