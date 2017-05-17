@@ -91,7 +91,11 @@ expr2tc build_value(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
   if(is_symbol2t(rhs))
     return get_value(smt_conv, rhs);
 
+  if(is_with2t(rhs))
+    return get_value(smt_conv, to_with2t(rhs).update_value);
+
   (void) lhs;
+  abort();
   return expr2tc();
 }
 
