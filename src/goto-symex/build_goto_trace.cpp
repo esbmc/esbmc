@@ -46,7 +46,9 @@ expr2tc build_value(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
   if(is_constant_expr(rhs))
     return rhs;
 
-  (void) smt_conv;
+  if(is_symbol2t(rhs))
+    return get_value(smt_conv, rhs);
+
   (void) lhs;
   return expr2tc();
 }
