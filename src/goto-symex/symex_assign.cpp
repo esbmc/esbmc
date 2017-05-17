@@ -490,7 +490,7 @@ void goto_symext::symex_assign_concat(
   assert((operand_list.size() * 8) == cat.type->get_width());
 
   bool is_big_endian =
-      (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+    (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
 
   // Pin one set of rhs version numbers: if we assign part of a value to itself,
   // it'll change during the assignment

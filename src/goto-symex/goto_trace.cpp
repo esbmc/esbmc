@@ -26,18 +26,14 @@
 extern std::string verification_file;
 
 void
-goto_tracet::output(
-  const class namespacet &ns, std::ostream &out) const
+goto_tracet::output(const class namespacet &ns, std::ostream &out) const
 {
-  for (stepst::const_iterator it = steps.begin();
-       it != steps.end();
-       it++)
-    it->output(ns, out);
+  for (auto it : steps)
+    it.output(ns, out);
 }
 
 void
-goto_trace_stept::output(
-  const namespacet &ns, std::ostream &out) const
+goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
 {
   out << "*** ";
 
@@ -156,29 +152,28 @@ show_goto_trace_gui(
 {
   locationt previous_location;
 
-  for (goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
-      it != goto_trace.steps.end(); it++)
+  for (auto it : goto_trace.steps)
   {
-    const locationt &location = it->pc->location;
+    const locationt &location = it.pc->location;
 
-    if ((it->type == goto_trace_stept::ASSERT) && !it->guard)
+    if ((it.type == goto_trace_stept::ASSERT) && !it.guard)
     {
-      out << "FAILED" << std::endl << it->comment
+      out << "FAILED" << std::endl << it.comment
           << std::endl // value
           << std::endl // PC
           << location.file() << std::endl << location.line() << std::endl
           << location.column() << std::endl;
     }
-    else if (it->type == goto_trace_stept::ASSIGNMENT)
+    else if (it.type == goto_trace_stept::ASSIGNMENT)
     {
       irep_idt identifier;
 
-      if (!is_nil_expr(it->original_lhs))
-        identifier = to_symbol2t(it->original_lhs).get_symbol_name();
+      if (!is_nil_expr(it.original_lhs))
+        identifier = to_symbol2t(it.original_lhs).get_symbol_name();
       else
-        identifier = to_symbol2t(it->lhs).get_symbol_name();
+        identifier = to_symbol2t(it.lhs).get_symbol_name();
 
-      std::string value_string = from_expr(ns, identifier, it->value);
+      std::string value_string = from_expr(ns, identifier, it.value);
 
       const symbolt *symbol;
       irep_idt base_name;
@@ -188,9 +183,9 @@ show_goto_trace_gui(
       out << "TRACE" << std::endl;
 
       out << identifier << "," << base_name << ","
-          << get_type_id(it->value->type) << "," << value_string << std::endl
-          << it->step_nr << std::endl << it->pc->location.file() << std::endl
-          << it->pc->location.line() << std::endl << it->pc->location.column()
+          << get_type_id(it.value->type) << "," << value_string << std::endl
+          << it.step_nr << std::endl << it.pc->location.file() << std::endl
+          << it.pc->location.line() << std::endl << it.pc->location.column()
           << std::endl;
     }
     else if (location != previous_location)
@@ -207,7 +202,7 @@ show_goto_trace_gui(
             << ","             // type
             << ""
             << std::endl // value
-            << it->step_nr << std::endl << location.file() << std::endl
+            << it.step_nr << std::endl << location.file() << std::endl
             << location.line() << std::endl << location.column() << std::endl;
       }
     }
@@ -232,13 +227,14 @@ show_state_header(
 
   // Print stack trace
 
-  for (std::vector<stack_framet>::const_iterator it = state.stack_trace.begin();
-       it != state.stack_trace.end(); it++)
+  for (auto it : state.stack_trace)
   {
-    if (it->src == NULL)
-      out << it->function.as_string() << std::endl;
+    if (it.src == nullptr)
+      out << it.function.as_string() << std::endl;
     else
-      out << it->function.as_string() << " at " << it->src->pc->location.get_file().as_string() << " line " << it->src->pc->location.get_line().as_string() << std::endl;
+      out << it.function.as_string() << " at "
+          << it.src->pc->location.get_file().as_string() << " line "
+          << it.src->pc->location.get_line().as_string() << std::endl;
   }
 
   out << "----------------------------------------------------" << std::endl;
@@ -252,18 +248,21 @@ get_varname_from_guard (
   std::string varname;
   exprt old_irep_guard = migrate_expr_back(it->pc->guard);
   exprt guard_operand = old_irep_guard.op0();
-  if (!guard_operand.operands().empty()) {
-    if (!guard_operand.op0().identifier().as_string().empty()) {
+  if(!guard_operand.operands().empty())
+  {
+    if(!guard_operand.op0().identifier().as_string().empty())
+    {
       char identstr[guard_operand.op0().identifier().as_string().length()];
       strcpy(identstr, guard_operand.op0().identifier().c_str());
       int j = 0;
       char * tok;
       tok = strtok(identstr, "::");
-      while (tok != NULL) {
-	if (j == 4)
-	  varname = tok;
-	tok = strtok(NULL, "::");
-	j++;
+      while(tok != NULL)
+      {
+        if(j == 4)
+          varname = tok;
+        tok = strtok(NULL, "::");
+        j++;
       }
     }
   }
@@ -297,27 +296,26 @@ void generate_goto_trace_in_violation_graphml_format(
   last_created_node = first_node;
   already_initialized = true;
 
-  for(goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
-      it != goto_trace.steps.end(); it++)
+  for(auto it : goto_trace.steps)
   {
     /* check if it is an internal call */
     std::string::size_type find_bt =
-      it->pc->location.to_string().find("built-in", 0);
+      it.pc->location.to_string().find("built-in", 0);
     std::string::size_type find_lib =
-      it->pc->location.to_string().find("library", 0);
+      it.pc->location.to_string().find("library", 0);
     bool is_internal_call = (find_bt != std::string::npos)
         || (find_lib != std::string::npos);
 
     /** ignore internal calls and non assignments */
-    if(!(it->type == goto_trace_stept::ASSIGNMENT)
+    if(!(it.type == goto_trace_stept::ASSIGNMENT)
         || (is_internal_call == true))
       continue;
 
     /* checking other restrictions */
-    if (!is_valid_witness_expr(ns, it->lhs))
+    if (!is_valid_witness_expr(ns, it.lhs))
 	  continue;
 
-    const irep_idt &identifier = to_symbol2t(it->lhs).get_symbol_name();
+    const irep_idt &identifier = to_symbol2t(it.lhs).get_symbol_name();
 
     /* check if it is a temporary assignment */
     std::string id_str = id2string(identifier);
@@ -325,7 +323,7 @@ void generate_goto_trace_in_violation_graphml_format(
     if(find_tmp != std::string::npos)
       continue;
 
-    std::string current_ver_file = it->pc->location.get_file().as_string();
+    std::string current_ver_file = it.pc->location.get_file().as_string();
     if (verification_file.find(current_ver_file) != std::string::npos)
       current_ver_file = verification_file;
 
@@ -334,7 +332,7 @@ void generate_goto_trace_in_violation_graphml_format(
     current_edge_p.originFileName = current_ver_file;
 
     /* check if it has a line number (getting tokens) */
-	int line_number = std::atoi(it->pc->location.get_line().c_str());
+	int line_number = std::atoi(it.pc->location.get_line().c_str());
 	if(line_number != 0)
 	{
 	  current_edge_p.startline = line_number;
@@ -350,7 +348,7 @@ void generate_goto_trace_in_violation_graphml_format(
 	}
 
     /* check if it has entered or returned from a function */
-	std::string function_name = it->pc->location.get_function().c_str();
+	std::string function_name = it.pc->location.get_function().c_str();
 	if (last_function != function_name && !function_name.empty())
 	{
 	  /* it is a new entry */
@@ -372,7 +370,7 @@ void generate_goto_trace_in_violation_graphml_format(
     /* adjusts assumptions */
     /* left hand */
     std::vector<std::string> split;
-    std::string lhs_str = from_expr(ns, identifier, it->lhs);
+    std::string lhs_str = from_expr(ns, identifier, it.lhs);
     boost::split(split, lhs_str, boost::is_any_of("@"));
     lhs_str = split[0];
     std::string::size_type findamp = lhs_str.find("&", 0);
@@ -383,10 +381,10 @@ void generate_goto_trace_in_violation_graphml_format(
       lhs_str = lhs_str.substr(0, findds);
 
     /* check if isn't in an array (modify assumptions) */
-    if(it->lhs->type->type_id != it->lhs->type->array_id)
+    if(it.lhs->type->type_id != it.lhs->type->array_id)
     {
       /* common cases */
-      std::string value_str = from_expr(ns, identifier, it->value);
+      std::string value_str = from_expr(ns, identifier, it.value);
 
       /* remove memory address */
       std::string::size_type findat = value_str.find("@", 0);
@@ -408,8 +406,8 @@ void generate_goto_trace_in_violation_graphml_format(
       std::string::size_type findesbm = assumption.find("__ESBMC", 0);
       std::string::size_type finddma = assumption.find("&dynamic_", 0);
       std::string::size_type findivo = assumption.find("invalid-object", 0);
-      bool is_union = (it->rhs->type->type_id == it->rhs->type->union_id);
-      bool is_struct = (it->rhs->type->type_id == it->rhs->type->struct_id);
+      bool is_union = (it.rhs->type->type_id == it.rhs->type->union_id);
+      bool is_struct = (it.rhs->type->type_id == it.rhs->type->struct_id);
       /* TODO check if it is an union, struct, or dynamic attr.
        * However, we need more details about the validation tools */
       bool is_esbmc_or_dynamic = ((findesbm != std::string::npos)
@@ -483,31 +481,30 @@ void generate_goto_trace_in_correctness_graphml_format(
   graph.add_child("node", first_node);
   last_created_node = first_node;
 
-  for(goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
-      it != goto_trace.steps.end(); it++)
+  for(auto it : goto_trace.steps)
   {
     /* check if it is an internal call */
     std::string::size_type find_bt =
-      it->pc->location.to_string().find("built-in", 0);
+      it.pc->location.to_string().find("built-in", 0);
     std::string::size_type find_lib =
-      it->pc->location.to_string().find("library", 0);
+      it.pc->location.to_string().find("library", 0);
     bool is_internal_call =
       (find_bt != std::string::npos) || (find_lib != std::string::npos);
 
     /** ignore internal calls and non assignments */
-    if(!(it->type == goto_trace_stept::ASSIGNMENT)
+    if(!(it.type == goto_trace_stept::ASSIGNMENT)
         || (is_internal_call == true))
       continue;
 
     /* checking other restrictions */
-    if (!is_valid_witness_expr(ns, it->lhs))
+    if (!is_valid_witness_expr(ns, it.lhs))
       continue;
 
     /** ignore internal calls and non assignments */
-    if(!(it->is_assignment() || it->is_assume() || it->is_assert()))
+    if(!(it.is_assignment() || it.is_assume() || it.is_assert()))
       continue;
 
-    std::string current_ver_file = it->pc->location.get_file().as_string();
+    std::string current_ver_file = it.pc->location.get_file().as_string();
     if (verification_file.find(current_ver_file) != std::string::npos)
       current_ver_file = verification_file;
 
@@ -525,7 +522,7 @@ void generate_goto_trace_in_correctness_graphml_format(
     current_edge_p.originFileName = current_ver_file;
 
     /* check if has a line number (to get tokens) */
-    int line_number = std::atoi(it->pc->location.get_line().c_str());
+    int line_number = std::atoi(it.pc->location.get_line().c_str());
     if(line_number != 0)
     {
       current_edge_p.startline = line_number;
@@ -541,7 +538,7 @@ void generate_goto_trace_in_correctness_graphml_format(
     }
 
     /* check if it has entered or returned from a function */
-    std::string function_name = it->pc->location.get_function().c_str();
+    std::string function_name = it.pc->location.get_function().c_str();
     if (last_function != function_name && !function_name.empty())
     {
       /* it is a new entry */
@@ -560,10 +557,10 @@ void generate_goto_trace_in_correctness_graphml_format(
       }
     }
 
-    if (it->is_assignment()){
+    if (it.is_assignment()){
       /* assignment not required according spec 2017 */
     }
-    else if (it->is_assume())
+    else if (it.is_assume())
     {
       std::string codeline = line_content_map[line_number];
       if ((codeline.find("__VERIFIER_assume") != std::string::npos ) ||
@@ -578,7 +575,7 @@ void generate_goto_trace_in_correctness_graphml_format(
         current_node_p.invariantScope = function_name;
       }
     }
-    else if (it->is_assert())
+    else if (it.is_assert())
     {
       /* nothing to do here yet */
     }
@@ -612,22 +609,21 @@ show_goto_trace(
   unsigned prev_step_nr = 0;
   bool first_step = true;
 
-  for (goto_tracet::stepst::const_iterator it = goto_trace.steps.begin();
-      it != goto_trace.steps.end(); it++)
+  for (auto it : goto_trace.steps)
   {
-    switch (it->type)
+    switch (it.type)
     {
       case goto_trace_stept::ASSERT:
-        if (!it->guard)
+        if (!it.guard)
         {
-          show_state_header(out, *it, it->pc->location, it->step_nr);
+          show_state_header(out, it, it.pc->location, it.step_nr);
           out << "Violated property:" << std::endl;
-          if (!it->pc->location.is_nil())
-            out << "  " << it->pc->location << std::endl;
-          out << "  " << it->comment << std::endl;
+          if (!it.pc->location.is_nil())
+            out << "  " << it.pc->location << std::endl;
+          out << "  " << it.comment << std::endl;
 
-          if (it->pc->is_assert())
-            out << "  " << from_expr(ns, "", it->pc->guard) << std::endl;
+          if (it.pc->is_assert())
+            out << "  " << from_expr(ns, "", it.pc->guard) << std::endl;
           out << std::endl;
 
           // Having printed a property violation, don't print more steps.
@@ -635,49 +631,41 @@ show_goto_trace(
         }
         break;
 
-      case goto_trace_stept::ASSUME:
-        break;
-
       case goto_trace_stept::ASSIGNMENT:
-        if (it->pc->is_assign() || it->pc->is_return()
-            || (it->pc->is_other() && is_nil_expr(it->lhs)))
+        if (it.pc->is_assign() || it.pc->is_return()
+            || (it.pc->is_other() && is_nil_expr(it.lhs)))
         {
-          if (prev_step_nr != it->step_nr || first_step)
+          if (prev_step_nr != it.step_nr || first_step)
           {
             first_step = false;
-            prev_step_nr = it->step_nr;
-            show_state_header(out, *it, it->pc->location, it->step_nr);
+            prev_step_nr = it.step_nr;
+            show_state_header(out, it, it.pc->location, it.step_nr);
           }
-          counterexample_value(out, ns, it->original_lhs, it->value);
+          counterexample_value(out, ns, it.lhs, it.value);
         }
         break;
 
       case goto_trace_stept::OUTPUT:
       {
-        printf_formattert printf_formatter;
-
         std::list<exprt> vec;
+        for (auto it2 : it.output_args)
+          vec.push_back(migrate_expr_back(it2));
 
-        for (std::list<expr2tc>::const_iterator it2 = it->output_args.begin();
-            it2 != it->output_args.end(); it2++)
-        {
-          vec.push_back(migrate_expr_back(*it2));
-        }
-
-        printf_formatter(it->format_string, vec);
+        printf_formattert printf_formatter;
+        printf_formatter(it.format_string, vec);
         printf_formatter.print(out);
         out << std::endl;
-
         break;
       }
 
-      case goto_trace_stept::SKIP:
-        // Something deliberately ignored
-        break;
-
       case goto_trace_stept::RENUMBER:
         out << "Renumbered pointer to ";
-        counterexample_value(out, ns, it->lhs, it->value);
+        counterexample_value(out, ns, it.lhs, it.value);
+        break;
+
+      case goto_trace_stept::ASSUME:
+      case goto_trace_stept::SKIP:
+        // Something deliberately ignored
         break;
 
       default:
