@@ -10,6 +10,48 @@ expr2tc get_value(smt_convt &smt_conv, const expr2tc &expr)
   if(is_symbol2t(expr))
     return smt_conv.get(expr);
 
+  if(is_equality2t(expr))
+  {
+    equality2t eq = to_equality2t(expr);
+    expr2tc side1 = get_value(smt_conv, eq.side_1);
+    assert(!is_nil_expr(side1));
+
+    expr2tc side2 = get_value(smt_conv, eq.side_2);
+    assert(!is_nil_expr(side2));
+
+    equality2tc new_eq(side1, side2);
+    simplify(new_eq);
+
+    return new_eq;
+  }
+
+  if(is_not2t(expr))
+  {
+    not2t n = to_not2t(expr);
+    assert(is_bool_type(n.value));
+
+    expr2tc value = get_value(smt_conv, n.value);
+    assert(is_bool_type(value));
+    make_not(value);
+
+    return value;
+  }
+
+  if(is_if2t(expr))
+  {
+    if2t i = to_if2t(expr);
+
+    expr2tc cond = get_value(smt_conv, i.cond);
+    assert(is_bool_type(cond));
+
+    if(is_true(cond))
+      return get_value(smt_conv, i.true_value);
+
+    if(is_false(cond))
+      return get_value(smt_conv, i.false_value);
+  }
+
+  abort();
   return expr2tc();
 }
 
