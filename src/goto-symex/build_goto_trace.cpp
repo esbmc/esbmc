@@ -4,14 +4,25 @@
 
 expr2tc get_value(smt_convt &smt_conv, const expr2tc &expr)
 {
-  if(is_constant_expr(expr))
-    return expr;
-
-  if(is_symbol2t(expr))
-    return smt_conv.get(expr);
+  if(is_nil_expr(expr))
+    return expr2tc();
 
   switch(expr->expr_id)
   {
+    case expr2t::constant_int_id:
+    case expr2t::constant_fixedbv_id:
+    case expr2t::constant_floatbv_id:
+    case expr2t::constant_bool_id:
+    case expr2t::constant_string_id:
+    case expr2t::constant_struct_id:
+    case expr2t::constant_union_id:
+    case expr2t::constant_array_id:
+    case expr2t::constant_array_of_id:
+      return expr;
+
+    case expr2t::symbol_id:
+      return smt_conv.get(expr);
+
     case expr2t::equality_id:
     {
       equality2t eq = to_equality2t(expr);
