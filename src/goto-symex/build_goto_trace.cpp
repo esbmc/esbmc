@@ -21,8 +21,20 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
   if(is_symbol2t(lhs))
     return lhs;
 
-  (void) smt_conv;
-  (void) rhs;
+  if(is_index2t(lhs))
+  {
+    // The rhs must be a with statement
+    assert(is_with2t(rhs));
+
+    // Get value
+    with2t new_rhs = to_with2t(rhs);
+    expr2tc value = get_value(smt_conv, new_rhs.update_field);
+    assert(!is_nil_expr(value));
+
+    // Construct new index
+    return index2tc(lhs->type, to_index2t(lhs).source_value, value);
+  }
+
   return expr2tc();
 }
 
