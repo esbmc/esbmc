@@ -1,30 +1,38 @@
 #include <cassert>
 #include <goto-symex/build_goto_trace.h>
+#include <goto-symex/renaming.h>
 #include <goto-symex/witnesses.h>
 
-expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
+expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 {
   if(is_nil_expr(lhs))
-    return expr2tc();
-
-  if(is_symbol2t(lhs))
     return lhs;
 
-  if(is_index2t(lhs))
+  expr2tc new_lhs = lhs;
+  switch(new_lhs->expr_id)
   {
-    // The rhs must be a with statement
-    assert(is_with2t(rhs));
+    case expr2t::index_id:
+    {
+      // An array subscription
+      index2t index = to_index2t(lhs);
 
-    // Get value
-    with2t new_rhs = to_with2t(rhs);
-    expr2tc value = get_value(smt_conv, new_rhs.update_field);
-    assert(!is_nil_expr(value));
+      // Build new source value, it might be an index, in case of
+      // multidimensional arrays
+      expr2tc new_source_value = build_lhs(smt_conv, index.source_value);
+      expr2tc new_value = smt_conv.get(index.index);
+      new_lhs = index2tc(lhs->type, new_source_value, new_value);
+      break;
+    }
 
-    // Construct new index
-    return index2tc(lhs->type, to_index2t(lhs).source_value, value);
+    case expr2t::symbol_id:
+      break;
+
+    default:
+      abort();
   }
 
-  return expr2tc();
+  renaming::renaming_levelt::get_original_name(new_lhs, symbol2t::level0);
+  return new_lhs;
 }
 
 expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
@@ -107,8 +115,7 @@ void build_goto_trace(
     goto_trace_step.step_nr = step_nr;
     goto_trace_step.format_string = SSA_step.format_string;
     goto_trace_step.stack_trace = SSA_step.stack_trace;
-    goto_trace_step.lhs =
-      build_lhs(smt_conv, SSA_step.original_lhs, SSA_step.rhs);
+    goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
     goto_trace_step.value = build_rhs(smt_conv, goto_trace_step.lhs, SSA_step.rhs);
 
     for(auto it : SSA_step.converted_output_args)
