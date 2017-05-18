@@ -30,39 +30,51 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
 expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
 {
   if(is_nil_expr(rhs))
-    return expr2tc();
-
-  if(is_constant_array2t(rhs))
-  {
-    // An array subscription, we should be able to get the value directly,
-    // as lhs should have been resolved already
-    if(is_index2t(lhs))
-    {
-      index2t i = to_index2t(lhs);
-      assert(is_bv_type(i.index));
-
-      constant_int2t v = to_constant_int2t(i.index);
-      expr2tc elem = to_constant_array2t(rhs).datatype_members[v.value.to_uint64()];
-      return smt_conv.get(elem);
-    }
-
-    // It should be an array initialization
-    return smt_conv.get(rhs);
-  }
-
-  if(is_if2t(rhs))
-    return smt_conv.get(rhs);
-
-  if(is_constant_expr(rhs))
     return rhs;
 
-  if(is_symbol2t(rhs))
-    return smt_conv.get(rhs);
+  expr2tc new_rhs = rhs;
+  switch(rhs->expr_id)
+  {
+    case expr2t::constant_int_id:
+    case expr2t::constant_fixedbv_id:
+    case expr2t::constant_floatbv_id:
+    case expr2t::constant_bool_id:
+    case expr2t::constant_string_id:
+      return rhs;
 
-  if(is_with2t(rhs))
-    return smt_conv.get(to_with2t(rhs).update_value);
+    case expr2t::constant_array_id:
+    {
+      // An array subscription, we should be able to get the value directly,
+      // as lhs should have been resolved already
+      if(is_index2t(lhs))
+      {
+        index2t i = to_index2t(lhs);
+        assert(is_bv_type(i.index));
 
-  return expr2tc();
+        constant_int2t v = to_constant_int2t(i.index);
+        new_rhs = to_constant_array2t(rhs).datatype_members[v.value.to_uint64()];
+      }
+
+      // It should be an array initialization
+      break;
+    }
+
+    case expr2t::with_id:
+      new_rhs = to_with2t(rhs).update_value;
+      break;
+
+    case expr2t::constant_struct_id:
+    case expr2t::constant_union_id:
+    case expr2t::constant_array_of_id:
+    case expr2t::if_id:
+    case expr2t::symbol_id:
+      break;
+
+    default:
+      abort();
+  }
+
+  return smt_conv.get(new_rhs);
 }
 
 void build_goto_trace(
