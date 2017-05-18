@@ -253,7 +253,7 @@ void goto_symext::symex_assign_symbol(
     rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
 
   expr2tc orig_name_lhs = full_lhs;
-  cur_state->get_original_name(orig_name_lhs);
+  cur_state->rename(orig_name_lhs, true);
 
   cur_state->rename(rhs);
   do_simplify(rhs);
@@ -273,7 +273,6 @@ void goto_symext::symex_assign_symbol(
     cur_state->source,
     cur_state->gen_stack_trace(),
     symex_targett::STATE);
-
 }
 
 void goto_symext::symex_assign_structure(

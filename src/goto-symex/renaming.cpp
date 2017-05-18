@@ -111,7 +111,7 @@ void renaming::level1t::rename(expr2tc &expr)
   }
 }
 
-void renaming::level2t::rename(expr2tc &expr)
+void renaming::level2t::rename(expr2tc &expr, bool rename_only)
 {
   // rename all the symbols with their last known value
 
@@ -144,7 +144,7 @@ void renaming::level2t::rename(expr2tc &expr)
       else
         lev = symbol2t::level2;
 
-      if (!is_nil_expr(it->second.constant))
+      if (!is_nil_expr(it->second.constant) && !rename_only)
         expr = it->second.constant; // sym is now invalid reference
       else
         expr = symbol2tc(sym.type, sym.thename, lev,
@@ -171,9 +171,9 @@ void renaming::level2t::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    expr.get()->Foreach_operand([this] (expr2tc &e) {
+    expr.get()->Foreach_operand([this, &rename_only] (expr2tc &e) {
         if (!is_nil_expr(e))
-          rename(e);
+          rename(e, rename_only);
       }
     );
   }
