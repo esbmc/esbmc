@@ -2270,10 +2270,10 @@ smt_convt::get(const expr2tc &expr)
     {
       equality2t eq = to_equality2t(expr);
 
-      expr2tc side1 = get_by_type(eq.side_1);
+      expr2tc side1 = get(eq.side_1);
       if(is_nil_expr(side1)) break;
 
-      expr2tc side2 = get_by_type(eq.side_2);
+      expr2tc side2 = get(eq.side_2);
       if(is_nil_expr(side2)) break;
 
       equality2tc new_eq(side1, side2);
@@ -2287,7 +2287,7 @@ smt_convt::get(const expr2tc &expr)
       not2t n = to_not2t(expr);
       assert(is_bool_type(n.value));
 
-      expr2tc value = get_by_type(n.value);
+      expr2tc value = get(n.value);
       if(is_nil_expr(value)) break;
 
       make_not(value);
@@ -2298,14 +2298,14 @@ smt_convt::get(const expr2tc &expr)
     {
       if2t i = to_if2t(expr);
 
-      expr2tc cond = get_by_type(i.cond);
+      expr2tc cond = get(i.cond);
       if(is_nil_expr(cond)) break;
 
       if(is_true(cond))
-        return get_by_type(i.true_value);
+        return get(i.true_value);
 
       if(is_false(cond))
-        return get_by_type(i.false_value);
+        return get(i.false_value);
 
       break;
     }
@@ -2317,7 +2317,7 @@ smt_convt::get(const expr2tc &expr)
     {
       typecast2t t = to_typecast2t(expr);
 
-      expr2tc from = get_by_type(t.from);
+      expr2tc from = get(t.from);
       if(is_nil_expr(from)) break;
 
       typecast2tc new_t(expr->type, from, t.rounding_mode);
