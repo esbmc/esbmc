@@ -3,6 +3,23 @@
 #include <goto-symex/renaming.h>
 #include <goto-symex/witnesses.h>
 
+unsigned int get_member_name_field(const type2tc &t, const irep_idt &name)
+{
+  unsigned int idx = 0;
+  const struct_union_data &data_ref =
+    dynamic_cast<const struct_union_data &>(*t.get());
+
+  forall_names(it, data_ref.member_names) {
+    if (*it == name)
+      break;
+    idx++;
+  }
+  assert(idx != data_ref.member_names.size() &&
+         "Member name of with expr not found in struct type");
+
+  return idx;
+}
+
 expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
 {
   if(is_nil_expr(lhs))
@@ -25,6 +42,7 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
     }
 
     case expr2t::symbol_id:
+    case expr2t::member_id:
       break;
 
     default:
@@ -73,6 +91,22 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
 
     case expr2t::constant_struct_id:
     case expr2t::constant_union_id:
+    {
+      // An member access
+      if(is_member2t(lhs))
+      {
+        member2t m = to_member2t(lhs);
+        unsigned int v = get_member_name_field(rhs->type, m.member);
+        new_rhs = is_constant_string2t(rhs) ?
+          to_constant_struct2t(rhs).datatype_members[v] :
+          to_constant_union2t(rhs).datatype_members[v];
+      }
+
+      // It should be an union/struct initialization
+      break;
+    }
+
+
     case expr2t::constant_array_of_id:
     case expr2t::if_id:
     case expr2t::symbol_id:
