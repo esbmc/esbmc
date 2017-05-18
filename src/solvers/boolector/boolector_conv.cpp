@@ -413,8 +413,8 @@ static int64_t read_btor_string(const char *result, unsigned int len)
   return res;
 }
 
-BigInt
-boolector_convt::get_bv(const smt_ast *a)
+expr2tc
+boolector_convt::get_bv(const type2tc &type, smt_astt a)
 {
   assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
   const btor_smt_ast *ast = btor_ast_downcast(a);
@@ -423,7 +423,17 @@ boolector_convt::get_bv(const smt_ast *a)
   int64_t val = read_btor_string(result, a->sort->get_data_width());
   boolector_free_bv_assignment(btor, result);
 
-  return BigInt(val);
+  BigInt m(val);
+  if(is_fixedbv_type(type))
+  {
+    fixedbvt fbv(
+      constant_exprt(
+        integer2binary(m, type->get_width()),
+        integer2string(m),
+        migrate_type_back(type)));
+    return constant_fixedbv2tc(type, fbv);
+  }
+  return constant_int2tc(type, m);
 }
 
 expr2tc
