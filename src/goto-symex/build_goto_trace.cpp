@@ -111,6 +111,7 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
     case expr2t::constant_array_of_id:
     case expr2t::if_id:
     case expr2t::symbol_id:
+    case expr2t::bitcast_id:
       break;
 
     default:

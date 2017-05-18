@@ -2326,6 +2326,19 @@ smt_convt::get(const expr2tc &expr)
       return new_t;
     }
 
+    case expr2t::bitcast_id:
+    {
+      bitcast2t t = to_bitcast2t(expr);
+
+      expr2tc from = get(t.from);
+      if(is_nil_expr(from)) break;
+
+      bitcast2tc new_t(expr->type, from, t.rounding_mode);
+      simplify(new_t);
+
+      return new_t;
+    }
+
     default:;
   }
 
