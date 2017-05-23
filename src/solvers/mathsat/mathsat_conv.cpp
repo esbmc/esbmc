@@ -743,39 +743,47 @@ smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
 smt_astt mathsat_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(2));
+  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
   const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
 
   // Sides
-  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
+  smt_astt s1 = convert_ast(*expr->get_sub_expr(1));
   const mathsat_smt_ast *ms1 = mathsat_ast_downcast(s1);
 
-  smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
-  const mathsat_smt_ast *ms2 = mathsat_ast_downcast(s2);
-
   msat_term t;
-  switch (expr->expr_id) {
-    case expr2t::ieee_add_id:
-      t = msat_make_fp_plus(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_sub_id:
-      t = msat_make_fp_minus(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_mul_id:
-      t = msat_make_fp_times(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_div_id:
-      t = msat_make_fp_div(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_fma_id:
+  if(is_ieee_sqrt2t(expr))
+  {
+    t = msat_make_fp_sqrt(env, mrm->t, ms1->t);
+  }
+  else
+  {
+    smt_astt s2 = convert_ast(*expr->get_sub_expr(2));
+    const mathsat_smt_ast *ms2 = mathsat_ast_downcast(s2);
+
+    switch (expr->expr_id)
     {
-      // Mathsat doesn't support fma for now, if we force
-      // the multiplication, it will provide the wrong answer
-      std::cerr << "Mathsat doesn't support the fused multiply-add "
-          "(fp.fma) operator" << std::endl;
+      case expr2t::ieee_add_id:
+        t = msat_make_fp_plus(env, mrm->t, ms1->t, ms2->t);
+        break;
+      case expr2t::ieee_sub_id:
+        t = msat_make_fp_minus(env, mrm->t, ms1->t, ms2->t);
+        break;
+      case expr2t::ieee_mul_id:
+        t = msat_make_fp_times(env, mrm->t, ms1->t, ms2->t);
+        break;
+      case expr2t::ieee_div_id:
+        t = msat_make_fp_div(env, mrm->t, ms1->t, ms2->t);
+        break;
+      case expr2t::ieee_fma_id:
+      {
+        // Mathsat doesn't support fma for now, if we force
+        // the multiplication, it will provide the wrong answer
+        std::cerr << "Mathsat doesn't support the fused multiply-add "
+            "(fp.fma) operator" << std::endl;
+      }
+      default:
+        abort();
     }
-    default:
-      abort();
   }
   check_msat_error(t);
 

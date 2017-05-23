@@ -85,6 +85,7 @@
   BOOST_PP_LIST_CONS(ieee_mul,\
   BOOST_PP_LIST_CONS(ieee_div,\
   BOOST_PP_LIST_CONS(ieee_fma,\
+  BOOST_PP_LIST_CONS(ieee_sqrt,\
   BOOST_PP_LIST_CONS(modulus,\
   BOOST_PP_LIST_CONS(shl,\
   BOOST_PP_LIST_CONS(ashr,\
@@ -136,7 +137,7 @@
   BOOST_PP_LIST_CONS(isfinite,\
   BOOST_PP_LIST_CONS(signbit,\
   BOOST_PP_LIST_CONS(concat, BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))\
-))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 #define ESBMC_LIST_OF_TYPES BOOST_PP_LIST_CONS(bool,\
 BOOST_PP_LIST_CONS(empty,\
@@ -2444,24 +2445,42 @@ public:
   typedef esbmct::expr2t_traits<side_1_field, side_2_field> traits;
 };
 
+class ieee_arith_1op : public arith_ops
+{
+public:
+  ieee_arith_1op(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v,
+                  const expr2tc &rm)
+    : arith_ops(t, id), rounding_mode(rm), value(v) { }
+  ieee_arith_1op(const ieee_arith_1op &ref)
+    : arith_ops(ref), rounding_mode(ref.rounding_mode), value(ref.value) { }
+
+  expr2tc rounding_mode;
+  expr2tc value;
+
+// Type mangling:
+  typedef esbmct::field_traits<expr2tc, ieee_arith_1op, &ieee_arith_1op::rounding_mode> rounding_mode_field;
+  typedef esbmct::field_traits<expr2tc, ieee_arith_1op, &ieee_arith_1op::value> value_field;
+  typedef esbmct::expr2t_traits<rounding_mode_field, value_field> traits;
+};
+
 class ieee_arith_2ops : public arith_ops
 {
 public:
   ieee_arith_2ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
                   const expr2tc &v2, const expr2tc &rm)
-    : arith_ops(t, id), side_1(v1), side_2(v2), rounding_mode(rm) { }
+    : arith_ops(t, id), rounding_mode(rm), side_1(v1), side_2(v2) { }
   ieee_arith_2ops(const ieee_arith_2ops &ref)
-    : arith_ops(ref), side_1(ref.side_1), side_2(ref.side_2), rounding_mode(ref.rounding_mode) { }
+    : arith_ops(ref), rounding_mode(ref.rounding_mode), side_1(ref.side_1), side_2(ref.side_2) { }
 
+  expr2tc rounding_mode;
   expr2tc side_1;
   expr2tc side_2;
-  expr2tc rounding_mode;
 
 // Type mangling:
+  typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::rounding_mode> rounding_mode_field;
   typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::side_1> side_1_field;
   typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::side_2> side_2_field;
-  typedef esbmct::field_traits<expr2tc, ieee_arith_2ops, &ieee_arith_2ops::rounding_mode> rounding_mode_field;
-  typedef esbmct::expr2t_traits<side_1_field, side_2_field, rounding_mode_field> traits;
+  typedef esbmct::expr2t_traits<rounding_mode_field, side_1_field, side_2_field> traits;
 };
 
 class ieee_arith_3ops : public arith_ops
@@ -2469,22 +2488,22 @@ class ieee_arith_3ops : public arith_ops
 public:
   ieee_arith_3ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
                   const expr2tc &v2, const expr2tc &v3, const expr2tc &rm)
-    : arith_ops(t, id), value_1(v1), value_2(v2), rounding_mode(rm), value_3(v3) { }
+    : arith_ops(t, id), rounding_mode(rm), value_1(v1), value_2(v2), value_3(v3) { }
   ieee_arith_3ops(const ieee_arith_3ops &ref)
-    : arith_ops(ref), value_1(ref.value_1), value_2(ref.value_2),
-      rounding_mode(ref.rounding_mode), value_3(ref.value_3) { }
+    : arith_ops(ref), rounding_mode(ref.rounding_mode), value_1(ref.value_1),
+      value_2(ref.value_2), value_3(ref.value_3) { }
 
+  expr2tc rounding_mode;
   expr2tc value_1;
   expr2tc value_2;
-  expr2tc rounding_mode;
   expr2tc value_3;
 
 // Type mangling:
+  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::rounding_mode> rounding_mode_field;
   typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_1> value_1_field;
   typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_2> value_2_field;
-  typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::rounding_mode> rounding_mode_field;
   typedef esbmct::field_traits<expr2tc, ieee_arith_3ops, &ieee_arith_3ops::value_3> value_3_field;
-  typedef esbmct::expr2t_traits<value_1_field, value_2_field, rounding_mode_field, value_3_field> traits;
+  typedef esbmct::expr2t_traits<rounding_mode_field, value_1_field, value_2_field, value_3_field> traits;
 };
 
 class same_object_data : public expr2t
@@ -3114,6 +3133,7 @@ irep_typedefs(ieee_sub, ieee_arith_2ops);
 irep_typedefs(ieee_mul, ieee_arith_2ops);
 irep_typedefs(ieee_div, ieee_arith_2ops);
 irep_typedefs(ieee_fma, ieee_arith_3ops);
+irep_typedefs(ieee_sqrt, ieee_arith_1op);
 irep_typedefs(modulus, arith_2ops);
 irep_typedefs(shl, arith_2ops);
 irep_typedefs(ashr, arith_2ops);
@@ -4047,6 +4067,25 @@ public:
     : ieee_fma_expr_methods(type, ieee_fma_id, v1, v2, v3, rm) {}
   ieee_fma2t(const ieee_fma2t &ref)
     : ieee_fma_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+/** IEEE sqrt operation. Square root of the first operand. Must be a
+ *  floatbv.
+ *  @extends ieee_arith_2ops */
+class ieee_sqrt2t : public ieee_sqrt_expr_methods
+{
+public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand.
+   *  @param rm rounding mode. */
+  ieee_sqrt2t(const type2tc &type, const expr2tc &v1, const expr2tc &rm)
+    : ieee_sqrt_expr_methods(type, ieee_sqrt_id, v1, rm) {}
+  ieee_sqrt2t(const ieee_sqrt2t &ref)
+    : ieee_sqrt_expr_methods(ref) {}
 
   static std::string field_names[esbmct::num_type_fields];
 };

@@ -589,6 +589,13 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = mk_smt_bvfloat_arith_ops(expr);
     break;
   }
+  case expr2t::ieee_sqrt_id:
+  {
+    assert(is_floatbv_type(expr));
+    assert(expr->get_num_sub_exprs() == 2);
+    a = mk_smt_bvfloat_arith_ops(expr);
+    break;
+  }
   case expr2t::modulus_id:
   {
     assert(expr->get_num_sub_exprs() == 2);
@@ -2192,11 +2199,12 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "is_neg",
   "is_pos",
   "ieee_eq",
-  "ieee_neq",
   "ieee_add",
   "ieee_sub",
   "ieee_mul",
   "ieee_div",
+  "ieee_fma",
+  "ieee_sqrt",
   "ieee_rm_ne",
   "ieee_rm_zr",
   "ieee_rm_pi",
