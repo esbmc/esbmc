@@ -120,18 +120,6 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
   convert_function(*s);
 }
 
-/*******************************************************************\
-
-Function: goto_convert_functionst::convert_function
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_convert_functionst::convert_function(symbolt &symbol)
 {
   irep_idt identifier = symbol.name;
