@@ -17,6 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/i2string.h>
 #include <util/prefix.h>
 #include <util/std_expr.h>
+#include <util/type_byte_size.h>
 
 //#define DEBUG
 
@@ -742,6 +743,18 @@ void goto_convertt::convert_decl(
   if(var.type().is_array())
   {
     exprt &size = to_array_type(var.type()).size();
+
+    // That's the number of elements, calculate subtype size
+    const typet &subtype = to_array_type(var.type()).subtype();
+
+    type2tc tmp;
+    migrate_type(subtype, tmp);
+    auto st_size = type_byte_size(tmp);
+
+    exprt st_size_expr = from_integer(st_size, size.type());
+    exprt mult(exprt::mult, size.type());
+    mult.copy_to_operands(size, st_size_expr);
+
     if(size.is_symbol())
     {
       // Set the array to have a dynamic size
@@ -751,7 +764,7 @@ void goto_convertt::convert_decl(
       dynamic_size.location() = code.location();
 
       goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
-      exprt assign = code_assignt(dynamic_size, size);
+      exprt assign = code_assignt(dynamic_size, mult);
       migrate_expr(assign, t_s_s->code);
       t_s_s->location = code.location();
     }
