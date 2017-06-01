@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/irep2.h>
+#include <util/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/simplify_expr.h>
 #include <util/type_byte_size.h>

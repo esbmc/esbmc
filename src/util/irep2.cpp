@@ -6,6 +6,7 @@
 #include <sstream>
 #include <util/i2string.h>
 #include <util/irep2.h>
+#include <util/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
 

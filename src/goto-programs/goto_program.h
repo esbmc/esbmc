@@ -15,6 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ostream>
 #include <set>
 #include <util/irep2.h>
+#include <util/irep2_utils.h>
 #include <util/location.h>
 #include <util/namespace.h>
 #include <util/std_code.h>

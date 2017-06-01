@@ -10,6 +10,7 @@
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/expr.h>
+#include <util/irep2_utils.h>
 #include <util/std_types.h>
 #include <util/type_byte_size.h>
 

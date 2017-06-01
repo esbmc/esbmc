@@ -5,6 +5,7 @@
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/irep2.h>
+#include <util/irep2_utils.h>
 #include <util/type_byte_size.h>
 
 expr2tc
