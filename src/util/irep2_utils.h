@@ -3,6 +3,53 @@
 
 #include <util/irep2.h>
 
+/** Test whether type is an integer. */
+inline bool is_bv_type(const type2tc &t) \
+{ return (t->type_id == type2t::unsignedbv_id ||
+          t->type_id == type2t::signedbv_id); }
+
+inline bool is_bv_type(const expr2tc &e)
+{ return is_bv_type(e->type); }
+
+/** Test whether type is a float/double. */
+inline bool is_fractional_type(const type2tc &t) \
+{ return (t->type_id == type2t::fixedbv_id ||
+          t->type_id == type2t::floatbv_id); }
+
+inline bool is_fractional_type(const expr2tc &e)
+{ return is_bv_type(e->type); }
+
+/** Test whether type is a number type - bv, fixedbv or floatbv. */
+inline bool is_number_type(const type2tc &t)
+{ return (t->type_id == type2t::unsignedbv_id ||
+          t->type_id == type2t::signedbv_id ||
+          t->type_id == type2t::fixedbv_id ||
+          t->type_id == type2t::floatbv_id ||
+          t->type_id == type2t::bool_id); }
+
+inline bool is_number_type(const expr2tc &e)
+{ return is_number_type(e->type); }
+
+inline bool is_scalar_type(const type2tc &t)
+{ return is_number_type(t) || is_pointer_type(t) || is_bool_type(t) ||
+         is_empty_type(t) || is_code_type(t); }
+
+inline bool is_scalar_type(const expr2tc &e)
+{ return is_scalar_type(e->type); }
+
+inline bool is_multi_dimensional_array(const type2tc &t) {
+  if (is_array_type(t)) {
+    const array_type2t &arr_type = to_array_type(t);
+    return is_array_type(arr_type.subtype);
+  } else {
+    return false;
+  }
+}
+
+inline bool is_multi_dimensional_array(const expr2tc &e) {
+  return is_multi_dimensional_array(e->type);
+}
+
 inline bool is_constant_expr(const expr2tc &t)
 {
   return t->expr_id == expr2t::constant_int_id ||
@@ -77,13 +124,6 @@ inline expr2tc
 gen_false_expr()
 {
   return constant_bool2tc(false);
-}
-
-inline expr2tc
-gen_uint(const type2tc &type, unsigned long val)
-{
-  constant_int2tc v(type, BigInt(val));
-  return v;
 }
 
 inline expr2tc
