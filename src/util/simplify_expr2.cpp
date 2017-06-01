@@ -1,4 +1,3 @@
-#include <boost/static_assert.hpp>
 #include <climits>
 #include <cstring>
 #include <util/arith_tools.h>

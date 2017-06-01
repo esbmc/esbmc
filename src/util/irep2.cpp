@@ -1,7 +1,6 @@
 #include <ac_config.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>
-#include <boost/static_assert.hpp>
 #include <cstdarg>
 #include <cstring>
 #include <sstream>
@@ -190,8 +189,8 @@ static const char *type_names[] = {
 };
 // If this fires, you've added/removed a type id, and need to update the list
 // above (which is ordered according to the enum list)
-BOOST_STATIC_ASSERT(sizeof(type_names) ==
-                    (type2t::end_type_id * sizeof(char *)));
+static_assert(sizeof(type_names) == (type2t::end_type_id * sizeof(char *)),
+  "Missing type name");
 
 std::string
 get_type_id(const type2t &type)
@@ -301,7 +300,7 @@ type2t::do_crc(size_t seed) const
 void
 type2t::hash(crypto_hash &hash) const
 {
-  BOOST_STATIC_ASSERT(type2t::end_type_id < 256);
+  static_assert(type2t::end_type_id < 256, "Type id overflow");
   uint8_t tid = type_id;
   hash.ingest(&tid, sizeof(tid));
   return;
@@ -660,7 +659,7 @@ expr2t::do_crc(size_t seed) const
 void
 expr2t::hash(crypto_hash &hash) const
 {
-  BOOST_STATIC_ASSERT(expr2t::end_expr_id < 256);
+  static_assert(expr2t::end_expr_id < 256, "Expr id overflow");
   uint8_t eid = expr_id;
   hash.ingest(&eid, sizeof(eid));
   type->hash(hash);
@@ -850,8 +849,8 @@ static const char *expr_names[] = {
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
-BOOST_STATIC_ASSERT(sizeof(expr_names) ==
-                    (expr2t::end_expr_id * sizeof(char *)));
+static_assert(sizeof(expr_names) == (expr2t::end_expr_id * sizeof(char *)),
+  "Missing expr name");
 
 std::string
 get_expr_id(const expr2t &expr)
@@ -1331,8 +1330,8 @@ type_poolt type_pool;
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr
 // crcing code has to change.
-BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
-BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);
+static_assert(type2t::end_type_id <= 256, "Type id overflow");
+static_assert(expr2t::end_expr_id <= 256, "Expr id overflow");
 
 static inline __attribute__((always_inline)) std::string
 type_to_string(const bool &thebool, int indent __attribute__((unused)))

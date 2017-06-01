@@ -26,8 +26,6 @@
 #include <boost/preprocessor/list/adt.hpp>
 #include <boost/preprocessor/list/for_each.hpp>
 #include <boost/shared_ptr.hpp>
-#include <boost/static_assert.hpp>
-#include <boost/utility/enable_if.hpp>
 #include <cstdarg>
 #include <functional>
 #include <util/config.h>
@@ -293,7 +291,7 @@ public:
   irep_container &operator=(const irep_container<Y> &ref)
   {
     assert(dynamic_cast<const std::shared_ptr<T> &>(ref) != NULL);
-    *this = boost::static_pointer_cast<T, Y>
+    *this = std::static_pointer_cast<T, Y>
             (static_cast<const std::shared_ptr<Y> &>(ref));
     return *this;
   }
