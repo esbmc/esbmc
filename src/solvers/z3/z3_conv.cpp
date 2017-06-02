@@ -297,7 +297,8 @@ z3_convt::convert_struct(const std::vector<expr2tc> &members,
 #endif
 
   // Populate tuple with members of that struct
-  forall_types(it, member_types) {
+  for(auto const &it : member_types)
+  {
     const z3_smt_ast *tmp = z3_smt_downcast(convert_ast(members[i]));
     args[i] = tmp->e;
     i++;
@@ -1179,8 +1180,9 @@ z3_convt::tuple_get(const expr2tc &expr)
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  forall_types(it, strct.members) {
-    member2tc memb(*it, expr, strct.member_names[i]);
+  for(auto const &it : strct.members)
+  {
+    member2tc memb(it, expr, strct.member_names[i]);
     outstruct.get()->datatype_members.push_back(get(memb));
     i++;
   }

@@ -153,26 +153,6 @@ BOOST_PP_LIST_CONS(cpp_name, BOOST_PP_LIST_NIL)))))))))))))
 
 // XXXjmorse - abstract, access modifies, need consideration
 
-/** Iterate over all type2tc's in a vector.
- *  Deals only with constant vectors
- *  @see Forall_types
- *  @param it Name to give iterator to be declared
- *  @param vect Reference to vector of type2tc's.
- */
-#define forall_types(it, vect) \
-  for (std::vector<type2tc>::const_iterator (it) = (vect).begin();\
-       it != (vect).end(); it++)
-
-/** Iterate over all type2tc's in a vector.
- *  Deals only with non-constant vectors
- *  @see forall_types
- *  @param it Name to give iterator to be declared
- *  @param vect Reference to vector of type2tc's.
- */
-#define Forall_types(it, vect) \
-  for (std::vector<type2tc>::iterator (it) = (vect).begin();\
-       it != (vect).end(); it++)
-
 /** Iterate over all irep_idt's in a vector.
  *  Deals only with constant vectors of string-pool IDs.
  *  @see Forall_names

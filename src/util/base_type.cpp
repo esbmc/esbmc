@@ -33,8 +33,8 @@ void base_type(type2tc &type, const namespacet &ns)
   {
     struct_union_data &data = static_cast<struct_union_data&>(*type.get());
 
-    Forall_types(it, data.members) {
-      type2tc &subtype = *it;
+    for(auto &it : data.members) {
+      type2tc &subtype = it;
       base_type(subtype, ns);
     }
   }

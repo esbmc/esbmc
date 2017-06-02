@@ -286,9 +286,10 @@ void goto_symext::symex_assign_structure(
   // will croak after recursing. Otherwise, we are assigning to a re-constituted
   // structure, through dereferencing.
   unsigned int i = 0;
-  forall_types(it, structtype.members) {
+  for(auto const &it : structtype.members)
+  {
     const expr2tc &lhs_memb = the_structure.datatype_members[i];
-    member2tc rhs_memb(*it, rhs, structtype.member_names[i]);
+    member2tc rhs_memb(it, rhs, structtype.member_names[i]);
     symex_assign_rec(lhs_memb, rhs_memb, guard);
 
     i++;

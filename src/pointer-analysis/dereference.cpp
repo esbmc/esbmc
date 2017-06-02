@@ -980,9 +980,10 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
   mp_integer access_size = type_byte_size(type);
 
   unsigned int i = 0;
-  forall_types(it, struct_type.members) {
+  for(auto const &it : struct_type.members)
+  {
     mp_integer m_offs = member_offset(value->type, struct_type.member_names[i]);
-    mp_integer m_size = type_byte_size(*it);
+    mp_integer m_size = type_byte_size(it);
 
     if (int_offset < m_offs) {
       // The offset is behind this field, but wasn't accepted by the previous
@@ -1008,7 +1009,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
         return;
       } else {
         // This is a valid access to this field. Extract it, recurse.
-        value = member2tc(*it, value, struct_type.member_names[i]);
+        value = member2tc(it, value, struct_type.member_names[i]);
         build_reference_rec(value, gen_ulong(0), type, guard, mode);
       }
       return;
@@ -1016,7 +1017,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
               (int_offset - m_offs + access_size <= m_size)) {
       // This access is in the bounds of this member, but isn't at the start.
       // XXX that might be an alignment error.
-      expr2tc memb = member2tc(*it, value, struct_type.member_names[i]);
+      expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
       constant_int2tc new_offs(pointer_type2(), int_offset - m_offs);
 
       // Extract.
@@ -1065,11 +1066,11 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
   std::list<std::pair<expr2tc, expr2tc> > extract_list;
 
   unsigned int i = 0;
-  forall_types(it, struct_type.members) {
+  for(auto const &it : struct_type.members) {
     mp_integer offs = member_offset(value->type, struct_type.member_names[i]);
 
     // Compute some kind of guard
-    unsigned int field_size = (*it)->get_width() / 8;
+    unsigned int field_size = it->get_width() / 8;
     // Round up to word size
     unsigned int word_mask = (config.ansi_c.word_size / 8) - 1;
     field_size = (field_size + word_mask) & (~word_mask);
@@ -1079,19 +1080,19 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
     expr2tc upper_bound = lessthan2tc(offset, field_top);
     expr2tc field_guard = and2tc(lower_bound, upper_bound);
 
-    if (is_struct_type(*it)) {
+    if (is_struct_type(it)) {
       // Handle recursive structs
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
-      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
+      expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       construct_from_dyn_struct_offset(field, new_offset, type, guard,
                                        alignment, mode, &failed_container);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
-    } else if (is_array_type(*it)) {
+    } else if (is_array_type(it)) {
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
-      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
+      expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       build_reference_rec(field, new_offset, type, guard, mode, alignment);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
-    } else if (access_sz > ((*it)->get_width() / 8)) {
+    } else if (access_sz > (it->get_width() / 8)) {
       guardt newguard(guard);
       newguard.add(field_guard);
       dereference_failure("pointer dereference",
@@ -1101,14 +1102,14 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
     } else if (alignment >= (config.ansi_c.word_size / 8)) {
       // This is fully aligned, just pull it out and possibly cast,
       // XXX endian?
-      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
+      expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       if (!base_type_eq(field->type, type, ns))
         field = bitcast2tc(type, field);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     } else {
       // Not fully aligned; devolve to byte extract.
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
-      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
+      expr2tc field = member2tc(it, value, struct_type.member_names[i]);
 
       expr2tc *bytes =
         extract_bytes_from_scalar(field, type->get_width() / 8, new_offset);
@@ -1228,8 +1229,9 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
   assert(is_struct_type(type));
   const struct_type2t &structtype = to_struct_type(type);
   uint64_t struct_offset = intref.value.to_uint64();
-  forall_types(it, structtype.members) {
-    const type2tc &target_type = *it;
+  for(auto const &it : structtype.members)
+  {
+    const type2tc &target_type = it;
     expr2tc target = value; // The byte array;
     build_reference_rec(target, gen_ulong(struct_offset), target_type, guard,
         mode);
@@ -1273,18 +1275,18 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
     const struct_type2t &struct_type = to_struct_type(value->type);
     unsigned int i = 0;
-    forall_types(it, struct_type.members) {
+    for(auto const &it : struct_type.members)
+    {
       mp_integer offs = member_offset(value->type, struct_type.member_names[i]);
       mp_integer size = type_byte_size(*it);
 
-      if (!is_scalar_type(*it) &&
-            intref.value >= offs &&
-            intref.value < (offs + size)) {
+      if (!is_scalar_type(it) && intref.value >= offs && intref.value < (offs + size))
+      {
         // It's this field. Don't make a decision about whether it's correct
         // or not, recurse to make that happen.
         mp_integer new_offs = intref.value - offs;
         expr2tc offs_expr = gen_ulong(new_offs.to_ulong());
-        value = member2tc(*it, value, struct_type.member_names[i]);
+        value = member2tc(it, value, struct_type.member_names[i]);
         construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
         return;
       }
@@ -1401,18 +1403,20 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     // It's not compatible, but a subtype may be. Iterate over all of them.
     const struct_type2t &struct_type = to_struct_type(value->type);
     unsigned int i = 0;
-    forall_types(it, struct_type.members) {
+    for(auto const &it : struct_type.members)
+    {
       // Quickly skip over scalar subtypes.
-      if (is_scalar_type(*it)) {
+      if (is_scalar_type(it))
+      {
         i++;
         continue;
       }
 
       mp_integer memb_offs = member_offset(value->type, struct_type.member_names[i]);
-      mp_integer size = type_byte_size(*it);
+      mp_integer size = type_byte_size(it);
       expr2tc memb_offs_expr = gen_ulong(memb_offs.to_ulong());
       expr2tc limit_expr = gen_ulong(memb_offs.to_ulong() + size.to_ulong());
-      expr2tc memb = member2tc(*it, value, struct_type.member_names[i]);
+      expr2tc memb = member2tc(it, value, struct_type.member_names[i]);
 
       // Compute a guard and update the offset for an access to this field.
       // Guard is that the offset is in the range of this field. Offset has
@@ -1440,8 +1444,9 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     assert(is_struct_type(type));
     const struct_type2t &structtype = to_struct_type(type);
     expr2tc array_offset = offs;
-    forall_types(it, structtype.members) {
-      const type2tc &target_type = *it;
+    for(auto const &it : structtype.members)
+    {
+      const type2tc &target_type = it;
       expr2tc target = value; // The byte array;
       build_reference_rec(target, array_offset, target_type, tmp, mode);
       fields.push_back(target);

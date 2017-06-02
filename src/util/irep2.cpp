@@ -1431,10 +1431,11 @@ type_to_string(const std::vector<type2tc> &theval, int indent)
   int i;
 
   i = 0;
-  forall_types(it, theval) {
+  for(auto const &it : theval) {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += indent_str(indent) + std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
+    astring +=
+      indent_str(indent) + std::string(buffer) + ": " + it->pretty(indent + 2) + "\n";
     i++;
   }
 
@@ -1692,8 +1693,8 @@ do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
 
   int tmp = 0;
   std::vector<type2tc>::const_iterator it2 = side2.begin();
-  forall_types(it, side1) {
-    tmp = (*it)->ltchecked(**it2);
+  for(auto const &it : side1) {
+    tmp = it->ltchecked(**it2);
     if (tmp != 0)
       return tmp;
     it2++;
@@ -1928,8 +1929,8 @@ do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash)
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const std::vector<type2tc> &theval, size_t seed)
 {
-  forall_types(it, theval)
-    (*it)->do_crc(seed);
+  for(auto const &it : theval)
+    it->do_crc(seed);
 
   return seed;
 }
@@ -1937,8 +1938,8 @@ do_type_crc(const std::vector<type2tc> &theval, size_t seed)
 static inline __attribute__((always_inline)) void
 do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
 {
-  forall_types(it, theval)
-    (*it)->hash(hash);
+  for(auto const &it : theval)
+    it->hash(hash);
 }
 
 static inline __attribute__((always_inline)) size_t

@@ -1647,10 +1647,11 @@ migrate_type_back(const type2tc &ref)
     const struct_type2t &ref2 = to_struct_type(ref);
 
     idx = 0;
-    forall_types(it, ref2.members) {
+    for(auto const &it : ref2.members)
+    {
       struct_union_typet::componentt component;
       component.id("component");
-      component.type() = migrate_type_back(*it);
+      component.type() = migrate_type_back(it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
       comps.push_back(component);
@@ -1669,10 +1670,11 @@ migrate_type_back(const type2tc &ref)
     const union_type2t &ref2 = to_union_type(ref);
 
     idx = 0;
-    forall_types(it, ref2.members) {
+    for(auto const &it :ref2.members)
+    {
       struct_union_typet::componentt component;
       component.id("component");
-      component.type() = migrate_type_back(*it);
+      component.type() = migrate_type_back(it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
       comps.push_back(component);
@@ -1693,8 +1695,9 @@ migrate_type_back(const type2tc &ref)
 
     code_typet::argumentst args;
     unsigned int i = 0;
-    forall_types(it, ref2.arguments) {
-      args.push_back(code_typet::argumentt(migrate_type_back(*it)));
+    for(auto const &it :ref2.arguments)
+    {
+      args.push_back(code_typet::argumentt(migrate_type_back(it)));
       args.back().set_identifier(ref2.argument_names[i]);
       i++;
     }
@@ -1772,8 +1775,9 @@ migrate_type_back(const type2tc &ref)
     if (ref2.template_args.size() != 0) {
       exprt args("template_args");
       exprt &arglist = (exprt&)args.add("arguments");
-      forall_types(it, ref2.template_args) {
-        typet tmp = migrate_type_back(*it);
+      for(auto const &it : ref2.template_args)
+      {
+        typet tmp = migrate_type_back(it);
         exprt type("type");
         type.type() = tmp;
         arglist.copy_to_operands(type); // Yep, that's how it's structured.

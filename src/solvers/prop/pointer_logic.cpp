@@ -167,31 +167,30 @@ expr2tc pointer_logict::object_rec(
     assert(offset>=current_offset);
 
     unsigned int idx = 0;
-    forall_types(it, members) {
+    for(auto const &it : members)
+    {
       assert(offset>=current_offset);
 
-      mp_integer sub_size=type_byte_size(*it);
+      mp_integer sub_size = type_byte_size(it);
 
       if(sub_size==0)
         return src;
-      
-      mp_integer new_offset=current_offset+sub_size;
 
+      mp_integer new_offset=current_offset+sub_size;
       if(new_offset>offset)
       {
         // found it
-        member2tc tmp(*it, src, member_names[idx]);
-        
+        member2tc tmp(it, src, member_names[idx]);
         return object_rec(offset-current_offset, pointer_type, tmp);
       }
-      
+
       assert(new_offset<=offset);
       current_offset=new_offset;
       assert(current_offset<=offset);
       idx++;
     }
   }
-  
+
   return src;
 }
 

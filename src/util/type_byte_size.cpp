@@ -58,17 +58,18 @@ member_offset(const type2tc &type, const irep_idt &member)
 
   const struct_type2t &thetype = to_struct_type(type);
 
-  forall_types(it, thetype.members) {
+  for(auto const &it : thetype.members)
+  {
     // If the current field is 64 bits, and we're on a 32 bit machine, then we
     // _must_ round up to 64 bits now.
-    if (is_scalar_type(*it) && !is_code_type(*it) &&
-        (*it)->get_width() > 32 && config.ansi_c.word_size == 32)
+    if (is_scalar_type(it) && !is_code_type(it) &&
+        (it)->get_width() > 32 && config.ansi_c.word_size == 32)
       round_up_to_int64(result);
 
-    if (is_structure_type(*it))
+    if (is_structure_type(it))
       round_up_to_int64(result);
 
-    if (is_array_type(*it) && to_array_type(*it).subtype->get_width() > 32)
+    if (is_array_type(it) && to_array_type(it).subtype->get_width() > 32)
       round_up_to_int64(result);
 
     if (thetype.member_names[idx] == member.as_string())
@@ -76,7 +77,7 @@ member_offset(const type2tc &type, const irep_idt &member)
 
     // XXX 100% unhandled: bitfields.
 
-    mp_integer sub_size = type_byte_size(*it);
+    mp_integer sub_size = type_byte_size(it);
     // Handle padding: we need to observe the usual struct constraints.
     round_up_to_word(sub_size);
 
@@ -169,24 +170,25 @@ type_byte_size(const type2tc &type)
 
     const struct_type2t &t2 = to_struct_type(type);
     mp_integer accumulated_size(0);
-    forall_types(it, t2.members) {
+    for(auto const &it : t2.members)
+    {
       // If the current field is 64 bits, and we're on a 32 bit machine, then we
       // _must_ round up to 64 bits now. Also guard against symbolic types
       // as operands.
-      if (is_scalar_type(*it) && !is_code_type(*it) &&
-          (*it)->get_width() > 32 && config.ansi_c.word_size == 32)
+      if (is_scalar_type(it) && !is_code_type(it) &&
+          (it)->get_width() > 32 && config.ansi_c.word_size == 32)
         round_up_to_int64(accumulated_size);
 
       // While we're at it, round any struct/union up to 64 bit alignment too,
       // as that might require such alignment due to internal doubles.
-      if (is_structure_type(*it))
+      if (is_structure_type(it))
         round_up_to_int64(accumulated_size);
 
       // Also arrays of int64's. One onders why I bother.
-      if (is_array_type(*it) && to_array_type(*it).subtype->get_width() > 32)
+      if (is_array_type(it) && to_array_type(*it).subtype->get_width() > 32)
         round_up_to_int64(accumulated_size);
 
-      mp_integer memb_size = type_byte_size(*it);
+      mp_integer memb_size = type_byte_size(it);
 
       round_up_to_word(memb_size);
 
@@ -205,8 +207,9 @@ type_byte_size(const type2tc &type)
     // array allocation alignment.
     const union_type2t &t2 = to_union_type(type);
     mp_integer max_size(0);
-    forall_types(it, t2.members) {
-      mp_integer memb_size = type_byte_size(*it);
+    for(auto const &it : t2.members)
+    {
+      mp_integer memb_size = type_byte_size(it);
       max_size = std::max(max_size, memb_size);
     }
 
