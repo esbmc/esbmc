@@ -10,22 +10,22 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_FIXEDBV_UTIL_H
 
 #include <util/format_spec.h>
+#include <util/irep2_type.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
 #include <util/std_types.h>
-#include <util/irep2_type.h>
 
 class fixedbv_spect
 {
 public:
   unsigned integer_bits, width;
 
-  fixedbv_spect():integer_bits(0), width(0)
+  fixedbv_spect() : integer_bits(0), width(0)
   {
   }
 
-  fixedbv_spect(unsigned _width, unsigned _integer_bits):
-    integer_bits(_integer_bits), width(_width)
+  fixedbv_spect(unsigned _width, unsigned _integer_bits)
+    : integer_bits(_integer_bits), width(_width)
   {
     assert(width >= integer_bits);
   }

@@ -13,6 +13,7 @@
 #include <util/c_types.h>
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
+#include <util/ieee_float.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
 

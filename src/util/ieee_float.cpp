@@ -35,13 +35,47 @@ mp_integer ieee_float_spect::max_fraction() const
   return power(2, f)-1;
 }
 
-void ieee_float_spect::from_type(const floatbv_typet &type)
+ieee_float_spect::ieee_float_spect(const floatbv_typet& type)
 {
-  unsigned width=type.get_width();
-  f=type.get_f();
-  assert(f!=0);
-  assert(f<width);
-  e=width-f-1;
+  unsigned width = type.get_width();
+  f = type.get_f();
+  assert(f != 0);
+  assert(f < width);
+  e = width - f - 1;
+}
+
+ieee_float_spect::ieee_float_spect(const floatbv_type2tc& type)
+{
+  unsigned width = type->get_width();
+  f = type->fraction;
+  assert(f != 0);
+  assert(f < width);
+  e = width - f - 1;
+}
+
+const floatbv_type2tc ieee_float_spect::get_type() const
+{
+  return floatbv_type2tc(f, e);
+}
+
+ieee_floatt::ieee_floatt()
+  : rounding_mode(ROUND_TO_EVEN),
+    sign_flag(false), exponent(0), fraction(0),
+    NaN_flag(false), infinity_flag(false)
+{
+}
+
+ieee_floatt::ieee_floatt(const ieee_float_spect &s)
+  : rounding_mode(ROUND_TO_EVEN),
+    spec(s), sign_flag(false), exponent(0), fraction(0),
+    NaN_flag(false), infinity_flag(false)
+{
+}
+
+ieee_floatt::ieee_floatt(const constant_exprt &expr)
+  : rounding_mode(ROUND_TO_EVEN)
+{
+  from_expr(expr);
 }
 
 void ieee_floatt::print(std::ostream &out) const

@@ -1257,7 +1257,7 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
       ieee_floatt number(spec);
       number.unpack(BigInt(Z3_get_numeral_string(ctx, v)));
 
-      return constant_floatbv2tc(t, number);
+      return constant_floatbv2tc(number);
     }
   }
 

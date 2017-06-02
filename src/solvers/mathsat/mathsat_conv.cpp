@@ -163,7 +163,7 @@ mathsat_convt::get_bv(const type2tc &_t,
     ieee_floatt number(spec);
     number.unpack(BigInt(buffer));
 
-    return constant_floatbv2tc(_t, number);
+    return constant_floatbv2tc(number);
   }
 
   char *foo = buffer;

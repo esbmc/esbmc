@@ -11,7 +11,6 @@
 expr2tc
 expr2t::do_simplify(bool second __attribute__((unused))) const
 {
-
   return expr2tc();
 }
 
@@ -1399,7 +1398,7 @@ typecast2t::do_simplify(bool second) const
         fpbv.from_expr(to_constant_floatbv2t(simp).value.to_expr());
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
 
-        return constant_floatbv2tc(type, fpbv);
+        return constant_floatbv2tc(fpbv);
       }
     }
     else if (is_bv_type(simp) && is_number_type(type))
@@ -1445,7 +1444,7 @@ typecast2t::do_simplify(bool second) const
         fpbv.spec = to_floatbv_type(migrate_type_back(type));
         fpbv.from_integer(to_constant_int2t(simp).value);
 
-        return constant_floatbv2tc(type, fpbv);
+        return constant_floatbv2tc(fpbv);
       }
     }
     else if (is_fixedbv_type(simp) && is_number_type(type))
@@ -1486,7 +1485,7 @@ typecast2t::do_simplify(bool second) const
       else if(is_floatbv_type(type))
       {
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
-        return constant_floatbv2tc(type, fpbv);
+        return constant_floatbv2tc(fpbv);
       }
       else if(is_bool_type(type))
       {

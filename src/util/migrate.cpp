@@ -693,7 +693,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     ieee_floatt bv(to_constant_expr(expr));
 
-    expr2t *new_expr = new constant_floatbv2t(type, bv);
+    expr2t *new_expr = new constant_floatbv2t(bv);
     new_expr_ref = expr2tc(new_expr);
   } else if (expr.id() == exprt::typecast) {
     assert(expr.op0().id_string() != "");

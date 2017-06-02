@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_sizeof.h>
 #include <ansi-c/c_typecast.h>
 #include <ansi-c/c_typecheck_base.h>
-#include <cassert>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/bitvector.h>
@@ -17,6 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/config.h>
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
+#include <util/ieee_float.h>
 #include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>

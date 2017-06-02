@@ -2,6 +2,7 @@
 #define IREP2_EXPR_H_
 
 #include <util/fixedbv.h>
+#include <util/ieee_float.h>
 #include <util/irep2_type.h>
 
 // So - make some type definitions for the different types we're going to be
@@ -1156,8 +1157,8 @@ public:
    *  @param type Type of this expression.
    *  @param value ieee_floatt object containing number we'll be operating on
    */
-  constant_floatbv2t(const type2tc &type, const ieee_floatt &value)
-    : constant_floatbv_expr_methods(type, constant_floatbv_id, value) { }
+  constant_floatbv2t(const ieee_floatt &value)
+    : constant_floatbv_expr_methods(value.spec.get_type(), constant_floatbv_id, value) { }
   constant_floatbv2t(const constant_floatbv2t &ref)
     : constant_floatbv_expr_methods(ref) { }
 
