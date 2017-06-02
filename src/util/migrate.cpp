@@ -1486,9 +1486,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(new code_decl2t(thetype, sym_name));
   } else if (expr.id() == irept::id_code && expr.statement() == "printf") {
     std::vector<expr2tc> ops;
-    forall_expr(it, expr.operands()) {
+    for(auto const &it : expr.operands())
+    {
       expr2tc tmp_op;
-      migrate_expr(*it, tmp_op);
+      migrate_expr(it, tmp_op);
       ops.push_back(tmp_op);
     }
     new_expr_ref = expr2tc(new code_printf2t(ops));
@@ -1857,10 +1858,8 @@ migrate_expr_back(const expr2tc &ref)
     const constant_struct2t &ref2 = to_constant_struct2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thestruct("struct", thetype);
-    forall_exprs(it, ref2.datatype_members) {
-      exprt tmp = migrate_expr_back(*it);
-      thestruct.operands().push_back(tmp);
-    }
+    for(auto const &it : ref2.datatype_members)
+      thestruct.operands().push_back(migrate_expr_back(it));
     return thestruct;
   }
   case expr2t::constant_union_id:
@@ -1868,10 +1867,8 @@ migrate_expr_back(const expr2tc &ref)
     const constant_union2t &ref2 = to_constant_union2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt theunion("union", thetype);
-    forall_exprs(it, ref2.datatype_members) {
-      exprt tmp = migrate_expr_back(*it);
-      theunion.operands().push_back(tmp);
-    }
+    for(auto const &it : ref2.datatype_members)
+      theunion.operands().push_back(migrate_expr_back(it));
     return theunion;
   }
   case expr2t::constant_array_id:
@@ -1879,10 +1876,8 @@ migrate_expr_back(const expr2tc &ref)
     const constant_array2t &ref2 = to_constant_array2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thearray("constant", thetype);
-    forall_exprs(it, ref2.datatype_members) {
-      exprt tmp = migrate_expr_back(*it);
-      thearray.operands().push_back(tmp);
-    }
+    for(auto const &it : ref2.datatype_members)
+      thearray.operands().push_back(migrate_expr_back(it));
     return thearray;
   }
   case expr2t::constant_array_of_id:
@@ -2567,9 +2562,8 @@ migrate_expr_back(const expr2tc &ref)
     const code_printf2t &ref2 = to_code_printf2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("printf"));
-    forall_exprs(it, ref2.operands) {
-      codeexpr.operands().push_back(migrate_expr_back(*it));
-    }
+    for(auto const &it : ref2.operands)
+      codeexpr.operands().push_back(migrate_expr_back(it));
     return codeexpr;
   }
   case expr2t::code_expression_id:
@@ -2625,9 +2619,8 @@ migrate_expr_back(const expr2tc &ref)
     exprt op2("arguments");
     codeexpr.copy_to_operands(op0, op1, op2);
     exprt &args = codeexpr.op2();
-    forall_exprs(it, ref2.operands) {
-      args.operands().push_back(migrate_expr_back(*it));
-    }
+    for(auto const &it : ref2.operands)
+      args.operands().push_back(migrate_expr_back(it));
     return codeexpr;
   }
   case expr2t::code_comma_id:

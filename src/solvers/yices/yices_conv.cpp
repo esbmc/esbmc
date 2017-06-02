@@ -639,8 +639,8 @@ yices_convt::tuple_create(const expr2tc &structdef)
   const struct_union_data &type = get_type_def(strct.type);
 
   std::vector<term_t> terms;
-  forall_exprs(it, strct.datatype_members) {
-    smt_astt a = convert_ast(*it);
+  for(auto const &it : strct.datatype_members) {
+    smt_astt a = convert_ast(it);
     const yices_smt_ast *yast = yices_ast_downcast(a);
     terms.push_back(yast->term);
   }

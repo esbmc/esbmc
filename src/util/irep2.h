@@ -1,5 +1,5 @@
-#ifndef _UTIL_IREP2_H_
-#define _UTIL_IREP2_H_
+#ifndef IREP2_H_
+#define IREP2_H_
 
 /** @file irep2.h
  *  Classes and definitions for non-stringy internal representation.
@@ -152,26 +152,6 @@ BOOST_PP_LIST_CONS(string,\
 BOOST_PP_LIST_CONS(cpp_name, BOOST_PP_LIST_NIL)))))))))))))
 
 // XXXjmorse - abstract, access modifies, need consideration
-
-/** Iterate over all expr2tc's in a vector.
- *  Deals only with constant vectors.
- *  @see Forall_exprs
- *  @param it Name to give iterator to be declared
- *  @param vect Reference to vector of expr2tc's.
- */
-#define forall_exprs(it, vect) \
-  for (std::vector<expr2tc>::const_iterator (it) = (vect).begin();\
-       it != (vect).end(); it++)
-
-/** Iterate over all expr2tc's in a vector.
- *  Deals only with non-constant vectors.
- *  @see forall_exprs
- *  @param it Name to give iterator to be declared
- *  @param vect Reference to vector of expr2tc's.
- */
-#define Forall_exprs(it, vect) \
-  for (std::vector<expr2tc>::iterator (it) = (vect).begin();\
-       it != (vect).end(); it++)
 
 /** Iterate over all type2tc's in a vector.
  *  Deals only with constant vectors
@@ -4944,4 +4924,4 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MACROS_ENUM, foo, ESBMC_LIST_OF_EXPRS)
 #undef dynamic_cast
 #endif
 
-#endif /* _UTIL_IREP2_H_ */
+#endif /* IREP2_H_ */

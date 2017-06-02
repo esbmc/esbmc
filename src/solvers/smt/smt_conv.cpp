@@ -2495,8 +2495,8 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
     const constant_array2t &arr = to_constant_array2t(expr);
     smt_astt args[arr.datatype_members.size()];
     unsigned int i = 0;
-    forall_exprs(it, arr.datatype_members) {
-      args[i] = convert_ast(*it);
+    for(auto const &it : arr.datatype_members) {
+      args[i] = convert_ast(it);
       i++;
     }
 
