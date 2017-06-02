@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/format_spec.h>
 #include <util/mp_arith.h>
 #include <util/std_expr.h>
+#include <util/std_types.h>
 
 class fixedbv_spect
 {
@@ -28,7 +29,7 @@ public:
     assert(width >= integer_bits);
   }
 
-  fixedbv_spect(const class fixedbv_typet &type);
+  fixedbv_spect(const fixedbv_typet &type);
 
   inline unsigned get_fraction_bits() const
   {
