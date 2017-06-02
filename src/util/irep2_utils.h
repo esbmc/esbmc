@@ -1,7 +1,7 @@
 #ifndef UTIL_IREP2_UTILS_H_
 #define UTIL_IREP2_UTILS_H_
 
-#include <util/irep2.h>
+#include <util/irep2_expr.h>
 
 /** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t) \
