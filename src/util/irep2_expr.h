@@ -1137,8 +1137,8 @@ public:
    *  @param type Type of this expression.
    *  @param value fixedbvt object containing number we'll be operating on
    */
-  constant_fixedbv2t(const type2tc &type, const fixedbvt &value)
-    : constant_fixedbv_expr_methods(type, constant_fixedbv_id, value) { }
+  constant_fixedbv2t(const fixedbvt &value)
+    : constant_fixedbv_expr_methods(value.spec.get_type(), constant_fixedbv_id, value) { }
   constant_fixedbv2t(const constant_fixedbv2t &ref)
     : constant_fixedbv_expr_methods(ref) { }
 

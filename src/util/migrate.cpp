@@ -686,7 +686,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     fixedbvt bv(to_constant_expr(expr));
 
-    expr2t *new_expr = new constant_fixedbv2t(type, bv);
+    expr2t *new_expr = new constant_fixedbv2t(bv);
     new_expr_ref = expr2tc(new_expr);
   } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_floatbv) {
     migrate_type(expr.type(), type);

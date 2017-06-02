@@ -2249,7 +2249,7 @@ smt_convt::get(const expr2tc &expr)
     value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
     fixedbvt fbv;
     fbv.from_expr(value_expr);
-    return constant_fixedbv2tc(expr->type, fbv);
+    return constant_fixedbv2tc(fbv);
   }
   case type2t::floatbv_id:
   {
