@@ -496,13 +496,13 @@ smt_convt::convert_typecast_to_struct(const typecast2t &cast)
     // we have to look up source fields by matching the field names between
     // structs, then using their index numbers construct equalities between
     // fields in the source value and a fresh value.
-    forall_names(it, struct_type_to.member_names)
+    for(auto const &it : struct_type_to.member_names)
     {
       // Linear search, yay :(
       unsigned int i3 = 0;
-      forall_names(it2, struct_type_from.member_names)
+      for(auto const &it2 : struct_type_from.member_names)
       {
-        if (*it == *it2)
+        if (it == it2)
           break;
         i3++;
       }

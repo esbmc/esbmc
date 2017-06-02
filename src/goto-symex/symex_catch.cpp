@@ -128,10 +128,10 @@ bool goto_symext::symex_throw()
   // a derived object with multiple inheritance
   unsigned old_id_number=-1, new_id_number=0;
 
-  forall_names(e_it, throw_ref.exception_list)
+  for(auto const &it : throw_ref.exception_list)
   {
     // Handle throw declarations
-    switch(handle_throw_decl(except, *e_it))
+    switch(handle_throw_decl(except, it))
     {
       case 0:
         return true;
@@ -151,7 +151,7 @@ bool goto_symext::symex_throw()
 
     // Search for a catch with a matching type
     goto_symex_statet::exceptiont::catch_mapt::const_iterator
-      c_it=except->catch_map.find(*e_it);
+      c_it=except->catch_map.find(it);
 
     // Do we have a catch for it?
     if(c_it!=except->catch_map.end())
@@ -159,7 +159,7 @@ bool goto_symext::symex_throw()
       // We do!
 
       // Get current catch number and update if needed
-      new_id_number = (*except->catch_order.find(*e_it)).second;
+      new_id_number = (*except->catch_order.find(it)).second;
 
       if(new_id_number < old_id_number)
       {
@@ -174,7 +174,7 @@ bool goto_symext::symex_throw()
     else // We don't have a catch for it
     {
       // If it's a pointer, we must look for a catch(void*)
-      if(e_it->as_string().find("_ptr") != std::string::npos)
+      if(it.as_string().find("_ptr") != std::string::npos)
       {
         // It's a pointer!
 
@@ -204,7 +204,8 @@ bool goto_symext::symex_throw()
     }
   }
 
-  if (catch_insn == NULL) {
+  if (catch_insn == nullptr)
+  {
     // No catch for type, void, or ellipsis
     // Call terminate handler before showing error message
     if(!terminate_handler())

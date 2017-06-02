@@ -277,12 +277,9 @@ z3_convt::convert_struct(const std::vector<expr2tc> &members,
                          const std::vector<type2tc> &member_types,
                          const type2tc &type, z3::expr &output)
 {
-
   // Converts a static struct - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
-  u_int i = 0;
-
   z3::sort sort;
   convert_type(type, sort);
 
@@ -297,11 +294,10 @@ z3_convt::convert_struct(const std::vector<expr2tc> &members,
 #endif
 
   // Populate tuple with members of that struct
-  for(auto const &it : member_types)
+  for(unsigned int i = 0; i < member_types.size(); i++)
   {
     const z3_smt_ast *tmp = z3_smt_downcast(convert_ast(members[i]));
     args[i] = tmp->e;
-    i++;
   }
 
   // Create tuple itself, return to caller. This is a lump of data, we don't

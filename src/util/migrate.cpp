@@ -2680,9 +2680,8 @@ migrate_expr_back(const expr2tc &ref)
     exprt codeexpr("cpp-throw");
     irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
 
-    forall_names(it, ref2.exception_list) {
-      exceptions_thrown.push_back(irept(*it));
-    }
+    for(auto const &it : ref2.exception_list)
+      exceptions_thrown.push_back(irept(it));
 
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;

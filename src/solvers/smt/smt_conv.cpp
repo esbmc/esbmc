@@ -45,8 +45,9 @@ smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
   unsigned int idx = 0;
   const struct_union_data &data_ref = get_type_def(t);
 
-  forall_names(it, data_ref.member_names) {
-    if (*it == name)
+  for(auto const &it : data_ref.member_names)
+  {
+    if (it == name)
       break;
     idx++;
   }

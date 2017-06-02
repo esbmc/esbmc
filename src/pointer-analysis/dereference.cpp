@@ -1252,7 +1252,8 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
   // incompatible type, we do.
   const constant_int2t &intref = to_constant_int2t(offs);
 
-  if (is_struct_type(value->type)) {
+  if (is_struct_type(value->type))
+  {
     // Right. In this situation, there are several possibilities. First, if the
     // offset is zero, and the struct type is compatible, we've succeeded.
     // If the offset isn't zero, then there are some possibilities:
@@ -1260,13 +1261,9 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
     //   a) it's a misaligned access, which is an error
     //   b) there's a struct within a struct here that we should recurse into.
 
-    if (intref.value == 0) {
-      // Success?
-      if (dereference_type_compare(value, type)) {
-        // Good, just return this expression.
-        return;
-      }
-    }
+    // Good, just return this expression.
+    if ((intref.value == 0) && dereference_type_compare(value, type))
+      return;
 
     // If it's not compatible, recurse into the next relevant field to see if
     // we can construct a ref in there. This would match structs within structs
@@ -1278,7 +1275,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
     for(auto const &it : struct_type.members)
     {
       mp_integer offs = member_offset(value->type, struct_type.member_names[i]);
-      mp_integer size = type_byte_size(*it);
+      mp_integer size = type_byte_size(it);
 
       if (!is_scalar_type(it) && intref.value >= offs && intref.value < (offs + size))
       {
@@ -1295,10 +1292,12 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
     // Fell out of that loop. Either this offset is out of range, or lies in
     // padding.
-    dereference_failure("Memory model", "Object accessed with illegal offset",
-                        guard);
-      return;
-  } else {
+    dereference_failure(
+      "Memory model", "Object accessed with illegal offset", guard);
+    return;
+  }
+  else
+  {
     std::cerr << "Unexpectedly " << get_type_id(value->type) << " type'd";
     std::cerr << " argument to construct_struct_ref" << std::endl;
     abort();

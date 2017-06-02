@@ -151,28 +151,6 @@ BOOST_PP_LIST_CONS(fixedbv,\
 BOOST_PP_LIST_CONS(string,\
 BOOST_PP_LIST_CONS(cpp_name, BOOST_PP_LIST_NIL)))))))))))))
 
-// XXXjmorse - abstract, access modifies, need consideration
-
-/** Iterate over all irep_idt's in a vector.
- *  Deals only with constant vectors of string-pool IDs.
- *  @see Forall_names
- *  @param it Name to give iterator to be declared
- *  @param vect Reference to vector of irep_idts's.
- */
-#define forall_names(it, vect) \
-  for (std::vector<irep_idt>::const_iterator (it) = (vect).begin();\
-       it != (vect).end(); it++)
-
-/** Iterate over all irep_idt's in a vector.
- *  Deals only with non-constant vectors of string-pool IDs.
- *  @see forall_names
- *  @param it Name to give iterator to be declared
- *  @param vect Reference to vector of irep_idts's.
- */
-#define Forall_names(it, vect) \
-  for (std::vector<std::string>::iterator (it) = (vect).begin();\
-       it != (vect).end(); it++)
-
 // Even crazier forward decs,
 namespace esbmct {
   template <typename ...Args> class expr2t_traits;

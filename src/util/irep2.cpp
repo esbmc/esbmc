@@ -199,7 +199,6 @@ get_type_id(const type2t &type)
   return std::string(type_names[type.type_id]);
 }
 
-
 type2t::type2t(type_ids id)
   : type_id(id),
     crc_val(0)
@@ -438,10 +437,10 @@ struct_union_data::get_structure_name(void) const
 unsigned int
 struct_union_data::get_component_number(const irep_idt &name) const
 {
-
   unsigned int i = 0;
-  forall_names(it, member_names) {
-    if (*it == name)
+  for(auto const &it : member_names)
+  {
+    if (it == name)
       return i;
     i++;
   }
@@ -1451,10 +1450,12 @@ type_to_string(const std::vector<irep_idt> &theval,
   int i;
 
   i = 0;
-  forall_names(it, theval) {
+  for(auto const &it : theval)
+  {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += indent_str(indent) + std::string(buffer) + ": " + (*it).as_string() + "\n";
+    astring +=
+      indent_str(indent) + std::string(buffer) + ": " + it.as_string() + "\n";
     i++;
   }
 
@@ -1945,16 +1946,16 @@ do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const std::vector<irep_idt> &theval, size_t seed)
 {
-  forall_names(it, theval)
-    boost::hash_combine(seed, (*it).as_string());
+  for(auto const &it : theval)
+    boost::hash_combine(seed, it.as_string());
   return seed;
 }
 
 static inline __attribute__((always_inline)) void
 do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
 {
-  forall_names(it, theval)
-    hash.ingest((void*)(*it).as_string().c_str(), (*it).as_string().size());
+  for(auto const &it : theval)
+    hash.ingest((void*)it.as_string().c_str(), it.as_string().size());
 }
 
 static inline __attribute__((always_inline)) size_t
