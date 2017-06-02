@@ -31,7 +31,7 @@ Function: pointer_logict::add_object
 unsigned pointer_logict::add_object(const expr2tc &expr)
 {
   // remove any index/member
-  
+
   if (expr->expr_id == expr2t::index_id)
   {
     const index2t &index = static_cast<const index2t &>(*expr.get());
@@ -100,7 +100,7 @@ expr2tc pointer_logict::pointer_expr(
   {
     return symbol2tc(type, irep_idt("INVALID"));
   }
-  
+
   if(pointer.object>=objects.size())
   {
     return symbol2tc(type, irep_idt("INVALID" + i2string(pointer.object)));
@@ -109,7 +109,7 @@ expr2tc pointer_logict::pointer_expr(
   const expr2tc &object_expr = lookup[pointer.object];
 
   expr2tc deep_object = object_rec(pointer.offset, type, object_expr);
-  
+
   assert(type->type_id == type2t::pointer_id);
   return address_of2tc(type, deep_object);
 }
@@ -140,13 +140,13 @@ expr2tc pointer_logict::object_rec(
 
     if (size == 0)
       return src;
-    
+
     mp_integer index=offset/size;
     mp_integer rest=offset%size;
 
     type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
     index2tc newindex(arrtype.subtype, src, constant_int2tc(inttype, index));
-    
+
     return object_rec(rest, pointer_type, newindex);
   }
   else if (is_structure_type(src))
@@ -158,7 +158,7 @@ expr2tc pointer_logict::object_rec(
       data_ref.get_structure_member_names();
 
     assert(offset>=0);
-  
+
     if(offset==0) // the struct itself
       return src;
 
