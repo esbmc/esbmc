@@ -1,6 +1,7 @@
 #ifndef IREP2_EXPR_H_
 #define IREP2_EXPR_H_
 
+#include <util/fixedbv.h>
 #include <util/irep2_type.h>
 
 // So - make some type definitions for the different types we're going to be
@@ -2800,89 +2801,6 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MPL_SET, foo, ESBMC_LIST_OF_EXPRS)
   // Insert things into this boost set
   boost::mpl::insert<boost::mpl::_1, boost::mpl::_2>
 >::type set_of_traits;
-
-inline bool operator==(const type2tc &a, const type2tc &b)
-{
-  // Handle nil ireps
-  if (is_nil_type(a) && is_nil_type(b))
-    return true;
-  else if (is_nil_type(a) || is_nil_type(b))
-    return false;
-  else
-    return (*a.get() == *b.get());
-}
-
-inline bool operator!=(const type2tc &a, const type2tc &b)
-{
-  return !(a == b);
-}
-
-inline bool operator<(const type2tc &a, const type2tc &b)
-{
-  if (is_nil_type(a)) // nil is lower than non-nil
-    return !is_nil_type(b); // true if b is non-nil, so a is lower
-  else if (is_nil_type(b))
-    return false; // If b is nil, nothing can be lower
-  else
-    return (*a.get() < *b.get());
-}
-
-inline bool operator>(const type2tc &a, const type2tc &b)
-{
-  // We're greater if we neither less than or equal.
-  // This costs more: but that's ok, because all conventional software uses
-  // less-than comparisons for ordering
-  return !(a < b) && (a != b);
-}
-
-inline bool operator==(const expr2tc& a, const expr2tc& b)
-{
-  if (is_nil_expr(a) && is_nil_expr(b))
-    return true;
-  else if (is_nil_expr(a) || is_nil_expr(b))
-    return false;
-  else
-    return (*a.get() == *b.get());
-}
-
-inline bool operator!=(const expr2tc& a, const expr2tc& b)
-{
-  return !(a == b);
-}
-
-inline bool operator<(const expr2tc& a, const expr2tc& b)
-{
-  if (is_nil_expr(a)) // nil is lower than non-nil
-    return !is_nil_expr(b); // true if b is non-nil, so a is lower
-  else if (is_nil_expr(b))
-    return false; // If b is nil, nothing can be lower
-  else
-    return (*a.get() < *b.get());
-}
-
-inline bool operator>(const expr2tc& a, const expr2tc& b)
-{
-  // We're greater if we neither less than or equal.
-  // This costs more: but that's ok, because all conventional software uses
-  // less-than comparisons for ordering
-  return !(a < b) && (a != b);
-}
-
-inline std::ostream& operator<<(std::ostream &out, const expr2tc& a)
-{
-  out << a->pretty(0);
-  return out;
-}
-
-struct irep2_hash
-{
-  size_t operator()(const expr2tc &ref) const { return ref.crc(); }
-};
-
-struct type2_hash
-{
-  size_t operator()(const type2tc &ref) const { return ref->crc(); }
-};
 
 // Same deal as for "type_macros".
 #ifdef NDEBUG

@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <iostream>
 #include <util/config.h>
-#include <util/irep2.h>
 
 configt config;
 

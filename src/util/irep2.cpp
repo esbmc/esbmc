@@ -4,10 +4,10 @@
 #include <cstdarg>
 #include <cstring>
 #include <sstream>
+#include <util/fixedbv.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
-#include <util/irep2_expr.h>
 #include <util/irep2_type.h>
+#include <util/irep2_expr.h>
 #include <util/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
