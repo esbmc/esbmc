@@ -114,7 +114,7 @@ tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   eqs.reserve(data.members.size());
 
   // Iterate through each field and encode an equality.
-  for(unsigned int i = 0; i <= data.members.size(); i++)
+  for(unsigned int i = 0; i < data.members.size(); i++)
   {
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
