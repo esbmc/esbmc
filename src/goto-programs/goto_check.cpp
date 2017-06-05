@@ -215,6 +215,10 @@ void goto_checkt::overflow_check(
   if(!is_signedbv_type(type))
     return;
 
+  // Don't check pointer overflow
+  if(is_pointer_type(*expr->get_sub_expr(0)))
+    return;
+
   // add overflow subgoal
   expr2tc overflow =
     is_neg2t(expr) ?
