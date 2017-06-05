@@ -204,7 +204,7 @@ bool clang_c_languaget::final(contextt& context, message_handlert& message_handl
 std::string clang_c_languaget::internal_additions()
 {
   std::string intrinsics =
-    "# 1 \"<esbmc_intrinsics.h>\" 1\n"
+    "# 1 \"esbmc_intrinsics.h\" 1\n"
     "void __ESBMC_assume(_Bool assumption);\n"
     "void assert(_Bool assertion);\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
