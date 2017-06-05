@@ -279,4 +279,76 @@ inline void make_not(expr2tc &expr)
   expr.swap(new_expr);
 }
 
+inline expr2tc gen_zero(
+  const type2tc &type,
+  bool array_as_array_of = false)
+{
+  switch(type->type_id)
+  {
+    case type2t::bool_id:
+      return gen_false_expr();
+
+    case type2t::unsignedbv_id:
+    case type2t::signedbv_id:
+      return constant_int2tc(type, BigInt(0));
+
+    case type2t::fixedbv_id:
+      return constant_fixedbv2tc(
+        fixedbvt(fixedbv_spect(to_fixedbv_type(type))));
+
+    case type2t::floatbv_id:
+      return constant_floatbv2tc(
+        ieee_floatt(ieee_float_spect(to_floatbv_type(type))));
+
+    case type2t::array_id:
+    {
+      if(array_as_array_of)
+        return constant_array_of2tc(
+          type, gen_zero(to_array_type(type).subtype));
+
+      auto arr_type = to_array_type(type);
+
+      assert(is_constant_int2t(arr_type.array_size));
+      auto s = to_constant_int2t(arr_type.array_size);
+
+      std::vector<expr2tc> members;
+      for(long int i = 0; i < s.as_long(); i++)
+        members.push_back(
+          gen_zero(to_array_type(type).subtype, array_as_array_of));
+
+      return constant_array2tc(type, members);
+    }
+
+    case type2t::pointer_id:
+      return symbol2tc(pointer_type2(), "NULL");
+
+    case type2t::struct_id:
+    {
+      auto struct_type = to_struct_type(type);
+
+      std::vector<expr2tc> members;
+      for(auto const& member_type : struct_type.members)
+        members.push_back(gen_zero(member_type, array_as_array_of));
+
+      return constant_struct2tc(type, members);
+    }
+
+    case type2t::union_id:
+    {
+      auto union_type = to_union_type(type);
+
+      std::vector<expr2tc> members;
+      for(auto const& member_type : union_type.members)
+        members.push_back(gen_zero(member_type, array_as_array_of));
+
+      return constant_union2tc(type, members);
+    }
+
+    default:
+      break;
+  }
+
+  abort();
+}
+
 #endif /* UTIL_IREP2_UTILS_H_ */
