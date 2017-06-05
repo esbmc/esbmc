@@ -416,6 +416,12 @@ string_type2t::get_width(void) const
   return width * 8;
 }
 
+unsigned int
+string_type2t::get_length(void) const
+{
+  return width;
+}
+
 const std::vector<type2tc> &
 struct_union_data::get_structure_members(void) const
 {

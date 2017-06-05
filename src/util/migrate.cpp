@@ -265,6 +265,10 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     // an infinitely sized array of characters, the most permissive approach to
     // something that shouldn't happen.
     new_type_ref = type2tc(new array_type2t(get_uint8_type(), expr2tc(), true));
+  } else if (type.id() == "string") {
+    irep_idt width = type.width();
+    unsigned int iwidth = strtol(width.as_string().c_str(), NULL, 10);
+    new_type_ref = type2tc(new string_type2t(iwidth));
   } else {
     type.dump();
     assert(0);
@@ -328,6 +332,8 @@ migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns,
   } else if (type.id() == "incomplete_array") {
     real_migrate_type(type, new_type_ref, ns, cache);
   } else if (type.id() == "incomplete_struct") {
+    real_migrate_type(type, new_type_ref, ns, cache);
+  } else if (type.id() == "string") {
     real_migrate_type(type, new_type_ref, ns, cache);
   } else {
     type.dump();
@@ -1763,7 +1769,11 @@ migrate_type_back(const type2tc &ref)
     return thetype;
   }
   case type2t::string_id:
-    return string_typet();
+  {
+    string_typet ret;
+    ret.width(to_string_type(ref).get_length());
+    return ret;
+  }
   case type2t::cpp_name_id:
   {
     const cpp_name_type2t &ref2 = to_cpp_name_type(ref);

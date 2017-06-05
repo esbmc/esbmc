@@ -528,6 +528,7 @@ public:
   string_type2t(const string_type2t &ref)
     : string_type_methods(ref) { }
   virtual unsigned int get_width(void) const;
+  virtual unsigned int get_length(void) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
