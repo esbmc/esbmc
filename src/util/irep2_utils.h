@@ -2,51 +2,69 @@
 #define UTIL_IREP2_UTILS_H_
 
 #include <util/irep2_expr.h>
+#include <util/c_types.h>
 
 /** Test whether type is an integer. */
-inline bool is_bv_type(const type2tc &t) \
-{ return (t->type_id == type2t::unsignedbv_id ||
-          t->type_id == type2t::signedbv_id); }
+inline bool is_bv_type(const type2tc &t)
+{
+  return t->type_id == type2t::unsignedbv_id ||
+         t->type_id == type2t::signedbv_id;
+}
 
 inline bool is_bv_type(const expr2tc &e)
-{ return is_bv_type(e->type); }
+{
+  return is_bv_type(e->type);
+}
 
 /** Test whether type is a float/double. */
-inline bool is_fractional_type(const type2tc &t) \
-{ return (t->type_id == type2t::fixedbv_id ||
-          t->type_id == type2t::floatbv_id); }
+inline bool is_fractional_type(const type2tc &t)
+{
+  return t->type_id == type2t::fixedbv_id || t->type_id == type2t::floatbv_id;
+}
 
 inline bool is_fractional_type(const expr2tc &e)
-{ return is_bv_type(e->type); }
+{
+  return is_bv_type(e->type);
+}
 
 /** Test whether type is a number type - bv, fixedbv or floatbv. */
 inline bool is_number_type(const type2tc &t)
-{ return (t->type_id == type2t::unsignedbv_id ||
-          t->type_id == type2t::signedbv_id ||
-          t->type_id == type2t::fixedbv_id ||
-          t->type_id == type2t::floatbv_id ||
-          t->type_id == type2t::bool_id); }
-
-inline bool is_number_type(const expr2tc &e)
-{ return is_number_type(e->type); }
-
-inline bool is_scalar_type(const type2tc &t)
-{ return is_number_type(t) || is_pointer_type(t) || is_bool_type(t) ||
-         is_empty_type(t) || is_code_type(t); }
-
-inline bool is_scalar_type(const expr2tc &e)
-{ return is_scalar_type(e->type); }
-
-inline bool is_multi_dimensional_array(const type2tc &t) {
-  if (is_array_type(t)) {
-    const array_type2t &arr_type = to_array_type(t);
-    return is_array_type(arr_type.subtype);
-  } else {
-    return false;
-  }
+{
+  return t->type_id == type2t::unsignedbv_id ||
+         t->type_id == type2t::signedbv_id ||
+         t->type_id == type2t::fixedbv_id ||
+         t->type_id == type2t::floatbv_id ||
+         t->type_id == type2t::bool_id;
 }
 
-inline bool is_multi_dimensional_array(const expr2tc &e) {
+inline bool is_number_type(const expr2tc &e)
+{
+  return is_number_type(e->type);
+}
+
+inline bool is_scalar_type(const type2tc &t)
+{
+  return is_number_type(t) ||
+         is_pointer_type(t) ||
+         is_empty_type(t) ||
+         is_code_type(t);
+}
+
+inline bool is_scalar_type(const expr2tc &e)
+{
+  return is_scalar_type(e->type);
+}
+
+inline bool is_multi_dimensional_array(const type2tc &t)
+{
+  if (is_array_type(t))
+    return is_array_type(to_array_type(t).subtype);
+
+  return false;
+}
+
+inline bool is_multi_dimensional_array(const expr2tc &e)
+{
   return is_multi_dimensional_array(e->type);
 }
 
@@ -95,8 +113,8 @@ is_true(const expr2tc &expr)
 {
   if (is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
     return true;
-  else
-    return false;
+
+  return false;
 }
 
 /** Test if expr is false. First checks whether the expr is a constant bool, and
@@ -110,8 +128,8 @@ is_false(const expr2tc &expr)
 {
   if (is_constant_bool2t(expr) && !to_constant_bool2t(expr).value)
     return true;
-  else
-    return false;
+
+  return false;
 }
 
 inline expr2tc
@@ -223,8 +241,8 @@ get_base_array_subtype(const type2tc &type)
   const auto &subtype = to_array_type(type).subtype;
   if (is_array_type(subtype))
     return get_base_array_subtype(subtype);
-  else
-    return subtype;
+
+  return subtype;
 }
 
 inline bool simplify(expr2tc &expr)
@@ -254,7 +272,7 @@ inline void make_not(expr2tc &expr)
 
   expr2tc new_expr;
   if (is_not2t(expr))
-    new_expr.swap(to_not2t(expr).value);
+    new_expr = to_not2t(expr).value;
   else
     new_expr = not2tc(expr);
 
