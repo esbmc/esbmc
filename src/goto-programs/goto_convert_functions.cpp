@@ -353,23 +353,13 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
       type2 = ns.follow((typet&)type);
     } else {
       // Otherwise, try to guess the namespaced type symbol
-      std::string ident = type.identifier().as_string();
-      std::string ident2;
-
-      // Detect module prefix, then insert module name after it.
-      if (ident.c_str()[0] == 'c' && ident.c_str()[1] == 'p' &&
-          ident.c_str()[2] == 'p') {
-        ident2 = cur_name_sym.module.as_string() + "::" +
-                 ident.substr(5, std::string::npos);
-      } else {
-        ident2 = cur_name_sym.module.as_string() + "::"  +
-                 ident.substr(3, std::string::npos);
-      }
+      std::string ident =
+        cur_name_sym.module.as_string() + type.identifier().as_string();
 
       // Try looking that up.
-      if (!ns.lookup(irep_idt(ident2), sym)) {
+      if (!ns.lookup(irep_idt(ident), sym)) {
         irept tmptype = type;
-        tmptype.identifier(irep_idt(ident2));
+        tmptype.identifier(irep_idt(ident));
         type2 = ns.follow((typet&)tmptype);
       } else {
         // And if we fail
