@@ -1177,6 +1177,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
     envp_size_symbol.name = "envp_size'";
     envp_size_symbol.type = op0.type(); // same type as argc!
     envp_size_symbol.static_lifetime = true;
+    envp_size_symbol.is_used = true;
 
     symbolt *envp_new_size_symbol;
     context.move(envp_size_symbol, envp_new_size_symbol);
