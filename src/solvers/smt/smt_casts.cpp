@@ -482,7 +482,7 @@ smt_convt::convert_typecast_to_struct(const typecast2t &cast)
   {
     // Alas, Z3 considers field names as being part of the type, so we can't
     // just consider the source expression to be the casted expression.
-    for(; i2 <= struct_type_to.members.size(); i2++)
+    for(; i2 < struct_type_to.members.size(); i2++)
     {
       smt_astt args[2];
       args[0] = src_ast->project(this, i2);
