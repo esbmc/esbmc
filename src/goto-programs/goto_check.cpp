@@ -364,7 +364,6 @@ void goto_checkt::bounds_check(
     loc,
     guard);
 
-
   assert(is_array_type(t) || is_string_type(t));
 
   // We can't check the upper bound of an infinite sized array
