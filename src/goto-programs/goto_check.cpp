@@ -343,8 +343,6 @@ void goto_checkt::bounds_check(
   if(is_pointer_type(t))
     return;  // done by the pointer code
 
-  assert(is_array_type(t));
-
   // Otherwise, if there's a dereference in the array source, this bounds check
   // should be performed by the symex-time dereferencing code, as the base thing
   // being accessed may be anything.
@@ -366,14 +364,20 @@ void goto_checkt::bounds_check(
     loc,
     guard);
 
-  const array_type2t arr_type = to_array_type(t);
+
+  assert(is_array_type(t) || is_string_type(t));
 
   // We can't check the upper bound of an infinite sized array
-  if(arr_type.size_is_infinite)
+  if(is_array_type(t) && to_array_type(t).size_is_infinite)
     return;
 
+  const expr2tc &array_size =
+    is_array_type(t) ?
+      to_array_type(t).array_size :
+      constant_int2tc(get_uint64_type(), to_string_type(t).get_length());
+
   // Cast size to index type
-  typecast2tc casted_size(the_index->type, arr_type.array_size);
+  typecast2tc casted_size(the_index->type, array_size);
   lessthan2tc upper(the_index, casted_size);
   add_guarded_claim(
     upper,
