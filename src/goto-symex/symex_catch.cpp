@@ -348,7 +348,7 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
                        irep_idt("symex_throw::thrown_obj"));
   expr2tc operand(throw_insn->operand);
   guardt g;
-  symex_assign_symbol(thrown_obj, operand, g);
+  symex_assign_symbol(thrown_obj, operand, g, symex_targett::STATE);
 
   // Now record that value for future reference.
   cur_state->rename(thrown_obj);

@@ -121,7 +121,7 @@ goto_symext::argument_assignments(
       }
 
       guardt guard;
-      symex_assign_symbol(lhs, rhs, guard);
+      symex_assign_symbol(lhs, rhs, guard, symex_targett::STATE);
     }
 
     it1++;
@@ -236,7 +236,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
       symbol2tc rhs(call.ret->type, "nondet$symex::"+i2string(nondet_count++));
 
       guardt guard;
-      symex_assign_rec(call.ret, rhs, guard);
+      symex_assign_rec(call.ret, rhs, guard, symex_targett::STATE);
     }
 
     cur_state->source.pc++;

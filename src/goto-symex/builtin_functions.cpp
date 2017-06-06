@@ -111,7 +111,7 @@ goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
   track_new_pointer(ptr_obj, type2tc(), realloc_size);
 
   guardt guard;
-  symex_assign_rec(lhs, result, guard);
+  symex_assign_rec(lhs, result, guard, symex_targett::STATE);
 }
 
 expr2tc
@@ -218,7 +218,7 @@ goto_symext::symex_mem(
   expr2tc rhs_copy(rhs);
 
   guardt guard;
-  symex_assign_rec(lhs, rhs, guard);
+  symex_assign_rec(lhs, rhs, guard, symex_targett::STATE);
 
   pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
@@ -243,17 +243,17 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
 
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = gen_true_expr();
-  symex_assign_rec(idx, truth, guard);
+  symex_assign_rec(idx, truth, guard, symex_targett::STATE);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
   truth = gen_true_expr();
-  symex_assign_rec(valid_index_expr, truth, guard);
+  symex_assign_rec(valid_index_expr, truth, guard, symex_targett::STATE);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
   expr2tc falseity = gen_false_expr();
-  symex_assign_rec(dealloc_index_expr, falseity, guard);
+  symex_assign_rec(dealloc_index_expr, falseity, guard, symex_targett::STATE);
 
   type2tc sz_sym_type =
     type2tc(new array_type2t(pointer_type2(), expr2tc(),true));
@@ -273,7 +273,7 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
     object_size_exp = size;
   }
 
-  symex_assign_rec(sz_index_expr, object_size_exp, guard);
+  symex_assign_rec(sz_index_expr, object_size_exp, guard, symex_targett::STATE);
 
   return;
 }
@@ -314,12 +314,12 @@ void goto_symext::symex_free(const expr2tc &expr)
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
   expr2tc truth = gen_true_expr();
-  symex_assign_rec(dealloc_index_expr, truth, guard);
+  symex_assign_rec(dealloc_index_expr, truth, guard, symex_targett::STATE);
 
   symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
   index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
   expr2tc falsity = gen_false_expr();
-  symex_assign_rec(valid_index_expr, falsity, guard);
+  symex_assign_rec(valid_index_expr, falsity, guard, symex_targett::STATE);
 }
 
 void goto_symext::symex_printf(
@@ -417,7 +417,7 @@ void goto_symext::symex_cpp_new(
   expr2tc rhs_copy(rhs);
 
   guardt guard;
-  symex_assign_rec(lhs, rhs, guard);
+  symex_assign_rec(lhs, rhs, guard, symex_targett::STATE);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
@@ -428,7 +428,7 @@ void goto_symext::symex_cpp_new(
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = gen_true_expr();
 
-  symex_assign_rec(idx, truth, guard);
+  symex_assign_rec(idx, truth, guard, symex_targett::STATE);
 
   dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard, false));
 }

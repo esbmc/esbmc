@@ -476,7 +476,11 @@ protected:
   virtual void symex_assign(const expr2tc &code);
 
   /** Recursively perform symex assign. @see symex_assign */
-  void symex_assign_rec(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_rec(
+    const expr2tc &lhs,
+    expr2tc &rhs,
+    guardt &guard,
+    symex_targett::assignment_typet type);
 
   /**
    *  Perform assignment to a symbol.
@@ -486,7 +490,11 @@ protected:
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_symbol(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_symbol(
+    const expr2tc &lhs,
+    expr2tc &rhs,
+    guardt &guard,
+    symex_targett::assignment_typet type);
 
   /**
    *  Perform assignment to a structure.
@@ -505,7 +513,11 @@ protected:
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_structure(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_structure(
+    const expr2tc &lhs,
+    expr2tc &rhs,
+    guardt &guard,
+    symex_targett::assignment_typet type);
 
   /**
    *  Perform assignment to a typecast irep.
@@ -514,7 +526,11 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_typecast(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_typecast(
+    const expr2tc &lhs,
+    expr2tc &rhs,
+    guardt &guard,
+    symex_targett::assignment_typet type);
 
   /**
    *  Perform assignment to an array.
@@ -525,7 +541,11 @@ protected:
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_array(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_array(
+    const expr2tc &lhs,
+    expr2tc &rhs,
+    guardt &guard,
+    symex_targett::assignment_typet type);
 
   /**
    *  Perform assignment to a struct.
@@ -535,7 +555,11 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_member(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_member(
+    const expr2tc &lhs,
+    expr2tc &rhs,
+    guardt &guard,
+    symex_targett::assignment_typet type);
 
   /**
    *  Perform assignment to an "if".
@@ -545,7 +569,11 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_if(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_if(
+    const expr2tc &lhs,
+    expr2tc &rhs,
+    guardt &guard,
+    symex_targett::assignment_typet type);
 
   /**
    *  Perform assignment to a byte extract.
@@ -556,8 +584,11 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_byte_extract(const expr2tc &lhs, expr2tc &rhs,
-                                 guardt &guard);
+  void symex_assign_byte_extract(
+    const expr2tc &lhs,
+    expr2tc &rhs,
+    guardt &guard,
+    symex_targett::assignment_typet type);
 
   /**
    *  Assign through a 'concat' operation. These are generated when we fail to
@@ -569,7 +600,11 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Assignment guard.
    */
-  void symex_assign_concat(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+  void symex_assign_concat(
+    const expr2tc &lhs,
+    expr2tc &rhs,
+    guardt &guard,
+    symex_targett::assignment_typet type);
 
   /** Symbolic implementation of malloc. */
   expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
