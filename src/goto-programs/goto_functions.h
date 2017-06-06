@@ -25,6 +25,8 @@ Date: June 2003
 
 class goto_functiont
 {
+  bool inlined;
+
 public:
   goto_programt body;
   code_typet type;
@@ -34,21 +36,18 @@ public:
   // make symex renaming work.
   std::set<std::string> inlined_funcs;
 
+  void set_inlined(bool i)
+  {
+    inlined = i;
+  }
+
   bool is_inlined() const
   {
-    return type.inlined();
+    return inlined;
   }
 
-  goto_functiont():body_available(false)
+  goto_functiont() : inlined(false), body_available(false)
   {
-  }
-
-  void clear()
-  {
-    body.clear();
-    type.clear();
-    body_available=false;
-    inlined_funcs.clear();
   }
 };
 

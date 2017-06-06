@@ -84,6 +84,8 @@ public:
     return *this;
   }
 
+  bool hide;
+
   // local variables
   typedef std::list<irep_idt> local_variablest;
 
@@ -408,7 +410,7 @@ public:
   }
 
   //! Constructor
-  goto_programt()
+  goto_programt() : hide(false)
   {
   }
 

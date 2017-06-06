@@ -233,7 +233,10 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   f.body.update();
 
   if(hide(f.body))
-    f.type.hide(true);
+    f.body.hide = true;
+
+  if(f.type.inlined())
+    f.set_inlined(true);
 }
 
 void goto_convert(

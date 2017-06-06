@@ -278,7 +278,7 @@ void goto_inlinet::expand_function_call(
     parameter_assignments(tmp2.instructions.front().location, f.type, arguments, tmp);
     tmp.destructive_append(tmp2);
 
-    if(f.type.hide())
+    if(f.body.hide)
     {
       const locationt &new_location=function.find_location();
 
