@@ -1518,7 +1518,7 @@ std::string expr2ct::convert_struct(
   bool newline=false;
   unsigned last_size=0;
 
-  for(auto c_it : components)
+  for(auto const &c_it : components)
   {
     if(o_it->type().is_code())
       continue;

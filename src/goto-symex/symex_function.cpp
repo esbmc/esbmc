@@ -539,7 +539,7 @@ goto_symext::locality(const goto_functiont &goto_function)
 
   // For each local variable, set its frame number to frame_nr, ensuring all new
   // references to it look up a new variable.
-  for (auto it : local_identifiers)
+  for (auto const &it : local_identifiers)
   {
     // Temporary, for symbol migration,
     symbol2tc tmp_sym(get_empty_type(), it);

@@ -2048,7 +2048,7 @@ smt_convt::flatten_array_body(const expr2tc &expr)
   const constant_array2t &the_array = to_constant_array2t(expr);
 
 #ifndef NDEBUG
-  for (const auto &elem : the_array.datatype_members)
+  for (auto const &elem : the_array.datatype_members)
     // Must only contain constant arrays, for now. No indirection should be
     // expressable at this level.
     assert(is_constant_array2t(elem) && "Sub-member of constant array must be "
@@ -2056,7 +2056,7 @@ smt_convt::flatten_array_body(const expr2tc &expr)
 #endif
 
   std::vector<expr2tc> sub_expr_list;
-  for (const auto &elem : the_array.datatype_members) {
+  for (auto const &elem : the_array.datatype_members) {
     expr2tc tmp_container;
     const constant_array2t *sub_array = &to_constant_array2t(elem);
 

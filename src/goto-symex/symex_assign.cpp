@@ -474,7 +474,7 @@ void goto_symext::symex_assign_concat(
   operand_list.push_back(cur_concat);
 
 #ifndef NDEBUG
-  for (const auto &foo : operand_list)
+  for (auto const &foo : operand_list)
     assert(foo->type->get_width() == 8);
 #endif
   assert((operand_list.size() * 8) == cat.type->get_width());

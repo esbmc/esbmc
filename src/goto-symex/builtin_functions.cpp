@@ -97,11 +97,12 @@ goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     return;
   } else {
     result = expr2tc();
-    for (auto it = result_list.begin(); it != result_list.end(); it++) {
+    for (auto const &it : result_list)
+    {
       if (is_nil_expr(result))
-        result = it->first;
+        result = it.first;
       else
-        result = if2tc(result->type, it->second, it->first, result);
+        result = if2tc(result->type, it.second, it.first, result);
     }
   }
 
@@ -294,7 +295,7 @@ void goto_symext::symex_free(const expr2tc &expr)
   // Create temporary, dummy, dereference
   tmp = dereference2tc(get_uint8_type(), tmp);
   dereference(tmp, false, false, true); // 'internal' dereference
-  for (const auto &item : internal_deref_items) {
+  for (auto const &item : internal_deref_items) {
     guardt g = cur_state->guard;
     g.add(item.guard);
     expr2tc offset = item.offset;

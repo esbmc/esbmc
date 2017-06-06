@@ -618,7 +618,7 @@ execution_statet::restore_last_paths(void)
   // efficient, but it's what we've got.
 
   auto &list = preserved_paths[active_thread];
-  for (const auto &p : list) {
+  for (auto const &p : list) {
     const auto &loc = p.first;
     const auto &gs = p.second;
 

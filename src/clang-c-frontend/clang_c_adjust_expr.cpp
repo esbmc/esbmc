@@ -1257,6 +1257,6 @@ void clang_c_adjust::adjust_operands(exprt& expr)
   if(!expr.has_operands())
     return;
 
-  for(auto & op : expr.operands())
+  for(auto &op : expr.operands())
     adjust_expr(op);
 }

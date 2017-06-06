@@ -343,7 +343,7 @@ void goto_convertt::convert_block(
   scoped_variables.clear();
 
   // Convert each expression
-  for(auto it : code.operands())
+  for(auto const &it : code.operands())
   {
     const codet &code_it = to_code(it);
 
@@ -354,7 +354,7 @@ void goto_convertt::convert_block(
   }
 
   // see if we need to call any destructors
-  for(auto local : scoped_variables)
+  for(auto const &local : scoped_variables)
   {
     const symbolt &symbol = ns.lookup(local);
 
@@ -784,7 +784,7 @@ void goto_convertt::convert_decl_block(
   const codet& code,
   goto_programt& dest)
 {
-  for(auto it : code.operands())
+  for(auto const &it : code.operands())
     convert(to_code(it), dest);
 }
 

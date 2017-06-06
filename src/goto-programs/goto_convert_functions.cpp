@@ -148,7 +148,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   // Get parameter names
   goto_programt::local_variablest arg_ids;
   const code_typet::argumentst &arguments=f.type.arguments();
-  for(auto it : arguments)
+  for(auto const &it : arguments)
   {
     const irep_idt &identifier = it.get_identifier();
     assert(!identifier.empty());

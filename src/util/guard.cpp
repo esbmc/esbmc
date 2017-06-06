@@ -101,7 +101,7 @@ void guardt::build_guard_expr()
 
 void guardt::append(const guardt &guard)
 {
-  for(auto it : guard.guard_list)
+  for(auto const &it : guard.guard_list)
     add(it);
 }
 
@@ -199,7 +199,7 @@ guardt &operator |= (guardt &g1, const guardt &g2)
 void
 guardt::dump(void) const
 {
-  for (auto it : guard_list)
+  for (auto const &it : guard_list)
     it->dump();
 }
 

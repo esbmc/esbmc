@@ -93,10 +93,10 @@ void clang_c_languaget::build_compiler_args(std::string tmp_dir)
     compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
-  for(auto def : config.ansi_c.defines)
+  for(auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
-  for(auto inc : config.ansi_c.include_paths)
+  for(auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
 
   // Ignore ctype defined by the system
@@ -145,7 +145,7 @@ bool clang_c_languaget::parse(
   ASTs.push_back(std::move(AST));
 
   // Use diagnostics to find errors, rather than the return code.
-  for (const auto &astunit : ASTs)
+  for (auto const &astunit : ASTs)
     if (astunit->getDiagnostics().hasErrorOccurred())
       return true;
 
@@ -179,7 +179,7 @@ bool clang_c_languaget::typecheck(
 
 void clang_c_languaget::show_parse(std::ostream& out __attribute__((unused)))
 {
-  for (auto &translation_unit : ASTs)
+  for (auto const &translation_unit : ASTs)
     (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
 }
 

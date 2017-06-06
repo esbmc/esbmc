@@ -374,7 +374,7 @@ void bmct::show_program(symex_target_equationt &equation)
   bool print_guard = config.options.get_bool_option("show-guards");
   bool sparse = config.options.get_bool_option("simple-ssa-printing");
 
-  for(const auto &it : equation.SSA_steps)
+  for(auto const &it : equation.SSA_steps)
   {
     if(!(it.is_assert() || it.is_assignment() || it.is_assume()))
       continue;

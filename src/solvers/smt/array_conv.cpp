@@ -12,7 +12,7 @@ array_indexes_are_same(
   if (a.size() != b.size())
     return false;
 
-  for (const auto &e : a) {
+  for (auto const &e : a) {
     if (b.find(e.idx) == b.end())
       return false;
   }
@@ -250,7 +250,7 @@ array_convt::mk_unbounded_select(const array_ast *ma,
     array_selects[ma->base_array_id].get<0>();
   auto pair = array_num_idx.equal_range(ma->array_update_num);
 
-  for (auto it = pair.first; it != pair.second; it++) {
+  for (auto &it = pair.first; it != pair.second; it++) {
     if (it->idx == real_idx) {
       // Aha.
       return it->val;
@@ -633,7 +633,7 @@ array_convt::join_array_indexes()
   for (unsigned int arrid = 0; arrid < array_updates.size(); arrid++) {
     touched_array_sett &joined_array_ids = array_relations[arrid];
 
-    for (const auto &update : array_updates[arrid]) {
+    for (auto const &update : array_updates[arrid]) {
       if (update.is_ite) {
         if (update.u.i.true_arr_ast->base_array_id !=
             update.u.i.false_arr_ast->base_array_id) {
@@ -651,7 +651,7 @@ array_convt::join_array_indexes()
     }
   }
 
-  for (const auto &equality : array_equalities) {
+  for (auto const &equality : array_equalities) {
     touched_arrayt t;
 
     t.array_id = equality.second.arr2_id;
@@ -669,8 +669,8 @@ array_convt::join_array_indexes()
   do {
     modified = false;
 
-    for (const auto &arrset : array_relations) {
-      for (const auto &touched_arr_rec : arrset) {
+    for (auto const &arrset : array_relations) {
+      for (auto const &touched_arr_rec : arrset) {
         // It the other array recorded as touching all the arrays that this one
         // does? Try inserting this set, and see if the size changes. Slightly
         // ghetto, but avoids additional allocations.
@@ -680,7 +680,7 @@ array_convt::join_array_indexes()
         // Attempt insertions, modfiying context level to the current one.
         // This is necessary because this relation needs to not exist after a
         // pop of this operation.
-        for (const auto &other_arr_rec : arrset) {
+        for (auto const &other_arr_rec : arrset) {
           touched_arrayt t = other_arr_rec;
           t.ctx_level = ctx->ctx_level;
 
@@ -697,15 +697,15 @@ array_convt::join_array_indexes()
 
   // Right -- now join all ther indexes. This can be optimised, but not now.
   for (arrid = 0; arrid < array_updates.size(); arrid++) {
-    const auto &arrset = array_relations[arrid];
-    for (const auto &touched_arr_rec : arrset) {
+    auto const &arrset = array_relations[arrid];
+    for (auto const &touched_arr_rec : arrset) {
       // Only juggle indexes for relations that were just encoded
       if (touched_arr_rec.ctx_level != ctx->ctx_level)
         continue;
 
       // Go through each index of the other array and bake it into the current
       // selected one if it isn't already.
-      for (const auto &idx : array_indexes[touched_arr_rec.array_id]) {
+      for (auto const &idx : array_indexes[touched_arr_rec.array_id]) {
         if (array_indexes[arrid].find(idx.idx) == array_indexes[arrid].end()) {
           idx_record r;
           r.idx = idx.idx;
@@ -763,7 +763,7 @@ array_convt::add_new_indexes()
     // We're guarenteed that each of these indexes are _new_ to this array.
     // Enumerate them, giving them a location in the expr_index_map.
     index_map_containert &idx_map = expr_index_map[arrid];
-    for (auto it = pair.first; it != pair.second; it++) {
+    for (auto &it = pair.first; it != pair.second; it++) {
       struct index_map_rec r;
       r.idx = it->idx;
       r.vec_idx = idx_map.size();
@@ -852,7 +852,7 @@ array_convt::execute_new_updates(void)
 
     // We've identified where to start encoding transitions -- from rit back
     // to the beginning. Go backwards through the iterator, encoding them.
-    for (auto ptr : withs) {
+    for (auto const &ptr : withs) {
       execute_array_trans(array_valuation[arrid], arrid, ptr->update_level - 1,
           subtype, 0);
     }
@@ -881,7 +881,7 @@ array_convt::apply_new_selects(void)
       continue;
 
     // Go through each of these selects.
-    for (auto it = pair.first; it != pair.second; it++) {
+    for (auto &it = pair.first; it != pair.second; it++) {
       // Look up where in the valuation this is.
       auto index_rec = expr_index_map[arrid].find(it->idx);
       smt_astt &dest =
@@ -910,7 +910,7 @@ array_convt::add_array_equalities(void)
   // Pick only equalities that have been encoded in the current ctx.
   auto pair = array_equalities.equal_range(ctx->ctx_level);
 
-  for (auto it = pair.first; it != pair.second; it++) {
+  for (auto &it = pair.first; it != pair.second; it++) {
     assert(array_indexes_are_same(array_indexes[it->second.arr1_id],
                                   array_indexes[it->second.arr2_id]));
 
@@ -921,12 +921,13 @@ array_convt::add_array_equalities(void)
 
   // Second phase: look at all past equalities to see whether or not they need
   // to be extended to account for new indexes.
-  for (auto it = array_equalities.begin(); it != array_equalities.end(); it++) {
+  for (auto const &it : array_equalities)
+  {
     // Don't touch equalities we've already done
-    if (it->first == ctx->ctx_level)
+    if (it.first == ctx->ctx_level)
       continue;
 
-    idx_record_containert &idxs = array_indexes[it->second.arr1_id];
+    idx_record_containert &idxs = array_indexes[it.second.arr1_id];
     idx_record_containert::nth_index<1>::type &ctx_level_idx = idxs.get<1>();
     auto pair = ctx_level_idx.equal_range(ctx->ctx_level);
 
@@ -938,18 +939,21 @@ array_convt::add_array_equalities(void)
     // Ugh. We need to know how many new indexes there are, and where to start
     // in the array valuation array. So, count them.
     unsigned int ctx_count = 0;
-    for (auto it2 = pair.first; it2 != pair.second; it2++)
+    for (auto &it2 = pair.first; it2 != pair.second; it2++)
       ctx_count++;
 
     // All the new indexes will have been appended to the vector, so the start
     // pos is the number of elements, minus the ones on the end.
     unsigned int start_pos =
-      array_indexes[it->second.arr1_id].size() - ctx_count;
+      array_indexes[it.second.arr1_id].size() - ctx_count;
 
     // There are new indexes; apply equalities.
-    add_array_equality(it->second.arr1_id, it->second.arr2_id,
-        it->second.arr1_update_num, it->second.arr2_update_num,
-        it->second.result, start_pos);
+    add_array_equality(
+      it.second.arr1_id,
+      it.second.arr2_id,
+      it.second.arr1_update_num,
+      it.second.arr2_update_num,
+      it.second.result, start_pos);
   }
 }
 
@@ -1047,11 +1051,12 @@ array_convt::execute_array_update(ast_vect &dest_data,
   // encoded.
   dest_data[updated_idx] = updated_value;
 
-  for (auto it2 = idx_map.begin(); it2 != idx_map.end(); it2++) {
-    if (it2->vec_idx == updated_idx)
+  for (auto const &it2 : idx_map)
+  {
+    if (it2.vec_idx == updated_idx)
       continue;
 
-    if (it2->vec_idx < start_point)
+    if (it2.vec_idx < start_point)
       continue;
 
     // Generate an ITE. If the index is nondeterministically equal to the
@@ -1059,9 +1064,9 @@ array_convt::execute_array_update(ast_vect &dest_data,
     // This departs from the CBMC implementation, in that they explicitly
     // use implies and ackerman constraints.
     // FIXME: benchmark the two approaches. For now, this is shorter.
-    smt_astt cond = update_idx_ast->eq(ctx, ctx->convert_ast(it2->idx));
-    smt_astt dest_ite = updated_value->ite(ctx, cond, source_data[it2->vec_idx]);
-    ctx->assert_ast(dest_data[it2->vec_idx]->eq(ctx, dest_ite));
+    smt_astt cond = update_idx_ast->eq(ctx, ctx->convert_ast(it2.idx));
+    smt_astt dest_ite = updated_value->ite(ctx, cond, source_data[it2.vec_idx]);
+    ctx->assert_ast(dest_data[it2.vec_idx]->eq(ctx, dest_ite));
   }
 
   return;
@@ -1107,7 +1112,7 @@ array_convt::execute_array_joining_ite(ast_vect &dest,
   assert(array_indexes_are_same(array_indexes[cur_id],
                                 array_indexes[remote_ast->base_array_id]));
 
-  for (const auto &elem : array_indexes[remote_ast->base_array_id]) {
+  for (auto const &elem : array_indexes[remote_ast->base_array_id]) {
     selects.push_back(mk_unbounded_select(remote_ast, elem.idx, subtype));
   }
 
@@ -1156,7 +1161,7 @@ array_convt::collate_array_values(ast_vect &vals,
   auto pair = array_num_idx.equal_range(array_update_num);
 
   // Now assign in all free variables created as a result of selects.
-  for (auto it = pair.first; it != pair.second; it++) {
+  for (auto &it = pair.first; it != pair.second; it++) {
     auto it2 = idx_map.find(it->idx);
     assert(it2 != idx_map.end());
 
@@ -1176,11 +1181,11 @@ array_convt::collate_array_values(ast_vect &vals,
   } else {
     // We need to assign the initial value in, except where there's already
     // a select/index, in which case we assert that the values are equal.
-    for (auto it = vals.begin(); it != vals.end(); it++) {
-      if (*it == NULL) {
-        *it = init_val;
+    for (auto &it : vals) {
+      if (it == nullptr) {
+        it = init_val;
       } else {
-        ctx->assert_ast((*it)->eq(ctx, init_val));
+        ctx->assert_ast(it->eq(ctx, init_val));
       }
     }
   }
@@ -1199,18 +1204,19 @@ array_convt::add_initial_ackerman_constraints(
   // elements are equivalent. The cost is quadratic, alas.
 
   smt_sortt boolsort = ctx->boolean_sort;
-  for (auto it = idx_map.begin(); it != idx_map.end(); it++) {
-     if (it->vec_idx < start_point)
+  for (auto const &it : idx_map)
+  {
+     if (it.vec_idx < start_point)
        continue;
 
-    smt_astt outer_idx = ctx->convert_ast(it->idx);
-    for (auto it2 = idx_map.begin(); it2 != idx_map.end(); it2++) {
-      smt_astt inner_idx = ctx->convert_ast(it2->idx);
+    smt_astt outer_idx = ctx->convert_ast(it.idx);
+    for (auto const &it2 : idx_map) {
+      smt_astt inner_idx = ctx->convert_ast(it2.idx);
 
       // If they're the same idx, they're the same value.
       smt_astt idxeq = outer_idx->eq(ctx, inner_idx);
 
-      smt_astt valeq = vals[it->vec_idx]->eq(ctx, vals[it2->vec_idx]);
+      smt_astt valeq = vals[it.vec_idx]->eq(ctx, vals[it2.vec_idx]);
 
       ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_IMPLIES,
                                        idxeq, valeq));
