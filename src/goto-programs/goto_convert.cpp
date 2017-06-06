@@ -732,7 +732,6 @@ void goto_convertt::convert_decl(
       if(globals > 0)
         break_globals2assignments(initializer, dest, new_code.location());
     }
-
   }
   else
   {

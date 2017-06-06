@@ -20,7 +20,6 @@ Date: June 2003
       it!=(functions).function_map.end(); it++)
 
 #include <goto-programs/goto_program.h>
-#include <iostream>
 #include <util/std_types.h>
 
 class goto_functiont
@@ -63,9 +62,7 @@ public:
     function_map.clear();
   }
 
-  void output(
-    const namespacet &ns,
-    std::ostream &out) const;
+  void output(const namespacet &ns, std::ostream &out) const;
 
   void compute_location_numbers();
   void compute_loop_numbers();

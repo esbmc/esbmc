@@ -37,12 +37,6 @@ void goto_convertt::read(exprt &expr, goto_programt &dest)
   if(expr.is_constant())
     return;
 
-  if(expr.id()=="symbol")
-  {
-    // see if we already renamed it
-
-  }
-
   symbolt &new_symbol=new_tmp_symbol(expr.type());
 
   codet assignment("assign");

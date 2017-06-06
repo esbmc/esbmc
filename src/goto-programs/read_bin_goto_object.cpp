@@ -96,14 +96,12 @@ bool read_bin_goto_object(
     symbolt symbol;
     symbol.from_irep(t);
 
-    if(!symbol.is_type &&
-       symbol.type.is_code())
+    if(!symbol.is_type && symbol.type.is_code())
     {
       // makes sure there is an empty function
       // for every function symbol and fixes
       // the function types.
-      code_typet type = functions.function_map[symbol.name].type=
-        to_code_type(symbol.type);
+      functions.function_map[symbol.name].type = to_code_type(symbol.type);
     }
     context.add(symbol);
   }
