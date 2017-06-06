@@ -126,10 +126,10 @@ counterexample_value(
     value_string = "(assignment removed)";
   else
   {
+    value_string = from_expr(ns, identifier, value);
+
     if (is_constant_expr(value))
     {
-      value_string = from_expr(ns, identifier, value);
-
       if (is_bv_type(value))
       {
         value_string +=
