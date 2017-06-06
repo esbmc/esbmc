@@ -419,6 +419,15 @@ void goto_programt::copy_from(const goto_programt &src)
 
   clear();
 
+  // Copy variables
+  local_variables.insert(
+    local_variables.begin(),
+    src.local_variables.begin(),
+    src.local_variables.end());
+
+  // Copy hide flag
+  hide = src.hide;
+
   // Loop over program - 1st time collects targets and copy
 
   for(instructionst::const_iterator
