@@ -1449,7 +1449,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
       symbolt new_symbol;
 
       new_symbol.name=identifier;
-      new_symbol.base_name=std::string(id2string(identifier), 3, std::string::npos);
+      new_symbol.base_name=id2string(identifier);
       new_symbol.location=expr.location();
       new_symbol.type=code_typet();
       new_symbol.type.incomplete(true);
