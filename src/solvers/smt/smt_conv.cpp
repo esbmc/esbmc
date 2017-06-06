@@ -2061,7 +2061,7 @@ smt_convt::flatten_array_body(const expr2tc &expr)
                          sub_array->datatype_members.end());
   }
 
-  return constant_array2tc(expr->type, sub_expr_list);
+  return constant_array2tc(flatten_array_type(expr->type), sub_expr_list);
 }
 
 type2tc
