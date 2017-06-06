@@ -247,15 +247,11 @@ get_base_array_subtype(const type2tc &type)
 
 inline bool simplify(expr2tc &expr)
 {
-  static bool no_simplify = config.options.get_bool_option("no-simplify");
-  if(!no_simplify)
+  expr2tc tmp = expr->simplify();
+  if (!is_nil_expr(tmp))
   {
-    expr2tc tmp = expr->simplify();
-    if (!is_nil_expr(tmp))
-    {
-      expr = tmp;
-      return true;
-    }
+    expr = tmp;
+    return true;
   }
 
   return false;
