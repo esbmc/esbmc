@@ -392,7 +392,7 @@ void goto_convertt::remove_function_call(
   {
     symbolt new_symbol;
 
-    new_symbol.base_name="return_value";
+    new_symbol.base_name="return_value!";
     new_symbol.lvalue=true;
     new_symbol.type=expr.type();
 
