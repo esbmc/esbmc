@@ -322,9 +322,7 @@ dereferencet::dereference_expr_nonscalar(
     expr2tc size_check_expr = expr;
     wrap_in_scalar_step_list(size_check_expr, &scalar_step_list, guard);
     expr2tc offset_to_scalar = compute_pointer_offset(size_check_expr);
-    expr2tc tmp = offset_to_scalar->simplify();
-    if (!is_nil_expr(tmp))
-      offset_to_scalar = tmp;
+    simplify(offset_to_scalar);
 
     dereference2t &deref = to_dereference2t(expr);
     // first make sure there are no dereferences in there
@@ -343,9 +341,7 @@ dereferencet::dereference_expr_nonscalar(
     expr2tc size_check_expr = expr;
     wrap_in_scalar_step_list(size_check_expr, &scalar_step_list, guard);
     expr2tc offset_to_scalar = compute_pointer_offset(size_check_expr);
-    expr2tc tmp_offs = offset_to_scalar->simplify();
-    if (!is_nil_expr(tmp_offs))
-      offset_to_scalar = tmp_offs;
+    simplify(offset_to_scalar);
 
     // first make sure there are no dereferences in there
     dereference_expr(index.source_value, guard, dereferencet::READ);
@@ -655,9 +651,7 @@ dereferencet::build_reference_to(
   // that to be a dereference of foo + extra_offset, resulting in an integer.
   if (!is_nil_expr(lexical_offset)) {
     final_offset = add2tc(final_offset->type, final_offset, lexical_offset);
-    expr2tc foo = final_offset->simplify();
-    if (!is_nil_expr(foo))
-      final_offset = foo;
+    simplify(final_offset);
   }
 
   // If we're in internal mode, collect all of our data into one struct, insert
@@ -882,17 +876,14 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
 
   constant_int2tc subtype_sz_expr(pointer_type2(), BigInt(subtype_size));
   div2tc div(pointer_type2(), offset, subtype_sz_expr);
+  simplify(div);
+
   modulus2tc mod(pointer_type2(), offset, subtype_sz_expr);
-  expr2tc div2 = div->simplify();
-  expr2tc mod2 = mod->simplify();
-  if (is_nil_expr(div2))
-    div2 = div;
-  if (is_nil_expr(mod2))
-    mod2 = mod;
+  simplify(mod);
 
   if (is_structure_type(arr_subtype)) {
-    value = index2tc(arr_subtype, value, div2);
-    build_reference_rec(value, mod2, type, guard, mode, alignment);
+    value = index2tc(arr_subtype, value, div);
+    build_reference_rec(value, mod, type, guard, mode, alignment);
     return;
   }
 
@@ -919,20 +910,20 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
 
   // No alignment guarantee: assert that it's correct.
   if (!is_correctly_aligned) {
-    check_alignment(deref_size, mod2, guard);
+    check_alignment(deref_size, mod, guard);
   }
 
   if (!overflows_boundaries) {
     // Just extract an element and apply other standard extraction stuff.
     // No scope for stitching being required.
-    value = index2tc(arr_subtype, value, div2);
-    build_reference_rec(value, mod2, type, guard, mode, alignment);
+    value = index2tc(arr_subtype, value, div);
+    build_reference_rec(value, mod, type, guard, mode, alignment);
   } else {
     // Might read from more than one element, legitimately. Requires stitching.
     // Alignment assertion / guarantee ensures we don't do something silly.
     // This will construct from whatever the subtype is...
     unsigned int num_bytes = type->get_width() / 8;
-    expr2tc *bytes = extract_bytes_from_array(value, num_bytes, div2);
+    expr2tc *bytes = extract_bytes_from_array(value, num_bytes, div);
     stitch_together_from_byte_array(value, type, bytes);
     delete[] bytes;
   }
@@ -1186,20 +1177,15 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
   mp_integer subtype_sz = type_byte_size(arr_type.subtype);
   constant_int2tc subtype_sz_expr(pointer_type2(), subtype_sz);
   div2tc div(pointer_type2(), offset, subtype_sz_expr);
-  modulus2tc mod(pointer_type2(), offset, subtype_sz_expr);
+  simplify(div);
 
-  expr2tc idx = div->simplify();
-  if (is_nil_expr(idx))
-    idx = div;
-
-  index2tc outer_idx(arr_type.subtype, value, idx);
+  index2tc outer_idx(arr_type.subtype, value, div);
   value = outer_idx;
 
-  idx = mod->simplify();
-  if (is_nil_expr(idx))
-    idx = mod;
+  modulus2tc mod(pointer_type2(), offset, subtype_sz_expr);
+  simplify(mod);
 
-  build_reference_rec(value, idx, type, guard, mode, alignment);
+  build_reference_rec(value, mod, type, guard, mode, alignment);
 }
 
 void

@@ -138,11 +138,8 @@ void goto_symext::do_simplify(exprt &expr)
 
 void goto_symext::do_simplify(expr2tc &expr)
 {
-  if(!no_simplify) {
-    expr2tc tmp = expr->simplify();
-    if (!is_nil_expr(tmp))
-      expr = tmp;
-  }
+  if(!no_simplify)
+    simplify(expr);
 }
 
 void goto_symext::symex_assign(const expr2tc &code_assign)

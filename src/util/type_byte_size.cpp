@@ -147,11 +147,10 @@ type_byte_size(const type2tc &type)
 
     // Attempt to compute constant array offset. If we can't, we can't
     // reasonably return anything anyway, so throw.
-    expr2tc arrsize;
-    if (!t2.size_is_infinite) {
-     arrsize = t2.array_size->simplify();
-      if (is_nil_expr(arrsize))
-        arrsize = t2.array_size;
+    expr2tc arrsize = t2.array_size;
+    if (!t2.size_is_infinite)
+    {
+      simplify(arrsize);
 
       if (!is_constant_int2t(arrsize))
         throw new array_type2t::dyn_sized_array_excp(arrsize);

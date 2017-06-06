@@ -1888,11 +1888,8 @@ smt_convt::twiddle_index_width(const expr2tc &expr, const type2tc &type)
   const array_type2t &arrtype = to_array_type(type);
   unsigned int width = calculate_array_domain_width(arrtype);
   typecast2tc t(type2tc(new unsignedbv_type2t(width)), expr);
-  expr2tc tmp = t->simplify();
-  if (is_nil_expr(tmp))
-    return t;
-  else
-    return tmp;
+  simplify(t);
+  return t;
 }
 
 expr2tc
@@ -1960,10 +1957,7 @@ smt_convt::convert_array_index(const expr2tc &expr)
   } else {
     newidx = fix_array_idx(index.index, index.source_value->type);
   }
-
-  expr2tc tmp_idx = newidx->simplify();
-  if (!is_nil_expr(tmp_idx))
-    newidx = tmp_idx;
+  simplify(newidx);
 
   // Firstly, if it's a string, shortcircuit.
   if (is_string_type(index.source_value)) {
@@ -1975,11 +1969,10 @@ smt_convt::convert_array_index(const expr2tc &expr)
   a = a->select(this, newidx);
 
   const array_type2t &arrtype = to_array_type(index.source_value->type);
-  if (is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays) {
+  if (is_bool_type(arrtype.subtype) && !array_api->supports_bools_in_arrays)
     return make_bit_bool(a);
-  } else {
-    return a;
-  }
+
+  return a;
 }
 
 smt_astt
@@ -1996,10 +1989,7 @@ smt_convt::convert_array_store(const expr2tc &expr)
   } else {
     newidx = fix_array_idx(with.update_field, with.type);
   }
-
-  expr2tc tmp_idx = newidx->simplify();
-  if (!is_nil_expr(tmp_idx))
-    newidx = tmp_idx;
+  simplify(newidx);
 
   assert(is_array_type(expr->type));
   smt_astt src, update;
@@ -2400,12 +2390,12 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
             constarray.datatype_members.end());
 
       // Create new expression, convert and return that.
-      mul2tc newsize(arrtype.array_size->type, arrtype.array_size,
-          constarray_type.array_size);
-      expr2tc simplified = newsize->simplify();
-      assert(!is_nil_expr(simplified));
-      type2tc new_arr_type(new array_type2t(constarray_type.subtype,
-            simplified,false));
+      mul2tc newsize(
+        arrtype.array_size->type, arrtype.array_size, constarray_type.array_size);
+      simplify(newsize);
+
+      type2tc new_arr_type(
+        new array_type2t(constarray_type.subtype, newsize, false));
       constant_array2tc new_const_array(new_arr_type, new_contents);
       return convert_ast(new_const_array);
     }
