@@ -1904,11 +1904,12 @@ smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
   index2tc idx = expr;
   expr2tc output = twiddle_index_width(idx->index, idx->source_value->type);
   accuml_size += output->type->get_width();
-  while (is_index2t(idx->source_value)) {
+  while (is_index2t(idx->source_value))
+  {
     idx = idx->source_value;
     expr2tc tmp = twiddle_index_width(idx->index, idx->source_value->type);
     accuml_size += tmp->type->get_width();
-    output = concat2tc(get_uint_type(accuml_size), output, tmp);
+    output = concat2tc(get_uint_type(accuml_size), tmp, output);
   }
 
   // Give the caller the base array object / thing. So that it can actually
