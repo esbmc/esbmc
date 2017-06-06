@@ -293,6 +293,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;
   frame.function_identifier = identifier;
+  frame.hidden = goto_function.body.hide;
 
   cur_state->source.is_set = true;
   cur_state->source.pc = goto_function.body.instructions.begin();
