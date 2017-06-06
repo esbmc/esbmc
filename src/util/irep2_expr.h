@@ -54,7 +54,7 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value> value_field;
-  typedef esbmct::expr2t_traits<value_field> traits;
+  typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
 class constant_floatbv_data : public constant2t
@@ -70,7 +70,7 @@ public:
 
 // Type mangling:
   typedef esbmct::field_traits<ieee_floatt, constant_floatbv_data, &constant_floatbv_data::value> value_field;
-  typedef esbmct::expr2t_traits<value_field> traits;
+  typedef esbmct::expr2t_traits_notype<value_field> traits;
 };
 
 class constant_datatype_data : public constant2t
