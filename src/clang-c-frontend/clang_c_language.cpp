@@ -276,7 +276,7 @@ std::string clang_c_languaget::internal_additions()
     "signed char __VERIFIER_nondet_schar();\n"
     "_Bool __VERIFIER_nondet_bool();\n"
     "float __VERIFIER_nondet_float();\n"
-    "double __VERIFIER_nondet_double();"
+    "double __VERIFIER_nondet_double();\n"
 
     "void __VERIFIER_error();\n"
     "void __VERIFIER_assume(int);\n"
