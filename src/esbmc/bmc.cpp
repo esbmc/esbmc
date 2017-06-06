@@ -211,7 +211,11 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
   std::string logic;
 
   if (!options.get_bool_option("int-encoding"))
-    logic = "bit-vector arithmetic";
+  {
+    logic = "bit-vector";
+    logic += (!config.ansi_c.use_fixed_for_float) ? "/floating-point " : " ";
+    logic += "arithmetic";
+  }
   else
     logic = "integer/real arithmetic";
 
