@@ -1937,7 +1937,7 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
     accuml_size += tmp->type->get_width();
 
     // NB: order is reversed from indexes.
-    output = concat2tc(get_uint_type(accuml_size), tmp, output);
+    output = concat2tc(get_uint_type(accuml_size), output, tmp);
   }
 
   // Give the caller the actual value we're updating with.
