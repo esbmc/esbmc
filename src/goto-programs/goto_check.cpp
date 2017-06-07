@@ -222,7 +222,7 @@ void goto_checkt::overflow_check(
   // add overflow subgoal
   expr2tc overflow =
     is_neg2t(expr) ?
-      expr2tc(new overflow_neg2t(expr)) :
+      expr2tc(new overflow_neg2t(to_neg2t(expr).value)) :
       expr2tc(new overflow2t(expr));
   make_not(overflow);
 
