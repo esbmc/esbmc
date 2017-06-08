@@ -15,6 +15,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
+#include <clang-c-frontend/expr2c.h>
 #include <fstream>
 #include <sstream>
 
@@ -289,23 +290,21 @@ std::string clang_c_languaget::internal_additions()
 }
 
 bool clang_c_languaget::from_expr(
-  const exprt &expr __attribute__((unused)),
-  std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
+  const exprt &expr,
+  std::string &code,
+  const namespacet &ns)
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  code=expr2c(expr, ns);
+  return false;
 }
 
 bool clang_c_languaget::from_type(
-  const typet &type __attribute__((unused)),
-  std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
+  const typet &type,
+  std::string &code,
+  const namespacet &ns)
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  code=type2c(type, ns);
+  return false;
 }
 
 bool clang_c_languaget::to_expr(

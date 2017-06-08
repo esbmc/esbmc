@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <ansi-c/c_qualifiers.h>
+#include <util/c_qualifiers.h>
 #include <cassert>
 #include <cpp/cpp_typecheck.h>
 #include <cpp/cpp_typecheck_fargs.h>

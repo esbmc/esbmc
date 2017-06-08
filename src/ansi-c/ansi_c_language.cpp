@@ -14,9 +14,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_link.h>
 #include <ansi-c/c_main.h>
 #include <ansi-c/c_preprocess.h>
-#include <ansi-c/expr2c.h>
 #include <ansi-c/gcc_builtin_headers.h>
 #include <ansi-c/trans_unit.h>
+#include <clang-c-frontend/expr2c.h>
 #include <cstring>
 #include <fstream>
 #include <sstream>

@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <ansi-c/c_qualifiers.h>
+#include <util/c_qualifiers.h>
 #include <cpp/cpp_convert_type.h>
 #include <cpp/cpp_typecheck.h>
 #include <cpp/expr2cpp.h>

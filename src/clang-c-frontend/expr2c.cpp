@@ -6,9 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/ansi_c_declaration.h>
-#include <ansi-c/c_typecast.h>
-#include <ansi-c/expr2c.h>
+#include <clang-c-frontend/expr2c.h>
 #include <util/arith_tools.h>
 #include <util/c_misc.h>
 #include <util/c_types.h>
@@ -1391,16 +1389,6 @@ std::string expr2ct::convert_constant(
         dest=it->name().as_string();
         return dest;
       }
-
-#ifndef NDEBUG
-      const ansi_c_declarationt &decl = (const ansi_c_declarationt&)*it;
-      const exprt &v = decl.decl_value();
-
-      if(v.is_not_nil()) {
-        bool res = to_integer(v, i);
-        assert(!res);
-      }
-#endif
 
       ++i;
     }
