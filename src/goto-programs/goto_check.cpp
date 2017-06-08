@@ -99,24 +99,20 @@ void goto_checkt::div_by_zero_check(
   if(disable_div_by_zero_check)
     return;
 
-  assert(is_div2t(expr) || is_modulus2t(expr) || is_ieee_div2t(expr));
+  assert(is_div2t(expr) || is_modulus2t(expr));
 
   // add divison by zero subgoal
   expr2tc side_2;
   if(is_div2t(expr))
     side_2 = to_div2t(expr).side_2;
-  else if(is_modulus2t(expr))
-    side_2 = to_modulus2t(expr).side_2;
   else
-    side_2 = to_ieee_div2t(expr).side_2;
+    side_2 = to_modulus2t(expr).side_2;
 
   expr2tc zero = gen_zero(side_2->type);
   assert(!is_nil_expr(zero));
 
-  notequal2tc n(side_2, zero);
-
   add_guarded_claim(
-    n,
+      notequal2tc(side_2, zero),
     "division by zero",
     "division-by-zero",
     loc,
@@ -550,9 +546,7 @@ void goto_checkt::check_rec(
     case expr2t::ieee_mul_id:
     case expr2t::ieee_div_id:
     {
-      if(is_ieee_div2t(expr))
-        div_by_zero_check(expr, guard, loc);
-
+      // No division by zero for ieee_div, as it's defined behaviour
       float_overflow_check(expr, guard, loc);
       nan_check(expr, guard, loc);
       break;
