@@ -78,7 +78,7 @@ public:
   unsigned int interleaving_failed;
   unsigned int uw_loop;
 
-  virtual bool run(void);
+  virtual smt_convt::resultt run(void);
   virtual ~bmct() { }
 
   void set_ui(language_uit::uit _ui) { ui=_ui; }
@@ -93,8 +93,7 @@ protected:
   language_uit::uit ui;
 
   virtual smt_convt::resultt
-    run_decision_procedure(smt_convt &smt_conv,
-                           symex_target_equationt &equation);
+  run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq);
 
   virtual void do_cbmc(smt_convt &solver, symex_target_equationt &eq);
   virtual bool run_solver(symex_target_equationt &equation, smt_convt *solver);
@@ -104,11 +103,11 @@ protected:
   virtual void report_success();
   virtual void report_failure();
 
-  virtual void error_trace(
-    smt_convt &smt_conv, symex_target_equationt &equation);
+  virtual void error_trace(smt_convt &smt_conv, symex_target_equationt &eq);
   virtual void successful_trace(symex_target_equationt &equation);
-    bool run_thread();
-    int ltl_run_thread(symex_target_equationt *equation);
+
+  smt_convt::resultt run_thread();
+  int ltl_run_thread(symex_target_equationt *equation);
 };
 
 #endif

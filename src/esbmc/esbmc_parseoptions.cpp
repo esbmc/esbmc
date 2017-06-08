@@ -1824,7 +1824,9 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 
   status("Starting Bounded Model Checking");
 
-  bool res = bmc1.run();
+  smt_convt::resultt res = bmc1.run();
+  if(res == smt_convt::P_ERROR)
+    abort();
 
 #ifdef HAVE_SENDFILE_ESBMC
   if (bmc1.options.get_bool_option("memstats")) {

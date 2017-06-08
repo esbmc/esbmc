@@ -48,12 +48,6 @@ void bmct::do_cbmc(smt_convt &solver, symex_target_equationt &equation)
 
 void bmct::successful_trace(symex_target_equationt &equation __attribute__((unused)))
 {
-  if(options.get_bool_option("base-case"))
-  {
-    status("No bug has been found in the base case");
-    return ;
-  }
-
   if(options.get_bool_option("result-only"))
     return;
 
@@ -77,9 +71,6 @@ void bmct::successful_trace(symex_target_equationt &equation __attribute__((unus
         ns,
         goto_trace
       );
-      std::cout << "The correctness witness in GraphML format is available at: "
-                << options.get_option("witness-output")
-                << std::endl;
     break;
 
     case ui_message_handlert::OLD_GUI:
@@ -138,13 +129,6 @@ void bmct::error_trace(smt_convt &smt_conv,
         ns,
         goto_trace
       );
-      std::cout
-        << "The violation witness in GraphML format is available at: "
-        << options.get_option("witness-output")
-        << std::endl;
-      std::cout << std::endl << "Counterexample:" << std::endl;
-      show_goto_trace(std::cout, ns, goto_trace);
-    break;
 
     case ui_message_handlert::PLAIN:
       std::cout << std::endl << "Counterexample:" << std::endl;
@@ -355,7 +339,7 @@ void bmct::show_program(symex_target_equationt &equation)
   }
 }
 
-bool bmct::run(void)
+smt_convt::resultt bmct::run(void)
 {
 
   symex->options.set_option("unwind", options.get_option("unwind"));
@@ -373,11 +357,12 @@ bool bmct::run(void)
     }
 
     fine_timet bmc_start = current_time();
-    if(run_thread())
+    smt_convt::resultt res = run_thread();
+    if(res)
     {
       ++interleaving_failed;
       if(!options.get_bool_option("all-runs"))
-        return true;
+        return res;
     }
     fine_timet bmc_stop = current_time();
 
@@ -389,7 +374,7 @@ bool bmct::run(void)
 
     // Only run for one run
     if (options.get_bool_option("interactive-ileaves"))
-      return false;
+      return smt_convt::P_UNSATISFIABLE;
 
   } while(symex->setup_next_formula());
 
@@ -403,26 +388,26 @@ bool bmct::run(void)
     // So, what was the lowest value ltl outcome that we saw?
     if (ltl_results_seen[ltl_res_bad]) {
       std::cout << "Final lowest outcome: LTL_BAD" << std::endl;
-      return false;
+      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_failing]) {
       std::cout << "Final lowest outcome: LTL_FAILING" << std::endl;
-      return false;
+      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_succeeding]) {
       std::cout << "Final lowest outcome: LTL_SUCCEEDING" << std::endl;
-      return false;
+      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_good]) {
       std::cout << "Final lowest outcome: LTL_GOOD" << std::endl;
-      return false;
+      return smt_convt::P_UNSATISFIABLE;
     } else {
       std::cout << "No traces seen, apparently" << std::endl;
-      return false;
+      return smt_convt::P_UNSATISFIABLE;
     }
   }
 
-  return false;
+  return smt_convt::P_UNSATISFIABLE;
 }
 
-bool bmct::run_thread()
+smt_convt::resultt bmct::run_thread()
 {
   boost::shared_ptr<goto_symext::symex_resultt> result;
 
@@ -443,20 +428,20 @@ bool bmct::run_thread()
   {
     message_streamt message_stream(*get_message_handler());
     message_stream.error(error_str);
-    return true;
+    return smt_convt::P_ERROR;
   }
 
   catch(const char *error_str)
   {
     message_streamt message_stream(*get_message_handler());
     message_stream.error(error_str);
-    return true;
+    return smt_convt::P_ERROR;
   }
 
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    return true;
+    return smt_convt::P_ERROR;
   }
 
   fine_timet symex_stop = current_time();
@@ -498,7 +483,7 @@ bool bmct::run_thread()
       show_program(*equation);
 
     if (options.get_bool_option("program-only"))
-      return false;
+      return smt_convt::P_SMTLIB;
 
     {
       std::string msg;
@@ -511,20 +496,20 @@ bool bmct::run_thread()
     if(options.get_bool_option("document-subgoals"))
     {
       document_subgoals(*equation, std::cout);
-      return false;
+      return smt_convt::P_SMTLIB;
     }
 
     if(options.get_bool_option("show-vcc"))
     {
       show_vcc(*equation);
-      return false;
+      return smt_convt::P_SMTLIB;
     }
 
     if(result->remaining_claims==0)
     {
       successful_trace(*equation);
       report_success();
-      return false;
+      return smt_convt::P_UNSATISFIABLE;
     }
 
     if (options.get_bool_option("ltl")) {
@@ -532,7 +517,7 @@ bool bmct::run_thread()
       // Record that we've seen this outcome; later decide what the least
       // outcome was.
       ltl_results_seen[res]++;
-      return false;
+      return smt_convt::P_UNSATISFIABLE;
     }
 
     if (!options.get_bool_option("smt-during-symex")) {
@@ -540,25 +525,25 @@ bool bmct::run_thread()
         create_solver_factory("", options.get_bool_option("int-encoding"), ns,options));
     }
 
-    return run_solver(*equation, runtime_solver.get());
+    return run_decision_procedure(*runtime_solver.get(), *equation);
   }
 
   catch(std::string &error_str)
   {
     error(error_str);
-    return true;
+    return smt_convt::P_ERROR;
   }
 
   catch(const char *error_str)
   {
     error(error_str);
-    return true;
+    return smt_convt::P_ERROR;
   }
 
   catch(std::bad_alloc&)
   {
     std::cout << "Out of memory" << std::endl;
-    return true;
+    return smt_convt::P_ERROR;
   }
 }
 

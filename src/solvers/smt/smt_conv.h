@@ -428,7 +428,7 @@ public:
 
   /** Result of a call to dec_solve. Either sat, unsat, or error. SMTLIB is
    *  historic case that needs to go. */
-  typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
+  typedef enum { P_UNSATISFIABLE, P_SATISFIABLE, P_ERROR, P_SMTLIB } resultt;
 
   /** Push one context on the SMT assertion stack. */
   virtual void push_ctx(void);
