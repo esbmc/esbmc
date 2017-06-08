@@ -1894,7 +1894,7 @@ void cbmc_parseoptionst::help()
     " --version                    show current ESBMC version and exit\n"
     " --witness-output filename    generate a verification result witness in GraphML format\n"
     " --witness-detailed           generate line offset when generating a witness (linux only)\n"
-    " --clang-frontend             parse source files using clang (experimental)\n"
+    " --old-frontend               parse source files using our old frontend (deprecated)\n"
     " --result-only                do not print the counter-example\n"
     #ifdef _WIN32
     " --i386-macos                 set MACOS/I386 architecture\n"
