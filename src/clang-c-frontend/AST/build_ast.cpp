@@ -7,6 +7,7 @@
 
 #include <clang-c-frontend/AST/build_ast.h>
 #include <clang-c-frontend/AST/esbmc_action.h>
+#include <clang/Basic/Version.inc>
 #include <clang/Driver/Compilation.h>
 #include <clang/Driver/Driver.h>
 #include <clang/Driver/Options.h>
@@ -83,8 +84,12 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   const llvm::opt::ArgStringList *const CC1Args = &Jobs.begin()->getArguments();
 
-  std::unique_ptr<clang::CompilerInvocation> Invocation(
+#if (CLANG_VERSION_MAJOR >= 4)
+  std::shared_ptr<clang::CompilerInvocation> Invocation(
     clang::tooling::newInvocation(Diagnostics, *CC1Args));
+#else
+  auto Invocation = clang::tooling::newInvocation(Diagnostics, *CC1Args);
+#endif
 
   // Show the invocation, with -v.
   if (Invocation->getHeaderSearchOpts().Verbose) {
@@ -99,7 +104,11 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   // Create ASTUnit
   std::unique_ptr<clang::ASTUnit> unit(
     clang::ASTUnit::LoadFromCompilerInvocationAction(
+#if (CLANG_VERSION_MAJOR >= 4)
       std::move(Invocation),
+#else
+      Invocation,
+#endif
       std::make_shared<clang::PCHContainerOperations>(),
       Diagnostics,
       action));
