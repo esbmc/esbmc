@@ -5,9 +5,8 @@
  *      Author: mramalho
  */
 
-#include "build_ast.h"
-#include "esbmc_action.h"
-
+#include <clang-c-frontend/AST/build_ast.h>
+#include <clang-c-frontend/AST/esbmc_action.h>
 #include <clang/Driver/Compilation.h>
 #include <clang/Driver/Driver.h>
 #include <clang/Driver/Options.h>
@@ -16,10 +15,10 @@
 #include <clang/Frontend/CompilerInvocation.h>
 #include <clang/Frontend/FrontendActions.h>
 #include <clang/Frontend/TextDiagnosticPrinter.h>
-#include "clang/Lex/PreprocessorOptions.h"
+#include <clang/Lex/PreprocessorOptions.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Option/ArgList.h>
-#include "llvm/Support/Path.h"
+#include <llvm/Support/Path.h>
 
 std::unique_ptr<clang::ASTUnit> buildASTs(
   std::string intrinsics,
