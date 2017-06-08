@@ -65,10 +65,7 @@ public:
   { return new ansi_c_languaget; }
    
   virtual std::string id() const { return "C"; }
-  virtual std::string description() const { return "ANSI-C 99"; }
 
-  virtual void modules_provided(std::set<std::string> &modules);  
-  
 protected:
   ansi_c_parse_treet parse_tree;
   std::string parse_path;

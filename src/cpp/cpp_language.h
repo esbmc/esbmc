@@ -69,11 +69,6 @@ public:
   virtual languaget *new_language()
   { return new cpp_languaget; }
 
-  virtual std::string description() const { return "C++"; }
-  virtual std::set<std::string> extensions() const;
-
-  virtual void modules_provided(std::set<std::string> &modules);
-
 protected:
   cpp_parse_treet cpp_parse_tree;
   std::string parse_path;

@@ -23,35 +23,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/config.h>
 #include <util/expr_util.h>
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::modules_provided
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void ansi_c_languaget::modules_provided(std::set<std::string> &modules)
-{
-  modules.insert(translation_unit(parse_path));
-}
-
-/*******************************************************************\
-
-Function: internal_additions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void internal_additions(std::string &code)
 {
   code+=
@@ -130,18 +101,6 @@ static void internal_additions(std::string &code)
     "\n";
 }
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::preprocess
-
-  Inputs:
-
- Outputs:
-
- Purpose: ANSI-C preprocessing
-
-\*******************************************************************/
-
 bool ansi_c_languaget::preprocess(
   const std::string &path,
   std::ostream &outstream,
@@ -170,18 +129,6 @@ bool ansi_c_languaget::preprocess(
 
   return c_preprocess(path, outstream, false, message_handler);
 }
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool ansi_c_languaget::parse(
   const std::string &path,
@@ -239,18 +186,6 @@ bool ansi_c_languaget::parse(
   return result;
 }
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ansi_c_languaget::typecheck(
   contextt &context,
   const std::string &module,
@@ -270,18 +205,6 @@ bool ansi_c_languaget::typecheck(
   return false;
 }
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ansi_c_languaget::final(
   contextt &context,
   message_handlert &message_handler)
@@ -292,51 +215,15 @@ bool ansi_c_languaget::final(
   return false;
 }
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::show_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ansi_c_languaget::show_parse(std::ostream &out)
 {
   parse_tree.output(out);
 }
 
-/*******************************************************************\
-
-Function: new_ansi_c_language
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 languaget *new_ansi_c_language()
 {
   return new ansi_c_languaget;
 }
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::from_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool ansi_c_languaget::from_expr(
   const exprt &expr,
@@ -347,18 +234,6 @@ bool ansi_c_languaget::from_expr(
   return false;
 }
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::from_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ansi_c_languaget::from_type(
   const typet &type,
   std::string &code,
@@ -367,18 +242,6 @@ bool ansi_c_languaget::from_type(
   code=type2c(type, ns);
   return false;
 }
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::to_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool ansi_c_languaget::to_expr(
   const std::string &code __attribute__((unused)),
@@ -424,33 +287,9 @@ bool ansi_c_languaget::to_expr(
   return result;
 }
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::~ansi_c_languaget
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 ansi_c_languaget::~ansi_c_languaget()
 {
 }
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::merge_context
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool ansi_c_languaget::merge_context(
   contextt &dest,

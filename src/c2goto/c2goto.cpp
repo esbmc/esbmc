@@ -1,11 +1,8 @@
-#include <cstdio>
-#include <cwchar>
 #include <fstream>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/write_goto_binary.h>
 #include <langapi/language_ui.h>
 #include <langapi/mode.h>
-#include <ostream>
 #include <util/cmdline.h>
 #include <util/config.h>
 #include <util/irep2.h>
