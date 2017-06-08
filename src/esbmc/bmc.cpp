@@ -39,36 +39,12 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/time_stopping.h>
 
-/*******************************************************************\
-
-Function: bmct::do_cbmc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void bmct::do_cbmc(smt_convt &solver, symex_target_equationt &equation)
 {
   solver.set_message_handler(message_handler);
 
   equation.convert(solver);
 }
-
-/*******************************************************************\
-
-Function: bmct::successful_trace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void bmct::successful_trace(symex_target_equationt &equation __attribute__((unused)))
 {
@@ -131,18 +107,6 @@ void bmct::successful_trace(symex_target_equationt &equation __attribute__((unus
       assert(false);
   }
 }
-
-/*******************************************************************\
-
-Function: bmct::error_trace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void bmct::error_trace(smt_convt &smt_conv,
                        symex_target_equationt &equation)
@@ -259,18 +223,6 @@ bmct::run_decision_procedure(smt_convt &smt_conv,
   return dec_result;
 }
 
-/*******************************************************************\
-
-Function: bmct::report_success
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void bmct::report_success()
 {
 
@@ -314,18 +266,6 @@ void bmct::report_success()
 
 }
 
-/*******************************************************************\
-
-Function: bmct::report_failure
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void bmct::report_failure()
 {
   status("VERIFICATION FAILED");
@@ -354,18 +294,6 @@ void bmct::report_failure()
     assert(false);
   }
 }
-
-/*******************************************************************\
-
-Function: bmct::show_program
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void bmct::show_program(symex_target_equationt &equation)
 {
@@ -426,18 +354,6 @@ void bmct::show_program(symex_target_equationt &equation)
     count++;
   }
 }
-
-/*******************************************************************\
-
-Function: bmct::run
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool bmct::run(void)
 {

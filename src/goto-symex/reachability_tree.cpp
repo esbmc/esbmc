@@ -279,8 +279,6 @@ void reachability_treet::switch_to_next_execution_state()
 
 bool reachability_treet::reset_to_unexplored_state()
 {
-  std::list<boost::shared_ptr<execution_statet> >::iterator it;
-
   // After executing up to a point where all threads have ended and returning
   // that equation to the caller, free and remove fully explored execution
   // states back to the point where there's an unexplored one.
@@ -289,7 +287,7 @@ bool reachability_treet::reset_to_unexplored_state()
   // the last on the list. If we can, it's an unexplored state, if we can't,
   // all depths from the current execution state are explored, so delete it.
 
-  it = cur_state_it--;
+  auto it = cur_state_it--;
   execution_states.erase(it);
 
   while(execution_states.size() > 0 && !step_next_state()) {
