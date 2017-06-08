@@ -347,4 +347,37 @@ inline expr2tc gen_zero(
   abort();
 }
 
+inline expr2tc gen_one(
+  const type2tc &type)
+{
+  switch(type->type_id)
+  {
+    case type2t::bool_id:
+      return gen_true_expr();
+
+    case type2t::unsignedbv_id:
+    case type2t::signedbv_id:
+      return constant_int2tc(type, BigInt(1));
+
+    case type2t::fixedbv_id:
+    {
+      fixedbvt f(fixedbv_spect(to_fixedbv_type(type)));
+      f.from_integer(BigInt(1));
+      return constant_fixedbv2tc(f);
+    }
+
+    case type2t::floatbv_id:
+    {
+      ieee_floatt f(ieee_float_spect(to_floatbv_type(type)));
+      f.from_integer(BigInt(1));
+      return constant_floatbv2tc(f);
+    }
+
+    default:
+      break;
+  }
+
+  abort();
+}
+
 #endif /* UTIL_IREP2_UTILS_H_ */
