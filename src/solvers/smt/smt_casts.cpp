@@ -9,15 +9,11 @@ smt_convt::convert_typecast_to_bool(const typecast2t &cast)
   if (is_pointer_type(cast.from)) {
     // Convert to two casts.
     typecast2tc to_int(machine_ptr, cast.from);
-    constant_int2tc zero(machine_ptr, BigInt(0));
-    equality2tc as_bool(zero, to_int);
+    equality2tc as_bool(gen_zero(machine_ptr), to_int);
     return convert_ast(as_bool);
   }
 
-  expr2tc zero_expr;
-  migrate_expr(gen_zero(migrate_type_back(cast.from->type)), zero_expr);
-
-  notequal2tc neq(cast.from, zero_expr);
+  notequal2tc neq(cast.from, gen_zero(cast.from->type));
   return convert_ast(neq);
 }
 

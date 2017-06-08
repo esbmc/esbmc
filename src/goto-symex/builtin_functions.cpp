@@ -748,7 +748,7 @@ void goto_symext::symex_va_arg(const expr2tc& lhs, const sideeffect2t &code)
   }
   else
   {
-    migrate_expr(gen_zero(migrate_type_back(lhs->type)), va_rhs);
+    va_rhs = gen_zero(lhs->type);
   }
 
   symex_assign(code_assign2tc(lhs, va_rhs));

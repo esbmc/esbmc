@@ -1138,8 +1138,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
   // with offset == 0, or is out of bounds and should be a free value.
   if (base_type_eq(value->type, type, ns)) {
     // Is offset zero?
-    constant_int2tc zero_val(offset->type, BigInt(0));
-    equality2tc eq(offset, zero_val);
+    equality2tc eq(offset, gen_zero(offset->type));
 
     // Yes -> value, no -> free value
     expr2tc free_result = make_failed_symbol(type);

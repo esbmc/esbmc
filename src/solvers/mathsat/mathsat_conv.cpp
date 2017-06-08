@@ -696,28 +696,26 @@ smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
   smt_sort *s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
 
   msat_term t;
-  if(is_bool_type(cast.from)) {
+  if(is_bool_type(cast.from))
+  {
     // For bools, there is no direct conversion, so the cast is
     // transformed into fpa = b ? 1 : 0;
-    expr2tc zero_expr;
-    migrate_expr(gen_zero(migrate_type_back(cast.type)), zero_expr);
-
-    expr2tc one_expr;
-    migrate_expr(gen_one(migrate_type_back(cast.type)), one_expr);
-
     const smt_ast *args[3];
     args[0] = from;
-    args[1] = convert_ast(one_expr);
-    args[2] = convert_ast(zero_expr);
+    args[1] = convert_ast(gen_true_expr());
+    args[2] = convert_ast(gen_false_expr());
 
     return mk_func_app(s, SMT_FUNC_ITE, args, 3);
-  } else if(is_unsignedbv_type(cast.from)) {
-    t = msat_make_fp_from_ubv(env, ew, sw, mrm->t, mfrom->t);
-  } else if(is_signedbv_type(cast.from)) {
-    t = msat_make_fp_from_sbv(env, ew, sw, mrm->t, mfrom->t);
-  } else if(is_floatbv_type(cast.from)) {
-    t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
   }
+
+  if(is_unsignedbv_type(cast.from))
+    t = msat_make_fp_from_ubv(env, ew, sw, mrm->t, mfrom->t);
+
+  if(is_signedbv_type(cast.from))
+    t = msat_make_fp_from_sbv(env, ew, sw, mrm->t, mfrom->t);
+
+  if(is_floatbv_type(cast.from))
+    t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
 
   check_msat_error(t);
   return new mathsat_smt_ast(this, s, t);

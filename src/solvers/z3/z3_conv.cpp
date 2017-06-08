@@ -805,28 +805,26 @@ smt_astt z3_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
 
   // Convert each type
-  if(is_bool_type(cast.from)) {
+  if(is_bool_type(cast.from))
+  {
     // For bools, there is no direct conversion, so the cast is
     // transformed into fpa = b ? 1 : 0;
-    expr2tc zero_expr;
-    migrate_expr(gen_zero(migrate_type_back(cast.type)), zero_expr);
-
-    expr2tc one_expr;
-    migrate_expr(gen_one(migrate_type_back(cast.type)), one_expr);
-
     const smt_ast *args[3];
     args[0] = from;
-    args[1] = convert_ast(one_expr);
-    args[2] = convert_ast(zero_expr);
+    args[1] = convert_ast(gen_true_expr());
+    args[2] = convert_ast(gen_false_expr());
 
     return mk_func_app(s, SMT_FUNC_ITE, args, 3);
-  } if(is_unsignedbv_type(cast.from)) {
-    return new_ast(ctx.fpa_from_unsigned(mrm_const->e, mfrom->e, zs->s), s);
-  } else if(is_signedbv_type(cast.from)) {
-    return new_ast(ctx.fpa_from_signed(mrm_const->e, mfrom->e, zs->s), s);
-  } else if(is_floatbv_type(cast.from)) {
-    return new_ast(ctx.fpa_to_fpa(mrm_const->e, mfrom->e, zs->s), s);
   }
+
+  if(is_unsignedbv_type(cast.from))
+    return new_ast(ctx.fpa_from_unsigned(mrm_const->e, mfrom->e, zs->s), s);
+
+  if(is_signedbv_type(cast.from))
+    return new_ast(ctx.fpa_from_signed(mrm_const->e, mfrom->e, zs->s), s);
+
+  if(is_floatbv_type(cast.from))
+    return new_ast(ctx.fpa_to_fpa(mrm_const->e, mfrom->e, zs->s), s);
 
   abort();
 }

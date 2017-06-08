@@ -885,10 +885,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     } else if(is_floatbv_type(abs.value)) {
       a = mk_func_app(sort, SMT_FUNC_FABS, &args[0], 1);
     } else {
-      expr2tc zero;
-      migrate_expr(gen_zero(migrate_type_back(abs.value->type)), zero);
-
-      lessthan2tc lt(abs.value, zero);
+      lessthan2tc lt(abs.value, gen_zero(abs.value->type));
       neg2tc neg(abs.value->type, abs.value);
       if2tc ite(abs.type, lt, neg, abs.value);
 
@@ -1554,21 +1551,21 @@ smt_astt smt_convt::convert_signbit(const expr2tc& expr)
     is_neg = mk_func_app(boolean_sort, SMT_FUNC_ISNEG, value);
   else
   {
-    expr2tc zero_expr;
-    migrate_expr(gen_zero(migrate_type_back(signbit.operand->type)), zero_expr);
-
-    is_neg = mk_func_app(boolean_sort, SMT_FUNC_LT, value, convert_ast(zero_expr));
+    is_neg =
+      mk_func_app(
+        boolean_sort,
+        SMT_FUNC_LT,
+        value,
+        convert_ast(gen_zero(signbit.operand->type)));
   }
-
-  expr2tc zero_expr;
-  migrate_expr(gen_zero(migrate_type_back(signbit.type)), zero_expr);
-
-  expr2tc one_expr;
-  migrate_expr(gen_one(migrate_type_back(signbit.type)), one_expr);
 
   // If it's true, return 1. Return 0, othewise.
   return mk_func_app(
-    sort, SMT_FUNC_ITE, is_neg, convert_ast(one_expr), convert_ast(zero_expr));
+    sort,
+    SMT_FUNC_ITE,
+    is_neg,
+    convert_ast(gen_one(signbit.type)),
+    convert_ast(gen_zero(signbit.type)));
 }
 
 smt_astt
