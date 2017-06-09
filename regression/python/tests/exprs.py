@@ -201,7 +201,7 @@ class Exprs(unittest.TestCase):
         fbv.from_integer(esbmc.BigInt(0))
 
         fbvt = esbmc.type.fixedbv.make(32, 32)
-        const_fbv = esbmc.expr.constant_fixedbv.make(fbvt, fbv)
+        const_fbv = esbmc.expr.constant_fixedbv.make(fbv)
         reftext = "constant_fixedbv\n* value : 0\n* type : fixedbv\n  * width : 32\n  * integer_bits : 32"
         self.assertTrue(const_fbv.pretty(0) == reftext, "Created fixedbv has wrong form")
 
