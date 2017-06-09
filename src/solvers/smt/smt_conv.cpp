@@ -2034,7 +2034,13 @@ smt_convt::flatten_array_body(const expr2tc &expr)
 {
   assert(is_constant_array2t(expr));
   const constant_array2t &the_array = to_constant_array2t(expr);
+  const array_type2t &arr_type = to_array_type(the_array.type);
 
+  // inner most level, jus treturn the array
+  if(!is_array_type(arr_type.subtype))
+    return expr;
+
+  // This should be an array of arrays, glue the sub arrays together
 #ifndef NDEBUG
   for (auto const &elem : the_array.datatype_members)
     // Must only contain constant arrays, for now. No indirection should be
@@ -2044,22 +2050,20 @@ smt_convt::flatten_array_body(const expr2tc &expr)
 #endif
 
   std::vector<expr2tc> sub_expr_list;
-  for (auto const &elem : the_array.datatype_members) {
-    expr2tc tmp_container;
-    const constant_array2t *sub_array = &to_constant_array2t(elem);
-
-    // Possibly flatten an inner layer
-    if (is_array_type(get_array_subtype(elem->type))) {
-      tmp_container = flatten_array_body(elem);
-      sub_array = &to_constant_array2t(tmp_container);
-    }
-
-    sub_expr_list.insert(sub_expr_list.end(),
-                         sub_array->datatype_members.begin(),
-                         sub_array->datatype_members.end());
+  for (auto const &elem : the_array.datatype_members)
+  {
+    sub_expr_list.insert(
+      sub_expr_list.end(),
+      to_constant_array2t(elem).datatype_members.begin(),
+      to_constant_array2t(elem).datatype_members.end());
   }
 
-  return constant_array2tc(flatten_array_type(expr->type), sub_expr_list);
+  return constant_array2tc(
+    array_type2tc(
+      get_flattened_array_subtype(expr->type),
+      gen_ulong(sub_expr_list.size()),
+      false),
+    sub_expr_list);
 }
 
 type2tc
