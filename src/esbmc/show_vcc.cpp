@@ -14,19 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <langapi/mode.h>
 #include <util/migrate.h>
 
-/*******************************************************************\
-
-Function: bmct::show_vcc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
+void bmct::show_vcc(std::ostream &out, boost::shared_ptr<symex_target_equationt> &eq)
 {
   switch(ui)
   {
@@ -47,8 +35,8 @@ void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
   languagest languages(ns, MODE_C);
 
   for(symex_target_equationt::SSA_stepst::iterator
-      it=equation.SSA_steps.begin();
-      it!=equation.SSA_steps.end(); it++)
+      it=eq->SSA_steps.begin();
+      it!=eq->SSA_steps.end(); it++)
   {
     if(!it->is_assert()) continue;
 
@@ -59,7 +47,7 @@ void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
       out << it->comment << std::endl;
 
     symex_target_equationt::SSA_stepst::const_iterator
-      p_it=equation.SSA_steps.begin();
+      p_it=eq->SSA_steps.begin();
 
     for(unsigned count=1; p_it!=it; p_it++)
       if(p_it->is_assume() || p_it->is_assignment())
@@ -81,31 +69,19 @@ void bmct::show_vcc(std::ostream &out, symex_target_equationt &equation)
   }
 }
 
-/*******************************************************************\
-
-Function: bmct::show_vcc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::show_vcc(symex_target_equationt &equation)
+void bmct::show_vcc(boost::shared_ptr<symex_target_equationt> &eq)
 {
   const std::string &filename=options.get_option("output");
 
   if(filename.empty() || filename=="-")
-    show_vcc(std::cout, equation);
+    show_vcc(std::cout, eq);
   else
   {
     std::ofstream out(filename.c_str());
     if(!out)
       std::cerr << "failed to open " << filename << std::endl;
     else
-      show_vcc(out, equation);
+      show_vcc(out, eq);
   }
 }
 

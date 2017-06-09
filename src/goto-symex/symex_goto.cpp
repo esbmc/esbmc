@@ -42,7 +42,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     equality2tc question(gen_true_expr(), new_guard);
     try {
       symex_slicet slicer;
-      symex_target_equationt eq = dynamic_cast<const symex_target_equationt&>(*target);
+      auto eq = boost::dynamic_pointer_cast<symex_target_equationt>(target);
       slicer.slice_for_symbols(eq, question);
 
       tvt res = rte.get()->ask_solver_question(question);

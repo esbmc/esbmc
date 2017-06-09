@@ -1816,20 +1816,20 @@ bool cbmc_parseoptionst::process_goto_program(
   return false;
 }
 
-int cbmc_parseoptionst::do_bmc(bmct &bmc1)
+int cbmc_parseoptionst::do_bmc(bmct &bmc)
 {
-  bmc1.set_ui(get_ui());
+  bmc.set_ui(get_ui());
 
   // do actual BMC
 
   status("Starting Bounded Model Checking");
 
-  smt_convt::resultt res = bmc1.run();
+  smt_convt::resultt res = bmc.start_bmc();
   if(res == smt_convt::P_ERROR)
     abort();
 
 #ifdef HAVE_SENDFILE_ESBMC
-  if (bmc1.options.get_bool_option("memstats")) {
+  if (bmc.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, NULL, 100000);
     close(fd);

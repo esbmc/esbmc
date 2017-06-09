@@ -8,9 +8,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-symex/slice.h>
 
-symex_slicet::symex_slicet()
+symex_slicet::symex_slicet() : ignored(0), single_slice(false)
 {
-  single_slice = false;
 }
 
 void symex_slicet::get_symbols(const expr2tc &expr)
@@ -28,27 +27,27 @@ void symex_slicet::get_symbols(const expr2tc &expr)
   }
 }
 
-void symex_slicet::slice(symex_target_equationt &equation)
+void symex_slicet::slice(boost::shared_ptr<symex_target_equationt> &eq)
 {
   depends.clear();
 
   for(symex_target_equationt::SSA_stepst::reverse_iterator
-      it=equation.SSA_steps.rbegin();
-      it!=equation.SSA_steps.rend();
+      it = eq->SSA_steps.rbegin();
+      it != eq->SSA_steps.rend();
       it++)
     slice(*it);
 }
 
-void
-symex_slicet::slice_for_symbols(symex_target_equationt &equation,
-                                const expr2tc &expr)
+void symex_slicet::slice_for_symbols(
+  boost::shared_ptr<symex_target_equationt> &eq,
+  const expr2tc &expr)
 {
   get_symbols(expr);
   single_slice = true;
 
   for(symex_target_equationt::SSA_stepst::reverse_iterator
-      it=equation.SSA_steps.rbegin();
-      it!=equation.SSA_steps.rend();
+      it = eq->SSA_steps.rbegin();
+      it != eq->SSA_steps.rend();
       it++)
     slice(*it);
 }
@@ -96,6 +95,7 @@ void symex_slicet::slice_assignment(
   {
     // we don't really need it
     SSA_step.ignore=true;
+    ignored++;
   }
   else
   {
@@ -116,26 +116,30 @@ void symex_slicet::slice_renumber(
   {
     // we don't really need it
     SSA_step.ignore=true;
+    ignored++;
   }
 
   // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
-void slice(symex_target_equationt &equation)
+u_int64_t slice(boost::shared_ptr<symex_target_equationt> &eq)
 {
   symex_slicet symex_slice;
-  symex_slice.slice(equation);
+  symex_slice.slice(eq);
+  return symex_slice.ignored;
 }
 
-void simple_slice(symex_target_equationt &equation)
+u_int64_t simple_slice(boost::shared_ptr<symex_target_equationt> &eq)
 {
+  u_int64_t ignored = 0;
+
   // just find the last assertion
   symex_target_equationt::SSA_stepst::iterator
-    last_assertion=equation.SSA_steps.end();
+    last_assertion = eq->SSA_steps.end();
 
   for(symex_target_equationt::SSA_stepst::iterator
-      it=equation.SSA_steps.begin();
-      it!=equation.SSA_steps.end();
+      it = eq->SSA_steps.begin();
+      it != eq->SSA_steps.end();
       it++)
     if(it->is_assert())
       last_assertion=it;
@@ -145,9 +149,14 @@ void simple_slice(symex_target_equationt &equation)
   symex_target_equationt::SSA_stepst::iterator s_it=
     last_assertion;
 
-  if(s_it!=equation.SSA_steps.end())
+  if(s_it != eq->SSA_steps.end())
     for(s_it++;
-        s_it!=equation.SSA_steps.end();
+        s_it!= eq->SSA_steps.end();
         s_it++)
+    {
       s_it->ignore=true;
+      ignored++;
+    }
+
+  return ignored;
 }
