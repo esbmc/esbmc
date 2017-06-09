@@ -544,12 +544,14 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
 
   eq = boost::dynamic_pointer_cast<symex_target_equationt>(result->target);
 
-  std::ostringstream str;
-  str << "Symex completed in: ";
-  output_time(symex_stop - symex_start, str);
-  str << "s";
-  str << " (" << eq->SSA_steps.size() << " assignments)";
-  status(str.str());
+  {
+    std::ostringstream str;
+    str << "Symex completed in: ";
+    output_time(symex_stop - symex_start, str);
+    str << "s";
+    str << " (" << eq->SSA_steps.size() << " assignments)";
+    status(str.str());
+  }
 
   if (options.get_bool_option("double-assign-check"))
     eq->check_for_duplicate_assigns();
@@ -568,12 +570,14 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
     }
     fine_timet slice_stop = current_time();
 
-    std::ostringstream str;
-    str << "Slicing time: ";
-    output_time(slice_stop - slice_start, str);
-    str << "s";
-    str << " (removed " << ignored << " assignments)";
-    status(str.str());
+    {
+      std::ostringstream str;
+      str << "Slicing time: ";
+      output_time(slice_stop - slice_start, str);
+      str << "s";
+      str << " (removed " << ignored << " assignments)";
+      status(str.str());
+    }
 
     if (options.get_bool_option("program-only") ||
         options.get_bool_option("program-too"))
@@ -583,11 +587,11 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
       return smt_convt::P_SMTLIB;
 
     {
-      std::string msg;
-      msg="Generated "+i2string(result->total_claims)+
-          " VCC(s), "+i2string(result->remaining_claims)+
-          " remaining after simplification";
-      print(8, msg);
+      std::ostringstream str;
+      str << "Generated " << result->total_claims << " VCC(s), ";
+      str << result->remaining_claims << " remaining after simplification ";
+      str << "(" << eq->SSA_steps.size() - ignored << " assignments)";
+      status(str.str());
     }
 
     if(options.get_bool_option("document-subgoals"))
