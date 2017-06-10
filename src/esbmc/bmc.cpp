@@ -263,7 +263,7 @@ bmct::run_decision_procedure(
 
 void bmct::report_success()
 {
-  status("\nVERIFICATION SUCCESSFUL\n");
+  status("\nVERIFICATION SUCCESSFUL");
 
   switch(ui)
   {
@@ -299,7 +299,7 @@ void bmct::report_success()
 
 void bmct::report_failure()
 {
-  status("\nVERIFICATION FAILED\n");
+  status("\nVERIFICATION FAILED");
 
   switch(ui)
   {
