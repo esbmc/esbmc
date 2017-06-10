@@ -77,9 +77,17 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_nil_expr(expr))
     return true;
 
-  // Null is also essentially a constant.
-  if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
-    return true;
+  if (is_symbol2t(expr))
+  {
+    // Null is also essentially a constant.
+    if(to_symbol2t(expr).thename == "NULL")
+      return true;
+
+    // By propagation nondet symbols, we can achieve some speed up but the
+    // counterexample will be missing a lot of information, so not really worth it
+    if(to_symbol2t(expr).thename.as_string().find("nondet$symex::nondet") != std::string::npos)
+      return false;
+  }
 
   if (is_address_of2t(expr))
     return constant_propagation_reference(to_address_of2t(expr).ptr_obj);
@@ -116,7 +124,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_with2t(expr))
     return false;
 
-  if (is_constant_struct2t(expr) || is_constant_union2t(expr))
+  if (is_constant_struct2t(expr) || is_constant_union2t(expr) || is_constant_array2t(expr))
   {
     bool noconst = true;
 
@@ -128,6 +136,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
     return noconst;
   }
+
+  if (is_constant_expr(expr))
+    return true;
 
   return false;
 }
