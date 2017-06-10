@@ -1269,20 +1269,17 @@ smt_convt::convert_sort(const type2tc &type)
   }
   case type2t::array_id:
   {
-    const array_type2t &arr = to_array_type(type);
-
     // Index arrays by the smallest integer required to represent its size.
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size. Also, faff about if it's an array of arrays, extending
     // the domain.
-    smt_sortt d = make_array_domain_sort(arr);
+    smt_sortt d = make_array_domain_sort(to_array_type(flatten_array_type(type)));
 
     // Determine the range if we have arrays of arrays.
-    type2tc range = arr.subtype;
-    while (is_array_type(range))
-      range = to_array_type(range).subtype;
+    type2tc range = get_flattened_array_subtype(type);
 
-    if (is_tuple_ast_type(range)) {
+    if (is_tuple_ast_type(range))
+    {
       type2tc thetype = flatten_array_type(type);
       rewrite_ptrs_to_structs(thetype);
       result = tuple_api->mk_struct_sort(thetype);
@@ -1412,36 +1409,39 @@ smt_convt::convert_terminal(const expr2tc &expr)
   case expr2t::symbol_id:
   {
     // Special case for tuple symbols
-    if (is_tuple_ast_type(expr)) {
+    if (is_tuple_ast_type(expr))
+    {
       const symbol2t &sym = to_symbol2t(expr);
-      return tuple_api->mk_tuple_symbol(sym.get_symbol_name(),
-                                        convert_sort(sym.type));
-    } else if (is_array_type(expr)) {
+      return tuple_api->mk_tuple_symbol(
+        sym.get_symbol_name(),
+        convert_sort(sym.type));
+    }
+
+    if (is_array_type(expr))
+    {
       // Determine the range if we have arrays of arrays.
-      const array_type2t &arr = to_array_type(expr->type);
-      type2tc range = arr.subtype;
-      while (is_array_type(range))
-        range = to_array_type(range).subtype;
+      type2tc range = get_flattened_array_subtype(expr->type);
 
       // If this is an array of structs, we have a tuple array sym.
-      if (is_structure_type(range) || is_pointer_type(range)) {
+      if (is_structure_type(range) || is_pointer_type(range))
         return tuple_api->mk_tuple_array_symbol(expr);
-      } else {
-        ; // continue onwards;
-      }
     }
 
     // Just a normal symbol. Possibly an array symbol.
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
+
     smt_sortt sort = convert_sort(sym.type);
-    if (is_array_type(expr)) {
+
+    if (is_array_type(expr))
+    {
       smt_sortt subtype = convert_sort(get_flattened_array_subtype(sym.type));
       return array_api->mk_array_symbol(name, sort, subtype);
-    } else {
-      return mk_smt_symbol(name, sort);
     }
+
+    return mk_smt_symbol(name, sort);
   }
+
   default:
     std::cerr << "Converting unrecognized terminal expr to SMT" << std::endl;
     expr->dump();
@@ -1846,12 +1846,13 @@ smt_convt::make_array_domain_sort_exp(const array_type2t &arr)
 {
 
   // Start special casing if this is an array of arrays.
-  if (!is_array_type(arr.subtype)) {
+  if (!is_array_type(arr.subtype))
+  {
     // Normal array, work out what the domain sort is.
     if (int_encoding)
       return get_uint_type(config.ansi_c.int_width);
-    else
-      return get_uint_type(calculate_array_domain_width(arr));
+
+    return get_uint_type(calculate_array_domain_width(arr));
   }
   else
   {
@@ -1892,22 +1893,37 @@ smt_convt::twiddle_index_width(const expr2tc &expr, const type2tc &type)
 expr2tc
 smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 {
-  // So: some series of index exprs will occur here, with some symbol or
-  // other expression at the bottom that's actually some symbol, or whatever.
-  // So, extract all the indexes, and concat them, with the first (lowest)
-  // index at the top, then descending.
-
-  unsigned long accuml_size = 0;
   index2tc idx = expr;
-  expr2tc output = twiddle_index_width(idx->index, idx->source_value->type);
-  accuml_size += output->type->get_width();
+
+  // First we need to find the flatten_array_type, to cast symbols/constants
+  // with different types during the addition and multiplication. They'll be
+  // casted to the flattened array index type
+  while (is_index2t(idx->source_value))
+    idx = idx->source_value;
+
+  type2tc subtype =
+    make_array_domain_sort_exp(
+      to_array_type(flatten_array_type(idx->source_value->type)));
+
+  // Rewrite the store chain as additions and multiplications
+  idx = expr;
+  expr2tc output = typecast2tc(subtype, idx->index);
   while (is_index2t(idx->source_value))
   {
     idx = idx->source_value;
-    expr2tc tmp = twiddle_index_width(idx->index, idx->source_value->type);
-    accuml_size += tmp->type->get_width();
-    output = concat2tc(get_uint_type(accuml_size), tmp, output);
+
+    type2tc t = flatten_array_type(idx->type);
+    output = add2tc(
+      subtype,
+      mul2tc(
+        subtype,
+        typecast2tc(subtype, to_array_type(t).array_size),
+        typecast2tc(subtype, idx->index)),
+      output);
   }
+
+  // Try to simplify the expression
+  simplify(output);
 
   // Give the caller the base array object / thing. So that it can actually
   // select out of the right piece of data.
@@ -1918,24 +1934,34 @@ smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 expr2tc
 smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
 {
-  // Just like handle_select_chain, we have some kind of multidimensional
-  // array, which we're representing as a single array with an extended domain,
-  // and using different segments of the domain to represent different
-  // dimensions of it. Concat all of the indexs into one index; also give the
-  // caller the base object that this is being applied to.
-
-  unsigned long accuml_size = 0;
   with2tc with = expr;
-  expr2tc output = twiddle_index_width(with->update_field, with->type);
-  accuml_size += output->type->get_width();
-  while (is_with2t(with->update_value)) {
-    with = with->update_value;
-    expr2tc tmp = twiddle_index_width(with->update_field, with->type);
-    accuml_size += tmp->type->get_width();
 
-    // NB: order is reversed from indexes.
-    output = concat2tc(get_uint_type(accuml_size), output, tmp);
+  // First we need to find the flatten_array_type, to cast symbols/constants
+  // with different types during the addition and multiplication. They'll be
+  // casted to the flattened array index type
+  type2tc subtype =
+    make_array_domain_sort_exp(
+      to_array_type(flatten_array_type(with->source_value->type)));
+
+  // Rewrite the store chain as multiplications and additions
+  expr2tc output = typecast2tc(subtype, with->update_field);
+  while (is_with2t(with->update_value))
+  {
+    with = with->update_value;
+
+    type2tc t = flatten_array_type(with->type);
+
+    output = add2tc(
+      subtype,
+      mul2tc(
+        subtype,
+        typecast2tc(subtype, to_array_type(t).array_size),
+        output),
+      typecast2tc(subtype, with->update_field));
   }
+
+  // Try to simplify the expression
+  simplify(output);
 
   // Give the caller the actual value we're updating with.
   base = with->update_value;
@@ -1948,17 +1974,17 @@ smt_convt::convert_array_index(const expr2tc &expr)
   smt_astt a;
   const index2t &index = to_index2t(expr);
   expr2tc src_value = index.source_value;
-  expr2tc newidx;
 
+  expr2tc newidx;
   if (is_index2t(index.source_value)) {
     newidx = decompose_select_chain(expr, src_value);
   } else {
     newidx = fix_array_idx(index.index, index.source_value->type);
   }
-  simplify(newidx);
 
   // Firstly, if it's a string, shortcircuit.
-  if (is_string_type(index.source_value)) {
+  if (is_string_type(index.source_value))
+  {
     smt_astt tmp = convert_ast(src_value);
     return tmp->select(this, newidx);
   }
@@ -1987,7 +2013,6 @@ smt_convt::convert_array_store(const expr2tc &expr)
   } else {
     newidx = fix_array_idx(with.update_field, with.type);
   }
-  simplify(newidx);
 
   assert(is_array_type(expr->type));
   smt_astt src, update;
@@ -2008,25 +2033,29 @@ smt_convt::convert_array_store(const expr2tc &expr)
 type2tc
 smt_convt::flatten_array_type(const type2tc &type)
 {
-  unsigned long arrbits = 0;
-
+  // Don't touch these
   if (to_array_type(type).size_is_infinite)
-    // Don't touch these
     return type;
 
+  // No need to handle one dimensional arrays
+  if (!is_array_type(to_array_type(type).subtype))
+    return type;
+
+  type2tc subtype = get_flattened_array_subtype(type);
+
+  unsigned long arr_size = 1;
   // Otherwise, accumulate sufficient domain bits to represent all dimensions
   // of the given array, in one dimension.
   type2tc type_rec = type;
-  while (is_array_type(type_rec)) {
-    arrbits += calculate_array_domain_width(to_array_type(type_rec));
+  while (is_array_type(type_rec))
+  {
+    arr_size *= to_constant_int2t(to_array_type(type_rec).array_size).value.to_long();
     type_rec = to_array_type(type_rec).subtype;
   }
 
   // type_rec is now the base type.
-  uint64_t arr_size = 1ULL << arrbits;
   constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
-
-  return type2tc(new array_type2t(type_rec, arr_size_expr, false));
+  return array_type2tc(subtype, arr_size_expr, false);
 }
 
 expr2tc
@@ -2058,12 +2087,7 @@ smt_convt::flatten_array_body(const expr2tc &expr)
       to_constant_array2t(elem).datatype_members.end());
   }
 
-  return constant_array2tc(
-    array_type2tc(
-      get_flattened_array_subtype(expr->type),
-      gen_ulong(sub_expr_list.size()),
-      false),
-    sub_expr_list);
+  return constant_array2tc(flatten_array_type(expr->type), sub_expr_list);
 }
 
 type2tc
