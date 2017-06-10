@@ -39,7 +39,7 @@ public:
   };
   int ltl_results_seen[4];
 
-  unsigned int interleaving_number;
+  BigInt interleaving_number;
   unsigned int interleaving_failed;
 
   virtual smt_convt::resultt start_bmc();
