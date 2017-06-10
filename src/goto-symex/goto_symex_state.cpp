@@ -67,30 +67,27 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
 
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
-  static unsigned int with_counter=0;
-
   // Don't permit const propagaion of infinite-size arrays. They're going to
   // be special modelling arrays that require special handling either at SMT
   // or some other level, so attempting to optimse them is a Bad Plan (TM).
   if (is_array_type(expr) && to_array_type(expr->type).size_is_infinite)
     return false;
 
-  if (is_nil_expr(expr)) {
-    return true; // It's fine to constant propagate something that's absent.
-  } else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
-  {
-    // Null is also essentially a constant.
+  // It's fine to constant propagate something that's absent.
+  if (is_nil_expr(expr))
     return true;
-  }
-  else if (is_address_of2t(expr))
-  {
+
+  // Null is also essentially a constant.
+  if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
+    return true;
+
+  if (is_address_of2t(expr))
     return constant_propagation_reference(to_address_of2t(expr).ptr_obj);
-  }
-  else if (is_typecast2t(expr))
-  {
+
+  if (is_typecast2t(expr))
     return constant_propagation(to_typecast2t(expr).from);
-  }
-  else if (is_add2t(expr))
+
+  if (is_add2t(expr))
   {
     bool noconst = true;
 
@@ -104,22 +101,22 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
     return noconst;
   }
-  else if (is_constant_array_of2t(expr))
+
+  if (is_constant_array_of2t(expr))
   {
     const expr2tc &init = to_constant_array_of2t(expr).initializer;
     if (is_constant_expr(init) && !is_bool_type(init))
       return true;
   }
-  else if (is_with2t(expr))
-  {
-    // Keeping additional with data achieves nothing; no code in ESBMC inspects
-    // with chains to extract data from them.
-    // FIXME: actually benchmark this and look at timing results, it may be
-    // important benchmarks (i.e. TACAS) work better with some propagation
+
+  // Keeping additional with data achieves nothing; no code in ESBMC inspects
+  // with chains to extract data from them.
+  // FIXME: actually benchmark this and look at timing results, it may be
+  // important benchmarks (i.e. TACAS) work better with some propagation
+  if (is_with2t(expr))
     return false;
-    with_counter++;
-  }
-  else if (is_constant_struct2t(expr))
+
+  if (is_constant_struct2t(expr) || is_constant_union2t(expr))
   {
     bool noconst = true;
 
@@ -131,33 +128,6 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
     return noconst;
   }
-  else if (is_constant_union2t(expr))
-  {
-    const expr2tc *e = expr->get_sub_expr(0);
-    if (e == NULL)
-      return false;
-    if (is_nil_expr(*e))
-      return false;
-    if (expr->get_sub_expr(1) != NULL) // Ensure only one operand (?????)
-                                       // Preserves previous behaviour.
-      return false;
-
-    return constant_propagation(*e);
-  } else if (is_constant_expr(expr)) {
-    return true;
-  }
-
-  /* No difference
-  else if(expr.id()==exprt::equality)
-  {
-    if(expr.operands().size()!=2)
-	  throw "equality expects two operands";
-
-    return (constant_propagation(expr.op0()) ||
-           constant_propagation(expr.op1()));
-
-  }
-  */
 
   return false;
 }
