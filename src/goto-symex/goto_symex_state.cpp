@@ -67,11 +67,20 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
 
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
-  // Don't permit const propagaion of infinite-size arrays. They're going to
-  // be special modelling arrays that require special handling either at SMT
-  // or some other level, so attempting to optimse them is a Bad Plan (TM).
-  if (is_array_type(expr) && to_array_type(expr->type).size_is_infinite)
-    return false;
+  if (is_array_type(expr))
+  {
+    array_type2t arr = to_array_type(expr->type);
+
+    // Don't permit const propagaion of infinite-size arrays. They're going to
+    // be special modelling arrays that require special handling either at SMT
+    // or some other level, so attempting to optimse them is a Bad Plan (TM).
+    if(arr.size_is_infinite)
+      return false;
+
+    // Don't propagate multi dimensional arrays
+    if(is_array_type(arr.subtype))
+      return false;
+  }
 
   // It's fine to constant propagate something that's absent.
   if (is_nil_expr(expr))
@@ -79,13 +88,15 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if (is_symbol2t(expr))
   {
+    symbol2t s = to_symbol2t(expr);
+
     // Null is also essentially a constant.
-    if(to_symbol2t(expr).thename == "NULL")
+    if(s.thename == "NULL")
       return true;
 
     // By propagation nondet symbols, we can achieve some speed up but the
     // counterexample will be missing a lot of information, so not really worth it
-    if(to_symbol2t(expr).thename.as_string().find("nondet$symex::nondet") != std::string::npos)
+    if(s.thename.as_string().find("nondet$symex::nondet") != std::string::npos)
       return false;
   }
 
