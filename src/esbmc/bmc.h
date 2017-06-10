@@ -41,7 +41,6 @@ public:
 
   unsigned int interleaving_number;
   unsigned int interleaving_failed;
-  unsigned int uw_loop;
 
   virtual smt_convt::resultt start_bmc();
   virtual smt_convt::resultt run(boost::shared_ptr<symex_target_equationt> &eq);

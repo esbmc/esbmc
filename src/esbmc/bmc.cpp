@@ -51,7 +51,6 @@ bmct::bmct(const goto_functionst &funcs,
 {
   interleaving_number = 0;
   interleaving_failed = 0;
-  uw_loop = 0;
 
   ltl_results_seen[ltl_res_bad] = 0;
   ltl_results_seen[ltl_res_failing] = 0;
