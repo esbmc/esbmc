@@ -2081,10 +2081,12 @@ smt_convt::flatten_array_body(const expr2tc &expr)
   std::vector<expr2tc> sub_expr_list;
   for (auto const &elem : the_array.datatype_members)
   {
+    expr2tc flatten_elem = flatten_array_body(elem);
+
     sub_expr_list.insert(
       sub_expr_list.end(),
-      to_constant_array2t(elem).datatype_members.begin(),
-      to_constant_array2t(elem).datatype_members.end());
+      to_constant_array2t(flatten_elem).datatype_members.begin(),
+      to_constant_array2t(flatten_elem).datatype_members.end());
   }
 
   return constant_array2tc(flatten_array_type(expr->type), sub_expr_list);
