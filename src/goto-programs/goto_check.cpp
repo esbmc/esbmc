@@ -112,7 +112,7 @@ void goto_checkt::div_by_zero_check(
   assert(!is_nil_expr(zero));
 
   add_guarded_claim(
-      notequal2tc(side_2, zero),
+    notequal2tc(side_2, zero),
     "division by zero",
     "division-by-zero",
     loc,
