@@ -2065,7 +2065,7 @@ smt_convt::flatten_array_body(const expr2tc &expr)
   const constant_array2t &the_array = to_constant_array2t(expr);
   const array_type2t &arr_type = to_array_type(the_array.type);
 
-  // inner most level, jus treturn the array
+  // inner most level, just return the array
   if(!is_array_type(arr_type.subtype))
     return expr;
 
@@ -2343,10 +2343,13 @@ smt_convt::array_create(const expr2tc &expr)
 
   // Check size
   const array_type2t &arr_type = to_array_type(expr->type);
-  if (arr_type.size_is_infinite) {
-    // Guarentee nothing, this is modelling only.
+
+  // Guarentee nothing, this is modelling only.
+  if (arr_type.size_is_infinite)
     return convert_ast(newsym);
-  } else if (!is_constant_int2t(arr_type.array_size)) {
+
+  if (!is_constant_int2t(arr_type.array_size))
+  {
     std::cerr << "Non-constant sized array of type constant_array_of2t"
               << std::endl;
     abort();
@@ -2360,7 +2363,8 @@ smt_convt::array_create(const expr2tc &expr)
 
   // Repeatedly store things into this.
   smt_astt newsym_ast = convert_ast(newsym);
-  for (unsigned int i = 0; i < sz; i++) {
+  for (unsigned int i = 0; i < sz; i++)
+  {
     expr2tc init = array.datatype_members[i];
 
     // Workaround for bools-in-arrays
