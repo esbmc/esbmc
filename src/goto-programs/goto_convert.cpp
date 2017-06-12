@@ -653,42 +653,79 @@ void goto_convertt::convert_expression(
   }
 }
 
-bool goto_convertt::rewrite_vla_decl(exprt &var, goto_programt &dest)
+bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
 {
-  // We need to check if there an sideeffect on the array size
-  if(var.type().is_array())
+  // Since we might have multiplications now, we have to check all
+  // operands
+  bool res = false;
+  for(auto &it : size.operands())
+    res |= rewrite_vla_decl_size(it, dest);
+
+  // Remove side effect
+  if(has_sideeffect(size))
   {
-    exprt &size = to_array_type(var.type()).size();
-    if(has_sideeffect(size))
+    goto_programt sideeffects;
+    remove_sideeffects(size, sideeffects);
+    dest.destructive_append(sideeffects);
+    return true;
+  }
+
+  // We have to replace the symbol by a temporary, because it might
+  // change its value in the future
+  // Don't create a symbol for temporary symbols
+  if(size.is_symbol() &&
+     size.identifier().as_string().find("tmp$") == std::string::npos)
+  {
+    // Old size symbol
+    exprt old_size = size;
+
+    // Replace the size by a new variable, to avoid wrong results
+    // when the symbol used to create the VLA is changed
+    size = symbol_expr(new_tmp_symbol(size.type()));
+
+    codet assignment("assign");
+    assignment.reserve_operands(2);
+    assignment.copy_to_operands(size);
+    assignment.copy_to_operands(old_size);
+    assignment.location() = size.location();
+    copy(assignment, ASSIGN, dest);
+
+    return true;
+  }
+
+  // A constant array
+  return res;
+}
+
+bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
+{
+  // Not an array, don't care
+  if(!var_type.is_array())
+    return false;
+
+  array_typet &arr_type = to_array_type(var_type);
+  exprt &size = arr_type.size();
+
+  // It's a multidimensional array, apply the transformations recursively.
+  if(arr_type.subtype().is_array())
+  {
+    array_typet &arr_subtype = to_array_type(arr_type.subtype());
+
+    // Rewrite the inner array
+    if(rewrite_vla_decl(arr_subtype, dest))
     {
-      // Remove side effect
-      goto_programt sideeffects;
-      remove_sideeffects(size, sideeffects);
-      dest.destructive_append(sideeffects);
-      return true;
-    }
+      // The resulting size is a multiplication of all sizes
+      exprt mult(exprt::mult, size.type());
+      mult.copy_to_operands(arr_subtype.size(), size);
+      size.swap(mult);
 
-    if(size.is_symbol())
-    {
-      // Old size symbol
-      exprt old_size = size;
-
-      // Replace the size by a new variable, to avoid wrong results
-      // when the symbol used to create the VLA is changed
-      size = symbol_expr(new_tmp_symbol(size.type()));
-
-      codet assignment("assign");
-      assignment.reserve_operands(2);
-      assignment.copy_to_operands(size);
-      assignment.copy_to_operands(old_size);
-      assignment.location() = var.location();
-      copy(assignment, ASSIGN, dest);
-
-      return true;
+      // Move the subtype up
+      arr_type.subtype() = arr_subtype.subtype();
     }
   }
 
-  return false;
+  // Now rewrite the size expression
+  return rewrite_vla_decl_size(size, dest);
 }
 
 void goto_convertt::convert_decl(
@@ -725,11 +762,11 @@ void goto_convertt::convert_decl(
   scoped_variables.push_front(identifier);
 
   // Check if is an VLA declaration and rewrite the declaration
-  if(rewrite_vla_decl(var, dest))
+  if(rewrite_vla_decl(var.type(), dest))
   {
-    // This means that it was an VLA declaration and we need to
+    // This means that it was a VLA declaration and we need to
     // to rewrite the symbol as well
-    to_array_type(s->type).size() = to_array_type(var.type()).size();
+    s->type = var.type();
   }
 
   exprt initializer = nil_exprt();
@@ -763,20 +800,19 @@ void goto_convertt::convert_decl(
   if(var.type().is_array())
   {
     exprt &size = to_array_type(var.type()).size();
-
-    // That's the number of elements, calculate subtype size
-    const typet &subtype = to_array_type(var.type()).subtype();
-
-    type2tc tmp;
-    migrate_type(subtype, tmp);
-    auto st_size = type_byte_size(tmp);
-
-    exprt st_size_expr = from_integer(st_size, size.type());
-    exprt mult(exprt::mult, size.type());
-    mult.copy_to_operands(size, st_size_expr);
-
-    if(size.is_symbol())
+    if(size.is_symbol() || size.id() == "*")
     {
+      // That's the number of elements, calculate subtype size
+      const typet &subtype = to_array_type(var.type()).subtype();
+
+      type2tc tmp;
+      migrate_type(subtype, tmp);
+      auto st_size = type_byte_size(tmp);
+
+      exprt st_size_expr = from_integer(st_size, size.type());
+      exprt mult(exprt::mult, size.type());
+      mult.copy_to_operands(size, st_size_expr);
+
       // Set the array to have a dynamic size
       address_of_exprt addrof(var);
       exprt dynamic_size("dynamic_size", int_type());

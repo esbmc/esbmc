@@ -88,7 +88,8 @@ protected:
 
   void address_of_replace_objects(exprt &expr, goto_programt &dest);
 
-  bool rewrite_vla_decl(exprt &var, goto_programt &dest);
+  bool rewrite_vla_decl(typet &var_type, goto_programt &dest);
+  bool rewrite_vla_decl_size(exprt &size, goto_programt &dest);
 
   bool has_sideeffect(const exprt &expr);
   bool has_function_call(const exprt &expr);
