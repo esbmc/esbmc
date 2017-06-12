@@ -781,7 +781,7 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
     case type2t::unsignedbv_id:
     case type2t::signedbv_id:
     case type2t::fixedbv_id:
-      res = get_bv(*it, a);
+      res = get_bv(it, a);
       break;
     default:
       std::cerr << "Unexpected sort " << it->type_id << " in tuple_get_rec"
