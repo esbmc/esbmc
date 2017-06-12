@@ -712,6 +712,50 @@ bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
   return res;
 }
 
+void goto_convertt::generate_dynamic_size_vla(exprt &var, goto_programt &dest)
+{
+  assert(var.type().is_array());
+
+  array_typet arr_type = to_array_type(var.type());
+  exprt size = to_array_type(var.type()).size();
+
+  // First, if it's a multidimensional vla, the size will be the
+  // multiplication of the dimensions
+  while(arr_type.subtype().is_array())
+  {
+    array_typet arr_subtype = to_array_type(arr_type.subtype());
+
+    exprt mult(exprt::mult, size.type());
+    mult.copy_to_operands(size, arr_subtype.size());
+    size.swap(mult);
+
+    arr_type = arr_subtype;
+  }
+
+  // Now, calculate the array size, which are the dimensions times the
+  // elements' size
+  const typet &subtype = arr_type.subtype();
+
+  type2tc tmp;
+  migrate_type(subtype, tmp);
+  auto st_size = type_byte_size(tmp);
+
+  exprt st_size_expr = from_integer(st_size, size.type());
+  exprt mult(exprt::mult, size.type());
+  mult.copy_to_operands(size, st_size_expr);
+
+  // Set the array to have a dynamic size
+  address_of_exprt addrof(var);
+  exprt dynamic_size("dynamic_size", int_type());
+  dynamic_size.copy_to_operands(addrof);
+  dynamic_size.location() = var.location();
+
+  goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
+  exprt assign = code_assignt(dynamic_size, mult);
+  migrate_expr(assign, t_s_s->code);
+  t_s_s->location = var.location();
+}
+
 void goto_convertt::convert_decl(
   const codet &code,
   goto_programt &dest)
@@ -746,7 +790,8 @@ void goto_convertt::convert_decl(
   scoped_variables.push_front(identifier);
 
   // Check if is an VLA declaration and rewrite the declaration
-  if(rewrite_vla_decl(var.type(), dest))
+  bool is_vla = rewrite_vla_decl(var.type(), dest);
+  if(is_vla)
   {
     // This means that it was a VLA declaration and we need to
     // to rewrite the symbol as well
@@ -781,34 +826,8 @@ void goto_convertt::convert_decl(
   // break up into decl and assignment
   copy(new_code, OTHER, dest);
 
-  if(var.type().is_array())
-  {
-    exprt &size = to_array_type(var.type()).size();
-    if(size.is_symbol() || size.id() == "*")
-    {
-      // That's the number of elements, calculate subtype size
-      const typet &subtype = to_array_type(var.type()).subtype();
-
-      type2tc tmp;
-      migrate_type(subtype, tmp);
-      auto st_size = type_byte_size(tmp);
-
-      exprt st_size_expr = from_integer(st_size, size.type());
-      exprt mult(exprt::mult, size.type());
-      mult.copy_to_operands(size, st_size_expr);
-
-      // Set the array to have a dynamic size
-      address_of_exprt addrof(var);
-      exprt dynamic_size("dynamic_size", int_type());
-      dynamic_size.copy_to_operands(addrof);
-      dynamic_size.location() = code.location();
-
-      goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
-      exprt assign = code_assignt(dynamic_size, mult);
-      migrate_expr(assign, t_s_s->code);
-      t_s_s->location = code.location();
-    }
-  }
+  if(is_vla)
+    generate_dynamic_size_vla(var, dest);
 
   code_assignt assign(var, initializer);
   assign.location() = new_code.location();
