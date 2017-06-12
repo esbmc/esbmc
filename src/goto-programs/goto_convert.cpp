@@ -655,12 +655,6 @@ void goto_convertt::convert_expression(
 
 bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
 {
-  // Since we might have multiplications now, we have to check all
-  // operands
-  bool res = false;
-  for(auto &it : size.operands())
-    res |= rewrite_vla_decl_size(it, dest);
-
   // Remove side effect
   if(has_sideeffect(size))
   {
@@ -694,7 +688,7 @@ bool goto_convertt::rewrite_vla_decl_size(exprt &size, goto_programt &dest)
   }
 
   // A constant array
-  return res;
+  return false;
 }
 
 bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
@@ -704,28 +698,18 @@ bool goto_convertt::rewrite_vla_decl(typet &var_type, goto_programt &dest)
     return false;
 
   array_typet &arr_type = to_array_type(var_type);
-  exprt &size = arr_type.size();
+
+  // Rewrite size
+  bool res = rewrite_vla_decl_size(arr_type.size(), dest);
 
   // It's a multidimensional array, apply the transformations recursively.
+  // res is the second operand because it can be short-circuited and the
+  // side-effect will not be evaluated
   if(arr_type.subtype().is_array())
-  {
-    array_typet &arr_subtype = to_array_type(arr_type.subtype());
-
-    // Rewrite the inner array
-    if(rewrite_vla_decl(arr_subtype, dest))
-    {
-      // The resulting size is a multiplication of all sizes
-      exprt mult(exprt::mult, size.type());
-      mult.copy_to_operands(arr_subtype.size(), size);
-      size.swap(mult);
-
-      // Move the subtype up
-      arr_type.subtype() = arr_subtype.subtype();
-    }
-  }
+    return rewrite_vla_decl(to_array_type(arr_type.subtype()), dest) || res;
 
   // Now rewrite the size expression
-  return rewrite_vla_decl_size(size, dest);
+  return res;
 }
 
 void goto_convertt::convert_decl(
