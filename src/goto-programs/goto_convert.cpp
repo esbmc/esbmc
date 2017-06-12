@@ -653,6 +653,44 @@ void goto_convertt::convert_expression(
   }
 }
 
+bool goto_convertt::rewrite_vla_decl(exprt &var, goto_programt &dest)
+{
+  // We need to check if there an sideeffect on the array size
+  if(var.type().is_array())
+  {
+    exprt &size = to_array_type(var.type()).size();
+    if(has_sideeffect(size))
+    {
+      // Remove side effect
+      goto_programt sideeffects;
+      remove_sideeffects(size, sideeffects);
+      dest.destructive_append(sideeffects);
+      return true;
+    }
+
+    if(size.is_symbol())
+    {
+      // Old size symbol
+      exprt old_size = size;
+
+      // Replace the size by a new variable, to avoid wrong results
+      // when the symbol used to create the VLA is changed
+      size = symbol_expr(new_tmp_symbol(size.type()));
+
+      codet assignment("assign");
+      assignment.reserve_operands(2);
+      assignment.copy_to_operands(size);
+      assignment.copy_to_operands(old_size);
+      assignment.location() = var.location();
+      copy(assignment, ASSIGN, dest);
+
+      return true;
+    }
+  }
+
+  return false;
+}
+
 void goto_convertt::convert_decl(
   const codet &code,
   goto_programt &dest)
@@ -686,36 +724,12 @@ void goto_convertt::convert_decl(
   // Local variable, add to locals
   scoped_variables.push_front(identifier);
 
-  // We need to check if there an sideeffect on the array size
-  if(var.type().is_array())
+  // Check if is an VLA declaration and rewrite the declaration
+  if(rewrite_vla_decl(var, dest))
   {
-    exprt &size = to_array_type(var.type()).size();
-    if(has_sideeffect(size))
-    {
-      // Remove side effect
-      goto_programt sideeffects;
-      remove_sideeffects(size, sideeffects);
-      dest.destructive_append(sideeffects);
-
-      // Update symbol
-      to_array_type(s->type).size() = size;
-    }
-    else if(size.is_symbol())
-    {
-      // Replace the size by a new variable, to avoid wrong results
-      // when the symbol used to create the VLA is changed
-      size = symbol_expr(new_tmp_symbol(size.type()));
-
-      codet assignment("assign");
-      assignment.reserve_operands(2);
-      assignment.copy_to_operands(size);
-      assignment.copy_to_operands(to_array_type(s->type).size());
-      assignment.location() = code.location();
-      copy(assignment, ASSIGN, dest);
-
-      // Update symbol
-      to_array_type(s->type).size() = size;
-    }
+    // This means that it was an VLA declaration and we need to
+    // to rewrite the symbol as well
+    to_array_type(s->type).size() = to_array_type(var.type()).size();
   }
 
   exprt initializer = nil_exprt();

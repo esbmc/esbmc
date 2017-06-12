@@ -86,8 +86,9 @@ protected:
   void remove_sideeffects(exprt &expr, goto_programt &dest,
                           bool result_is_used=true);
 
-  void address_of_replace_objects(exprt &expr,
-		  	  	  	  	  	  	  goto_programt &dest);
+  void address_of_replace_objects(exprt &expr, goto_programt &dest);
+
+  bool rewrite_vla_decl(exprt &var, goto_programt &dest);
 
   bool has_sideeffect(const exprt &expr);
   bool has_function_call(const exprt &expr);
