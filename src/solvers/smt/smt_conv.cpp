@@ -1881,16 +1881,6 @@ smt_convt::array_domain_to_width(const type2tc &type)
 }
 
 expr2tc
-smt_convt::twiddle_index_width(const expr2tc &expr, const type2tc &type)
-{
-  const array_type2t &arrtype = to_array_type(type);
-  unsigned int width = calculate_array_domain_width(arrtype);
-  typecast2tc t(type2tc(new unsignedbv_type2t(width)), expr);
-  simplify(t);
-  return t;
-}
-
-expr2tc
 smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 {
   index2tc idx = expr;

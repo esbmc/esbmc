@@ -926,8 +926,6 @@ public:
   smt_sortt make_array_domain_sort(const array_type2t &arr);
   /** Like make_array_domain_sort, but a type2tc not an smt_sort */
   type2tc make_array_domain_sort_exp(const array_type2t &arr);
-  /** Cast the given expression to the domain width of the array in type */
-  expr2tc twiddle_index_width(const expr2tc &expr, const type2tc &type);
   /** For a multi-dimensional array, convert the type into a single dimension
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
