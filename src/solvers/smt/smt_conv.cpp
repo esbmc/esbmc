@@ -1934,20 +1934,35 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
       to_array_type(flatten_array_type(with->source_value->type)));
 
   // Rewrite the store chain as multiplications and additions
-  expr2tc output = typecast2tc(subtype, with->update_field);
-  while (is_with2t(with->update_value))
+  // TODO: this is a mess, improve it
+  expr2tc output;
+  if(is_with2t(with->update_value))
   {
-    with = with->update_value;
+    std::vector<expr2tc> multiplications;
 
-    type2tc t = flatten_array_type(with->type);
+    // Multiply all indexes by the next dimension's flatten type
+    while (is_with2t(with->update_value))
+    {
+      type2tc t = flatten_array_type(with->update_value->type);
 
-    output = add2tc(
-      subtype,
-      mul2tc(
-        subtype,
-        typecast2tc(subtype, to_array_type(t).array_size),
-        output),
-      typecast2tc(subtype, with->update_field));
+      expr2tc mult =
+        mul2tc(
+          subtype,
+          typecast2tc(subtype, to_array_type(t).array_size),
+          typecast2tc(subtype, with->update_field));
+
+      multiplications.push_back(mult);
+
+      with = with->update_value;
+    }
+
+    // Add them together
+    output = typecast2tc(subtype, with->update_field);
+    while(multiplications.size())
+    {
+      output = add2tc(subtype, output, multiplications.back());
+      multiplications.pop_back();
+    }
   }
 
   // Try to simplify the expression
