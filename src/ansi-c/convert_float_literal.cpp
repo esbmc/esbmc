@@ -8,11 +8,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/convert_float_literal.h>
 #include <ansi-c/parse_float.h>
-#include <cassert>
-#include <cstdlib>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/config.h>
+#include <util/ieee_float.h>
 #include <util/std_types.h>
 
 /*******************************************************************\

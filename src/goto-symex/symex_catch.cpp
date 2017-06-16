@@ -128,10 +128,10 @@ bool goto_symext::symex_throw()
   // a derived object with multiple inheritance
   unsigned old_id_number=-1, new_id_number=0;
 
-  forall_names(e_it, throw_ref.exception_list)
+  for(auto const &it : throw_ref.exception_list)
   {
     // Handle throw declarations
-    switch(handle_throw_decl(except, *e_it))
+    switch(handle_throw_decl(except, it))
     {
       case 0:
         return true;
@@ -151,7 +151,7 @@ bool goto_symext::symex_throw()
 
     // Search for a catch with a matching type
     goto_symex_statet::exceptiont::catch_mapt::const_iterator
-      c_it=except->catch_map.find(*e_it);
+      c_it=except->catch_map.find(it);
 
     // Do we have a catch for it?
     if(c_it!=except->catch_map.end())
@@ -159,7 +159,7 @@ bool goto_symext::symex_throw()
       // We do!
 
       // Get current catch number and update if needed
-      new_id_number = (*except->catch_order.find(*e_it)).second;
+      new_id_number = (*except->catch_order.find(it)).second;
 
       if(new_id_number < old_id_number)
       {
@@ -174,7 +174,7 @@ bool goto_symext::symex_throw()
     else // We don't have a catch for it
     {
       // If it's a pointer, we must look for a catch(void*)
-      if(e_it->as_string().find("_ptr") != std::string::npos)
+      if(it.as_string().find("_ptr") != std::string::npos)
       {
         // It's a pointer!
 
@@ -204,7 +204,8 @@ bool goto_symext::symex_throw()
     }
   }
 
-  if (catch_insn == NULL) {
+  if (catch_insn == nullptr)
+  {
     // No catch for type, void, or ellipsis
     // Call terminate handler before showing error message
     if(!terminate_handler())
@@ -246,7 +247,7 @@ bool goto_symext::terminate_handler()
 {
   // We must look on the context if the user included exception lib
   const symbolt *tmp;
-  bool is_included=ns.lookup("cpp::std::terminate()",tmp);
+  bool is_included=ns.lookup("std::terminate()",tmp);
 
   // If it do, we must call the terminate function:
   // It'll call the current function handler
@@ -254,7 +255,7 @@ bool goto_symext::terminate_handler()
     codet terminate_function=to_code(tmp->value.op0());
 
     // We only call it if the user replaced the default one
-    if(terminate_function.op1().identifier()=="cpp::std::default_terminate()")
+    if(terminate_function.op1().identifier()=="std::default_terminate()")
       return false;
 
     // Call the function
@@ -290,7 +291,7 @@ bool goto_symext::unexpected_handler()
 
   // We must look on the context if the user included exception lib
   const symbolt *tmp;
-  bool is_included=ns.lookup("cpp::std::unexpected()",tmp);
+  bool is_included=ns.lookup("std::unexpected()",tmp);
 
   // If it do, we must call the unexpected function:
   // It'll call the current function handler
@@ -302,7 +303,7 @@ bool goto_symext::unexpected_handler()
 
     // We only call it if the user replaced the default one
     if (to_symbol2t(to_code_function_call2t(the_call).function).thename ==
-        "cpp::std::default_unexpected()")
+        "std::default_unexpected()")
       return false;
 
     // Indicate there we're inside the unexpected flow
@@ -347,7 +348,7 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
                        irep_idt("symex_throw::thrown_obj"));
   expr2tc operand(throw_insn->operand);
   guardt g;
-  symex_assign_symbol(thrown_obj, operand, g);
+  symex_assign_symbol(thrown_obj, operand, g, symex_targett::STATE);
 
   // Now record that value for future reference.
   cur_state->rename(thrown_obj);

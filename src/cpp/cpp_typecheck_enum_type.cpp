@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/c_qualifiers.h>
+#include <util/c_qualifiers.h>
 #include <cpp/cpp_enum_type.h>
 #include <cpp/cpp_typecheck.h>
 #include <util/arith_tools.h>

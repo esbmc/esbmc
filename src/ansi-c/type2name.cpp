@@ -95,7 +95,7 @@ std::string type2name(const typet &type)
     if(type.id()=="union") result +="UN";
 
     result+='[';
-    for(auto it : to_struct_type(type).components())
+    for(auto const &it : to_struct_type(type).components())
       result+=type2name(it.type()) + "'" + it.name().as_string() + "'|";
     result.resize(result.size()-1);
     result+=']';

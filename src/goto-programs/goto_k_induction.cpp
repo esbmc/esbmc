@@ -373,7 +373,7 @@ void goto_k_inductiont::create_symbols()
   unsigned int i = state_counter;
 
   symbolt state_symbol;
-  state_symbol.name="c::state$vector"+i2string(i);
+  state_symbol.name="state$vector"+i2string(i);
   state_symbol.base_name="state$vector"+i2string(i);
   state_symbol.is_type=true;
   state_symbol.type=state;

@@ -62,7 +62,7 @@ bool clang_c_convertert::convert_top_level_decl()
 {
   // Iterate through each translation unit and their global symbols, creating
   // symbols as we go.
-  for (auto &translation_unit : ASTs)
+  for (auto const &translation_unit : ASTs)
   {
     // Update ASTContext as it changes for each source file
     ASTContext = &(*translation_unit).getASTContext();
@@ -206,7 +206,7 @@ bool clang_c_convertert::get_decl(
       const clang::TranslationUnitDecl &tu =
         static_cast<const clang::TranslationUnitDecl &>(decl);
 
-      for(auto decl : tu.decls())
+      for(auto const &decl : tu.decls())
       {
         // This is a global declaration (variable, function, struct, etc)
         // We don't need the exprt, it will be automatically added to the
@@ -336,7 +336,7 @@ bool clang_c_convertert::get_struct_union_class_fields(
   struct_union_typet &type)
 {
   // First, parse the fields
-  for(const auto &field : recordd.fields())
+  for(auto const &field : recordd.fields())
   {
     struct_typet::componentt comp;
     if(get_decl(*field, comp))
@@ -371,7 +371,7 @@ bool clang_c_convertert::get_var(
     return true;
 
   // Check if we annotated it to be have an infinity size
-  for(auto attr : vd.getAttrs())
+  for(auto const &attr : vd.getAttrs())
   {
     if (!llvm::isa<clang::AnnotateAttr>(attr))
       continue;
@@ -520,7 +520,7 @@ bool clang_c_convertert::get_function(
 
   // We convert the parameters first so their symbol are added to context
   // before converting the body, as they may appear on the function body
-  for (const auto &pdecl : fd.parameters())
+  for (auto const &pdecl : fd.parameters())
   {
     code_typet::argumentt param;
     if(get_function_params(*pdecl, param))
@@ -685,7 +685,7 @@ bool clang_c_convertert::get_type(
       if(sub_type.is_struct() || sub_type.is_union())
       {
         struct_union_typet t = to_struct_union_type(sub_type);
-        sub_type = symbol_typet("c::tag-" + t.tag().as_string());
+        sub_type = symbol_typet("tag-" + t.tag().as_string());
       }
 
       new_type = gen_pointer_type(sub_type);
@@ -788,7 +788,7 @@ bool clang_c_convertert::get_type(
 
       type.return_type() = return_type;
 
-      for (const auto &ptype : func.getParamTypes())
+      for (auto const &ptype : func.getParamTypes())
       {
         typet param_type;
         if(get_type(ptype, param_type))
@@ -1283,7 +1283,7 @@ bool clang_c_convertert::get_expr(
       if(size_type.is_struct() || size_type.is_union())
       {
         struct_union_typet t = to_struct_union_type(size_type);
-        size_type = symbol_typet("c::tag-" + t.tag().as_string());
+        size_type = symbol_typet("tag-" + t.tag().as_string());
       }
 
       new_expr.set("#c_sizeof_type", size_type);
@@ -1624,7 +1624,7 @@ bool clang_c_convertert::get_expr(
         static_cast<const clang::CompoundStmt &>(stmt);
 
       code_blockt block;
-      for (const auto &stmt : compound_stmt.body()) {
+      for (auto const &stmt : compound_stmt.body()) {
         exprt statement;
         if(get_expr(*stmt, statement))
           return true;
@@ -2038,7 +2038,7 @@ bool clang_c_convertert::get_decl_ref(
       std::string base_name, pretty_name;
       get_function_name(*fd.getFirstDecl(), base_name, pretty_name);
 
-      identifier = "c::" + pretty_name;
+      identifier = pretty_name;
 
       if(get_type(fd.getType(), type))
         return true;
@@ -2072,12 +2072,7 @@ bool clang_c_convertert::get_decl_ref(
   new_expr = exprt("symbol", type);
   new_expr.identifier(identifier);
   new_expr.cmt_lvalue(true);
-
-  // Remove c:: or cpp::
-  if(identifier.find_last_of("::") != std::string::npos)
-    new_expr.name(identifier.substr(identifier.find_last_of("::")+1));
-  else
-    new_expr.name(identifier);
+  new_expr.name(identifier);
 
   return false;
 }
@@ -2420,7 +2415,7 @@ void clang_c_convertert::get_default_symbol(
   symbol.type = type;
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
-  symbol.name = "c::" + pretty_name;
+  symbol.name = pretty_name;
   symbol.is_used = is_used;
 }
 
@@ -2669,14 +2664,14 @@ void clang_c_convertert::move_symbol_to_context(
 void clang_c_convertert::dump_type_map()
 {
   std::cout << "Type_map:" << std::endl;
-  for (auto it : type_map)
+  for (auto const &it : type_map)
     std::cout << it.first << ": " << it.second << std::endl;
 }
 
 void clang_c_convertert::dump_object_map()
 {
   std::cout << "Object_map:" << std::endl;
-  for (auto it : object_map)
+  for (auto const &it : object_map)
     std::cout << it.first << ": " << it.second << std::endl;
 }
 

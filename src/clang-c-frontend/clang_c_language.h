@@ -41,7 +41,6 @@ public:
     message_handlert &message_handler);
 
   std::string id() const { return "c"; }
-  std::string description() const { return "C"; }
 
   virtual void show_parse(std::ostream &out);
 

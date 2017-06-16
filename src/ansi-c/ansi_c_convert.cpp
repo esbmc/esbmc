@@ -62,7 +62,7 @@ void ansi_c_convertt::convert_declaration(ansi_c_declarationt &declaration)
     declaration.set_is_macro(true);
 
   // add language prefix
-  declaration.set_name(language_prefix+id2string(declaration.get_name()));
+  declaration.set_name(id2string(declaration.get_name()));
 
   if(declaration.decl_value().is_not_nil())
   {
@@ -373,8 +373,7 @@ void ansi_c_convertt::convert_type(
         argument.set_base_name(base_name);
         argument.location()=declaration.location();
 
-        argument.set_identifier(
-          language_prefix+id2string(declaration.get_name()));
+        argument.set_identifier(id2string(declaration.get_name()));
 
         it->swap(argument);
       }

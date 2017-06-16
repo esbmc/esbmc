@@ -10,6 +10,7 @@
 #include <util/bitvector.h>
 #include <util/c_types.h>
 #include <util/expr_util.h>
+#include <util/ieee_float.h>
 #include <util/string_constant.h>
 
 bool clang_c_convertert::convert_character_literal(

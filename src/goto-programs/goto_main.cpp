@@ -58,7 +58,7 @@ void goto_convert(
   message_handlert &message_handler)
 {
   // find main symbol
-  const symbolt* s = context.find_symbol("main");
+  const symbolt* s = context.find_symbol("__ESBMC_main");
   if(s == nullptr)
     throw "failed to find main symbol";
 

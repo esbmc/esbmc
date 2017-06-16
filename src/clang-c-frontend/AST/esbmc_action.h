@@ -10,7 +10,7 @@
 
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendActions.h>
-#include "clang/Lex/Preprocessor.h"
+#include <clang/Lex/Preprocessor.h>
 #include <string>
 
 #define __STDC_LIMIT_MACROS

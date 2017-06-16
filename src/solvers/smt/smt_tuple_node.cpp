@@ -22,20 +22,22 @@ tuple_node_smt_ast::make_free(smt_convt *ctx)
   const struct_union_data &strct = ctx->get_type_def(ts->thetype);
 
   elements.resize(strct.members.size());
+
   unsigned int i = 0;
-  forall_types(it, strct.members) {
-    smt_sortt newsort = ctx->convert_sort(*it);
+  for(auto const &it :strct.members)
+  {
+    smt_sortt newsort = ctx->convert_sort(it);
     std::string fieldname = name + "." + strct.member_names[i].as_string();
 
-    if (is_tuple_ast_type(*it)) {
+    if (is_tuple_ast_type(it)) {
       elements[i] = ctx->tuple_api->tuple_fresh(newsort, fieldname);
-    } else if (is_tuple_array_ast_type(*it)) {
+    } else if (is_tuple_array_ast_type(it)) {
       std::string newname = ctx->mk_fresh_name(fieldname);
-      smt_sortt subsort = ctx->convert_sort(get_array_subtype(*it));
+      smt_sortt subsort = ctx->convert_sort(get_array_subtype(it));
       elements[i] = flat.array_conv.mk_array_symbol(newname, newsort, subsort);
-    } else if (is_array_type(*it)) {
+    } else if (is_array_type(it)) {
       elements[i] = ctx->mk_fresh(newsort, fieldname,
-                                  ctx->convert_sort(get_array_subtype(*it)));
+                                  ctx->convert_sort(get_array_subtype(it)));
     } else {
       elements[i] = ctx->mk_fresh(newsort, fieldname);
     }
@@ -66,16 +68,14 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   result_sym->elements.resize(data.members.size());
 
   // Iterate through each field and encode an ite.
-  unsigned int i = 0;
-  forall_types(it, data.members) {
+  for(unsigned int i = 0; i < data.members.size(); i++)
+  {
     smt_astt truepart = true_val->project(ctx, i);
     smt_astt falsepart = false_val->project(ctx, i);
 
     smt_astt result_ast = truepart->ite(ctx, cond, falsepart);
 
     result_sym->elements[i] = result_ast;
-
-    i++;
   }
 
   return result_sym;
@@ -114,12 +114,11 @@ tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   eqs.reserve(data.members.size());
 
   // Iterate through each field and encode an equality.
-  unsigned int i = 0;
-  forall_types(it, data.members) {
+  for(unsigned int i = 0; i < data.members.size(); i++)
+  {
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
     eqs.push_back(side1->eq(ctx, side2));
-    i++;
   }
 
   // Create an ast representing the fact that all the members are equal.
@@ -310,27 +309,28 @@ smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 
   // If this tuple was free and never read, don't attempt to extract data from
   // it. There isn't any.
-  if (tuple->elements.size() == 0) {
-    forall_types(it, strct.members) {
+  if (tuple->elements.size() == 0)
+  {
+    for(unsigned int i = 0; i < strct.members.size(); i++)
       outstruct.get()->datatype_members.push_back(expr2tc());
-    }
     return outstruct;
   }
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  forall_types(it, strct.members) {
+  for(auto const &it : strct.members)
+  {
     expr2tc res;
 
-    if (is_tuple_ast_type(*it)) {
+    if (is_tuple_ast_type(it)) {
       res = tuple_get_rec(to_tuple_node_ast(tuple->elements[i]));
-    } else if (is_tuple_array_ast_type(*it)) {
+    } else if (is_tuple_array_ast_type(it)) {
       res = expr2tc(); // XXX currently unimplemented
-    } else if (is_number_type(*it)) {
-      res = ctx->get_bv(*it, tuple->elements[i]);
-    } else if (is_bool_type(*it)) {
+    } else if (is_number_type(it)) {
+      res = ctx->get_bv(it, tuple->elements[i]);
+    } else if (is_bool_type(it)) {
       res = ctx->get_bool(tuple->elements[i]);
-    } else if (is_array_type(*it)) {
+    } else if (is_array_type(it)) {
       std::cerr << "Fetching array elements inside tuples currently unimplemented, sorry" << std::endl;
       res = expr2tc();
     } else {

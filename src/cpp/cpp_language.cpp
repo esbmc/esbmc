@@ -21,63 +21,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/config.h>
 #include <util/replace_symbol.h>
 
-/*******************************************************************\
-
-Function: cpp_languaget::extensions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-std::set<std::string> cpp_languaget::extensions() const
-{
-  std::set<std::string> s;
-
-  s.insert("cpp");
-  s.insert("cc");
-  s.insert("ipp");
-  s.insert("cxx");
-
-  #ifndef _WIN32
-  s.insert("C");
-  #endif
-
-  return s;
-}
-
-/*******************************************************************\
-
-Function: cpp_languaget::modules_provided
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void cpp_languaget::modules_provided(std::set<std::string> &modules)
-{
-  modules.insert(parse_path);
-}
-
-/*******************************************************************\
-
-Function: cpp_languaget::preprocess
-
-  Inputs:
-
- Outputs:
-
- Purpose: ANSI-C preprocessing
-
-\*******************************************************************/
-
 bool cpp_languaget::preprocess(
   const std::string &path,
   std::ostream &outstream,
@@ -103,18 +46,6 @@ bool cpp_languaget::preprocess(
 
   return c_preprocess(path, outstream, true, message_handler);
 }
-
-/*******************************************************************\
-
-Function: cpp_languaget::internal_additions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_languaget::internal_additions(std::ostream &out)
 {
@@ -208,18 +139,6 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "}" << std::endl;
 }
 
-/*******************************************************************\
-
-Function: cpp_languaget::parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_languaget::parse(
   const std::string &path,
   message_handlert &message_handler)
@@ -265,18 +184,6 @@ bool cpp_languaget::parse(
   return result;
 }
 
-/*******************************************************************\
-
-Function: cpp_languaget::typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_languaget::typecheck(
   contextt &context,
   const std::string &module,
@@ -292,39 +199,15 @@ bool cpp_languaget::typecheck(
   return c_link(context, new_context, message_handler, module);
 }
 
-/*******************************************************************\
-
-Function: cpp_languaget::final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_languaget::final(
   contextt &context,
   message_handlert &message_handler)
 {
   if(cpp_final(context, message_handler)) return true;
-  if(c_main(context, "c::", "c::main", message_handler)) return true;
+  if(c_main(context, "main", message_handler)) return true;
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cpp_languaget::show_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_languaget::show_parse(std::ostream &out)
 {
@@ -334,18 +217,6 @@ void cpp_languaget::show_parse(std::ostream &out)
       it++)
     show_parse(out, *it);
 }
-
-/*******************************************************************\
-
-Function: cpp_languaget::show_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_languaget::show_parse(
   std::ostream &out,
@@ -398,34 +269,10 @@ void cpp_languaget::show_parse(
     out << "UNKNOWN: " << item << std::endl;
 }
 
-/*******************************************************************\
-
-Function: new_cpp_language
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 languaget *new_cpp_language()
 {
   return new cpp_languaget;
 }
-
-/*******************************************************************\
-
-Function: cpp_languaget::from_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_languaget::from_expr(
   const exprt &expr,
@@ -436,18 +283,6 @@ bool cpp_languaget::from_expr(
   return false;
 }
 
-/*******************************************************************\
-
-Function: cpp_languaget::from_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_languaget::from_type(
   const typet &type,
   std::string &code,
@@ -456,18 +291,6 @@ bool cpp_languaget::from_type(
   code=type2cpp(type, ns);
   return false;
 }
-
-/*******************************************************************\
-
-Function: cpp_languaget::to_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_languaget::to_expr(
   const std::string &code,
@@ -509,18 +332,6 @@ bool cpp_languaget::to_expr(
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: cpp_languaget::~cpp_languaget
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 cpp_languaget::~cpp_languaget()
 {

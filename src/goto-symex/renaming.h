@@ -3,18 +3,12 @@
 
 #include <boost/functional/hash.hpp>
 #include <boost/shared_ptr.hpp>
-#include <cstdint>
-#include <cstring>
-#include <set>
-#include <stack>
-#include <string>
 #include <util/crypto_hash.h>
 #include <util/expr_util.h>
 #include <util/guard.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <util/irep2_expr.h>
 #include <util/std_expr.h>
-#include <vector>
 
 namespace renaming {
 

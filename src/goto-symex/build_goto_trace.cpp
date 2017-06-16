@@ -10,31 +10,29 @@ Author: Daniel Kroening
 
 #include <cassert>
 #include <goto-symex/build_goto_trace.h>
-
-extern bool is_valid_witness_expr(const namespacet & ns, const irep_container<expr2t> & exp);
+#include <goto-symex/witnesses.h>
 
 void build_goto_trace(
-  const symex_target_equationt &target,
-  smt_convt &smt_conv,
+  const boost::shared_ptr<symex_target_equationt> target,
+  boost::shared_ptr<smt_convt> &smt_conv,
   goto_tracet &goto_trace)
 {
   unsigned step_nr=0;
 
   for(symex_target_equationt::SSA_stepst::const_iterator
-      it=target.SSA_steps.begin();
-      it!=target.SSA_steps.end();
+      it=target->SSA_steps.begin();
+      it!=target->SSA_steps.end();
       it++)
   {
 
     const symex_target_equationt::SSA_stept &SSA_step=*it;
-    tvt result;
-    result=smt_conv.l_get(SSA_step.guard_ast);
+    tvt result = smt_conv->l_get(SSA_step.guard_ast);
 
-    if(result!=tvt(true) && result!=tvt(tvt::TV_ASSUME) && SSA_step.type != goto_trace_stept::ASSERT)
+    if(result != tvt(true))
       continue;
 
-    if(it->is_assignment() &&
-       SSA_step.assignment_type==symex_target_equationt::HIDDEN)
+    if(SSA_step.assignment_type == symex_target_equationt::HIDDEN
+       && it->is_assignment())
       continue;
 
     step_nr++;
@@ -53,9 +51,8 @@ void build_goto_trace(
     goto_trace_step.format_string=SSA_step.format_string;
     goto_trace_step.stack_trace = SSA_step.stack_trace;
 
-    if(!is_nil_expr(SSA_step.lhs)) {
-      goto_trace_step.value = smt_conv.get(SSA_step.lhs);
-    }
+    if(!is_nil_expr(SSA_step.lhs))
+      goto_trace_step.value = smt_conv->get(SSA_step.lhs);
 
     for(std::list<expr2tc>::const_iterator
         j=SSA_step.converted_output_args.begin();
@@ -66,36 +63,23 @@ void build_goto_trace(
       if (is_constant_expr(arg))
         goto_trace_step.output_args.push_back(arg);
       else
-        goto_trace_step.output_args.push_back(smt_conv.get(arg));
+        goto_trace_step.output_args.push_back(smt_conv->get(arg));
     }
 
-    if(SSA_step.is_assert() ||
-       SSA_step.is_assume())
-    {
-      result = smt_conv.l_get(SSA_step.cond_ast);
-      if ((result==tvt(tvt::TV_ASSUME) && SSA_step.comment.compare("arithmetic overflow on *")==0) ||
-    	 (result==tvt(false) && SSA_step.comment.compare("arithmetic overflow on *")==0)) {
-        goto_trace_step.guard = true;
-      } else if (result==tvt(tvt::TV_ASSUME) && SSA_step.comment.compare("unwinding assertion loop")==0) {
-        goto_trace_step.guard = false;
-      } else if (result==tvt(tvt::TV_UNKNOWN)) {
-        goto_trace_step.guard = true;
-      } else {
-        goto_trace_step.guard = result.is_true();
-      }
-    }
+    if(SSA_step.is_assert() || SSA_step.is_assume())
+      goto_trace_step.guard = !smt_conv->l_get(SSA_step.cond_ast).is_false();
   }
 }
 
 void build_successful_goto_trace(
-    const symex_target_equationt &target,
+    const boost::shared_ptr<symex_target_equationt> target,
     const namespacet &ns,
     goto_tracet &goto_trace)
 {
   unsigned step_nr=0;
   for(symex_target_equationt::SSA_stepst::const_iterator
-      it=target.SSA_steps.begin();
-      it!=target.SSA_steps.end(); it++)
+      it=target->SSA_steps.begin();
+      it!=target->SSA_steps.end(); it++)
   {
     if((it->is_assignment() || it->is_assert() || it->is_assume())
       && (is_valid_witness_expr(ns, it->lhs)))

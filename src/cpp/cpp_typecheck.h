@@ -685,6 +685,4 @@ private:
   bool disable_access_control;      // Disable protect and private
 };
 
-std::string cpp_identifier_prefix(const irep_idt &mode);
-
 #endif

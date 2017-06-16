@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_sizeof.h>
 #include <ansi-c/c_typecast.h>
 #include <ansi-c/c_typecheck_base.h>
-#include <cassert>
 #include <util/arith_tools.h>
 #include <util/base_type.h>
 #include <util/bitvector.h>
@@ -17,6 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/config.h>
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
+#include <util/ieee_float.h>
 #include <util/prefix.h>
 #include <util/simplify_expr.h>
 #include <util/std_expr.h>
@@ -404,7 +404,7 @@ void c_typecheck_baset::typecheck_expr_symbol(exprt &expr)
     // put it back
     expr.location()=location;
   }
-  else if(identifier=="c::__func__")
+  else if(identifier=="__func__")
   {
     // this is an ANSI-C standard compliant hack to get the function name
     string_constantt s(location.get_function());
@@ -1449,7 +1449,7 @@ void c_typecheck_baset::typecheck_side_effect_function_call(
       symbolt new_symbol;
 
       new_symbol.name=identifier;
-      new_symbol.base_name=std::string(id2string(identifier), 3, std::string::npos);
+      new_symbol.base_name=id2string(identifier);
       new_symbol.location=expr.location();
       new_symbol.type=code_typet();
       new_symbol.type.incomplete(true);
@@ -1578,7 +1578,7 @@ void c_typecheck_baset::do_special_functions(
     else if(identifier==CPROVER_PREFIX "isnanf" ||
             identifier==CPROVER_PREFIX "isnand" ||
             identifier==CPROVER_PREFIX "isnanld" ||
-            identifier=="c::__builtin_isnan")
+            identifier=="__builtin_isnan")
     {
       if(expr.arguments().size() != 1)
       {
@@ -1609,12 +1609,12 @@ void c_typecheck_baset::do_special_functions(
     else if(identifier==CPROVER_PREFIX "inff" ||
             identifier==CPROVER_PREFIX "inf" ||
             identifier==CPROVER_PREFIX "infld" ||
-            identifier=="c::__builtin_inff" ||
-            identifier=="c::__builtin_inf" ||
-            identifier=="c::__builtin_infld" ||
-            identifier=="c::__builtin_huge_valf" ||
-            identifier=="c::__builtin_huge_val" ||
-            identifier=="c::__builtin_huge_vall")
+            identifier=="__builtin_inff" ||
+            identifier=="__builtin_inf" ||
+            identifier=="__builtin_infld" ||
+            identifier=="__builtin_huge_valf" ||
+            identifier=="__builtin_huge_val" ||
+            identifier=="__builtin_huge_vall")
     {
       typet t = expr.type();
 
@@ -1640,9 +1640,9 @@ void c_typecheck_baset::do_special_functions(
     else if(identifier==CPROVER_PREFIX "nanf" ||
             identifier==CPROVER_PREFIX "nan" ||
             identifier==CPROVER_PREFIX "nanld" ||
-            identifier=="c::__builtin_nanf" ||
-            identifier=="c::__builtin_nan" ||
-            identifier=="c::__builtin_nanl")
+            identifier=="__builtin_nanf" ||
+            identifier=="__builtin_nan" ||
+            identifier=="__builtin_nanl")
     {
       typet t = expr.type();
 
@@ -1686,10 +1686,10 @@ void c_typecheck_baset::do_special_functions(
             identifier==CPROVER_PREFIX "isinff" ||
             identifier==CPROVER_PREFIX "isinfd" ||
             identifier==CPROVER_PREFIX "isinfld" ||
-            identifier=="c::__builtin_isinf" ||
-            identifier=="c::__builtin_isinff" ||
-            identifier=="c::__builtin_isinfd"||
-            identifier=="c::__builtin_isinfld")
+            identifier=="__builtin_isinf" ||
+            identifier=="__builtin_isinff" ||
+            identifier=="__builtin_isinfd"||
+            identifier=="__builtin_isinfld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -1705,9 +1705,9 @@ void c_typecheck_baset::do_special_functions(
     else if(identifier==CPROVER_PREFIX "isnormalf" ||
             identifier==CPROVER_PREFIX "isnormald" ||
             identifier==CPROVER_PREFIX "isnormalld" ||
-            identifier=="c::__builtin_isnormalf" ||
-            identifier=="c::__builtin_isnormald" ||
-            identifier=="c::__builtin_isnormalld")
+            identifier=="__builtin_isnormalf" ||
+            identifier=="__builtin_isnormald" ||
+            identifier=="__builtin_isnormalld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -1723,9 +1723,9 @@ void c_typecheck_baset::do_special_functions(
     else if(identifier==CPROVER_PREFIX "signf" ||
             identifier==CPROVER_PREFIX "signd" ||
             identifier==CPROVER_PREFIX "signld" ||
-            identifier=="c::__builtin_signbit" ||
-            identifier=="c::__builtin_signbitf" ||
-            identifier=="c::__builtin_signbitl")
+            identifier=="__builtin_signbit" ||
+            identifier=="__builtin_signbitf" ||
+            identifier=="__builtin_signbitl")
     {
       if(expr.arguments().size() != 1)
       {
@@ -1738,7 +1738,7 @@ void c_typecheck_baset::do_special_functions(
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
     }
-    else if(identifier == "c::__builtin_expect")
+    else if(identifier == "__builtin_expect")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)

@@ -8,7 +8,7 @@
 #include <cstdint>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
-#include <util/irep2.h>
+#include <util/irep2_utils.h>
 #include <util/message.h>
 #include <util/namespace.h>
 #include <util/threeval.h>
@@ -428,7 +428,7 @@ public:
 
   /** Result of a call to dec_solve. Either sat, unsat, or error. SMTLIB is
    *  historic case that needs to go. */
-  typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
+  typedef enum { P_UNSATISFIABLE, P_SATISFIABLE, P_ERROR, P_SMTLIB } resultt;
 
   /** Push one context on the SMT assertion stack. */
   virtual void push_ctx(void);
@@ -926,8 +926,6 @@ public:
   smt_sortt make_array_domain_sort(const array_type2t &arr);
   /** Like make_array_domain_sort, but a type2tc not an smt_sort */
   type2tc make_array_domain_sort_exp(const array_type2t &arr);
-  /** Cast the given expression to the domain width of the array in type */
-  expr2tc twiddle_index_width(const expr2tc &expr, const type2tc &type);
   /** For a multi-dimensional array, convert the type into a single dimension
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */

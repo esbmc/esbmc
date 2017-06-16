@@ -1426,14 +1426,14 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
   // Find main function; find first function call; insert updates to each
   // property expression. This makes sure that there isn't inconsistent
   // initialization of each monitor boolean.
-  goto_functionst::function_mapt::iterator f_it = goto_functions.function_map.find("main");
+  goto_functionst::function_mapt::iterator f_it = goto_functions.function_map.find("__ESBMC_main");
   assert(f_it != goto_functions.function_map.end());
   Forall_goto_program_instructions(p_it, f_it->second.body) {
     if (p_it->type == FUNCTION_CALL) {
       const code_function_call2t &func_call =
         to_code_function_call2t(p_it->code);
       if (is_symbol2t(func_call.function) &&
-          to_symbol2t(func_call.function).thename == "c::main")
+          to_symbol2t(func_call.function).thename == "main")
         continue;
 
       // Insert initializers for each monitor expr.
@@ -1442,7 +1442,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
       for (it = monitors.begin(); it != monitors.end(); it++) {
         goto_programt::instructiont new_insn;
         new_insn.type = ASSIGN;
-        std::string prop_name = "c::" + it->first + "_status";
+        std::string prop_name = it->first + "_status";
         typecast2tc cast(get_int_type(32), it->second.second);
         code_assign2tc assign(symbol2tc(get_int_type(32), prop_name), cast);
         new_insn.code = assign;
@@ -1487,7 +1487,7 @@ expr2tc cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::
   namespacet ns(context);
   languagest languages(ns, MODE_C);
 
-  std::string expr_str = strings["c::__ESBMC_property_" + name];
+  std::string expr_str = strings["__ESBMC_property_" + name];
   std::string dummy_str = "";
 
   languages.to_expr(expr_str, dummy_str, main_expr, ui_message_handler);
@@ -1544,7 +1544,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   new_insn.type = ASSIGN;
   std::set<std::pair<std::string, expr2tc> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
-    std::string prop_name = "c::" + trig_it->first + "_status";
+    std::string prop_name = trig_it->first + "_status";
     typecast2tc hack_cast(get_int_type(32), trig_it->second);
     symbol2tc newsym(get_int_type(32), prop_name);
     new_insn.code = code_assign2tc(newsym, hack_cast);
@@ -1554,7 +1554,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   }
 
   new_insn.type = FUNCTION_CALL;
-  symbol2tc func_sym(get_empty_type(), "c::__ESBMC_switch_to_monitor");
+  symbol2tc func_sym(get_empty_type(), "__ESBMC_switch_to_monitor");
   std::vector<expr2tc> args;
   new_insn.code = code_function_call2tc(expr2tc(), func_sym, args);
   new_insn.function = insn->function;
@@ -1587,7 +1587,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   std::string identifier = to_symbol2t(expr).get_symbol_name();
   const symbolt &sym = ns.lookup(identifier);
 
-  if (identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
+  if (identifier == "__ESBMC_alloc" || identifier == "__ESBMC_alloc_size")
     return 0;
 
   if (sym.static_lifetime || sym.type.is_dynamic_set())
@@ -1622,7 +1622,7 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
 
             if (is_symbol2t(deref_code.function) &&
                 to_symbol2t(deref_code.function).get_symbol_name()
-                            == "c::__ESBMC_yield")
+                            == "__ESBMC_yield")
               print_insn = true;
           }
           break;
@@ -1816,18 +1816,20 @@ bool cbmc_parseoptionst::process_goto_program(
   return false;
 }
 
-int cbmc_parseoptionst::do_bmc(bmct &bmc1)
+int cbmc_parseoptionst::do_bmc(bmct &bmc)
 {
-  bmc1.set_ui(get_ui());
+  bmc.set_ui(get_ui());
 
   // do actual BMC
 
   status("Starting Bounded Model Checking");
 
-  bool res = bmc1.run();
+  smt_convt::resultt res = bmc.start_bmc();
+  if(res == smt_convt::P_ERROR)
+    abort();
 
 #ifdef HAVE_SENDFILE_ESBMC
-  if (bmc1.options.get_bool_option("memstats")) {
+  if (bmc.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, NULL, 100000);
     close(fd);
@@ -1894,7 +1896,7 @@ void cbmc_parseoptionst::help()
     " --version                    show current ESBMC version and exit\n"
     " --witness-output filename    generate a verification result witness in GraphML format\n"
     " --witness-detailed           generate line offset when generating a witness (linux only)\n"
-    " --clang-frontend             parse source files using clang (experimental)\n"
+    " --old-frontend               parse source files using our old frontend (deprecated)\n"
     " --result-only                do not print the counter-example\n"
     #ifdef _WIN32
     " --i386-macos                 set MACOS/I386 architecture\n"

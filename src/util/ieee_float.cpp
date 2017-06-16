@@ -12,34 +12,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/ieee_float.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: ieee_float_spect::bias
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 mp_integer ieee_float_spect::bias() const
 {
   return power(2, e-1)-1;
 }
-
-/*******************************************************************\
-
-Function: ieee_float_spect::to_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 floatbv_typet ieee_float_spect::to_type() const
 {
@@ -49,89 +25,63 @@ floatbv_typet ieee_float_spect::to_type() const
   return result;
 }
 
-/*******************************************************************\
-
-Function: ieee_float_spect::max_exponent
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 mp_integer ieee_float_spect::max_exponent() const
 {
   return power(2, e)-1;
 }
-
-/*******************************************************************\
-
-Function: ieee_float_spect::max_fraction
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 mp_integer ieee_float_spect::max_fraction() const
 {
   return power(2, f)-1;
 }
 
-/*******************************************************************\
-
-Function: ieee_float_spect::from_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void ieee_float_spect::from_type(const floatbv_typet &type)
+ieee_float_spect::ieee_float_spect(const floatbv_typet& type)
 {
-  unsigned width=type.get_width();
-  f=type.get_f();
-  assert(f!=0);
-  assert(f<width);
-  e=width-f-1;
+  unsigned width = type.get_width();
+  f = type.get_f();
+  assert(f != 0);
+  assert(f < width);
+  e = width - f - 1;
 }
 
-/*******************************************************************\
+ieee_float_spect::ieee_float_spect(const floatbv_type2tc& type)
+{
+  unsigned width = type->get_width();
+  f = type->fraction;
+  assert(f != 0);
+  assert(f < width);
+  e = width - f - 1;
+}
 
-Function: ieee_floatt::print
+const floatbv_type2tc ieee_float_spect::get_type() const
+{
+  return floatbv_type2tc(f, e);
+}
 
-  Inputs:
+ieee_floatt::ieee_floatt()
+  : rounding_mode(ROUND_TO_EVEN),
+    sign_flag(false), exponent(0), fraction(0),
+    NaN_flag(false), infinity_flag(false)
+{
+}
 
- Outputs:
+ieee_floatt::ieee_floatt(const ieee_float_spect &s)
+  : rounding_mode(ROUND_TO_EVEN),
+    spec(s), sign_flag(false), exponent(0), fraction(0),
+    NaN_flag(false), infinity_flag(false)
+{
+}
 
- Purpose:
-
-\*******************************************************************/
+ieee_floatt::ieee_floatt(const constant_exprt &expr)
+  : rounding_mode(ROUND_TO_EVEN)
+{
+  from_expr(expr);
+}
 
 void ieee_floatt::print(std::ostream &out) const
 {
   out << to_ansi_c_string();
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::format
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string ieee_floatt::format(const format_spect &format_spec) const
 {
@@ -177,18 +127,6 @@ std::string ieee_floatt::format(const format_spect &format_spec) const
   return result;
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::base10_digits
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 mp_integer ieee_floatt::base10_digits(const mp_integer &src)
 {
   mp_integer tmp=src;
@@ -197,18 +135,6 @@ mp_integer ieee_floatt::base10_digits(const mp_integer &src)
   while(tmp!=0) { ++result; tmp/=10; }
   return result;
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::to_string_decimal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string ieee_floatt::to_string_decimal(unsigned precision) const
 {
@@ -285,20 +211,6 @@ std::string ieee_floatt::to_string_decimal(unsigned precision) const
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::to_string_scientific
-
-  Inputs:
-
- Outputs:
-
- Purpose: format as [-]d.ddde+-d
-          Note that printf always produces at least two digits
-          for the exponent.
-
-\*******************************************************************/
 
 std::string ieee_floatt::to_string_scientific(unsigned precision) const
 {
@@ -385,18 +297,6 @@ std::string ieee_floatt::to_string_scientific(unsigned precision) const
   return result;
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::unpack
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ieee_floatt::unpack(const mp_integer &i)
 {
   assert(spec.f!=0);
@@ -447,34 +347,10 @@ void ieee_floatt::unpack(const mp_integer &i)
   }
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::is_normal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ieee_floatt::is_normal() const
 {
   return fraction>=power(2, spec.f);
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::pack
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 mp_integer ieee_floatt::pack() const
 {
@@ -512,18 +388,6 @@ mp_integer ieee_floatt::pack() const
   return result;
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::extract_base2
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ieee_floatt::extract_base2(
   mp_integer &_fraction,
   mp_integer &_exponent) const
@@ -546,18 +410,6 @@ void ieee_floatt::extract_base2(
     ++_exponent;
   }
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::extract_base10
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ieee_floatt::extract_base10(
   mp_integer &_fraction,
@@ -595,18 +447,6 @@ void ieee_floatt::extract_base10(
   }
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::build
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ieee_floatt::build(
   const mp_integer &_fraction,
   const mp_integer &_exponent)
@@ -618,18 +458,6 @@ void ieee_floatt::build(
   exponent+=spec.f;
   align();
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::from_base10
-
-  Inputs:
-
- Outputs:
-
- Purpose: compute f * (10^e)
-
-\*******************************************************************/
 
 void ieee_floatt::from_base10(
   const mp_integer &_fraction,
@@ -659,18 +487,6 @@ void ieee_floatt::from_base10(
   align();
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::from_integer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ieee_floatt::from_integer(const mp_integer &i)
 {
   NaN_flag=infinity_flag=sign_flag=false;
@@ -678,18 +494,6 @@ void ieee_floatt::from_integer(const mp_integer &i)
   fraction=i;
   align();
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::align
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ieee_floatt::align()
 {
@@ -823,18 +627,6 @@ void ieee_floatt::align()
   }
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::divide_and_round
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ieee_floatt::divide_and_round(
   mp_integer &fraction,
   const mp_integer &factor)
@@ -885,36 +677,12 @@ void ieee_floatt::divide_and_round(
   }
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::to_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 constant_exprt ieee_floatt::to_expr() const
 {
   constant_exprt result(spec.to_type());
   result.set_value(integer2binary(pack(), spec.width()));
   return result;
 }
-
-/*******************************************************************\
-
-Function: operator /=
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 ieee_floatt &ieee_floatt::operator /= (const ieee_floatt &other)
 {
@@ -973,18 +741,6 @@ ieee_floatt &ieee_floatt::operator /= (const ieee_floatt &other)
   return *this;
 }
 
-/*******************************************************************\
-
-Function: operator *=
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 ieee_floatt &ieee_floatt::operator *= (const ieee_floatt &other)
 {
   assert(other.spec.f==spec.f);
@@ -1016,18 +772,6 @@ ieee_floatt &ieee_floatt::operator *= (const ieee_floatt &other)
 
   return *this;
 }
-
-/*******************************************************************\
-
-Function: operator +=
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 ieee_floatt &ieee_floatt::operator += (const ieee_floatt &other)
 {
@@ -1111,18 +855,6 @@ ieee_floatt &ieee_floatt::operator += (const ieee_floatt &other)
   return *this;
 }
 
-/*******************************************************************\
-
-Function: operator -=
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 ieee_floatt &ieee_floatt::operator -= (const ieee_floatt &other)
 {
   ieee_floatt _other=other;
@@ -1130,35 +862,11 @@ ieee_floatt &ieee_floatt::operator -= (const ieee_floatt &other)
   return (*this)+=_other;
 }
 
-/*******************************************************************\
-
-Function: operator !
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 ieee_floatt &ieee_floatt::operator ! ()
 {
   this->negate();
   return (*this);
 }
-
-/*******************************************************************\
-
-Function: operator <
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool operator < (const ieee_floatt &a, const ieee_floatt &b)
 {
@@ -1205,18 +913,6 @@ bool operator < (const ieee_floatt &a, const ieee_floatt &b)
     return a.fraction<b.fraction;
 }
 
-/*******************************************************************\
-
-Function: operator <=
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool operator <=(const ieee_floatt &a, const ieee_floatt &b)
 {
   if(a.NaN_flag || b.NaN_flag) return false;
@@ -1237,51 +933,15 @@ bool operator <=(const ieee_floatt &a, const ieee_floatt &b)
   return a<b;
 }
 
-/*******************************************************************\
-
-Function: operator >
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool operator > (const ieee_floatt &a, const ieee_floatt &b)
 {
   return b < a;
 }
 
-/*******************************************************************\
-
-Function: operator >=
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool operator >=(const ieee_floatt &a, const ieee_floatt &b)
 {
   return b <= a;
 }
-
-/*******************************************************************\
-
-Function: operator ==
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool operator ==(const ieee_floatt &a, const ieee_floatt &b)
 {
@@ -1308,18 +968,6 @@ bool operator ==(const ieee_floatt &a, const ieee_floatt &b)
          a.sign_flag==b.sign_flag;
 }
 
-/*******************************************************************\
-
-Function: operator ==
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool operator ==(const ieee_floatt &a, int i)
 {
   ieee_floatt other;
@@ -1327,18 +975,6 @@ bool operator ==(const ieee_floatt &a, int i)
   other.from_integer(i);
   return a==other;
 }
-
-/*******************************************************************\
-
-Function: operator >
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool operator >(const ieee_floatt &a, int i)
 {
@@ -1372,34 +1008,10 @@ bool operator <=(const ieee_floatt &a, int i)
   return a <= other;
 }
 
-/*******************************************************************\
-
-Function: operator !=
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool operator !=(const ieee_floatt &a, const ieee_floatt &b)
 {
   return !(a==b);
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::change_spec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ieee_floatt::change_spec(const ieee_float_spect &dest_spec)
 {
@@ -1418,35 +1030,11 @@ void ieee_floatt::change_spec(const ieee_float_spect &dest_spec)
     build(_fraction, _exponent);
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::from_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ieee_floatt::from_expr(const constant_exprt &expr)
 {
   spec=to_floatbv_type(expr.type());
   unpack(binary2integer(id2string(expr.get_value()), false));
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::to_integer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 mp_integer ieee_floatt::to_integer() const
 {
@@ -1468,18 +1056,6 @@ mp_integer ieee_floatt::to_integer() const
   return result;
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::from_double
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ieee_floatt::from_double(const double d)
 {
   spec.f=52;
@@ -1496,18 +1072,6 @@ void ieee_floatt::from_double(const double d)
 
   unpack(u.i);
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::from_float
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ieee_floatt::from_float(const float f)
 {
@@ -1526,18 +1090,6 @@ void ieee_floatt::from_float(const float f)
   unpack(u.i);
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::make_NaN
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ieee_floatt::make_NaN()
 {
   NaN_flag=true;
@@ -1546,17 +1098,6 @@ void ieee_floatt::make_NaN()
   fraction=0;
   infinity_flag=false;
 }
-/*******************************************************************\
-
-Function: ieee_floatt::make_fltmax
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ieee_floatt::make_fltmax()
 {
@@ -1565,34 +1106,10 @@ void ieee_floatt::make_fltmax()
   unpack(bit_pattern);
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::make_fltmin
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ieee_floatt::make_fltmin()
 {
   unpack(power(2, spec.f));
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::make_plus_infinity
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ieee_floatt::make_plus_infinity()
 {
@@ -1603,70 +1120,21 @@ void ieee_floatt::make_plus_infinity()
   infinity_flag=true;
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::make_minus_infinity
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ieee_floatt::make_minus_infinity()
 {
   make_plus_infinity();
   sign_flag=true;
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::is_double
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ieee_floatt::is_double() const
 {
   return spec.f == 52 && spec.e == 11;
 }
 
-/*******************************************************************\
-
-Function: ieee_floatt::is_float
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ieee_floatt::is_float() const
 {
   return spec.f == 23 && spec.e == 8;
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::to_double
-
-  Inputs:
-
- Outputs:
-
- Purpose: Note that calling from_double -> to_double can return different bit
-          patterns for NaN.
-
-\*******************************************************************/
 
 double ieee_floatt::to_double() const
 {
@@ -1694,19 +1162,6 @@ double ieee_floatt::to_double() const
   a.i = i.to_ulong();
   return a.f;
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt:to_float
-
-  Inputs:
-
- Outputs:
-
- Purpose: Note that calling from_float -> to_float can return different bit
-          patterns for NaN.
-
-\*******************************************************************/
 
 float ieee_floatt::to_float() const
 {
@@ -1739,20 +1194,6 @@ float ieee_floatt::to_float() const
   a.i = (unsigned) i.to_ulong();
   return a.f;
 }
-
-/*******************************************************************\
-
-Function: ieee_floatt::next_representable
-
-  Inputs:
-
- Outputs:
-
- Purpose: Sets *this to the next representable number closer to
-          plus infinity (greater = true) or minus infinity
-          (greater = false).
-
-\*******************************************************************/
 
 void ieee_floatt::next_representable(bool greater)
 {
@@ -1805,18 +1246,6 @@ void ieee_floatt::next_representable(bool greater)
 
   unpack(old);
 
-  //sign change impossible (zero case caught earler)
+  // sign change impossible (zero case caught earler)
   set_sign(old_sign);
-
-  //mp_integer new_exp = exponent;
-  //mp_integer new_frac = fraction + dir;
-
-  //std::cout << exponent << ":" << fraction << std::endl;
-  //std::cout << new_exp << ":" << new_frac << std::endl;
-
-  //if(get_sign())
-  //  new_frac.negate();
-
-  //new_exp -= spec.f;
-  //build(new_frac, new_exp);
 }

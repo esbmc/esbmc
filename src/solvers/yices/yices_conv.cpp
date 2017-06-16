@@ -621,8 +621,9 @@ yices_convt::mk_struct_sort(const type2tc &type)
 
   std::vector<type_t> sorts;
   const struct_union_data &def = get_type_def(type);
-  forall_types(it, def.members) {
-    smt_sortt s = convert_sort(*it);
+  for(auto const &it : def.members)
+  {
+    smt_sortt s = convert_sort(it);
     const yices_smt_sort *sort = yices_sort_downcast(s);
     sorts.push_back(sort->type);
   }
@@ -639,8 +640,8 @@ yices_convt::tuple_create(const expr2tc &structdef)
   const struct_union_data &type = get_type_def(strct.type);
 
   std::vector<term_t> terms;
-  forall_exprs(it, strct.datatype_members) {
-    smt_astt a = convert_ast(*it);
+  for(auto const &it : strct.datatype_members) {
+    smt_astt a = convert_ast(it);
     const yices_smt_ast *yast = yices_ast_downcast(a);
     terms.push_back(yast->term);
   }
@@ -760,29 +761,30 @@ yices_convt::tuple_get_rec(term_t term, const type2tc &type)
   const struct_union_data &ref = get_type_def(type);
   std::vector<expr2tc> members;
   unsigned int i = 0;
-  forall_types(it, ref.members) {
+  for(auto const &it : ref.members)
+  {
     expr2tc res;
     term_t elem = yices_select(i + 1, term);
-    smt_astt a = new_ast(convert_sort(*it), elem);
+    smt_astt a = new_ast(convert_sort(it), elem);
 
-    switch ((*it)->type_id) {
+    switch (it->type_id) {
     case type2t::bool_id:
       res = get_bool(a);
       break;
     case type2t::pointer_id:
     case type2t::struct_id:
-      res = tuple_get_rec(elem, *it);
+      res = tuple_get_rec(elem, it);
       break;
     case type2t::array_id:
-      res = get_array(a, *it);
+      res = get_array(a, it);
       break;
     case type2t::unsignedbv_id:
     case type2t::signedbv_id:
     case type2t::fixedbv_id:
-      res = get_bv(*it, a);
+      res = get_bv(it, a);
       break;
     default:
-      std::cerr << "Unexpected sort " << (*it)->type_id << " in tuple_get_rec"
+      std::cerr << "Unexpected sort " << it->type_id << " in tuple_get_rec"
                 << std::endl;
       abort();
     }

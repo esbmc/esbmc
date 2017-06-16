@@ -9,15 +9,11 @@ smt_convt::convert_typecast_to_bool(const typecast2t &cast)
   if (is_pointer_type(cast.from)) {
     // Convert to two casts.
     typecast2tc to_int(machine_ptr, cast.from);
-    constant_int2tc zero(machine_ptr, BigInt(0));
-    equality2tc as_bool(zero, to_int);
+    equality2tc as_bool(gen_zero(machine_ptr), to_int);
     return convert_ast(as_bool);
   }
 
-  expr2tc zero_expr;
-  migrate_expr(gen_zero(migrate_type_back(cast.from->type)), zero_expr);
-
-  notequal2tc neq(cast.from, zero_expr);
+  notequal2tc neq(cast.from, gen_zero(cast.from->type));
   return convert_ast(neq);
 }
 
@@ -433,18 +429,14 @@ smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 smt_astt
 smt_convt::convert_typecast_to_struct(const typecast2t &cast)
 {
-
   const struct_type2t &struct_type_from = to_struct_type(cast.from->type);
   const struct_type2t &struct_type_to = to_struct_type(cast.type);
-
-  u_int i = 0, i2 = 0;
 
   std::vector<type2tc> new_members;
   std::vector<irep_idt> new_names;
   new_members.reserve(struct_type_to.members.size());
   new_names.reserve(struct_type_to.members.size());
 
-  i = 0;
   // This all goes to pot when we consider polymorphism, and in particular,
   // multiple inheritance. So, for normal structs, as usual check that each
   // field has a compatible type. But for classes, check that either they're
@@ -452,17 +444,25 @@ smt_convt::convert_typecast_to_struct(const typecast2t &cast)
   // we just select out the common fields, which drops any additional data in
   // the subclass.
 
+  unsigned int i = 0;
   bool same_format = true;
-  if (is_subclass_of(cast.from->type, cast.type, ns)) {
+  if (is_subclass_of(cast.from->type, cast.type, ns))
+  {
     same_format = false; // then we're fine
-  } else if (struct_type_from.name == struct_type_to.name) {
+  }
+  else if (struct_type_from.name == struct_type_to.name)
+  {
     ; // Also fine
-  } else {
+  }
+  else
+  {
     // Check that these two different structs have the same format.
-    forall_types(it, struct_type_to.members) {
-      if (!base_type_eq(struct_type_from.members[i], *it, ns)) {
-	std::cerr << "Incompatible struct in cast-to-struct" << std::endl;
-	abort();
+    for(auto const &it : struct_type_to.members)
+    {
+      if (!base_type_eq(struct_type_from.members[i], it, ns))
+      {
+        std::cerr << "Incompatible struct in cast-to-struct" << std::endl;
+        abort();
       }
 
       i++;
@@ -473,30 +473,34 @@ smt_convt::convert_typecast_to_struct(const typecast2t &cast)
   smt_astt fresh = tuple_api->tuple_fresh(fresh_sort);
   smt_astt src_ast = convert_ast(cast.from);
 
-  if (same_format) {
+  unsigned int i2 = 0;
+  if (same_format)
+  {
     // Alas, Z3 considers field names as being part of the type, so we can't
     // just consider the source expression to be the casted expression.
-    i2 = 0;
-    forall_types(it, struct_type_to.members) {
+    for(; i2 < struct_type_to.members.size(); i2++)
+    {
       smt_astt args[2];
       args[0] = src_ast->project(this, i2);
       args[1] = fresh->project(this, i2);
       assert_ast(args[0]->eq(this, args[1]));
-      i2++;
     }
-  } else {
+  }
+  else
+  {
     // Due to inheritance, these structs don't have the same format. Therefore
     // we have to look up source fields by matching the field names between
     // structs, then using their index numbers construct equalities between
     // fields in the source value and a fresh value.
-    i2 = 0;
-    forall_names(it, struct_type_to.member_names) {
+    for(auto const &it : struct_type_to.member_names)
+    {
       // Linear search, yay :(
       unsigned int i3 = 0;
-      forall_names(it2, struct_type_from.member_names) {
-	if (*it == *it2)
-	  break;
-	i3++;
+      for(auto const &it2 : struct_type_from.member_names)
+      {
+        if (it == it2)
+          break;
+        i3++;
       }
 
       assert(i3 != struct_type_from.member_names.size() &&

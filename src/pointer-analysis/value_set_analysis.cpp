@@ -47,7 +47,7 @@ void value_set_analysist::add_vars(
     value_sett &v=*(*this)[i_it].value_set;
     v.add_vars(globals);
 
-    for(auto l_it : goto_program.local_variables)
+    for(auto const &l_it : goto_program.local_variables)
     {
       // cache hit?
       entry_cachet::const_iterator e_it = entry_cache.find(l_it);
@@ -126,7 +126,7 @@ void value_set_analysist::add_vars(
       value_sett &v=*(*this)[i_it].value_set;
       v.add_vars(globals);
 
-      for(auto l_it : f_it->second.body.local_variables)
+      for(auto const &l_it : f_it->second.body.local_variables)
       {
         const symbolt &symbol=ns.lookup(l_it);
 

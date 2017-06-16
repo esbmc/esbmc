@@ -13,15 +13,19 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/symex_target_equation.h>
 #include <util/hash_cont.h>
 
-void slice(symex_target_equationt &equation);
-void simple_slice(symex_target_equationt &equation);
+u_int64_t slice(boost::shared_ptr<symex_target_equationt> &eq);
+u_int64_t simple_slice(boost::shared_ptr<symex_target_equationt> &eq);
 
 class symex_slicet
 {
 public:
   symex_slicet();
-  void slice(symex_target_equationt &equation);
-  void slice_for_symbols(symex_target_equationt &equation, const expr2tc &expr);
+  void slice(boost::shared_ptr<symex_target_equationt> &eq);
+  void slice_for_symbols(
+    boost::shared_ptr<symex_target_equationt> &eq,
+    const expr2tc &expr);
+
+  u_int64_t ignored;
 
 protected:
   typedef hash_set_cont<std::string, string_hash> symbol_sett;

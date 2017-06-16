@@ -635,7 +635,6 @@ show_goto_trace(
 
           if (it->pc->is_assert())
             out << "  " << from_expr(ns, "", it->pc->guard) << std::endl;
-          out << std::endl;
 
           // Having printed a property violation, don't print more steps.
           return;

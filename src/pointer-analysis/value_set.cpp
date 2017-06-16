@@ -1230,8 +1230,8 @@ void value_sett::apply_code(const expr2tc &code)
   if (is_code_block2t(code))
   {
     const code_block2t &ref = to_code_block2t(code);
-    forall_exprs(it, ref.operands)
-      apply_code(*it);
+    for(auto const &it : ref.operands)
+      apply_code(it);
   }
   else if (is_code_assign2t(code))
   {

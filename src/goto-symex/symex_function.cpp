@@ -121,7 +121,7 @@ goto_symext::argument_assignments(
       }
 
       guardt guard;
-      symex_assign_symbol(lhs, rhs, guard);
+      symex_assign_symbol(lhs, rhs, guard, symex_targett::STATE);
     }
 
     it1++;
@@ -236,7 +236,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
       symbol2tc rhs(call.ret->type, "nondet$symex::"+i2string(nondet_count++));
 
       guardt guard;
-      symex_assign_rec(call.ret, rhs, guard);
+      symex_assign_rec(call.ret, rhs, guard, symex_targett::STATE);
     }
 
     cur_state->source.pc++;
@@ -293,6 +293,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = ret_value;
   frame.function_identifier = identifier;
+  frame.hidden = goto_function.body.hide;
 
   cur_state->source.is_set = true;
   cur_state->source.pc = goto_function.body.instructions.begin();
@@ -539,7 +540,7 @@ goto_symext::locality(const goto_functiont &goto_function)
 
   // For each local variable, set its frame number to frame_nr, ensuring all new
   // references to it look up a new variable.
-  for (auto it : local_identifiers)
+  for (auto const &it : local_identifiers)
   {
     // Temporary, for symbol migration,
     symbol2tc tmp_sym(get_empty_type(), it);

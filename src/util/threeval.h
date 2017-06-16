@@ -18,7 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class tvt
 {
 public:
-  typedef enum { TV_FALSE, TV_UNKNOWN, TV_TRUE, TV_ASSUME } tv_enumt;
+  typedef enum { TV_FALSE, TV_UNKNOWN, TV_TRUE } tv_enumt;
 
   bool is_true() const { return value==TV_TRUE; }
   bool is_false() const { return value==TV_FALSE; }

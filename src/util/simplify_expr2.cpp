@@ -1,4 +1,3 @@
-#include <boost/static_assert.hpp>
 #include <climits>
 #include <cstring>
 #include <util/arith_tools.h>
@@ -6,12 +5,12 @@
 #include <util/c_types.h>
 #include <util/expr_util.h>
 #include <util/irep2.h>
+#include <util/irep2_utils.h>
 #include <util/type_byte_size.h>
 
 expr2tc
 expr2t::do_simplify(bool second __attribute__((unused))) const
 {
-
   return expr2tc();
 }
 
@@ -1384,7 +1383,7 @@ typecast2t::do_simplify(bool second) const
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
         fbv.from_integer(to_constant_bool2t(simp).value);
-        return constant_fixedbv2tc(type, fbv);
+        return constant_fixedbv2tc(fbv);
       }
       else if(is_floatbv_type(simp))
       {
@@ -1399,7 +1398,7 @@ typecast2t::do_simplify(bool second) const
         fpbv.from_expr(to_constant_floatbv2t(simp).value.to_expr());
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
 
-        return constant_floatbv2tc(type, fpbv);
+        return constant_floatbv2tc(fpbv);
       }
     }
     else if (is_bv_type(simp) && is_number_type(type))
@@ -1425,7 +1424,7 @@ typecast2t::do_simplify(bool second) const
         fixedbvt fbv;
         fbv.spec = to_fixedbv_type(migrate_type_back(type));
         fbv.from_integer(theint.value);
-        return constant_fixedbv2tc(type, fbv);
+        return constant_fixedbv2tc(fbv);
       }
       else if(is_bool_type(type))
       {
@@ -1445,7 +1444,7 @@ typecast2t::do_simplify(bool second) const
         fpbv.spec = to_floatbv_type(migrate_type_back(type));
         fpbv.from_integer(to_constant_int2t(simp).value);
 
-        return constant_floatbv2tc(type, fpbv);
+        return constant_floatbv2tc(fpbv);
       }
     }
     else if (is_fixedbv_type(simp) && is_number_type(type))
@@ -1460,7 +1459,7 @@ typecast2t::do_simplify(bool second) const
       else if(is_fixedbv_type(type))
       {
         fbv.round(to_fixedbv_type(migrate_type_back(type)));
-        return constant_fixedbv2tc(type, fbv);
+        return constant_fixedbv2tc(fbv);
       }
       else if(is_bool_type(type))
       {
@@ -1486,7 +1485,7 @@ typecast2t::do_simplify(bool second) const
       else if(is_floatbv_type(type))
       {
         fpbv.change_spec(to_floatbv_type(migrate_type_back(type)));
-        return constant_floatbv2tc(type, fpbv);
+        return constant_floatbv2tc(fpbv);
       }
       else if(is_bool_type(type))
       {

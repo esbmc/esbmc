@@ -6,7 +6,7 @@ class Reachtree(unittest.TestCase):
         # cwd = regression/python
         self.ns, self.opts, self.po = esbmc.init_esbmc_process(['test_data/00_big_endian_01/main.c', '--big-endian', '--bv'])
         self.funcs = self.po.goto_functions
-        self.main = self.funcs.function_map[esbmc.irep_idt('c::main')].body
+        self.main = self.funcs.function_map[esbmc.irep_idt('main')].body
         self.eq = esbmc.symex.equation(self.ns)
         self.art = esbmc.symex.reachability_tree(self.po.goto_functions, self.ns, self.opts, self.eq, self.po.context, self.po.message_handler)
 

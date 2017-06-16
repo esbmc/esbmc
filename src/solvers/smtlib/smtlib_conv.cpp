@@ -413,7 +413,7 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
     fixedbvt fbt;
     fbt.spec = spec;
     fbt.from_integer(m);
-    result = constant_fixedbv2tc(t, fbt);
+    result = constant_fixedbv2tc(fbt);
   } else if (is_bool_type(t)) {
     if (respval.token == TOK_KW_TRUE) {
       result = constant_bool2tc(true);
@@ -505,7 +505,7 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
     fixedbvt fbt;
     fbt.spec = spec;
     fbt.from_integer(m);
-    result = constant_fixedbv2tc(t, fbt);
+    result = constant_fixedbv2tc(fbt);
   } else if (is_bool_type(t)) {
     if (respval.token == TOK_KW_TRUE) {
       result = constant_bool2tc(true);

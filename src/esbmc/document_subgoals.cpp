@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/expr2c.h>
+#include <clang-c-frontend/expr2c.h>
 #include <esbmc/document_subgoals.h>
 #include <fstream>
 #include <util/i2string.h>
@@ -81,7 +81,7 @@ std::string escape_latex(const std::string &s, bool alltt)
     if(s[i]=='\\' || s[i]=='{' || s[i]=='}')
       dest+="\\";
 
-    if(!alltt && 
+    if(!alltt &&
        (s[i]=='_' || s[i]=='$' || s[i]=='~' ||
         s[i]=='^' || s[i]=='%' || s[i]=='#' ||
         s[i]=='&'))
@@ -122,7 +122,7 @@ std::string emphasize(const std::string &s)
         dest+="{\\bf{";
       else
         dest+="}}";
-      
+
       bold_mode=new_mode;
     }
 
@@ -225,7 +225,7 @@ void get_code(const irept &location, std::string &dest)
       it=lines.erase(it);
     else
       break;
-  }    
+  }
 
   for(std::list<linet>::iterator it=lines.end();
       it!=lines.begin();)

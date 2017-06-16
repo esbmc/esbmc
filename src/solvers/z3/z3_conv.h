@@ -9,10 +9,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef CPROVER_PROP_Z3_CONV_H
 #define CPROVER_PROP_Z3_CONV_H
 
-#include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/member.hpp>
-#include <boost/multi_index/ordered_index.hpp>
-#include <boost/multi_index_container.hpp>
 #include <cstdint>
 #include <cstring>
 #include <map>
@@ -191,10 +187,6 @@ public:
 
   std::list<z3::expr> assumpt;
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
-
-  // XXX - push-pop will break here.
-  typedef std::map<std::string, z3::expr> renumber_mapt;
-  renumber_mapt renumber_map;
 
   // Array of obj ID -> address range tuples
   z3::sort addr_space_tuple_sort;

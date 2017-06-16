@@ -8,13 +8,31 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <util/arith_tools.h>
 #include <util/fixedbv.h>
-#include <util/irep2.h>
 #include <util/std_types.h>
 
 fixedbv_spect::fixedbv_spect(const fixedbv_typet &type)
 {
-  integer_bits=type.get_integer_bits();
-  width=type.get_width();
+  integer_bits = type.get_integer_bits();
+  width = type.get_width();
+}
+
+fixedbv_spect::fixedbv_spect(const fixedbv_type2tc& type)
+{
+  integer_bits = type->integer_bits;
+  width = type->get_width();
+}
+
+const fixedbv_type2tc fixedbv_spect::get_type() const
+{
+  return fixedbv_type2tc(width, integer_bits);
+}
+
+fixedbvt::fixedbvt() : v(0)
+{
+}
+
+fixedbvt::fixedbvt(const fixedbv_spect &s) : spec(s), v(0)
+{
 }
 
 fixedbvt::fixedbvt(const constant_exprt &expr)

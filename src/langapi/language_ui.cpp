@@ -114,7 +114,7 @@ bool language_uit::parse(const std::string &filename)
     return true;
   }
 
-  if(config.options.get_bool_option("clang-frontend"))
+  if(config.options.get_bool_option("old-frontend"))
   {
 #ifndef WITHOUT_CLANG
     mode++;
