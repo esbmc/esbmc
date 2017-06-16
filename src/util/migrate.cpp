@@ -1,6 +1,6 @@
-#include <cstdint>
 #include <util/c_types.h>
 #include <util/config.h>
+#include <util/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/namespace.h>
 #include <util/prefix.h>
@@ -265,6 +265,10 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     // an infinitely sized array of characters, the most permissive approach to
     // something that shouldn't happen.
     new_type_ref = type2tc(new array_type2t(get_uint8_type(), expr2tc(), true));
+  } else if (type.id() == "string") {
+    irep_idt width = type.width();
+    unsigned int iwidth = strtol(width.as_string().c_str(), NULL, 10);
+    new_type_ref = type2tc(new string_type2t(iwidth));
   } else {
     type.dump();
     assert(0);
@@ -328,6 +332,8 @@ migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns,
   } else if (type.id() == "incomplete_array") {
     real_migrate_type(type, new_type_ref, ns, cache);
   } else if (type.id() == "incomplete_struct") {
+    real_migrate_type(type, new_type_ref, ns, cache);
+  } else if (type.id() == "string") {
     real_migrate_type(type, new_type_ref, ns, cache);
   } else {
     type.dump();
@@ -480,7 +486,7 @@ sym_name_to_symbol(irep_idt init, type2tc type)
   } else if (init.as_string().compare(0, 3, "cs$") == 0 ||
              init.as_string().compare(0, 8, "kindice$") == 0 ||
              init.as_string().compare(0, 2, "s$") == 0 ||
-             init.as_string().compare(0, 5, "c::i$") == 0) {
+             init.as_string().compare(0, 5, "i$") == 0) {
     // This is part of k-induction, where the type is slowly accumulated over
     // time, and the symbol never makes its way into the symbol table :|
     return expr2tc(new symbol2t(type, init, symbol2t::level0, 0, 0, 0, 0));
@@ -686,14 +692,14 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     fixedbvt bv(to_constant_expr(expr));
 
-    expr2t *new_expr = new constant_fixedbv2t(type, bv);
+    expr2t *new_expr = new constant_fixedbv2t(bv);
     new_expr_ref = expr2tc(new_expr);
   } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_floatbv) {
     migrate_type(expr.type(), type);
 
     ieee_floatt bv(to_constant_expr(expr));
 
-    expr2t *new_expr = new constant_floatbv2t(type, bv);
+    expr2t *new_expr = new constant_floatbv2t(bv);
     new_expr_ref = expr2tc(new_expr);
   } else if (expr.id() == exprt::typecast) {
     assert(expr.op0().id_string() != "");
@@ -704,7 +710,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rounding_mode =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -731,7 +737,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rounding_mode =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1071,7 +1077,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rm =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1093,7 +1099,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rm =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1115,7 +1121,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rm =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1134,7 +1140,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rm =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1153,7 +1159,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     // Default to rounding mode symbol
     expr2tc rm =
-      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+      expr2tc(new symbol2t(type_pool.get_int32(), "__ESBMC_rounding_mode"));
 
     // If it's not nil, convert it
     exprt old_rm = expr.find_expr("rounding_mode");
@@ -1161,6 +1167,23 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       migrate_expr(old_rm, rm);
 
     ieee_fma2t *a = new ieee_fma2t(type, v1, v2, v3, rm);
+    new_expr_ref = expr2tc(a);
+  } else if (expr.id() == "ieee_sqrt") {
+    migrate_type(expr.type(), type);
+
+    expr2tc value;
+    migrate_expr(expr.op0(), value);
+
+    // Default to rounding mode symbol
+    expr2tc rm =
+      expr2tc(new symbol2t(type_pool.get_int32(), "c::__ESBMC_rounding_mode"));
+
+    // If it's not nil, convert it
+    exprt old_rm = expr.find_expr("rounding_mode");
+    if(old_rm.is_not_nil())
+      migrate_expr(old_rm, rm);
+
+    ieee_sqrt2t *a = new ieee_sqrt2t(type, value, rm);
     new_expr_ref = expr2tc(a);
   } else if (expr.id() == exprt::mod) {
     migrate_type(expr.type(), type);
@@ -1469,9 +1492,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(new code_decl2t(thetype, sym_name));
   } else if (expr.id() == irept::id_code && expr.statement() == "printf") {
     std::vector<expr2tc> ops;
-    forall_expr(it, expr.operands()) {
+    for(auto const &it : expr.operands())
+    {
       expr2tc tmp_op;
-      migrate_expr(*it, tmp_op);
+      migrate_expr(it, tmp_op);
       ops.push_back(tmp_op);
     }
     new_expr_ref = expr2tc(new code_printf2t(ops));
@@ -1629,10 +1653,11 @@ migrate_type_back(const type2tc &ref)
     const struct_type2t &ref2 = to_struct_type(ref);
 
     idx = 0;
-    forall_types(it, ref2.members) {
+    for(auto const &it : ref2.members)
+    {
       struct_union_typet::componentt component;
       component.id("component");
-      component.type() = migrate_type_back(*it);
+      component.type() = migrate_type_back(it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
       comps.push_back(component);
@@ -1651,10 +1676,11 @@ migrate_type_back(const type2tc &ref)
     const union_type2t &ref2 = to_union_type(ref);
 
     idx = 0;
-    forall_types(it, ref2.members) {
+    for(auto const &it :ref2.members)
+    {
       struct_union_typet::componentt component;
       component.id("component");
-      component.type() = migrate_type_back(*it);
+      component.type() = migrate_type_back(it);
       component.set_name(irep_idt(ref2.member_names[idx]));
       component.pretty_name(irep_idt(ref2.member_pretty_names[idx]));
       comps.push_back(component);
@@ -1675,8 +1701,9 @@ migrate_type_back(const type2tc &ref)
 
     code_typet::argumentst args;
     unsigned int i = 0;
-    forall_types(it, ref2.arguments) {
-      args.push_back(code_typet::argumentt(migrate_type_back(*it)));
+    for(auto const &it :ref2.arguments)
+    {
+      args.push_back(code_typet::argumentt(migrate_type_back(it)));
       args.back().set_identifier(ref2.argument_names[i]);
       i++;
     }
@@ -1742,7 +1769,11 @@ migrate_type_back(const type2tc &ref)
     return thetype;
   }
   case type2t::string_id:
-    return string_typet();
+  {
+    string_typet ret;
+    ret.width(to_string_type(ref).get_length());
+    return ret;
+  }
   case type2t::cpp_name_id:
   {
     const cpp_name_type2t &ref2 = to_cpp_name_type(ref);
@@ -1754,8 +1785,9 @@ migrate_type_back(const type2tc &ref)
     if (ref2.template_args.size() != 0) {
       exprt args("template_args");
       exprt &arglist = (exprt&)args.add("arguments");
-      forall_types(it, ref2.template_args) {
-        typet tmp = migrate_type_back(*it);
+      for(auto const &it : ref2.template_args)
+      {
+        typet tmp = migrate_type_back(it);
         exprt type("type");
         type.type() = tmp;
         arglist.copy_to_operands(type); // Yep, that's how it's structured.
@@ -1828,10 +1860,8 @@ migrate_expr_back(const expr2tc &ref)
     const constant_struct2t &ref2 = to_constant_struct2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thestruct("struct", thetype);
-    forall_exprs(it, ref2.datatype_members) {
-      exprt tmp = migrate_expr_back(*it);
-      thestruct.operands().push_back(tmp);
-    }
+    for(auto const &it : ref2.datatype_members)
+      thestruct.operands().push_back(migrate_expr_back(it));
     return thestruct;
   }
   case expr2t::constant_union_id:
@@ -1839,10 +1869,8 @@ migrate_expr_back(const expr2tc &ref)
     const constant_union2t &ref2 = to_constant_union2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt theunion("union", thetype);
-    forall_exprs(it, ref2.datatype_members) {
-      exprt tmp = migrate_expr_back(*it);
-      theunion.operands().push_back(tmp);
-    }
+    for(auto const &it : ref2.datatype_members)
+      theunion.operands().push_back(migrate_expr_back(it));
     return theunion;
   }
   case expr2t::constant_array_id:
@@ -1850,10 +1878,8 @@ migrate_expr_back(const expr2tc &ref)
     const constant_array2t &ref2 = to_constant_array2t(ref);
     typet thetype = migrate_type_back(ref->type);
     exprt thearray("constant", thetype);
-    forall_exprs(it, ref2.datatype_members) {
-      exprt tmp = migrate_expr_back(*it);
-      thearray.operands().push_back(tmp);
-    }
+    for(auto const &it : ref2.datatype_members)
+      thearray.operands().push_back(migrate_expr_back(it));
     return thearray;
   }
   case expr2t::constant_array_of_id:
@@ -2176,6 +2202,17 @@ migrate_expr_back(const expr2tc &ref)
     fmaval.copy_to_operands(migrate_expr_back(ref2.value_1),
                             migrate_expr_back(ref2.value_2),
                             migrate_expr_back(ref2.value_3));
+
+    // Add rounding mode
+    fmaval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
+    return fmaval;
+  }
+  case expr2t::ieee_sqrt_id:
+  {
+    const ieee_sqrt2t &ref2 = to_ieee_sqrt2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt fmaval("ieee_sqrt", thetype);
+    fmaval.copy_to_operands(migrate_expr_back(ref2.value));
 
     // Add rounding mode
     fmaval.set("rounding_mode", migrate_expr_back(ref2.rounding_mode));
@@ -2527,9 +2564,8 @@ migrate_expr_back(const expr2tc &ref)
     const code_printf2t &ref2 = to_code_printf2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.statement(irep_idt("printf"));
-    forall_exprs(it, ref2.operands) {
-      codeexpr.operands().push_back(migrate_expr_back(*it));
-    }
+    for(auto const &it : ref2.operands)
+      codeexpr.operands().push_back(migrate_expr_back(it));
     return codeexpr;
   }
   case expr2t::code_expression_id:
@@ -2585,9 +2621,8 @@ migrate_expr_back(const expr2tc &ref)
     exprt op2("arguments");
     codeexpr.copy_to_operands(op0, op1, op2);
     exprt &args = codeexpr.op2();
-    forall_exprs(it, ref2.operands) {
-      args.operands().push_back(migrate_expr_back(*it));
-    }
+    for(auto const &it : ref2.operands)
+      args.operands().push_back(migrate_expr_back(it));
     return codeexpr;
   }
   case expr2t::code_comma_id:
@@ -2643,9 +2678,8 @@ migrate_expr_back(const expr2tc &ref)
     exprt codeexpr("cpp-throw");
     irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
 
-    forall_names(it, ref2.exception_list) {
-      exceptions_thrown.push_back(irept(*it));
-    }
+    for(auto const &it : ref2.exception_list)
+      exceptions_thrown.push_back(irept(it));
 
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;

@@ -1,12 +1,12 @@
 #include <ac_config.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/functional/hash.hpp>
-#include <boost/static_assert.hpp>
-#include <cstdarg>
-#include <cstring>
-#include <sstream>
+#include <util/fixedbv.h>
 #include <util/i2string.h>
-#include <util/irep2.h>
+#include <util/ieee_float.h>
+#include <util/irep2_type.h>
+#include <util/irep2_expr.h>
+#include <util/irep2_utils.h>
 #include <util/migrate.h>
 #include <util/std_types.h>
 
@@ -190,15 +190,14 @@ static const char *type_names[] = {
 };
 // If this fires, you've added/removed a type id, and need to update the list
 // above (which is ordered according to the enum list)
-BOOST_STATIC_ASSERT(sizeof(type_names) ==
-                    (type2t::end_type_id * sizeof(char *)));
+static_assert(sizeof(type_names) == (type2t::end_type_id * sizeof(char *)),
+  "Missing type name");
 
 std::string
 get_type_id(const type2t &type)
 {
   return std::string(type_names[type.type_id]);
 }
-
 
 type2t::type2t(type_ids id)
   : type_id(id),
@@ -301,7 +300,7 @@ type2t::do_crc(size_t seed) const
 void
 type2t::hash(crypto_hash &hash) const
 {
-  BOOST_STATIC_ASSERT(type2t::end_type_id < 256);
+  static_assert(type2t::end_type_id < 256, "Type id overflow");
   uint8_t tid = type_id;
   hash.ingest(&tid, sizeof(tid));
   return;
@@ -417,6 +416,12 @@ string_type2t::get_width(void) const
   return width * 8;
 }
 
+unsigned int
+string_type2t::get_length(void) const
+{
+  return width;
+}
+
 const std::vector<type2tc> &
 struct_union_data::get_structure_members(void) const
 {
@@ -438,10 +443,10 @@ struct_union_data::get_structure_name(void) const
 unsigned int
 struct_union_data::get_component_number(const irep_idt &name) const
 {
-
   unsigned int i = 0;
-  forall_names(it, member_names) {
-    if (*it == name)
+  for(auto const &it : member_names)
+  {
+    if (it == name)
       return i;
     i++;
   }
@@ -660,7 +665,7 @@ expr2t::do_crc(size_t seed) const
 void
 expr2t::hash(crypto_hash &hash) const
 {
-  BOOST_STATIC_ASSERT(expr2t::end_expr_id < 256);
+  static_assert(expr2t::end_expr_id < 256, "Expr id overflow");
   uint8_t eid = expr_id;
   hash.ingest(&eid, sizeof(eid));
   type->hash(hash);
@@ -795,6 +800,7 @@ static const char *expr_names[] = {
   "ieee_mul",
   "ieee_div",
   "ieee_fma",
+  "ieee_sqrt",
   "modulus",
   "shl",
   "ashr",
@@ -849,8 +855,8 @@ static const char *expr_names[] = {
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
-BOOST_STATIC_ASSERT(sizeof(expr_names) ==
-                    (expr2t::end_expr_id * sizeof(char *)));
+static_assert(sizeof(expr_names) == (expr2t::end_expr_id * sizeof(char *)),
+  "Missing expr name");
 
 std::string
 get_expr_id(const expr2t &expr)
@@ -1330,8 +1336,8 @@ type_poolt type_pool;
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr
 // crcing code has to change.
-BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
-BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);
+static_assert(type2t::end_type_id <= 256, "Type id overflow");
+static_assert(expr2t::end_expr_id <= 256, "Expr id overflow");
 
 static inline __attribute__((always_inline)) std::string
 type_to_string(const bool &thebool, int indent __attribute__((unused)))
@@ -1412,10 +1418,10 @@ type_to_string(const std::vector<expr2tc> &theval, int indent)
   int i;
 
   i = 0;
-  forall_exprs(it, theval) {
+  for(auto const &it : theval) {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += indent_str(indent) + std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
+    astring += indent_str(indent) + std::string(buffer) + ": " + it->pretty(indent + 2) + "\n";
     i++;
   }
 
@@ -1430,10 +1436,11 @@ type_to_string(const std::vector<type2tc> &theval, int indent)
   int i;
 
   i = 0;
-  forall_types(it, theval) {
+  for(auto const &it : theval) {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += indent_str(indent) + std::string(buffer) + ": " + (*it)->pretty(indent + 2) + "\n";
+    astring +=
+      indent_str(indent) + std::string(buffer) + ": " + it->pretty(indent + 2) + "\n";
     i++;
   }
 
@@ -1449,10 +1456,12 @@ type_to_string(const std::vector<irep_idt> &theval,
   int i;
 
   i = 0;
-  forall_names(it, theval) {
+  for(auto const &it : theval)
+  {
     snprintf(buffer, 63, "%d", i);
     buffer[63] = '\0';
-    astring += indent_str(indent) + std::string(buffer) + ": " + (*it).as_string() + "\n";
+    astring +=
+      indent_str(indent) + std::string(buffer) + ": " + it.as_string() + "\n";
     i++;
   }
 
@@ -1671,8 +1680,8 @@ do_type_lt(const std::vector<expr2tc> &side1, const std::vector<expr2tc> &side2)
 
   int tmp = 0;
   std::vector<expr2tc>::const_iterator it2 = side2.begin();
-  forall_exprs(it, side1) {
-    tmp = (*it)->ltchecked(**it2);
+  for(auto const &it : side1) {
+    tmp = it->ltchecked(**it2);
     if (tmp != 0)
       return tmp;
     it2++;
@@ -1691,8 +1700,8 @@ do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
 
   int tmp = 0;
   std::vector<type2tc>::const_iterator it2 = side2.begin();
-  forall_types(it, side1) {
-    tmp = (*it)->ltchecked(**it2);
+  for(auto const &it : side1) {
+    tmp = it->ltchecked(**it2);
     if (tmp != 0)
       return tmp;
     it2++;
@@ -1911,8 +1920,8 @@ do_type_hash(const ieee_floatt &theval, crypto_hash &hash)
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const std::vector<expr2tc> &theval, size_t seed)
 {
-  forall_exprs(it, theval)
-    (*it)->do_crc(seed);
+  for(auto const &it : theval)
+    it->do_crc(seed);
 
   return seed;
 }
@@ -1920,15 +1929,15 @@ do_type_crc(const std::vector<expr2tc> &theval, size_t seed)
 static inline __attribute__((always_inline)) void
 do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash)
 {
-  forall_exprs(it, theval)
-    (*it)->hash(hash);
+  for(auto const &it : theval)
+    it->hash(hash);
 }
 
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const std::vector<type2tc> &theval, size_t seed)
 {
-  forall_types(it, theval)
-    (*it)->do_crc(seed);
+  for(auto const &it : theval)
+    it->do_crc(seed);
 
   return seed;
 }
@@ -1936,23 +1945,23 @@ do_type_crc(const std::vector<type2tc> &theval, size_t seed)
 static inline __attribute__((always_inline)) void
 do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
 {
-  forall_types(it, theval)
-    (*it)->hash(hash);
+  for(auto const &it : theval)
+    it->hash(hash);
 }
 
 static inline __attribute__((always_inline)) size_t
 do_type_crc(const std::vector<irep_idt> &theval, size_t seed)
 {
-  forall_names(it, theval)
-    boost::hash_combine(seed, (*it).as_string());
+  for(auto const &it : theval)
+    boost::hash_combine(seed, it.as_string());
   return seed;
 }
 
 static inline __attribute__((always_inline)) void
 do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
 {
-  forall_names(it, theval)
-    hash.ingest((void*)(*it).as_string().c_str(), (*it).as_string().size());
+  for(auto const &it : theval)
+    hash.ingest((void*)it.as_string().c_str(), it.as_string().size());
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -2775,15 +2784,17 @@ std::string mul2t::field_names [esbmct::num_type_fields]  =
 std::string div2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string ieee_add2t::field_names [esbmct::num_type_fields]  =
-{ "side_1", "side_2", "rounding_mode", "", "", ""};
+{ "rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_sub2t::field_names [esbmct::num_type_fields]  =
-{ "side_1", "side_2", "rounding_mode", "", "", ""};
+{ "rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_mul2t::field_names [esbmct::num_type_fields]  =
-{ "side_1", "side_2", "rounding_mode", "", "", ""};
+{ "rounding_mode",  "side_1", "side_2", "", "", ""};
 std::string ieee_div2t::field_names [esbmct::num_type_fields]  =
-{ "side_1", "side_2", "rounding_mode", "", "", ""};
+{ "rounding_mode", "side_1", "side_2", "", "", ""};
 std::string ieee_fma2t::field_names [esbmct::num_type_fields]  =
-{ "value_1", "value_2", "value_3", "rounding_mode", "", ""};
+{ "rounding_mode", "value_1", "value_2", "value_3", "", ""};
+std::string ieee_sqrt2t::field_names [esbmct::num_type_fields]  =
+{ "rounding_mode", "value", "", "", ""};
 std::string modulus2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", "", ""};
 std::string shl2t::field_names [esbmct::num_type_fields]  =
@@ -3082,6 +3093,7 @@ expr_typedefs3(ieee_sub, ieee_arith_2ops);
 expr_typedefs3(ieee_mul, ieee_arith_2ops);
 expr_typedefs3(ieee_div, ieee_arith_2ops);
 expr_typedefs4(ieee_fma, ieee_arith_3ops);
+expr_typedefs2(ieee_sqrt, ieee_arith_1op);
 expr_typedefs2(modulus, arith_2ops);
 expr_typedefs2(shl, arith_2ops);
 expr_typedefs2(ashr, arith_2ops);

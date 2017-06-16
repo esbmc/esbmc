@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/arith_tools.h>
 #include <util/config.h>
 #include <util/i2string.h>
+#include <util/irep2_utils.h>
 #include <util/prefix.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
@@ -30,7 +31,7 @@ Function: pointer_logict::add_object
 unsigned pointer_logict::add_object(const expr2tc &expr)
 {
   // remove any index/member
-  
+
   if (expr->expr_id == expr2t::index_id)
   {
     const index2t &index = static_cast<const index2t &>(*expr.get());
@@ -99,7 +100,7 @@ expr2tc pointer_logict::pointer_expr(
   {
     return symbol2tc(type, irep_idt("INVALID"));
   }
-  
+
   if(pointer.object>=objects.size())
   {
     return symbol2tc(type, irep_idt("INVALID" + i2string(pointer.object)));
@@ -108,7 +109,7 @@ expr2tc pointer_logict::pointer_expr(
   const expr2tc &object_expr = lookup[pointer.object];
 
   expr2tc deep_object = object_rec(pointer.offset, type, object_expr);
-  
+
   assert(type->type_id == type2t::pointer_id);
   return address_of2tc(type, deep_object);
 }
@@ -139,13 +140,13 @@ expr2tc pointer_logict::object_rec(
 
     if (size == 0)
       return src;
-    
+
     mp_integer index=offset/size;
     mp_integer rest=offset%size;
 
     type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
     index2tc newindex(arrtype.subtype, src, constant_int2tc(inttype, index));
-    
+
     return object_rec(rest, pointer_type, newindex);
   }
   else if (is_structure_type(src))
@@ -157,7 +158,7 @@ expr2tc pointer_logict::object_rec(
       data_ref.get_structure_member_names();
 
     assert(offset>=0);
-  
+
     if(offset==0) // the struct itself
       return src;
 
@@ -166,31 +167,30 @@ expr2tc pointer_logict::object_rec(
     assert(offset>=current_offset);
 
     unsigned int idx = 0;
-    forall_types(it, members) {
+    for(auto const &it : members)
+    {
       assert(offset>=current_offset);
 
-      mp_integer sub_size=type_byte_size(*it);
+      mp_integer sub_size = type_byte_size(it);
 
       if(sub_size==0)
         return src;
-      
-      mp_integer new_offset=current_offset+sub_size;
 
+      mp_integer new_offset=current_offset+sub_size;
       if(new_offset>offset)
       {
         // found it
-        member2tc tmp(*it, src, member_names[idx]);
-        
+        member2tc tmp(it, src, member_names[idx]);
         return object_rec(offset-current_offset, pointer_type, tmp);
       }
-      
+
       assert(new_offset<=offset);
       current_offset=new_offset;
       assert(current_offset<=offset);
       idx++;
     }
   }
-  
+
   return src;
 }
 

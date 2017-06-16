@@ -59,7 +59,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   smt_thread_guard = options.get_bool_option("smt-thread-guard");
 
   goto_functionst::function_mapt::const_iterator it =
-    goto_functions.function_map.find("main");
+    goto_functions.function_map.find("__ESBMC_main");
   if (it == goto_functions.function_map.end()) {
     std::cerr << "main symbol not found; please set an entry point" <<std::endl;
     abort();
@@ -250,7 +250,7 @@ execution_statet::symex_step(reachability_treet &art)
 
   switch (instruction.type) {
     case END_FUNCTION:
-      if (instruction.function == "main") {
+      if (instruction.function == "__ESBMC_main") {
         end_thread();
         force_cswitch();
       } else {
@@ -618,7 +618,7 @@ execution_statet::restore_last_paths(void)
   // efficient, but it's what we've got.
 
   auto &list = preserved_paths[active_thread];
-  for (const auto &p : list) {
+  for (auto const &p : list) {
     const auto &loc = p.first;
     const auto &gs = p.second;
 
@@ -833,8 +833,8 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
     if (ns.lookup(name, symbol))
       return;
 
-    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size" ||
-        name == "c::__ESBMC_is_dynamic") {
+    if (name == "__ESBMC_alloc" || name == "__ESBMC_alloc_size" ||
+        name == "__ESBMC_is_dynamic") {
       return;
     }
     else if ((symbol->static_lifetime || symbol->type.is_dynamic_set()))
@@ -1238,7 +1238,7 @@ execution_statet::init_property_monitors(void)
       namespacet ns(new_context);
       languagest languages(ns, MODE_C);
 
-      std::string expr_str = strings["c::__ESBMC_property_" + prop_name];
+      std::string expr_str = strings["__ESBMC_property_" + prop_name];
       std::string dummy_str = "";
 
       languages.to_expr(expr_str, dummy_str, main_expr, message_handler);

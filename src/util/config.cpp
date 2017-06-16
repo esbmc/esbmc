@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <iostream>
 #include <util/config.h>
-#include <util/irep2.h>
 
 configt config;
 
@@ -83,7 +82,6 @@ bool configt::set(const cmdlinet &cmdline)
   ansi_c.endianess=ansi_ct::NO_ENDIANESS;
   ansi_c.os=ansi_ct::NO_OS;
   ansi_c.lib=configt::ansi_ct::LIB_NONE;
-  ansi_c.rounding_mode=ieee_floatt::ROUND_TO_EVEN;
 
   if(cmdline.isset("16"))
     ansi_c.set_16();
@@ -177,18 +175,6 @@ bool configt::set(const cmdlinet &cmdline)
 
   if(cmdline.isset("big-endian"))
     ansi_c.endianess=configt::ansi_ct::IS_BIG_ENDIAN;
-
-  if(cmdline.isset("round-to-even") || cmdline.isset("round-to-nearest"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_EVEN;
-
-  if(cmdline.isset("round-to-plus-inf"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_PLUS_INF;
-
-  if(cmdline.isset("round-to-minus-inf"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_MINUS_INF;
-
-  if(cmdline.isset("round-to-zero"))
-    ansi_c.rounding_mode=ieee_floatt::ROUND_TO_ZERO;
 
   if(cmdline.isset("little-endian") && cmdline.isset("big-endian"))
   {

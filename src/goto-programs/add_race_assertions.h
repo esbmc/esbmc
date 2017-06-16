@@ -17,12 +17,12 @@ Date: February 2006
 
 void add_race_assertions(
   value_setst &value_sets,
-  class contextt &context,
+  contextt &context,
   goto_programt &goto_program);
 
 void add_race_assertions(
   value_setst &value_sets,
-  class contextt &context,
+  contextt &context,
   goto_functionst &goto_functions);
 
 #endif

@@ -17,11 +17,6 @@ Author: Daniel Kroening, kroening@kroening.com
 void goto_check(
   const namespacet &ns,
   optionst &options,
-  goto_programt &goto_program);
-
-void goto_check(
-  const namespacet &ns,
-  optionst &options,
   goto_functionst &goto_functions);
 
 #endif

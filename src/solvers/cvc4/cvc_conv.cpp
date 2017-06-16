@@ -298,7 +298,7 @@ cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 
   // Seems we can't make negative bitvectors; so just pull the value out and
   // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv = CVC4::BitVector(width, (uint64_t)theint.to_int64());
+  CVC4::BitVector bv = CVC4::BitVector(width, (unsigned long int)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
   return new cvc_smt_ast(this, s, e);
 }

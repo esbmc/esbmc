@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <ansi-c/c_qualifiers.h>
+#include <util/c_qualifiers.h>
 #include <cpp/cpp_template_type.h>
 #include <cpp/cpp_type2name.h>
 #include <cpp/cpp_typecheck.h>
@@ -38,8 +38,7 @@ void cpp_typecheckt::convert_argument(
     argument.set_base_name(identifier);
   }
 
-  identifier=cpp_identifier_prefix(mode)+"::"+
-             cpp_scopes.current_scope().prefix+
+  identifier=cpp_scopes.current_scope().prefix+
              id2string(identifier);
 
   argument.set_identifier(identifier);

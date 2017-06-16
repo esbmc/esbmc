@@ -1,6 +1,5 @@
 #include <cassert>
 #include <goto-symex/build_goto_trace.h>
-#include <goto-symex/renaming.h>
 #include <goto-symex/witnesses.h>
 
 unsigned int get_member_name_field(const type2tc &t, const irep_idt &name)
@@ -9,8 +8,9 @@ unsigned int get_member_name_field(const type2tc &t, const irep_idt &name)
   const struct_union_data &data_ref =
     dynamic_cast<const struct_union_data &>(*t.get());
 
-  forall_names(it, data_ref.member_names) {
-    if (*it == name)
+  for(auto const &it : data_ref.member_names)
+  {
+    if (it == name)
       break;
     idx++;
   }
@@ -20,7 +20,8 @@ unsigned int get_member_name_field(const type2tc &t, const irep_idt &name)
   return idx;
 }
 
-expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
+expr2tc build_lhs(
+  boost::shared_ptr<smt_convt> &smt_conv, const expr2tc &lhs)
 {
   if(is_nil_expr(lhs))
     return lhs;
@@ -36,7 +37,7 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
       // Build new source value, it might be an index, in case of
       // multidimensional arrays
       expr2tc new_source_value = build_lhs(smt_conv, index.source_value);
-      expr2tc new_value = smt_conv.get(index.index);
+      expr2tc new_value = smt_conv->get(index.index);
       new_lhs = index2tc(lhs->type, new_source_value, new_value);
       break;
     }
@@ -54,7 +55,10 @@ expr2tc build_lhs(smt_convt &smt_conv, const expr2tc &lhs)
   return new_lhs;
 }
 
-expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
+expr2tc build_rhs(
+  boost::shared_ptr<smt_convt> &smt_conv,
+  const expr2tc &lhs,
+  const expr2tc &rhs)
 {
   if(is_nil_expr(rhs))
     return rhs;
@@ -107,31 +111,32 @@ expr2tc build_rhs(smt_convt &smt_conv, const expr2tc &lhs, const expr2tc &rhs)
       break;
     }
 
-
     case expr2t::constant_array_of_id:
     case expr2t::if_id:
     case expr2t::symbol_id:
     case expr2t::bitcast_id:
+    case expr2t::equality_id:
       break;
 
     default:
+      rhs->dump();
       assert(0);
       break;
   }
 
-  return smt_conv.get(new_rhs);
+  return smt_conv->get(new_rhs);
 }
 
 void build_goto_trace(
-  const symex_target_equationt &target,
-  smt_convt &smt_conv,
+  const boost::shared_ptr<symex_target_equationt> target,
+  boost::shared_ptr<smt_convt> &smt_conv,
   goto_tracet &goto_trace)
 {
   unsigned step_nr = 0;
 
-  for(auto SSA_step : target.SSA_steps)
+  for(auto SSA_step : target->SSA_steps)
   {
-    tvt result = smt_conv.l_get(SSA_step.guard_ast);
+    tvt result = smt_conv->l_get(SSA_step.guard_ast);
     if(!result.is_true())
       continue;
 
@@ -155,28 +160,31 @@ void build_goto_trace(
     goto_trace_step.lhs = build_lhs(smt_conv, SSA_step.original_lhs);
     goto_trace_step.value = build_rhs(smt_conv, goto_trace_step.lhs, SSA_step.rhs);
 
+    if(!is_nil_expr(SSA_step.lhs))
+      goto_trace_step.value = smt_conv->get(SSA_step.lhs);
+
     for(auto it : SSA_step.converted_output_args)
     {
       if (is_constant_expr(it))
         goto_trace_step.output_args.push_back(it);
       else
-        goto_trace_step.output_args.push_back(smt_conv.get(it));
+        goto_trace_step.output_args.push_back(smt_conv->get(it));
     }
 
     if(SSA_step.is_assert() || SSA_step.is_assume())
-      goto_trace_step.guard = !smt_conv.l_get(SSA_step.cond_ast).is_false();
+      goto_trace_step.guard = !smt_conv->l_get(SSA_step.cond_ast).is_false();
   }
 }
 
 void build_successful_goto_trace(
-    const symex_target_equationt &target,
+    const boost::shared_ptr<symex_target_equationt> target,
     const namespacet &ns,
     goto_tracet &goto_trace)
 {
   unsigned step_nr=0;
   for(symex_target_equationt::SSA_stepst::const_iterator
-      it=target.SSA_steps.begin();
-      it!=target.SSA_steps.end(); it++)
+      it=target->SSA_steps.begin();
+      it!=target->SSA_steps.end(); it++)
   {
     if((it->is_assignment() || it->is_assert() || it->is_assume())
       && (is_valid_witness_expr(ns, it->lhs)))

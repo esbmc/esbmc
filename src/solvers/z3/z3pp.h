@@ -164,7 +164,7 @@ namespace z3 {
         void init(config & c, bool use_ints);
         context(bool dummy __attribute__((unused))) : m_ctx(NULL), m_esbmc_int_sort(NULL), int_encoding(false) { }
         context(config & c, bool use_ints) : int_encoding(use_ints) { init(c, use_ints); }
-        ~context() { Z3_del_context(m_ctx); Z3_finalize_memory(); }
+        ~context() { Z3_del_context(m_ctx); }
         operator Z3_context() const { return m_ctx; }
 
         /**
@@ -327,6 +327,7 @@ namespace z3 {
         expr fpa_mul(z3::expr rm, z3::expr s1, z3::expr s2);
         expr fpa_div(z3::expr rm, z3::expr s1, z3::expr s2);
         expr fpa_fma(z3::expr rm, z3::expr v1, z3::expr v2, z3::expr v3);
+        expr fpa_sqrt(z3::expr rm, z3::expr value);
 
         expr fpa_from_bv(z3::expr t, sort sort);
         expr fpa_to_ieeebv(z3::expr fp);
@@ -2272,6 +2273,13 @@ namespace z3 {
     expr context::fpa_fma(z3::expr rm, z3::expr v1, z3::expr v2, z3::expr v3)
     {
       Z3_ast r = Z3_mk_fpa_fma(m_ctx, rm, v1, v2, v3);
+      check_error();
+      return expr(*this, r);
+    }
+
+    expr context::fpa_sqrt(z3::expr rm, z3::expr value)
+    {
+      Z3_ast r = Z3_mk_fpa_sqrt(m_ctx, rm, value);
       check_error();
       return expr(*this, r);
     }

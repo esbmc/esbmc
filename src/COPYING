@@ -15,7 +15,8 @@ license. Our modifications are distributed under the terms of the Apache 2.0
 license.
 
 Several pieces of software included in ESBMC are BSD 4-clause, making them
-incompatible with the GPL.
+incompatible with the GPL. If you compile with / link against a GPL licensed
+library, you're unable to distribute the results due to conflicting licenses.
 
 ~
 
@@ -25,7 +26,7 @@ To briefly summarise each solver:
   CVC4: BSD 3-clause, however some builds incorporate software under different
     licenses.
   MathSAT: Academic free, non-commercial.
-  Yices: Personal use, non-commercial
+  Yices: Personal use, non-commercial. Recently released GPL3.
   Z3: MIT license
 
 In all circumstances you should refer to the specific license of the solver you

@@ -27,7 +27,7 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
   if(!instruction.targets.empty())
   {
     irept tgts;
-    for(auto it : instruction.targets)
+    for(auto const &it : instruction.targets)
     {
       irept t(i2string(it->location_number));
       tgts.move_to_sub(t);
@@ -41,7 +41,7 @@ void convert(const goto_programt::instructiont &instruction, irept &irep)
     irept lbls;
     irept::subt &subs = lbls.get_sub();
     subs.reserve(instruction.labels.size());
-    for(auto it : instruction.labels)
+    for(auto const &it : instruction.labels)
       subs.push_back(irept(it));
 
     irep.labels(lbls);
@@ -61,7 +61,7 @@ void convert(const irept &irep, goto_programt::instructiont &instruction)
 
   const irept &lbls = irep.labels_irep();
   const irept::subt &lsubs = lbls.get_sub();
-  for(auto it : lsubs)
+  for(auto const &it : lsubs)
     instruction.labels.push_back(it.id());
 }
 
@@ -69,7 +69,7 @@ void convert(const goto_programt &program, irept &irep)
 {
   irep.id("goto-program");
   irep.get_sub().reserve(program.instructions.size());
-  for(auto it : program.instructions)
+  for(auto const &it : program.instructions)
   {
     irep.get_sub().push_back(irept());
     convert(it, irep.get_sub().back());
@@ -80,11 +80,13 @@ void convert(const goto_programt &program, irept &irep)
     irept vars;
     irept::subt &subs = vars.get_sub();
     subs.reserve(program.local_variables.size());
-    for(auto it : program.local_variables)
+    for(auto const &it : program.local_variables)
       subs.push_back(irept(it));
 
     irep.variables(vars);
   }
+
+  irep.hide(program.hide);
 }
 
 void convert(const irept &irep, goto_programt &program)
@@ -97,7 +99,7 @@ void convert(const irept &irep, goto_programt &program)
 
   // convert instructions back
   const irept::subt &subs = irep.get_sub();
-  for(auto it : subs)
+  for(auto const &it : subs)
   {
     program.instructions.push_back(goto_programt::instructiont());
     convert(it, program.instructions.back());
@@ -105,7 +107,7 @@ void convert(const irept &irep, goto_programt &program)
     number_targets_list.push_back(std::list<unsigned>());
     const irept &targets = it.targets();
     const irept::subt &tsubs = targets.get_sub();
-    for(auto tit : tsubs)
+    for(auto const &tit : tsubs)
       number_targets_list.back().push_back(atoi(tit.id_string().c_str()));
   }
 
@@ -144,6 +146,8 @@ void convert(const irept &irep, goto_programt &program)
 
   const irept &vars = irep.variables();
   const irept::subt &vsubs = vars.get_sub();
-  for(auto it : vsubs)
+  for(auto const &it : vsubs)
     program.local_variables.push_front(it.id());
+
+  program.hide = irep.hide();
 }

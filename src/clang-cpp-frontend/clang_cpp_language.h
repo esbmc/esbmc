@@ -40,9 +40,6 @@ public:
     const std::string &module,
     message_handlert &message_handler);
 
-  std::string id() const { return "cpp"; }
-  std::string description() const { return "C++"; }
-
   virtual void show_parse(std::ostream &out);
 
   // conversion from expression into string

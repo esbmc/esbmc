@@ -565,8 +565,9 @@ yices_convt::mk_struct_sort(const type2tc &type)
 
   std::vector<type_t> sorts;
   const struct_union_data &def = get_type_def(type);
-  forall_types(it, def.members) {
-    smt_sortt s = convert_sort(*it);
+  for(auto const &it : def.members)
+  {
+    smt_sortt s = convert_sort(it);
     const yices_smt_sort *sort = yices_sort_downcast(s);
     sorts.push_back(sort->s);
   }
@@ -583,8 +584,8 @@ yices_convt::tuple_create(const expr2tc &structdef)
   const struct_union_data &type = get_type_def(strct.type);
 
   std::vector<term_t> terms;
-  forall_exprs(it, strct.datatype_members) {
-    smt_astt a = convert_ast(*it);
+  for(auto const &it : strct.datatype_members) {
+    smt_astt a = convert_ast(it);
     const yices_smt_ast *yast = yices_ast_downcast(a);
     terms.push_back(yast->term);
   }
@@ -695,7 +696,6 @@ yices_convt::tuple_get(const expr2tc &expr)
   }
 
   const struct_union_data &strct = get_type_def(expr->type);
-
   constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
 
   // Run through all fields and despatch to 'get' again.

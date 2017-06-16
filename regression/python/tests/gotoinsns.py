@@ -6,7 +6,7 @@ class Gotoinsns(unittest.TestCase):
         # cwd = regression/python
         self.ns, self.opts, self.po = esbmc.init_esbmc_process(['test_data/00_big_endian_01/main.c', '--big-endian', '--bv'])
         self.funcs = self.po.goto_functions
-        self.main = self.funcs.function_map[esbmc.irep_idt('c::main')].body
+        self.main = self.funcs.function_map[esbmc.irep_idt('main')].body
         self.insns = self.main.get_instructions()
 
     def tearDown(self):
@@ -30,14 +30,14 @@ class Gotoinsns(unittest.TestCase):
         self.assertTrue(theinsn.type == esbmc.goto_programs.goto_program_instruction_type.OTHER, "Wrong insn type")
         code = esbmc.downcast_expr(theinsn.code)
         self.assertTrue(code.expr_id == esbmc.expr.expr_ids.code_decl, "decl insn has wrong expr type")
-        self.assertTrue(code.value.as_string() == "c::main::main::1::i", "decl insn has wrong expr value")
-        self.assertTrue(theinsn.function.as_string() == "c::main", "decl insn has wrong function name")
+        self.assertTrue(code.value.as_string() == "main::main::1::i", "decl insn has wrong expr value")
+        self.assertTrue(theinsn.function.as_string() == "main", "decl insn has wrong function name")
 
     def test_insn_locations(self):
         import esbmc
         theinsn = self.insns[0]
         loc = esbmc.location.from_locationt(theinsn.location)
-        self.assertTrue(loc.file.as_string() == 'test_data/00_big_endian_01/main.c', "File string is wrong")
+        self.assertTrue(loc.file.as_string() == 'main.c', "File string is wrong")
         self.assertTrue(loc.function.as_string() == "main", "Func name in location is wrong")
         self.assertTrue(loc.line == 5, "Line number in test file is wrong")
         self.assertTrue(loc.column == 0, "Column number in test file is wrong")

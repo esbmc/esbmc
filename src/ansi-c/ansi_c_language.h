@@ -23,7 +23,7 @@ public:
   virtual bool parse(
     const std::string &path,
     message_handlert &message_handler);
-             
+
   virtual bool typecheck(
     contextt &context,
     const std::string &module,
@@ -33,17 +33,17 @@ public:
     contextt &context,
     message_handlert &message_handler);
 
-  virtual bool merge_context( 
+  virtual bool merge_context(
     contextt &dest,
-    contextt &src, 
+    contextt &src,
     message_handlert &message_handler,
     const std::string &module) const;
 
   virtual void show_parse(std::ostream &out);
-  
+
   virtual ~ansi_c_languaget();
   ansi_c_languaget() { }
-  
+
   virtual bool from_expr(
     const exprt &expr,
     std::string &code,
@@ -60,20 +60,17 @@ public:
     exprt &expr,
     message_handlert &message_handler,
     const namespacet &ns);
-                       
+
   virtual languaget *new_language()
   { return new ansi_c_languaget; }
-   
-  virtual std::string id() const { return "C"; }
-  virtual std::string description() const { return "ANSI-C 99"; }
 
-  virtual void modules_provided(std::set<std::string> &modules);  
-  
+  virtual std::string id() const { return "C"; }
+
 protected:
   ansi_c_parse_treet parse_tree;
   std::string parse_path;
 };
- 
+
 languaget *new_ansi_c_language();
- 
+
 #endif

@@ -1,7 +1,6 @@
 #include <pthread.h>
 #include <stdlib.h>
 
-void *malloc(unsigned size);
 pthread_mutex_t *mutex;
 
 void *thread1(void *arg)

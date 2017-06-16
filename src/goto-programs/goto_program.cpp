@@ -136,9 +136,10 @@ void goto_programt::instructiont::output_instruction(
 
     {
       const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(code);
-      forall_names(it, throw_ref.exception_list) {
-      	if(it != throw_ref.exception_list.begin()) out << ",";
-        out << " " << *it;
+      for(auto const &it :  throw_ref.exception_list)
+      {
+        if(it != *throw_ref.exception_list.begin()) out << ",";
+        out << " " << it;
       }
 
       if (!is_nil_expr(throw_ref.operand))
@@ -204,11 +205,11 @@ void goto_programt::instructiont::output_instruction(
       const code_cpp_throw_decl_end2t &decl_end =
         to_code_cpp_throw_decl_end2t(code);
 
-      forall_names(it, decl_end.exception_list)
+      for(auto const &it : decl_end.exception_list)
       {
-        if (it != decl_end.exception_list.begin())
+        if (it != *decl_end.exception_list.begin())
           out << ", ";
-        out << *it;
+        out << it;
       }
     }
 
@@ -417,6 +418,15 @@ void goto_programt::copy_from(const goto_programt &src)
   targets_mappingt targets_mapping;
 
   clear();
+
+  // Copy variables
+  local_variables.insert(
+    local_variables.begin(),
+    src.local_variables.begin(),
+    src.local_variables.end());
+
+  // Copy hide flag
+  hide = src.hide;
 
   // Loop over program - 1st time collects targets and copy
 

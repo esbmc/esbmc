@@ -460,8 +460,7 @@ std::string cpp_typecheckt::class_template_identifier(
   const cpp_template_args_non_tct &partial_specialization_args)
 {
   std::string identifier=
-    cpp_identifier_prefix(current_mode)+"::"+
-      cpp_scopes.current_scope().prefix+
+    cpp_scopes.current_scope().prefix+
       "template."+id2string(base_name) + "<";
 
   int counter=0;

@@ -7,7 +7,7 @@ class Gotoprogs(unittest.TestCase):
         # cwd = regression/python
         self.ns, self.opts, self.po = esbmc.init_esbmc_process(['test_data/00_big_endian_01/main.c', '--big-endian', '--bv'])
         self.funcs = self.po.goto_functions
-        self.main = self.funcs.function_map[esbmc.irep_idt('c::main')].body
+        self.main = self.funcs.function_map[esbmc.irep_idt('main')].body
 
     def tearDown(self):
         import esbmc
@@ -33,7 +33,7 @@ class Gotoprogs(unittest.TestCase):
 
     def test_empty2(self):
         import esbmc
-        other_func = self.funcs.function_map[esbmc.irep_idt('c::__ESBMC_atomic_begin')].body
+        other_func = self.funcs.function_map[esbmc.irep_idt('__ESBMC_atomic_begin')].body
         self.assertTrue(other_func.empty(), "Atomic begin should be empty")
 
     def test_update(self):

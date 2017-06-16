@@ -180,7 +180,7 @@ void goto_program_dereferencet::dereference_instruction(
     if (!is_nil_expr(func_call.ret))
       dereference_expr(func_call.ret, checks_only, dereferencet::WRITE);
 
-    for (auto it : func_call.operands)
+    for (auto &it : func_call.operands)
       dereference_expr(it, checks_only, dereferencet::READ);
 
     if (is_dereference2t(func_call.function)) {

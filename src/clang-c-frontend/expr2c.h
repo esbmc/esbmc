@@ -9,9 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_EXPR2C_H
 #define CPROVER_EXPR2C_H
 
-#include <ansi-c/c_qualifiers.h>
 #include <map>
 #include <set>
+#include <util/c_qualifiers.h>
 #include <util/expr.h>
 #include <util/namespace.h>
 #include <util/std_code.h>

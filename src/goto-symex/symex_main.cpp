@@ -196,10 +196,9 @@ goto_symext::symex_step(reachability_treet & art)
     // terminate intrinsic _has_ to run, or we explode.
     if (is_symbol2t(call.function)) {
       const irep_idt &id = to_symbol2t(call.function).thename;
-      if (has_prefix(id.as_string(), "c::__ESBMC")) {
+      if (has_prefix(id.as_string(), "__ESBMC")) {
         cur_state->source.pc++;
-        std::string name = id.as_string().substr(3);
-        run_intrinsic(call, art, name);
+        run_intrinsic(call, art, id.as_string());
         return;
       }
     }

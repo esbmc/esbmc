@@ -29,11 +29,10 @@ bool ansi_c_convert(
 class ansi_c_convertt:public message_streamt
 {
 public:
-  ansi_c_convertt(    
+  ansi_c_convertt(
     const std::string &_module,
     message_handlert &_message_handler):
     message_streamt(_message_handler),
-    language_prefix("c::"),
     module(_module)
   {
   }
@@ -42,25 +41,24 @@ public:
 
   // expressions
   virtual void convert_expr(exprt &expr);
-  
+
   // types
   virtual void convert_type(typet &type);
 
   virtual void convert_type(
     typet &type,
     c_storage_spect &c_storage_spec);
-  
+
 protected:
   virtual void convert_code(codet &code);
-  
+
   virtual void convert_declaration(ansi_c_declarationt &declaration);
-  
-  std::string language_prefix;
+
   const std::string &module;
 
   irep_idt final_id(const irep_idt &id) const
   {
-    return language_prefix+id2string(id);
+    return id2string(id);
   }
 };
 

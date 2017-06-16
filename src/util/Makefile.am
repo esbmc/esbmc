@@ -11,9 +11,9 @@ libutil_la_SOURCES = \
       type_eq.cpp guard.cpp array_name.cpp message_stream.cpp union_find.cpp \
       xml.cpp xml_irep.cpp std_types.cpp std_code.cpp format_constant.cpp \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
-      pointer_arithmetic.cpp signal_catcher.cpp migrate.cpp \
+      signal_catcher.cpp migrate.cpp \
       thread.cpp crypto_hash.cpp type_byte_size.cpp dcutil.cpp \
-      string_constant.cpp c_types.cpp ieee_float.cpp
+      string_constant.cpp c_types.cpp ieee_float.cpp c_qualifiers.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -Wno-bool-compare
 
 utilincludedir = $(includedir)/util
@@ -25,7 +25,7 @@ utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
       i2string.h ieee_float.h irep.h irep2.h irep_serialization.h \
       language.h language_file.h location.h message.h message_stream.h \
       migrate.h mp_arith.h namespace.h numbering.h options.h \
-      parseoptions.h parser.h pointer_arithmetic.h prefix.h \
+      parseoptions.h parser.h prefix.h c_qualifiers.h \
       reference_counting.h rename.h replace_symbol.h signal_catcher.h \
       simplify_expr.h simplify_expr_class.h simplify_utils.h std_code.h \
       std_expr.h std_types.h string2array.h string_constant.h \

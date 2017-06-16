@@ -431,7 +431,7 @@ boolector_convt::get_bv(const type2tc &type, smt_astt a)
         integer2binary(m, type->get_width()),
         integer2string(m),
         migrate_type_back(type)));
-    return constant_fixedbv2tc(type, fbv);
+    return constant_fixedbv2tc(fbv);
   }
   return constant_int2tc(type, m);
 }

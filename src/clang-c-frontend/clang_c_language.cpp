@@ -15,6 +15,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <clang-c-frontend/clang_c_convert.h>
 #include <clang-c-frontend/clang_c_language.h>
 #include <clang-c-frontend/clang_c_main.h>
+#include <clang-c-frontend/expr2c.h>
 #include <fstream>
 #include <sstream>
 
@@ -93,10 +94,10 @@ void clang_c_languaget::build_compiler_args(std::string tmp_dir)
     compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
-  for(auto def : config.ansi_c.defines)
+  for(auto const &def : config.ansi_c.defines)
     compiler_args.push_back("-D" + def);
 
-  for(auto inc : config.ansi_c.include_paths)
+  for(auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
 
   // Ignore ctype defined by the system
@@ -145,7 +146,7 @@ bool clang_c_languaget::parse(
   ASTs.push_back(std::move(AST));
 
   // Use diagnostics to find errors, rather than the return code.
-  for (const auto &astunit : ASTs)
+  for (auto const &astunit : ASTs)
     if (astunit->getDiagnostics().hasErrorOccurred())
       return true;
 
@@ -179,7 +180,7 @@ bool clang_c_languaget::typecheck(
 
 void clang_c_languaget::show_parse(std::ostream& out __attribute__((unused)))
 {
-  for (auto &translation_unit : ASTs)
+  for (auto const &translation_unit : ASTs)
     (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
 }
 
@@ -198,13 +199,13 @@ bool clang_c_languaget::preprocess(
 bool clang_c_languaget::final(contextt& context, message_handlert& message_handler)
 {
   add_cprover_library(context, message_handler);
-  return clang_main(context, "c::", "c::main", message_handler);
+  return clang_main(context, "main", message_handler);
 }
 
 std::string clang_c_languaget::internal_additions()
 {
   std::string intrinsics =
-    "# 1 \"<esbmc_intrinsics.h>\" 1\n"
+    "# 1 \"esbmc_intrinsics.h\" 1\n"
     "void __ESBMC_assume(_Bool assumption);\n"
     "void assert(_Bool assertion);\n"
     "void __ESBMC_assert(_Bool assertion, const char *description);\n"
@@ -234,18 +235,8 @@ std::string clang_c_languaget::internal_additions()
     "unsigned long __ESBMC_alloc_size[1];\n"
 
     // float stuff
-    "_Bool __ESBMC_isnan(double f);\n"
-    "_Bool __ESBMC_isfinite(double f);\n"
-    "_Bool __ESBMC_isinf(double f);\n"
-    "_Bool __ESBMC_isnormal(double f);\n"
     "int __ESBMC_rounding_mode = 0;\n"
-
-    // absolute value
-    "int __ESBMC_abs(int x);\n"
-    "long int __ESBMC_labs(long int x);\n"
-    "double __ESBMC_fabs(double x);\n"
-    "long double __ESBMC_fabsl(long double x);\n"
-    "float __ESBMC_fabsf(float x);\n"
+    "_Bool __ESBMC_floatbv_mode();\n"
 
     // Digital controllers code
     "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
@@ -286,7 +277,7 @@ std::string clang_c_languaget::internal_additions()
     "signed char __VERIFIER_nondet_schar();\n"
     "_Bool __VERIFIER_nondet_bool();\n"
     "float __VERIFIER_nondet_float();\n"
-    "double __VERIFIER_nondet_double();"
+    "double __VERIFIER_nondet_double();\n"
 
     "void __VERIFIER_error();\n"
     "void __VERIFIER_assume(int);\n"
@@ -299,23 +290,21 @@ std::string clang_c_languaget::internal_additions()
 }
 
 bool clang_c_languaget::from_expr(
-  const exprt &expr __attribute__((unused)),
-  std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
+  const exprt &expr,
+  std::string &code,
+  const namespacet &ns)
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  code=expr2c(expr, ns);
+  return false;
 }
 
 bool clang_c_languaget::from_type(
-  const typet &type __attribute__((unused)),
-  std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
+  const typet &type,
+  std::string &code,
+  const namespacet &ns)
 {
-  std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
-  abort();
-  return true;
+  code=type2c(type, ns);
+  return false;
 }
 
 bool clang_c_languaget::to_expr(

@@ -56,7 +56,7 @@ const struct opt_templ esbmc_options[] = {
   { 0, "version", switc, "" },
   { 0, "witness-output", string, "" },
   { 0, "witness-detailed", switc, "" },
-  { 0, "clang-frontend", switc, "" },
+  { 0, "old-frontend", switc, "" },
   { 0, "result-only", switc, "" },
   { 0, "i386-linux", switc, "" },
   { 0, "i386-macos", switc, "" },

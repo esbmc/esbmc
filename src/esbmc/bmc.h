@@ -24,46 +24,11 @@ Author: Daniel Kroening, kroening@kroening.com
 class bmct:public messaget
 {
 public:
-  bmct(const goto_functionst &funcs, optionst &opts,
-      contextt &_context, message_handlert &_message_handler) :
-    messaget(_message_handler),
-    options(opts),
-    context(_context),
-    ns(_context),
-    ui(ui_message_handlert::PLAIN)
-  {
-    interleaving_number = 0;
-    interleaving_failed = 0;
-    uw_loop = 0;
-
-    ltl_results_seen[ltl_res_bad] = 0;
-    ltl_results_seen[ltl_res_failing] = 0;
-    ltl_results_seen[ltl_res_succeeding] = 0;
-    ltl_results_seen[ltl_res_good] = 0;
-
-    if (options.get_bool_option("smt-during-symex")) {
-      runtime_solver = std::shared_ptr<smt_convt>(
-        create_solver_factory("", opts.get_bool_option("int-encoding"), ns, options));
-
-      symex = std::make_shared<reachability_treet>(
-        funcs,
-        ns,
-        options,
-        boost::shared_ptr<runtime_encoded_equationt>(
-          new runtime_encoded_equationt(ns, *runtime_solver)),
-        _context,
-        _message_handler);
-    } else {
-      symex = std::make_shared<reachability_treet>(
-        funcs,
-        ns,
-        options,
-        boost::shared_ptr<symex_target_equationt>(
-          new symex_target_equationt(ns)),
-        _context,
-        _message_handler);
-    }
-  }
+  bmct(
+    const goto_functionst &funcs,
+    optionst &opts,
+    contextt &_context,
+    message_handlert &_message_handler);
 
   optionst &options;
   enum {
@@ -74,11 +39,11 @@ public:
   };
   int ltl_results_seen[4];
 
-  unsigned int interleaving_number;
+  BigInt interleaving_number;
   unsigned int interleaving_failed;
-  unsigned int uw_loop;
 
-  virtual bool run(void);
+  virtual smt_convt::resultt start_bmc();
+  virtual smt_convt::resultt run(boost::shared_ptr<symex_target_equationt> &eq);
   virtual ~bmct() { }
 
   void set_ui(language_uit::uit _ui) { ui=_ui; }
@@ -86,29 +51,38 @@ public:
 protected:
   const contextt &context;
   namespacet ns;
-  std::shared_ptr<smt_convt> runtime_solver;
+  boost::shared_ptr<smt_convt> runtime_solver;
   std::shared_ptr<reachability_treet> symex;
 
   // use gui format
   language_uit::uit ui;
 
-  virtual smt_convt::resultt
-    run_decision_procedure(smt_convt &smt_conv,
-                           symex_target_equationt &equation);
+  virtual smt_convt::resultt run_decision_procedure(
+    boost::shared_ptr<smt_convt> &smt_conv,
+    boost::shared_ptr<symex_target_equationt> &eq);
 
-  virtual void do_cbmc(smt_convt &solver, symex_target_equationt &eq);
-  virtual bool run_solver(symex_target_equationt &equation, smt_convt *solver);
-  virtual void show_vcc(symex_target_equationt &equation);
-  virtual void show_vcc(std::ostream &out, symex_target_equationt &equation);
-  virtual void show_program(symex_target_equationt &equation);
+  virtual void do_cbmc(
+    boost::shared_ptr<smt_convt> &smt_conv,
+    boost::shared_ptr<symex_target_equationt> &eq);
+
+  virtual void show_program(boost::shared_ptr<symex_target_equationt> &eq);
   virtual void report_success();
   virtual void report_failure();
 
   virtual void error_trace(
-    smt_convt &smt_conv, symex_target_equationt &equation);
-  virtual void successful_trace(symex_target_equationt &equation);
-    bool run_thread();
-    int ltl_run_thread(symex_target_equationt *equation);
+    boost::shared_ptr<smt_convt> &smt_conv,
+    boost::shared_ptr<symex_target_equationt> &eq);
+
+  virtual void successful_trace(boost::shared_ptr<symex_target_equationt> &eq);
+
+  virtual void show_vcc(boost::shared_ptr<symex_target_equationt> &eq);
+
+  virtual void show_vcc(
+    std::ostream &out,
+    boost::shared_ptr<symex_target_equationt> &eq);
+
+  smt_convt::resultt run_thread(boost::shared_ptr<symex_target_equationt> &eq);
+  int ltl_run_thread(boost::shared_ptr<symex_target_equationt> &eq);
 };
 
 #endif

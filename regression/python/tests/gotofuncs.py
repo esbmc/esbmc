@@ -14,7 +14,7 @@ class Gotofuncs(unittest.TestCase):
 
     def get_main(self):
         import esbmc
-        return self.funcs.function_map[esbmc.irep_idt('c::main')]
+        return self.funcs.function_map[esbmc.irep_idt('main')]
 
     def test_setup(self):
         self.assertTrue(self.ns != None, "No namespace object generated")
@@ -24,7 +24,7 @@ class Gotofuncs(unittest.TestCase):
     def test_func_list(self):
         # Should contain the main function and a variety of clib stuff
         funcnames = [x.key().as_string() for x in self.funcs.function_map]
-        refnames = ['main', 'c::__ESBMC_assume', 'c::assert', 'c::__ESBMC_assert', 'c::main']
+        refnames = ['__ESBMC_main', 'main']
         for name in refnames:
             self.assertTrue(name in funcnames, "func '{}' should be in function map".format(name))
 

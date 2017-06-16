@@ -6,19 +6,14 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#include <ansi-c/ansi_c_declaration.h>
-#include <ansi-c/c_typecast.h>
-#include <ansi-c/expr2c.h>
-#include <cassert>
-#include <cctype>
-#include <map>
-#include <set>
+#include <clang-c-frontend/expr2c.h>
 #include <util/arith_tools.h>
 #include <util/c_misc.h>
 #include <util/c_types.h>
 #include <util/config.h>
 #include <util/fixedbv.h>
 #include <util/i2string.h>
+#include <util/ieee_float.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
 #include <util/std_types.h>
@@ -1395,16 +1390,6 @@ std::string expr2ct::convert_constant(
         return dest;
       }
 
-#ifndef NDEBUG
-      const ansi_c_declarationt &decl = (const ansi_c_declarationt&)*it;
-      const exprt &v = decl.decl_value();
-
-      if(v.is_not_nil()) {
-        bool res = to_integer(v, i);
-        assert(!res);
-      }
-#endif
-
       ++i;
     }
 
@@ -1521,7 +1506,7 @@ std::string expr2ct::convert_struct(
   bool newline=false;
   unsigned last_size=0;
 
-  for(auto c_it : components)
+  for(auto const &c_it : components)
   {
     if(o_it->type().is_code())
       continue;

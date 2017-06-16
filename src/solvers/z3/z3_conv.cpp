@@ -271,12 +271,9 @@ z3_convt::convert_struct(const std::vector<expr2tc> &members,
                          const std::vector<type2tc> &member_types,
                          const type2tc &type, z3::expr &output)
 {
-
   // Converts a static struct - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
   // propagation.
-  u_int i = 0;
-
   z3::sort sort;
   convert_type(type, sort);
 
@@ -291,10 +288,10 @@ z3_convt::convert_struct(const std::vector<expr2tc> &members,
 #endif
 
   // Populate tuple with members of that struct
-  forall_types(it, member_types) {
+  for(unsigned int i = 0; i < member_types.size(); i++)
+  {
     const z3_smt_ast *tmp = z3_smt_downcast(convert_ast(members[i]));
     args[i] = tmp->e;
-    i++;
   }
 
   // Create tuple itself, return to caller. This is a lump of data, we don't
@@ -783,28 +780,26 @@ smt_astt z3_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
 
   // Convert each type
-  if(is_bool_type(cast.from)) {
+  if(is_bool_type(cast.from))
+  {
     // For bools, there is no direct conversion, so the cast is
     // transformed into fpa = b ? 1 : 0;
-    expr2tc zero_expr;
-    migrate_expr(gen_zero(migrate_type_back(cast.type)), zero_expr);
-
-    expr2tc one_expr;
-    migrate_expr(gen_one(migrate_type_back(cast.type)), one_expr);
-
     const smt_ast *args[3];
     args[0] = from;
-    args[1] = convert_ast(one_expr);
-    args[2] = convert_ast(zero_expr);
+    args[1] = convert_ast(gen_true_expr());
+    args[2] = convert_ast(gen_false_expr());
 
     return mk_func_app(s, SMT_FUNC_ITE, args, 3);
-  } if(is_unsignedbv_type(cast.from)) {
-    return new_ast(z3_ctx.fpa_from_unsigned(mrm_const->e, mfrom->e, zs->s), s);
-  } else if(is_signedbv_type(cast.from)) {
-    return new_ast(z3_ctx.fpa_from_signed(mrm_const->e, mfrom->e, zs->s), s);
-  } else if(is_floatbv_type(cast.from)) {
-    return new_ast(z3_ctx.fpa_to_fpa(mrm_const->e, mfrom->e, zs->s), s);
   }
+
+  if(is_unsignedbv_type(cast.from))
+    return new_ast(z3_ctx.fpa_from_unsigned(mrm_const->e, mfrom->e, zs->s), s);
+
+  if(is_signedbv_type(cast.from))
+    return new_ast(z3_ctx.fpa_from_signed(mrm_const->e, mfrom->e, zs->s), s);
+
+  if(is_floatbv_type(cast.from))
+    return new_ast(z3_ctx.fpa_to_fpa(mrm_const->e, mfrom->e, zs->s), s);
 
   abort();
 }
@@ -825,7 +820,7 @@ smt_astt z3_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
 smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(2));
+  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
   const z3_smt_ast *mrm = z3_smt_downcast(rm);
 
   unsigned ew = to_floatbv_type(expr->type).exponent;
@@ -833,10 +828,13 @@ smt_astt z3_convt::mk_smt_fpbv_arith_ops(const expr2tc& expr)
   smt_sortt s = mk_sort(SMT_SORT_FLOATBV, ew, sw);
 
   // Sides
-  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
+  smt_astt s1 = convert_ast(*expr->get_sub_expr(1));
   const z3_smt_ast *ms1 = z3_smt_downcast(s1);
 
-  smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
+  if(is_ieee_sqrt2t(expr))
+    return new_ast(z3_ctx.fpa_sqrt(mrm->e, ms1->e), s);
+
+  smt_astt s2 = convert_ast(*expr->get_sub_expr(2));
   const z3_smt_ast *ms2 = z3_smt_downcast(s2);
 
   switch (expr->expr_id) {
@@ -1134,8 +1132,9 @@ z3_convt::tuple_get(const expr2tc &expr)
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  forall_types(it, strct.members) {
-    member2tc memb(*it, expr, strct.member_names[i]);
+  for(auto const &it : strct.members)
+  {
+    member2tc memb(it, expr, strct.member_names[i]);
     outstruct.get()->datatype_members.push_back(get(memb));
     i++;
   }
@@ -1189,7 +1188,7 @@ z3_convt::get_bv(const type2tc &type, smt_astt a)
         integer2binary(m, type->get_width()),
         integer2string(m),
         migrate_type_back(type)));
-    return constant_fixedbv2tc(type, fbv);
+    return constant_fixedbv2tc(fbv);
   }
   return constant_int2tc(type, m);
 }
@@ -1219,7 +1218,7 @@ expr2tc z3_convt::get_fpbv(const type2tc& t, smt_astt a)
   ieee_floatt number(spec);
   number.unpack(BigInt(Z3_get_numeral_string(z3_ctx, v)));
 
-  return constant_floatbv2tc(t, number);
+  return constant_floatbv2tc(number);
 }
 
 expr2tc

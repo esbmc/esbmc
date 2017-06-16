@@ -201,10 +201,15 @@ public:
      */
     unsigned int va_index;
 
+    /** Record the entry guard of the function */
     guardt entry_guard;
 
+    /** Record if the function body is hidden */
+    bool hidden;
+
     framet(unsigned int thread_id) :
-      return_value(expr2tc())
+      return_value(expr2tc()),
+      hidden(false)
     {
       level1.thread_id = thread_id;
     }

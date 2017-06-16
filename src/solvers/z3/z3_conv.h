@@ -9,10 +9,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #ifndef CPROVER_PROP_Z3_CONV_H
 #define CPROVER_PROP_Z3_CONV_H
 
-#include <boost/multi_index/hashed_index.hpp>
-#include <boost/multi_index/member.hpp>
-#include <boost/multi_index/ordered_index.hpp>
-#include <boost/multi_index_container.hpp>
 #include <cstdint>
 #include <cstring>
 #include <map>

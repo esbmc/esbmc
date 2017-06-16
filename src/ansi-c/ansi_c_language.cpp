@@ -14,43 +14,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_link.h>
 #include <ansi-c/c_main.h>
 #include <ansi-c/c_preprocess.h>
-#include <ansi-c/expr2c.h>
 #include <ansi-c/gcc_builtin_headers.h>
 #include <ansi-c/trans_unit.h>
+#include <clang-c-frontend/expr2c.h>
 #include <cstring>
 #include <fstream>
 #include <sstream>
 #include <util/config.h>
 #include <util/expr_util.h>
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::modules_provided
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void ansi_c_languaget::modules_provided(std::set<std::string> &modules)
-{
-  modules.insert(translation_unit(parse_path));
-}
-
-/*******************************************************************\
-
-Function: internal_additions
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void internal_additions(std::string &code)
 {
@@ -78,18 +49,8 @@ static void internal_additions(std::string &code)
     "extern const char __func__[];\n"
 
     // float stuff
-    "_Bool __ESBMC_isnan(double f);\n"
-    "_Bool __ESBMC_isfinite(double f);\n"
-    "_Bool __ESBMC_isinf(double f);\n"
-    "_Bool __ESBMC_isnormal(double f);\n"
     "int __ESBMC_rounding_mode = 0;\n"
-
-    // absolute value
-    "int __ESBMC_abs(int x);\n"
-    "long int __ESBMC_labs(long int x);\n"
-    "double __ESBMC_fabs(double x);\n"
-    "long double __ESBMC_fabsl(long double x);\n"
-    "float __ESBMC_fabsf(float x);\n"
+    "_Bool __ESBMC_floatbv_mode();\n"
 
     // Digital controllers code
     "void __ESBMC_generate_cascade_controllers(float * cden, int csize, float * cout, int coutsize, _Bool isDenominator);\n"
@@ -109,24 +70,26 @@ static void internal_additions(std::string &code)
     "unsigned long nondet_ulong();\n"
     "short nondet_short();\n"
     "unsigned short nondet_ushort();\n"
-    "short nondet_short();\n"
-    "unsigned short nondet_ushort();\n"
     "char nondet_char();\n"
     "unsigned char nondet_uchar();\n"
     "signed char nondet_schar();\n"
+    "_Bool nondet_bool();\n"
+    "float nondet_float();\n"
+    "double nondet_double();"
 
-    // And again, for TACAS VERIFIER versions,
+    // TACAS definitions,
     "int __VERIFIER_nondet_int();\n"
     "unsigned int __VERIFIER_nondet_uint();\n"
     "long __VERIFIER_nondet_long();\n"
     "unsigned long __VERIFIER_nondet_ulong();\n"
     "short __VERIFIER_nondet_short();\n"
     "unsigned short __VERIFIER_nondet_ushort();\n"
-    "short __VERIFIER_nondet_short();\n"
-    "unsigned short __VERIFIER_nondet_ushort();\n"
     "char __VERIFIER_nondet_char();\n"
     "unsigned char __VERIFIER_nondet_uchar();\n"
     "signed char __VERIFIER_nondet_schar();\n"
+    "_Bool __VERIFIER_nondet_bool();\n"
+    "float __VERIFIER_nondet_float();\n"
+    "double __VERIFIER_nondet_double();\n"
 
     "const char *__PRETTY_FUNCTION__;\n"
     "const char *__FILE__ = \"\";\n"
@@ -137,18 +100,6 @@ static void internal_additions(std::string &code)
 
     "\n";
 }
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::preprocess
-
-  Inputs:
-
- Outputs:
-
- Purpose: ANSI-C preprocessing
-
-\*******************************************************************/
 
 bool ansi_c_languaget::preprocess(
   const std::string &path,
@@ -178,18 +129,6 @@ bool ansi_c_languaget::preprocess(
 
   return c_preprocess(path, outstream, false, message_handler);
 }
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool ansi_c_languaget::parse(
   const std::string &path,
@@ -247,18 +186,6 @@ bool ansi_c_languaget::parse(
   return result;
 }
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ansi_c_languaget::typecheck(
   contextt &context,
   const std::string &module,
@@ -278,73 +205,25 @@ bool ansi_c_languaget::typecheck(
   return false;
 }
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ansi_c_languaget::final(
   contextt &context,
   message_handlert &message_handler)
 {
   if(c_final(context, message_handler)) return true;
-  if(c_main(context, "c::", "c::main", message_handler)) return true;
+  if(c_main(context, "main", message_handler)) return true;
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::show_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void ansi_c_languaget::show_parse(std::ostream &out)
 {
   parse_tree.output(out);
 }
 
-/*******************************************************************\
-
-Function: new_ansi_c_language
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 languaget *new_ansi_c_language()
 {
   return new ansi_c_languaget;
 }
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::from_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool ansi_c_languaget::from_expr(
   const exprt &expr,
@@ -355,18 +234,6 @@ bool ansi_c_languaget::from_expr(
   return false;
 }
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::from_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ansi_c_languaget::from_type(
   const typet &type,
   std::string &code,
@@ -375,18 +242,6 @@ bool ansi_c_languaget::from_type(
   code=type2c(type, ns);
   return false;
 }
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::to_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool ansi_c_languaget::to_expr(
   const std::string &code __attribute__((unused)),
@@ -432,33 +287,9 @@ bool ansi_c_languaget::to_expr(
   return result;
 }
 
-/*******************************************************************\
-
-Function: ansi_c_languaget::~ansi_c_languaget
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 ansi_c_languaget::~ansi_c_languaget()
 {
 }
-
-/*******************************************************************\
-
-Function: ansi_c_languaget::merge_context
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool ansi_c_languaget::merge_context(
   contextt &dest,

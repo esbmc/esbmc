@@ -6,7 +6,7 @@ Author:
 
 \*******************************************************************/
 
-#include <ansi-c/c_qualifiers.h>
+#include <util/c_qualifiers.h>
 #include <cpp/cpp_typecheck.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -1087,10 +1087,10 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
   else if(to.id() == "bool")
   {
     std::string name = expr.type().identifier().as_string();
-    if(name == "cpp::std::tag.istream"
-      || name == "cpp::std::tag.ostream"
-      || name == "cpp::std::tag.iostream"
-      || name == "cpp::std::tag.ifstream")
+    if(name == "std::tag.istream"
+      || name == "std::tag.ostream"
+      || name == "std::tag.iostream"
+      || name == "std::tag.ifstream")
     {
       exprt nondet_expr("nondet_symbol", bool_typet());
       new_expr.swap(nondet_expr);
@@ -1907,7 +1907,7 @@ bool cpp_typecheckt::dynamic_typecast(
   {
     exprt typeid_function = new_expr;
     exprt function = typeid_function;
-    irep_idt badcast_identifier = "cpp::std::tag.bad_cast";
+    irep_idt badcast_identifier = "std::tag.bad_cast";
 
     // We must check if the user included typeinfo
     const symbolt *bad_cast_symbol;

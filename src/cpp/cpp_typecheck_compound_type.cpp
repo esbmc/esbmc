@@ -6,7 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
-#include <ansi-c/c_qualifiers.h>
+#include <util/c_qualifiers.h>
 #include <cpp/cpp_convert_type.h>
 #include <cpp/cpp_declarator_converter.h>
 #include <cpp/cpp_name.h>
@@ -159,7 +159,6 @@ cpp_typecheckt::fetch_compound_name(
 
   // See: typecheck_compound_type for full details.
   const std::string symbol_name=
-    cpp_identifier_prefix("C++")+"::"+
     dest_scope->prefix+
     "tag."+identifier;
 
@@ -223,9 +222,8 @@ void cpp_typecheckt::typecheck_compound_type(
   // All types are dumped in the 'cpp' namespace. Types declared in a piece of
   // code with 'c' linkage are no different from C++ types, and otherwise this
   // leads to type conflicts when calling code with a different linkage. (i.e.,
-  // a cpp::foo pointer isn't compatible with a c::foo pointer).
+  // a foo pointer isn't compatible with a foo pointer).
   const irep_idt symbol_name=
-    cpp_identifier_prefix("C++")+"::"+
     dest_scope->prefix+
     "tag."+identifier;
 
@@ -439,7 +437,6 @@ void cpp_typecheckt::typecheck_compound_declarator(
   struct_typet::componentt component;
 
   irep_idt identifier=
-    cpp_identifier_prefix(current_mode)+"::"+
     cpp_scopes.current_scope().prefix+
     base_name;
 
@@ -1643,7 +1640,6 @@ void cpp_typecheckt::convert_compound_ano_union(
 
   // All types are in 'cpp' mode.
   irep_idt identifier=
-    cpp_identifier_prefix("C++")+"::"+
     cpp_scopes.current_scope().prefix+
     base_name.c_str();
 

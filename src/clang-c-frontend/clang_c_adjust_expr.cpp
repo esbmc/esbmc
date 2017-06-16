@@ -13,6 +13,7 @@
 #include <util/c_types.h>
 #include <util/cprover_prefix.h>
 #include <util/expr_util.h>
+#include <util/ieee_float.h>
 #include <util/prefix.h>
 #include <util/std_code.h>
 
@@ -52,7 +53,7 @@ void clang_c_adjust::adjust_symbol(symbolt& symbol)
   if(!symbol.value.is_nil())
     adjust_expr(symbol.value);
 
-  if(symbol.type.is_code() && symbol.name=="c::main")
+  if(symbol.type.is_code() && symbol.name=="main")
     adjust_argc_argv(symbol);
 }
 
@@ -704,7 +705,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "isnanf" ||
             identifier==CPROVER_PREFIX "isnand" ||
             identifier==CPROVER_PREFIX "isnanld" ||
-            identifier=="c::__builtin_isnan")
+            identifier=="__builtin_isnan")
     {
       if(expr.arguments().size() != 1)
       {
@@ -735,12 +736,12 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "inff" ||
             identifier==CPROVER_PREFIX "inf" ||
             identifier==CPROVER_PREFIX "infld" ||
-            identifier=="c::__builtin_inff" ||
-            identifier=="c::__builtin_inf" ||
-            identifier=="c::__builtin_infld" ||
-            identifier=="c::__builtin_huge_valf" ||
-            identifier=="c::__builtin_huge_val" ||
-            identifier=="c::__builtin_huge_vall")
+            identifier=="__builtin_inff" ||
+            identifier=="__builtin_inf" ||
+            identifier=="__builtin_infld" ||
+            identifier=="__builtin_huge_valf" ||
+            identifier=="__builtin_huge_val" ||
+            identifier=="__builtin_huge_vall")
     {
       typet t = expr.type();
 
@@ -766,9 +767,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "nanf" ||
             identifier==CPROVER_PREFIX "nan" ||
             identifier==CPROVER_PREFIX "nanld" ||
-            identifier=="c::__builtin_nanf" ||
-            identifier=="c::__builtin_nan" ||
-            identifier=="c::__builtin_nanl")
+            identifier=="__builtin_nanf" ||
+            identifier=="__builtin_nan" ||
+            identifier=="__builtin_nanl")
     {
       typet t = expr.type();
 
@@ -812,10 +813,10 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
             identifier==CPROVER_PREFIX "isinff" ||
             identifier==CPROVER_PREFIX "isinfd" ||
             identifier==CPROVER_PREFIX "isinfld" ||
-            identifier=="c::__builtin_isinf" ||
-            identifier=="c::__builtin_isinff" ||
-            identifier=="c::__builtin_isinfd"||
-            identifier=="c::__builtin_isinfld")
+            identifier=="__builtin_isinf" ||
+            identifier=="__builtin_isinff" ||
+            identifier=="__builtin_isinfd"||
+            identifier=="__builtin_isinfld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -831,9 +832,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "isnormalf" ||
             identifier==CPROVER_PREFIX "isnormald" ||
             identifier==CPROVER_PREFIX "isnormalld" ||
-            identifier=="c::__builtin_isnormalf" ||
-            identifier=="c::__builtin_isnormald" ||
-            identifier=="c::__builtin_isnormalld")
+            identifier=="__builtin_isnormalf" ||
+            identifier=="__builtin_isnormald" ||
+            identifier=="__builtin_isnormalld")
     {
       if(expr.arguments().size() != 1)
       {
@@ -849,9 +850,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
     else if(identifier==CPROVER_PREFIX "signf" ||
             identifier==CPROVER_PREFIX "signd" ||
             identifier==CPROVER_PREFIX "signld" ||
-            identifier=="c::__builtin_signbit" ||
-            identifier=="c::__builtin_signbitf" ||
-            identifier=="c::__builtin_signbitl")
+            identifier=="__builtin_signbit" ||
+            identifier=="__builtin_signbitf" ||
+            identifier=="__builtin_signbitl")
     {
       if(expr.arguments().size() != 1)
       {
@@ -864,7 +865,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       sign_expr.operands() = expr.arguments();
       expr.swap(sign_expr);
     }
-    else if(identifier == "c::__builtin_expect")
+    else if(identifier == "__builtin_expect")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -877,7 +878,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       exprt tmp = expr.arguments()[0];
       expr.swap(tmp);
     }
-    else if(identifier == "c::__builtin_isgreater")
+    else if(identifier == "__builtin_isgreater")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -892,7 +893,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 
       expr.swap(op);
     }
-    else if(identifier == "c::__builtin_isgreaterequal")
+    else if(identifier == "__builtin_isgreaterequal")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -907,7 +908,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 
       expr.swap(op);
     }
-    else if(identifier == "c::__builtin_isless")
+    else if(identifier == "__builtin_isless")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -922,7 +923,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 
       expr.swap(op);
     }
-    else if(identifier == "c::__builtin_islessequal")
+    else if(identifier == "__builtin_islessequal")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -937,7 +938,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 
       expr.swap(op);
     }
-    else if(identifier == "c::__builtin_islessgreater")
+    else if(identifier == "__builtin_islessgreater")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -958,7 +959,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
 
       expr.swap(op);
     }
-    else if(identifier == "c::__builtin_isunordered")
+    else if(identifier == "__builtin_isunordered")
     {
       // this is a gcc extension to provide branch prediction
       if(expr.arguments().size() != 2)
@@ -1006,6 +1007,31 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt& expr)
       }
 
       exprt new_expr("ieee_fma", expr.type());
+      new_expr.operands() = expr.arguments();
+      expr.swap(new_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "floatbv_mode")
+    {
+      exprt new_expr;
+      if(config.ansi_c.use_fixed_for_float)
+        new_expr = false_exprt();
+      else
+        new_expr = true_exprt();
+
+      expr.swap(new_expr);
+    }
+    else if(identifier==CPROVER_PREFIX "sqrtf" ||
+            identifier==CPROVER_PREFIX "sqrtd" ||
+            identifier==CPROVER_PREFIX "sqrtld")
+    {
+      if(expr.arguments().size() != 1)
+      {
+        std::cout << "sqrt expects one operand" << std::endl;
+        expr.dump();
+        abort();
+      }
+
+      exprt new_expr("ieee_sqrt", expr.type());
       new_expr.operands() = expr.arguments();
       expr.swap(new_expr);
     }
@@ -1115,7 +1141,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
 
   symbolt argc_symbol;
   argc_symbol.base_name = "argc";
-  argc_symbol.name = "c::argc'";
+  argc_symbol.name = "argc'";
   argc_symbol.type = op0.type();
   argc_symbol.static_lifetime = true;
   argc_symbol.lvalue = true;
@@ -1133,7 +1159,7 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
 
   symbolt argv_symbol;
   argv_symbol.base_name = "argv";
-  argv_symbol.name = "c::argv'";
+  argv_symbol.name = "argv'";
   argv_symbol.type = array_typet(op1.type().subtype(), size_expr);
   argv_symbol.static_lifetime = true;
   argv_symbol.lvalue = true;
@@ -1148,16 +1174,17 @@ void clang_c_adjust::adjust_argc_argv(const symbolt& main_symbol)
 
     symbolt envp_size_symbol;
     envp_size_symbol.base_name = "envp_size";
-    envp_size_symbol.name = "c::envp_size'";
+    envp_size_symbol.name = "envp_size'";
     envp_size_symbol.type = op0.type(); // same type as argc!
     envp_size_symbol.static_lifetime = true;
+    envp_size_symbol.is_used = true;
 
     symbolt *envp_new_size_symbol;
     context.move(envp_size_symbol, envp_new_size_symbol);
 
     symbolt envp_symbol;
     envp_symbol.base_name = "envp";
-    envp_symbol.name = "c::envp'";
+    envp_symbol.name = "envp'";
     envp_symbol.type = op2.type();
     envp_symbol.static_lifetime = true;
     envp_symbol.is_used = true;
@@ -1230,6 +1257,6 @@ void clang_c_adjust::adjust_operands(exprt& expr)
   if(!expr.has_operands())
     return;
 
-  for(auto & op : expr.operands())
+  for(auto &op : expr.operands())
     adjust_expr(op);
 }

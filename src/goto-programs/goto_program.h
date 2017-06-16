@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cassert>
 #include <ostream>
 #include <set>
-#include <util/irep2.h>
+#include <util/irep2_utils.h>
 #include <util/location.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
@@ -84,9 +84,10 @@ public:
     return *this;
   }
 
+  bool hide;
+
   // local variables
   typedef std::list<irep_idt> local_variablest;
-
   local_variablest local_variables;
 
   void add_local_variable(const irep_idt &id)
@@ -164,14 +165,13 @@ public:
     inline void make_atomic_begin() { clear(ATOMIC_BEGIN); }
     inline void make_atomic_end() { clear(ATOMIC_END); }
 
-    inline void make_goto(std::list<class instructiont>::iterator _target)
+    inline void make_goto(targett _target)
     {
       make_goto();
       targets.push_back(_target);
     }
 
-    inline void make_goto(std::list<class instructiont>::iterator _target,
-                          const expr2tc &g)
+    inline void make_goto(targett _target, const expr2tc &g)
     {
       make_goto(_target);
       guard=g;
@@ -181,7 +181,7 @@ public:
     inline bool is_return       () const { return type==RETURN;        }
     inline bool is_assign       () const { return type==ASSIGN;        }
     inline bool is_function_call() const { return type==FUNCTION_CALL; }
-    inline bool is_throw        () const { return type==THROW; }
+    inline bool is_throw        () const { return type==THROW;         }
     inline bool is_catch        () const { return type==CATCH;         }
     inline bool is_skip         () const { return type==SKIP;          }
     inline bool is_location     () const { return type==LOCATION;      }
@@ -325,8 +325,7 @@ public:
   //! Appends the given program, which is destroyed
   inline void destructive_append(goto_programt &p)
   {
-    instructions.splice(instructions.end(),
-                        p.instructions);
+    instructions.splice(instructions.end(), p.instructions);
   }
 
   //! Inserts the given program at the given location.
@@ -335,8 +334,7 @@ public:
     targett target,
     goto_programt &p)
   {
-    instructions.splice(target,
-                        p.instructions);
+    instructions.splice(target, p.instructions);
   }
 
   //! Adds an instruction at the end.
@@ -408,7 +406,7 @@ public:
   }
 
   //! Constructor
-  goto_programt()
+  goto_programt() : hide(false)
   {
   }
 

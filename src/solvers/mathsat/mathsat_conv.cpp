@@ -132,39 +132,40 @@ mathsat_convt::get_bool(const smt_ast *a)
   msat_free(msat_term_repr(t));
 }
 
-BigInt
-mathsat_convt::get_bv(const smt_ast *a)
+expr2tc
+mathsat_convt::get_bv(const type2tc &type, smt_astt a)
 {
-  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
-
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
-  msat_term t = msat_get_model_value(env, mast->t);
-  check_msat_error(t);
-
-  // GMP rational value object.
-  mpq_t val;
-  mpq_init(val);
-
-  msat_term_to_number(env, t, val);
-  check_msat_error(t);
-  msat_free(msat_term_repr(t));
-
-  mpz_t num;
-  mpz_init(num);
-  mpz_set(num, mpq_numref(val));
-  char buffer[mpz_sizeinbase(num, 10) + 2];
-  mpz_get_str(buffer, 10, num);
-
-  char *foo = buffer;
-  int64_t finval = strtoll(buffer, &foo, 10);
-
-  if (buffer[0] != '\0' && (foo == buffer || *foo != '\0')) {
-    std::cerr << "Couldn't parse string representation of number \""
-              << buffer << "\"" << std::endl;
-    abort();
-  }
-
-  return BigInt(finval);
+//  assert(a->sort->id >= SMT_SORT_SBV || a->sort->id <= SMT_SORT_FIXEDBV);
+//
+//  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
+//  msat_term t = msat_get_model_value(env, mast->t);
+//  check_msat_error(t);
+//
+//  // GMP rational value object.
+//  mpq_t val;
+//  mpq_init(val);
+//
+//  msat_term_to_number(env, t, val);
+//  check_msat_error(t);
+//  msat_free(msat_term_repr(t));
+//
+//  mpz_t num;
+//  mpz_init(num);
+//  mpz_set(num, mpq_numref(val));
+//  char buffer[mpz_sizeinbase(num, 10) + 2];
+//  mpz_get_str(buffer, 10, num);
+//
+//  char *foo = buffer;
+//  int64_t finval = strtoll(buffer, &foo, 10);
+//
+//  if (buffer[0] != '\0' && (foo == buffer || *foo != '\0')) {
+//    std::cerr << "Couldn't parse string representation of number \""
+//              << buffer << "\"" << std::endl;
+//    abort();
+//  }
+//
+//  return BigInt(finval);
+  return expr2tc();
 }
 
 expr2tc mathsat_convt::get_fpbv(const type2tc& _t, smt_astt a)
@@ -196,7 +197,7 @@ expr2tc mathsat_convt::get_fpbv(const type2tc& _t, smt_astt a)
   ieee_floatt number(spec);
   number.unpack(BigInt(buffer));
 
-  return constant_floatbv2tc(_t, number);
+  return constant_floatbv2tc(number);
 }
 
 expr2tc
@@ -720,28 +721,26 @@ smt_astt mathsat_convt::mk_smt_typecast_to_fpbv(const typecast2t &cast)
   unsigned ew = s->get_data_width() - sw;
 
   msat_term t;
-  if(is_bool_type(cast.from)) {
+  if(is_bool_type(cast.from))
+  {
     // For bools, there is no direct conversion, so the cast is
     // transformed into fpa = b ? 1 : 0;
-    expr2tc zero_expr;
-    migrate_expr(gen_zero(migrate_type_back(cast.type)), zero_expr);
-
-    expr2tc one_expr;
-    migrate_expr(gen_one(migrate_type_back(cast.type)), one_expr);
-
     const smt_ast *args[3];
     args[0] = from;
-    args[1] = convert_ast(one_expr);
-    args[2] = convert_ast(zero_expr);
+    args[1] = convert_ast(gen_true_expr());
+    args[2] = convert_ast(gen_false_expr());
 
     return mk_func_app(s, SMT_FUNC_ITE, args, 3);
-  } else if(is_unsignedbv_type(cast.from)) {
-    t = msat_make_fp_from_ubv(env, ew, sw, mrm->t, mfrom->t);
-  } else if(is_signedbv_type(cast.from)) {
-    t = msat_make_fp_from_sbv(env, ew, sw, mrm->t, mfrom->t);
-  } else if(is_floatbv_type(cast.from)) {
-    t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
   }
+
+  if(is_unsignedbv_type(cast.from))
+    t = msat_make_fp_from_ubv(env, ew, sw, mrm->t, mfrom->t);
+
+  if(is_signedbv_type(cast.from))
+    t = msat_make_fp_from_sbv(env, ew, sw, mrm->t, mfrom->t);
+
+  if(is_floatbv_type(cast.from))
+    t = msat_make_fp_cast(env, ew, sw, mrm->t, mfrom->t);
 
   check_msat_error(t);
   return new mathsat_smt_ast(this, s, t);
@@ -767,32 +766,47 @@ smt_astt mathsat_convt::mk_smt_nearbyint_from_float(const nearbyint2t& expr)
 smt_astt mathsat_convt::mk_smt_fpbv_arith_ops(const expr2tc& expr)
 {
   // Rounding mode symbol
-  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(2));
+  smt_astt rm = convert_rounding_mode(*expr->get_sub_expr(0));
   const mathsat_smt_ast *mrm = mathsat_ast_downcast(rm);
 
   // Sides
-  smt_astt s1 = convert_ast(*expr->get_sub_expr(0));
+  smt_astt s1 = convert_ast(*expr->get_sub_expr(1));
   const mathsat_smt_ast *ms1 = mathsat_ast_downcast(s1);
 
-  smt_astt s2 = convert_ast(*expr->get_sub_expr(1));
-  const mathsat_smt_ast *ms2 = mathsat_ast_downcast(s2);
-
   msat_term t;
-  switch (expr->expr_id) {
-    case expr2t::ieee_add_id:
-      t = msat_make_fp_plus(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_sub_id:
-      t = msat_make_fp_minus(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_mul_id:
-      t = msat_make_fp_times(env, mrm->t, ms1->t, ms2->t);
-      break;
-    case expr2t::ieee_div_id:
-      t = msat_make_fp_div(env, mrm->t, ms1->t, ms2->t);
-      break;
-    default:
-      abort();
+  if(is_ieee_sqrt2t(expr))
+  {
+    t = msat_make_fp_sqrt(env, mrm->t, ms1->t);
+  }
+  else
+  {
+    smt_astt s2 = convert_ast(*expr->get_sub_expr(2));
+    const mathsat_smt_ast *ms2 = mathsat_ast_downcast(s2);
+
+    switch (expr->expr_id)
+    {
+      case expr2t::ieee_add_id:
+        t = msat_make_fp_plus(env, mrm->t, ms1->t, ms2->t);
+        break;
+      case expr2t::ieee_sub_id:
+        t = msat_make_fp_minus(env, mrm->t, ms1->t, ms2->t);
+        break;
+      case expr2t::ieee_mul_id:
+        t = msat_make_fp_times(env, mrm->t, ms1->t, ms2->t);
+        break;
+      case expr2t::ieee_div_id:
+        t = msat_make_fp_div(env, mrm->t, ms1->t, ms2->t);
+        break;
+      case expr2t::ieee_fma_id:
+      {
+        // Mathsat doesn't support fma for now, if we force
+        // the multiplication, it will provide the wrong answer
+        std::cerr << "Mathsat doesn't support the fused multiply-add "
+            "(fp.fma) operator" << std::endl;
+      }
+      default:
+        abort();
+    }
   }
   check_msat_error(t);
 

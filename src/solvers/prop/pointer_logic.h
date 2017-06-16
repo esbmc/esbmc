@@ -29,45 +29,45 @@ public:
   {
     unsigned object;
     mp_integer offset;
-    
+
     pointert()
     {
     }
-    
+
     pointert(unsigned _obj, mp_integer _off):object(_obj), offset(_off)
     {
     }
   };
-  
+
   // converts an (object,offset) pair to an expression
   expr2tc pointer_expr(const pointert &pointer, const type2tc &type) const;
 
   // converts an (object,0) pair to an expression
   expr2tc pointer_expr(unsigned object, const type2tc &type) const;
-    
+
   ~pointer_logict();
   pointer_logict();
-  
+
   unsigned add_object(const expr2tc &expr);
 
-  // number of NULL object  
+  // number of NULL object
   unsigned get_null_object() const
   {
     return null_object;
   }
 
-  // number of INVALID object  
+  // number of INVALID object
   unsigned get_invalid_object() const
   {
     return invalid_object;
   }
-  
+
   unsigned get_free_obj_num() {
     return objects.size() - 1 + ++obj_num_offset;
   }
 
 protected:
-  unsigned null_object, invalid_object;  
+  unsigned null_object, invalid_object;
 
   expr2tc pointer_expr(const mp_integer &offset, const expr2t &object) const;
 
