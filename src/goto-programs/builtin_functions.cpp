@@ -8,6 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <cassert>
 #include <goto-programs/goto_convert_class.h>
+#include <regex>
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 #include <util/cprover_prefix.h>
@@ -556,17 +557,12 @@ void goto_convertt::do_function_call_symbol(
     throw "error: function `"+id2string(identifier)+"' type mismatch: expected code";
   }
 
-  std::string base_name, base_name_upper;
-  base_name = base_name_upper = symbol->base_name.as_string();
+  std::string base_name = symbol->base_name.as_string();
 
-  std::transform(
-    base_name_upper.begin(),
-    base_name_upper.end(),
-    base_name_upper.begin(),
-    ::toupper);
+  // Replace __VERIFIER by __ESBMC
+  base_name = std::regex_replace(base_name, std::regex("VERIFIER"), "ESBMC");
 
-  bool is_assume = ((base_name_upper == "__ESBMC_ASSUME")
-                    || (base_name_upper == "__VERIFIER_ASSUME"));
+  bool is_assume = (base_name == "__ESBMC_assume");
   bool is_assert = (base_name == "assert");
 
   if(is_assume || is_assert)
@@ -590,9 +586,8 @@ void goto_convertt::do_function_call_symbol(
     // ASSUME/ASSERT insns are boolean exprs.  So, if the given argument to
     // this function isn't a bool, typecast it.  We can't rely on the C/C++
     // type system to ensure that.
-    if (!is_bool_type(t->guard->type)) {
+    if (!is_bool_type(t->guard->type))
       t->guard = typecast2tc(get_bool_type(), t->guard);
-    }
 
     t->location=function.location();
     t->location.user_provided(true);
@@ -606,7 +601,7 @@ void goto_convertt::do_function_call_symbol(
       throw id2string(base_name)+" expected not to have LHS";
     }
   }
-  else if(base_name_upper == "__ESBMC_ASSERT")
+  else if(base_name == "__ESBMC_assert")
   {
     if(arguments.size()!=2)
     {
@@ -614,13 +609,13 @@ void goto_convertt::do_function_call_symbol(
       throw "`"+id2string(base_name)+"' expected to have two arguments";
     }
 
-    const std::string &description = get_string_constant(arguments[1]);
-
     if(options.get_bool_option("no-assertions"))
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
     migrate_expr(arguments[0], t->guard);
+
+    const std::string &description = get_string_constant(arguments[1]);
     t->location=function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -636,18 +631,16 @@ void goto_convertt::do_function_call_symbol(
   {
     do_printf(lhs, function, arguments, dest);
   }
-  else if((base_name_upper == "__ESBMC_ATOMIC_BEGIN")
-          || (base_name_upper == "__VERIFIER_ATOMIC_BEGIN"))
+  else if(base_name == "__ESBMC_atomic_begin")
   {
     do_atomic_begin(lhs, function, arguments, dest);
   }
-  else if((base_name_upper == "__ESBMC_ATOMIC_END")
-          || (base_name_upper == "__VERIFIER_ATOMIC_END"))
+  else if(base_name == "__ESBMC_atomic_end")
   {
     do_atomic_end(lhs, function, arguments, dest);
   }
-  else if(has_prefix(id2string(base_name_upper), "NONDET_")
-          || has_prefix(id2string(base_name_upper), "__VERIFIER_NONDET_"))
+  else if(has_prefix(id2string(base_name), "nondet_")
+          || has_prefix(id2string(base_name), "__ESBMC_nondet_"))
   {
     // make it a side effect if there is an LHS
     if(lhs.is_nil()) return;
