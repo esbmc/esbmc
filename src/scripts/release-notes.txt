@@ -1,5 +1,15 @@
 Release Notes of the ESBMC model checker
 
+*** Version 4.3
+* New support to encode square root operations using fp.sqrt
+* Improvements to cex generation
+* Improvements to status messages
+* Clang is now the default frontend
+* Fix VLA bounds check
+* Fix verification of programs with envp
+* Fix wrong message when using __ESBMC_assert
+* Fix wrong index generation when using multidimensional arrays
+
 *** Version 4.2.1
 + Fix bug when inlining functions and esbmc would assume that
 the variables from the inlined function were global
