@@ -224,8 +224,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
       unsigned int &nondet_count = get_nondet_counter();
       symbol2tc rhs(call.ret->type, "nondet$symex::"+i2string(nondet_count++));
 
-      guardt guard;
-      symex_assign_rec(call.ret, call.ret, rhs, guard, symex_targett::STATE);
+      symex_assign(code_assign2tc(call.ret, rhs));
     }
 
     cur_state->source.pc++;
