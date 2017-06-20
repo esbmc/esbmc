@@ -376,20 +376,19 @@ goto_symext::finish_formula(void)
   if (!memory_leak_check)
     return;
 
-  std::list<allocated_obj>::const_iterator it;
-  for (it = dynamic_memory.begin(); it != dynamic_memory.end(); it++) {
-
+  for (auto const &it : dynamic_memory)
+  {
     // Don't check memory leak if the object is automatically deallocated
-    if(it->auto_deallocd)
+    if(it.auto_deallocd)
       continue;
 
     // Assert that the allocated object was freed.
-    deallocated_obj2tc deallocd(it->obj);
+    deallocated_obj2tc deallocd(it.obj);
     equality2tc eq(deallocd, gen_true_expr());
     replace_dynamic_allocation(eq);
-    it->alloc_guard.guard_expr(eq);
+    it.alloc_guard.guard_expr(eq);
     cur_state->rename(eq);
-    target->assertion(it->alloc_guard.as_expr(), eq,
+    target->assertion(it.alloc_guard.as_expr(), eq,
                       "dereference failure: forgotten memory",
                       std::vector<stack_framet>(), cur_state->source);
     total_claims++;

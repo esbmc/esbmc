@@ -275,7 +275,8 @@ void goto_symext::symex_assign_symbol(
   // do the assignment
   target->assignment(
     tmp_guard.as_expr(),
-    renamed_lhs, orig_name_lhs,
+    renamed_lhs,
+    orig_name_lhs,
     rhs,
     cur_state->source,
     cur_state->gen_stack_trace(),
