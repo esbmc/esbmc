@@ -41,3 +41,5 @@ SUFFIXES = .hs
 
 clean-local:
 	-rm -rf *.c
+
+.NOTPARALLEL: all
