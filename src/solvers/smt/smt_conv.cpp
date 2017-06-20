@@ -2269,112 +2269,23 @@ smt_convt::pre_solve()
 expr2tc
 smt_convt::get(const expr2tc &expr)
 {
-  switch(expr->expr_id)
-  {
-    case expr2t::constant_int_id:
-    case expr2t::constant_fixedbv_id:
-    case expr2t::constant_floatbv_id:
-    case expr2t::constant_bool_id:
-    case expr2t::constant_string_id:
-    case expr2t::constant_struct_id:
-    case expr2t::constant_union_id:
-    case expr2t::constant_array_of_id:
-      return expr;
-
-    case expr2t::constant_array_id:
+  expr2tc res = expr;
+  res.get()->Foreach_operand(
+    [this] (expr2tc &e)
     {
-      constant_array2t a = to_constant_array2t(expr);
-      a.Foreach_operand(
-        [this] (expr2tc &e)
-        {
-          expr2tc new_e = get(e);
-          e.swap(new_e);
-        }
-      );
-
-      return constant_array2tc(a.type, a.datatype_members);
+      expr2tc new_e = get(e);
+      e = new_e;
     }
+  );
 
-    case expr2t::symbol_id:
-      return get_by_type(expr);
+  if(is_constant_expr(expr))
+    return expr;
 
-    case expr2t::equality_id:
-    {
-      equality2t eq = to_equality2t(expr);
+  if(is_symbol2t(expr))
+    return get_by_type(expr);
 
-      expr2tc side1 = get(eq.side_1);
-      if(is_nil_expr(side1)) break;
-
-      expr2tc side2 = get(eq.side_2);
-      if(is_nil_expr(side2)) break;
-
-      equality2tc new_eq(side1, side2);
-      simplify(new_eq);
-
-      return new_eq;
-    }
-
-    case expr2t::not_id:
-    {
-      not2t n = to_not2t(expr);
-      assert(is_bool_type(n.value));
-
-      expr2tc value = get(n.value);
-      if(is_nil_expr(value)) break;
-
-      make_not(value);
-      return value;
-    }
-
-    case expr2t::if_id:
-    {
-      if2t i = to_if2t(expr);
-
-      expr2tc cond = get(i.cond);
-      if(is_nil_expr(cond)) break;
-
-      if(is_true(cond))
-        return get(i.true_value);
-
-      if(is_false(cond))
-        return get(i.false_value);
-
-      break;
-    }
-
-    case expr2t::with_id:
-      return get_by_type(to_with2t(expr).update_value);
-
-    case expr2t::typecast_id:
-    {
-      typecast2t t = to_typecast2t(expr);
-
-      expr2tc from = get(t.from);
-      if(is_nil_expr(from)) break;
-
-      typecast2tc new_t(expr->type, from, t.rounding_mode);
-      simplify(new_t);
-
-      return new_t;
-    }
-
-    case expr2t::bitcast_id:
-    {
-      bitcast2t t = to_bitcast2t(expr);
-
-      expr2tc from = get(t.from);
-      if(is_nil_expr(from)) break;
-
-      bitcast2tc new_t(expr->type, from, t.rounding_mode);
-      simplify(new_t);
-
-      return new_t;
-    }
-
-    default:;
-  }
-
-  return expr2tc();
+  simplify(res);
+  return res;
 }
 
 expr2tc
