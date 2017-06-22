@@ -390,39 +390,60 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
   }
 }
 
-smt_convt::resultt bmct::start_bmc()
+void bmct::report_trace(
+  smt_convt::resultt &res,
+  boost::shared_ptr<symex_target_equationt> &eq)
 {
-  boost::shared_ptr<symex_target_equationt> eq;
+  bool bs = options.get_bool_option("base-case");
+  bool fc = options.get_bool_option("forward-condition");
+  bool is = options.get_bool_option("inductive-step");
+  bool show_cex = options.get_bool_option("show-counter-example");
 
-  auto res = run(eq);
   switch(res)
   {
     case smt_convt::P_UNSATISFIABLE:
-      if(!options.get_bool_option("base-case"))
-      {
+      if(!bs) {
         successful_trace(eq);
-        report_success();
       }
-      else
-        status("No bug has been found in the base case");
       break;
 
     case smt_convt::P_SATISFIABLE:
-      if (!options.get_bool_option("base-case") &&
-          options.get_bool_option("show-counter-example"))
-      {
+      if(!bs && show_cex) {
+        error_trace(runtime_solver, eq);
+      } else if(!is && !fc) {
         error_trace(runtime_solver, eq);
       }
-      else if(!options.get_bool_option("inductive-step")
-          && !options.get_bool_option("forward-condition"))
-      {
-        error_trace(runtime_solver, eq);
+      break;
+
+    default:
+      break;
+  }
+}
+
+void bmct::report_result(smt_convt::resultt &res)
+{
+  bool bs = options.get_bool_option("base-case");
+  bool fc = options.get_bool_option("forward-condition");
+  bool is = options.get_bool_option("inductive-step");
+
+  switch(res)
+  {
+    case smt_convt::P_UNSATISFIABLE:
+      if(!bs) {
+        report_success();
+      } else {
+        status("No bug has been found in the base case");
+      }
+      break;
+
+    case smt_convt::P_SATISFIABLE:
+      if(!is && !fc) {
         report_failure();
-      }
-      else if (options.get_bool_option("forward-condition"))
+      } else if (fc) {
         status("The forward condition is unable to prove the property");
-      else
+      } else if (is) {
         status("The inductive step is unable to prove the property");
+      }
       break;
 
     // Return failure if we didn't actually check anything, we just emitted the
@@ -438,10 +459,16 @@ smt_convt::resultt bmct::start_bmc()
 
   if((interleaving_number > 0) && options.get_bool_option("all-runs"))
   {
-    std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
-    std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
+    status("Number of generated interleavings: " + integer2string((interleaving_number)));
+    status("Number of failed interleavings: " + integer2string((interleaving_failed)));
   }
+}
 
+smt_convt::resultt bmct::start_bmc()
+{
+  boost::shared_ptr<symex_target_equationt> eq;
+  smt_convt::resultt res = run(eq);
+  report_result(res);
   return res;
 }
 
@@ -465,6 +492,8 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
     smt_convt::resultt res = run_thread(eq);
     if(res)
     {
+      report_trace(res, eq);
+
       ++interleaving_failed;
       if(!options.get_bool_option("all-runs"))
         return res;

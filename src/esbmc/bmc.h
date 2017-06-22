@@ -81,6 +81,12 @@ protected:
     std::ostream &out,
     boost::shared_ptr<symex_target_equationt> &eq);
 
+  virtual void report_trace(
+      smt_convt::resultt &res,
+      boost::shared_ptr<symex_target_equationt> &eq);
+
+  virtual void report_result(smt_convt::resultt &res);
+
   smt_convt::resultt run_thread(boost::shared_ptr<symex_target_equationt> &eq);
   int ltl_run_thread(boost::shared_ptr<symex_target_equationt> &eq);
 };
