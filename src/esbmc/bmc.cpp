@@ -450,7 +450,7 @@ void bmct::report_result(smt_convt::resultt &res)
     // test information to an SMTLIB formatted file. Causes esbmc to quit
     // immediately (with no error reported)
     case smt_convt::P_SMTLIB:
-      break;
+      return;
 
     default:
       error("decision procedure failed");
@@ -480,6 +480,8 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
   if(options.get_bool_option("schedule"))
     return run_thread(eq);
 
+  smt_convt::resultt res;
+
   do
   {
     if(++interleaving_number > 1)
@@ -489,12 +491,14 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
     }
 
     fine_timet bmc_start = current_time();
-    smt_convt::resultt res = run_thread(eq);
+    res = run_thread(eq);
     if(res)
     {
       report_trace(res, eq);
 
-      ++interleaving_failed;
+      if(res == smt_convt::P_SATISFIABLE)
+        ++interleaving_failed;
+
       if(!options.get_bool_option("all-runs"))
         return res;
     }
@@ -531,7 +535,7 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
   if(interleaving_failed > 0)
     return smt_convt::P_SATISFIABLE;
 
-  return smt_convt::P_UNSATISFIABLE;
+  return res;
 }
 
 smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
