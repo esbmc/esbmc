@@ -336,13 +336,17 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
 
   bool print_guard = config.options.get_bool_option("show-guards");
   bool sparse = config.options.get_bool_option("simple-ssa-printing");
+  bool no_sliced = config.options.get_bool_option("no-sliced-ssa");
 
   for(auto const &it : eq->SSA_steps)
   {
     if(!(it.is_assert() || it.is_assignment() || it.is_assume()))
       continue;
 
-    if (!sparse) {
+    if(it.ignore && no_sliced)
+      continue;
+
+    if(!sparse) {
       std::cout << "// " << it.source.pc->location_number << " ";
       std::cout << it.source.pc->location.as_string() << "\n";
     }
