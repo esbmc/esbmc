@@ -40,7 +40,7 @@ public:
   int ltl_results_seen[4];
 
   BigInt interleaving_number;
-  unsigned int interleaving_failed;
+  BigInt interleaving_failed;
 
   virtual smt_convt::resultt start_bmc();
   virtual smt_convt::resultt run(boost::shared_ptr<symex_target_equationt> &eq);

@@ -436,6 +436,12 @@ smt_convt::resultt bmct::start_bmc()
       break;
   }
 
+  if((interleaving_number > 0) && options.get_bool_option("all-runs"))
+  {
+    std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
+    std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
+  }
+
   return res;
 }
 
@@ -477,31 +483,24 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
 
   } while(symex->setup_next_formula());
 
-  if(options.get_bool_option("all-runs"))
+  if (options.get_bool_option("ltl"))
   {
-    std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
-    std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
-  }
-
-  if (options.get_bool_option("ltl")) {
     // So, what was the lowest value ltl outcome that we saw?
     if (ltl_results_seen[ltl_res_bad]) {
       std::cout << "Final lowest outcome: LTL_BAD" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_failing]) {
       std::cout << "Final lowest outcome: LTL_FAILING" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_succeeding]) {
       std::cout << "Final lowest outcome: LTL_SUCCEEDING" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_good]) {
       std::cout << "Final lowest outcome: LTL_GOOD" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
-    } else {
+    }  else {
       std::cout << "No traces seen, apparently" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     }
   }
+
+  if(interleaving_failed > 0)
+    return smt_convt::P_SATISFIABLE;
 
   return smt_convt::P_UNSATISFIABLE;
 }
