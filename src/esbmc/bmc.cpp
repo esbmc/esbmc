@@ -336,13 +336,17 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
 
   bool print_guard = config.options.get_bool_option("show-guards");
   bool sparse = config.options.get_bool_option("simple-ssa-printing");
+  bool no_sliced = config.options.get_bool_option("no-sliced-ssa");
 
   for(auto const &it : eq->SSA_steps)
   {
     if(!(it.is_assert() || it.is_assignment() || it.is_assume()))
       continue;
 
-    if (!sparse) {
+    if(it.ignore && no_sliced)
+      continue;
+
+    if(!sparse) {
       std::cout << "// " << it.source.pc->location_number << " ";
       std::cout << it.source.pc->location.as_string() << "\n";
     }
@@ -386,52 +390,85 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
   }
 }
 
-smt_convt::resultt bmct::start_bmc()
+void bmct::report_trace(
+  smt_convt::resultt &res,
+  boost::shared_ptr<symex_target_equationt> &eq)
 {
-  boost::shared_ptr<symex_target_equationt> eq;
+  bool bs = options.get_bool_option("base-case");
+  bool fc = options.get_bool_option("forward-condition");
+  bool is = options.get_bool_option("inductive-step");
+  bool show_cex = options.get_bool_option("show-counter-example");
 
-  auto res = run(eq);
   switch(res)
   {
     case smt_convt::P_UNSATISFIABLE:
-      if(!options.get_bool_option("base-case"))
-      {
+      if(!bs) {
         successful_trace(eq);
-        report_success();
       }
-      else
-        status("No bug has been found in the base case");
       break;
 
     case smt_convt::P_SATISFIABLE:
-      if (!options.get_bool_option("base-case") &&
-          options.get_bool_option("show-counter-example"))
-      {
+      if(!bs && show_cex) {
+        error_trace(runtime_solver, eq);
+      } else if(!is && !fc) {
         error_trace(runtime_solver, eq);
       }
-      else if(!options.get_bool_option("inductive-step")
-          && !options.get_bool_option("forward-condition"))
-      {
-        error_trace(runtime_solver, eq);
+      break;
+
+    default:
+      break;
+  }
+}
+
+void bmct::report_result(smt_convt::resultt &res)
+{
+  bool bs = options.get_bool_option("base-case");
+  bool fc = options.get_bool_option("forward-condition");
+  bool is = options.get_bool_option("inductive-step");
+
+  switch(res)
+  {
+    case smt_convt::P_UNSATISFIABLE:
+      if(!bs) {
+        report_success();
+      } else {
+        status("No bug has been found in the base case");
+      }
+      break;
+
+    case smt_convt::P_SATISFIABLE:
+      if(!is && !fc) {
         report_failure();
-      }
-      else if (options.get_bool_option("forward-condition"))
+      } else if (fc) {
         status("The forward condition is unable to prove the property");
-      else
+      } else if (is) {
         status("The inductive step is unable to prove the property");
+      }
       break;
 
     // Return failure if we didn't actually check anything, we just emitted the
     // test information to an SMTLIB formatted file. Causes esbmc to quit
     // immediately (with no error reported)
     case smt_convt::P_SMTLIB:
-      break;
+      return;
 
     default:
       error("decision procedure failed");
       break;
   }
 
+  if((interleaving_number > 0) && options.get_bool_option("all-runs"))
+  {
+    status("Number of generated interleavings: " + integer2string((interleaving_number)));
+    status("Number of failed interleavings: " + integer2string((interleaving_failed)));
+  }
+}
+
+smt_convt::resultt bmct::start_bmc()
+{
+  boost::shared_ptr<symex_target_equationt> eq;
+  smt_convt::resultt res = run(eq);
+  report_result(res);
   return res;
 }
 
@@ -443,6 +480,8 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
   if(options.get_bool_option("schedule"))
     return run_thread(eq);
 
+  smt_convt::resultt res;
+
   do
   {
     if(++interleaving_number > 1)
@@ -452,10 +491,14 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
     }
 
     fine_timet bmc_start = current_time();
-    smt_convt::resultt res = run_thread(eq);
+    res = run_thread(eq);
     if(res)
     {
-      ++interleaving_failed;
+      report_trace(res, eq);
+
+      if(res == smt_convt::P_SATISFIABLE)
+        ++interleaving_failed;
+
       if(!options.get_bool_option("all-runs"))
         return res;
     }
@@ -473,33 +516,26 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
 
   } while(symex->setup_next_formula());
 
-  if(options.get_bool_option("all-runs"))
+  if (options.get_bool_option("ltl"))
   {
-    std::cout << "*** number of generated interleavings: " << interleaving_number << " ***" << std::endl;
-    std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
-  }
-
-  if (options.get_bool_option("ltl")) {
     // So, what was the lowest value ltl outcome that we saw?
     if (ltl_results_seen[ltl_res_bad]) {
       std::cout << "Final lowest outcome: LTL_BAD" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_failing]) {
       std::cout << "Final lowest outcome: LTL_FAILING" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_succeeding]) {
       std::cout << "Final lowest outcome: LTL_SUCCEEDING" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     } else if (ltl_results_seen[ltl_res_good]) {
       std::cout << "Final lowest outcome: LTL_GOOD" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
-    } else {
+    }  else {
       std::cout << "No traces seen, apparently" << std::endl;
-      return smt_convt::P_UNSATISFIABLE;
     }
   }
 
-  return smt_convt::P_UNSATISFIABLE;
+  if(interleaving_failed > 0)
+    return smt_convt::P_SATISFIABLE;
+
+  return res;
 }
 
 smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &eq)
