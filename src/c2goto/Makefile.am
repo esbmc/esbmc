@@ -34,3 +34,5 @@ clib64_fp.c: c2goto $(srcdir)/library/*.c $(srcdir)/library/libm/*.c
 clean-local:
 	-rm clib64.goto clib32.goto clib64.c clib32.c
 .PHONY: clean-local
+
+.NOTPARALLEL: all
