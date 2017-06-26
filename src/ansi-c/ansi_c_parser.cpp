@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 ansi_c_parsert ansi_c_parser;
 
-/*******************************************************************\
-
-Function: ansi_c_parsert::scopet::print
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ansi_c_parsert::scopet::print(std::ostream &out) const
 {
   out << "Prefix: " << prefix << std::endl;
@@ -35,18 +23,6 @@ void ansi_c_parsert::scopet::print(std::ostream &out) const
         << std::endl;
   }
 }
-
-/*******************************************************************\
-
-Function: ansi_c_parsert::lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 ansi_c_id_classt ansi_c_parsert::lookup(std::string &name, bool tag) const
 {
@@ -66,18 +42,6 @@ ansi_c_id_classt ansi_c_parsert::lookup(std::string &name, bool tag) const
   return ANSI_C_UNKNOWN;
 }
 
-/*******************************************************************\
-
-Function: yyansi_cerror
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 extern char *yyansi_ctext;
 
 int yyansi_cerror(const std::string &error)
@@ -85,18 +49,6 @@ int yyansi_cerror(const std::string &error)
   ansi_c_parser.parse_error(error, yyansi_ctext);
   return 0;
 }
-
-/*******************************************************************\
-
-Function: ansi_c_parsert::convert_declarator
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 static void
 insert_base_type(typet &dest, const typet &base_type)
@@ -193,18 +145,6 @@ void ansi_c_parsert::convert_declarator(
   }
 }
 
-/*******************************************************************\
-
-Function: ansi_c_parsert::new_declaration
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ansi_c_parsert::new_declaration(
   const irept &type,
   irept &declarator,
@@ -264,18 +204,6 @@ void ansi_c_parsert::new_declaration(
   dest.swap(declaration);
 }
 
-/*******************************************************************\
-
-Function: ansi_c_parsert::get_class
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
- 
 ansi_c_id_classt ansi_c_parsert::get_class(const typet &type)
 {
   if(type.id()=="typedef")

@@ -19,18 +19,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/string2array.h>
 #include <util/type_eq.h>
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::zero_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool c_typecheck_baset::zero_initializer(
   exprt &value,
   const typet &type) const
@@ -135,18 +123,6 @@ bool c_typecheck_baset::zero_initializer(
   return true;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::do_initializer(
   exprt &value,
   typet &type,
@@ -175,18 +151,6 @@ void c_typecheck_baset::do_initializer(
     type=value.type();
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt c_typecheck_baset::do_initializer_rec(
   const exprt &value,
@@ -279,18 +243,6 @@ exprt c_typecheck_baset::do_initializer_rec(
   }
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt c_typecheck_baset::do_initializer_rec(
   init_statet &state,
   const typet &type,
@@ -330,18 +282,6 @@ exprt c_typecheck_baset::do_initializer_rec(
     return result;
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_array
-
-  Inputs:
-
- Outputs:
-
-  Purpose:
-
-\*******************************************************************/
 
 exprt c_typecheck_baset::do_initializer_array(
   init_statet &state,
@@ -415,18 +355,6 @@ exprt c_typecheck_baset::do_initializer_array(
   return result;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_incomplete_array
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt c_typecheck_baset::do_initializer_incomplete_array(
   init_statet &state,
   const typet &type,
@@ -456,18 +384,6 @@ exprt c_typecheck_baset::do_initializer_incomplete_array(
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_struct
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt c_typecheck_baset::do_initializer_struct(
   init_statet &state,
@@ -519,18 +435,6 @@ exprt c_typecheck_baset::do_initializer_struct(
   return result;
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer_union
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt c_typecheck_baset::do_initializer_union(
   init_statet &state,
   const union_typet &type,
@@ -570,18 +474,6 @@ exprt c_typecheck_baset::do_initializer_union(
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::do_initializer(symbolt &symbol)
 {
@@ -637,18 +529,6 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
     }
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::do_designated_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt c_typecheck_baset::do_designated_initializer(
   const exprt &value,

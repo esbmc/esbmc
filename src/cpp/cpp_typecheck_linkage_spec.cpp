@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <cpp/cpp_typecheck.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::convert(cpp_linkage_spect &linkage_spec)
 {
   irep_idt old_mode=current_mode;

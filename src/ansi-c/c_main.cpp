@@ -16,18 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-/*******************************************************************\
-
-Function: static_lifetime_init
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 static void
 init_variable(codet &dest, const symbolt &sym)
 {
@@ -75,18 +63,6 @@ void static_lifetime_init(
     }
   );
 }
-
-/*******************************************************************\
-
-Function: c_main
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool c_main(
   contextt &context,

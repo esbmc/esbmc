@@ -64,51 +64,15 @@ protected:
   unsigned type_counter;
 };
 
-/*******************************************************************\
-
-Function: c_linkt::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string c_linkt::to_string(const exprt &expr)
 {
   return expr2c(expr, ns);
 }
 
-/*******************************************************************\
-
-Function: c_linkt::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string c_linkt::to_string(const typet &type)
 {
   return type2c(type, ns);
 }
-
-/*******************************************************************\
-
-Function: c_linkt::duplicate
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_linkt::duplicate(
   symbolt &in_context,
@@ -126,18 +90,6 @@ void c_linkt::duplicate(
   else
     duplicate_symbol(in_context, new_symbol);
 }
-
-/*******************************************************************\
-
-Function: c_linkt::duplicate_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_linkt::duplicate_type(
   symbolt &in_context,
@@ -189,18 +141,6 @@ void c_linkt::duplicate_type(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: c_linkt::duplicate_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_linkt::duplicate_symbol(
   symbolt &in_context,
@@ -355,18 +295,6 @@ void c_linkt::duplicate_symbol(
   }
 }
 
-/*******************************************************************\
-
-Function: c_linkt::typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_linkt::typecheck()
 {
   new_context.Foreach_operand(
@@ -412,18 +340,6 @@ void c_linkt::typecheck()
   );
 }
 
-/*******************************************************************\
-
-Function: c_linkt::move
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_linkt::move(symbolt &new_symbol)
 {
   // try to add it
@@ -432,18 +348,6 @@ void c_linkt::move(symbolt &new_symbol)
   if(context.move(new_symbol, new_symbol_ptr))
     duplicate(*new_symbol_ptr, new_symbol);
 }
-
-/*******************************************************************\
-
-Function: convert_c
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool c_link(
   contextt &context,

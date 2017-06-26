@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/migrate.h>
 #include <util/simplify_expr.h>
 
-/*******************************************************************\
-
-Function: goto_symext::symex_catch
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_symext::symex_catch()
 {
   // there are two variants: 'push' and 'pop'
@@ -66,18 +54,6 @@ void goto_symext::symex_catch()
     cur_state->source.pc++;
   }
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_throw
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool goto_symext::symex_throw()
 {
@@ -231,18 +207,6 @@ bool goto_symext::symex_throw()
   return true;
 }
 
-/*******************************************************************\
-
-Function: goto_symext::terminate_handler
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool goto_symext::terminate_handler()
 {
   // We must look on the context if the user included exception lib
@@ -269,18 +233,6 @@ bool goto_symext::terminate_handler()
   // shown to the user as there is a throw without catch.
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_symext::unexpected
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool goto_symext::unexpected_handler()
 {
@@ -318,18 +270,6 @@ bool goto_symext::unexpected_handler()
   // shown to the user as there is a throw without catch.
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_symext::update_throw_target
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
                                       __attribute__((unused)),
@@ -385,18 +325,6 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
   }
 }
 
-/*******************************************************************\
-
-Function: goto_symext::handle_throw_decl
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
   const irep_idt &id)
 {
@@ -432,18 +360,6 @@ int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
   return 2;
 }
 
-/*******************************************************************\
-
-Function: goto_symext::handle_rethrow
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool goto_symext::handle_rethrow(const expr2tc &operand,
   const goto_programt::instructiont &instruction)
 {
@@ -472,18 +388,6 @@ bool goto_symext::handle_rethrow(const expr2tc &operand,
   }
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_symext::symex_throw_decl
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_symext::symex_throw_decl()
 {

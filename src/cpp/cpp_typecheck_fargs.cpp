@@ -29,18 +29,6 @@ std::ostream &operator<<(std::ostream &out,
   return out;
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheck_fargst::has_class_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_typecheck_fargst::has_class_type() const
 {
   for(exprt::operandst::const_iterator it=operands.begin();
@@ -54,18 +42,6 @@ bool cpp_typecheck_fargst::has_class_type() const
   return false;
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheck_fargst::build
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheck_fargst::build(
   const side_effect_expr_function_callt &function_call)
 {
@@ -77,18 +53,6 @@ void cpp_typecheck_fargst::build(
   for(unsigned i=0; i<function_call.op1().operands().size(); i++)
     operands.push_back(function_call.op1().operands()[i]);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheck_fargst::exact_match
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_typecheck_fargst::match(
   const code_typet &code_type,

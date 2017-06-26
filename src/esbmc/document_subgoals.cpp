@@ -19,18 +19,6 @@ struct linet
   int line_number;
 };
 
-/*******************************************************************\
-
-Function: strip_space
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void strip_space(std::list<linet> &lines)
 {
   unsigned strip=50;
@@ -60,18 +48,6 @@ void strip_space(std::list<linet> &lines)
   }
 }
 
-/*******************************************************************\
-
-Function: escape_latex
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string escape_latex(const std::string &s, bool alltt)
 {
   std::string dest;
@@ -92,18 +68,6 @@ std::string escape_latex(const std::string &s, bool alltt)
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: emphasize
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string emphasize(const std::string &s)
 {
@@ -138,18 +102,6 @@ std::string emphasize(const std::string &s)
   #endif
 }
 
-/*******************************************************************\
-
-Function: is_empty
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool is_empty_str(const std::string &s)
 {
   for(unsigned i=0; i<s.size(); i++)
@@ -158,18 +110,6 @@ bool is_empty_str(const std::string &s)
 
   return true;
 }
-
-/*******************************************************************\
-
-Function: get_code
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void get_code(const irept &location, std::string &dest)
 {
@@ -259,18 +199,6 @@ void get_code(const irept &location, std::string &dest)
     dest+=tmp+"\n";
   }
 }
-
-/*******************************************************************\
-
-Function: symex_bmct::document_subgoals
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 struct doc_claimt
 {

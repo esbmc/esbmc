@@ -264,18 +264,6 @@ std::string configt::this_architecture()
   return this_arch;
 }
 
-/*******************************************************************\
-
-Function: configt::ansi_ct::this_operating_system
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string configt::this_operating_system()
 {
   std::string this_os;

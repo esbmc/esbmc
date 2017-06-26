@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/arith_tools.h>
 #include <util/c_types.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::cpp_destructor
-
-  Inputs:
-
- Outputs: NOT typechecked code
-
- Purpose:
-
-\*******************************************************************/
-
 codet cpp_typecheckt::cpp_destructor(
   const locationt &location,
   const typet &type,

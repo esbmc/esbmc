@@ -43,18 +43,6 @@ protected:
   typedef hash_set_cont<std::string, string_hash> id_sett;
 };
 
-/*******************************************************************\
-
-Function: expr2cppt::convert_struct
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cppt::convert_struct(
   const exprt &src,
   unsigned &precedence)
@@ -119,18 +107,6 @@ std::string expr2cppt::convert_struct(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2cppt::convert_constant
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cppt::convert_constant(
   const exprt &src,
   unsigned &precedence)
@@ -146,18 +122,6 @@ std::string expr2cppt::convert_constant(
 
   return expr2ct::convert_constant(src, precedence);
 }
-
-/*******************************************************************\
-
-Function: expr2cppt::convert_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2cppt::convert_rec(
   const typet &src,
@@ -336,36 +300,12 @@ std::string expr2cppt::convert_rec(
     return expr2ct::convert_rec(src, qualifiers);
 }
 
-/*******************************************************************\
-
-Function: expr2cppt::convert_cpp_this
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cppt::convert_cpp_this(
   const exprt &src __attribute__((unused)),
   unsigned precedence __attribute__((unused)))
 {
   return "this";
 }
-
-/*******************************************************************\
-
-Function: expr2cppt::convert_cpp_new
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2cppt::convert_cpp_new(
   const exprt &src,
@@ -392,18 +332,6 @@ std::string expr2cppt::convert_cpp_new(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2cppt::convert_code_cpp_delete
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cppt::convert_code_cpp_delete(
   const exprt &src,
   unsigned indent)
@@ -423,18 +351,6 @@ std::string expr2cppt::convert_code_cpp_delete(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2cppt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cppt::convert(
   const exprt &src,
   unsigned &precedence)
@@ -453,18 +369,6 @@ std::string expr2cppt::convert(
     return expr2ct::convert(src, precedence);
 }
 
-/*******************************************************************\
-
-Function: expr2cppt::convert_code
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cppt::convert_code(
   const codet &src,
   unsigned indent)
@@ -482,36 +386,12 @@ std::string expr2cppt::convert_code(
   return expr2ct::convert_code(src, indent);
 }
 
-/*******************************************************************\
-
-Function: expr2cpp
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2cpp(const exprt &expr, const namespacet &ns, const bool fullname)
 {
   expr2cppt expr2cpp(ns, fullname);
   expr2cpp.get_shorthands(expr);
   return expr2cpp.convert(expr);
 }
-
-/*******************************************************************\
-
-Function: type2cpp
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string type2cpp(const typet &type, const namespacet &ns, const bool fullname)
 {

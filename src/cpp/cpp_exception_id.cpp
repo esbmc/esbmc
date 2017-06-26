@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_exception_id.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: cpp_exception_list_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose: turns a type into a list of relevant exception IDs
-
-\*******************************************************************/
-
 #include <iostream>
 
 void cpp_exception_list_rec(
@@ -104,18 +92,6 @@ void cpp_exception_list_rec(
   return;
 }
 
-/*******************************************************************\
-
-Function: cpp_exception_list
-
-  Inputs:
-
- Outputs:
-
- Purpose: turns a type into a list of relevant exception IDs
-
-\*******************************************************************/
-
 irept cpp_exception_list(const typet &src, const namespacet &ns)
 {
   std::vector<irep_idt> ids;
@@ -129,18 +105,6 @@ irept cpp_exception_list(const typet &src, const namespacet &ns)
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: cpp_exception_id
-
-  Inputs:
-
- Outputs:
-
- Purpose: turns a type into an exception ID
-
-\*******************************************************************/
 
 irep_idt cpp_exception_id(const typet &src, const namespacet &ns)
 {

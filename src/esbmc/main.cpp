@@ -23,18 +23,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <langapi/mode.h>
 #include <util/irep2.h>
 
-/*******************************************************************\
-
-Function: main
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 int main(int argc, const char **argv)
 {
   // To avoid the static initialization order fiasco:

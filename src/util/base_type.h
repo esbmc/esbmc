@@ -45,14 +45,6 @@ bool
 is_subclass_of(const type2tc &subclass, const type2tc &superclass,
                const namespacet &ns);
 
-/*******************************************************************\
-
-   Class: base_type_eqt
-
- Purpose:
-
-\*******************************************************************/
-
 class base_type_eqt
 {
 public:

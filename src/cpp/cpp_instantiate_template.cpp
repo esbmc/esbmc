@@ -14,18 +14,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/simplify_expr.h>
 #include <util/simplify_expr_class.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::template_suffix
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string cpp_typecheckt::template_suffix(
   const cpp_template_args_tct &template_args)
 {
@@ -92,18 +80,6 @@ std::string cpp_typecheckt::template_suffix(
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::show_instantiation_stack
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::show_instantiation_stack(std::ostream &out)
 {
@@ -276,21 +252,6 @@ bool cpp_typecheckt::has_incomplete_args(
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::instantiate_template
-
-  Inputs: location of the instantiation,
-          the identifier of the template symbol,
-          typechecked template arguments,
-          an (optional) specialization
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 const symbolt &cpp_typecheckt::instantiate_template(
   const locationt &location,

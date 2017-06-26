@@ -15,18 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/simplify_expr.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_type(typet &type)
 {
   if(type.is_code())
@@ -50,18 +38,6 @@ void c_typecheck_baset::typecheck_type(typet &type)
   else if(type.id()=="symbol")
     typecheck_symbol_type(type);
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_code_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_code_type(code_typet &type)
 {
@@ -134,18 +110,6 @@ void c_typecheck_baset::typecheck_code_type(code_typet &type)
   typecheck_type(code_type.return_type());
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_array_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_array_type(array_typet &type)
 {
   array_typet &array_type=to_array_type(type);
@@ -184,18 +148,6 @@ void c_typecheck_baset::typecheck_array_type(array_typet &type)
     }
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_compound_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_compound_type(typet &type)
 {
@@ -272,18 +224,6 @@ void c_typecheck_baset::typecheck_compound_type(typet &type)
   }
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_c_bit_field_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_c_bit_field_type(typet &type)
 {
   typecheck_type(type.subtype());
@@ -337,18 +277,6 @@ void c_typecheck_baset::typecheck_c_bit_field_type(typet &type)
   type.width(width);
 }
 
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_typeof_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecheck_baset::typecheck_typeof_type(typet &type)
 {
   if(type.is_expression())
@@ -364,18 +292,6 @@ void c_typecheck_baset::typecheck_typeof_type(typet &type)
     type.swap(t);
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_symbol_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::typecheck_symbol_type(typet &type)
 {
@@ -403,18 +319,6 @@ void c_typecheck_baset::typecheck_symbol_type(typet &type)
   if(symbol.is_macro)
     type=symbol.type; // overwrite
 }
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::adjust_function_argument
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecheck_baset::adjust_function_argument(typet &type) const
 {

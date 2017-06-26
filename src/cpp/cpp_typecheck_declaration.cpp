@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/expr_util.h>
 #include <util/i2string.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_typedef
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_typecheckt::convert_typedef(typet &type)
 {
   if(type.id()=="merged_type" &&
@@ -35,18 +23,6 @@ bool cpp_typecheckt::convert_typedef(typet &type)
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_anonymous_union
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::convert_anonymous_union(
   cpp_declarationt &declaration,
@@ -120,18 +96,6 @@ void cpp_typecheckt::convert_anonymous_union(
   code.swap(new_code);
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::convert(cpp_declarationt &declaration)
 {
   // see if the declaration is empty
@@ -153,18 +117,6 @@ void cpp_typecheckt::convert(cpp_declarationt &declaration)
   typecheck_function_bodies();
   function_bodies=old_function_bodies;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_non_template_declaration
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::convert_non_template_declaration(
   cpp_declarationt &declaration)

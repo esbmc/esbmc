@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cassert>
 #include <cpp/cpp_declarator.h>
 
-/*******************************************************************\
-
-Function: cpp_declaratort::output
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_declaratort::output(std::ostream &out) const
 {
   out << "  name: " << name().pretty() << std::endl;
@@ -29,18 +17,6 @@ void cpp_declaratort::output(std::ostream &out) const
   out << "  init_args: " << init_args().pretty() << std::endl;
   out << "  method_qualifier: " << method_qualifier().pretty() << std::endl;
 }
-
-/*******************************************************************\
-
-Function: cpp_declaratort::merge_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 typet cpp_declaratort::merge_type(const typet &declaration_type) const
 {

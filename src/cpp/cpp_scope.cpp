@@ -9,18 +9,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_scope.h>
 #include <cpp/cpp_typecheck.h>
 
-/*******************************************************************\
-
-Function: cpp_scopet::lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_scopet::lookup(
   const irep_idt &base_name,
   id_sett &id_set)
@@ -63,18 +51,6 @@ void cpp_scopet::lookup(
   }
 }
 
-/*******************************************************************\
-
-Function: cpp_scopet::recursive_lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_scopet::recursive_lookup(
   const irep_idt &base_name,
   id_sett &id_set)
@@ -90,18 +66,6 @@ void cpp_scopet::recursive_lookup(
 }
 
 
-
-/*******************************************************************\
-
-Function: cpp_scopet::lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_scopet::lookup(
   const irep_idt &base_name,
@@ -151,18 +115,6 @@ void cpp_scopet::lookup(
   }
 }
 
-/*******************************************************************\
-
-Function: cpp_scopet::recursive_lookup
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_scopet::recursive_lookup(
   const irep_idt &base_name,
   cpp_idt::id_classt id_class,
@@ -174,18 +126,6 @@ void cpp_scopet::recursive_lookup(
   if(id_set.empty() && parents_size())
       get_parent().recursive_lookup(base_name, id_class, id_set); // recursive call
 }
-
-/*******************************************************************\
-
-Function: cpp_scopet::lookup_id
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_scopet::lookup_id(
   const irep_idt &identifier,
@@ -215,18 +155,6 @@ void cpp_scopet::lookup_id(
 
 
 
-/*******************************************************************\
-
-Function: cpp_scopet::new_scope
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 cpp_scopet &cpp_scopet::new_scope(const irep_idt &new_scope_name)
 {
   cpp_idt &id=insert(new_scope_name);
@@ -238,18 +166,6 @@ cpp_scopet &cpp_scopet::new_scope(const irep_idt &new_scope_name)
   return (cpp_scopet &)id;
 }
 
-
-/*******************************************************************\
-
-Function: cpp_scopet::contains
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_scopet::contains(const irep_idt& base_name)
 {

@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <cctype>
 #include <cstdlib>
 
-/*******************************************************************\
-
-Function: preprocessor_line
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void preprocessor_line(
   const char *text,
   unsigned &line_no,

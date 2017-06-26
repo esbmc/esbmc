@@ -13,18 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_types.h>
 #include <util/string_constant.h>
 
-/*******************************************************************\
-
-Function: convert_string_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert_string_literal(
   const std::string &src,
   std::string &dest)
@@ -40,18 +28,6 @@ void convert_string_literal(
   else
     unescape_string(std::string(src, 1, src.size()-2), dest);
 }
-
-/*******************************************************************\
-
-Function: convert_string_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void convert_string_literal(const std::string &src, exprt &dest)
 {

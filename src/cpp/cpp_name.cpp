@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_name.h>
 #include <sstream>
 
-/*******************************************************************\
-
-Function: cpp_namet::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_namet::convert(
   std::string &identifier,
   std::string &base_name) const
@@ -52,18 +40,6 @@ void cpp_namet::convert(
       base_name+=name_component;
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_namet::to_string
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string cpp_namet::to_string() const
 {

@@ -18,18 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_code.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: expr2ct::id_shorthand
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::id_shorthand(const exprt &expr) const
 {
   const irep_idt &identifier=expr.identifier();
@@ -47,18 +35,6 @@ std::string expr2ct::id_shorthand(const exprt &expr) const
   return sh;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::get_symbols
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void expr2ct::get_symbols(const exprt &expr)
 {
   if(expr.id()=="symbol")
@@ -67,18 +43,6 @@ void expr2ct::get_symbols(const exprt &expr)
   forall_operands(it, expr)
     get_symbols(*it);
 }
-
-/*******************************************************************\
-
-Function: expr2ct::get_shorthands
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void expr2ct::get_shorthands(const exprt &expr)
 {
@@ -104,34 +68,10 @@ void expr2ct::get_shorthands(const exprt &expr)
   }
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert(const typet &src)
 {
   return convert_rec(src, c_qualifierst());
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_rec(
   const typet &src,
@@ -311,18 +251,6 @@ std::string expr2ct::convert_rec(
   return convert_norep((exprt&)src, precedence);
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_typecast
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_typecast(
   const exprt &src,
   unsigned &precedence)
@@ -387,18 +315,6 @@ std::string expr2ct::convert_bitcast(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_implicit_address_of
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_implicit_address_of(
   const exprt &src,
   unsigned &precedence)
@@ -408,18 +324,6 @@ std::string expr2ct::convert_implicit_address_of(
 
   return convert(src.op0(), precedence);
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_trinary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_trinary(
   const exprt &src,
@@ -466,18 +370,6 @@ std::string expr2ct::convert_trinary(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_quantifier
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_quantifier(
   const exprt &src,
   const std::string &symbol,
@@ -520,18 +412,6 @@ std::string expr2ct::convert_quantifier(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_with
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_with(
   const exprt &src,
@@ -591,18 +471,6 @@ std::string expr2ct::convert_with(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_cond
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_cond(
   const exprt &src,
   unsigned precedence)
@@ -635,18 +503,6 @@ std::string expr2ct::convert_cond(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_binary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_binary(
   const exprt &src,
@@ -682,18 +538,6 @@ std::string expr2ct::convert_binary(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_unary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_unary(
   const exprt &src,
   const std::string &symbol,
@@ -712,18 +556,6 @@ std::string expr2ct::convert_unary(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_pointer_object_has_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_pointer_object_has_type(
   const exprt &src,
@@ -744,18 +576,6 @@ std::string expr2ct::convert_pointer_object_has_type(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_alloca
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_alloca(
   const exprt &src,
@@ -778,18 +598,6 @@ std::string expr2ct::convert_alloca(
 }
 
 
-/*******************************************************************\
-
-Function: expr2ct::convert_malloc
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_malloc(
   const exprt &src,
   unsigned &precedence)
@@ -810,18 +618,6 @@ std::string expr2ct::convert_malloc(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_nondet
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_nondet(
   const exprt &src,
   unsigned &precedence)
@@ -831,18 +627,6 @@ std::string expr2ct::convert_nondet(
 
   return "NONDET("+convert(src.type())+")";
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_statement_expression
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_statement_expression(
   const exprt &src,
@@ -854,18 +638,6 @@ std::string expr2ct::convert_statement_expression(
 
   return "("+convert_code(to_code_block(to_code(src.op0())), 0)+")";
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_function
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_function(
   const exprt &src,
@@ -890,18 +662,6 @@ std::string expr2ct::convert_function(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_array_of
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_array_of(
   const exprt &src,
   unsigned precedence)
@@ -911,18 +671,6 @@ std::string expr2ct::convert_array_of(
 
   return "ARRAY_OF("+convert(src.op0())+')';
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_byte_extract
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_byte_extract(
   const exprt &src,
@@ -946,18 +694,6 @@ std::string expr2ct::convert_byte_extract(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_byte_update
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_byte_update(
   const exprt &src,
@@ -987,18 +723,6 @@ std::string expr2ct::convert_byte_update(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_unary_post
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_unary_post(
   const exprt &src,
   const std::string &symbol,
@@ -1018,18 +742,6 @@ std::string expr2ct::convert_unary_post(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_index
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_index(
   const exprt &src,
@@ -1052,18 +764,6 @@ std::string expr2ct::convert_index(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_member
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_member(
   const exprt &src,
@@ -1122,18 +822,6 @@ std::string expr2ct::convert_member(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_array_member_value
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_array_member_value(
   const exprt &src,
   unsigned precedence)
@@ -1143,18 +831,6 @@ std::string expr2ct::convert_array_member_value(
 
   return "[]="+convert(src.op0());
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_struct_member_value
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_struct_member_value(
   const exprt &src,
@@ -1166,36 +842,12 @@ std::string expr2ct::convert_struct_member_value(
   return "."+src.name().as_string()+"="+convert(src.op0());
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_norep
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_norep(
   const exprt &src,
   unsigned &precedence __attribute__((unused)))
 {
   return src.pretty(0);
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_symbol(
   const exprt &src,
@@ -1215,18 +867,6 @@ std::string expr2ct::convert_symbol(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_nondet_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_nondet_symbol(
   const exprt &src,
   unsigned &precedence __attribute__((unused)))
@@ -1234,18 +874,6 @@ std::string expr2ct::convert_nondet_symbol(
   const std::string &id=src.identifier().as_string();
   return "nondet_symbol("+id+")";
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_predicate_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_predicate_symbol(
   const exprt &src,
@@ -1255,18 +883,6 @@ std::string expr2ct::convert_predicate_symbol(
   return "ps("+id+")";
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_predicate_next_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_predicate_next_symbol(
   const exprt &src,
   unsigned &precedence __attribute__((unused)))
@@ -1274,18 +890,6 @@ std::string expr2ct::convert_predicate_next_symbol(
   const std::string &id=src.identifier().as_string();
   return "pns("+id+")";
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_quantified_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_quantified_symbol(
   const exprt &src,
@@ -1295,36 +899,12 @@ std::string expr2ct::convert_quantified_symbol(
   return id;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_nondet_bool
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_nondet_bool(
   const exprt &src __attribute__((unused)),
   unsigned &precedence __attribute__((unused)))
 {
   return "nondet_bool()";
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_object_descriptor
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_object_descriptor(
   const exprt &src,
@@ -1345,18 +925,6 @@ std::string expr2ct::convert_object_descriptor(
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_constant
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_constant(
   const exprt &src,
@@ -1472,18 +1040,6 @@ std::string expr2ct::convert_constant(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_struct
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_struct(
   const exprt &src,
   unsigned &precedence)
@@ -1546,18 +1102,6 @@ std::string expr2ct::convert_struct(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_union
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_union(
   const exprt &src,
   unsigned &precedence)
@@ -1578,18 +1122,6 @@ std::string expr2ct::convert_union(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_array
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_array(
   const exprt &src,
@@ -1617,18 +1149,6 @@ std::string expr2ct::convert_array(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_array_list
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_array_list(
   const exprt &src,
@@ -1662,18 +1182,6 @@ std::string expr2ct::convert_array_list(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_function_call(
   const exprt &src,
@@ -1714,18 +1222,6 @@ std::string expr2ct::convert_function_call(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_overflow
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_overflow(
   const exprt &src,
   unsigned &precedence)
@@ -1751,36 +1247,12 @@ std::string expr2ct::convert_overflow(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::indent_str
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::indent_str(unsigned indent)
 {
   std::string dest;
   for(unsigned j=0; j<indent; j++) dest+=' ';
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_while
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_asm(
   const codet &src __attribute__((unused)),
@@ -1790,18 +1262,6 @@ std::string expr2ct::convert_code_asm(
   dest+="asm();\n";
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_while
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_while(
   const codet &src,
@@ -1828,18 +1288,6 @@ std::string expr2ct::convert_code_while(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_dowhile
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_dowhile(
   const codet &src,
@@ -1868,18 +1316,6 @@ std::string expr2ct::convert_code_dowhile(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_ifthenelse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_ifthenelse(
   const codet &src,
@@ -1916,18 +1352,6 @@ std::string expr2ct::convert_code_ifthenelse(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_return
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_return(
   const codet &src,
   unsigned indent)
@@ -1950,18 +1374,6 @@ std::string expr2ct::convert_code_return(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_goto
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_goto(
   const codet &src,
   unsigned indent)
@@ -1973,18 +1385,6 @@ std::string expr2ct::convert_code_goto(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_gcc_goto
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_gcc_goto(
   const codet &src,
@@ -1998,18 +1398,6 @@ std::string expr2ct::convert_code_gcc_goto(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_break
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_break(
   const codet &src __attribute__((unused)),
   unsigned indent)
@@ -2020,18 +1408,6 @@ std::string expr2ct::convert_code_break(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_switch
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_switch(
   const codet &src,
@@ -2074,18 +1450,6 @@ std::string expr2ct::convert_code_switch(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_continue
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_continue(
   const codet &src __attribute__((unused)),
   unsigned indent)
@@ -2096,18 +1460,6 @@ std::string expr2ct::convert_code_continue(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_decl_block
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_decl_block(
   const codet &src,
@@ -2123,18 +1475,6 @@ std::string expr2ct::convert_code_decl_block(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_decl
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_decl(
   const codet &src,
@@ -2162,18 +1502,6 @@ std::string expr2ct::convert_code_decl(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_for
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_for(
   const codet &src,
@@ -2213,18 +1541,6 @@ std::string expr2ct::convert_code_for(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_block
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_block(
   const codet &src,
   unsigned indent)
@@ -2247,18 +1563,6 @@ std::string expr2ct::convert_code_block(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_expression
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_expression(
   const codet &src,
   unsigned indent)
@@ -2279,18 +1583,6 @@ std::string expr2ct::convert_code_expression(
   dest+="\n";
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code(
   const codet &src,
@@ -2383,18 +1675,6 @@ std::string expr2ct::convert_code(
   return convert_norep(src, precedence);
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_assign
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_assign(
   const codet &src,
   unsigned indent)
@@ -2419,18 +1699,6 @@ std::string expr2ct::convert_code_assign(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_free
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_free(
   const codet &src,
   unsigned indent)
@@ -2444,18 +1712,6 @@ std::string expr2ct::convert_code_free(
   return indent_str(indent)+"FREE("+convert(src.op0())+");";
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_init
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_init(
   const codet &src,
   unsigned indent)
@@ -2464,18 +1720,6 @@ std::string expr2ct::convert_code_init(
 
   return indent_str(indent)+"INIT "+tmp+";";
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_lock
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_lock(
   const codet &src,
@@ -2490,18 +1734,6 @@ std::string expr2ct::convert_code_lock(
   return indent_str(indent)+"LOCK("+convert(src.op0())+");";
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_unlock
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_unlock(
   const codet &src,
   unsigned indent)
@@ -2514,18 +1746,6 @@ std::string expr2ct::convert_code_unlock(
 
   return indent_str(indent)+"UNLOCK("+convert(src.op0())+");";
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_function_call
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_function_call(
   const code_function_callt &src __attribute__((unused)),
@@ -2578,18 +1798,6 @@ std::string expr2ct::convert_code_function_call(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_printf
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_printf(
   const codet &src,
   unsigned indent)
@@ -2611,18 +1819,6 @@ std::string expr2ct::convert_code_printf(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_assert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_assert(
   const codet &src,
   unsigned indent)
@@ -2636,18 +1832,6 @@ std::string expr2ct::convert_code_assert(
   return indent_str(indent)+"assert("+convert(src.op0())+");";
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code_assume
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code_assume(
   const codet &src,
   unsigned indent)
@@ -2660,18 +1844,6 @@ std::string expr2ct::convert_code_assume(
 
   return indent_str(indent)+"assume("+convert(src.op0())+");";
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_label
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_label(
   const code_labelt &src,
@@ -2690,18 +1862,6 @@ std::string expr2ct::convert_code_label(
 
   return labels_string+tmp;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_code_switch_case
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_code_switch_case(
   const code_switch_caset &src,
@@ -2733,34 +1893,10 @@ std::string expr2ct::convert_code_switch_case(
   return labels_string+tmp;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_code
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_code(const codet &src)
 {
   return convert_code(src, 0);
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert_Hoare
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert_Hoare(const exprt &src)
 {
@@ -2804,18 +1940,6 @@ std::string expr2ct::convert_Hoare(const exprt &src)
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_extractbit
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string expr2ct::convert_extractbit(
   const exprt &src,
   unsigned precedence)
@@ -2831,19 +1955,6 @@ std::string expr2ct::convert_extractbit(
   return dest;
 }
 
-/*******************************************************************\
-
-Function: expr2ct::convert_sizeof
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-
 std::string expr2ct::convert_sizeof(
   const exprt &src,
   unsigned precedence __attribute__((unused)))
@@ -2854,18 +1965,6 @@ std::string expr2ct::convert_sizeof(
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert(
   const exprt &src,
@@ -3298,18 +2397,6 @@ std::string expr2ct::convert(
   // no C language expression for internal representation
   return convert_norep(src, precedence);
 }
-
-/*******************************************************************\
-
-Function: expr2ct::convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 std::string expr2ct::convert(const exprt &src)
 {

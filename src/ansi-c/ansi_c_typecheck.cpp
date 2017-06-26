@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <ansi-c/ansi_c_typecheck.h>
 
-/*******************************************************************\
-
-Function: ansi_c_typecheckt::typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void ansi_c_typecheckt::typecheck()
 {
   for(ansi_c_parse_treet::declarationst::iterator
@@ -33,18 +21,6 @@ void ansi_c_typecheckt::typecheck()
   }
 }
 
-/*******************************************************************\
-
-Function: ansi_c_typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool ansi_c_typecheck(
   ansi_c_parse_treet &ansi_c_parse_tree,
   contextt &context,
@@ -55,18 +31,6 @@ bool ansi_c_typecheck(
     ansi_c_parse_tree, context, module, message_handler);
   return ansi_c_typecheck.typecheck_main();
 }
-
-/*******************************************************************\
-
-Function: ansi_c_typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool ansi_c_typecheck(
   exprt &expr,

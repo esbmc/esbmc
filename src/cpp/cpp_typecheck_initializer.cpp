@@ -15,18 +15,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/simplify_expr_class.h>
 #include <util/std_expr.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::convert_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose: Initialize an object with a value
-
-\*******************************************************************/
-
 void cpp_typecheckt::convert_initializer(symbolt &symbol)
 {
   // this is needed for template arguments that are types
@@ -176,18 +164,6 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
       ops);
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::zero_initializer
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::zero_initializer(
   const exprt &object,

@@ -14,21 +14,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/std_code.h>
 #include <util/std_expr.h>
 
-/*******************************************************************\
-
-Function: copy_parent
-
-  Inputs:
-    parent_base_name: base name of typechecked parent
-    block: non-typechecked block
-
- Outputs:
-    generate code to copy the parent
-
- Purpose:
-
-\*******************************************************************/
-
 static void copy_parent(
   const locationt &location,
   const irep_idt &parent_base_name,
@@ -73,21 +58,6 @@ static void copy_parent(
   op1.location() = location;
 }
 
-/*******************************************************************\
-
-Function: copy_member
-
-  Inputs:
-    member_base_name: name of a member
-    block: non-typechecked block
-
- Outputs:
-    generate code to copy the member
-
- Purpose:
-
-\*******************************************************************/
-
 static void copy_member(
   const locationt &location,
   const irep_idt &member_base_name,
@@ -126,22 +96,6 @@ static void copy_member(
   op1.op0().get_sub().back().set("#location", location);
   op1.location() = location;
 }
-
-/*******************************************************************\
-
-Function: copy_array
-
-  Inputs:
-    member_base_name: name of array member
-    index: index to copy
-    block: non-typechecked block
-
- Outputs:
-    generate code to copy the member
-
- Purpose:
-
-\*******************************************************************/
 
 static void copy_array(
   const locationt& location,
@@ -190,18 +144,6 @@ static void copy_array(
 }
 
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::default_ctor
-
-  Inputs:
-
- Outputs:
-
- Purpose: Generate code for implicit default constructors
-
-\*******************************************************************/
-
 void cpp_typecheckt::default_ctor(
   const locationt &location,
   const irep_idt &base_name,
@@ -230,18 +172,6 @@ void cpp_typecheckt::default_ctor(
   ctor.move_to_operands(decl);
   ctor.location() = location;
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::default_cpctor
-
-  Inputs:
-
- Outputs:
-
- Purpose: Generate code for implicit default copy constructor
-
-\*******************************************************************/
 
 void cpp_typecheckt::default_cpctor(
   const symbolt& symbol,
@@ -406,19 +336,6 @@ void cpp_typecheckt::default_cpctor(
   cpctor.type().set("#default_copy_cons", "1");
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::default_assignop
-
-  Inputs:
-
- Outputs:
-
- Purpose: Generate declarartion of the implicit default assignment
- operator
-
-\*******************************************************************/
-
 void cpp_typecheckt::default_assignop(
   const symbolt& symbol,
   cpp_declarationt& cpctor)
@@ -489,18 +406,6 @@ void cpp_typecheckt::default_assignop(
   args_decl_declor.type().subtype().make_nil();
   args_decl_declor.value().make_nil();
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::default_assignop
-
-  Inputs:
-
- Outputs:
-
- Purpose: Generate code for the implicit default assignment operator
-
-\*******************************************************************/
 
 void cpp_typecheckt::default_assignop_value(
   const symbolt &symbol,
@@ -582,24 +487,6 @@ void cpp_typecheckt::default_assignop_value(
   ret_code.statement("return");
   ret_code.type()=code_typet();
 }
-
-/*******************************************************************\
-
-Function: check_member_initializers
-
-Inputs:   bases: the parents of the class
-          components: the components of the class
-          initializers: the constructor initializers
-
- Outputs: If an invalid initializer is found, then
-          the method outputs an error message and
-          throws a 0 exception.
-
- Purpose: Check a constructor initialization-list.
-          An initalizer has to be a data member declared
-          in this class or a direct-parent constructor.
-
-\*******************************************************************/
 
 void cpp_typecheckt::check_member_initializers(
   const irept &bases,
@@ -747,24 +634,6 @@ void cpp_typecheckt::check_member_initializers(
     }
   }
 }
-
-/*******************************************************************\
-
-Function: full_member_initialization
-
-  Inputs: bases: the class base types
-          components: the class components
-          initializers: the constructor initializers
-
- Outputs: initializers is updated.
-
- Purpose: Build the full initialization list of the constructor.
-          First, all the direct-parent constructors are called.
-          Second, all the non-pod data members are initialized.
-
- Note: The initialization order follows the declaration order.
-
-\*******************************************************************/
 
 void cpp_typecheckt::full_member_initialization(
   const struct_typet &struct_type,
@@ -1047,22 +916,6 @@ void cpp_typecheckt::full_member_initialization(
   initializers.swap(final_initializers);
 }
 
-/*******************************************************************\
-
-Function: find_cpctor
-
-  Inputs: typechecked compound symbol
-  Outputs: return true if a copy constructor is found
-
-  Note:
-    "A non-template constructor for class X is a copy constructor
-    if its first parameter is of type X&, const X&, volatile X&
-    or const volatile X&, and either there are no other parameters
-    or else all other parameters have default arguments (8.3.6).106)
-    [Example: X::X(const X&) and X::X(X&, int=1) are copy constructors."
-
-\*******************************************************************/
-
 bool cpp_typecheckt::find_cpctor(const symbolt &symbol) const
 {
   const struct_typet &struct_type = to_struct_type(symbol.type);
@@ -1119,18 +972,6 @@ bool cpp_typecheckt::find_cpctor(const symbolt &symbol) const
   return false;
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::find_assignop
-
-  Inputs:
-
-  Outputs:
-
-  Note:
-
-\*******************************************************************/
-
 bool cpp_typecheckt::find_assignop(const symbolt& symbol) const
 {
   const struct_typet& struct_type = to_struct_type(symbol.type);
@@ -1172,17 +1013,6 @@ bool cpp_typecheckt::find_assignop(const symbolt& symbol) const
   return false;
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::find_dtor
-
-  Inputs:
-  Outputs:
-
-  Note:
-
-\*******************************************************************/
-
 bool cpp_typecheckt::find_dtor(const symbolt& symbol) const
 {
   const irept &components=
@@ -1196,20 +1026,6 @@ bool cpp_typecheckt::find_dtor(const symbolt& symbol) const
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: default_dtor
-
- Inputs:
-
- Outputs:
-
- Purpose:
-
- Note:
-
-\*******************************************************************/
 
 void cpp_typecheckt::default_dtor(
   const symbolt &symb,
@@ -1238,20 +1054,6 @@ void cpp_typecheckt::default_dtor(
   dtor.add("storage_spec").id("cpp-storage-spec");
   dtor.add("operands").move_to_sub(decl);
 }
-
-/*******************************************************************\
-
-Function: dtor
-
- Inputs:
-
- Outputs:
-
- Purpose: produces destructor code for a class object
-
- Note:
-
-\*******************************************************************/
 
 void cpp_typecheckt::dtor(const symbolt &symb, code_blockt &vtables, code_blockt &dtors)
 {

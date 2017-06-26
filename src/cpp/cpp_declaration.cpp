@@ -8,18 +8,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 #include <cpp/cpp_declaration.h>
 
-/*******************************************************************\
-
-Function: cpp_declarationt::output
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_declarationt::output(std::ostream &out) const
 {
   out << "is_template: " << is_template() << std::endl;

@@ -18,18 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/std_expr.h>
 #include <util/string2array.h>
 
-/*******************************************************************\
-
-Function: c_implicit_typecast
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool c_implicit_typecast(
   exprt &expr,
   const typet &dest_type,
@@ -39,18 +27,6 @@ bool c_implicit_typecast(
   c_typecast.implicit_typecast(expr, dest_type);
   return !c_typecast.errors.empty();
 }
-
-/*******************************************************************\
-
-Function: check_c_implicit_typecast
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool check_c_implicit_typecast(
   const typet &src_type,
@@ -64,18 +40,6 @@ bool check_c_implicit_typecast(
   return !c_typecast.errors.empty();
 }
 
-/*******************************************************************\
-
-Function: c_implicit_typecast_arithmetic
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool c_implicit_typecast_arithmetic(
   exprt &expr1, exprt &expr2,
   const namespacet &ns)
@@ -84,18 +48,6 @@ bool c_implicit_typecast_arithmetic(
   c_typecast.implicit_typecast_arithmetic(expr1, expr2);
   return !c_typecast.errors.empty();
 }
-
-/*******************************************************************\
-
-Function: check_c_implicit_typecast
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool check_c_implicit_typecast(
   const typet &src_type,
@@ -172,18 +124,6 @@ bool check_c_implicit_typecast(
   return true;
 }
 
-/*******************************************************************\
-
-Function: c_typecastt::follow_with_qualifiers
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet c_typecastt::follow_with_qualifiers(const typet &src_type)
 {
   if(src_type.id()!="symbol") return src_type;
@@ -195,18 +135,6 @@ typet c_typecastt::follow_with_qualifiers(const typet &src_type)
 
   return dest_type;
 }
-
-/*******************************************************************\
-
-Function: c_typecastt::get_c_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 c_typecastt::c_typet c_typecastt::get_c_type(
   const typet &type)
@@ -270,18 +198,6 @@ c_typecastt::c_typet c_typecastt::get_c_type(
   return OTHER;
 }
 
-/*******************************************************************\
-
-Function: c_typecastt::implicit_typecast_arithmetic
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecastt::implicit_typecast_arithmetic(
   exprt &expr,
   c_typet c_type)
@@ -320,36 +236,12 @@ void c_typecastt::implicit_typecast_arithmetic(
     do_typecast(expr, new_type);
 }
 
-/*******************************************************************\
-
-Function: c_typecastt::implicit_typecast_arithmetic
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecastt::implicit_typecast_arithmetic(exprt &expr)
 {
   c_typet c_type=get_c_type(expr.type());
   c_type=std::max(c_type, INT); // minimum promotion
   implicit_typecast_arithmetic(expr, c_type);
 }
-
-/*******************************************************************\
-
-Function: c_typecastt::implicit_typecast
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecastt::implicit_typecast(
   exprt &expr,
@@ -360,18 +252,6 @@ void c_typecastt::implicit_typecast(
 
   implicit_typecast_followed(expr, src_type, dest_type);
 }
-
-/*******************************************************************\
-
-Function: c_typecastt::implicit_typecast_followed
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecastt::implicit_typecast_followed(
   exprt &expr,
@@ -462,18 +342,6 @@ void c_typecastt::implicit_typecast_followed(
     do_typecast(expr, dest_type);
 }
 
-/*******************************************************************\
-
-Function: c_typecastt::implicit_typecast_arithmetic
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void c_typecastt::implicit_typecast_arithmetic(
   exprt &expr1,
   exprt &expr2)
@@ -499,18 +367,6 @@ void c_typecastt::implicit_typecast_arithmetic(
       do_typecast(expr2, expr1.type());
   }
 }
-
-/*******************************************************************\
-
-Function: c_typecastt::do_typecast
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void c_typecastt::do_typecast(exprt &dest, const typet &type)
 {

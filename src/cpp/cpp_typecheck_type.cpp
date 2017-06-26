@@ -12,18 +12,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/expr2cpp.h>
 #include <util/location.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::typecheck_type(typet &type)
 {
   assert(type.id()!="");

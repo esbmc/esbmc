@@ -10,18 +10,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <c2goto/cprover_library.h>
 #include <cpp/cpp_final.h>
 
-/*******************************************************************\
-
-Function: cpp_final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool cpp_final(
   contextt &context,
   message_handlert &message_handler)

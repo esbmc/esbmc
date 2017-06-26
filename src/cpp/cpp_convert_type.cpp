@@ -39,18 +39,6 @@ protected:
   void read_template(const typet &type);
 };
 
-/*******************************************************************\
-
-Function: cpp_convert_typet::read
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_convert_typet::read(const typet &type)
 {
   unsigned_cnt=signed_cnt=char_cnt=int_cnt=short_cnt=
@@ -63,18 +51,6 @@ void cpp_convert_typet::read(const typet &type)
 
   read_rec(type);
 }
-
-/*******************************************************************\
-
-Function: cpp_convert_typet::read_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_convert_typet::read_rec(const typet &type)
 {
@@ -165,18 +141,6 @@ void cpp_convert_typet::read_rec(const typet &type)
   }
 }
 
-/*******************************************************************\
-
-Function: cpp_covnert_typet::read_template
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_convert_typet::read_template(const typet &type)
 {
   other.push_back(type);
@@ -204,18 +168,6 @@ void cpp_convert_typet::read_template(const typet &type)
     // TODO: initializer
   }
 }
-
-/*******************************************************************\
-
-Function: cpp_convert_typet::read_function_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_convert_typet::read_function_type(const typet &type)
 {
@@ -313,18 +265,6 @@ void cpp_convert_typet::read_function_type(const typet &type)
      arguments.get_sub().front().type().id()=="empty")
     arguments.get_sub().clear();
 }
-
-/*******************************************************************\
-
-Function: cpp_convert_typet::write
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_convert_typet::write(typet &type)
 {
@@ -593,18 +533,6 @@ void cpp_convert_typet::write(typet &type)
   if(volatile_cnt)
     type.set("#volatile", true);
 }
-
-/*******************************************************************\
-
-Function: cpp_convert_plain_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_convert_plain_type(typet &type)
 {

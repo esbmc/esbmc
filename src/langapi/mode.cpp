@@ -17,18 +17,6 @@ const char *extensions_cpp     []={ "cpp", "cc", "ipp", "cxx", NULL };
 const char *extensions_cpp     []={ "cpp", "cc", "ipp", "C", "cxx", NULL };
 #endif
 
-/*******************************************************************\
-
-Function: get_mode
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 int get_mode(const std::string &str)
 {
   unsigned i;
@@ -39,18 +27,6 @@ int get_mode(const std::string &str)
 
   return -1;
 }
-
-/*******************************************************************\
-
-Function: get_mode_filename
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 int get_mode_filename(const std::string &filename)
 {
@@ -72,18 +48,6 @@ int get_mode_filename(const std::string &filename)
 
   return -1;
 }
-
-/*******************************************************************\
-
-Function: new_language
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 languaget *new_language(const char *mode)
 {

@@ -13,18 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/c_types.h>
 #include <util/i2string.h>
 
-/*******************************************************************\
-
-Function: convert_character_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert_character_literal(
   const std::string &src,
   std::string &dest)
@@ -40,18 +28,6 @@ void convert_character_literal(
   else
     unescape_string(std::string(src, 1, src.size()-2), dest);
 }
-
-/*******************************************************************\
-
-Function: convert_character_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void convert_character_literal(
   const std::string &src,

@@ -6638,18 +6638,6 @@ void Parser::SkipTo(int token)
   }
 }
 
-/*******************************************************************\
-
-Function: Parser::parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool Parser::parse()
 {
   number_of_errors=0;
@@ -6664,18 +6652,6 @@ bool Parser::parse()
 
   return number_of_errors!=0;
 }
-
-/*******************************************************************\
-
-Function: cpp_parse
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool cpp_parse()
 {

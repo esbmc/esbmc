@@ -1,15 +1,3 @@
-/*******************************************************************\
-
-Function: cpp_typecheckt::do_virtual_table
-
-Inputs:
-
-Outputs:
-
-Purpose:
-
-\*******************************************************************/
-
 #include <cpp/cpp_typecheck.h>
 #include <util/expr_util.h>
 #include <util/std_expr.h>

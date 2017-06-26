@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/i2string.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: type2name
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 std::string type2name(const typet &type)
 {
   std::string result;

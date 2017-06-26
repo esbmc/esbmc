@@ -14,18 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/ieee_float.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: convert_float_literal
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert_float_literal(
   const std::string &src,
   exprt &dest)

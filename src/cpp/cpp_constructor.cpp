@@ -12,18 +12,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <util/c_types.h>
 #include <util/std_types.h>
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::cpp_constructor
-
-  Inputs: non-typchecked object, non-typechecked operands
-
- Outputs: typechecked code
-
- Purpose:
-
-\*******************************************************************/
-
 codet cpp_typecheckt::cpp_constructor(
   const locationt &location,
   const exprt &object,
@@ -344,18 +332,6 @@ codet cpp_typecheckt::cpp_constructor(
   return nil;
 }
 
-/*******************************************************************\
-
-Function: cpp_typecheckt::new_temporary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void cpp_typecheckt::new_temporary(
   const locationt &location,
   const typet &type,
@@ -387,18 +363,6 @@ void cpp_typecheckt::new_temporary(
 
   temporary.swap(tmp_object_expr);
 }
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::new_temporary
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void cpp_typecheckt::new_temporary(
   const locationt &location,

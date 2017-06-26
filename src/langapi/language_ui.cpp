@@ -12,18 +12,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <memory>
 #include <util/i2string.h>
 
-/*******************************************************************\
-
-Function: language_uit::language_uit
-
-  Inputs:
-
- Outputs:
-
- Purpose: Constructor
-
-\*******************************************************************/
-
 static ui_message_handlert::uit get_ui_cmdline(const cmdlinet &cmdline)
 {
   if(cmdline.isset("gui"))
@@ -34,18 +22,6 @@ static ui_message_handlert::uit get_ui_cmdline(const cmdlinet &cmdline)
   return ui_message_handlert::PLAIN;
 }
 
-/*******************************************************************\
-
-Function: language_uit::language_uit
-
-  Inputs:
-
- Outputs:
-
- Purpose: Constructor
-
-\*******************************************************************/
-
 language_uit::language_uit(const cmdlinet &__cmdline):
   ui_message_handler(get_ui_cmdline(__cmdline)),
   _cmdline(__cmdline)
@@ -53,33 +29,9 @@ language_uit::language_uit(const cmdlinet &__cmdline):
   set_message_handler(&ui_message_handler);
 }
 
-/*******************************************************************\
-
-Function: language_uit::~language_uit
-
-  Inputs:
-
- Outputs:
-
- Purpose: Destructor
-
-\*******************************************************************/
-
 language_uit::~language_uit()
 {
 }
-
-/*******************************************************************\
-
-Function: language_uit::parse()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool language_uit::parse()
 {
@@ -91,18 +43,6 @@ bool language_uit::parse()
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: language_uit::parse()
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool language_uit::parse(const std::string &filename)
 {
@@ -158,18 +98,6 @@ bool language_uit::parse(const std::string &filename)
   return false;
 }
 
-/*******************************************************************\
-
-Function: language_uit::typecheck
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool language_uit::typecheck()
 {
   status("Converting");
@@ -188,18 +116,6 @@ bool language_uit::typecheck()
   return false;
 }
 
-/*******************************************************************\
-
-Function: language_uit::final
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool language_uit::final()
 {
   language_files.set_message_handler(message_handler);
@@ -215,18 +131,6 @@ bool language_uit::final()
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: language_uit::show_symbol_table
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void language_uit::show_symbol_table()
 {
@@ -245,34 +149,10 @@ void language_uit::show_symbol_table()
   }
 }
 
-/*******************************************************************\
-
-Function: language_uit::show_symbol_table_xml_ui
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void language_uit::show_symbol_table_xml_ui()
 {
   error("cannot show symbol table in this format");
 }
-
-/*******************************************************************\
-
-Function: language_uit::show_symbol_table_plain
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void language_uit::show_symbol_table_plain(std::ostream &out)
 {
