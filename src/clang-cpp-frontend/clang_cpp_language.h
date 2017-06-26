@@ -46,13 +46,15 @@ public:
   virtual bool from_expr(
     const exprt &expr,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false);
 
   // conversion from type into string
   virtual bool from_type(
     const typet &type,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false);
 
   // conversion from string into expression
   virtual bool to_expr(

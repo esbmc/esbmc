@@ -337,6 +337,7 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
   bool print_guard = config.options.get_bool_option("show-guards");
   bool sparse = config.options.get_bool_option("simple-ssa-printing");
   bool no_sliced = config.options.get_bool_option("no-sliced-ssa");
+  bool fullname = config.options.get_bool_option("full-ssa-names");
 
   for(auto const &it : eq->SSA_steps)
   {
@@ -356,7 +357,7 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
     std::string string_value;
 
     exprt cond = migrate_expr_back(it.cond);
-    languages.from_expr(cond, string_value);
+    languages.from_expr(cond, string_value, fullname);
 
     if(it.is_assignment())
     {

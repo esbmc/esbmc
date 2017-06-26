@@ -83,7 +83,8 @@ bool clang_cpp_languaget::final(
 bool clang_cpp_languaget::from_expr(
   const exprt &expr __attribute__((unused)),
   std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
+  const namespacet &ns __attribute__((unused)),
+  bool fullname __attribute__((unused)))
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();
@@ -93,7 +94,8 @@ bool clang_cpp_languaget::from_expr(
 bool clang_cpp_languaget::from_type(
   const typet &type __attribute__((unused)),
   std::string &code __attribute__((unused)),
-  const namespacet &ns __attribute__((unused)))
+  const namespacet &ns __attribute__((unused)),
+  bool fullname __attribute__((unused)))
 {
   std::cout << "Method " << __PRETTY_FUNCTION__ << " not implemented yet" << std::endl;
   abort();

@@ -2,7 +2,7 @@ noinst_LTLIBRARIES = libutil.la
 libutil_la_SOURCES = \
       irep2.cpp \
       arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
-      expr_util.cpp i2string.cpp language.cpp location.cpp message.cpp \
+      expr_util.cpp i2string.cpp location.cpp message.cpp \
       language_file.cpp mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp \
       threeval.cpp typecheck.cpp bitvector.cpp parser.cpp replace_symbol.cpp \
       string_hash.cpp string_container.cpp options.cpp c_misc.cpp \

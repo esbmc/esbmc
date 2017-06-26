@@ -292,18 +292,20 @@ std::string clang_c_languaget::internal_additions()
 bool clang_c_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool fullname)
 {
-  code=expr2c(expr, ns);
+  code=expr2c(expr, ns, fullname);
   return false;
 }
 
 bool clang_c_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  bool fullname)
 {
-  code=type2c(type, ns);
+  code=type2c(type, ns, fullname);
   return false;
 }
 

@@ -1204,7 +1204,7 @@ std::string expr2ct::convert_symbol(
   const irep_idt &id=src.identifier();
   std::string dest;
 
-  if(ns_collision.find(id)==ns_collision.end())
+  if(!fullname && ns_collision.find(id)==ns_collision.end())
     dest=id_shorthand(src);
   else
     dest=id2string(id);
@@ -3317,42 +3317,16 @@ std::string expr2ct::convert(const exprt &src)
   return convert(src, precedence);
 }
 
-/*******************************************************************\
-
-Function: expr2c
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-std::string expr2c(const exprt &expr, const namespacet &ns)
+std::string expr2c(const exprt &expr, const namespacet &ns, bool fullname)
 {
   std::string code;
-  expr2ct expr2c(ns);
+  expr2ct expr2c(ns, fullname);
   expr2c.get_shorthands(expr);
   return expr2c.convert(expr);
 }
 
-/*******************************************************************\
-
-Function: type2c
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-std::string type2c(const typet &type, const namespacet &ns)
+std::string type2c(const typet &type, const namespacet &ns, bool fullname)
 {
-  expr2ct expr2c(ns);
-  //expr2c.get_shorthands(expr);
+  expr2ct expr2c(ns, fullname);
   return expr2c.convert(type);
 }
-

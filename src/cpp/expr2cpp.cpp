@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 class expr2cppt:public expr2ct
 {
 public:
-  expr2cppt(const namespacet &_ns):expr2ct(_ns) { }
+  expr2cppt(const namespacet &_ns, const bool _fullname) : expr2ct(_ns, _fullname) { }
 
   virtual std::string convert(const exprt &src)
   {
@@ -494,9 +494,9 @@ Function: expr2cpp
 
 \*******************************************************************/
 
-std::string expr2cpp(const exprt &expr, const namespacet &ns)
+std::string expr2cpp(const exprt &expr, const namespacet &ns, const bool fullname)
 {
-  expr2cppt expr2cpp(ns);
+  expr2cppt expr2cpp(ns, fullname);
   expr2cpp.get_shorthands(expr);
   return expr2cpp.convert(expr);
 }
@@ -513,8 +513,8 @@ Function: type2cpp
 
 \*******************************************************************/
 
-std::string type2cpp(const typet &type, const namespacet &ns)
+std::string type2cpp(const typet &type, const namespacet &ns, const bool fullname)
 {
-  expr2cppt expr2cpp(ns);
+  expr2cppt expr2cpp(ns, fullname);
   return expr2cpp.convert(type);
 }

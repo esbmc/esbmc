@@ -44,15 +44,19 @@ public:
   virtual ~ansi_c_languaget();
   ansi_c_languaget() { }
 
+  // conversion from expression into string
   virtual bool from_expr(
     const exprt &expr,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false);
 
+  // conversion from type into string
   virtual bool from_type(
     const typet &type,
     std::string &code,
-    const namespacet &ns);
+    const namespacet &ns,
+    bool fullname = false);
 
   virtual bool to_expr(
     const std::string &code,

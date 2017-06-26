@@ -1864,6 +1864,7 @@ void cbmc_parseoptionst::help()
     " --show-guards                print SSA's guards, if any\n"
     " --simple-ssa-printing        do not print the SSA's original location\n"
     " --no-sliced-ssa              do not print the sliced SSAs\n"
+    " --full-ssa-names             print SSAs with full variable names\n"
     " --smt-formula-only           only show SMT formula (not supported by all solvers)\n"
     " --smt-formula-too            show SMT formula (not supported by all solvers) and verify\n"
     " --show-smt-model             show SMT model (not supported by all solvers), if the formula is SAT\n"
