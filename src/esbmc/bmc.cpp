@@ -334,10 +334,10 @@ void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
 
   std::cout << "\n" << "Program constraints: " << eq->SSA_steps.size() << "\n";
 
-  bool print_guard = config.options.get_bool_option("show-guards");
-  bool sparse = config.options.get_bool_option("simple-ssa-printing");
-  bool no_sliced = config.options.get_bool_option("no-sliced-ssa");
-  bool fullname = config.options.get_bool_option("full-ssa-names");
+  bool print_guard = config.options.get_bool_option("ssa-guards");
+  bool sparse = config.options.get_bool_option("ssa-no-location");
+  bool no_sliced = config.options.get_bool_option("ssa-no-sliced");
+  bool fullname = config.options.get_bool_option("ssa-full-names");
 
   for(auto const &it : eq->SSA_steps)
   {
