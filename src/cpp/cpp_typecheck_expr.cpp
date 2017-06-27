@@ -283,8 +283,6 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
   if(expr.op1().cmt_lvalue() &&
      expr.op2().cmt_lvalue())
     expr.set("#lvalue", true);
-
-  return;
 }
 
 void cpp_typecheckt::typecheck_expr_member(exprt &expr)
@@ -2291,7 +2289,6 @@ void cpp_typecheckt::convert_pmop(exprt& expr)
   exprt tmp(expr.op1());
   tmp.type().set("#bound", expr.op0());
   expr.swap(tmp);
-  return;
 }
 
 void cpp_typecheckt::typecheck_expr_function_identifier(exprt &expr)

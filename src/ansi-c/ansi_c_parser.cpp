@@ -79,8 +79,6 @@ insert_base_type(typet &dest, const typet &base_type)
     else
       p=&t.subtype();
   }
-
-  return;
 }
 
 void ansi_c_parsert::convert_declarator(

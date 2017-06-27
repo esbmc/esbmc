@@ -418,17 +418,14 @@ cvc_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 void
 cvc_convt::add_array_constraints_for_solving()
 {
-  return;
 }
 
 void
 cvc_convt::push_array_ctx()
 {
-  return;
 }
 
 void
 cvc_convt::pop_array_ctx()
 {
-  return;
 }

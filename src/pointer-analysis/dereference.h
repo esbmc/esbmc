@@ -150,7 +150,6 @@ public:
    */
   virtual void rename(expr2tc &expr __attribute__((unused)))
   {
-    return;
   }
 
   struct internal_item {
@@ -162,7 +161,6 @@ public:
   virtual void dump_internal_state(const std::list<struct internal_item> &data
                                    __attribute__((unused)))
   {
-    return;
   }
 };
 

@@ -1206,7 +1206,6 @@ void
 smt_convt::assert_expr(const expr2tc &e)
 {
   assert_ast(convert_ast(e));
-  return;
 }
 
 smt_sortt
@@ -2245,7 +2244,6 @@ smt_convt::pre_solve()
   // the array api class.
   tuple_api->add_tuple_constraints_for_solving();
   array_api->add_array_constraints_for_solving();
-  return;
 }
 
 expr2tc
@@ -2554,8 +2552,6 @@ smt_convt::rewrite_ptrs_to_structs(type2tc &type)
   type2t::subtype_delegate del_wrap(std::ref(replace_w_ptr));
   delegate = &del_wrap;
   type.get()->Foreach_subtype(replace_w_ptr);
-
-  return;
 }
 
 // Default behaviours for SMT AST's

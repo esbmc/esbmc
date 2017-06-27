@@ -28,8 +28,6 @@ round_up_to_word(mp_integer &mp)
   } else if (mp.to_ulong() & align_mask) {
     mp += word_bytes - (mp.to_ulong() & align_mask);
   }
-
-  return;
 }
 
 static inline void
@@ -46,8 +44,6 @@ round_up_to_int64(mp_integer &mp)
   } else if (mp.to_ulong() & align_mask) {
     mp += word_bytes - (mp.to_ulong() & align_mask);
   }
-
-  return;
 }
 
 mp_integer

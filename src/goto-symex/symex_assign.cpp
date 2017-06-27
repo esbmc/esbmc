@@ -520,8 +520,6 @@ void goto_symext::symex_assign_concat(
     lhs_it++;
     rhs_it++;
   }
-
-  return;
 }
 
 void goto_symext::replace_nondet(expr2tc &expr)

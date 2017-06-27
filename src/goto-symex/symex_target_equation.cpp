@@ -134,8 +134,6 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
 
   if (!assertions.empty())
     smt_conv.assert_ast(smt_conv.make_disjunct(assertions));
-
-  return;
 }
 
 void symex_target_equationt::convert_internal_step(
@@ -201,8 +199,6 @@ void symex_target_equationt::convert_internal_step(
     v.push_back(step.cond_ast);
     assumpt_ast = smt_conv.make_conjunct(v);
   }
-
-  return;
 }
 
 void symex_target_equationt::output(std::ostream &out) const
@@ -325,8 +321,6 @@ symex_target_equationt::check_for_duplicate_assigns() const
   }
 
   std::cerr << "Checked " << i << " insns" << std::endl;
-
-  return;
 }
 
 unsigned int
@@ -434,8 +428,6 @@ runtime_encoded_equationt::convert(smt_convt &smt_conv)
   // Finally, we also want to assert the set of assertions.
   if(!assert_vec_list.back().empty())
     smt_conv.assert_ast(smt_conv.make_disjunct(assert_vec_list.back()));
-
-  return;
 }
 
 boost::shared_ptr<symex_targett>

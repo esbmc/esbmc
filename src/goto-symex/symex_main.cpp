@@ -61,7 +61,6 @@ goto_symext::assume(const expr2tc &assumption)
   // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
   target->assumption(tmp_guard, assumption, cur_state->source);
-  return;
 }
 
 boost::shared_ptr<goto_symext::symex_resultt>
@@ -364,8 +363,6 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
               << std::endl;
     abort();
   }
-
-  return;
 }
 
 void

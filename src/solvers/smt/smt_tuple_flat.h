@@ -77,7 +77,7 @@ public:
   smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
   smt_astt project(smt_convt *ctx, unsigned int elem) const override;
 
-  void dump() const override { return; }
+  void dump() const override { }
 
   void make_free(smt_convt *ctx);
   void pre_ite(smt_convt *ctx, smt_astt cond, smt_astt falseop);
@@ -154,7 +154,7 @@ public:
   smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
   smt_astt project(smt_convt *ctx, unsigned int elem) const override;
 
-  void dump() const override { return; }
+  void dump() const override { }
 };
 
 class array_sym_smt_ast : public tuple_sym_smt_ast

@@ -46,7 +46,6 @@ array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
   destination->array_fields = source->array_fields;
   destination->base_array_id = source->base_array_id;
   destination->array_update_num = source->array_update_num;
-  return;
 }
 
 unsigned int
@@ -509,8 +508,6 @@ array_convt::add_array_constraints_for_solving()
   execute_new_updates();
   apply_new_selects();
   add_array_equalities();
-
-  return;
 }
 
 void
@@ -717,7 +714,6 @@ array_convt::join_array_indexes()
   }
 
   // Le fin
-  return;
 }
 
 void
@@ -977,7 +973,6 @@ array_convt::add_array_equality(unsigned int arr1_id, unsigned int arr2_id,
 
   smt_astt conj = ctx->make_conjunct(lits);
   ctx->assert_ast(result->eq(ctx, conj));
-  return;
 }
 
 void
@@ -1069,8 +1064,7 @@ array_convt::execute_array_update(ast_vect &dest_data,
     ctx->assert_ast(dest_data[it2.vec_idx]->eq(ctx, dest_ite));
   }
 
-  return;
-}
+  }
 
 void
 array_convt::execute_array_ite(ast_vect &dest,
@@ -1086,8 +1080,6 @@ array_convt::execute_array_ite(ast_vect &dest,
     smt_astt updated_elem = true_vals[i]->ite(ctx, cond, false_vals[i]);
     ctx->assert_ast(dest[i]->eq(ctx, updated_elem));
   }
-
-  return;
 }
 
 void
@@ -1130,8 +1122,6 @@ array_convt::execute_array_joining_ite(ast_vect &dest,
 
   execute_array_ite(dest, *true_vals, *false_vals, idx_map, cond,
       start_point);
-
-  return;
 }
 
 void

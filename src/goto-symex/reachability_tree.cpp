@@ -136,8 +136,6 @@ reachability_treet::post_hash_collision_cleanup()
 
   for (auto && it : get_cur_state().DFS_traversed)
     it = true;
-
-  return;
 }
 
 void
@@ -149,7 +147,6 @@ reachability_treet::update_hash_collision_set()
   crypto_hash hash;
   hash = ex_state.generate_hash();
   hit_hashes.insert(hash);
-  return;
 }
 
 void
@@ -177,8 +174,6 @@ reachability_treet::create_next_state()
     new_state->switch_to_thread(next_thread_id);
     new_state->update_after_switch_point();
   }
-
-  return;
 }
 
 bool
@@ -813,6 +808,4 @@ void reachability_treet::save_checkpoint(const std::string fname __attribute__((
 #endif
 
   abort();
-
-  return;
 }

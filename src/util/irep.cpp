@@ -23,7 +23,6 @@ irept::dump() const
 {
 
   std::cout << pretty(0) << std::endl;
-  return;
 }
 
 const irept &get_nil_irep()

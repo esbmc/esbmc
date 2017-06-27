@@ -503,8 +503,6 @@ goto_programt::extract_instructions(OutList &list, ListAppender listappend,
     }
     i++;
   }
-
-  return;
 }
 
 template <typename InList, typename InElem, typename FetchElem,
@@ -567,8 +565,6 @@ goto_programt::inject_instructions(InList list,
       it->targets.push_back(target_list_it);
     }
   }
-
-  return;
 }
 
 #endif

@@ -24,7 +24,6 @@ public:
   ~value_set_domaint() override {
     if (value_set)
       delete value_set;
-    return;
   }
 
   value_set_domaint(const value_set_domaint &ref)

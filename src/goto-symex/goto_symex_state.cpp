@@ -393,8 +393,6 @@ void goto_symex_statet::print_stack_trace(unsigned int indent) const
     std::cout << spaces << "Next instruction to be executed:" << std::endl;
     source.pc->output_instruction(ns, "", std::cout);
   }
-
-  return;
 }
 
 std::vector<stack_framet>

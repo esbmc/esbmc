@@ -857,19 +857,16 @@ mathsat_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 void
 mathsat_convt::add_array_constraints_for_solving()
 {
-  return;
 }
 
 void
 mathsat_convt::push_array_ctx()
 {
-  return;
 }
 
 void
 mathsat_convt::pop_array_ctx()
 {
-  return;
 }
 
 const smt_ast* mathsat_smt_ast::select(smt_convt* ctx, const expr2tc& idx) const

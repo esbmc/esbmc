@@ -266,7 +266,6 @@ public:
     // which causes the existing reference to be decremented.
     const T *foo = std::shared_ptr<T>::get();
     *this = foo->clone();
-    return;
   }
 
   uint32_t crc() const
@@ -1106,7 +1105,6 @@ namespace esbmct {
       (void)idx;
       (void)vec;
       (void)indent;
-      return;
     }
 
     bool cmp_rec(const base2t &ref) const
@@ -1125,13 +1123,11 @@ namespace esbmct {
 
     void do_crc_rec() const
     {
-      return;
     }
 
     void hash_rec(crypto_hash &hash) const
     {
       (void)hash;
-      return;
     }
 
     const expr2tc *get_sub_expr_rec(unsigned int cur_idx, unsigned int desired) const
@@ -1160,25 +1156,21 @@ namespace esbmct {
     void foreach_operand_impl_rec(expr2t::op_delegate &f)
     {
       (void)f;
-      return;
     }
 
     void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const
     {
       (void)f;
-      return;
     }
 
     void foreach_subtype_impl_rec(type2t::subtype_delegate &t)
     {
       (void)t;
-      return;
     }
 
     void foreach_subtype_impl_const_rec(type2t::const_subtype_delegate &t) const
     {
       (void)t;
-      return;
     }
 
     template <typename T>

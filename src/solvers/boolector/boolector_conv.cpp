@@ -567,19 +567,16 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 void
 boolector_convt::add_array_constraints_for_solving()
 {
-  return;
 }
 
 void
 boolector_convt::push_array_ctx()
 {
-  return;
 }
 
 void
 boolector_convt::pop_array_ctx()
 {
-  return;
 }
 
 smt_ast *

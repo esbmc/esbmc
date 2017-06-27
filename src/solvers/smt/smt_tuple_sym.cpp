@@ -385,8 +385,6 @@ array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
     source->assign(ctx, destination);
     i++;
   }
-
-  return;
 }
 
 smt_astt
@@ -588,17 +586,14 @@ smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
 void
 smt_tuple_sym_flattener::add_tuple_constraints_for_solving()
 {
-  return;
 }
 
 void
 smt_tuple_sym_flattener::push_tuple_ctx()
 {
-  return;
 }
 
 void
 smt_tuple_sym_flattener::pop_tuple_ctx()
 {
-  return;
 }

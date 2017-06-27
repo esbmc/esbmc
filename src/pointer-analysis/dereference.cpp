@@ -927,8 +927,6 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
     stitch_together_from_byte_array(value, type, bytes);
     delete[] bytes;
   }
-
-  return;
 }
 
 void
@@ -1226,7 +1224,6 @@ dereferencet::construct_struct_ref_from_const_offset_array(expr2tc &value,
 
   // We now have a vector of fields reconstructed from the byte array
   value = constant_struct2tc(type, fields);
-  return;
 }
 
 void
@@ -1287,8 +1284,6 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
     std::cerr << " argument to construct_struct_ref" << std::endl;
     abort();
   }
-
-  return;
 }
 
 void
@@ -1734,7 +1729,6 @@ dereferencet::check_code_access(expr2tc &value, const expr2tc &offset,
   // As for setting the 'value', it's currently already set to the base code
   // object. There's nothing we can actually change it to to mean anything, so
   // don't fiddle with it.
-  return;
 }
 
 void

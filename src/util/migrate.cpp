@@ -445,7 +445,6 @@ splice_expr(const exprt &expr, expr2tc &new_expr_ref)
 
   exprt newexpr = splice_expr(expr);
   migrate_expr(newexpr, new_expr_ref);
-  return;
 }
 
 static void
@@ -610,8 +609,6 @@ flatten_to_bytes(const exprt &expr, std::vector<expr2tc> &bytes)
     std::cerr << " when flattening union literal" << std::endl;
     abort();
   }
-
-  return;
 }
 
 static expr2tc

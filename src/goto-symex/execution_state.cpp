@@ -289,8 +289,6 @@ execution_statet::symex_step(reachability_treet &art)
     default:
       goto_symext::symex_step(art);
   }
-
-  return;
 }
 
 void
@@ -302,8 +300,6 @@ execution_statet::symex_assign(const expr2tc &code)
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_assign(code);
-
-  return;
 }
 
 void
@@ -315,8 +311,6 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(expr);
-
-  return;
 }
 
 void
@@ -331,8 +325,6 @@ execution_statet::symex_goto(const expr2tc &old_guard)
       analyze_read(old_guard);
     }
   }
-
-  return;
 }
 
 void
@@ -344,8 +336,6 @@ execution_statet::assume(const expr2tc &assumption)
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(assumption);
-
-  return;
 }
 
 unsigned int &
@@ -584,8 +574,6 @@ execution_statet::preserve_last_paths()
     threads_state[last_active_thread].thread_ended = true;
     atomic_numbers[last_active_thread] = 0;
   }
-
-  return;
 }
 
 void
@@ -601,8 +589,6 @@ execution_statet::cull_all_paths()
   for (auto &frame : cur_state->call_stack) {
     frame.goto_state_map.clear();
   }
-
-  return;
 }
 
 void
@@ -635,8 +621,6 @@ execution_statet::restore_last_paths()
   }
 
   list.clear();
-
-  return;
 }
 
 bool
@@ -785,8 +769,6 @@ execution_statet::analyze_assign(const expr2tc &code)
     thread_last_writes[active_thread].insert(global_writes.begin(),
                                              global_writes.end());
   }
-
-  return;
 }
 
 void
@@ -801,8 +783,6 @@ execution_statet::analyze_read(const expr2tc &code)
     thread_last_reads[active_thread].insert(global_reads.begin(),
                                             global_reads.end());
   }
-
-  return;
 }
 
 void
@@ -1114,8 +1094,6 @@ execution_statet::print_stack_traces(unsigned int indent) const
     it->print_stack_trace(indent + 2);
     std::cout << std::endl;
   }
-
-  return;
 }
 
 void
@@ -1182,7 +1160,6 @@ execution_statet::kill_monitor_thread()
          "You cannot kill monitor thread _from_ the monitor thread\n");
 
   threads_state[monitor_tid].thread_ended = true;
-  return;
 }
 
 static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
@@ -1195,8 +1172,6 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
     Forall_operands(it, e)
       replace_symbol_names(*it, prefix, strings, used_syms);
   }
-
-  return;
 }
 
 void
@@ -1343,7 +1318,6 @@ schedule_execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
   *ptotal_claims += tmp_total;
   *premaining_claims += tmp_remaining;
-  return;
 }
 
 execution_statet::state_hashing_level2t::state_hashing_level2t(

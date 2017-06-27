@@ -423,8 +423,6 @@ smt_convt::finalize_pointer_chain(unsigned int objnum)
     or2tc or1(lt1, gt1);
     assert_expr(or1);
   }
-
-  return;
 }
 
 smt_astt
@@ -594,7 +592,6 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   symbol2tc newname(addr_space_arr_type, ss2.str());
   equality2tc eq(newname, store);
   convert_assign(eq);
-  return;
 }
 
 std::string

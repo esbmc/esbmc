@@ -184,8 +184,6 @@ void setup_cpp_defs(const char **defs)
     record_define(*defs);
     defs++;
   }
-
-  return;
 }
 
 #ifndef _WIN32

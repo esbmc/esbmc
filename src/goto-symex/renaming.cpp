@@ -42,7 +42,6 @@ renaming::level1t::get_ident_name(expr2tc &sym) const
   symbol.rlevel = symbol2t::level1;
   symbol.level1_num = it->second;
   symbol.thread_num = thread_id;
-  return;
 }
 
 void
@@ -67,7 +66,6 @@ renaming::level2t::get_ident_name(expr2tc &sym) const
   symbol.rlevel = lev;
   symbol.level2_num = it->second.count;
   symbol.node_num = it->second.node_id;
-  return;
 }
 
 void renaming::level1t::rename(expr2tc &expr)
@@ -309,5 +307,4 @@ void renaming::level2t::rename_to_record(expr2tc &expr, const name_record &rec)
   sym.level1_num = rec.l1_num;
   sym.thread_num = rec.t_num;
   sym.rlevel = rec.lev;
-  return;
 }

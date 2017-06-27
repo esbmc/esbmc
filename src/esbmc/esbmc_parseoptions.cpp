@@ -1455,8 +1455,6 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
       break;
     }
   }
-
-  return;
 }
 
 static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
@@ -1475,8 +1473,6 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
       }
     );
   }
-
-  return;
 }
 
 expr2tc cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
@@ -1563,8 +1559,6 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   new_insn.type = ATOMIC_END;
   new_insn.function = insn->function;
   insn_list.insert(insn, new_insn);
-
-  return;
 }
 
 static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
@@ -1634,8 +1628,6 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
         pit->output_instruction(ns, pit->function, std::cout);
     }
   }
-
-  return;
 }
 
 bool cbmc_parseoptionst::read_goto_binary(

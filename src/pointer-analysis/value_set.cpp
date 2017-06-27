@@ -616,8 +616,6 @@ value_sett::get_byte_stitching_value_set(
   } else {
     get_value_set_rec(expr, dest, suffix, original_type);
   }
-
-  return;
 }
 
 void value_sett::get_reference_set(

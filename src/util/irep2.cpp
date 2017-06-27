@@ -279,7 +279,6 @@ void
 type2t::dump() const
 {
   std::cout << pretty(0) << std::endl;
-  return;
 }
 
 uint32_t
@@ -303,7 +302,6 @@ type2t::hash(crypto_hash &hash) const
   static_assert(type2t::end_type_id < 256, "Type id overflow");
   uint8_t tid = type_id;
   hash.ingest(&tid, sizeof(tid));
-  return;
 }
 
 unsigned int
@@ -669,7 +667,6 @@ expr2t::hash(crypto_hash &hash) const
   uint8_t eid = expr_id;
   hash.ingest(&eid, sizeof(eid));
   type->hash(hash);
-  return;
 }
 
 expr2tc
@@ -881,7 +878,6 @@ void
 expr2t::dump() const
 {
   std::cout << pretty(0) << std::endl;
-  return;
 }
 
 // Map a base type to it's list of names
@@ -1178,8 +1174,6 @@ type_poolt::type_poolt(bool yolo __attribute__((unused)))
   int16 = &signedbv_map[signedbv_typet(16)];
   int32 = &signedbv_map[signedbv_typet(32)];
   int64 = &signedbv_map[signedbv_typet(64)];
-
-  return;
 }
 
 type_poolt &
@@ -1789,7 +1783,6 @@ do_type_hash(const bool &thebool, crypto_hash &hash)
     uint8_t tval = 0;
     hash.ingest(&tval, sizeof(tval));
   }
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1805,7 +1798,6 @@ do_type_hash(const unsigned int &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)&theval, sizeof(theval));
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1821,7 +1813,6 @@ do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)&theval, sizeof(theval));
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1837,7 +1828,6 @@ do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)&theval, sizeof(theval));
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1884,7 +1874,6 @@ do_type_hash(const BigInt &theint, crypto_hash &hash)
     // at the price of possible crc collisions.
     ;
   }
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1899,7 +1888,6 @@ do_type_hash(const fixedbvt &theval, crypto_hash &hash)
 {
 
   do_type_hash(theval.to_integer(), hash);
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1914,7 +1902,6 @@ do_type_hash(const ieee_floatt &theval, crypto_hash &hash)
 {
 
   do_type_hash(theval.to_integer(), hash);
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1979,7 +1966,6 @@ do_type_hash(const expr2tc &theval, crypto_hash &hash)
 
   if (theval.get() != nullptr)
     theval->hash(hash);
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -1997,7 +1983,6 @@ do_type_hash(const type2tc &theval, crypto_hash &hash)
 
   if (theval.get() != nullptr)
     theval->hash(hash);
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -2013,7 +1998,6 @@ do_type_hash(const irep_idt &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)theval.as_string().c_str(), theval.as_string().size());
-  return;
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -2026,7 +2010,7 @@ static inline __attribute__((always_inline)) void
 do_type_hash(const type2t::type_ids &i __attribute__((unused)),
              crypto_hash &hash __attribute__((unused)))
 {
-  return; // Dummy field crc
+  // Dummy field crc
 }
 
 static inline __attribute__((always_inline)) size_t
@@ -2039,7 +2023,7 @@ static inline __attribute__((always_inline)) void
 do_type_hash(const expr2t::expr_ids &i __attribute__((unused)),
              crypto_hash &hash __attribute__((unused)))
 {
-  return; // Dummy field crc
+  // Dummy field crc
 }
 
 template <typename T>
@@ -2192,7 +2176,6 @@ call_expr_delegate(T &ref, U &f)
   // Don't do anything normally.
   (void)ref;
   (void)f;
-  return;
 }
 
 template <>
@@ -2201,7 +2184,6 @@ call_expr_delegate<const expr2tc,expr2t::const_op_delegate>
                   (const expr2tc &ref, expr2t::const_op_delegate &f)
 {
   f(ref);
-  return;
 }
 
 template <>
@@ -2210,7 +2192,6 @@ call_expr_delegate<expr2tc, expr2t::op_delegate>
                   (expr2tc &ref, expr2t::op_delegate &f)
 {
   f(ref);
-  return;
 }
 
 template <>
@@ -2220,8 +2201,6 @@ call_expr_delegate<const std::vector<expr2tc>, expr2t::const_op_delegate>
 {
   for (const expr2tc &r : ref)
     f(r);
-
-  return;
 }
 
 template <>
@@ -2231,8 +2210,6 @@ call_expr_delegate<std::vector<expr2tc>, expr2t::op_delegate>
 {
   for (expr2tc &r : ref)
     f(r);
-
-  return;
 }
 
 // Repeat of call_expr_delegate, but for types
@@ -2243,7 +2220,6 @@ call_type_delegate(T &ref, U &f)
   // Don't do anything normally.
   (void)ref;
   (void)f;
-  return;
 }
 
 template <>
@@ -2252,7 +2228,6 @@ call_type_delegate<const type2tc,type2t::const_subtype_delegate>
                   (const type2tc &ref, type2t::const_subtype_delegate &f)
 {
   f(ref);
-  return;
 }
 
 template <>
@@ -2261,7 +2236,6 @@ call_type_delegate<type2tc, type2t::subtype_delegate>
                   (type2tc &ref, type2t::subtype_delegate &f)
 {
   f(ref);
-  return;
 }
 
 template <>
@@ -2271,8 +2245,6 @@ call_type_delegate<const std::vector<type2tc>, type2t::const_subtype_delegate>
 {
   for (const type2tc &r : ref)
     f(r);
-
-  return;
 }
 
 template <>
@@ -2282,8 +2254,6 @@ call_type_delegate<std::vector<type2tc>, type2t::subtype_delegate>
 {
   for (type2tc &r : ref)
     f(r);
-
-  return;
 }
 
 /************************ Second attempt at irep templates ********************/
@@ -2442,7 +2412,6 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::ha
 {
 
   hash_rec(hash); // _includes_ type_id / expr_id
-  return;
 }
 
 // The, *actual* recursive defs

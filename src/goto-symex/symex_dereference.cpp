@@ -98,7 +98,6 @@ void symex_dereference_statet::get_value_set(
 void symex_dereference_statet::rename(expr2tc &expr)
 {
   goto_symex.cur_state->rename(expr);
-  return;
 }
 
 void
@@ -108,7 +107,6 @@ symex_dereference_statet::dump_internal_state(
   goto_symex.internal_deref_items.insert(
                           goto_symex.internal_deref_items.begin(),
                           data.begin(), data.end());
-  return;
 }
 
 void goto_symext::dereference(expr2tc &expr, const bool write, bool free,

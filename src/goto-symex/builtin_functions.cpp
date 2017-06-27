@@ -274,8 +274,6 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
   }
 
   symex_assign_rec(sz_index_expr, object_size_exp, guard, symex_targett::STATE);
-
-  return;
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
@@ -444,7 +442,6 @@ goto_symext::intrinsic_yield(reachability_treet &art)
 {
 
   art.get_cur_state().force_cswitch();
-  return;
 }
 
 
@@ -465,8 +462,6 @@ goto_symext::intrinsic_switch_to(const code_function_call2t &call,
   unsigned int tid = thread_num.value.to_long();
   if (tid != art.get_cur_state().get_active_state_number())
     art.get_cur_state().switch_to_thread(tid);
-
-  return;
 }
 
 void
@@ -478,7 +473,6 @@ goto_symext::intrinsic_switch_from(reachability_treet &art)
 
   // And force a context switch.
   art.get_cur_state().force_cswitch();
-  return;
 }
 
 
@@ -495,7 +489,6 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
 
   code_assign2tc assign(call.ret, tid);
   symex_assign(assign);
-  return;
 }
 
 void
@@ -548,7 +541,6 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
 
   state.value_set.assign(call.ret, startdata);
   symex_assign(assign);
-  return;
 }
 
 void
@@ -593,18 +585,14 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
   // blocked, but a context switch will be forced when we exit the atomic block.
   // Otherwise, this will cause the required context switch.
   art.get_cur_state().force_cswitch();
-
-  return;
 }
 
 void
 goto_symext::intrinsic_terminate_thread(reachability_treet &art)
 {
-
   art.get_cur_state().end_thread();
   // No need to force a context switch; an ended thread will cause the run to
   // end and the switcher to be invoked.
-  return;
 }
 
 void
@@ -635,7 +623,6 @@ goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reacha
   constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), flags);
   code_assign2tc assign(call.ret, flag_expr);
   symex_assign(assign);
-  return;
 }
 
 void
@@ -643,7 +630,6 @@ goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)
 {
 
   art.get_cur_state().increment_active_atomic_number();
-  return;
 }
 
 void
@@ -651,7 +637,6 @@ goto_symext::intrinsic_really_atomic_end(reachability_treet &art)
 {
 
   art.get_cur_state().decrement_active_atomic_number();
-  return;
 }
 
 void
@@ -664,7 +649,6 @@ goto_symext::intrinsic_switch_to_monitor(reachability_treet &art)
     return;
 
   ex_state.switch_to_monitor();
-  return;
 }
 
 void

@@ -141,7 +141,6 @@ void cpp_typecheckt::mark_template_instantiated(
   // instantiated, and what the instantiated things symbol is.
   irept &new_instances = s->value.add("template_instances");
   new_instances.set(template_pattern_name, instantiated_symbol_name);
-  return;
 }
 
 const symbolt *

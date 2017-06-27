@@ -278,7 +278,6 @@ goto_convert_functionst::collect_type(const irept &type, typename_sett &deps)
   }
 
   collect_expr(type, deps);
-  return;
 }
 
 void
@@ -302,8 +301,6 @@ goto_convert_functionst::collect_expr(const irept &expr, typename_sett &deps)
   forall_named_irep(it, expr.get_comments()) {
     collect_type(it->second, deps);
   }
-
-  return;
 }
 
 void
@@ -368,7 +365,6 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
   }
 
   rename_exprs(type, cur_name_sym, sname);
-  return;
 }
 
 void
@@ -392,8 +388,6 @@ goto_convert_functionst::rename_exprs(irept &expr, const symbolt &cur_name_sym,
 
   Forall_named_irep(it, expr.get_comments())
     rename_exprs(it->second, cur_name_sym, sname);
-
-  return;
 }
 
 void
@@ -415,7 +409,6 @@ goto_convert_functionst::wallop_type(irep_idt name,
   symbolt* s = context.find_symbol(name);
   rename_types(s->type, *s, sname);
   deps.clear();
-  return;
 }
 
 void
@@ -474,8 +467,6 @@ goto_convert_functionst::thrash_type_symbols()
       rename_exprs(s.value, s, s.name);
     }
   );
-
-  return;
 }
 
 void

@@ -82,14 +82,8 @@ void cpp_exception_list_rec(
 
   // grab C++ type
   irep_idt cpp_type=src.get("#cpp_type");
-
   if(cpp_type!=irep_idt())
-  {
     dest.emplace_back(id2string(cpp_type)+suffix);
-    return;
-  }
-
-  return;
 }
 
 irept cpp_exception_list(const typet &src, const namespacet &ns)

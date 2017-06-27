@@ -64,7 +64,7 @@ public:
 
   smt_astt eq_fixedsize(smt_convt *ctx, const array_ast *other) const;
 
-  void dump() const override { return; }
+  void dump() const override { }
 
   std::string symname; // Only if this was produced from mk_smt_symbol.
 

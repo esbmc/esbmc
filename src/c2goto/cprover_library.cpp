@@ -95,8 +95,6 @@ generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt
       generate_symbol_deps(name, irep_it->second, deps);
     }
   }
-
-  return;
 }
 
 void
@@ -114,8 +112,6 @@ ingest_symbol(irep_idt name, std::multimap<irep_idt, irep_idt> &deps, std::list<
     to_include.push_back(it->second);
 
   deps.erase(name);
-
-  return;
 }
 
 #ifdef NO_CPROVER_LIBRARY
@@ -124,7 +120,6 @@ add_cprover_library(
   contextt &context __attribute__((unused)),
   message_handlert &message_handler __attribute__((unused)))
 {
-  return;
 }
 
 #else

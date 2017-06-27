@@ -136,8 +136,6 @@ z3_convt::init_addr_space_array()
 
   addr_space_arr_sort =
                   ctx.array_sort(ctx.esbmc_int_sort(), addr_space_tuple_sort);
-
-  return;
 }
 
 smt_convt::resultt
@@ -257,8 +255,6 @@ z3_convt::convert_struct_type(const std::vector<type2tc> &members,
   delete[] proj_names;
   delete[] proj_types;
   delete[] proj_decls;
-
-  return;
 }
 
 void
@@ -269,7 +265,6 @@ z3_convt::setup_pointer_sort()
   pointer_sort = s;
   Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(ctx, s);
   pointer_decl = z3::func_decl(ctx, decl);
-  return;
 }
 
 void
@@ -370,8 +365,6 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
     type->dump();
     abort();
   }
-
-  return;
 }
 
 tvt
@@ -387,7 +380,6 @@ z3_convt::l_get(const smt_ast *a)
   } else {
     result = tvt(tvt::TV_UNKNOWN);
   }
-
 
   return result;
 }
@@ -417,8 +409,6 @@ z3_convt::assert_formula(const z3::expr &ast)
   solver.add(formula);
 
   assumpt.push_back(newvar);
-
-  return;
 }
 
 z3::expr
@@ -1302,7 +1292,6 @@ z3_convt::debug_label_formula(std::string name, const z3::expr &formula)
   z3::expr sym = ctx.constant(the_name.c_str(), formula.get_sort());
   z3::expr eq = sym == formula;
   assert_formula(eq);
-  return;
 }
 
 const smt_ast *
@@ -1338,37 +1327,31 @@ z3_convt::make_conjunct(const ast_vec &v)
 void
 z3_convt::add_array_constraints_for_solving()
 {
-  return;
 }
 
 void
 z3_convt::push_array_ctx()
 {
-  return;
 }
 
 void
 z3_convt::pop_array_ctx()
 {
-  return;
 }
 
 void
 z3_convt::add_tuple_constraints_for_solving()
 {
-  return;
 }
 
 void
 z3_convt::push_tuple_ctx()
 {
-  return;
 }
 
 void
 z3_convt::pop_tuple_ctx()
 {
-  return;
 }
 
 void z3_smt_ast::dump() const

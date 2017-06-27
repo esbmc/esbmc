@@ -877,19 +877,16 @@ void
 smtlib_convt::add_array_constraints_for_solving()
 {
   // None required
-  return;
 }
 
 void
 smtlib_convt::push_array_ctx()
 {
-  return;
 }
 
 void
 smtlib_convt::pop_array_ctx()
 {
-  return;
 }
 
 const std::string smtlib_convt::temp_prefix = "?x";
