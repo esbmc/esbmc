@@ -9,9 +9,9 @@ class yices_smt_sort : public smt_sort
 public:
 #define yices_sort_downcast(x) static_cast<const yices_smt_sort *>(x)
   yices_smt_sort(smt_sort_kind i, type_t _t)
-    : smt_sort(i), type(_t), tuple_type(), arr_range(NULL) { }
+    : smt_sort(i), type(_t), tuple_type(), arr_range(nullptr) { }
   yices_smt_sort(smt_sort_kind i, type_t _t, unsigned int w)
-    : smt_sort(i, w), type(_t), tuple_type(), arr_range(NULL) { }
+    : smt_sort(i, w), type(_t), tuple_type(), arr_range(nullptr) { }
 
   yices_smt_sort(smt_sort_kind i, type_t _t, unsigned long w,
                  unsigned long d, const yices_smt_sort *rangetype)
@@ -20,7 +20,7 @@ public:
   // Constructor for structs. Bitwidth is set to 1 as an estople
   // that... it's a valid domain sort.
   yices_smt_sort(smt_sort_kind i, type_t _t, const type2tc &s)
-    : smt_sort(i, 1), type(_t), tuple_type(s), arr_range(NULL) { }
+    : smt_sort(i, 1), type(_t), tuple_type(s), arr_range(nullptr) { }
 
   virtual ~yices_smt_sort() { }
 
@@ -134,7 +134,7 @@ public:
   inline void clear_model(void) {
     if (sat_model) {
       yices_free_model(sat_model);
-      sat_model = NULL;
+      sat_model = nullptr;
     }
   }
 

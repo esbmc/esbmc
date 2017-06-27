@@ -377,7 +377,7 @@ cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   // If someone's making a tuple-symbol, wave our hands and do nothing. It's
   // the tuple modelling code doing some symbol sillyness.
   if (s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
-    return NULL;
+    return nullptr;
 
   // Standard arrangement: if we already have the name, return the expression
   // from the symbol table. If not, time for a new name.

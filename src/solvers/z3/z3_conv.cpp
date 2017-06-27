@@ -226,7 +226,7 @@ z3_convt::convert_struct_type(const std::vector<type2tc> &members,
   mk_tuple_name = z3::symbol(ctx, name.c_str());
 
   if (!members.size()) {
-    sort = z3::to_sort(ctx, Z3_mk_tuple_sort(ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, NULL));
+    sort = z3::to_sort(ctx, Z3_mk_tuple_sort(ctx, mk_tuple_name, 0, nullptr, nullptr, &mk_tuple_decl, nullptr));
     return;
   }
 
@@ -912,7 +912,7 @@ smt_sort *
 z3_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
-  z3_smt_sort *s = NULL;
+  z3_smt_sort *s = nullptr;
 
   va_start(ap, k);
   switch (k) {
@@ -1063,7 +1063,7 @@ smt_astt
 z3_convt::tuple_fresh(const smt_sort *s, std::string name)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort*>(s);
-  const char *n = (name == "") ? NULL : name.c_str();
+  const char *n = (name == "") ? nullptr : name.c_str();
   z3::expr output = ctx.fresh_const(n, zs->s);
   return new_ast(output, zs);
 }
@@ -1132,7 +1132,7 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
     z3_array_type = z3_sort_downcast(convert_sort(arr_type))->s;
     domain_sort = z3_array_type.array_domain();
 
-    output = ctx.fresh_const(NULL, z3_array_type);
+    output = ctx.fresh_const(nullptr, z3_array_type);
 
     for (i = 0; i < size; i++) {
       int_cte = ctx.num_val(i, domain_sort);

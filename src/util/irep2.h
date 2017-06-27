@@ -1140,7 +1140,7 @@ namespace esbmct {
       assert(cur_idx >= desired);
       (void)cur_idx;
       (void)desired;
-      return NULL;
+      return nullptr;
     }
 
     expr2tc *get_sub_expr_nc_rec(unsigned int cur_idx, unsigned int desired)
@@ -1149,7 +1149,7 @@ namespace esbmct {
       assert(cur_idx >= desired);
       (void)cur_idx;
       (void)desired;
-      return NULL;
+      return nullptr;
     }
 
     unsigned int get_num_sub_exprs_rec(void) const
@@ -1256,7 +1256,7 @@ namespace esbmct {
     // latter, and the end user can worry about how to cast up to a not2tc.
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const base2tc &init,
-                 typename boost::lazy_disable_if<boost::mpl::bool_<superclass::traits::always_construct == true>, arbitary>::type* = NULL
+                 typename boost::lazy_disable_if<boost::mpl::bool_<superclass::traits::always_construct == true>, arbitary>::type* = nullptr
                  ) : base2tc(init)
     {
       assert(init.get()->*idfield == expid);

@@ -33,7 +33,7 @@ create_new_yices_solver(bool int_encoding, const namespacet &ns,
 
 yices_convt::yices_convt(bool int_encoding, const namespacet &ns)
   : smt_convt(int_encoding, ns), array_iface(false, false),
-    sat_model(NULL)
+    sat_model(nullptr)
 {
   yices_init();
 
@@ -89,16 +89,16 @@ yices_convt::dec_solve()
   clear_model();
   pre_solve();
 
-  smt_status_t result = yices_check_context(yices_ctx, NULL);
+  smt_status_t result = yices_check_context(yices_ctx, nullptr);
 
   if (result == STATUS_SAT) {
     sat_model = yices_get_model(yices_ctx, 1);
     return smt_convt::P_SATISFIABLE;
   } else if (result == STATUS_UNSAT) {
-    sat_model = NULL;
+    sat_model = nullptr;
     return smt_convt::P_UNSATISFIABLE;
   } else {
-    sat_model = NULL;
+    sat_model = nullptr;
     return smt_convt::P_ERROR;
   }
 }

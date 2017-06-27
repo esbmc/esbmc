@@ -26,11 +26,11 @@ class z3_smt_sort : public smt_sort {
 public:
 #define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
   z3_smt_sort(smt_sort_kind i, z3::sort _s)
-    : smt_sort(i), s(_s), rangesort(NULL) { }
+    : smt_sort(i), s(_s), rangesort(nullptr) { }
   z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
-    : smt_sort(i), s(_s), rangesort(NULL), tupletype(_tupletype) { }
+    : smt_sort(i), s(_s), rangesort(nullptr), tupletype(_tupletype) { }
   z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w)
-    : smt_sort(i, w), s(_s), rangesort(NULL) { }
+    : smt_sort(i, w), s(_s), rangesort(nullptr) { }
   z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w, unsigned long dw,
               const smt_sort *_rangesort)
     : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }

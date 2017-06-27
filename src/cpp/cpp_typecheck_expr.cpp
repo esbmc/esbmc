@@ -458,7 +458,7 @@ struct operator_entryt
   { "notequal", "!=" },
   { "dereference", "*" },
   { "ptrmember", "->" },
-  { NULL, NULL }
+  { nullptr, nullptr }
 };
 
 bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
@@ -556,7 +556,7 @@ bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
   }
 
   for(const operator_entryt *e=operators;
-      e->id_name!=NULL;
+      e->id_name!=nullptr;
       e++)
     if(expr.id()==e->id_name)
     {

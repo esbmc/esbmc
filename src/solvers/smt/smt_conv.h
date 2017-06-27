@@ -764,7 +764,7 @@ public:
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
   virtual smt_astt mk_fresh(smt_sortt s, const std::string &tag,
-                            smt_sortt st = NULL);
+                            smt_sortt st = nullptr);
   /** Create a previously un-used variable name with the prefix given in tag */
   std::string mk_fresh_name(const std::string &tag);
 
@@ -1102,7 +1102,7 @@ public:
 // Define here to enable inlining
 extern inline
 smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s) {
-  assert(sort != NULL);
+  assert(sort != nullptr);
   ctx->live_asts.push_back(this);
 }
 

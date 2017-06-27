@@ -62,13 +62,13 @@ public:
   explicit irept(const irep_idt &_id);
 
   #ifdef SHARING
-  inline irept():data(NULL)
+  inline irept():data(nullptr)
   {
   }
 
   inline irept(const irept &irep):data(irep.data)
   {
-    if(data!=NULL)
+    if(data!=nullptr)
     {
       assert(data->ref_count!=0);
       data->ref_count++;
@@ -89,7 +89,7 @@ public:
 
     tmp = data;
     data=irep.data;
-    if(data!=NULL) data->ref_count++;
+    if(data!=nullptr) data->ref_count++;
     remove_ref(tmp);
     return *this;
   }
@@ -97,7 +97,7 @@ public:
   ~irept()
   {
     remove_ref(data);
-    data=NULL;
+    data=nullptr;
   }
   #else
   irept()

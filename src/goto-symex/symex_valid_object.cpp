@@ -25,7 +25,7 @@ static const expr2tc *get_object(const expr2tc &expr)
     return get_object(to_index2t(expr).source_value);
   }
 
-  return NULL;
+  return nullptr;
 }
 
 void goto_symext::replace_dynamic_allocation(expr2tc &expr)
@@ -53,7 +53,7 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
       // see if that is a good one!
       const expr2tc *identifier = get_object(obj_operand);
       
-      if (identifier != NULL)
+      if (identifier != nullptr)
       {        
         expr2tc base_ident = *identifier;
         cur_state->get_original_name(base_ident);

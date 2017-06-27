@@ -100,7 +100,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   cswitch_forced = false;
   active_thread = 0;
   last_active_thread = 0;
-  last_insn = NULL;
+  last_insn = nullptr;
   node_count = 0;
   nondet_count = 0;
   DFS_traversed.reserve(1);
@@ -505,7 +505,7 @@ execution_statet::preserve_last_paths(void)
   auto &pp = preserved_paths[last_active_thread];
   auto &ls = threads_state[last_active_thread];
   assert(pp.size() == 0 && "Unmerged preserved paths in ex_state");
-  assert(last_insn != NULL && "Last insn unset in preserve_last_paths");
+  assert(last_insn != nullptr && "Last insn unset in preserve_last_paths");
 
   // Add the current path to the set of paths to be preserved. Don't do this
   // if the current guard is false, though.
@@ -534,7 +534,7 @@ execution_statet::preserve_last_paths(void)
     // Second where the current-path guard plus the to-be-merged guard is equal
     // to the pre-goto guard: in that case, these can only be the two descendent
     // paths from the pre-goto state.
-    const goto_statet *tomerge = NULL;
+    const goto_statet *tomerge = nullptr;
     for (const goto_statet &gs : statelist) {
       bool merge = false;
 
@@ -555,14 +555,14 @@ execution_statet::preserve_last_paths(void)
 
       // Select merging this goto_statet with a sanity check
       if (merge) {
-        assert(tomerge == NULL && "Multiple branching to-preserve paths?");
+        assert(tomerge == nullptr && "Multiple branching to-preserve paths?");
         tomerge = &gs;
       }
     }
 
     // We _must_ have found a path to merge, or the current-state guard would
     // have matched pre_goto_guard earlier
-    assert(tomerge != NULL);
+    assert(tomerge != nullptr);
 
     // Alas, copies.
     pp.push_back(std::make_pair(target_insn_it, goto_statet(*tomerge)));
@@ -1211,7 +1211,7 @@ execution_statet::init_property_monitors(void)
         // Munge back into the shape of an actual string
         std::string str = "";
         forall_operands(iter2, s.value) {
-          char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
+          char c = (char)strtol(iter2->value().as_string().c_str(), nullptr, 2);
           if (c != 0)
             str += c;
           else

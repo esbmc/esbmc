@@ -86,7 +86,7 @@ reachability_treet::setup_for_new_explore(void)
                          new dfs_execution_statet(goto_functions, ns, this,
                                                targ, permanent_context, options,
                                                message_handler));
-    schedule_target = NULL;
+    schedule_target = nullptr;
   }
 
   execution_states.push_back(boost::shared_ptr<execution_statet>(s));
@@ -392,7 +392,7 @@ bool reachability_treet::dfs_position::write_to_file(
   unsigned int i;
 
   f = fopen(filename.c_str(), "wb");
-  if (f == NULL) {
+  if (f == nullptr) {
     std::cerr << "Couldn't open checkpoint output file" << std::endl;
     return true;
   }
@@ -453,7 +453,7 @@ bool reachability_treet::dfs_position::read_from_file(
   char c;
 
   f = fopen(filename.c_str(), "rb");
-  if (f == NULL) {
+  if (f == nullptr) {
     std::cerr << "Couldn't open checkpoint input file" << std::endl;
     return true;
   }

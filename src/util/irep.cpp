@@ -56,7 +56,7 @@ void irept::detatch()
   std::cout << "DETATCH1: " << data << std::endl;
   #endif
 
-  if(data==NULL)
+  if(data==nullptr)
   {
     data=new dt;
 
@@ -93,7 +93,7 @@ const irept::dt &irept::read() const
   std::cout << "READ: " << data << std::endl;
   #endif
 
-  if(data==NULL)
+  if(data==nullptr)
     return empty_d;
 
   return *data;
@@ -105,7 +105,7 @@ const irept::dt &irept::read() const
 #ifdef SHARING
 void irept::remove_ref(dt *old_data)
 {
-  if(old_data==NULL) return;
+  if(old_data==nullptr) return;
 
   assert(old_data->ref_count!=0);
 
@@ -137,7 +137,7 @@ void irept::clear()
 {
   #ifdef SHARING
   remove_ref(data);
-  data=NULL;
+  data=nullptr;
   #else
   data.clear();
   #endif

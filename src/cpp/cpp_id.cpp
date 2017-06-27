@@ -19,7 +19,7 @@ cpp_idt::cpp_idt():
   this_expr(static_cast<const exprt &>(get_nil_irep())),
   compound_counter(0),
   use_parent(false),
-  original_scope(NULL)
+  original_scope(nullptr)
 {
 }
 
@@ -50,7 +50,7 @@ void cpp_idt::print_fields(std::ostream &out, unsigned indent) const
   for(unsigned i=0; i<indent; i++) out << ' ';
   out << "  method=" << is_method << std::endl;
 
-  if(original_scope!=NULL)
+  if(original_scope!=nullptr)
   {
     for(unsigned i=0; i<indent; i++) out << ' ';
     out << "  original_scope=" << original_scope->identifier << std::endl;

@@ -51,7 +51,7 @@ std::string execute_cmd(std::string command)
   std::string result = "";
   while (!feof(pipe))
   {
-    if (fgets(buffer, 128, pipe) != NULL)
+    if (fgets(buffer, 128, pipe) != nullptr)
       result += buffer;
   }
   pclose(pipe);

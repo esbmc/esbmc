@@ -58,7 +58,7 @@ void goto_symext::symex_catch()
 bool goto_symext::symex_throw()
 {
   irep_idt catch_name = "missing";
-  const goto_programt::const_targett *catch_insn = NULL;
+  const goto_programt::const_targett *catch_insn = nullptr;
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
   // get the list of exceptions thrown
@@ -363,7 +363,7 @@ bool goto_symext::handle_rethrow(const expr2tc &operand,
   // throw without argument, we must rethrow last exception
   if(is_nil_expr(operand))
   {
-    if(last_throw != NULL && to_code_cpp_throw2t(last_throw->code).exception_list.size())
+    if(last_throw != nullptr && to_code_cpp_throw2t(last_throw->code).exception_list.size())
     {
       // get exception from last throw
       std::vector<irep_idt>::const_iterator e_it =

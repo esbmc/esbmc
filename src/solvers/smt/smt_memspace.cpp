@@ -381,7 +381,7 @@ smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
     // through malloc will be marked dynamic.
 
     type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
-                                     expr2tc((expr2t*)NULL), true));
+                                     expr2tc((expr2t*)nullptr), true));
     symbol2tc allocarr(arrtype, dyn_info_arr_name);
     constant_int2tc objid(machine_uint, BigInt(obj_num));
     index2tc idx(get_bool_type(), allocarr, objid);

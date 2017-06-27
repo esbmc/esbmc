@@ -51,8 +51,8 @@ const char *cmdlinet::getval(char option) const
   int i;
 
   i=getoptnr(option);
-  if(i<0) return (const char *)NULL;
-  if(options[i].values.empty()) return (const char *)NULL;
+  if(i<0) return (const char *)nullptr;
+  if(options[i].values.empty()) return (const char *)nullptr;
   return options[i].values.front().c_str();
 }
 
@@ -70,8 +70,8 @@ const char *cmdlinet::getval(const char *option) const
   int i;
 
   i=getoptnr(option);
-  if(i<0) return (const char *)NULL;
-  if(options[i].values.empty()) return (const char *)NULL;
+  if(i<0) return (const char *)nullptr;
+  if(options[i].values.empty()) return (const char *)nullptr;
   return options[i].values.front().c_str();
 }
 

@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 language_filet::~language_filet()
 {
-  if(language!=NULL) delete language;
+  if(language!=nullptr) delete language;
 }
 
 void language_filet::get_modules()

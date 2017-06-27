@@ -180,7 +180,7 @@ public:
                             unsigned int array_update_no,
                             const smt_sort *subtype,
                             unsigned int start_point,
-                            smt_astt init_val = NULL);
+                            smt_astt init_val = nullptr);
   void add_initial_ackerman_constraints(const ast_vect &vals,
       const index_map_containert &idx_map, unsigned int start_point);
   void add_new_indexes();

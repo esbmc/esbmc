@@ -2016,7 +2016,7 @@ bool simplify_exprt::simplify_relation(exprt &expr)
      expr.operands().size()==2 &&
      expr.op0().type().id()=="pointer")
   {
-    const exprt *other=NULL;
+    const exprt *other=nullptr;
 
     if(expr.op0().is_constant() &&
        expr.op0().value().as_string()=="NULL")
@@ -2025,7 +2025,7 @@ bool simplify_exprt::simplify_relation(exprt &expr)
             expr.op1().value().as_string()=="NULL")
       other=&(expr.op0());
 
-    if(other!=NULL)
+    if(other!=nullptr)
     {
       if(other->is_address_of() &&
          other->operands().size()==1)
@@ -2503,12 +2503,12 @@ struct saj_tablet
   { "bitxor", "unsignedbv" },
   { "bitxor", "signedbv"   },
   { "bitxor", "floatbv"    },
-  { NULL,     NULL         }
+  { nullptr,     nullptr         }
 };
 
 bool sort_and_join(const irep_idt &id, const irep_idt &type_id)
 {
-  for(unsigned i=0; saj_table[i].id!=NULL; i++)
+  for(unsigned i=0; saj_table[i].id!=nullptr; i++)
     if(id==saj_table[i].id &&
        type_id==saj_table[i].type_id)
       return true;

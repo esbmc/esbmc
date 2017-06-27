@@ -1047,7 +1047,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
   unsigned int access_sz = type->get_width() / 8;
 
   expr2tc failed_container;
-  if (failed_symbol == NULL)
+  if (failed_symbol == nullptr)
     failed_container = make_failed_symbol(type);
   else
     failed_container = *failed_symbol;

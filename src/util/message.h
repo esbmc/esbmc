@@ -114,7 +114,7 @@ public:
 
   messaget()
   {
-    message_handler=(message_handlert *)NULL;
+    message_handler=(message_handlert *)nullptr;
     verbosity=10;
   }
 

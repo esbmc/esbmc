@@ -238,7 +238,7 @@ show_state_header(
 
   for (const auto & it : state.stack_trace)
   {
-    if (it.src == NULL)
+    if (it.src == nullptr)
       out << it.function.as_string() << std::endl;
     else
       out << it.function.as_string() << " at " << it.src->pc->location.get_file().as_string() << " line " << it.src->pc->location.get_line().as_string() << std::endl;
@@ -262,10 +262,10 @@ get_varname_from_guard (
       int j = 0;
       char * tok;
       tok = strtok(identstr, "::");
-      while (tok != NULL) {
+      while (tok != nullptr) {
 	if (j == 4)
 	  varname = tok;
-	tok = strtok(NULL, "::");
+	tok = strtok(nullptr, "::");
 	j++;
       }
     }

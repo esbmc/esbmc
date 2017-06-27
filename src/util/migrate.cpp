@@ -18,7 +18,7 @@
 // Why is this a global? Because there are over three hundred call sites to
 // migrate_expr, and it's a huge task to fix them all up to pass a namespace
 // down.
-namespacet *migrate_namespace_lookup = NULL;
+namespacet *migrate_namespace_lookup = nullptr;
 
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 
@@ -66,12 +66,12 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     new_type_ref = type2tc(b);
   } else if (type.id() == typet::t_signedbv) {
     irep_idt width = type.width();
-    unsigned int iwidth = strtol(width.as_string().c_str(), NULL, 10);
+    unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
     signedbv_type2t *s = new signedbv_type2t(iwidth);
     new_type_ref = type2tc(s);
   } else if (type.id() == typet::t_unsignedbv) {
     irep_idt width = type.width();
-    unsigned int iwidth = strtol(width.as_string().c_str(), NULL, 10);
+    unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
     unsignedbv_type2t *s = new unsignedbv_type2t(iwidth);
     new_type_ref = type2tc(s);
   } else if (type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
@@ -80,7 +80,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     new_type_ref = type2tc(s);
   } else if (type.id() == typet::t_array) {
     type2tc subtype;
-    expr2tc size((expr2t *)NULL);
+    expr2tc size((expr2t *)nullptr);
     bool is_infinite = false;
 
     migrate_type(type.subtype(), subtype, ns, cache);
@@ -100,7 +100,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     type2tc subtype;
 
     // Don't recursively look up anything through pointers.
-    migrate_type(type.subtype(), subtype, NULL, true);
+    migrate_type(type.subtype(), subtype, nullptr, true);
 
     pointer_type2t *p = new pointer_type2t(subtype);
     new_type_ref = type2tc(p);
@@ -264,7 +264,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     new_type_ref = type2tc(new array_type2t(get_uint8_type(), expr2tc(), true));
   } else if (type.id() == "string") {
     irep_idt width = type.width();
-    unsigned int iwidth = strtol(width.as_string().c_str(), NULL, 10);
+    unsigned int iwidth = strtol(width.as_string().c_str(), nullptr, 10);
     new_type_ref = type2tc(new string_type2t(iwidth));
   } else {
     type.dump();
@@ -1801,7 +1801,7 @@ exprt
 migrate_expr_back(const expr2tc &ref)
 {
 
-  if (ref.get() == NULL)
+  if (ref.get() == nullptr)
     return nil_exprt();
 
   switch (ref->expr_id) {

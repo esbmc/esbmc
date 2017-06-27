@@ -51,7 +51,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
       abort();
     }
 
-    in_stream = NULL;
+    in_stream = nullptr;
     solver_name = "Text output";
     solver_version = "";
     solver_proc_pid = 0;
@@ -319,7 +319,7 @@ smtlib_convt::dec_solve()
   fflush(out_stream);
 
   // If we're just outputing to a file, this is where we terminate.
-  if (in_stream == NULL)
+  if (in_stream == nullptr)
     return smt_convt::P_SMTLIB;
 
   // And read in the output
@@ -613,7 +613,7 @@ smtlib_convt::l_get(const smt_ast *a)
 const std::string
 smtlib_convt::solver_text()
 {
-  if (in_stream == NULL) {
+  if (in_stream == nullptr) {
     // Text output
     return solver_name;
   }
@@ -666,7 +666,7 @@ smt_sort *
 smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 {
   va_list ap;
-  smtlib_smt_sort *s = NULL, *dom, *range;
+  smtlib_smt_sort *s = nullptr, *dom, *range;
   unsigned long uint;
   int thebool;
 

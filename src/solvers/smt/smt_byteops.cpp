@@ -188,13 +188,13 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   }
 
   if (top == value) {
-    middle = NULL;
+    middle = nullptr;
   } else {
     middle = value;
   }
 
   if (src_offset == 0) {
-    middle = NULL;
+    middle = nullptr;
     bottom = value;
   } else {
     smt_sortt s = mk_sort(SMT_SORT_BV, bottom_of_update, false);
@@ -204,7 +204,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   // Concatenate the top and bottom, and possible middle, together.
   smt_astt concat;
 
-  if (middle != NULL) {
+  if (middle != nullptr) {
     smt_sortt s = mk_sort(SMT_SORT_BV, width_op0 - bottom_of_update, false);
     concat = mk_func_app(s, SMT_FUNC_CONCAT, top, middle);
   } else {

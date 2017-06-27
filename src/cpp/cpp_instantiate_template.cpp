@@ -126,7 +126,7 @@ cpp_typecheckt::is_template_instantiated(
     }
   }
 
-  return NULL;
+  return nullptr;
 }
 
 void cpp_typecheckt::mark_template_instantiated(
@@ -221,7 +221,7 @@ cpp_typecheckt::handle_recursive_template_instance(
     }
   }
 
-  return NULL;
+  return nullptr;
 }
 
 bool cpp_typecheckt::has_incomplete_args(
@@ -298,14 +298,14 @@ const symbolt &cpp_typecheckt::instantiate_template(
   cpp_scopet *template_scope=
     static_cast<cpp_scopet *>(cpp_scopes.id_map[template_symbol.name]);
 
-  if(template_scope==NULL)
+  if(template_scope==nullptr)
   {
     err_location(location);
     str << "identifier: " << template_symbol.name << std::endl;
     throw "template instantiation error: scope not found";
   }
 
-  assert(template_scope!=NULL);
+  assert(template_scope!=nullptr);
 
   // produce new declaration
   cpp_declarationt new_decl=to_cpp_declaration(template_symbol.type);

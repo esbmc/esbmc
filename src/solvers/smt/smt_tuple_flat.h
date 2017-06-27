@@ -87,7 +87,7 @@ inline tuple_node_smt_astt
 to_tuple_node_ast(smt_astt a)
 {
   tuple_node_smt_astt ta = dynamic_cast<tuple_node_smt_astt>(a);
-  assert(ta != NULL && "Tuple AST mismatch");
+  assert(ta != nullptr && "Tuple AST mismatch");
   return ta;
 }
 
@@ -95,7 +95,7 @@ inline tuple_smt_sortt
 to_tuple_sort(smt_sortt a)
 {
   tuple_smt_sortt ta = dynamic_cast<tuple_smt_sortt >(a);
-  assert(ta != NULL && "Tuple AST mismatch");
+  assert(ta != nullptr && "Tuple AST mismatch");
   return ta;
 }
 
@@ -179,7 +179,7 @@ inline tuple_sym_smt_astt
 to_tuple_sym_ast(smt_astt a)
 {
   tuple_sym_smt_astt ta = dynamic_cast<tuple_sym_smt_astt>(a);
-  assert(ta != NULL && "Tuple AST mismatch");
+  assert(ta != nullptr && "Tuple AST mismatch");
   return ta;
 }
 
@@ -187,7 +187,7 @@ inline array_sym_smt_astt
 to_array_sym_ast(smt_astt a)
 {
   array_sym_smt_astt ta = dynamic_cast<array_sym_smt_astt>(a);
-  assert(ta != NULL && "Tuple-Array AST mismatch");
+  assert(ta != nullptr && "Tuple-Array AST mismatch");
   return ta;
 }
 

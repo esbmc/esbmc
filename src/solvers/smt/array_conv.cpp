@@ -1153,7 +1153,7 @@ array_convt::collate_array_values(ast_vect &vals,
 
   // First, make everything null,
   for (unsigned int i = start_point; i < vals.size(); i++)
-    vals[i] = NULL;
+    vals[i] = nullptr;
 
   // Get the range of values with this update array num.
   array_select_containert &idxs = array_selects[base_array_id];
@@ -1172,10 +1172,10 @@ array_convt::collate_array_values(ast_vect &vals,
   }
 
   // Initialize everything else to either a free variable or the initial value.
-  if (init_val == NULL) {
+  if (init_val == nullptr) {
     // Free variables, except where free variables tied to selects have occurred
     for (auto & val : vals) {
-      if (val == NULL)
+      if (val == nullptr)
         val = ctx->mk_fresh(subtype, "collate_array_vals::");
     }
   } else {

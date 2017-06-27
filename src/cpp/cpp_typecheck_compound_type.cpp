@@ -94,7 +94,7 @@ cpp_typecheckt::fetch_compound_name(
   // get the tag name
   bool anonymous=type.find("tag").is_nil();
   std::string identifier, base_name;
-  cpp_scopet *dest_scope=NULL;
+  cpp_scopet *dest_scope=nullptr;
   bool has_body=type.body().is_not_nil();
   bool tag_only_declaration=type.get_bool("#tag_only_declaration");
 
@@ -141,7 +141,7 @@ void cpp_typecheckt::typecheck_compound_type(
   // get the tag name
   bool anonymous=type.find("tag").is_nil();
   std::string identifier, base_name;
-  cpp_scopet *dest_scope=NULL;
+  cpp_scopet *dest_scope=nullptr;
   bool has_body=type.body().is_not_nil();
   bool tag_only_declaration=type.get_bool("#tag_only_declaration");
 

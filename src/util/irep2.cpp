@@ -336,7 +336,7 @@ array_type2t::get_width(void) const
   const expr2t *elem_size = array_size.get();
   const constant_int2t *const_elem_size = dynamic_cast<const constant_int2t*>
                                                       (elem_size);
-  assert(const_elem_size != NULL);
+  assert(const_elem_size != nullptr);
   unsigned long num_elems = const_elem_size->as_ulong();
 
   return num_elems * sub_width;
@@ -731,7 +731,7 @@ expr2t::simplify(void) const
   expr2tc new_us = clone();
   std::list<expr2tc>::iterator it2 = newoperands.begin();
   new_us.get()->Foreach_operand([this, &it2] (expr2tc &e) {
-      if ((*it2) == NULL)
+      if ((*it2) == nullptr)
         ; // No change in operand;
       else
         e = *it2; // Operand changed; overwrite with new one.
@@ -1472,7 +1472,7 @@ static inline __attribute__((always_inline)) std::string
 type_to_string(const expr2tc &theval, int indent)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
    return theval->pretty(indent + 2);
   return "";
 }
@@ -1481,7 +1481,7 @@ static inline __attribute__((always_inline)) std::string
 type_to_string(const type2tc &theval, int indent)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
     return theval->pretty(indent + 2);
   else
     return "";
@@ -1564,7 +1564,7 @@ do_type_cmp(const expr2tc &side1, const expr2tc &side2)
 {
   if (side1.get() == side2.get())
     return true; // Catch null
-  else if (side1.get() == NULL || side2.get() == NULL)
+  else if (side1.get() == nullptr || side2.get() == nullptr)
     return false;
   else
     return (side1 == side2);
@@ -1575,7 +1575,7 @@ do_type_cmp(const type2tc &side1, const type2tc &side2)
 {
   if (side1.get() == side2.get())
     return true; // both null ptr check
-  if (side1.get() == NULL || side2.get() == NULL)
+  if (side1.get() == nullptr || side2.get() == nullptr)
     return false; // One of them is null, the other isn't
   return (side1 == side2);
 }
@@ -1725,9 +1725,9 @@ do_type_lt(const expr2tc &side1, const expr2tc &side2)
 {
   if (side1.get() == side2.get())
     return 0; // Catch nulls
-  else if (side1.get() == NULL)
+  else if (side1.get() == nullptr)
     return -1;
-  else if (side2.get() == NULL)
+  else if (side2.get() == nullptr)
     return 1;
   else
     return side1->ltchecked(*side2.get());
@@ -1738,9 +1738,9 @@ do_type_lt(const type2tc &side1, const type2tc &side2)
 {
   if (*side1.get() == *side2.get())
     return 0; // Both may be null;
-  else if (side1.get() == NULL)
+  else if (side1.get() == nullptr)
     return -1;
-  else if (side2.get() == NULL)
+  else if (side2.get() == nullptr)
     return 1;
   else
     return side1->ltchecked(*side2.get());
@@ -1968,7 +1968,7 @@ static inline __attribute__((always_inline)) size_t
 do_type_crc(const expr2tc &theval, size_t seed)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
     return theval->do_crc(seed);
   return seed;
 }
@@ -1977,7 +1977,7 @@ static inline __attribute__((always_inline)) void
 do_type_hash(const expr2tc &theval, crypto_hash &hash)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
     theval->hash(hash);
   return;
 }
@@ -1986,7 +1986,7 @@ static inline __attribute__((always_inline)) size_t
 do_type_crc(const type2tc &theval, size_t seed)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
     return theval->do_crc(seed);
   return seed;
 }
@@ -1995,7 +1995,7 @@ static inline __attribute__((always_inline)) void
 do_type_hash(const type2tc &theval, crypto_hash &hash)
 {
 
-  if (theval.get() != NULL)
+  if (theval.get() != nullptr)
     theval->hash(hash);
   return;
 }

@@ -17,7 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class value_set_domaint:public abstract_domain_baset
 {
 public:
-  value_set_domaint() : value_set(NULL)
+  value_set_domaint() : value_set(nullptr)
   {
   }
 
@@ -32,7 +32,7 @@ public:
     if (ref.value_set)
       value_set = new value_sett(*ref.value_set);
     else
-      value_set = NULL;
+      value_set = nullptr;
   }
 
   value_sett *value_set;

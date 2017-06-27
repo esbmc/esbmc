@@ -363,7 +363,7 @@ void goto_k_inductiont::fill_state(loopst &loop)
 void goto_k_inductiont::create_symbols()
 {
   // Create symbol for the state$vector
-  symbolt *symbol_ptr=NULL;
+  symbolt *symbol_ptr=nullptr;
   unsigned int i = state_counter;
 
   symbolt state_symbol;

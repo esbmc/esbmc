@@ -35,7 +35,7 @@ public:
   
   void get_modules();
   
-  language_filet() { language=NULL; }
+  language_filet() { language=nullptr; }
   ~language_filet();
 };
  

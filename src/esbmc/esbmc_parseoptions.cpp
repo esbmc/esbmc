@@ -122,7 +122,7 @@ uint64_t cbmc_parseoptionst::read_time_spec(const char *str)
     mult = 1;
   }
 
-  uint64_t timeout = strtol(str, NULL, 10);
+  uint64_t timeout = strtol(str, nullptr, 10);
   timeout *= mult;
   return timeout;
 }
@@ -154,7 +154,7 @@ uint64_t cbmc_parseoptionst::read_mem_spec(const char *str)
     mult = 1024*1024;
   }
 
-  uint64_t size = strtol(str, NULL, 10);
+  uint64_t size = strtol(str, nullptr, 10);
   size *= mult;
   return size;
 }
@@ -1387,7 +1387,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
         // Munge back into the shape of an actual string
         std::string str = "";
         forall_operands(iter2, s.value) {
-          char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
+          char c = (char)strtol(iter2->value().as_string().c_str(), nullptr, 2);
           if (c != 0)
             str += c;
           else
@@ -1831,7 +1831,7 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc)
 #ifdef HAVE_SENDFILE_ESBMC
   if (bmc.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
-    sendfile(2, fd, NULL, 100000);
+    sendfile(2, fd, nullptr, 100000);
     close(fd);
   }
 #endif

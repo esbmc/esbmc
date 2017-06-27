@@ -131,8 +131,8 @@ create_solver_factory(const std::string &solver_name,
                       bool int_encoding, const namespacet &ns,
                       const optionst &options)
 {
-  tuple_iface *tuple_api = NULL;
-  array_iface *array_api = NULL;
+  tuple_iface *tuple_api = nullptr;
+  array_iface *array_api = nullptr;
   smt_convt *ctx = create_solver_factory1(solver_name, int_encoding, ns, options, &tuple_api, &array_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
@@ -141,7 +141,7 @@ create_solver_factory(const std::string &solver_name,
 
   // Pick a tuple flattener to use. If the solver has native support, and no
   // options were given, use that by default
-  if (tuple_api != NULL && !node_flat && !sym_flat)
+  if (tuple_api != nullptr && !node_flat && !sym_flat)
     ctx->set_tuple_iface(tuple_api);
   // Use the node flattener if specified
   else if (node_flat)
@@ -156,7 +156,7 @@ create_solver_factory(const std::string &solver_name,
   // Pick an array flattener to use. Again, pick the solver native one by
   // default, or the one specified, or if none of the above then use the built
   // in arrays -> to BV flattener.
-  if (array_api != NULL && !array_flat)
+  if (array_api != nullptr && !array_flat)
     ctx->set_array_iface(array_api);
   else if (array_flat)
     ctx->set_array_iface(new array_convt(ctx));

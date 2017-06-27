@@ -34,7 +34,7 @@ boolector_convt::boolector_convt(bool int_encoding,
   if (options.get_option("output") != "") {
     debugfile = fopen(options.get_option("output").c_str(), "w");
   } else {
-    debugfile = NULL;
+    debugfile = nullptr;
   }
 }
 
@@ -42,10 +42,10 @@ boolector_convt::~boolector_convt(void)
 {
   boolector_delete(btor);
 
-  btor = NULL;
+  btor = nullptr;
   if (debugfile)
     fclose(debugfile);
-  debugfile = NULL;
+  debugfile = nullptr;
 }
 
 smt_convt::resultt
@@ -70,7 +70,7 @@ boolector_convt::l_get(const smt_ast *l)
   const btor_smt_ast *ast = btor_ast_downcast(l);
   const char *result = boolector_bv_assignment(btor, ast->e);
 
-  assert(result != NULL && "Boolector returned null bv assignment string");
+  assert(result != nullptr && "Boolector returned null bv assignment string");
 
   tvt t;
 
@@ -402,7 +402,7 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     node = boolector_array(btor, boolector_sort_downcast(s)->t, name.c_str());
     break;
   default:
-    return NULL; // Hax.
+    return nullptr; // Hax.
   }
 
   btor_smt_ast *ast = new_ast(s, node);
@@ -440,7 +440,7 @@ boolector_convt::get_bool(const smt_ast *a)
 
 static int64_t read_btor_string(const char *result, unsigned int len)
 {
-  assert(result != NULL && "Boolector returned null bv assignment string");
+  assert(result != nullptr && "Boolector returned null bv assignment string");
 
   // Assume first bit is the most significant for the moment.
   int64_t res = 0;
