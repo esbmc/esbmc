@@ -86,7 +86,7 @@ void map_line_number_to_content(std::string source_code_file,
     return;
   }
   std::string source_content = read_file(source_code_file);
-  std::istringstream source_stream(source_content.c_str());
+  std::istringstream source_stream(source_content);
   std::string line;
   int line_count = 0;
   while (std::getline(source_stream, line))
