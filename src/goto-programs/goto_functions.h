@@ -56,7 +56,7 @@ public:
   typedef std::map<irep_idt, goto_functiont> function_mapt;
   function_mapt function_map;
 
-  ~goto_functionst() { }
+  ~goto_functionst() = default;
   void clear()
   {
     function_map.clear();

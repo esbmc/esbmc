@@ -328,7 +328,3 @@ bool cpp_languaget::to_expr(
 
   return result;
 }
-
-cpp_languaget::~cpp_languaget()
-{
-}

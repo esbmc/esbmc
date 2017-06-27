@@ -34,9 +34,7 @@ public:
     return lookup(irep.identifier());
   }
 
-  virtual ~namespacet()
-  {
-  }
+  virtual ~namespacet() = default;
 
   virtual bool lookup(const irep_idt &name, const symbolt *&symbol) const;
   void follow_symbol(irept &irep) const;

@@ -909,10 +909,6 @@ mathsat_smt_ast::~mathsat_smt_ast()
   // as freeing env does exactly the same
 }
 
-mathsat_smt_sort::~mathsat_smt_sort()
-{
-}
-
 void mathsat_convt::dump_smt()
 {
   print_mathsat_formula();

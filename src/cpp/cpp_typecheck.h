@@ -136,7 +136,7 @@ public:
   {
   }
 
-  ~cpp_typecheckt() override { }
+  ~cpp_typecheckt() override = default;
 
   void typecheck() override;
 

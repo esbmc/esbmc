@@ -42,9 +42,7 @@ public:
     goto_programt::const_targett target,
     expr2tc &expr);
 
-  ~goto_program_dereferencet() override 
-  {
-  }
+  ~goto_program_dereferencet() override = default;
 
 protected:
   const optionst &options;

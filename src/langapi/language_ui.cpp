@@ -29,10 +29,6 @@ language_uit::language_uit(const cmdlinet &__cmdline):
   set_message_handler(&ui_message_handler);
 }
 
-language_uit::~language_uit()
-{
-}
-
 bool language_uit::parse()
 {
   for(const auto & arg : _cmdline.args)

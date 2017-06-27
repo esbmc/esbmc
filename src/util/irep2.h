@@ -331,7 +331,7 @@ protected:
   type2t(type_ids id);
 
   /** Copy constructor */
-  type2t(const type2t &ref);
+  type2t(const type2t &ref) = default;
 
   virtual void foreach_subtype_impl_const(const_subtype_delegate &t) const = 0;
   virtual void foreach_subtype_impl(subtype_delegate &t) = 0;
@@ -341,7 +341,7 @@ public:
   typedef type2tc container_type;
   typedef type2t base_type;
 
-  virtual ~type2t() { };
+  virtual ~type2t() = default;
 
   /** Fetch bit width of this type.
    *  For a particular type, calculate its size in a bit representation of
@@ -545,7 +545,7 @@ public:
   // Also provide base traits
   typedef esbmct::expr2t_default_traits traits;
 
-  virtual ~expr2t() { };
+  virtual ~expr2t() = default;
 
   /** Clone method. Self explanatory. */
   virtual expr2tc clone() const = 0;

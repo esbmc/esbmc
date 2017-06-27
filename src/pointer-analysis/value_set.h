@@ -150,7 +150,7 @@ public:
   class object_map_dt:public std::map<unsigned, objectt>
   {
   public:
-    object_map_dt() {}
+    object_map_dt() = default;
     const static object_map_dt empty;
   };
 
@@ -182,9 +182,7 @@ public:
      *  track each individual element, only the array of them. */
     std::string suffix;
 
-    entryt()
-    {
-    }
+    entryt() = default;
 
     entryt(std::string _identifier, const std::string _suffix):
       identifier(std::move(_identifier)),

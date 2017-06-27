@@ -38,9 +38,7 @@ public:
   {
   }
 
-  ~goto_convertt() override
-  {
-  }
+  ~goto_convertt() override = default;
 
 protected:
   contextt &context;

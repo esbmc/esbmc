@@ -77,9 +77,7 @@ public:
     return simplify_rec(expr);
   }
 
-  virtual ~simplify_exprt()
-  {
-  }
+  virtual ~simplify_exprt() = default;
 
   typedef std::set<mp_integer> value_listt;
   bool get_values(const exprt &expr, value_listt &value_list);

@@ -43,8 +43,8 @@ public:
   void show_parse(std::ostream &out) override;
 
   // constructor, destructor
-  ~cpp_languaget() override;
-  cpp_languaget() { }
+  ~cpp_languaget() override = default;
+  cpp_languaget() = default;
 
   // conversion from expression into string
   bool from_expr(

@@ -162,6 +162,3 @@ pointer_logict::pointer_logict()
 
 }
 
-pointer_logict::~pointer_logict()
-{
-}

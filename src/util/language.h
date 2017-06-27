@@ -82,7 +82,7 @@ public:
 
   // constructor / destructor
 
-  languaget() { }
-  virtual ~languaget() { }
+  languaget() = default;
+  virtual ~languaget() = default;
 };
 #endif

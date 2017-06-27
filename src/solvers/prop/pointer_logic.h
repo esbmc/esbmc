@@ -30,9 +30,7 @@ public:
     unsigned object;
     mp_integer offset;
 
-    pointert()
-    {
-    }
+    pointert() = default;
 
     pointert(unsigned _obj, mp_integer _off):object(_obj), offset(_off)
     {
@@ -45,7 +43,7 @@ public:
   // converts an (object,0) pair to an expression
   expr2tc pointer_expr(unsigned object, const type2tc &type) const;
 
-  ~pointer_logict();
+  ~pointer_logict() = default;
   pointer_logict();
 
   unsigned add_object(const expr2tc &expr);

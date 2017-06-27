@@ -83,9 +83,7 @@ public:
   /**
    *  Default destructor.
    */
-  virtual ~reachability_treet()
-  {
-  };
+  virtual ~reachability_treet() = default;
 
   /** Reinitialize for making new exploration of given functions.
    *  Sets up the flags and fields of the object to start a new exploration of

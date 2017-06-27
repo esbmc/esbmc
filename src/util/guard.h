@@ -20,7 +20,7 @@ class guardt
 
 public:
   // Default constructors
-  guardt() { }
+  guardt() = default;
   guardt(const guardt &ref) { *this = ref; }
 
   typedef std::vector<expr2tc> guard_listt;

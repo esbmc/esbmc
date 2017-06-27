@@ -22,7 +22,7 @@ public:
   yices_smt_sort(smt_sort_kind i, type_t _t, const type2tc &s)
     : smt_sort(i, 1), type(_t), tuple_type(s), arr_range(nullptr) { }
 
-  ~yices_smt_sort() override { }
+  ~yices_smt_sort() override = default;
 
   type_t type;
   type2tc tuple_type; // Only valid for tuples
@@ -43,7 +43,7 @@ public:
         abort();
       }
     }
-  ~yices_smt_ast() override { }
+  ~yices_smt_ast() override = default;
 
   // Provide assign semantics for arrays. While yices will swallow array
   // equalities, it appears to silently not honour them? From observation.

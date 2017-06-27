@@ -37,7 +37,7 @@ public:
 
   const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const override;
 
-  ~btor_smt_ast() override { }
+  ~btor_smt_ast() override = default;
   void dump() const override;
 
   BoolectorNode *e;

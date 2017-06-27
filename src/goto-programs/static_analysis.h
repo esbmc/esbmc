@@ -42,9 +42,7 @@ public:
     locationt from,
     locationt to)=0;
 
-  virtual ~abstract_domain_baset()
-  {
-  }
+  virtual ~abstract_domain_baset() = default;
   
   virtual void output(
     const namespacet &ns __attribute__((unused)),
@@ -123,9 +121,7 @@ public:
   virtual void operator()(
     const goto_functionst &goto_functions);
 
-  virtual ~static_analysis_baset()
-  {
-  }
+  virtual ~static_analysis_baset() = default;
 
   virtual void clear()
   {

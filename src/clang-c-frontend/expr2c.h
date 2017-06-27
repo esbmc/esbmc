@@ -23,7 +23,7 @@ class expr2ct
 {
 public:
   expr2ct(const namespacet &_ns, const bool _fullname) : ns(_ns), fullname(_fullname) { }
-  virtual ~expr2ct() { }
+  virtual ~expr2ct() = default;
 
   virtual std::string convert(const typet &src);
   virtual std::string convert(const exprt &src);

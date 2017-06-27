@@ -106,9 +106,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class dereference_callbackt
 {
 public:
-  virtual ~dereference_callbackt()
-  {
-  }
+  virtual ~dereference_callbackt() = default;
 
   /** Triggers a 'valid object' check when accessing a dynamically allocated
    *  object. This is legacy, and will be deleted at some point. */
@@ -195,7 +193,7 @@ public:
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
   }
 
-  virtual ~dereferencet() { }
+  virtual ~dereferencet() = default;
   
   /** The different ways in which a pointer may be accessed. */
   typedef enum {

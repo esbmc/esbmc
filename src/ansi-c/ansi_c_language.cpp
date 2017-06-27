@@ -289,10 +289,6 @@ bool ansi_c_languaget::to_expr(
   return result;
 }
 
-ansi_c_languaget::~ansi_c_languaget()
-{
-}
-
 bool ansi_c_languaget::merge_context(
   contextt &dest,
   contextt &src,

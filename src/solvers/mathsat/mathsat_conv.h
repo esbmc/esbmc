@@ -19,7 +19,7 @@ public:
   mathsat_smt_sort(smt_sort_kind i, msat_type _t, unsigned long w, unsigned long dw,
                    const smt_sort *_rangesort)
     : smt_sort(i, w, dw), t(_t), rangesort(_rangesort) {}
-  ~mathsat_smt_sort() override;
+  ~mathsat_smt_sort() override = default;
 
   msat_type t;
   const smt_sort *rangesort;

@@ -9,14 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/replace_symbol.h>
 #include <util/std_types.h>
 
-replace_symbolt::replace_symbolt()
-{
-}
-
-replace_symbolt::~replace_symbolt()
-{
-}
-
 bool replace_symbolt::replace(exprt &dest)
 {
   if(dest.id()=="symbol")

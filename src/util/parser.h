@@ -28,7 +28,7 @@ public:
   
   parsert() { clear(); }
   
-  ~parsert() override { }
+  ~parsert() override = default;
 
   virtual bool read(char &ch)
   {

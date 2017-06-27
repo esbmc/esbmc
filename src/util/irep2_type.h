@@ -35,8 +35,7 @@ class symbol_type_data : public type2t
 public:
   symbol_type_data(type2t::type_ids id, const dstring sym_name) :
     type2t (id), symbol_name(sym_name) {}
-  symbol_type_data(const symbol_type_data &ref) :
-    type2t (ref), symbol_name(ref.symbol_name) { }
+  symbol_type_data(const symbol_type_data &ref) = default;
 
   irep_idt symbol_name;
 
@@ -55,9 +54,7 @@ public:
         member_pretty_names(std::move(pretty_names)), name(n)
   {
   }
-  struct_union_data(const struct_union_data &ref)
-    : type2t(ref), members(ref.members), member_names(ref.member_names),
-      member_pretty_names(ref.member_pretty_names), name(ref.name) { }
+  struct_union_data(const struct_union_data &ref) = default;
 
   /** Fetch index number of member. Given a textual name of a member of a
    *  struct or union, this method will look up what index it is into the
@@ -93,7 +90,7 @@ public:
     // assert(w != 0 && "Must have nonzero width for integer type");
     // XXX -- zero sized bitfields are permissible. Oh my.
   }
-  bv_data(const bv_data &ref) : type2t(ref), width(ref.width) { }
+  bv_data(const bv_data &ref) = default;
 
   unsigned int get_width() const override;
 
@@ -111,9 +108,7 @@ public:
             const type2tc &ret, std::vector<irep_idt> names, bool e)
     : type2t(id), arguments(std::move(args)), ret_type(ret), argument_names(std::move(names)),
       ellipsis(e) { }
-  code_data(const code_data &ref)
-    : type2t(ref), arguments(ref.arguments), ret_type(ref.ret_type),
-      argument_names(ref.argument_names), ellipsis(ref.ellipsis) { }
+  code_data(const code_data &ref) = default;
 
   unsigned int get_width() const override;
 
@@ -135,9 +130,7 @@ class array_data : public type2t
 public:
   array_data(type2t::type_ids id, const type2tc &st, const expr2tc &sz, bool i)
     : type2t(id), subtype(st), array_size(sz), size_is_infinite(i) { }
-  array_data(const array_data &ref)
-    : type2t(ref), subtype(ref.subtype), array_size(ref.array_size),
-      size_is_infinite(ref.size_is_infinite) { }
+  array_data(const array_data &ref) = default;
 
   type2tc subtype;
   expr2tc array_size;
@@ -155,8 +148,7 @@ class pointer_data : public type2t
 public:
   pointer_data(type2t::type_ids id, const type2tc &st)
     : type2t(id), subtype(st) { }
-  pointer_data(const pointer_data &ref)
-    : type2t(ref), subtype(ref.subtype) { }
+  pointer_data(const pointer_data &ref) = default;
 
   type2tc subtype;
 
@@ -170,8 +162,7 @@ class fixedbv_data : public type2t
 public:
   fixedbv_data(type2t::type_ids id, unsigned int w, unsigned int ib)
     : type2t(id), width(w), integer_bits(ib) { }
-  fixedbv_data(const fixedbv_data &ref)
-    : type2t(ref), width(ref.width), integer_bits(ref.integer_bits) { }
+  fixedbv_data(const fixedbv_data &ref) = default;
 
   unsigned int width;
   unsigned int integer_bits;
@@ -187,8 +178,7 @@ class floatbv_data : public type2t
 public:
   floatbv_data(type2t::type_ids id, unsigned int f, unsigned int e)
     : type2t(id), fraction(f), exponent(e) { }
-  floatbv_data(const floatbv_data &ref)
-    : type2t(ref), fraction(ref.fraction), exponent(ref.exponent) { }
+  floatbv_data(const floatbv_data &ref) = default;
 
   unsigned int fraction;
   unsigned int exponent;
@@ -204,8 +194,7 @@ class string_data : public type2t
 public:
   string_data(type2t::type_ids id, unsigned int w)
     : type2t(id), width(w) { }
-  string_data(const string_data &ref)
-    : type2t(ref), width(ref.width) { }
+  string_data(const string_data &ref) = default;
 
   unsigned int width;
 
@@ -220,8 +209,7 @@ public:
   cpp_name_data(type2t::type_ids id, const irep_idt &n,
                 std::vector<type2tc> templ_args)
     : type2t(id), name(n), template_args(std::move(templ_args)) { }
-  cpp_name_data(const cpp_name_data &ref)
-    : type2t(ref), name(ref.name), template_args(ref.template_args) { }
+  cpp_name_data(const cpp_name_data &ref) = default;
 
   irep_idt name;
   std::vector<type2tc> template_args;
@@ -265,7 +253,7 @@ class bool_type2t : public bool_type_methods
 {
 public:
   bool_type2t() : bool_type_methods (bool_id) {}
-  bool_type2t(const bool_type2t &ref) : bool_type_methods(ref) {}
+  bool_type2t(const bool_type2t &ref) = default;
   unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
@@ -279,7 +267,7 @@ class empty_type2t : public empty_type_methods
 {
 public:
   empty_type2t() : empty_type_methods(empty_id) {}
-  empty_type2t(const empty_type2t &ref) : empty_type_methods(ref) { }
+  empty_type2t(const empty_type2t &ref) = default;
   unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
@@ -296,8 +284,7 @@ public:
   /** Primary constructor. @param sym_name Name of symbolic type. */
   symbol_type2t(const dstring &sym_name) :
     symbol_type_methods(symbol_id, sym_name) { }
-  symbol_type2t(const symbol_type2t &ref) :
-    symbol_type_methods(ref) { }
+  symbol_type2t(const symbol_type2t &ref) = default;
   unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
@@ -322,7 +309,7 @@ public:
                 const std::vector<irep_idt> &memb_pretty_names,
                 const irep_idt &name)
     : struct_type_methods(struct_id, members, memb_names, memb_pretty_names, name) {}
-  struct_type2t(const struct_type2t &ref) : struct_type_methods(ref) {}
+  struct_type2t(const struct_type2t &ref) = default;
   unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
@@ -347,7 +334,7 @@ public:
                const std::vector<irep_idt> &memb_pretty_names,
                const irep_idt &name)
     : union_type_methods(union_id, members, memb_names, memb_pretty_names, name) {}
-  union_type2t(const union_type2t &ref) : union_type_methods(ref) {}
+  union_type2t(const union_type2t &ref) = default;
   unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
@@ -364,8 +351,7 @@ public:
   /** Primary constructor. @param width Width of represented integer */
   unsignedbv_type2t(unsigned int width)
     : unsignedbv_type_methods(unsignedbv_id, width) { }
-  unsignedbv_type2t(const unsignedbv_type2t &ref)
-    : unsignedbv_type_methods(ref) { }
+  unsignedbv_type2t(const unsignedbv_type2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -381,8 +367,7 @@ public:
   /** Primary constructor. @param width Width of represented integer */
   signedbv_type2t(signed int width)
     : signedbv_type_methods(signedbv_id, width) { }
-  signedbv_type2t(const signedbv_type2t &ref)
-    : signedbv_type_methods(ref) { }
+  signedbv_type2t(const signedbv_type2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -395,7 +380,7 @@ public:
               const std::vector<irep_idt> &names, bool e)
     : code_type_methods(code_id, args, ret_type, names, e)
   { assert(args.size() == names.size()); }
-  code_type2t(const code_type2t &ref) : code_type_methods(ref) { }
+  code_type2t(const code_type2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -428,8 +413,7 @@ public:
           array_size = sz;
       }
     }
-  array_type2t(const array_type2t &ref)
-    : array_type_methods(ref) { }
+  array_type2t(const array_type2t &ref) = default;
 
   unsigned int get_width() const override;
 
@@ -460,8 +444,7 @@ public:
   /** Primary constructor. @param subtype Subtype of this pointer */
   pointer_type2t(const type2tc &subtype)
     : pointer_type_methods(pointer_id, subtype) { }
-  pointer_type2t(const pointer_type2t &ref)
-    : pointer_type_methods(ref) { }
+  pointer_type2t(const pointer_type2t &ref) = default;
   unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
@@ -482,8 +465,7 @@ public:
    */
   fixedbv_type2t(unsigned int width, unsigned int integer)
     : fixedbv_type_methods(fixedbv_id, width, integer) { }
-  fixedbv_type2t(const fixedbv_type2t &ref)
-    : fixedbv_type_methods(ref) { }
+  fixedbv_type2t(const fixedbv_type2t &ref) = default;
   unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
@@ -504,8 +486,7 @@ public:
    */
   floatbv_type2t(unsigned int fraction, unsigned int exponent)
     : floatbv_type_methods(floatbv_id, fraction, exponent) { }
-  floatbv_type2t(const floatbv_type2t &ref)
-    : floatbv_type_methods(ref) { }
+  floatbv_type2t(const floatbv_type2t &ref) = default;
   unsigned int get_width() const override;
 
   static std::string field_names[esbmct::num_type_fields];
@@ -525,8 +506,7 @@ public:
    */
   string_type2t(unsigned int elements)
     : string_type_methods(string_id, elements) { }
-  string_type2t(const string_type2t &ref)
-    : string_type_methods(ref) { }
+  string_type2t(const string_type2t &ref) = default;
   unsigned int get_width() const override;
   virtual unsigned int get_length() const;
 
@@ -547,8 +527,7 @@ public:
    */
   cpp_name_type2t(const irep_idt &n, const std::vector<type2tc> &ta)
     : cpp_name_type_methods(cpp_name_id, n, ta){}
-  cpp_name_type2t(const cpp_name_type2t &ref)
-    : cpp_name_type_methods(ref) { }
+  cpp_name_type2t(const cpp_name_type2t &ref) = default;
 
   unsigned int get_width() const override;
 

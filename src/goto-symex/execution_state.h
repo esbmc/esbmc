@@ -93,7 +93,7 @@ class execution_statet : public goto_symext
   /**
    *  Default destructor.
    */
-  virtual ~execution_statet();
+  virtual ~execution_statet() = default;
 
   // Types
 
@@ -108,7 +108,7 @@ class execution_statet : public goto_symext
   {
   public:
     ex_state_level2t(execution_statet &ref);
-    ~ex_state_level2t() override ;
+    ~ex_state_level2t() override = default;
     boost::shared_ptr<renaming::level2t> clone() const override ;
     void rename(expr2tc &lhs_symbol, unsigned count) override ;
     void rename(expr2tc &identifier) override ;
@@ -125,7 +125,7 @@ class execution_statet : public goto_symext
   {
   public:
     state_hashing_level2t(execution_statet &ref);
-    ~state_hashing_level2t() override ;
+    ~state_hashing_level2t() override = default;
     boost::shared_ptr<renaming::level2t> clone() const override ;
     void make_assignment(expr2tc &lhs_symbol,
                                      const expr2tc &const_value,
@@ -666,7 +666,7 @@ class dfs_execution_statet : public execution_statet
   {
   };
 
-  dfs_execution_statet(const dfs_execution_statet &ref);
+  dfs_execution_statet(const dfs_execution_statet &ref) = default;
   boost::shared_ptr<execution_statet> clone() const override ;
   ~dfs_execution_statet() override ;
 };
@@ -701,7 +701,7 @@ class schedule_execution_statet : public execution_statet
     *premaining_claims = 0;
   };
 
-  schedule_execution_statet(const schedule_execution_statet &ref);
+  schedule_execution_statet(const schedule_execution_statet &ref) = default;
   boost::shared_ptr<execution_statet> clone() const override ;
   ~schedule_execution_statet() override ;
   void claim(const expr2tc &expr, const std::string &msg) override ;

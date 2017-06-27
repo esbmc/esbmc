@@ -267,7 +267,7 @@ public:
       // XXX not applicable during int mode?
     }
 
-  virtual ~smt_sort() { }
+  virtual ~smt_sort() = default;
 };
 
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
@@ -312,7 +312,7 @@ public:
   smt_sortt sort;
 
   smt_ast(smt_convt *ctx, smt_sortt s);
-  virtual ~smt_ast() { }
+  virtual ~smt_ast() = default;
 
   // "this" is the true operand.
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
@@ -413,7 +413,7 @@ public:
    *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
    *  @param _ns Namespace for looking up the type of certain symbols. */
   smt_convt(bool int_encoding, const namespacet &_ns);
-  ~smt_convt() override ;
+  ~smt_convt() override = default;
 
   /** Post-constructor setup method. We must create various pieces of memory
    *  model data for tracking, however can't do it from the constructor because

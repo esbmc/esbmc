@@ -30,7 +30,7 @@ public:
 
   std::list<typet> other;
 
-  cpp_convert_typet() { }
+  cpp_convert_typet() = default;
   cpp_convert_typet(const typet &type) { read(type); }
 
 protected:

@@ -13,10 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 std::string verification_file;
 
-cmdlinet::cmdlinet()
-{
-}
-
 cmdlinet::~cmdlinet()
 {
   clear();

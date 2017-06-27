@@ -13,7 +13,7 @@ public:
     : smt_sort(i, w), t(_t) { }
   cvc_smt_sort(smt_sort_kind i, CVC4::Type &_t, unsigned long w,unsigned long d)
     : smt_sort(i, w, d), t(_t) { }
-  ~cvc_smt_sort() override { }
+  ~cvc_smt_sort() override = default;
 
   CVC4::Type t;
 };
@@ -24,7 +24,7 @@ public:
 #define cvc_ast_downcast(x) static_cast<const cvc_smt_ast *>(x)
   cvc_smt_ast(smt_convt *ctx, const smt_sort *_s, CVC4::Expr &_e)
     : smt_ast(ctx, _s), e(_e) { }
-  ~cvc_smt_ast() override { }
+  ~cvc_smt_ast() override = default;
   void dump() const override { abort(); }
 
   CVC4::Expr e;
@@ -34,7 +34,7 @@ class cvc_convt : public smt_convt, public array_iface
 {
 public:
   cvc_convt(bool int_encoding, const namespacet &ns);
-  ~cvc_convt() override;
+  ~cvc_convt() override = default;
 
   resultt dec_solve() override;
   tvt l_get(const smt_ast *l) override;

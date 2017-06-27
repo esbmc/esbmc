@@ -93,7 +93,7 @@ z3_convt::pop_ctx()
 
   solver.pop();
   intr_pop_ctx();
-  smt_convt::pop_ctx();;
+  smt_convt::pop_ctx();
 
   // Clear model if we have one.
   model = z3::model();

@@ -24,10 +24,6 @@ cvc_convt::cvc_convt(bool int_encoding, const namespacet &ns)
   assert(!int_encoding && "Integer encoding mode for CVC unimplemented");
 }
 
-cvc_convt::~cvc_convt()
-{
-}
-
 smt_convt::resultt
 cvc_convt::dec_solve()
 {

@@ -32,9 +32,7 @@ public:
     return value;
   }
 
-  tvt()
-  {
-  }
+  tvt() = default;
 
   explicit tvt(bool b):value(b?TV_TRUE:TV_FALSE)
   {

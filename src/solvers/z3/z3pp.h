@@ -369,7 +369,7 @@ namespace z3 {
     public:
         object() : m_ctx(nullptr) { }  // jmorse - uninitialized cons
         object(context & c):m_ctx(&c) {}
-        object(object const & s):m_ctx(s.m_ctx) {}
+        object(object const & s) = default;
         context & ctx() const { return *m_ctx; }
         void check_error() const { m_ctx->check_error(); }
         friend void check_context(object const & a, object const & b);
@@ -384,7 +384,7 @@ namespace z3 {
     class symbol : public object {
         Z3_symbol m_sym;
     public:
-        symbol() : m_sym(nullptr) { }
+        symbol() = default;
         symbol(context & c, const char *s):object(c), m_sym(nullptr) {
           m_sym = Z3_mk_string_symbol(*m_ctx, s);
         }
@@ -435,7 +435,7 @@ namespace z3 {
     protected:
         Z3_ast    m_ast;
     public:
-        ast() : m_ast(nullptr) { } // jmorse: uninitialized cons
+        ast() = default; // jmorse: uninitialized cons
         ast(context & c):object(c), m_ast(nullptr) {}
         ast(context & c, Z3_ast n):object(c), m_ast(n) { Z3_inc_ref(ctx(), m_ast); }
         ast(ast const & s):object(s), m_ast(s.m_ast) { Z3_inc_ref(ctx(), m_ast); }
@@ -465,7 +465,7 @@ namespace z3 {
     */
     class sort : public ast {
     public:
-        sort() { } // jmorse - uninitialized cons
+        sort() = default; // jmorse - uninitialized cons
         sort(context & c):ast(c) {}
         sort(context & c, Z3_sort s):ast(c, reinterpret_cast<Z3_ast>(s)) {}
         sort(sort const & s):ast(s) {}
@@ -547,7 +547,7 @@ namespace z3 {
     */
     class func_decl : public ast {
     public:
-        func_decl() {} // jmorse - uninitialized cons
+        func_decl() = default; // jmorse - uninitialized cons
         func_decl(context & c):ast(c) {}
         func_decl(context & c, Z3_func_decl n):ast(c, reinterpret_cast<Z3_ast>(n)) {}
         func_decl(func_decl const & s):ast(s) {}
@@ -590,7 +590,7 @@ namespace z3 {
     */
     class expr : public ast {
     public:
-        expr() { } // jmorse - uninitialized cons
+        expr() = default; // jmorse - uninitialized cons
         expr(context & c):ast(c) {}
         expr(context & c, Z3_ast n):ast(c, reinterpret_cast<Z3_ast>(n)) {}
         expr(expr const & n):ast(n) {}
@@ -1505,7 +1505,7 @@ namespace z3 {
             Z3_model_inc_ref(ctx(), m);
         }
     public:
-        model() : m_model(nullptr) { } // jmorse - uninitialized cons
+        model() = default; // jmorse - uninitialized cons
         model(context & c, Z3_model m):object(c) { init(m); }
         model(model const & s):object(s) { init(s.m_model); }
         ~model() { if (m_model) Z3_model_dec_ref(ctx(), m_model); }
@@ -1609,7 +1609,7 @@ namespace z3 {
     public:
         struct simple {};
         struct translate {};
-        solver() : m_solver(nullptr) { } // jmorse - uninitialized cons
+        solver() = default; // jmorse - uninitialized cons
         solver(context & c):object(c) { init(Z3_mk_solver(c)); }
         solver(context & c, simple):object(c) { init(Z3_mk_simple_solver(c)); }
         solver(context & c, Z3_solver s):object(c) { init(s); }

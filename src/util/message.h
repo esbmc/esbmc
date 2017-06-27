@@ -25,25 +25,11 @@ public:
     const std::string &message,
     const locationt &location);
 
-  virtual ~message_handlert()
-  {
-  }
+  virtual ~message_handlert() = default;
 };
 
 class nul_message_handlert:public message_handlert
 {
-public:
-  //virtual void print(unsigned level, const std::string &message)
-  //{
-  //}
-#if 0
-  virtual void print(
-    unsigned level,
-    const std::string &message,
-    const locationt &location)
-  {
-  }
-#endif
 };
 
 class stream_message_handlert:public message_handlert
@@ -124,7 +110,7 @@ public:
     verbosity=10;
   }
 
-  virtual ~messaget() {  }
+  virtual ~messaget() = default;
 
   // Levels:
   //

@@ -44,7 +44,7 @@ public:
 
   virtual smt_convt::resultt start_bmc();
   virtual smt_convt::resultt run(boost::shared_ptr<symex_target_equationt> &eq);
-  ~bmct() override { }
+  ~bmct() override = default;
 
   void set_ui(language_uit::uit _ui) { ui=_ui; }
 

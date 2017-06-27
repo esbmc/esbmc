@@ -404,9 +404,7 @@ public:
   {
   }
 
-  virtual ~goto_programt()
-  {
-  }
+  virtual ~goto_programt() = default;
 
   //! Swap the goto program
   inline void swap(goto_programt &program)

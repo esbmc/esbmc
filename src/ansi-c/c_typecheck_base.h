@@ -45,9 +45,9 @@ public:
   {
   }
 
-  ~c_typecheck_baset() override { }
+  ~c_typecheck_baset() override = default;
 
-  void typecheck() override =0;
+  void typecheck() override = 0;
   virtual void typecheck_expr(exprt &expr);
 
 protected:

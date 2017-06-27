@@ -122,7 +122,7 @@ public:
     }
 
   public:
-    ~goto_statet() {}
+    ~goto_statet() = default;
   };
 
   /**

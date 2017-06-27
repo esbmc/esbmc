@@ -17,8 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 class xmlt
 {
 public:
-  xmlt()
-  {}
+  xmlt() = default;
 
   xmlt(std::string _name):name(std::move(_name))
   {}

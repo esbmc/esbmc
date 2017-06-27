@@ -817,7 +817,7 @@ bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
                                  bool subtract, bool is_signed)
 {
   assert(op0.size() == op1.size());
-  unsigned int width = op0.size();;
+  unsigned int width = op0.size();
   bvt tmp_op1 = op1;
   if (subtract)
     negate(op1, tmp_op1);

@@ -1293,7 +1293,7 @@ void goto_convertt::convert_skip(
   t->location=code.location();
   expr2tc tmp_code;
   migrate_expr(code, tmp_code);
-  t->code = tmp_code;;
+  t->code = tmp_code;
 }
 
 void goto_convertt::convert_assume(

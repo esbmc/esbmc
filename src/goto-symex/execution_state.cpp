@@ -197,10 +197,6 @@ execution_statet::operator=(const execution_statet &ex)
   return *this;
 }
 
-execution_statet::~execution_statet()
-{
-};
-
 void trap_to_python(reachability_treet *art);
 
 void
@@ -1228,10 +1224,6 @@ execution_statet::ex_state_level2t::ex_state_level2t(
 {
 }
 
-execution_statet::ex_state_level2t::~ex_state_level2t()
-{
-}
-
 boost::shared_ptr<renaming::level2t>
 execution_statet::ex_state_level2t::clone() const
 {
@@ -1275,11 +1267,6 @@ boost::shared_ptr<execution_statet> dfs_execution_statet::clone() const
   return d;
 }
 
-dfs_execution_statet::dfs_execution_statet(const dfs_execution_statet &ref)
-  :  execution_statet(ref)
-{
-}
-
 schedule_execution_statet::~schedule_execution_statet()
 {
   // Don't delete equation. Schedule requires all this data.
@@ -1293,13 +1280,6 @@ boost::shared_ptr<execution_statet> schedule_execution_statet::clone() const
   // Don't duplicate target equation.
   s.get()->target = target;
   return s;
-}
-
-schedule_execution_statet::schedule_execution_statet(const schedule_execution_statet &ref)
-  :  execution_statet(ref),
-     ptotal_claims(ref.ptotal_claims),
-     premaining_claims(ref.premaining_claims)
-{
 }
 
 void
@@ -1322,10 +1302,6 @@ schedule_execution_statet::claim(const expr2tc &expr, const std::string &msg)
 execution_statet::state_hashing_level2t::state_hashing_level2t(
                                          execution_statet &ref)
     : ex_state_level2t(ref)
-{
-}
-
-execution_statet::state_hashing_level2t::~state_hashing_level2t()
 {
 }
 

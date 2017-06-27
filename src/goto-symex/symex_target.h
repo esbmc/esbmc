@@ -22,7 +22,7 @@ class stack_framet;
 class symex_targett
 {
 public:
-  virtual ~symex_targett() { }
+  virtual ~symex_targett() = default;
 
   struct sourcet
   {

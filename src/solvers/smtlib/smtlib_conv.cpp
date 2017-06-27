@@ -809,7 +809,7 @@ smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   symbol_table.insert(record);
 
   if (s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
-    return a;;
+    return a;
 
   // As this is the first time, declare that symbol to the solver.
   fprintf(out_stream, "(declare-fun |%s| () %s)\n", name.c_str(),

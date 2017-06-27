@@ -27,9 +27,7 @@ class ansi_c_parsert:public parsert
 public:
   ansi_c_parse_treet parse_tree;
   
-  ansi_c_parsert()
-  {
-  }
+  ansi_c_parsert() = default;
   
   bool parse() override
   {

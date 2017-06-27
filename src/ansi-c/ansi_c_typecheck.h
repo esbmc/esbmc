@@ -48,7 +48,7 @@ public:
   {
   }
 
-  ~ansi_c_typecheckt() override { }
+  ~ansi_c_typecheckt() override = default;
 
   void typecheck() override;
 

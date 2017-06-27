@@ -25,10 +25,6 @@ array_convt::array_convt(smt_convt *_ctx)
 {
 }
 
-array_convt::~array_convt()
-{
-}
-
 void
 array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
 {

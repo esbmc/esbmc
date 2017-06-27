@@ -35,7 +35,7 @@ public:
               const smt_sort *_rangesort)
     : smt_sort(i, w, dw), s(_s), rangesort(_rangesort) { }
 
-  ~z3_smt_sort() override { }
+  ~z3_smt_sort() override = default;
 
   z3::sort s;
   const smt_sort *rangesort;
@@ -47,7 +47,7 @@ public:
 #define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
   z3_smt_ast(smt_convt *ctx, z3::expr _e, const smt_sort *_s) :
             smt_ast(ctx, _s), e(_e) { }
-  ~z3_smt_ast() override { }
+  ~z3_smt_ast() override = default;
   z3::expr e;
 
   const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const override;

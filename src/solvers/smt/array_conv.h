@@ -52,8 +52,7 @@ public:
   }
 
   
-  ~array_ast() override {
-  }
+  ~array_ast() override = default;
 
   smt_astt eq(smt_convt *ctx, smt_astt other) const override;
   smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const override;
@@ -105,7 +104,7 @@ public:
   > index_map_containert;
 
   array_convt(smt_convt *_ctx);
-  ~array_convt();
+  ~array_convt() = default;
 
   // Public api
   smt_ast *mk_array_symbol(const std::string &name, const smt_sort *ms,

@@ -21,7 +21,7 @@ namespace renaming {
 
     virtual void get_ident_name(expr2tc &symbol) const=0;
 
-    virtual ~renaming_levelt() { }
+    virtual ~renaming_levelt() = default;
 //  protected:
 //  XXX: should leave protected enabled, but g++ 5.4 on ubuntu 16.04 does not
 //  appear to honour the following friend directive?
@@ -113,8 +113,8 @@ namespace renaming {
 
     unsigned int current_number(const irep_idt &name) const;
 
-    level1t() {}
-    ~level1t() override { }
+    level1t() = default;
+    ~level1t() override = default;
 
     virtual void print(std::ostream &out) const;
   };
@@ -129,7 +129,7 @@ namespace renaming {
     class name_record {
     public:
       // Appease boost python error paths
-      name_record() {}
+      name_record() = default;
 
       name_record(const symbol2t &sym)
         : base_name(sym.thename), lev(sym.rlevel), l1_num(sym.level1_num),
@@ -265,8 +265,8 @@ namespace renaming {
     // specific level2t object.
     static void rename_to_record(expr2tc &sym, const name_record &rec);
 
-    level2t() { };
-    ~level2t() override { };
+    level2t() = default;
+    ~level2t() override = default;
     virtual boost::shared_ptr<level2t> clone() const = 0;
 
     virtual void print(std::ostream &out) const;

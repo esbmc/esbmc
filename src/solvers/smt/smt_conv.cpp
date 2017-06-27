@@ -117,10 +117,6 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   ptr_foo_inited = false;
 }
 
-smt_convt::~smt_convt()
-{
-}
-
 void
 smt_convt::set_tuple_iface(tuple_iface *iface)
 {

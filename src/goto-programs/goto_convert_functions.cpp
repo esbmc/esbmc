@@ -34,10 +34,6 @@ goto_convert_functionst::goto_convert_functionst(
 	  inlining=true;
 }
 
-goto_convert_functionst::~goto_convert_functionst()
-{
-}
-
 void goto_convert_functionst::goto_convert()
 {
   // warning! hash-table iterators are not stable

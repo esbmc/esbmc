@@ -205,12 +205,6 @@ type2t::type2t(type_ids id)
 {
 }
 
-type2t::type2t(const type2t &ref)
-  : type_id(ref.type_id),
-    crc_val(ref.crc_val)
-{
-}
-
 bool
 type2t::operator==(const type2t &ref) const
 {

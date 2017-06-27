@@ -34,7 +34,7 @@ public:
   {
   }
 
-  ~tuple_smt_sort() override { }
+  ~tuple_smt_sort() override = default;
 };
 
 /** Function app representing a tuple sorted value.
@@ -58,7 +58,7 @@ public:
   tuple_node_smt_ast (smt_tuple_node_flattener &f, smt_convt *ctx, smt_sortt s,
                       std::string _name)
     : smt_ast(ctx, s), name(std::move(_name)), flat(f) { }
-  ~tuple_node_smt_ast() override { }
+  ~tuple_node_smt_ast() override = default;
 
   /** The symbol prefix of the variables representing this tuples value, as a
    *  string (i.e., no associated type). */
@@ -138,7 +138,7 @@ public:
    *               value. */
   tuple_sym_smt_ast (smt_convt *ctx, smt_sortt s, std::string _name)
     : smt_ast(ctx, s), name(std::move(_name)) { }
-  ~tuple_sym_smt_ast() override { }
+  ~tuple_sym_smt_ast() override = default;
 
   /** The symbol prefix of the variables representing this tuples value, as a
    *  string (i.e., no associated type). */
@@ -162,7 +162,7 @@ class array_sym_smt_ast : public tuple_sym_smt_ast
 public:
   array_sym_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
     : tuple_sym_smt_ast(ctx, s, _name) { }
-  ~array_sym_smt_ast() override { }
+  ~array_sym_smt_ast() override = default;
 
   smt_astt ite(smt_convt *ctx, smt_astt cond,
       smt_astt falseop) const override;

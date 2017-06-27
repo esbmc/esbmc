@@ -41,8 +41,8 @@ public:
 
   void show_parse(std::ostream &out) override;
 
-  ~ansi_c_languaget() override;
-  ansi_c_languaget() { }
+  ~ansi_c_languaget() override = default;
+  ansi_c_languaget() = default;
 
   // conversion from expression into string
   bool from_expr(

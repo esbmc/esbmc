@@ -23,7 +23,7 @@ public:
   {
   }
 
-  virtual ~message_streamt() { }
+  virtual ~message_streamt() = default;
 
   // overload to use language specific syntax
   virtual std::string to_string(const exprt &expr) { return expr.to_string(); }
