@@ -143,7 +143,6 @@ tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
     eqs.push_back(side1->eq(ctx, side2));
-    i++;
   }
 
   // Create an ast representing the fact that all the members are equal.
