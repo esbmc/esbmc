@@ -24,8 +24,8 @@ class cbmc_parseoptionst:
   public language_uit
 {
 public:
-  virtual int doit();
-  virtual void help();
+  int doit() override ;
+  void help() override ;
 
   cbmc_parseoptionst(int argc, const char **argv):
     parseoptions_baset(esbmc_options, argc, argv),

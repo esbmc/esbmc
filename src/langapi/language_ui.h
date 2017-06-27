@@ -22,7 +22,7 @@ public:
   contextt context;
 
   language_uit(const cmdlinet &__cmdline);
-  virtual ~language_uit();
+  ~language_uit() override;
 
   virtual bool parse();
   virtual bool parse(const std::string &filename);

@@ -53,7 +53,7 @@ public:
   {
   }
 
-  virtual void print(unsigned level __attribute__((unused)), const std::string &message)
+  void print(unsigned level __attribute__((unused)), const std::string &message) override
   { out << message << std::endl; }
 
 protected:

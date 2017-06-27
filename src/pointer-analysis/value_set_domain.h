@@ -21,7 +21,7 @@ public:
   {
   }
 
-  ~value_set_domaint() {
+  ~value_set_domaint() override {
     if (value_set)
       delete value_set;
     return;
@@ -44,31 +44,31 @@ public:
     return value_set->make_union(*other.value_set, keepnew);
   }
 
-  virtual void output(
+  void output(
     const namespacet &ns __attribute__((unused)),
-    std::ostream &out) const
+    std::ostream &out) const override
   {
     value_set->output(out);
   }
     
-  virtual void initialize(
+  void initialize(
     const namespacet &ns,
-    locationt l)
+    locationt l) override 
   {
     value_set = new value_sett(ns);
     value_set->clear();
     value_set->location_number=l->location_number;
   }
 
-  virtual void transform(
+  void transform(
     const namespacet &ns,
     locationt from_l,
-    locationt to_l);
+    locationt to_l) override ;
 
-  virtual void get_reference_set(
+  void get_reference_set(
     const namespacet &ns __attribute__((unused)),
     const expr2tc &expr,
-    value_setst::valuest &dest)
+    value_setst::valuest &dest) override
   {
     value_set->get_reference_set(expr, dest);
   }

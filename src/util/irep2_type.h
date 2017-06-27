@@ -95,7 +95,7 @@ public:
   }
   bv_data(const bv_data &ref) : type2t(ref), width(ref.width) { }
 
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   unsigned int width;
 
@@ -115,7 +115,7 @@ public:
     : type2t(ref), arguments(ref.arguments), ret_type(ref.ret_type),
       argument_names(ref.argument_names), ellipsis(ref.ellipsis) { }
 
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   std::vector<type2tc> arguments;
   type2tc ret_type;
@@ -266,7 +266,7 @@ class bool_type2t : public bool_type_methods
 public:
   bool_type2t(void) : bool_type_methods (bool_id) {}
   bool_type2t(const bool_type2t &ref) : bool_type_methods(ref) {}
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -280,7 +280,7 @@ class empty_type2t : public empty_type_methods
 public:
   empty_type2t(void) : empty_type_methods(empty_id) {}
   empty_type2t(const empty_type2t &ref) : empty_type_methods(ref) { }
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -298,7 +298,7 @@ public:
     symbol_type_methods(symbol_id, sym_name) { }
   symbol_type2t(const symbol_type2t &ref) :
     symbol_type_methods(ref) { }
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -323,7 +323,7 @@ public:
                 const irep_idt &name)
     : struct_type_methods(struct_id, members, memb_names, memb_pretty_names, name) {}
   struct_type2t(const struct_type2t &ref) : struct_type_methods(ref) {}
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -348,7 +348,7 @@ public:
                const irep_idt &name)
     : union_type_methods(union_id, members, memb_names, memb_pretty_names, name) {}
   union_type2t(const union_type2t &ref) : union_type_methods(ref) {}
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -431,7 +431,7 @@ public:
   array_type2t(const array_type2t &ref)
     : array_type_methods(ref) { }
 
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   /** Exception for invalid manipulations of an infinitely sized array. No
    *  actual data stored. */
@@ -462,7 +462,7 @@ public:
     : pointer_type_methods(pointer_id, subtype) { }
   pointer_type2t(const pointer_type2t &ref)
     : pointer_type_methods(ref) { }
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -484,7 +484,7 @@ public:
     : fixedbv_type_methods(fixedbv_id, width, integer) { }
   fixedbv_type2t(const fixedbv_type2t &ref)
     : fixedbv_type_methods(ref) { }
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -506,7 +506,7 @@ public:
     : floatbv_type_methods(floatbv_id, fraction, exponent) { }
   floatbv_type2t(const floatbv_type2t &ref)
     : floatbv_type_methods(ref) { }
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -527,7 +527,7 @@ public:
     : string_type_methods(string_id, elements) { }
   string_type2t(const string_type2t &ref)
     : string_type_methods(ref) { }
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
   virtual unsigned int get_length(void) const;
 
   static std::string field_names[esbmct::num_type_fields];
@@ -550,7 +550,7 @@ public:
   cpp_name_type2t(const cpp_name_type2t &ref)
     : cpp_name_type_methods(ref) { }
 
-  virtual unsigned int get_width(void) const;
+  unsigned int get_width(void) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };

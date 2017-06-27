@@ -37,43 +37,43 @@ public:
 
   // assignment to a variable - must be symbol
   // the value is destroyed
-  virtual void assignment(
+  void assignment(
     const expr2tc &guard,
     const expr2tc &lhs,
     const expr2tc &original_lhs,
     const expr2tc &rhs,
     const sourcet &source,
     std::vector<stack_framet> stack_trace,
-    assignment_typet assignment_type);
+    assignment_typet assignment_type) override ;
 
   // output
-  virtual void output(
+  void output(
     const expr2tc &guard,
     const sourcet &source,
     const std::string &fmt,
-    const std::list<expr2tc> &args);
+    const std::list<expr2tc> &args) override ;
 
   // record an assumption
   // cond is destroyed
-  virtual void assumption(
+  void assumption(
     const expr2tc &guard,
     const expr2tc &cond,
-    const sourcet &source);
+    const sourcet &source) override ;
 
   // record an assertion
   // cond is destroyed
-  virtual void assertion(
+  void assertion(
     const expr2tc &guard,
     const expr2tc &cond,
     const std::string &msg,
     std::vector<stack_framet> stack_trace,
-    const sourcet &source);
+    const sourcet &source) override ;
 
-  virtual void renumber(
+  void renumber(
     const expr2tc &guard,
     const expr2tc &symbol,
     const expr2tc &size,
-    const sourcet &source);
+    const sourcet &source) override ;
 
   virtual void convert(smt_convt &smt_conv);
   void convert_internal_step(
@@ -165,15 +165,15 @@ public:
 
   unsigned int clear_assertions();
 
-  virtual boost::shared_ptr<symex_targett> clone(void) const
+  boost::shared_ptr<symex_targett> clone(void) const override 
   {
     // No pointers or anything that requires ownership modification, can just
     // duplicate self.
     return boost::shared_ptr<symex_targett>(new symex_target_equationt(*this));
   }
 
-  virtual void push_ctx(void);
-  virtual void pop_ctx(void);
+  void push_ctx(void) override ;
+  void pop_ctx(void) override ;
 
 protected:
   const namespacet &ns;
@@ -188,12 +188,12 @@ public:
 
   runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
 
-  virtual void push_ctx(void);
-  virtual void pop_ctx(void);
+  void push_ctx(void) override ;
+  void pop_ctx(void) override ;
 
-  virtual boost::shared_ptr<symex_targett> clone(void) const;
+  boost::shared_ptr<symex_targett> clone(void) const override ;
 
-  virtual void convert(smt_convt &smt_conv);
+  void convert(smt_convt &smt_conv) override ;
   void flush_latest_instructions(void);
 
   tvt ask_solver_question(const expr2tc &question);

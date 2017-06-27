@@ -1346,7 +1346,7 @@ public:
   nearbyint2t(const nearbyint2t &ref)
     : nearbyint_expr_methods(ref){}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1380,7 +1380,7 @@ public:
 
   typecast2t(const typecast2t &ref)
     : typecast_expr_methods(ref){}
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1434,7 +1434,7 @@ public:
   if2t(const if2t &ref)
     : if_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1449,7 +1449,7 @@ public:
   equality2t(const equality2t &ref)
     : equality_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1464,7 +1464,7 @@ public:
   notequal2t(const notequal2t &ref)
     : notequal_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1479,7 +1479,7 @@ public:
   lessthan2t(const lessthan2t &ref)
     : lessthan_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1494,7 +1494,7 @@ public:
   greaterthan2t(const greaterthan2t &ref)
     : greaterthan_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1509,7 +1509,7 @@ public:
   lessthanequal2t(const lessthanequal2t &ref)
   : lessthanequal_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1525,7 +1525,7 @@ public:
   greaterthanequal2t(const greaterthanequal2t &ref)
     : greaterthanequal_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1541,7 +1541,7 @@ public:
   not2t(const not2t &ref)
   : not_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1557,7 +1557,7 @@ public:
   and2t(const and2t &ref)
   : and_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1573,7 +1573,7 @@ public:
   or2t(const or2t &ref)
   : or_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1589,7 +1589,7 @@ public:
   xor2t(const xor2t &ref)
   : xor_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1605,7 +1605,7 @@ public:
   implies2t(const implies2t &ref)
   : implies_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1624,7 +1624,7 @@ public:
   bitand2t(const bitand2t &ref)
   : bitand_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1643,7 +1643,7 @@ public:
   bitor2t(const bitor2t &ref)
   : bitor_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1662,7 +1662,7 @@ public:
   bitxor2t(const bitxor2t &ref)
   : bitxor_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1681,7 +1681,7 @@ public:
   bitnand2t(const bitnand2t &ref)
   : bitnand_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1700,7 +1700,7 @@ public:
   bitnor2t(const bitnor2t &ref)
   : bitnor_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1719,7 +1719,7 @@ public:
   bitnxor2t(const bitnxor2t &ref)
   : bitnxor_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1739,7 +1739,7 @@ public:
   bitnot2t(const bitnot2t &ref)
     : bitnot_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1760,7 +1760,7 @@ public:
   lshr2t(const lshr2t &ref)
   : lshr_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1778,7 +1778,7 @@ public:
   neg2t(const neg2t &ref)
     : neg_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1796,7 +1796,7 @@ public:
   abs2t(const abs2t &ref)
     : abs_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1815,7 +1815,7 @@ public:
   add2t(const add2t &ref)
     : add_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1835,7 +1835,7 @@ public:
   sub2t(const sub2t &ref)
     : sub_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1855,7 +1855,7 @@ public:
   mul2t(const mul2t &ref)
     : mul_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1875,7 +1875,7 @@ public:
   div2t(const div2t &ref)
     : div_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1895,7 +1895,7 @@ public:
   ieee_add2t(const ieee_add2t &ref)
     : ieee_add_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1916,7 +1916,7 @@ public:
   ieee_sub2t(const ieee_sub2t &ref)
     : ieee_sub_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1937,7 +1937,7 @@ public:
   ieee_mul2t(const ieee_mul2t &ref)
     : ieee_mul_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1958,7 +1958,7 @@ public:
   ieee_div2t(const ieee_div2t &ref)
     : ieee_div_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2019,7 +2019,7 @@ public:
   modulus2t(const modulus2t &ref)
     : modulus_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2039,7 +2039,7 @@ public:
   shl2t(const shl2t &ref)
     : shl_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2060,7 +2060,7 @@ public:
   ashr2t(const ashr2t &ref)
     : ashr_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2077,7 +2077,7 @@ public:
   same_object2t(const same_object2t &ref)
     : same_object_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2096,7 +2096,7 @@ public:
   pointer_offset2t(const pointer_offset2t &ref)
     : pointer_offset_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2135,7 +2135,7 @@ public:
   address_of2t(const address_of2t &ref)
     : address_of_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2204,7 +2204,7 @@ public:
   with2t(const with2t &ref)
     : with_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2223,7 +2223,7 @@ public:
   member2t(const member2t &ref)
     : member_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2242,7 +2242,7 @@ public:
   index2t(const index2t &ref)
     : index_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2258,7 +2258,7 @@ public:
   isnan2t(const isnan2t &ref)
     : isnan_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2281,7 +2281,7 @@ public:
   overflow2t(const overflow2t &ref)
     : overflow_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2301,7 +2301,7 @@ public:
   overflow_cast2t(const overflow_cast2t &ref)
     : overflow_cast_expr_methods(ref) {}
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2733,7 +2733,7 @@ public:
   isinf2t(const isinf2t &ref)
     : isinf_expr_methods(ref) { }
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2746,7 +2746,7 @@ public:
   isnormal2t(const isnormal2t &ref)
     : isnormal_expr_methods(ref) { }
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2759,7 +2759,7 @@ public:
   isfinite2t(const isfinite2t &ref)
     : isfinite_expr_methods(ref) { }
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2772,7 +2772,7 @@ public:
   signbit2t(const signbit2t &ref)
     : signbit_expr_methods(ref) { }
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2785,7 +2785,7 @@ public:
   concat2t(const concat2t &ref)
     : concat_expr_methods(ref) { }
 
-  virtual expr2tc do_simplify(bool second) const;
+  expr2tc do_simplify(bool second) const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };

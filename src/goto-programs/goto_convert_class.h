@@ -38,7 +38,7 @@ public:
   {
   }
 
-  virtual ~goto_convertt()
+  ~goto_convertt() override
   {
   }
 

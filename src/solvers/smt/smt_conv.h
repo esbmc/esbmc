@@ -413,7 +413,7 @@ public:
    *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
    *  @param _ns Namespace for looking up the type of certain symbols. */
   smt_convt(bool int_encoding, const namespacet &_ns);
-  ~smt_convt();
+  ~smt_convt() override ;
 
   /** Post-constructor setup method. We must create various pieces of memory
    *  model data for tracking, however can't do it from the constructor because

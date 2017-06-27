@@ -27,8 +27,8 @@ public:
   typedef static_analysist<value_set_domaint> baset;
 
   // overloading  
-  virtual void initialize(const goto_programt &goto_program);
-  virtual void initialize(const goto_functionst &goto_functions);
+  void initialize(const goto_programt &goto_program) override ;
+  void initialize(const goto_functionst &goto_functions) override ;
 
   friend void convert(
     const goto_functionst &goto_functions,
@@ -63,10 +63,10 @@ protected:
 
 public:
   // interface value_sets
-  virtual void get_values(
+  void get_values(
     locationt l,
     const expr2tc &expr,
-    value_setst::valuest &dest)
+    value_setst::valuest &dest) override 
   {
     (*this)[l].value_set->get_value_set(expr, dest);
   }  

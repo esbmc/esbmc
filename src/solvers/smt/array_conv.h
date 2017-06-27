@@ -51,20 +51,20 @@ public:
   {
   }
 
-  virtual
-  ~array_ast(void) {
+  
+  ~array_ast(void) override {
   }
 
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const;
-  virtual void assign(smt_convt *ctx, smt_astt sym) const;
-  virtual smt_astt update(smt_convt *ctx, smt_astt value, unsigned int idx,
-                          expr2tc idx_expr = expr2tc()) const;
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
+  smt_astt eq(smt_convt *ctx, smt_astt other) const override;
+  smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const override;
+  void assign(smt_convt *ctx, smt_astt sym) const override;
+  smt_astt update(smt_convt *ctx, smt_astt value, unsigned int idx,
+                          expr2tc idx_expr = expr2tc()) const override;
+  smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
 
   smt_astt eq_fixedsize(smt_convt *ctx, const array_ast *other) const;
 
-  virtual void dump() const { return; }
+  void dump() const override { return; }
 
   std::string symname; // Only if this was produced from mk_smt_symbol.
 
@@ -109,12 +109,12 @@ public:
 
   // Public api
   smt_ast *mk_array_symbol(const std::string &name, const smt_sort *ms,
-                           smt_sortt subtype);
+                           smt_sortt subtype) override;
   expr2tc get_array_elem(smt_astt a, uint64_t index,
-                         const type2tc &subtype);
-  virtual smt_astt convert_array_of(smt_astt init_val,
-                                          unsigned long domain_width);
-  void add_array_constraints_for_solving(void);
+                         const type2tc &subtype) override;
+  smt_astt convert_array_of(smt_astt init_val,
+                                          unsigned long domain_width) override;
+  void add_array_constraints_for_solving(void) override;
 
   // Heavy lifters
   virtual smt_astt convert_array_of_wsort(
@@ -197,8 +197,8 @@ public:
     return new array_ast(this, ctx, _s, _a);
   }
 
-  void push_array_ctx(void);
-  void pop_array_ctx(void);
+  void push_array_ctx(void) override;
+  void pop_array_ctx(void) override;
 
   // Members
 

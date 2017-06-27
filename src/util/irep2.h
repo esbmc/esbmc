@@ -1042,12 +1042,12 @@ namespace esbmct {
     // Top level / public methods for this irep. These methods are virtual, set
     // up any relevant computation, and then call the recursive instances below
     // to perform the actual work over fields.
-    base_container2tc clone(void) const;
-    list_of_memberst tostring(unsigned int indent) const;
-    bool cmp(const base2t &ref) const;
-    int lt(const base2t &ref) const;
-    size_t do_crc(size_t seed) const;
-    void hash(crypto_hash &hash) const;
+    base_container2tc clone(void) const override;
+    list_of_memberst tostring(unsigned int indent) const override;
+    bool cmp(const base2t &ref) const override;
+    int lt(const base2t &ref) const override;
+    size_t do_crc(size_t seed) const override;
+    void hash(crypto_hash &hash) const override;
 
     static void build_python_class(const typename container::id_field_type id);
 
@@ -1208,12 +1208,12 @@ namespace esbmct {
     // See notes on irep_methods2 copy constructor
     expr_methods2(const derived &ref) : superclass(ref) { }
 
-    const expr2tc *get_sub_expr(unsigned int i) const;
-    expr2tc *get_sub_expr_nc(unsigned int i);
-    unsigned int get_num_sub_exprs(void) const;
+    const expr2tc *get_sub_expr(unsigned int i) const override;
+    expr2tc *get_sub_expr_nc(unsigned int i) override;
+    unsigned int get_num_sub_exprs(void) const override;
 
-    void foreach_operand_impl_const(expr2t::const_op_delegate &expr) const;
-    void foreach_operand_impl(expr2t::op_delegate &expr);
+    void foreach_operand_impl_const(expr2t::const_op_delegate &expr) const override;
+    void foreach_operand_impl(expr2t::op_delegate &expr) override;
   };
 
   /** Type methods template for type ireps.
@@ -1230,8 +1230,8 @@ namespace esbmct {
     // See notes on irep_methods2 copy constructor
     type_methods2(const derived &ref) : superclass(ref) { }
 
-    void foreach_subtype_impl_const(type2t::const_subtype_delegate &t) const;
-    void foreach_subtype_impl(type2t::subtype_delegate &t);
+    void foreach_subtype_impl_const(type2t::const_subtype_delegate &t) const override;
+    void foreach_subtype_impl(type2t::subtype_delegate &t) override;
   };
 
   // So that we can write such things as:

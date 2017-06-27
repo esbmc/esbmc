@@ -108,10 +108,10 @@ class execution_statet : public goto_symext
   {
   public:
     ex_state_level2t(execution_statet &ref);
-    virtual ~ex_state_level2t();
-    virtual boost::shared_ptr<renaming::level2t> clone(void) const;
-    virtual void rename(expr2tc &lhs_symbol, unsigned count);
-    virtual void rename(expr2tc &identifier);
+    ~ex_state_level2t() override ;
+    boost::shared_ptr<renaming::level2t> clone(void) const override ;
+    void rename(expr2tc &lhs_symbol, unsigned count) override ;
+    void rename(expr2tc &identifier) override ;
 
     execution_statet *owner;
   };
@@ -125,11 +125,11 @@ class execution_statet : public goto_symext
   {
   public:
     state_hashing_level2t(execution_statet &ref);
-    virtual ~state_hashing_level2t(void);
-    virtual boost::shared_ptr<renaming::level2t> clone(void) const;
-    virtual void make_assignment(expr2tc &lhs_symbol,
+    ~state_hashing_level2t(void) override ;
+    boost::shared_ptr<renaming::level2t> clone(void) const override ;
+    void make_assignment(expr2tc &lhs_symbol,
                                      const expr2tc &const_value,
-                                     const expr2tc &assigned_value);
+                                     const expr2tc &assigned_value) override ;
     crypto_hash generate_l2_state_hash() const;
     typedef std::map<irep_idt, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
@@ -229,7 +229,7 @@ class execution_statet : public goto_symext
    *  a thread being created, and so forth.
    *  @param art reachability_treet we're operating with (defunct?)
    */
-  virtual void symex_step(reachability_treet &art);
+  void symex_step(reachability_treet &art) override ;
 
   /**
    *  Symbolically assign a value.
@@ -238,7 +238,7 @@ class execution_statet : public goto_symext
    *  see whether the assignment should be generating a context switch.
    *  @param code Code representing assignment we're making.
    */
-  virtual void symex_assign(const expr2tc &code);
+  void symex_assign(const expr2tc &code) override ;
 
   /**
    *  Symbolically assert something.
@@ -249,7 +249,7 @@ class execution_statet : public goto_symext
    *  @param expr Expression that we're asserting is true.
    *  @param msg Textual message explaining this assertion.
    */
-  virtual void claim(const expr2tc &expr, const std::string &msg);
+  void claim(const expr2tc &expr, const std::string &msg) override ;
 
   /**
    *  Perform a jump across GOTO code.
@@ -260,7 +260,7 @@ class execution_statet : public goto_symext
    *  too.
    *  @param old_guard Guard of the goto jump being performed.
    */
-  virtual void symex_goto(const expr2tc &old_guard);
+  void symex_goto(const expr2tc &old_guard) override ;
 
   /**
    *  Assume some expression is true.
@@ -269,7 +269,7 @@ class execution_statet : public goto_symext
    *  function.
    *  @param assumption Expression of the thing we're assuming to be true.
    */
-  virtual void assume(const expr2tc &assumption);
+  void assume(const expr2tc &assumption) override ;
 
   /**
    *  Fetch reference to count of dynamic objects in this state.
@@ -278,10 +278,10 @@ class execution_statet : public goto_symext
    *  to the true counter.
    *  @return Reference to the count of global dynamic objects.
    */
-  virtual unsigned int &get_dynamic_counter(void);
+  unsigned int &get_dynamic_counter(void) override ;
 
   /** Like get_dynamic_counter, but with nondet symbols. */
-  virtual unsigned int &get_nondet_counter(void);
+  unsigned int &get_nondet_counter(void) override ;
 
   /**
    *  Fetch name of current execution guard.
@@ -667,8 +667,8 @@ class dfs_execution_statet : public execution_statet
   };
 
   dfs_execution_statet(const dfs_execution_statet &ref);
-  virtual boost::shared_ptr<execution_statet> clone(void) const;
-  virtual ~dfs_execution_statet(void);
+  boost::shared_ptr<execution_statet> clone(void) const override ;
+  ~dfs_execution_statet(void) override ;
 };
 
 /**
@@ -702,9 +702,9 @@ class schedule_execution_statet : public execution_statet
   };
 
   schedule_execution_statet(const schedule_execution_statet &ref);
-  virtual boost::shared_ptr<execution_statet> clone(void) const;
-  virtual ~schedule_execution_statet(void);
-  virtual void claim(const expr2tc &expr, const std::string &msg);
+  boost::shared_ptr<execution_statet> clone(void) const override ;
+  ~schedule_execution_statet(void) override ;
+  void claim(const expr2tc &expr, const std::string &msg) override ;
 
   unsigned int *ptotal_claims;
   unsigned int *premaining_claims;

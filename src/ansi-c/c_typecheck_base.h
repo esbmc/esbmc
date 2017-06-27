@@ -45,9 +45,9 @@ public:
   {
   }
 
-  virtual ~c_typecheck_baset() { }
+  ~c_typecheck_baset() override { }
 
-  virtual void typecheck()=0;
+  void typecheck() override =0;
   virtual void typecheck_expr(exprt &expr);
 
 protected:
@@ -62,8 +62,8 @@ protected:
   void replace_symbol(irept &symbol);
 
   // overload to use language specific syntax
-  virtual std::string to_string(const exprt &expr);
-  virtual std::string to_string(const typet &type);
+  std::string to_string(const exprt &expr) override;
+  std::string to_string(const typet &type) override;
 
   //
   // service functions

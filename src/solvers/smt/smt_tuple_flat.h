@@ -34,7 +34,7 @@ public:
   {
   }
 
-  virtual ~tuple_smt_sort() { }
+  ~tuple_smt_sort() override { }
 };
 
 /** Function app representing a tuple sorted value.
@@ -58,7 +58,7 @@ public:
   tuple_node_smt_ast (smt_tuple_node_flattener &f, smt_convt *ctx, smt_sortt s,
                       const std::string &_name)
     : smt_ast(ctx, s), name(_name), flat(f) { }
-  virtual ~tuple_node_smt_ast() { }
+  ~tuple_node_smt_ast() override { }
 
   /** The symbol prefix of the variables representing this tuples value, as a
    *  string (i.e., no associated type). */
@@ -67,17 +67,17 @@ public:
   smt_tuple_node_flattener &flat;
   std::vector<smt_astt> elements;
 
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
-      smt_astt falseop) const;
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual void assign(smt_convt *ctx, smt_astt sym) const;
-  virtual smt_astt update(smt_convt *ctx, smt_astt value,
+  smt_astt ite(smt_convt *ctx, smt_astt cond,
+      smt_astt falseop) const override;
+  smt_astt eq(smt_convt *ctx, smt_astt other) const override;
+  void assign(smt_convt *ctx, smt_astt sym) const override;
+  smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
-                                expr2tc idx_expr = expr2tc()) const;
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
-  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+                                expr2tc idx_expr = expr2tc()) const override;
+  smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
+  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
 
-  virtual void dump() const { return; }
+  void dump() const override { return; }
 
   void make_free(smt_convt *ctx);
   void pre_ite(smt_convt *ctx, smt_astt cond, smt_astt falseop);
@@ -105,25 +105,25 @@ public:
   smt_tuple_node_flattener(smt_convt *_ctx, const namespacet &_ns)
     : tuple_iface(), ctx(_ctx), ns(_ns), array_conv(_ctx) { }
 
-  virtual smt_sortt mk_struct_sort(const type2tc &type);
-  virtual smt_astt tuple_create(const expr2tc &structdef);
-  virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "");
-  virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s);
-  virtual expr2tc tuple_get(const expr2tc &expr);
+  smt_sortt mk_struct_sort(const type2tc &type) override;
+  smt_astt tuple_create(const expr2tc &structdef) override;
+  smt_astt tuple_fresh(smt_sortt s, std::string name = "") override;
+  smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
+  expr2tc tuple_get(const expr2tc &expr) override;
 
   expr2tc tuple_get_rec(tuple_node_smt_astt tuple);
 
-  virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
-  virtual smt_astt tuple_array_of(const expr2tc &init_value,
-                                            unsigned long domain_width);
-  virtual smt_astt tuple_array_create(const type2tc &array_type,
+  smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
+  smt_astt tuple_array_of(const expr2tc &init_value,
+                                            unsigned long domain_width) override;
+  smt_astt tuple_array_create(const type2tc &array_type,
                                             smt_astt *input_args,
                                             bool const_array,
-                                            smt_sortt domain);
+                                            smt_sortt domain) override;
 
-  virtual void add_tuple_constraints_for_solving();
-  virtual void push_tuple_ctx();
-  virtual void pop_tuple_ctx();
+  void add_tuple_constraints_for_solving() override;
+  void push_tuple_ctx() override;
+  void pop_tuple_ctx() override;
 
   smt_convt *ctx;
   const namespacet &ns;
@@ -138,23 +138,23 @@ public:
    *               value. */
   tuple_sym_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
     : smt_ast(ctx, s), name(_name) { }
-  virtual ~tuple_sym_smt_ast() { }
+  ~tuple_sym_smt_ast() override { }
 
   /** The symbol prefix of the variables representing this tuples value, as a
    *  string (i.e., no associated type). */
   const std::string name;
 
 
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
-      smt_astt falseop) const;
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual smt_astt update(smt_convt *ctx, smt_astt value,
+  smt_astt ite(smt_convt *ctx, smt_astt cond,
+      smt_astt falseop) const override;
+  smt_astt eq(smt_convt *ctx, smt_astt other) const override;
+  smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
-                                expr2tc idx_expr = expr2tc()) const;
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
-  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+                                expr2tc idx_expr = expr2tc()) const override;
+  smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
+  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
 
-  virtual void dump() const { return; }
+  void dump() const override { return; }
 };
 
 class array_sym_smt_ast : public tuple_sym_smt_ast
@@ -162,17 +162,17 @@ class array_sym_smt_ast : public tuple_sym_smt_ast
 public:
   array_sym_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
     : tuple_sym_smt_ast(ctx, s, _name) { }
-  virtual ~array_sym_smt_ast() { }
+  ~array_sym_smt_ast() override { }
 
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
-      smt_astt falseop) const;
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual smt_astt update(smt_convt *ctx, smt_astt value,
+  smt_astt ite(smt_convt *ctx, smt_astt cond,
+      smt_astt falseop) const override;
+  smt_astt eq(smt_convt *ctx, smt_astt other) const override;
+  smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
-                                expr2tc idx_expr = expr2tc()) const;
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
-  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
-  virtual void assign(smt_convt *ctx, smt_astt sym) const;
+                                expr2tc idx_expr = expr2tc()) const override;
+  smt_astt select(smt_convt *ctx, const expr2tc &idx) const override;
+  smt_astt project(smt_convt *ctx, unsigned int elem) const override;
+  void assign(smt_convt *ctx, smt_astt sym) const override;
 };
 
 inline tuple_sym_smt_astt
@@ -197,24 +197,24 @@ public:
   smt_tuple_sym_flattener(smt_convt *_ctx, const namespacet &_ns)
     : tuple_iface(), ctx(_ctx), ns(_ns) { }
 
-  virtual smt_sortt mk_struct_sort(const type2tc &type);
-  virtual smt_astt tuple_create(const expr2tc &structdef);
-  virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "");
-  virtual smt_astt tuple_array_of(const expr2tc &init_value,
-                                            unsigned long domain_width);
-  virtual smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s);
-  virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
-  virtual expr2tc tuple_get(const expr2tc &expr);
+  smt_sortt mk_struct_sort(const type2tc &type) override;
+  smt_astt tuple_create(const expr2tc &structdef) override;
+  smt_astt tuple_fresh(smt_sortt s, std::string name = "") override;
+  smt_astt tuple_array_of(const expr2tc &init_value,
+                                            unsigned long domain_width) override;
+  smt_astt mk_tuple_symbol(const std::string &name, smt_sortt s) override;
+  smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
+  expr2tc tuple_get(const expr2tc &expr) override;
 
   expr2tc tuple_get_rec(tuple_node_smt_astt tuple);
-  virtual smt_astt tuple_array_create(const type2tc &array_type,
+  smt_astt tuple_array_create(const type2tc &array_type,
                                             smt_astt *input_args,
                                             bool const_array,
-                                            smt_sortt domain);
+                                            smt_sortt domain) override;
 
-  virtual void add_tuple_constraints_for_solving();
-  virtual void push_tuple_ctx();
-  virtual void pop_tuple_ctx();
+  void add_tuple_constraints_for_solving() override;
+  void push_tuple_ctx() override;
+  void pop_tuple_ctx() override;
 
   smt_convt *ctx;
   const namespacet &ns;

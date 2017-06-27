@@ -29,7 +29,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
   {
   }
 
-  int doit() {
+  int doit() override {
     goto_functionst goto_functions;
 
     config.set(cmdline);

@@ -39,7 +39,7 @@ public:
     );
   }
 
-  virtual void typecheck();
+  void typecheck() override;
 
 protected:
   void duplicate(symbolt &in_context, symbolt &new_symbol);
@@ -48,8 +48,8 @@ protected:
   void move(symbolt &new_symbol);
 
   // overload to use language specific syntax
-  virtual std::string to_string(const exprt &expr);
-  virtual std::string to_string(const typet &type);
+  std::string to_string(const exprt &expr) override;
+  std::string to_string(const typet &type) override;
 
   contextt &context;
   contextt &new_context;

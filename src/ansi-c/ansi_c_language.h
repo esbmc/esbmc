@@ -20,18 +20,18 @@ public:
     std::ostream &outstream,
     message_handlert &message_handler);
 
-  virtual bool parse(
+  bool parse(
     const std::string &path,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
-  virtual bool typecheck(
+  bool typecheck(
     contextt &context,
     const std::string &module,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
-  virtual bool final(
+  bool final(
     contextt &context,
-    message_handlert &message_handler);
+    message_handlert &message_handler) override;
 
   virtual bool merge_context(
     contextt &dest,
@@ -39,36 +39,36 @@ public:
     message_handlert &message_handler,
     const std::string &module) const;
 
-  virtual void show_parse(std::ostream &out);
+  void show_parse(std::ostream &out) override;
 
-  virtual ~ansi_c_languaget();
+  ~ansi_c_languaget() override;
   ansi_c_languaget() { }
 
   // conversion from expression into string
-  virtual bool from_expr(
+  bool from_expr(
     const exprt &expr,
     std::string &code,
     const namespacet &ns,
-    bool fullname = false);
+    bool fullname = false) override;
 
   // conversion from type into string
-  virtual bool from_type(
+  bool from_type(
     const typet &type,
     std::string &code,
     const namespacet &ns,
-    bool fullname = false);
+    bool fullname = false) override;
 
-  virtual bool to_expr(
+  bool to_expr(
     const std::string &code,
     const std::string &module,
     exprt &expr,
     message_handlert &message_handler,
-    const namespacet &ns);
+    const namespacet &ns) override;
 
-  virtual languaget *new_language()
+  languaget *new_language() override
   { return new ansi_c_languaget; }
 
-  virtual std::string id() const { return "C"; }
+  std::string id() const override { return "C"; }
 
 protected:
   ansi_c_parse_treet parse_tree;

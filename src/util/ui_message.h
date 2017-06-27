@@ -35,7 +35,7 @@ public:
     }
   }
    
-  virtual ~ui_message_handlert()
+  ~ui_message_handlert() override
   {
     if(get_ui()==XML_UI)
       std::cout << "</cprover>" << std::endl;
@@ -50,15 +50,15 @@ protected:
   uit _ui;
  
   // overloading
-  virtual void print(
+  void print(
     unsigned level,
-    const std::string &message);
+    const std::string &message) override;
 
   // overloading
-  virtual void print(
+  void print(
     unsigned level,
     const std::string &message,
-    const locationt &location);
+    const locationt &location) override;
 
   virtual void old_gui_msg(
     const std::string &type,

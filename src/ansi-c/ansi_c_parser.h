@@ -31,12 +31,12 @@ public:
   {
   }
   
-  virtual bool parse()
+  bool parse() override
   {
     return yyansi_cparse();
   }
 
-  virtual void clear()
+  void clear() override
   {
     parsert::clear();
     parse_tree.clear();

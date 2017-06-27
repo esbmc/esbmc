@@ -17,28 +17,28 @@ class expr2cppt:public expr2ct
 public:
   expr2cppt(const namespacet &_ns, const bool _fullname) : expr2ct(_ns, _fullname) { }
 
-  virtual std::string convert(const exprt &src)
+  std::string convert(const exprt &src) override
   {
     return expr2ct::convert(src);
   }
 
-  virtual std::string convert(const typet &src)
+  std::string convert(const typet &src) override
   {
     return expr2ct::convert(src);
   }
 
 protected:
-  virtual std::string convert(const exprt &src, unsigned &precedence);
+  std::string convert(const exprt &src, unsigned &precedence) override;
   virtual std::string convert_cpp_this(const exprt &src, unsigned precedence);
   virtual std::string convert_cpp_new(const exprt &src, unsigned precedence);
   virtual std::string convert_code_cpp_delete(const exprt &src, unsigned precedence);
-  virtual std::string convert_struct(const exprt &src, unsigned &precedence);
-  virtual std::string convert_code(const codet &src, unsigned indent);
-  virtual std::string convert_constant(const exprt &src, unsigned &precedence);
+  std::string convert_struct(const exprt &src, unsigned &precedence) override;
+  std::string convert_code(const codet &src, unsigned indent) override;
+  std::string convert_constant(const exprt &src, unsigned &precedence) override;
 
-  virtual std::string convert_rec(
+  std::string convert_rec(
     const typet &src,
-    const c_qualifierst &qualifiers);
+    const c_qualifierst &qualifiers) override;
 
   typedef hash_set_cont<std::string, string_hash> id_sett;
 };

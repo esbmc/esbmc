@@ -91,9 +91,9 @@ namespace renaming {
     current_namest current_names;
     unsigned int thread_id;
 
-    virtual void rename(expr2tc &expr);
-    virtual void get_ident_name(expr2tc &symbol) const;
-    virtual void remove(const expr2tc &symbol)
+    void rename(expr2tc &expr) override ;
+    void get_ident_name(expr2tc &symbol) const override ;
+    void remove(const expr2tc &symbol) override 
     {
       current_names.erase(name_record(to_symbol2t(symbol)));
     }
@@ -106,7 +106,7 @@ namespace renaming {
       frameno = frame;
     }
 
-    virtual void get_original_name(expr2tc &expr) const
+    void get_original_name(expr2tc &expr) const override 
     {
       renaming_levelt::get_original_name(expr, symbol2t::level0);
     }
@@ -114,7 +114,7 @@ namespace renaming {
     unsigned int current_number(const irep_idt &name) const;
 
     level1t() {}
-    virtual ~level1t() { }
+    ~level1t() override { }
 
     virtual void print(std::ostream &out) const;
   };
@@ -214,12 +214,12 @@ namespace renaming {
                                  const expr2tc &constant_value,
                                  const expr2tc &assigned_value);
 
-    virtual void rename(expr2tc &expr);
+    void rename(expr2tc &expr) override ;
     virtual void rename(expr2tc &expr, unsigned count)=0;
 
-    virtual void get_ident_name(expr2tc &symbol) const;
+    void get_ident_name(expr2tc &symbol) const override ;
 
-    virtual void remove(const expr2tc &symbol)
+    void remove(const expr2tc &symbol) override 
     {
         current_names.erase(name_record(to_symbol2t(symbol)));
     }
@@ -229,7 +229,7 @@ namespace renaming {
       current_names.erase(rec);
     }
 
-    virtual void get_original_name(expr2tc &expr) const
+    void get_original_name(expr2tc &expr) const override 
     {
       renaming_levelt::get_original_name(expr, symbol2t::level1);
     }
@@ -267,7 +267,7 @@ namespace renaming {
     static void rename_to_record(expr2tc &sym, const name_record &rec);
 
     level2t() { };
-    virtual ~level2t() { };
+    ~level2t() override { };
     virtual boost::shared_ptr<level2t> clone(void) const = 0;
 
     virtual void print(std::ostream &out) const;

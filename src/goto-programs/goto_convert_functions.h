@@ -51,7 +51,7 @@ public:
     goto_functionst &_functions,
     message_handlert &_message_handler);
 
-  virtual ~goto_convert_functionst();
+  ~goto_convert_functionst() override;
 
 protected:
   goto_functionst &functions;
