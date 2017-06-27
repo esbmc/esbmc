@@ -77,7 +77,7 @@ protected:
     unsigned pos;
 
   public:
-    explicit init_statet(const exprt &_array):array(_array), pos(0)
+    explicit init_statet(exprt _array):array(std::move(_array)), pos(0)
     {
     }
 

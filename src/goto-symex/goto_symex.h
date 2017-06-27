@@ -87,7 +87,7 @@ public:
       boost::shared_ptr<symex_targett> t,
       unsigned int claims,
       unsigned int remain)
-      : target(t), total_claims(claims), remaining_claims(remain) { };
+      : target(std::move(t)), total_claims(claims), remaining_claims(remain) { };
 
     boost::shared_ptr<symex_targett> target;
     unsigned int total_claims;

@@ -48,11 +48,11 @@ public:
 class struct_union_data : public type2t
 {
 public:
-  struct_union_data(type2t::type_ids id, const std::vector<type2tc> &membs,
-    const std::vector<irep_idt> &names, const std::vector<irep_idt> &pretty_names,
+  struct_union_data(type2t::type_ids id, std::vector<type2tc> membs,
+    std::vector<irep_idt> names, std::vector<irep_idt> pretty_names,
     const irep_idt &n)
-      : type2t(id), members(membs), member_names(names),
-        member_pretty_names(pretty_names), name(n)
+      : type2t(id), members(std::move(membs)), member_names(std::move(names)),
+        member_pretty_names(std::move(pretty_names)), name(n)
   {
   }
   struct_union_data(const struct_union_data &ref)
@@ -107,9 +107,9 @@ public:
 class code_data : public type2t
 {
 public:
-  code_data(type2t::type_ids id, const std::vector<type2tc> &args,
-            const type2tc &ret, const std::vector<irep_idt> &names, bool e)
-    : type2t(id), arguments(args), ret_type(ret), argument_names(names),
+  code_data(type2t::type_ids id, std::vector<type2tc> args,
+            const type2tc &ret, std::vector<irep_idt> names, bool e)
+    : type2t(id), arguments(std::move(args)), ret_type(ret), argument_names(std::move(names)),
       ellipsis(e) { }
   code_data(const code_data &ref)
     : type2t(ref), arguments(ref.arguments), ret_type(ref.ret_type),
@@ -218,8 +218,8 @@ class cpp_name_data : public type2t
 {
 public:
   cpp_name_data(type2t::type_ids id, const irep_idt &n,
-                const std::vector<type2tc> &templ_args)
-    : type2t(id), name(n), template_args(templ_args) { }
+                std::vector<type2tc> templ_args)
+    : type2t(id), name(n), template_args(std::move(templ_args)) { }
   cpp_name_data(const cpp_name_data &ref)
     : type2t(ref), name(ref.name), template_args(ref.template_args) { }
 

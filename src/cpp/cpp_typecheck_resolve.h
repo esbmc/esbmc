@@ -155,7 +155,7 @@ protected:
            irep_idt _id):
       cost(_s_args.arguments().size()),
            specialization_args(_s_args),
-           full_args(_f_args),
+           full_args(std::move(_f_args)),
            id(_id)
     {
     }

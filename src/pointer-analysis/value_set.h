@@ -186,8 +186,8 @@ public:
     {
     }
 
-    entryt(const std::string &_identifier, const std::string _suffix):
-      identifier(_identifier),
+    entryt(std::string _identifier, const std::string _suffix):
+      identifier(std::move(_identifier)),
       suffix(_suffix)
     {
     }

@@ -406,11 +406,11 @@ protected:
   public:
     function_bodyt(
       symbolt *_function_symbol,
-      const template_mapt &_template_map,
-      const instantiation_stackt &_instantiation_stack):
+      template_mapt _template_map,
+      instantiation_stackt _instantiation_stack):
       function_symbol(_function_symbol),
-      template_map(_template_map),
-      instantiation_stack(_instantiation_stack)
+      template_map(std::move(_template_map)),
+      instantiation_stack(std::move(_instantiation_stack))
     {
     }
 

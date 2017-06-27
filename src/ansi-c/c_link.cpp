@@ -21,12 +21,12 @@ public:
   c_linkt(
     contextt &_context,
     contextt &_new_context,
-    const std::string &_module,
+    std::string _module,
     message_handlert &_message_handler):
     typecheckt(_message_handler),
     context(_context),
     new_context(_new_context),
-    module(_module),
+    module(std::move(_module)),
     ns(_context, _new_context),
     type_counter(0)
   {

@@ -40,7 +40,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    message_handlert &_message_handler) :
   goto_symext(ns, context, goto_functions, _target, options),
   owning_rt(art),
-  state_level2(l2init),
+  state_level2(std::move(l2init)),
   global_value_set(ns),
   message_handler(_message_handler)
 {

@@ -45,8 +45,8 @@ class constant_fixedbv_data : public constant2t
 {
 public:
   constant_fixedbv_data(const type2tc &t, expr2t::expr_ids id,
-                        const fixedbvt &fbv)
-    : constant2t(t, id), value(fbv) { }
+                        fixedbvt fbv)
+    : constant2t(t, id), value(std::move(fbv)) { }
   constant_fixedbv_data(const constant_fixedbv_data &ref)
     : constant2t(ref), value(ref.value) { }
 
@@ -61,8 +61,8 @@ class constant_floatbv_data : public constant2t
 {
 public:
   constant_floatbv_data(const type2tc &t, expr2t::expr_ids id,
-                        const ieee_floatt &ieeebv)
-    : constant2t(t, id), value(ieeebv) { }
+                        ieee_floatt ieeebv)
+    : constant2t(t, id), value(std::move(ieeebv)) { }
   constant_floatbv_data(const constant_floatbv_data &ref)
     : constant2t(ref), value(ref.value) { }
 
@@ -77,8 +77,8 @@ class constant_datatype_data : public constant2t
 {
 public:
   constant_datatype_data(const type2tc &t, expr2t::expr_ids id,
-                         const std::vector<expr2tc> &m)
-    : constant2t(t, id), datatype_members(m) { }
+                         std::vector<expr2tc> m)
+    : constant2t(t, id), datatype_members(std::move(m)) { }
   constant_datatype_data(const constant_datatype_data &ref)
     : constant2t(ref), datatype_members(ref.datatype_members) { }
 
@@ -705,9 +705,9 @@ public:
   };
 
   sideeffect_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &op,
-                  const expr2tc &sz, const std::vector<expr2tc> &args,
+                  const expr2tc &sz, std::vector<expr2tc> args,
                   const type2tc &tp, allockind k)
-    : expr2t(t, id), operand(op), size(sz), arguments(args), alloctype(tp),
+    : expr2t(t, id), operand(op), size(sz), arguments(std::move(args)), alloctype(tp),
                      kind(k) { }
   sideeffect_data(const sideeffect_data &ref)
     : expr2t(ref), operand(ref.operand), size(ref.size),
@@ -741,8 +741,8 @@ class code_block_data : public code_base
 {
 public:
   code_block_data(const type2tc &t, expr2t::expr_ids id,
-                  const std::vector<expr2tc> &v)
-    : code_base(t, id), operands(v) { }
+                  std::vector<expr2tc> v)
+    : code_base(t, id), operands(std::move(v)) { }
   code_block_data(const code_block_data &ref)
     : code_base(ref), operands(ref.operands) { }
 
@@ -790,8 +790,8 @@ class code_printf_data : public code_base
 {
 public:
   code_printf_data(const type2tc &t, expr2t::expr_ids id,
-                   const std::vector<expr2tc> &v)
-    : code_base(t, id), operands(v) { }
+                   std::vector<expr2tc> v)
+    : code_base(t, id), operands(std::move(v)) { }
   code_printf_data(const code_printf_data &ref)
     : code_base(ref), operands(ref.operands) { }
 
@@ -857,8 +857,8 @@ class code_funccall_data : public code_base
 {
 public:
   code_funccall_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &r,
-                     const expr2tc &func, const std::vector<expr2tc> &ops)
-    : code_base(t, id), ret(r), function(func), operands(ops) { }
+                     const expr2tc &func, std::vector<expr2tc> ops)
+    : code_base(t, id), ret(r), function(func), operands(std::move(ops)) { }
   code_funccall_data(const code_funccall_data &ref)
     : code_base(ref), ret(ref.ret), function(ref.function),
       operands(ref.operands) { }
@@ -911,8 +911,8 @@ class code_cpp_catch_data : public code_base
 {
 public:
   code_cpp_catch_data(const type2tc &t, expr2t::expr_ids id,
-                      const std::vector<irep_idt> &el)
-    : code_base(t, id), exception_list(el) { }
+                      std::vector<irep_idt> el)
+    : code_base(t, id), exception_list(std::move(el)) { }
   code_cpp_catch_data(const code_cpp_catch_data &ref)
     : code_base(ref), exception_list(ref.exception_list) { }
 
@@ -927,8 +927,8 @@ class code_cpp_throw_data : public code_base
 {
 public:
   code_cpp_throw_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
-                      const std::vector<irep_idt> &l)
-    : code_base(t, id), operand(o), exception_list(l) { }
+                      std::vector<irep_idt> l)
+    : code_base(t, id), operand(o), exception_list(std::move(l)) { }
   code_cpp_throw_data(const code_cpp_throw_data &ref)
     : code_base(ref), operand(ref.operand), exception_list(ref.exception_list)
       { }
@@ -946,8 +946,8 @@ class code_cpp_throw_decl_data : public code_base
 {
 public:
   code_cpp_throw_decl_data(const type2tc &t, expr2t::expr_ids id,
-                           const std::vector<irep_idt> &l)
-    : code_base(t, id), exception_list(l) { }
+                           std::vector<irep_idt> l)
+    : code_base(t, id), exception_list(std::move(l)) { }
   code_cpp_throw_decl_data(const code_cpp_throw_decl_data &ref)
     : code_base(ref), exception_list(ref.exception_list)
       { }
@@ -963,8 +963,8 @@ class concat_data : public expr2t
 {
 public:
   concat_data(const type2tc &t, expr2t::expr_ids id,
-              const std::vector<expr2tc> &d)
-    : expr2t(t, id), data_items(d) { }
+              std::vector<expr2tc> d)
+    : expr2t(t, id), data_items(std::move(d)) { }
   concat_data(const concat_data &ref)
     : expr2t(ref), data_items(ref.data_items)
       { }

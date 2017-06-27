@@ -56,8 +56,8 @@ public:
    *  @param _name The symbol prefix of the variables representing this tuples
    *               value. */
   tuple_node_smt_ast (smt_tuple_node_flattener &f, smt_convt *ctx, smt_sortt s,
-                      const std::string &_name)
-    : smt_ast(ctx, s), name(_name), flat(f) { }
+                      std::string _name)
+    : smt_ast(ctx, s), name(std::move(_name)), flat(f) { }
   ~tuple_node_smt_ast() override { }
 
   /** The symbol prefix of the variables representing this tuples value, as a
@@ -136,8 +136,8 @@ public:
    *  @param s The sort of the tuple, of type tuple_smt_sort.
    *  @param _name The symbol prefix of the variables representing this tuples
    *               value. */
-  tuple_sym_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
-    : smt_ast(ctx, s), name(_name) { }
+  tuple_sym_smt_ast (smt_convt *ctx, smt_sortt s, std::string _name)
+    : smt_ast(ctx, s), name(std::move(_name)) { }
   ~tuple_sym_smt_ast() override { }
 
   /** The symbol prefix of the variables representing this tuples value, as a

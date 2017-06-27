@@ -46,8 +46,8 @@ public:
   }
 
   array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s,
-            const std::vector<smt_astt> &_a)
-    : smt_ast(ctx, _s), symname(""), array_fields(_a), array_ctx(actx)
+            std::vector<smt_astt> _a)
+    : smt_ast(ctx, _s), symname(""), array_fields(std::move(_a)), array_ctx(actx)
   {
   }
 

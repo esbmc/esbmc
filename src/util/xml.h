@@ -20,7 +20,7 @@ public:
   xmlt()
   {}
 
-  xmlt(const std::string &_name):name(_name)
+  xmlt(std::string _name):name(std::move(_name))
   {}
 
   typedef std::list<xmlt> elementst;
