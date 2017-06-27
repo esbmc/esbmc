@@ -65,7 +65,7 @@ goto_symext::assume(const expr2tc &assumption)
 }
 
 boost::shared_ptr<goto_symext::symex_resultt>
-goto_symext::get_symex_result(void)
+goto_symext::get_symex_result()
 {
 
   return boost::shared_ptr<goto_symext::symex_resultt>(
@@ -257,7 +257,7 @@ goto_symext::symex_step(reachability_treet & art)
   }
 }
 
-void goto_symext::symex_assume(void)
+void goto_symext::symex_assume()
 {
   if (cur_state->guard.is_false())
     return;
@@ -282,7 +282,7 @@ void goto_symext::symex_assume(void)
     cur_state->guard.make_false();
 }
 
-void goto_symext::symex_assert(void)
+void goto_symext::symex_assert()
 {
   if (cur_state->guard.is_false())
     return;
@@ -369,7 +369,7 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
 }
 
 void
-goto_symext::finish_formula(void)
+goto_symext::finish_formula()
 {
 
   if (!memory_leak_check)

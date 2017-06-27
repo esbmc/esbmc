@@ -79,7 +79,7 @@ z3_convt::~z3_convt()
 }
 
 void
-z3_convt::push_ctx(void)
+z3_convt::push_ctx()
 {
 
   smt_convt::push_ctx();
@@ -88,7 +88,7 @@ z3_convt::push_ctx(void)
 }
 
 void
-z3_convt::pop_ctx(void)
+z3_convt::pop_ctx()
 {
 
   solver.pop();
@@ -100,7 +100,7 @@ z3_convt::pop_ctx(void)
 }
 
 void
-z3_convt::intr_push_ctx(void)
+z3_convt::intr_push_ctx()
 {
 
   // Also push/duplicate pointer logic state.
@@ -115,7 +115,7 @@ z3_convt::intr_push_ctx(void)
 }
 
 void
-z3_convt::intr_pop_ctx(void)
+z3_convt::intr_pop_ctx()
 {
 
   // Erase everything on stack since last push_ctx
@@ -126,7 +126,7 @@ z3_convt::intr_pop_ctx(void)
 }
 
 void
-z3_convt::init_addr_space_array(void)
+z3_convt::init_addr_space_array()
 {
 
   convert_type(addr_space_type, addr_space_tuple_sort);
@@ -141,7 +141,7 @@ z3_convt::init_addr_space_array(void)
 }
 
 smt_convt::resultt
-z3_convt::dec_solve(void)
+z3_convt::dec_solve()
 {
   unsigned major, minor, build, revision;
   z3::check_result result;
@@ -160,7 +160,7 @@ z3_convt::dec_solve(void)
 }
 
 z3::check_result
-z3_convt::check2_z3_properties(void)
+z3_convt::check2_z3_properties()
 {
   z3::check_result result;
   unsigned i;
@@ -262,7 +262,7 @@ z3_convt::convert_struct_type(const std::vector<type2tc> &members,
 }
 
 void
-z3_convt::setup_pointer_sort(void)
+z3_convt::setup_pointer_sort()
 {
   z3::sort s;
   convert_type(pointer_struct, s);
@@ -1342,13 +1342,13 @@ z3_convt::add_array_constraints_for_solving()
 }
 
 void
-z3_convt::push_array_ctx(void)
+z3_convt::push_array_ctx()
 {
   return;
 }
 
 void
-z3_convt::pop_array_ctx(void)
+z3_convt::pop_array_ctx()
 {
   return;
 }

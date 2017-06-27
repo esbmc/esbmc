@@ -881,13 +881,13 @@ smtlib_convt::add_array_constraints_for_solving()
 }
 
 void
-smtlib_convt::push_array_ctx(void)
+smtlib_convt::push_array_ctx()
 {
   return;
 }
 
 void
-smtlib_convt::pop_array_ctx(void)
+smtlib_convt::pop_array_ctx()
 {
   return;
 }

@@ -89,8 +89,8 @@ public:
 
   const smt_ast *convert_array_of(smt_astt init_val,
                                   unsigned long domain_width) override;
-  void push_array_ctx(void) override;
-  void pop_array_ctx(void) override;
+  void push_array_ctx() override;
+  void pop_array_ctx() override;
 
   expr2tc get_bool(const smt_ast *a) override;
   expr2tc get_bv(const type2tc &t, const smt_ast *a) override;

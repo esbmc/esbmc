@@ -70,7 +70,7 @@ mathsat_convt::mathsat_convt(bool int_encoding,
   _env = &env;
 }
 
-mathsat_convt::~mathsat_convt(void)
+mathsat_convt::~mathsat_convt()
 {
   msat_destroy_env(env);
   _env = nullptr;
@@ -861,13 +861,13 @@ mathsat_convt::add_array_constraints_for_solving()
 }
 
 void
-mathsat_convt::push_array_ctx(void)
+mathsat_convt::push_array_ctx()
 {
   return;
 }
 
 void
-mathsat_convt::pop_array_ctx(void)
+mathsat_convt::pop_array_ctx()
 {
   return;
 }

@@ -30,8 +30,8 @@ public:
   void goto_convert();
   void convert_function(symbolt &symbol);
   void convert_function(const irep_idt &identifier);
-  void thrash_type_symbols(void);
-  void fixup_unions(void);
+  void thrash_type_symbols();
+  void fixup_unions();
 
   void collect_type(const irept &type, typename_sett &set);
   void collect_expr(const irept &expr, typename_sett &set);

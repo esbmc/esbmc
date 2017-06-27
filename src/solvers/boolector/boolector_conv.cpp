@@ -38,7 +38,7 @@ boolector_convt::boolector_convt(bool int_encoding,
   }
 }
 
-boolector_convt::~boolector_convt(void)
+boolector_convt::~boolector_convt()
 {
   boolector_delete(btor);
 
@@ -571,13 +571,13 @@ boolector_convt::add_array_constraints_for_solving()
 }
 
 void
-boolector_convt::push_array_ctx(void)
+boolector_convt::push_array_ctx()
 {
   return;
 }
 
 void
-boolector_convt::pop_array_ctx(void)
+boolector_convt::pop_array_ctx()
 {
   return;
 }

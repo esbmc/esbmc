@@ -117,7 +117,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns)
   ptr_foo_inited = false;
 }
 
-smt_convt::~smt_convt(void)
+smt_convt::~smt_convt()
 {
 }
 
@@ -146,7 +146,7 @@ smt_convt::delete_all_asts()
 }
 
 void
-smt_convt::smt_post_init(void)
+smt_convt::smt_post_init()
 {
   if (int_encoding) {
     machine_int_sort = mk_sort(SMT_SORT_INT, false);
@@ -179,7 +179,7 @@ smt_convt::smt_post_init(void)
 }
 
 void
-smt_convt::push_ctx(void)
+smt_convt::push_ctx()
 {
   tuple_api->push_tuple_ctx();
   array_api->push_array_ctx();
@@ -195,7 +195,7 @@ smt_convt::push_ctx(void)
 }
 
 void
-smt_convt::pop_ctx(void)
+smt_convt::pop_ctx()
 {
 
   // Erase everything in caches added in the current context level. Everything

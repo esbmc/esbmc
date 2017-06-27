@@ -43,7 +43,7 @@ class mathsat_convt : public smt_convt, public array_iface
 {
 public:
   mathsat_convt(bool int_encoding, const namespacet &ns);
-  ~mathsat_convt(void) override;
+  ~mathsat_convt() override;
 
   resultt dec_solve() override;
   tvt l_get(const smt_ast *a) override;
@@ -88,8 +88,8 @@ public:
                                           unsigned long domain_width) override;
 
   void add_array_constraints_for_solving() override;
-  void push_array_ctx(void) override;
-  void pop_array_ctx(void) override;
+  void push_array_ctx() override;
+  void pop_array_ctx() override;
 
   size_t get_exp_width(smt_sortt sort);
   size_t get_mant_width(smt_sortt sort);

@@ -283,12 +283,12 @@ void symex_target_equationt::SSA_stept::short_output(
 }
 
 void
-symex_target_equationt::push_ctx(void)
+symex_target_equationt::push_ctx()
 {
 }
 
 void
-symex_target_equationt::pop_ctx(void)
+symex_target_equationt::pop_ctx()
 {
 }
 
@@ -330,7 +330,7 @@ symex_target_equationt::check_for_duplicate_assigns() const
 }
 
 unsigned int
-symex_target_equationt::clear_assertions(void)
+symex_target_equationt::clear_assertions()
 {
   unsigned int num_asserts = 0;
 
@@ -358,7 +358,7 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
 }
 
 void
-runtime_encoded_equationt::flush_latest_instructions(void)
+runtime_encoded_equationt::flush_latest_instructions()
 {
 
   if (SSA_steps.size() == 0)
@@ -391,7 +391,7 @@ runtime_encoded_equationt::flush_latest_instructions(void)
 }
 
 void
-runtime_encoded_equationt::push_ctx(void)
+runtime_encoded_equationt::push_ctx()
 {
 
   flush_latest_instructions();
@@ -404,7 +404,7 @@ runtime_encoded_equationt::push_ctx(void)
 }
 
 void
-runtime_encoded_equationt::pop_ctx(void)
+runtime_encoded_equationt::pop_ctx()
 {
 
   SSA_stepst::iterator it = scoped_end_points.back();
@@ -439,7 +439,7 @@ runtime_encoded_equationt::convert(smt_convt &smt_conv)
 }
 
 boost::shared_ptr<symex_targett>
-runtime_encoded_equationt::clone(void) const
+runtime_encoded_equationt::clone() const
 {
   // Only permit cloning at the start of a run - there should never be any data
   // in this formula when it happens. Cloning needs to be supported so that a

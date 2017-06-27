@@ -104,7 +104,7 @@ public:
    *  @return Symbol of the guard
    */
   symbol2tc
-  guard_identifier(void)
+  guard_identifier()
   {
     return symbol2tc(type_pool.get_bool(), id2string(guard_identifier_s),
                      symbol2t::level1, 0, 0,
@@ -116,7 +116,7 @@ public:
   /**
    *  Create a symex result for this run.
    */
-  boost::shared_ptr<goto_symext::symex_resultt> get_symex_result(void);
+  boost::shared_ptr<goto_symext::symex_resultt> get_symex_result();
 
   /**
    *  Symbolically execute one instruction.
@@ -134,7 +134,7 @@ public:
    *  This should contain anything that must happen at the end of a program run,
    *  for example assertions about dynamic memory being freed.
    */
-  void finish_formula(void);
+  void finish_formula();
 
 protected:
   /**
@@ -180,7 +180,7 @@ protected:
   /**
    *  Perform interpretation of RETURN instruction.
    */
-  void symex_return(void);
+  void symex_return();
 
   /**
    *  Interpret an OTHER instruction.
@@ -188,17 +188,17 @@ protected:
    *  example (ideally they should be intrinsics...), but also printf and
    *  variable declarations are handled here.
    */
-  void symex_other(void);
+  void symex_other();
 
   /**
    *  Interpret an ASSUME instruction.
    */
-  void symex_assume(void);
+  void symex_assume();
 
   /**
    *  Interpret an ASSERT instruction.
    */
-  void symex_assert(void);
+  void symex_assert();
 
   /**
    *  Perform an assertion.
@@ -224,7 +224,7 @@ protected:
    *  performed that joins the states converging at this point, according to
    *  the truth of their guards.
    */
-  void merge_gotos(void);
+  void merge_gotos();
 
   /**
    *  Merge pointer tracking value sets in a phi function.
@@ -273,7 +273,7 @@ protected:
    *  This frees/removes the top stack frame, and removes any relevant local
    *  variables from the l2 renaming, and value set tracking.
    */
-  void pop_frame(void);
+  void pop_frame();
 
   /**
    *  Create assignment for return statement.
@@ -298,7 +298,7 @@ protected:
    *  except in the case of function pointer interpretation, where we instead
    *  switch to interpreting the next pointed to function.
    */
-  void symex_end_of_function(void);
+  void symex_end_of_function();
 
   /**
    *  Handle an indirect function call, to a pointer.
@@ -640,12 +640,12 @@ protected:
    *  Fetch reference to global dynamic object counter.
    *  @return Reference to global dynamic object counter.
    */
-  virtual unsigned int &get_dynamic_counter(void) = 0;
+  virtual unsigned int &get_dynamic_counter() = 0;
   /**
    *  Fetch reference to global nondet object counter.
    *  @return Reference to global nondet object counter.
    */
-  virtual unsigned int &get_nondet_counter(void) = 0;
+  virtual unsigned int &get_nondet_counter() = 0;
 
   // Members
 

@@ -155,7 +155,7 @@ public:
       level1_num(ref.level1_num), level2_num(ref.level2_num),
       thread_num(ref.thread_num), node_num(ref.node_num) { }
 
-  virtual std::string get_symbol_name(void) const;
+  virtual std::string get_symbol_name() const;
 
   // So: I want to make this private, however then all the templates accessing
   // it can't access it; and the typedef for symbol_expr_methods further down
@@ -1119,9 +1119,9 @@ public:
     : constant_int_expr_methods(ref) { }
 
   /** Accessor for fetching machine-word unsigned integer of this constant */
-  unsigned long as_ulong(void) const;
+  unsigned long as_ulong() const;
   /** Accessor for fetching machine-word integer of this constant */
-  long as_long(void) const;
+  long as_long() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1180,9 +1180,9 @@ public:
     : constant_bool_expr_methods(ref) { }
 
   /** Return whether contained boolean is true. */
-  bool is_true(void) const;
+  bool is_true() const;
   /** Return whether contained boolean is false. */
-  bool is_false(void) const;
+  bool is_false() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1204,7 +1204,7 @@ public:
     : constant_string_expr_methods(ref) { }
 
   /** Convert string to a constant length array of characters */
-  expr2tc to_array(void) const;
+  expr2tc to_array() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -2601,7 +2601,7 @@ public:
   object_descriptor2t(const object_descriptor2t &ref)
     : object_descriptor_expr_methods(ref) {}
 
-  const expr2tc &get_root_object(void) const;
+  const expr2tc &get_root_object() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };

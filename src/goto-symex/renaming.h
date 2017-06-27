@@ -268,7 +268,7 @@ namespace renaming {
 
     level2t() { };
     ~level2t() override { };
-    virtual boost::shared_ptr<level2t> clone(void) const = 0;
+    virtual boost::shared_ptr<level2t> clone() const = 0;
 
     virtual void print(std::ostream &out) const;
     virtual void dump() const;

@@ -422,13 +422,13 @@ cvc_convt::add_array_constraints_for_solving()
 }
 
 void
-cvc_convt::push_array_ctx(void)
+cvc_convt::push_array_ctx()
 {
   return;
 }
 
 void
-cvc_convt::pop_array_ctx(void)
+cvc_convt::pop_array_ctx()
 {
   return;
 }

@@ -441,7 +441,7 @@ public:
   void output(std::ostream &out) const;
 
   /** Write a textual representation of the value set to stderr. */
-  void dump(void) const;
+  void dump() const;
 
   /** Join the two given object maps. Takes all the pointer records from src
    *  and stores them into the dest object map.

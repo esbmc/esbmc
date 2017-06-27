@@ -197,7 +197,7 @@ guardt &operator |= (guardt &g1, const guardt &g2)
 }
 
 void
-guardt::dump(void) const
+guardt::dump() const
 {
   for (auto const &it : guard_list)
     it->dump();

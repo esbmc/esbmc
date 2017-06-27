@@ -165,15 +165,15 @@ public:
 
   unsigned int clear_assertions();
 
-  boost::shared_ptr<symex_targett> clone(void) const override 
+  boost::shared_ptr<symex_targett> clone() const override 
   {
     // No pointers or anything that requires ownership modification, can just
     // duplicate self.
     return boost::shared_ptr<symex_targett>(new symex_target_equationt(*this));
   }
 
-  void push_ctx(void) override ;
-  void pop_ctx(void) override ;
+  void push_ctx() override ;
+  void pop_ctx() override ;
 
 protected:
   const namespacet &ns;
@@ -188,13 +188,13 @@ public:
 
   runtime_encoded_equationt(const namespacet &_ns, smt_convt &conv);
 
-  void push_ctx(void) override ;
-  void pop_ctx(void) override ;
+  void push_ctx() override ;
+  void pop_ctx() override ;
 
-  boost::shared_ptr<symex_targett> clone(void) const override ;
+  boost::shared_ptr<symex_targett> clone() const override ;
 
   void convert(smt_convt &smt_conv) override ;
-  void flush_latest_instructions(void);
+  void flush_latest_instructions();
 
   tvt ask_solver_question(const expr2tc &question);
 

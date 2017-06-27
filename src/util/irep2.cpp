@@ -276,14 +276,14 @@ type2t::pretty(unsigned int indent) const
 }
 
 void
-type2t::dump(void) const
+type2t::dump() const
 {
   std::cout << pretty(0) << std::endl;
   return;
 }
 
 uint32_t
-type2t::crc(void) const
+type2t::crc() const
 {
   size_t seed = 0;
   do_crc(seed);
@@ -307,20 +307,20 @@ type2t::hash(crypto_hash &hash) const
 }
 
 unsigned int
-bool_type2t::get_width(void) const
+bool_type2t::get_width() const
 {
   // For the purpose of the byte representating memory model
   return 8;
 }
 
 unsigned int
-bv_data::get_width(void) const
+bv_data::get_width() const
 {
   return width;
 }
 
 unsigned int
-array_type2t::get_width(void) const
+array_type2t::get_width() const
 {
   // Two edge cases: the array can have infinite size, or it can have a dynamic
   // size that's determined by the solver.
@@ -343,33 +343,33 @@ array_type2t::get_width(void) const
 }
 
 unsigned int
-pointer_type2t::get_width(void) const
+pointer_type2t::get_width() const
 {
   return config.ansi_c.pointer_width;
 }
 
 unsigned int
-empty_type2t::get_width(void) const
+empty_type2t::get_width() const
 {
   throw new symbolic_type_excp();
 }
 
 unsigned int
-symbol_type2t::get_width(void) const
+symbol_type2t::get_width() const
 {
   std::cerr <<"Fetching width of symbol type - invalid operation" << std::endl;
   abort();
 }
 
 unsigned int
-cpp_name_type2t::get_width(void) const
+cpp_name_type2t::get_width() const
 {
   std::cerr << "Fetching width of cpp_name type - invalid operation" << std::endl;
   abort();
 }
 
 unsigned int
-struct_type2t::get_width(void) const
+struct_type2t::get_width() const
 {
   // Iterate over members accumulating width.
   std::vector<type2tc>::const_iterator it;
@@ -381,7 +381,7 @@ struct_type2t::get_width(void) const
 }
 
 unsigned int
-union_type2t::get_width(void) const
+union_type2t::get_width() const
 {
   // Iterate over members accumulating width.
   std::vector<type2tc>::const_iterator it;
@@ -393,49 +393,49 @@ union_type2t::get_width(void) const
 }
 
 unsigned int
-fixedbv_type2t::get_width(void) const
+fixedbv_type2t::get_width() const
 {
   return width;
 }
 
 unsigned int
-floatbv_type2t::get_width(void) const
+floatbv_type2t::get_width() const
 {
   return fraction + exponent + 1;
 }
 
 unsigned int
-code_data::get_width(void) const
+code_data::get_width() const
 {
   throw new symbolic_type_excp();
 }
 
 unsigned int
-string_type2t::get_width(void) const
+string_type2t::get_width() const
 {
   return width * 8;
 }
 
 unsigned int
-string_type2t::get_length(void) const
+string_type2t::get_length() const
 {
   return width;
 }
 
 const std::vector<type2tc> &
-struct_union_data::get_structure_members(void) const
+struct_union_data::get_structure_members() const
 {
   return members;
 }
 
 const std::vector<irep_idt> &
-struct_union_data::get_structure_member_names(void) const
+struct_union_data::get_structure_member_names() const
 {
   return member_names;
 }
 
 const irep_idt &
-struct_union_data::get_structure_name(void) const
+struct_union_data::get_structure_name() const
 {
   return name;
 }
@@ -583,7 +583,7 @@ expr2t::operator<(const expr2t &ref) const
 }
 
 unsigned long
-expr2t::depth(void) const
+expr2t::depth() const
 {
   unsigned long num_nodes = 0;
 
@@ -600,7 +600,7 @@ expr2t::depth(void) const
 }
 
 unsigned long
-expr2t::num_nodes(void) const
+expr2t::num_nodes() const
 {
   unsigned long count = 0;
 
@@ -649,7 +649,7 @@ expr2t::lt(const expr2t &ref) const
 }
 
 uint32_t
-expr2t::crc(void) const
+expr2t::crc() const
 {
   size_t seed = 0;
   return do_crc(seed);
@@ -673,7 +673,7 @@ expr2t::hash(crypto_hash &hash) const
 }
 
 expr2tc
-expr2t::simplify(void) const
+expr2t::simplify() const
 {
   try {
 
@@ -878,7 +878,7 @@ expr2t::pretty(unsigned int indent) const
 }
 
 void
-expr2t::dump(void) const
+expr2t::dump() const
 {
   std::cout << pretty(0) << std::endl;
   return;
@@ -1043,7 +1043,7 @@ expr2t_traits_always_construct<Args...>::make_contained(typename Args::result_ty
 /**************************** Expression constructors *************************/
 
 unsigned long
-constant_int2t::as_ulong(void) const
+constant_int2t::as_ulong() const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
   assert(!value.is_negative());
@@ -1051,26 +1051,26 @@ constant_int2t::as_ulong(void) const
 }
 
 long
-constant_int2t::as_long(void) const
+constant_int2t::as_long() const
 {
   // XXXjmorse - add assertion that we don't exceed machine word width?
   return value.to_long();
 }
 
 bool
-constant_bool2t::is_true(void) const
+constant_bool2t::is_true() const
 {
   return value;
 }
 
 bool
-constant_bool2t::is_false(void) const
+constant_bool2t::is_false() const
 {
   return !value;
 }
 
 std::string
-symbol_data::get_symbol_name(void) const
+symbol_data::get_symbol_name() const
 {
   switch (rlevel) {
   case level0:
@@ -1097,7 +1097,7 @@ symbol_data::get_symbol_name(void) const
 }
 
 expr2tc
-constant_string2t::to_array(void) const
+constant_string2t::to_array() const
 {
   std::vector<expr2tc> contents;
   unsigned int length = value.as_string().size(), i;
@@ -1127,7 +1127,7 @@ constant_string2t::to_array(void) const
 }
 
 const expr2tc &
-object_descriptor2t::get_root_object(void) const
+object_descriptor2t::get_root_object() const
 {
   const expr2tc *tmp = &object;
 
@@ -1141,7 +1141,7 @@ object_descriptor2t::get_root_object(void) const
   } while (1);
 }
 
-type_poolt::type_poolt(void)
+type_poolt::type_poolt()
 {
   // This space is deliberately left blank
 }
@@ -2309,7 +2309,7 @@ esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::ge
 
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 unsigned int
-esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::get_num_sub_exprs(void) const
+esbmct::expr_methods2<derived, baseclass, traits, container, enable, fields>::get_num_sub_exprs() const
 {
   return superclass::get_num_sub_exprs_rec(); // Skips expr_id
 }
@@ -2382,7 +2382,7 @@ esbmct::type_methods2<derived, baseclass, traits, container, enable, fields>::fo
 
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 auto
-esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::clone(void) const -> base_container2tc
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::clone() const -> base_container2tc
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
@@ -2555,7 +2555,7 @@ esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::ge
 
 template <class derived, class baseclass, typename traits, typename container, typename enable, typename fields>
 unsigned int
-esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::get_num_sub_exprs_rec(void) const
+esbmct::irep_methods2<derived, baseclass, traits, container, enable, fields>::get_num_sub_exprs_rec() const
 {
   unsigned int num = 0;
   const derived *derived_this = static_cast<const derived*>(this);

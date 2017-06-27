@@ -19,7 +19,7 @@ const irept::dt empty_d;
 #endif
 
 void
-irept::dump(void) const
+irept::dump() const
 {
 
   std::cout << pretty(0) << std::endl;

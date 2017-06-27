@@ -502,7 +502,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
 
 
 void
-smt_convt::init_addr_space_array(void)
+smt_convt::init_addr_space_array()
 {
   addr_space_sym_num.back() = 1;
 
@@ -598,7 +598,7 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
 }
 
 std::string
-smt_convt::get_cur_addrspace_ident(void)
+smt_convt::get_cur_addrspace_ident()
 {
   std::stringstream ss;
   ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();

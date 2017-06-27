@@ -88,8 +88,8 @@ public:
                                   unsigned long domain_width) override;
 
   void add_array_constraints_for_solving() override;
-  void push_array_ctx(void) override;
-  void pop_array_ctx(void) override;
+  void push_array_ctx() override;
+  void pop_array_ctx() override;
 
   expr2tc get_bool(const smt_ast *a) override;
   expr2tc get_bv(const type2tc &t, const smt_ast *a) override;

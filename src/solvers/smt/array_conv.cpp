@@ -50,7 +50,7 @@ array_convt::convert_array_assign(const array_ast *src, smt_astt sym)
 }
 
 unsigned int
-array_convt::new_array_id(void)
+array_convt::new_array_id()
 {
   unsigned int new_base_array_id = array_indexes.size();
 
@@ -501,7 +501,7 @@ array_convt::get_array_elem(smt_astt a, uint64_t index, const type2tc &subtype)
 }
 
 void
-array_convt::add_array_constraints_for_solving(void)
+array_convt::add_array_constraints_for_solving()
 {
 
   join_array_indexes();
@@ -514,7 +514,7 @@ array_convt::add_array_constraints_for_solving(void)
 }
 
 void
-array_convt::push_array_ctx(void)
+array_convt::push_array_ctx()
 {
   // The most important factor in this process is to make sure that new indexes
   // in arrays are accounted for, as everything else is straightforwards. Thus,
@@ -544,7 +544,7 @@ array_convt::push_array_ctx(void)
 }
 
 void
-array_convt::pop_array_ctx(void)
+array_convt::pop_array_ctx()
 {
   // Order of service:
   //  * Erase old array IDs
@@ -823,7 +823,7 @@ array_convt::add_new_indexes()
 }
 
 void
-array_convt::execute_new_updates(void)
+array_convt::execute_new_updates()
 {
   // Identify new array updates, and execute them.
 
@@ -860,7 +860,7 @@ array_convt::execute_new_updates(void)
 }
 
 void
-array_convt::apply_new_selects(void)
+array_convt::apply_new_selects()
 {
   // In the push context procedure, two kinds of new selects have already been
   // encoded. They're ones that either apply to a new index expr (through the
@@ -901,7 +901,7 @@ array_convt::apply_new_selects(void)
 }
 
 void
-array_convt::add_array_equalities(void)
+array_convt::add_array_equalities()
 {
   // Precondition: all constraints have already been added and constrained into
   // the array_valuation vectors. Also that the array ID's being used all share

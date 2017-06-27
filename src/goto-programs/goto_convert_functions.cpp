@@ -419,7 +419,7 @@ goto_convert_functionst::wallop_type(irep_idt name,
 }
 
 void
-goto_convert_functionst::thrash_type_symbols(void)
+goto_convert_functionst::thrash_type_symbols()
 {
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and
@@ -479,7 +479,7 @@ goto_convert_functionst::thrash_type_symbols(void)
 }
 
 void
-goto_convert_functionst::fixup_unions(void)
+goto_convert_functionst::fixup_unions()
 {
   // Iterate over all types and expressions, replacing:
   //  * Non-pointer union types with byte arrays of corresponding size

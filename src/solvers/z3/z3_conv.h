@@ -65,20 +65,20 @@ public:
   z3_convt(bool int_encoding, const namespacet &ns);
   ~z3_convt() override;
 private:
-  void intr_push_ctx(void);
-  void intr_pop_ctx(void);
+  void intr_push_ctx();
+  void intr_pop_ctx();
 public:
-  void push_ctx(void) override;
-  void pop_ctx(void) override;
-  smt_convt::resultt dec_solve(void) override;
-  z3::check_result check2_z3_properties(void);
+  void push_ctx() override;
+  void pop_ctx() override;
+  smt_convt::resultt dec_solve() override;
+  z3::check_result check2_z3_properties();
 
   expr2tc get_bool(const smt_ast *a) override;
   expr2tc get_bv(const type2tc &t, const smt_ast *a) override;
   expr2tc get_array_elem(const smt_ast *array, uint64_t index,
                                  const type2tc &subtype) override;
 
-  void setup_pointer_sort(void);
+  void setup_pointer_sort();
   void convert_type(const type2tc &type, z3::sort &outtype);
 
   void convert_struct(const std::vector<expr2tc> &members,
@@ -141,8 +141,8 @@ public:
 
   void add_array_constraints_for_solving() override;
   void add_tuple_constraints_for_solving() override;
-  void push_array_ctx(void) override;
-  void pop_array_ctx(void) override;
+  void push_array_ctx() override;
+  void pop_array_ctx() override;
   void push_tuple_ctx() override;
   void pop_tuple_ctx() override;
 
@@ -154,7 +154,7 @@ public:
   void assert_ast(const smt_ast *a) override;
 
   void debug_label_formula(std::string name, const z3::expr &formula);
-  void init_addr_space_array(void);
+  void init_addr_space_array();
 
   const std::string solver_text() override
   {

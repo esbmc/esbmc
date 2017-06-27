@@ -95,14 +95,14 @@ public:
   smt_astt mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s) override;
 
-  void push_ctx(void) override;
-  void pop_ctx(void) override;
+  void push_ctx() override;
+  void pop_ctx() override;
 
   smt_astt convert_array_of(smt_astt init_val, unsigned long domain_width) override;
 
   void add_array_constraints_for_solving() override;
-  void push_array_ctx(void) override;
-  void pop_array_ctx(void) override;
+  void push_array_ctx() override;
+  void pop_array_ctx() override;
 
   smt_sortt mk_struct_sort(const type2tc &type) override;
   smt_astt tuple_create(const expr2tc &structdef) override;
@@ -131,7 +131,7 @@ public:
     return new yices_smt_ast(this, s, t);
   }
 
-  inline void clear_model(void) {
+  inline void clear_model() {
     if (sat_model) {
       yices_free_model(sat_model);
       sat_model = nullptr;

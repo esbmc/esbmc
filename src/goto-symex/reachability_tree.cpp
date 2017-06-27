@@ -61,7 +61,7 @@ reachability_treet::reachability_treet(
 }
 
 void
-reachability_treet::setup_for_new_explore(void)
+reachability_treet::setup_for_new_explore()
 {
   boost::shared_ptr<symex_targett> targ;
 
@@ -117,7 +117,7 @@ int reachability_treet::get_CS_bound() const
 }
 
 bool
-reachability_treet::check_for_hash_collision(void) const
+reachability_treet::check_for_hash_collision() const
 {
 
   const execution_statet &ex_state = get_cur_state();
@@ -131,7 +131,7 @@ reachability_treet::check_for_hash_collision(void) const
 }
 
 void
-reachability_treet::post_hash_collision_cleanup(void)
+reachability_treet::post_hash_collision_cleanup()
 {
 
   for (auto && it : get_cur_state().DFS_traversed)
@@ -141,7 +141,7 @@ reachability_treet::post_hash_collision_cleanup(void)
 }
 
 void
-reachability_treet::update_hash_collision_set(void)
+reachability_treet::update_hash_collision_set()
 {
 
   execution_statet &ex_state = get_cur_state();
@@ -153,7 +153,7 @@ reachability_treet::update_hash_collision_set(void)
 }
 
 void
-reachability_treet::create_next_state(void)
+reachability_treet::create_next_state()
 {
   execution_statet &ex_state = get_cur_state();
 
@@ -182,7 +182,7 @@ reachability_treet::create_next_state(void)
 }
 
 bool
-reachability_treet::step_next_state(void)
+reachability_treet::step_next_state()
 {
 
   next_thread_id = decide_ileave_direction(get_cur_state());
@@ -506,7 +506,7 @@ fail:
 }
 
 void
-reachability_treet::print_ileave_trace(void) const
+reachability_treet::print_ileave_trace() const
 {
   std::list<boost::shared_ptr<execution_statet>>::const_iterator it;
   int i = 0;
@@ -519,7 +519,7 @@ reachability_treet::print_ileave_trace(void) const
 }
 
 int
-reachability_treet::get_ileave_direction_from_user(void) const
+reachability_treet::get_ileave_direction_from_user() const
 {
   std::string input;
   unsigned int tid;
@@ -574,7 +574,7 @@ reachability_treet::get_ileave_direction_from_user(void) const
 
 //begin - H.Savino
 int
-reachability_treet::get_ileave_direction_from_scheduling(void) const
+reachability_treet::get_ileave_direction_from_scheduling() const
 {
   unsigned int tid;
 
@@ -699,7 +699,7 @@ reachability_treet::get_next_formula()
 }
 
 bool
-reachability_treet::setup_next_formula(void)
+reachability_treet::setup_next_formula()
 {
 
   return reset_to_unexplored_state();

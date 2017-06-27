@@ -256,7 +256,7 @@ public:
     return tmp;
   }
 
-  void detach(void)
+  void detach()
   {
     if (this->use_count() == 1)
       return; // No point remunging oneself if we're the only user of the ptr.
@@ -269,7 +269,7 @@ public:
     return;
   }
 
-  uint32_t crc(void) const
+  uint32_t crc() const
   {
     const T *foo = std::shared_ptr<T>::get();
     if (foo->crc_val != 0)
@@ -358,7 +358,7 @@ public:
    *  @throws array_type2t::dyn_sized_array_excp
    *  @return Size of types byte representation, in bits
    */
-  virtual unsigned int get_width(void) const = 0;
+  virtual unsigned int get_width() const = 0;
 
   /* These are all self explanatory */
   bool operator==(const type2t &ref) const;
@@ -379,7 +379,7 @@ public:
    *  used for debugging and when single stepping in gdb.
    *  @see pretty
    */
-  void dump(void) const;
+  void dump() const;
 
   /** Produce a checksum/hash of the current object.
    *  Takes current object and produces a lossy digest of it. Originally used
@@ -388,7 +388,7 @@ public:
    *  @see do_crc
    *  @return Digest of the current type.
    */
-  uint32_t crc(void) const;
+  uint32_t crc() const;
 
   /** Perform checked invocation of cmp method.
    *  Takes reference to another type - if they have the same type id, invoke
@@ -458,7 +458,7 @@ public:
   /** Clone method. Self explanatory.
    *  @return New container, containing a duplicate of this object.
    */
-  virtual type2tc clone(void) const = 0;
+  virtual type2tc clone() const = 0;
 
   // Please see the equivalent methods in expr2t for documentation
   template <typename T>
@@ -549,7 +549,7 @@ public:
   virtual ~expr2t() { };
 
   /** Clone method. Self explanatory. */
-  virtual expr2tc clone(void) const = 0;
+  virtual expr2tc clone() const = 0;
 
   /* These are all self explanatory */
   bool operator==(const expr2t &ref) const;
@@ -581,7 +581,7 @@ public:
    *  can reach from this expr).
    *  @return Number of expr2tc's reachable from this node.
    */
-  unsigned long num_nodes(void) const;
+  unsigned long num_nodes() const;
 
   /** Calculate max depth of exprs from this point.
    *  Looks at all sub-exprs of this expr, and calculates the longest chain one
@@ -589,13 +589,13 @@ public:
    *  exprs we're dealing with.
    *  @return Number of expr2tc's reachable from this node.
    */
-  unsigned long depth(void) const;
+  unsigned long depth() const;
 
   /** Write textual representation of this object to stdout.
    *  For use in debugging - dumps the output of the pretty method to stdout.
    *  Can either be used in portion of code, or more commonly called from gdb.
    */
-  void dump(void) const;
+  void dump() const;
 
   /** Calculate a hash/digest of the current expr.
    *  For use in hash data structures; used to be a crc32, but is now a 16 bit
@@ -603,7 +603,7 @@ public:
    *  distribution properties, but is at least fast.
    *  @return Hash value of this expr
    */
-  uint32_t crc(void) const;
+  uint32_t crc() const;
 
   /** Perform comparison operation between this and another expr.
    *  Overridden by subclasses of expr2t to compare different members of this
@@ -670,7 +670,7 @@ public:
 
   /** Count the number of sub-exprs there are.
    */
-  virtual unsigned int get_num_sub_exprs(void) const = 0 ;
+  virtual unsigned int get_num_sub_exprs() const = 0 ;
 
   /** Simplify an expression.
    *  Similar to simplification in the string-based irep, this generates an
@@ -681,7 +681,7 @@ public:
    *  @return Either a nil expr (null pointer contents) if nothing could be
    *          simplified or a simplified expression.
    */
-  expr2tc simplify(void) const;
+  expr2tc simplify() const;
 
   /** expr-specific simplification methods.
    *  By default, an expression can't be simplified, and this method returns
@@ -1042,7 +1042,7 @@ namespace esbmct {
     // Top level / public methods for this irep. These methods are virtual, set
     // up any relevant computation, and then call the recursive instances below
     // to perform the actual work over fields.
-    base_container2tc clone(void) const override;
+    base_container2tc clone() const override;
     list_of_memberst tostring(unsigned int indent) const override;
     bool cmp(const base2t &ref) const override;
     int lt(const base2t &ref) const override;
@@ -1069,7 +1069,7 @@ namespace esbmct {
     // placed here to avoid un-necessary recursion in expr_methods2.
     const expr2tc *get_sub_expr_rec(unsigned int cur_count, unsigned int desired) const;
     expr2tc *get_sub_expr_nc_rec(unsigned int cur_count, unsigned int desired);
-    unsigned int get_num_sub_exprs_rec(void) const;
+    unsigned int get_num_sub_exprs_rec() const;
 
     void foreach_operand_impl_rec(expr2t::op_delegate &f);
     void foreach_operand_impl_const_rec(expr2t::const_op_delegate &f) const;
@@ -1152,7 +1152,7 @@ namespace esbmct {
       return nullptr;
     }
 
-    unsigned int get_num_sub_exprs_rec(void) const
+    unsigned int get_num_sub_exprs_rec() const
     {
       return 0;
     }
@@ -1210,7 +1210,7 @@ namespace esbmct {
 
     const expr2tc *get_sub_expr(unsigned int i) const override;
     expr2tc *get_sub_expr_nc(unsigned int i) override;
-    unsigned int get_num_sub_exprs(void) const override;
+    unsigned int get_num_sub_exprs() const override;
 
     void foreach_operand_impl_const(expr2t::const_op_delegate &expr) const override;
     void foreach_operand_impl(expr2t::op_delegate &expr) override;

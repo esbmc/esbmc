@@ -87,10 +87,10 @@ public:
 
   // Abstract method, with the purpose of duplicating a symex_targett from the
   // subclass.
-  virtual boost::shared_ptr<symex_targett> clone(void) const = 0;
+  virtual boost::shared_ptr<symex_targett> clone() const = 0;
 
-  virtual void push_ctx(void) = 0;
-  virtual void pop_ctx(void) = 0;
+  virtual void push_ctx() = 0;
+  virtual void pop_ctx() = 0;
 };
 
 class stack_framet

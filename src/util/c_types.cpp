@@ -42,7 +42,7 @@ typet index_type()
   return signedbv_typet(config.ansi_c.int_width);
 }
 
-type2tc index_type2(void)
+type2tc index_type2()
 {
   return type_pool.get_int(config.ansi_c.int_width);
 }

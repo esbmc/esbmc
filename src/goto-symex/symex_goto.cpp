@@ -183,7 +183,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 }
 
 void
-goto_symext::merge_gotos(void)
+goto_symext::merge_gotos()
 {
   statet::framet &frame = cur_state->top();
 

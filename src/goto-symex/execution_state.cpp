@@ -349,14 +349,14 @@ execution_statet::assume(const expr2tc &assumption)
 }
 
 unsigned int &
-execution_statet::get_dynamic_counter(void)
+execution_statet::get_dynamic_counter()
 {
 
   return dynamic_counter;
 }
 
 unsigned int &
-execution_statet::get_nondet_counter(void)
+execution_statet::get_nondet_counter()
 {
 
   return nondet_count;
@@ -430,7 +430,7 @@ execution_statet::dfs_explore_thread(unsigned int tid)
 }
 
 bool
-execution_statet::check_if_ileaves_blocked(void)
+execution_statet::check_if_ileaves_blocked()
 {
 
   if(owning_rt->get_CS_bound() != -1 && CS_number >= owning_rt->get_CS_bound())
@@ -452,7 +452,7 @@ execution_statet::check_if_ileaves_blocked(void)
 }
 
 void
-execution_statet::end_thread(void)
+execution_statet::end_thread()
 {
 
   get_active_state().thread_ended = true;
@@ -463,7 +463,7 @@ execution_statet::end_thread(void)
 }
 
 void
-execution_statet::update_after_switch_point(void)
+execution_statet::update_after_switch_point()
 {
 
   execute_guard();
@@ -489,7 +489,7 @@ execution_statet::update_after_switch_point(void)
 }
 
 void
-execution_statet::preserve_last_paths(void)
+execution_statet::preserve_last_paths()
 {
   // If the thread terminated, there are no paths to preserve: this is the final
   // switching away.
@@ -589,7 +589,7 @@ execution_statet::preserve_last_paths(void)
 }
 
 void
-execution_statet::cull_all_paths(void)
+execution_statet::cull_all_paths()
 {
   // Walk through _all_ symbolic paths in the program and wipe them out.
   // Current path is easy: set the guard to false. phi_function will overwrite
@@ -606,7 +606,7 @@ execution_statet::cull_all_paths(void)
 }
 
 void
-execution_statet::restore_last_paths(void)
+execution_statet::restore_last_paths()
 {
   // For each preserved path: create a fresh new goto_statet with data values
   // created from the present values of l2-renaming and value set, as we
@@ -640,7 +640,7 @@ execution_statet::restore_last_paths(void)
 }
 
 bool
-execution_statet::is_cur_state_guard_false(void)
+execution_statet::is_cur_state_guard_false()
 {
 
   // So, can the assumption actually be true? If enabled, ask the solver.
@@ -668,7 +668,7 @@ execution_statet::is_cur_state_guard_false(void)
 }
 
 void
-execution_statet::execute_guard(void)
+execution_statet::execute_guard()
 {
 
   node_id = node_count++;
@@ -937,7 +937,7 @@ execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l) const
 }
 
 void
-execution_statet::calculate_mpor_constraints(void)
+execution_statet::calculate_mpor_constraints()
 {
   // Primary bit of MPOR logic - to be executed at the end of a transition to
   // update dependancy tracking and suchlike.
@@ -1034,7 +1034,7 @@ execution_statet::calculate_mpor_constraints(void)
 }
 
 bool
-execution_statet::has_cswitch_point_occured(void) const
+execution_statet::has_cswitch_point_occured() const
 {
 
   // Context switches can occur due to being forced, or by global state access
@@ -1050,7 +1050,7 @@ execution_statet::has_cswitch_point_occured(void) const
 }
 
 bool
-execution_statet::can_execution_continue(void) const
+execution_statet::can_execution_continue() const
 {
 
   if (threads_state[active_thread].thread_ended)
@@ -1063,7 +1063,7 @@ execution_statet::can_execution_continue(void) const
 }
 
 crypto_hash
-execution_statet::generate_hash(void) const
+execution_statet::generate_hash() const
 {
 
   auto l2 =
@@ -1119,7 +1119,7 @@ execution_statet::print_stack_traces(unsigned int indent) const
 }
 
 void
-execution_statet::switch_to_monitor(void)
+execution_statet::switch_to_monitor()
 {
 
   if (threads_state[monitor_tid].thread_ended) {
@@ -1150,7 +1150,7 @@ execution_statet::switch_to_monitor(void)
 }
 
 void
-execution_statet::switch_away_from_monitor(void)
+execution_statet::switch_away_from_monitor()
 {
 
   // Occurs when we rerun the automata to discover whether or not the property
@@ -1176,7 +1176,7 @@ execution_statet::switch_away_from_monitor(void)
 }
 
 void
-execution_statet::kill_monitor_thread(void)
+execution_statet::kill_monitor_thread()
 {
   assert(monitor_tid != active_thread &&
          "You cannot kill monitor thread _from_ the monitor thread\n");
@@ -1200,7 +1200,7 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
 }
 
 void
-execution_statet::init_property_monitors(void)
+execution_statet::init_property_monitors()
 {
   std::map<std::string, std::string> strings;
 
@@ -1254,12 +1254,12 @@ execution_statet::ex_state_level2t::ex_state_level2t(
 {
 }
 
-execution_statet::ex_state_level2t::~ex_state_level2t(void)
+execution_statet::ex_state_level2t::~ex_state_level2t()
 {
 }
 
 boost::shared_ptr<renaming::level2t>
-execution_statet::ex_state_level2t::clone(void) const
+execution_statet::ex_state_level2t::clone() const
 {
 
   return boost::shared_ptr<ex_state_level2t>(new ex_state_level2t(*this));
@@ -1277,7 +1277,7 @@ execution_statet::ex_state_level2t::rename(expr2tc &identifier)
   renaming::level2t::rename(identifier);
 }
 
-dfs_execution_statet::~dfs_execution_statet(void)
+dfs_execution_statet::~dfs_execution_statet()
 {
 
   // Delete target; or if we're encoding at runtime, pop a context.
@@ -1285,7 +1285,7 @@ dfs_execution_statet::~dfs_execution_statet(void)
     target->pop_ctx();
 }
 
-boost::shared_ptr<execution_statet> dfs_execution_statet::clone(void) const
+boost::shared_ptr<execution_statet> dfs_execution_statet::clone() const
 {
   boost::shared_ptr<dfs_execution_statet> d =
     boost::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
@@ -1306,12 +1306,12 @@ dfs_execution_statet::dfs_execution_statet(const dfs_execution_statet &ref)
 {
 }
 
-schedule_execution_statet::~schedule_execution_statet(void)
+schedule_execution_statet::~schedule_execution_statet()
 {
   // Don't delete equation. Schedule requires all this data.
 }
 
-boost::shared_ptr<execution_statet> schedule_execution_statet::clone(void) const
+boost::shared_ptr<execution_statet> schedule_execution_statet::clone() const
 {
   boost::shared_ptr<schedule_execution_statet> s =
     boost::shared_ptr<schedule_execution_statet>(new schedule_execution_statet(*this));
@@ -1352,12 +1352,12 @@ execution_statet::state_hashing_level2t::state_hashing_level2t(
 {
 }
 
-execution_statet::state_hashing_level2t::~state_hashing_level2t(void)
+execution_statet::state_hashing_level2t::~state_hashing_level2t()
 {
 }
 
 boost::shared_ptr<renaming::level2t>
-execution_statet::state_hashing_level2t::clone(void) const
+execution_statet::state_hashing_level2t::clone() const
 {
 
   return boost::shared_ptr<state_hashing_level2t>(new state_hashing_level2t(*this));

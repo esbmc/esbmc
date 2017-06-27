@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/expr_util.h>
 #include <util/irep2.h>
 
-void goto_symext::symex_other(void)
+void goto_symext::symex_other()
 {
   const goto_programt::instructiont &instruction=*cur_state->source.pc;
 

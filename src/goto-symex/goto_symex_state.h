@@ -405,7 +405,7 @@ public:
    *  current function invocations on the stack, and returns them.
    *  @return Vector of strings describing the current function calls in state.
    */
-  std::vector<stack_framet> gen_stack_trace(void) const;
+  std::vector<stack_framet> gen_stack_trace() const;
 
   /**
    *  Fixup types after renaming: we might rename a symbol that we

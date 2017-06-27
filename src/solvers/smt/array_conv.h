@@ -52,7 +52,7 @@ public:
   }
 
   
-  ~array_ast(void) override {
+  ~array_ast() override {
   }
 
   smt_astt eq(smt_convt *ctx, smt_astt other) const override;
@@ -114,12 +114,12 @@ public:
                          const type2tc &subtype) override;
   smt_astt convert_array_of(smt_astt init_val,
                                           unsigned long domain_width) override;
-  void add_array_constraints_for_solving(void) override;
+  void add_array_constraints_for_solving() override;
 
   // Heavy lifters
   virtual smt_astt convert_array_of_wsort(
     smt_astt init_val, unsigned long domain_width, smt_sortt arr_sort);
-  unsigned int new_array_id(void);
+  unsigned int new_array_id();
   void convert_array_assign(const array_ast *src, smt_astt sym);
   smt_astt mk_select(const array_ast *array, const expr2tc &idx,
                            const smt_sort *ressort);
@@ -146,8 +146,8 @@ public:
 
   // Array constraint beating
 
-  void join_array_indexes(void);
-  void add_array_equalities(void);
+  void join_array_indexes();
+  void add_array_equalities();
   void add_array_equality(unsigned int arr1_id, unsigned int arr2_id,
                           unsigned int arr1_update, unsigned int arr2_update,
                           smt_astt result, unsigned int start_pos = 0);
@@ -197,8 +197,8 @@ public:
     return new array_ast(this, ctx, _s, _a);
   }
 
-  void push_array_ctx(void) override;
-  void pop_array_ctx(void) override;
+  void push_array_ctx() override;
+  void pop_array_ctx() override;
 
   // Members
 

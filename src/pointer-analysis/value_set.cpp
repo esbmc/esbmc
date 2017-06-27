@@ -1308,7 +1308,7 @@ expr2tc value_sett::make_member(
 }
 
 void
-value_sett::dump(void) const
+value_sett::dump() const
 {
   output(std::cout);
 }

@@ -152,49 +152,49 @@ gen_ulong(unsigned long val)
 }
 
 inline const type2tc &
-get_uint8_type(void)
+get_uint8_type()
 {
   return type_pool.get_uint8();
 }
 
 inline const type2tc &
-get_uint16_type(void)
+get_uint16_type()
 {
   return type_pool.get_uint16();
 }
 
 inline const type2tc &
-get_uint32_type(void)
+get_uint32_type()
 {
   return type_pool.get_uint32();
 }
 
 inline const type2tc &
-get_uint64_type(void)
+get_uint64_type()
 {
   return type_pool.get_uint64();
 }
 
 inline const type2tc &
-get_int8_type(void)
+get_int8_type()
 {
   return type_pool.get_int8();
 }
 
 inline const type2tc &
-get_int16_type(void)
+get_int16_type()
 {
   return type_pool.get_int16();
 }
 
 inline const type2tc &
-get_int32_type(void)
+get_int32_type()
 {
   return type_pool.get_int32();
 }
 
 inline const type2tc &
-get_int64_type(void)
+get_int64_type()
 {
   return type_pool.get_int64();
 }
@@ -212,13 +212,13 @@ get_int_type(unsigned int sz)
 }
 
 inline const type2tc &
-get_bool_type(void)
+get_bool_type()
 {
   return type_pool.get_bool();
 }
 
 inline const type2tc &
-get_empty_type(void)
+get_empty_type()
 {
   return type_pool.get_empty();
 }

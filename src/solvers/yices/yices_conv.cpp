@@ -474,13 +474,13 @@ yices_convt::add_array_constraints_for_solving()
 }
 
 void
-yices_convt::push_array_ctx(void)
+yices_convt::push_array_ctx()
 {
   return;
 }
 
 void
-yices_convt::pop_array_ctx(void)
+yices_convt::pop_array_ctx()
 {
   return;
 }

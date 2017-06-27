@@ -482,7 +482,7 @@ goto_symext::run_next_function_ptr_target(bool first)
 }
 
 void
-goto_symext::pop_frame(void)
+goto_symext::pop_frame()
 {
   assert(!cur_state->call_stack.empty());
 
@@ -581,7 +581,7 @@ goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
 }
 
 void
-goto_symext::symex_return(void)
+goto_symext::symex_return()
 {
 
   // we treat this like an unconditional
