@@ -13,11 +13,8 @@ void convert_claims(
   const std::list<std::string> &claims,
   std::set<unsigned> &unsigned_claims)
 {
-  for(std::list<std::string>::const_iterator
-      it=claims.begin();
-      it!=claims.end();
-      it++)
-    unsigned_claims.insert(atoi(it->c_str()));
+  for(const auto & claim : claims)
+    unsigned_claims.insert(atoi(claim.c_str()));
 }
 
 void set_claims(
@@ -25,12 +22,9 @@ void set_claims(
   const std::set<unsigned> &claims,
   unsigned &count)
 {
-  for(goto_programt::instructionst::iterator
-      it=goto_program.instructions.begin();
-      it!=goto_program.instructions.end();
-      it++)
+  for(auto & instruction : goto_program.instructions)
   {
-    if(it->is_assert())
+    if(instruction.is_assert())
     {
       count++;
 
@@ -43,7 +37,7 @@ void set_claims(
         else
           it->type=ASSUME;
         #else
-        it->type=SKIP;
+        instruction.type=SKIP;
         #endif
       }
     }
@@ -82,12 +76,9 @@ void set_claims(
 
   unsigned count=0;
 
-  for(goto_functionst::function_mapt::iterator
-      it=goto_functions.function_map.begin();
-      it!=goto_functions.function_map.end();
-      it++)
+  for(auto & it : goto_functions.function_map)
   {
-    set_claims(it->second.body, unsigned_claims, count);
+    set_claims(it.second.body, unsigned_claims, count);
   }
 
   unsigned largest=*(--unsigned_claims.end());

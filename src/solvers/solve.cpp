@@ -51,9 +51,9 @@ create_solver(std::string the_solver,
             array_iface **array_api)
 {
 
-  for (unsigned int i = 0; i < esbmc_num_solvers; i++) {
-    if (the_solver == esbmc_solvers[i].name) {
-      return esbmc_solvers[i].create(int_encoding, ns,
+  for (const auto & esbmc_solver : esbmc_solvers) {
+    if (the_solver == esbmc_solver.name) {
+      return esbmc_solver.create(int_encoding, ns,
                                options, tuple_api, array_api);
     }
   }

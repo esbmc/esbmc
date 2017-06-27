@@ -129,8 +129,8 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
   smt_convt::ast_vec assertions;
   const smt_ast *assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
-  for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
-    convert_internal_step(smt_conv, assumpt_ast, assertions, *it);
+  for (auto & SSA_step : SSA_steps)
+    convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
 
   if (!assertions.empty())
     smt_conv.assert_ast(smt_conv.make_disjunct(assertions));
@@ -207,12 +207,9 @@ void symex_target_equationt::convert_internal_step(
 
 void symex_target_equationt::output(std::ostream &out) const
 {
-  for(SSA_stepst::const_iterator
-      it=SSA_steps.begin();
-      it!=SSA_steps.end();
-      it++)
+  for(const auto & SSA_step : SSA_steps)
   {
-    it->output(ns, out);
+    SSA_step.output(ns, out);
     out << "--------------" << std::endl;
   }
 }
@@ -220,12 +217,9 @@ void symex_target_equationt::output(std::ostream &out) const
 void symex_target_equationt::short_output(std::ostream &out,
                                           bool show_ignored) const
 {
-  for(SSA_stepst::const_iterator
-      it=SSA_steps.begin();
-      it!=SSA_steps.end();
-      it++)
+  for(const auto & SSA_step : SSA_steps)
   {
-    it->short_output(ns, out, show_ignored);
+    SSA_step.short_output(ns, out, show_ignored);
   }
 }
 
@@ -312,13 +306,12 @@ symex_target_equationt::check_for_duplicate_assigns() const
   std::map<std::string, unsigned int> countmap;
   unsigned int i = 0;
 
-  for (SSA_stepst::const_iterator it = SSA_steps.begin();
-      it != SSA_steps.end(); it++) {
+  for (const auto & SSA_step : SSA_steps) {
     i++;
-    if (!it->is_assignment())
+    if (!SSA_step.is_assignment())
       continue;
 
-    const equality2t &ref = to_equality2t(it->cond);
+    const equality2t &ref = to_equality2t(SSA_step.cond);
     const symbol2t &sym = to_symbol2t(ref.side_1);
     countmap[sym.get_symbol_name()]++;
   }

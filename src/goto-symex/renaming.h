@@ -249,11 +249,9 @@ namespace renaming {
 
     void get_variables(std::set<name_record> &vars) const
     {
-      for(current_namest::const_iterator it=current_names.begin();
-          it!=current_names.end();
-          it++)
+      for(const auto & current_name : current_names)
       {
-        vars.insert(it->first);
+        vars.insert(current_name.first);
       }
     }
 

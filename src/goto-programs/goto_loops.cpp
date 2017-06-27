@@ -129,11 +129,8 @@ void goto_loopst::add_loop_var(loopst &loop, const exprt& expr)
 
 void goto_loopst::dump()
 {
-  for(function_loopst::iterator
-      h_it=function_loops.begin();
-      h_it!=function_loops.end();
-      ++h_it)
+  for(auto & function_loop : function_loops)
   {
-    h_it->dump();
+    function_loop.dump();
   }
 }

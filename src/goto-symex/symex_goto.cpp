@@ -251,23 +251,20 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     tmp_guard -= cur_state->guard;
   }
 
-  for (std::set<renaming::level2t::name_record>::const_iterator
-       it = variables.begin();
-       it != variables.end();
-       it++)
+  for (const auto & variable : variables)
   {
-    if (goto_state.level2.current_number(*it) ==
-        cur_state->level2.current_number(*it))
+    if (goto_state.level2.current_number(variable) ==
+        cur_state->level2.current_number(variable))
       continue;  // not changed
 
-    if (it->base_name == guard_identifier_s)
+    if (variable.base_name == guard_identifier_s)
       continue;  // just a guard
 
-    if (has_prefix(it->base_name.as_string(),"symex::invalid_object"))
+    if (has_prefix(variable.base_name.as_string(),"symex::invalid_object"))
       continue;
 
     // changed!
-    const symbolt &symbol = ns.lookup(it->base_name);
+    const symbolt &symbol = ns.lookup(variable.base_name);
 
     type2tc type;
     typet old_type = symbol.type;
@@ -279,7 +276,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       rhs = symbol2tc(type, symbol.name);
 
       // Try to get the value
-      renaming::level2t::rename_to_record(rhs, *it);
+      renaming::level2t::rename_to_record(rhs, variable);
       goto_state.level2.rename(rhs);
     } else {
       symbol2tc true_val(type, symbol.name);
@@ -288,8 +285,8 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       // Semi-manually rename these symbols: we may be referring to an l1
       // variable not in the current scope, thus we need to directly specify
       // which l1 variable we're dealing with.
-      renaming::level2t::rename_to_record(true_val, *it);
-      renaming::level2t::rename_to_record(false_val, *it);
+      renaming::level2t::rename_to_record(true_val, variable);
+      renaming::level2t::rename_to_record(false_val, variable);
 
       // Try to get the symbol's value
       goto_state.level2.rename(true_val);
@@ -304,7 +301,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     // Again, specifiy which l1 data object we're going to make the assignment
     // to.
-    renaming::level2t::rename_to_record(new_lhs, *it);
+    renaming::level2t::rename_to_record(new_lhs, variable);
 
     cur_state->assignment(new_lhs, rhs, true);
 

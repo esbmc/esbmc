@@ -66,12 +66,9 @@ std::string expr2cppt::convert_struct(
   bool first=true;
   unsigned last_size=0;
 
-  for(struct_typet::componentst::const_iterator
-      c_it=components.begin();
-      c_it!=components.end();
-      c_it++)
+  for(const auto & component : components)
   {
-    if(c_it->type().id()=="code")
+    if(component.type().id()=="code")
     {
     }
     else
@@ -94,7 +91,7 @@ std::string expr2cppt::convert_struct(
 
       dest+=sep;
       dest+=".";
-      dest+=c_it->get_string("pretty_name");
+      dest+=component.get_string("pretty_name");
       dest+="=";
       dest+=tmp;
     }

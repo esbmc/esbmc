@@ -404,12 +404,9 @@ exprt c_typecheck_baset::do_initializer_struct(
 
   result.reserve_operands(components.size());
 
-  for(struct_typet::componentst::const_iterator
-      it=components.begin();
-      it!=components.end();
-      it++)
+  for(const auto & component : components)
   {
-    const typet &op_type=it->type();
+    const typet &op_type=component.type();
 
     if(state.has_next())
     {

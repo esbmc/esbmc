@@ -31,11 +31,9 @@ std::ostream &operator<<(std::ostream &out,
 
 bool cpp_typecheck_fargst::has_class_type() const
 {
-  for(exprt::operandst::const_iterator it=operands.begin();
-      it!=operands.end();
-      it++)
+  for(const auto & operand : operands)
   {
-    if(it->type().id()=="struct")
+    if(operand.type().id()=="struct")
       return true;
   }
 
@@ -50,8 +48,8 @@ void cpp_typecheck_fargst::build(
   operands.clear();
   operands.reserve(function_call.op1().operands().size());
 
-  for(unsigned i=0; i<function_call.op1().operands().size(); i++)
-    operands.push_back(function_call.op1().operands()[i]);
+  for(const auto & i : function_call.op1().operands())
+    operands.push_back(i);
 }
 
 bool cpp_typecheck_fargst::match(

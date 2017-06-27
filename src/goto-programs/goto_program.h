@@ -243,11 +243,8 @@ public:
     {
       if(!is_goto()) return false;
 
-      for(targetst::const_iterator
-          it=targets.begin();
-          it!=targets.end();
-          it++)
-        if((*it)->location_number<=location_number)
+      for(auto target : targets)
+        if(target->location_number<=location_number)
           return true;
 
       return false;
@@ -379,11 +376,8 @@ public:
   //! Compute location numbers
   void compute_location_numbers(unsigned &nr)
   {
-    for(instructionst::iterator
-        it=instructions.begin();
-        it!=instructions.end();
-        it++)
-      it->location_number=nr++;
+    for(auto & instruction : instructions)
+      instruction.location_number=nr++;
   }
 
   //! Compute location numbers

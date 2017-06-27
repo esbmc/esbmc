@@ -19,17 +19,14 @@ void show_claims(
   const goto_programt &goto_program,
   unsigned &count)
 {
-  for(goto_programt::instructionst::const_iterator
-      it=goto_program.instructions.begin();
-      it!=goto_program.instructions.end();
-      it++)
+  for(const auto & instruction : goto_program.instructions)
   {
-    if(it->is_assert())
+    if(instruction.is_assert())
     {
       count++;
 
-      const irep_idt &comment=it->location.comment();
-      const irep_idt &property=it->location.property();
+      const irep_idt &comment=instruction.location.comment();
+      const irep_idt &property=instruction.location.property();
       const irep_idt description=
         (comment==""?"assertion":comment);
 
@@ -39,7 +36,7 @@ void show_claims(
         xml.new_element("number").data=i2string(count);
         
         xmlt &l=xml.new_element();
-        convert(it->location, l);
+        convert(instruction.location, l);
         l.name="location";
         
         xml.new_element("description").data=
@@ -49,7 +46,7 @@ void show_claims(
           xmlt::escape(id2string(property));
         
         xml.new_element("expression").data=
-          xmlt::escape(from_expr(ns, identifier, it->guard));
+          xmlt::escape(from_expr(ns, identifier, instruction.guard));
           
         std::cout << xml << std::endl;
       }
@@ -57,11 +54,11 @@ void show_claims(
       {
         std::cout << "Claim " << count << ":" << std::endl;
 
-        std::cout << "  " << it->location << std::endl
+        std::cout << "  " << instruction.location << std::endl
                   << "  " << description
                   << std::endl;
 
-        std::cout << "  " << from_expr(ns, identifier, it->guard)
+        std::cout << "  " << from_expr(ns, identifier, instruction.guard)
                   << std::endl;
         std::cout << std::endl;
       }
@@ -87,10 +84,7 @@ void show_claims(
 {
   unsigned count=0;
 
-  for(goto_functionst::function_mapt::const_iterator
-      it=goto_functions.function_map.begin();
-      it!=goto_functions.function_map.end();
-      it++)
-    if(!it->second.is_inlined())
-      show_claims(ns, it->first, ui, it->second.body, count);
+  for(const auto & it : goto_functions.function_map)
+    if(!it.second.is_inlined())
+      show_claims(ns, it.first, ui, it.second.body, count);
 }

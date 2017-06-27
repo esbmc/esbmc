@@ -125,15 +125,11 @@ exprt template_mapt::lookup_expr(const irep_idt &identifier) const
 
 void template_mapt::print(std::ostream &out) const
 {
-  for(type_mapt::const_iterator it=type_map.begin();
-      it!=type_map.end();
-      it++)
-    out << it->first << " = " << it->second.pretty() << std::endl;
+  for(const auto & it : type_map)
+    out << it.first << " = " << it.second.pretty() << std::endl;
 
-  for(expr_mapt::const_iterator it=expr_map.begin();
-      it!=expr_map.end();
-      it++)
-    out << it->first << " = " << it->second.pretty() << std::endl;
+  for(const auto & it : expr_map)
+    out << it.first << " = " << it.second.pretty() << std::endl;
 }
 
 void template_mapt::build(
@@ -210,13 +206,8 @@ void template_mapt::build_unassigned(
   const template_typet::parameterst &template_parameters=
     template_type.parameters();
 
-  for(template_typet::parameterst::const_iterator
-      t_it=template_parameters.begin();
-      t_it!=template_parameters.end();
-      t_it++)
+  for(const auto & t : template_parameters)
   {
-    const exprt &t=*t_it;
-
     if(t.id()=="type")
     {
       typet tmp("unassigned");

@@ -53,12 +53,10 @@ std::string type2name(const typet &type)
     const code_typet &t = to_code_type(type);
     const code_typet::argumentst arguments = t.arguments();
     result+="P(";
-    for (code_typet::argumentst::const_iterator it = arguments.begin();
-         it!=arguments.end();
-         it++)
+    for (const auto & argument : arguments)
     {
-      result+=type2name(it->type());
-      result+="'" + it->get_identifier().as_string() + "'|";
+      result+=type2name(argument.type());
+      result+="'" + argument.get_identifier().as_string() + "'|";
     }
     result.resize(result.size()-1);
     result+=')';

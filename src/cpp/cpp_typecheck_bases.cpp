@@ -173,16 +173,13 @@ void cpp_typecheckt::add_base_components(
   const struct_typet::componentst &src_c=from.components();
   struct_typet::componentst &dest_c=to.components();
 
-  for(struct_typet::componentst::const_iterator
-      it=src_c.begin();
-      it!=src_c.end();
-      it++)
+  for(const auto & it : src_c)
   {
-    if(it->get_bool("from_base"))
+    if(it.get_bool("from_base"))
       continue;
 
     // copy the component
-    dest_c.push_back(*it);
+    dest_c.push_back(it);
 
     // now twiddle the copy
     struct_typet::componentt &component=dest_c.back();

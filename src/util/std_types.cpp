@@ -38,12 +38,9 @@ unsigned struct_union_typet::component_number(
 
   unsigned number=0;
 
-  for(componentst::const_iterator
-      it=c.begin();
-      it!=c.end();
-      it++)
+  for(const auto & it : c)
   {
-    if(it->get_name()==component_name)
+    if(it.get_name()==component_name)
       return number;
 
     number++;
@@ -58,15 +55,12 @@ const struct_union_typet::componentt &struct_union_typet::get_component(
 {
   const componentst &c=components();
 
-  for(componentst::const_iterator
-      it=c.begin();
-      it!=c.end();
-      it++)
+  for(const auto & it : c)
   {
 	//std::cout << "it->get_name(): " << it->get_name() << std::endl;
 	//std::cout << "component_name: " << component_name << std::endl;
-    if(it->get_name()==component_name)
-      return *it;
+    if(it.get_name()==component_name)
+      return it;
   }
 
   return static_cast<const componentt &>(get_nil_irep());
@@ -92,13 +86,10 @@ bool struct_typet::is_prefix_of(const struct_typet &other) const
   componentst::const_iterator
     ot_it=ot_components.begin();
 
-  for(componentst::const_iterator tt_it=
-      tt_components.begin();
-      tt_it!=tt_components.end();
-      tt_it++)
+  for(const auto & tt_component : tt_components)
   {
-    if(ot_it->type()!=tt_it->type() ||
-       ot_it->name()!=tt_it->name())
+    if(ot_it->type()!=tt_component.type() ||
+       ot_it->name()!=tt_component.name())
     {
       return false; // they just don't match
     }

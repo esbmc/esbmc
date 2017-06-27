@@ -150,11 +150,8 @@ void goto_program_dereferencet::dereference_program(
   goto_functionst &goto_functions,
   bool checks_only)
 {
-  for(goto_functionst::function_mapt::iterator
-      it=goto_functions.function_map.begin();
-      it!=goto_functions.function_map.end();
-      it++)
-    dereference_program(it->second.body, checks_only);
+  for(auto & it : goto_functions.function_map)
+    dereference_program(it.second.body, checks_only);
 }
 
 void goto_program_dereferencet::dereference_instruction(

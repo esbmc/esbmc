@@ -62,11 +62,8 @@ void cpp_typecheckt::typecheck()
   // default linkage is C++
   current_mode="C++";
 
-  for(cpp_parse_treet::itemst::iterator
-      it=cpp_parse_tree.items.begin();
-      it!=cpp_parse_tree.items.end();
-      it++)
-    convert(*it);
+  for(auto & item : cpp_parse_tree.items)
+    convert(item);
 
   static_initialization();
 
@@ -312,23 +309,20 @@ void cpp_typecheckt::clean_up()
 
         function_members.reserve(components.size());
 
-        for(struct_typet::componentst::const_iterator
-            compo_it = components.begin();
-            compo_it != components.end();
-            compo_it++)
+        for(const auto & component : components)
         {
-          if(compo_it->get_bool("is_static") ||
-             compo_it->is_type())
+          if(component.get_bool("is_static") ||
+             component.is_type())
           {
             // skip it
           }
-          else if(compo_it->type().id()=="code")
+          else if(component.type().id()=="code")
           {
-            function_members.push_back(*compo_it);
+            function_members.push_back(component);
           }
           else
           {
-            data_members.push_back(*compo_it);
+            data_members.push_back(component);
           }
         }
 

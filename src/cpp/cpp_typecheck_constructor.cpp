@@ -541,26 +541,23 @@ void cpp_typecheckt::check_member_initializers(
     member_name.convert(identifier, base_name);
     bool ok = false;
 
-    for(struct_typet::componentst::const_iterator
-        c_it=components.begin();
-        c_it!=components.end();
-        c_it++)
+    for(const auto & component : components)
     {
-      if(c_it->base_name()!=base_name) continue;
+      if(component.base_name()!=base_name) continue;
 
       // Data member
-      if(!c_it->get_bool("from_base") &&
-         !c_it->get_bool("is_static") &&
-         c_it->get("type") != "code")
+      if(!component.get_bool("from_base") &&
+         !component.get_bool("is_static") &&
+         component.get("type") != "code")
       {
         ok = true;
         break;
       }
 
       // Maybe it is a parent constructor?
-      if(c_it->is_type())
+      if(component.is_type())
       {
-        typet type = static_cast<const typet&>(c_it->type());
+        typet type = static_cast<const typet&>(component.type());
         if(type.id() != "symbol")
           continue;
 
@@ -582,11 +579,11 @@ void cpp_typecheckt::check_member_initializers(
       }
 
       // Parent constructor
-      if(c_it->get_bool("from_base")
-        && !c_it->is_type()
-        && !c_it->get_bool("is_static")
-        && c_it->get("type") == "code"
-        && c_it->type().get("return_type") == "constructor")
+      if(component.get_bool("from_base")
+        && !component.is_type()
+        && !component.get_bool("is_static")
+        && component.get("type") == "code"
+        && component.type().get("return_type") == "constructor")
       {
         typet member_type = (typet&) initializer.member_irep();
         typecheck_type(member_type);
@@ -729,12 +726,11 @@ void cpp_typecheckt::full_member_initialization(
         // check if the initializer is a data
         bool is_data = false;
 
-        for(struct_typet::componentst::const_iterator c_it =
-            components.begin(); c_it != components.end(); c_it++)
+        for(const auto & component : components)
         {
-          if(c_it->base_name()==base_name
-             && c_it->get("type")!="code"
-             && !c_it->is_type())
+          if(component.base_name()==base_name
+             && component.get("type")!="code"
+             && !component.is_type())
           {
             is_data = true;
             break;
@@ -921,14 +917,9 @@ bool cpp_typecheckt::find_cpctor(const symbolt &symbol) const
   const struct_typet &struct_type = to_struct_type(symbol.type);
   const struct_typet::componentst &components = struct_type.components();
 
-  for(struct_typet::componentst::const_iterator
-      cit=components.begin();
-      cit!=components.end();
-      cit++)
+  for(const auto & component : components)
   {
     // Skip non-ctor
-    const struct_typet::componentt& component = *cit;
-
     if(component.type().id() != "code"
       || to_code_type(component.type()).return_type().id()!="constructor")
       continue;
@@ -977,10 +968,8 @@ bool cpp_typecheckt::find_assignop(const symbolt& symbol) const
   const struct_typet& struct_type = to_struct_type(symbol.type);
   const struct_typet::componentst& components = struct_type.components();
 
-  for(unsigned i = 0; i < components.size(); i++)
+  for(const auto & component : components)
   {
-    const struct_typet::componentt& component = components[i];
-
     if(component.base_name()!="operator=")
       continue;
 

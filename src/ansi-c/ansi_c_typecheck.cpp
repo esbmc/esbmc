@@ -10,13 +10,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void ansi_c_typecheckt::typecheck()
 {
-  for(ansi_c_parse_treet::declarationst::iterator
-      it=parse_tree.declarations.begin();
-      it!=parse_tree.declarations.end();
-      it++)
+  for(auto & declaration : parse_tree.declarations)
   {
     symbolt symbol;
-    it->to_symbol(symbol);
+    declaration.to_symbol(symbol);
     typecheck_symbol(symbol);
   }
 }

@@ -18,12 +18,11 @@ Date: May 2007
 
 class goto_function_serializationt {
   private:
-    irep_serializationt::ireps_containert &ireps_container;
     goto_program_serializationt gpconverter;
     
   public:
-    goto_function_serializationt(irep_serializationt::ireps_containert &ic) : 
-      ireps_container(ic), gpconverter(ic) {};
+    goto_function_serializationt(irep_serializationt::ireps_containert &ic)
+      : gpconverter(ic) {};
       
   void convert(std::istream&, irept&);
   void convert(const goto_functiont&, std::ostream& );

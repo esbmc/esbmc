@@ -150,11 +150,8 @@ void c_typecheck_baset::typecheck_new_symbol(symbolt &symbol)
     {
       // we don't need the identifiers
       code_typet &code_type=to_code_type(symbol.type);
-      for(code_typet::argumentst::iterator
-          it=code_type.arguments().begin();
-          it!=code_type.arguments().end();
-          it++)
-        it->set_identifier("");
+      for(auto & it : code_type.arguments())
+        it.set_identifier("");
     }
   }
   else if(symbol.type.id()=="incomplete_array" ||
@@ -428,19 +425,16 @@ void c_typecheck_baset::typecheck_function_body(symbolt &symbol)
   code_typet &code_type=to_code_type(symbol.type);
 
   // adjust the function identifiers
-  for(code_typet::argumentst::iterator
-      a_it=code_type.arguments().begin();
-      a_it!=code_type.arguments().end();
-      a_it++)
+  for(auto & a_it : code_type.arguments())
   {
-    irep_idt identifier=a_it->get_identifier();
+    irep_idt identifier=a_it.get_identifier();
     if(identifier!="")
     {
       id_replace_mapt::const_iterator
         m_it=id_replace_map.find(identifier);
 
       if(m_it!=id_replace_map.end())
-        a_it->set_identifier(m_it->second);
+        a_it.set_identifier(m_it->second);
     }
   }
 

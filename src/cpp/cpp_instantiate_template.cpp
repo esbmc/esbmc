@@ -24,14 +24,11 @@ std::string cpp_typecheckt::template_suffix(
   const cpp_template_args_tct::argumentst &arguments=
     template_args.arguments();
 
-  for(cpp_template_args_tct::argumentst::const_iterator
-      it=arguments.begin();
-      it!=arguments.end();
-      it++)
+  for(const auto & argument : arguments)
   {
     if(first) first=false; else result+=",";
 
-    const exprt expr=*it;
+    const exprt expr=argument;
 
     assert(expr.id()!="ambiguous");
 
@@ -65,7 +62,7 @@ std::string cpp_typecheckt::template_suffix(
         i=0;
       else if(to_integer(e, i))
       {
-        err_location(*it);
+        err_location(argument);
         str << "template argument expression expected to be "
                "scalar constant, but got `"
             << to_string(e) << "'";
@@ -233,10 +230,9 @@ bool cpp_typecheckt::has_incomplete_args(
   const cpp_template_args_tct::argumentst &_arguments =
     template_args_tc.arguments();
 
-  for (cpp_template_args_tct::argumentst::const_iterator it =
-    _arguments.begin(); it != _arguments.end(); it++)
+  for (const auto & _argument : _arguments)
   {
-    const typet& e = it->type();
+    const typet& e = _argument.type();
 
     symbolt* arg_sym = context.find_symbol(e.identifier());
     if(arg_sym != nullptr)
@@ -446,13 +442,13 @@ const symbolt &cpp_typecheckt::instantiate_template(
       static_cast<const exprt &>(
         template_symbol.value.find("template_methods"));
 
-    for(unsigned i=0; i<template_methods.operands().size(); i++)
+    for(const auto & i : template_methods.operands())
     {
       cpp_saved_scope.restore();
 
       cpp_declarationt method_decl=
         static_cast<const cpp_declarationt &>(
-          static_cast<const irept &>(template_methods.operands()[i]));
+          static_cast<const irept &>(i));
 
       // copy the type of the template method
       template_typet method_type=

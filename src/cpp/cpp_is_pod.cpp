@@ -36,25 +36,22 @@ bool cpp_typecheckt::cpp_is_pod(const typet &type) const
     const struct_typet::componentst &components=
       struct_type.components();
 
-    for(struct_typet::componentst::const_iterator
-        it=components.begin();
-        it!=components.end();
-        it++)
+    for(const auto & component : components)
     {
-      if(it->is_type())
+      if(component.is_type())
         continue;
 
-      if(it->get_base_name()=="operator=")
+      if(component.get_base_name()=="operator=")
         return false;
 
-      if(it->get_bool("is_virtual"))
+      if(component.get_bool("is_virtual"))
         return false;
 
-      const typet &sub_type=it->type();
+      const typet &sub_type=component.type();
 
       if(sub_type.id()=="code")
       {
-        if(it->get_bool("is_virtual"))
+        if(component.get_bool("is_virtual"))
           return false;
 
         const typet &return_type=to_code_type(sub_type).return_type();
@@ -63,8 +60,8 @@ bool cpp_typecheckt::cpp_is_pod(const typet &type) const
            return_type.id()=="destructor")
           return false;
       }
-      else if(it->get("access") != "public" &&
-              !it->get_bool("is_static"))
+      else if(component.get("access") != "public" &&
+              !component.get_bool("is_static"))
         return false;
 
       if(!cpp_is_pod(sub_type))

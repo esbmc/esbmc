@@ -82,19 +82,16 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
 
       const code_typet &code_type=to_code_type(symbol.type.subtype());
 
-      for(code_typet::argumentst::const_iterator
-          ait=code_type.arguments().begin();
-          ait!=code_type.arguments().end();
-          ait++)
+      for(const auto & ait : code_type.arguments())
       {
         exprt new_object("new_object");
         new_object.set("#lvalue", true);
-        new_object.type() = ait->type();
+        new_object.type() = ait.type();
 
-        if(ait->cmt_base_name()=="this")
+        if(ait.cmt_base_name()=="this")
         {
           fargs.has_object = true;
-          new_object.type() = ait->type().subtype();
+          new_object.type() = ait.type().subtype();
         }
 
         fargs.operands.push_back(new_object);

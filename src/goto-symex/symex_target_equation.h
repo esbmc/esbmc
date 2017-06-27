@@ -133,10 +133,8 @@ public:
   unsigned count_ignored_SSA_steps() const
   {
     unsigned i=0;
-    for(SSA_stepst::const_iterator
-        it=SSA_steps.begin();
-        it!=SSA_steps.end(); it++)
-      if(it->ignore) i++;
+    for(const auto & SSA_step : SSA_steps)
+      if(SSA_step.ignore) i++;
     return i;
   }
 

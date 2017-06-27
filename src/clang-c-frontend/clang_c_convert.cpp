@@ -1601,13 +1601,10 @@ bool clang_c_convertert::get_expr(
       const auto &declgroup = decl.getDeclGroup();
 
       codet decls("decl-block");
-      for (clang::DeclGroupRef::const_iterator
-        it = declgroup.begin();
-        it != declgroup.end();
-        ++it)
+      for (auto it : declgroup)
       {
         exprt single_decl;
-        if(get_decl(**it, single_decl))
+        if(get_decl(*it, single_decl))
           return true;
 
         decls.operands().push_back(single_decl);

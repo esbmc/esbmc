@@ -1264,9 +1264,9 @@ bool Parser::rOtherDeclaration(
 
     assert(!type_name.get_sub().empty());
 
-    for(unsigned i=0; i < type_name.get_sub().size(); i++)
+    for(auto & i : type_name.get_sub())
     {
-      if(type_name.get_sub()[i].id() == "operator")
+      if(i.id() == "operator")
       {
         is_operator = true;
         break;

@@ -31,11 +31,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void goto_convertt::finish_gotos()
 {
-  for(gotost::const_iterator it=targets.gotos.begin();
-      it!=targets.gotos.end();
-      it++)
+  for(auto it : targets.gotos)
   {
-    goto_programt::instructiont &i=**it;
+    goto_programt::instructiont &i=*it;
 
     if (is_code_goto2t(i.code))
     {
@@ -262,9 +260,8 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   // the THROW_DECL instruction is annotated with a list of IDs,
   // one per target
   irept::subt &throw_list = c.add("throw_list").get_sub();
-  for(unsigned i=0; i<expr.operands().size(); i++)
+  for(const auto & block : expr.operands())
   {
-    const exprt &block=expr.operands()[i];
     irept type = irept(block.get("throw_decl_id"));
 
     // grab the ID and add to THROW_DECL instruction
@@ -1642,11 +1639,9 @@ void goto_convertt::convert_switch(
 
   goto_programt tmp_cases;
 
-  for(casest::iterator it=targets.cases.begin();
-      it!=targets.cases.end();
-      it++)
+  for(auto & it : targets.cases)
   {
-    const caset &case_ops=it->second;
+    const caset &case_ops=it.second;
 
     assert(!case_ops.empty());
 
@@ -1661,7 +1656,7 @@ void goto_convertt::convert_switch(
     }
 
     goto_programt::targett x=tmp_cases.add_instruction();
-    x->make_goto(it->first);
+    x->make_goto(it.first);
     migrate_expr(guard_expr, x->guard);
     x->location=case_ops.front().find_location();
   }

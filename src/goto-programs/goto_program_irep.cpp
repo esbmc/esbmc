@@ -119,14 +119,12 @@ void convert(const irept &irep, goto_programt &program)
       lit != program.instructions.end() && nit != number_targets_list.end();
       lit++, nit++)
   {
-    for (std::list<unsigned>::iterator tit=nit->begin();
-         tit!=nit->end();
-         tit++)
+    for (unsigned int & tit : *nit)
     {
       goto_programt::targett fit = program.instructions.begin();
       for(; fit != program.instructions.end(); fit++)
       {
-        if(fit->location_number == *tit)
+        if(fit->location_number == tit)
         {
           lit->targets.push_back(fit);
           break;

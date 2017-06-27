@@ -51,12 +51,9 @@ void goto_convert_functionst::goto_convert()
     }
   );
 
-  for(symbol_listt::iterator
-      it=symbol_list.begin();
-      it!=symbol_list.end();
-      it++)
+  for(auto & it : symbol_list)
   {
-    convert_function(**it);
+    convert_function(*it);
   }
 
   functions.compute_location_numbers();
@@ -64,17 +61,11 @@ void goto_convert_functionst::goto_convert()
 
 bool goto_convert_functionst::hide(const goto_programt &goto_program)
 {
-  for(goto_programt::instructionst::const_iterator
-      i_it=goto_program.instructions.begin();
-      i_it!=goto_program.instructions.end();
-      i_it++)
+  for(const auto & instruction : goto_program.instructions)
   {
-    for(goto_programt::instructiont::labelst::const_iterator
-        l_it=i_it->labels.begin();
-        l_it!=i_it->labels.end();
-        l_it++)
+    for(const auto & label : instruction.labels)
     {
-      if(*l_it=="__ESBMC_HIDE")
+      if(label=="__ESBMC_HIDE")
         return true;
     }
   }
@@ -417,8 +408,8 @@ goto_convert_functionst::wallop_type(irep_idt name,
     return;
 
   // Iterate over our dependancies ensuring they're resolved.
-  for (std::set<irep_idt>::iterator it = deps.begin(); it != deps.end(); it++)
-    wallop_type(*it, typenames, sname);
+  for (const auto & dep : deps)
+    wallop_type(dep, typenames, sname);
 
   // And finally perform renaming.
   symbolt* s = context.find_symbol(name);
@@ -464,8 +455,8 @@ goto_convert_functionst::thrash_type_symbols(void)
     }
   );
 
-  for (typename_mapt::iterator it = typenames.begin(); it != typenames.end(); it++)
-    it->second.erase(it->first);
+  for (auto & it : typenames)
+    it.second.erase(it.first);
 
   // Now, repeatedly rename all types. When we encounter a type that contains
   // unresolved symbols, resolve it first, then include it into this type.

@@ -61,9 +61,9 @@ void cpp_exception_list_rec(
         dest.push_back(id2string(identifier)+suffix);
 
         // Save all the base classes
-        for(unsigned int i=0; i<bases.get_sub().size(); ++i)
+        for(const auto & i : bases.get_sub())
         {
-          typet base_type = bases.get_sub()[i].type();
+          typet base_type = i.type();
           identifier = base_type.identifier();
           dest.push_back(id2string(identifier)+suffix);
         }

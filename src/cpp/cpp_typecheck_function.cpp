@@ -64,11 +64,8 @@ void cpp_typecheckt::convert_arguments(
   code_typet::argumentst &arguments=
     function_type.arguments();
 
-  for(code_typet::argumentst::iterator
-      it=arguments.begin();
-      it!=arguments.end();
-      it++)
-    convert_argument(mode, *it);
+  for(auto & argument : arguments)
+    convert_argument(mode, argument);
 }
 
 void cpp_typecheckt::convert_function(symbolt &symbol)

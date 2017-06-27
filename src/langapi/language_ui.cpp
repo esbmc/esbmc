@@ -35,9 +35,9 @@ language_uit::~language_uit()
 
 bool language_uit::parse()
 {
-  for(unsigned i=0; i<_cmdline.args.size(); i++)
+  for(const auto & arg : _cmdline.args)
   {
-    if(parse(_cmdline.args[i]))
+    if(parse(arg))
       return true;
   }
 

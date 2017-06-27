@@ -185,10 +185,9 @@ goto_symext::symex_step(reachability_treet & art)
 
     replace_dynamic_allocation(deref_code);
 
-    for (std::vector<expr2tc>::iterator it = call.operands.begin();
-         it != call.operands.end(); it++)
-      if (!is_nil_expr(*it))
-        dereference(*it, false);
+    for (auto & operand : call.operands)
+      if (!is_nil_expr(operand))
+        dereference(operand, false);
 
     // Always run intrinsics, whether guard is false or not. This is due to the
     // unfortunate circumstance where a thread starts with false guard due to

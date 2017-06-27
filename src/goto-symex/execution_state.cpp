@@ -179,14 +179,12 @@ execution_statet::operator=(const execution_statet &ex)
   // updating their ex_state references. There isn't an elegant way of updating
   // them, it seems, while keeping the symex stuff ignorant of ex_state.
   // Oooooo, so this is where auto types would be useful...
-  for (std::vector<goto_symex_statet>::iterator it = threads_state.begin();
-       it != threads_state.end(); it++) {
-    for (goto_symex_statet::call_stackt::iterator it2 = it->call_stack.begin();
-         it2 != it->call_stack.end(); it2++) {
-      for (goto_symex_statet::goto_state_mapt::iterator it3 = it2->goto_state_map.begin();
-           it3 != it2->goto_state_map.end(); it3++) {
-        for (goto_symex_statet::goto_state_listt::iterator it4 = it3->second.begin();
-             it4 != it3->second.begin(); it4++) {
+  for (auto & it : threads_state) {
+    for (goto_symex_statet::call_stackt::iterator it2 = it.call_stack.begin();
+         it2 != it.call_stack.end(); it2++) {
+      for (auto & it3 : it2->goto_state_map) {
+        for (goto_symex_statet::goto_state_listt::iterator it4 = it3.second.begin();
+             it4 != it3.second.begin(); it4++) {
           ex_state_level2t &l2 = dynamic_cast<ex_state_level2t&>(it4->level2);
           l2.owner = this;
         }
@@ -707,10 +705,10 @@ execution_statet::execute_guard(void)
   if (is_false(parent_guard))
     guard_expr = parent_guard;
 
-  for (unsigned int i = 0; i < threads_state.size(); i++)
+  for (auto & i : threads_state)
   {
-    threads_state.at(i).global_guard.make_true();
-    threads_state.at(i).global_guard.add(get_guard_identifier());
+    i.global_guard.make_true();
+    i.global_guard.add(get_guard_identifier());
   }
 
   // Check to see whether or not the state guard is false, indicating we've
@@ -755,9 +753,8 @@ execution_statet::add_thread(const goto_programt *prog)
   // Unfortunately as each thread has a depenancy relation with every other
   // thread we have to do a lot of work to initialize a new one. And initially
   // all relations are '0', no transitions yet.
-  for (std::vector<std::vector<int> >::iterator it = dependancy_chain.begin();
-       it != dependancy_chain.end(); it++) {
-    it->push_back(0);
+  for (auto & it : dependancy_chain) {
+    it.push_back(0);
   }
   // And the new threads dependancies,
   dependancy_chain.push_back(std::vector<int>());
@@ -1076,9 +1073,8 @@ execution_statet::generate_hash(void) const
   crypto_hash state = l2->generate_l2_state_hash();
   std::string str = state.to_string();
 
-  for (std::vector<goto_symex_statet>::const_iterator it = threads_state.begin();
-       it != threads_state.end(); it++) {
-    goto_programt::const_targett pc = it->source.pc;
+  for (const auto & it : threads_state) {
+    goto_programt::const_targett pc = it.source.pc;
     int id = pc->location_number;
     std::stringstream s;
     s << id;
@@ -1394,9 +1390,8 @@ execution_statet::state_hashing_level2t::generate_l2_state_hash() const
   uint8_t *data = (uint8_t*)alloca(current_hashes.size() * CRYPTO_HASH_SIZE * sizeof(uint8_t));
 
   total = 0;
-  for (current_state_hashest::const_iterator it = current_hashes.begin();
-        it != current_hashes.end(); it++) {
-    memcpy(&data[total * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
+  for (const auto & current_hashe : current_hashes) {
+    memcpy(&data[total * CRYPTO_HASH_SIZE], current_hashe.second.hash, CRYPTO_HASH_SIZE);
     total++;
   }
 

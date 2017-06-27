@@ -122,14 +122,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     const struct_typet &strct = to_struct_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
-    for (struct_union_typet::componentst::const_iterator it = comps.begin();
-         it != comps.end(); it++) {
+    for (const auto & comp : comps) {
       type2tc ref;
 
       // Hacks: due to SFINAE, we might have a templated instantiation in
       // here that's invalid. Try to detect those and avoid converting them.
       // As that's just going to cause grief.
-      const irep_idt &this_name = it->get("name");
+      const irep_idt &this_name = comp.get("name");
       if (this_name != "" && ns) {
         const symbolt *component_sym;
         bool failed = ns->lookup(this_name, component_sym);
@@ -140,11 +139,11 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
           continue;
       }
 
-      migrate_type((const typet&)it->type(), ref, ns, cache);
+      migrate_type((const typet&)comp.type(), ref, ns, cache);
 
       members.push_back(ref);
-      names.push_back(it->get(typet::a_name));
-      pretty_names.push_back(it->get(typet::a_pretty_name));
+      names.push_back(comp.get(typet::a_name));
+      pretty_names.push_back(comp.get(typet::a_pretty_name));
     }
 
     irep_idt name = type.get("tag");
@@ -160,14 +159,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     const struct_union_typet &strct = to_union_type(type);
     const struct_union_typet::componentst comps = strct.components();
 
-    for (struct_union_typet::componentst::const_iterator it = comps.begin();
-         it != comps.end(); it++) {
+    for (const auto & comp : comps) {
       type2tc ref;
-      migrate_type((const typet&)it->type(), ref, ns, cache);
+      migrate_type((const typet&)comp.type(), ref, ns, cache);
 
       members.push_back(ref);
-      names.push_back(it->get(typet::a_name));
-      pretty_names.push_back(it->get(typet::a_pretty_name));
+      names.push_back(comp.get(typet::a_name));
+      pretty_names.push_back(comp.get(typet::a_pretty_name));
     }
 
     irep_idt name = type.get("tag");
@@ -198,12 +196,11 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
       ellipsis = true;
 
     const code_typet::argumentst &old_args = ref.arguments();
-    for (code_typet::argumentst::const_iterator it = old_args.begin();
-         it != old_args.end(); it++) {
+    for (const auto & old_arg : old_args) {
       type2tc tmp;
-      migrate_type(it->type(), tmp, ns, cache);
+      migrate_type(old_arg.type(), tmp, ns, cache);
       args.push_back(tmp);
-      arg_names.push_back(it->get_identifier());
+      arg_names.push_back(old_arg.get_identifier());
     }
 
     // Don't migrate return type if it's a symbol. There are a variety of C++
@@ -1568,12 +1565,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     const irept::subt &exceptions_thrown =expr.find("exception_list").get_sub();
 
     std::vector<irep_idt> expr_list;
-    for(irept::subt::const_iterator
-        e_it=exceptions_thrown.begin();
-        e_it!=exceptions_thrown.end();
-        e_it++)
+    for(const auto & e_it : exceptions_thrown)
     {
-      expr_list.push_back(e_it->id());
+      expr_list.push_back(e_it.id());
     }
 
     expr2tc operand;
@@ -1587,12 +1581,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == "code" && expr.statement() == "throw-decl") {
     std::vector<irep_idt> expr_list;
     const irept::subt &exceptions_thrown =expr.find("throw_list").get_sub();
-    for(irept::subt::const_iterator
-        e_it=exceptions_thrown.begin();
-        e_it!=exceptions_thrown.end();
-        e_it++)
+    for(const auto & e_it : exceptions_thrown)
     {
-      expr_list.push_back(e_it->id());
+      expr_list.push_back(e_it.id());
     }
 
     new_expr_ref = expr2tc(new code_cpp_throw_decl2t(expr_list));
@@ -2506,9 +2497,8 @@ migrate_expr_back(const expr2tc &ref)
       exprt operand = migrate_expr_back(ref2.operand);
       // 2nd op is "arguments".
       exprt args("arguments");
-      for (std::vector<expr2tc>::const_iterator it = ref2.arguments.begin();
-           it != ref2.arguments.end(); it++)
-        args.copy_to_operands(migrate_expr_back(*it));
+      for (const auto & argument : ref2.arguments)
+        args.copy_to_operands(migrate_expr_back(argument));
       theexpr.copy_to_operands(operand, args);
     } else if (ref2.kind == sideeffect2t::nondet) {
       ; // Do nothing

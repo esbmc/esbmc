@@ -14,12 +14,10 @@ void ansi_c_parsert::scopet::print(std::ostream &out) const
 {
   out << "Prefix: " << prefix << std::endl;
 
-  for(scopet::name_mapt::const_iterator n_it=name_map.begin();
-      n_it!=name_map.end();
-      n_it++)
+  for(const auto & n_it : name_map)
   {
-    out << "  ID: " << n_it->first
-        << " CLASS: " << n_it->second.id_class
+    out << "  ID: " << n_it.first
+        << " CLASS: " << n_it.second.id_class
         << std::endl;
   }
 }

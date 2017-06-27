@@ -344,11 +344,8 @@ int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
         msg += "  Exception type: " + id.as_string();
         msg += "\n  Allowed exceptions:";
 
-        for(goto_symex_statet::exceptiont::throw_list_sett::iterator
-            s_it1=except->throw_list_set.begin();
-            s_it1!=except->throw_list_set.end();
-            ++s_it1)
-          msg+= "\n   - " + std::string((*s_it1).c_str());
+        for(const auto & s_it1 : except->throw_list_set)
+          msg+= "\n   - " + std::string(s_it1.c_str());
 
         claim(gen_false_expr(), msg);
         return 0;
@@ -411,7 +408,7 @@ void goto_symext::symex_throw_decl()
     except->throw_list_set.clear();
 
     // Copy throw list to the set
-    for(unsigned i=0; i<throw_decl_list.size(); ++i)
-      except->throw_list_set.insert(throw_decl_list[i]);
+    for(const auto & i : throw_decl_list)
+      except->throw_list_set.insert(i);
   }
 }

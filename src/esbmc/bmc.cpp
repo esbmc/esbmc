@@ -694,13 +694,11 @@ bmct::ltl_run_thread(boost::shared_ptr<symex_target_equationt> &equation)
 
   // Start by turning all assertions that aren't the negative prefix
   // assertion into skips.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->is_assert()) {
-      if (it->comment != "LTL_BAD") {
-        it->type = goto_trace_stept::SKIP;
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_BAD") {
+        SSA_step.type = goto_trace_stept::SKIP;
       } else {
         num_asserts++;
       }
@@ -718,23 +716,19 @@ bmct::ltl_run_thread(boost::shared_ptr<symex_target_equationt> &equation)
   }
 
   // Didn't find it; turn skip steps back into assertions.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->type == goto_trace_stept::SKIP)
-      it->type = goto_trace_stept::ASSERT;
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
   }
 
   // Try again, with LTL_FAILING
   num_asserts = 0;
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->is_assert()) {
-      if (it->comment != "LTL_FAILING") {
-        it->type = goto_trace_stept::SKIP;
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_FAILING") {
+        SSA_step.type = goto_trace_stept::SKIP;
       } else {
         num_asserts++;
       }
@@ -752,23 +746,19 @@ bmct::ltl_run_thread(boost::shared_ptr<symex_target_equationt> &equation)
   }
 
   // Didn't find it; turn skip steps back into assertions.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->type == goto_trace_stept::SKIP)
-      it->type = goto_trace_stept::ASSERT;
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
   }
 
   // Try again, with LTL_SUCCEEDING
   num_asserts = 0;
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->is_assert()) {
-      if (it->comment != "LTL_SUCCEEDING") {
-        it->type = goto_trace_stept::SKIP;
+    if (SSA_step.is_assert()) {
+      if (SSA_step.comment != "LTL_SUCCEEDING") {
+        SSA_step.type = goto_trace_stept::SKIP;
       } else {
         num_asserts++;
       }
@@ -787,12 +777,10 @@ bmct::ltl_run_thread(boost::shared_ptr<symex_target_equationt> &equation)
   }
 
   // Otherwise, we just got a good prefix.
-  for(symex_target_equationt::SSA_stepst::iterator
-      it=equation->SSA_steps.begin();
-      it!=equation->SSA_steps.end(); it++)
+  for(auto & SSA_step : equation->SSA_steps)
   {
-    if (it->type == goto_trace_stept::SKIP)
-      it->type = goto_trace_stept::ASSERT;
+    if (SSA_step.type == goto_trace_stept::SKIP)
+      SSA_step.type = goto_trace_stept::ASSERT;
   }
 
   return ltl_res_good;

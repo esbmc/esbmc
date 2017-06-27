@@ -368,10 +368,10 @@ void cpp_typecheckt::typecheck_class_template_member(
   const irept &instantiated_with =
     template_symbol.value.add("instantiated_with");
 
-  for(unsigned i=0; i<instantiated_with.get_sub().size(); i++)
+  for(const auto & i : instantiated_with.get_sub())
   {
     const cpp_template_args_tct &tc_template_args=
-      static_cast<const cpp_template_args_tct &>(instantiated_with.get_sub()[i]);
+      static_cast<const cpp_template_args_tct &>(i);
 
     cpp_declarationt decl_tmp=declaration;
 
@@ -406,14 +406,11 @@ std::string cpp_typecheckt::class_template_identifier(
 
   // these are probably not needed -- templates
   // should be unique in a namespace
-  for(template_typet::parameterst::const_iterator
-      it=template_type.parameters().begin();
-      it!=template_type.parameters().end();
-      it++)
+  for(const auto & it : template_type.parameters())
   {
     if(counter!=0) identifier+=",";
 
-    if(it->id()=="type")
+    if(it.id()=="type")
       identifier+="Type"+i2string(counter);
     else
       identifier+="Non_Type"+i2string(counter);
@@ -688,15 +685,10 @@ cpp_scopet &cpp_typecheckt::typecheck_template_parameters(
 
   unsigned anon_count=0;
 
-  for(template_typet::parameterst::iterator
-      it=parameters.begin();
-      it!=parameters.end();
-      it++)
+  for(auto & parameter : parameters)
   {
-    exprt &parameter=*it;
-
     cpp_declarationt declaration;
-    declaration.swap(static_cast<cpp_declarationt &>(parameter));
+    declaration.swap(parameter);
 
     cpp_declarator_convertert cpp_declarator_converter(*this);
 
@@ -728,12 +720,15 @@ cpp_scopet &cpp_typecheckt::typecheck_template_parameters(
 
     if(cpp_declarator_converter.is_typedef)
     {
-      parameter=exprt("type", typet("symbol"));
+      parameter=template_parametert("type", typet("symbol"));
       parameter.type().identifier(symbol.name);
       parameter.type().location()=declaration.find_location();
     }
     else
-      parameter=symbol_expr(symbol);
+    {
+      parameter = template_parametert("symbol", symbol.type);
+      parameter.identifier(symbol.name);
+    }
 
     // set (non-typechecked) default value
     if(default_value.is_not_nil())

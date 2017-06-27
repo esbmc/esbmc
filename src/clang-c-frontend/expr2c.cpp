@@ -48,21 +48,18 @@ void expr2ct::get_shorthands(const exprt &expr)
 {
   get_symbols(expr);
 
-  for(std::set<exprt>::const_iterator it=
-      symbols.begin();
-      it!=symbols.end();
-      it++)
+  for(const auto & symbol : symbols)
   {
-    std::string sh=id_shorthand(*it);
+    std::string sh=id_shorthand(symbol);
 
     std::pair<std::map<irep_idt, exprt>::iterator, bool> result=
       shorthands.insert(
-        std::pair<irep_idt, exprt>(sh, *it));
+        std::pair<irep_idt, exprt>(sh, symbol));
 
     if(!result.second)
-      if(result.first->second!=*it)
+      if(result.first->second!=symbol)
       {
-        ns_collision.insert(it->identifier());
+        ns_collision.insert(symbol.identifier());
         ns_collision.insert(result.first->second.identifier());
       }
   }

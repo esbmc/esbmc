@@ -23,14 +23,11 @@ code_function_callt get_destructor(
     const struct_typet::componentst &components=
       struct_type.methods();
 
-    for(struct_typet::componentst::const_iterator
-        it=components.begin();
-        it!=components.end();
-        it++)
+    for(const auto & component : components)
     {
-      if(it->type().is_code())
+      if(component.type().is_code())
       {
-        const code_typet &code_type=to_code_type(it->type());
+        const code_typet &code_type=to_code_type(component.type());
 
         if(code_type.return_type().id()=="destructor" &&
            code_type.arguments().size()==1)
@@ -40,8 +37,8 @@ code_function_callt get_destructor(
           if(arg_type.id()=="pointer" &&
              ns.follow(arg_type.subtype())==type)
           {
-            exprt symbol_expr("symbol", it->type());
-            symbol_expr.identifier(it->name());
+            exprt symbol_expr("symbol", component.type());
+            symbol_expr.identifier(component.name());
 
             code_function_callt function_call;
             function_call.function()=symbol_expr;

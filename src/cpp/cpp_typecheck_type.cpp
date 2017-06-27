@@ -145,17 +145,15 @@ void cpp_typecheckt::typecheck_type(typet &type)
 
     code_typet::argumentst &arguments=code_type.arguments();
 
-    for(code_typet::argumentst::iterator it=arguments.begin();
-        it!=arguments.end();
-        it++)
+    for(auto & argument : arguments)
     {
-      typecheck_type(it->type());
+      typecheck_type(argument.type());
 
       // see if there is a default value
-      if(it->has_default_value())
+      if(argument.has_default_value())
       {
-        typecheck_expr(it->default_value());
-        implicit_typecast(it->default_value(), it->type());
+        typecheck_expr(argument.default_value());
+        implicit_typecast(argument.default_value(), argument.type());
       }
     }
   }

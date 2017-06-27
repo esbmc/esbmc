@@ -920,9 +920,8 @@ bool simplify_exprt::simplify_concatenation(exprt &expr)
   if(is_bitvector_type(expr.type()))
   {
     // first, turn bool into bvec[1]
-    for(unsigned i=0; i<expr.operands().size(); i++)
+    for(auto & op : expr.operands())
     {
-      exprt &op=expr.operands()[i];
       if(op.is_true() || op.is_false())
       {
         bool value=op.is_true();
@@ -1576,8 +1575,8 @@ bool simplify_exprt::simplify_bitnot(exprt &expr)
       {
         std::string value=op.value().as_string();
 
-        for(unsigned i=0; i<value.size(); i++)
-          value[i]=(value[i]=='0')?'1':'0';
+        for(char & i : value)
+          i=(i=='0')?'1':'0';
 
         exprt tmp("constant", op.type());
         tmp.value(value);

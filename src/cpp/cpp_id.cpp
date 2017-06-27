@@ -29,10 +29,8 @@ void cpp_idt::print(std::ostream &out, unsigned indent) const
 
   if(!sub.empty())
   {
-    for(cpp_id_mapt::const_iterator it=sub.begin();
-        it!=sub.end();
-        it++)
-      it->second.print(out, indent+2);
+    for(const auto & it : sub)
+      it.second.print(out, indent+2);
 
     out << std::endl;
   }

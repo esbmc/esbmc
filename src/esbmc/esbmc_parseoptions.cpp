@@ -662,8 +662,8 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         }
       }
 
-      for(short i = 0; i < 3; ++i)
-        kill(children_pid[i], SIGKILL);
+      for(int i : children_pid)
+        kill(i, SIGKILL);
 
       // Check if a solution was found by the base case
       if(bc_finished && (bc_solution != 0) && (bc_solution != max_k_step))

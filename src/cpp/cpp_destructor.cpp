@@ -83,18 +83,15 @@ codet cpp_typecheckt::cpp_destructor(
 
     irep_idt dtor_name;
 
-    for(struct_typet::componentst::const_iterator
-        it=components.begin();
-        it!=components.end();
-        it++)
+    for(const auto & component : components)
     {
-      const typet &type=it->type();
+      const typet &type=component.type();
 
-      if(!it->get_bool("from_base") &&
+      if(!component.get_bool("from_base") &&
          type.id()=="code" &&
          type.return_type().id()=="destructor")
       {
-        dtor_name=it->base_name();
+        dtor_name=component.base_name();
         break;
       }
     }

@@ -37,12 +37,11 @@ void cpp_scopet::lookup(
   }
 
   // using directives
-  for(id_sett::iterator it = using_set.begin();
-      it != using_set.end(); it++)
+  for(auto it : using_set)
   {
-    cpp_idt& using_id = **it;
+    cpp_idt& using_id = *it;
     if(using_id.base_name == base_name)
-      id_set.insert(*it);
+      id_set.insert(it);
 
     if(using_id.is_scope)
     {
@@ -101,12 +100,11 @@ void cpp_scopet::lookup(
   }
 
   // using directives
-  for(id_sett::iterator it = using_set.begin();
-      it != using_set.end(); it++)
+  for(auto it : using_set)
   {
-    cpp_idt& using_id = **it;
+    cpp_idt& using_id = *it;
     if(using_id.base_name == base_name && using_id.id_class == id_class)
-      id_set.insert(*it);
+      id_set.insert(it);
 
     if(using_id.is_scope)
     {
@@ -132,12 +130,11 @@ void cpp_scopet::lookup_id(
   cpp_idt::id_classt id_class,
   id_sett &id_set)
 {
-  for(cpp_id_mapt::iterator n_it=sub.begin();
-      n_it!=sub.end(); n_it++)
+  for(auto & n_it : sub)
   {
-    if(n_it->second.identifier == identifier
-       && n_it->second.id_class == id_class)
-          id_set.insert(&n_it->second);
+    if(n_it.second.identifier == identifier
+       && n_it.second.id_class == id_class)
+          id_set.insert(&n_it.second);
   }
 
   if(this->identifier == identifier

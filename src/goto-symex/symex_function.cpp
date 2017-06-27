@@ -245,9 +245,9 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
 
   // read the arguments -- before the locality renaming
   std::vector<expr2tc> arguments = call.operands;
-  for (unsigned i = 0; i < arguments.size(); i++)
+  for (auto & argument : arguments)
   {
-    cur_state->rename(arguments[i]);
+    cur_state->rename(argument);
   }
 
   // Rename the return value to level1, identifying the data object / storage
@@ -313,14 +313,12 @@ get_function_list(const expr2tc &expr)
 
     // Get sub items, them iterate over adding the relevant guard
     l1 = get_function_list(ifexpr.true_value);
-    for (std::list<std::pair<guardt, symbol2tc> >::iterator it = l1.begin();
-         it != l1.end(); it++)
-      it->first.add(guardexpr);
+    for (auto & it : l1)
+      it.first.add(guardexpr);
 
     l2 = get_function_list(ifexpr.false_value);
-    for (std::list<std::pair<guardt, symbol2tc> >::iterator it = l2.begin();
-         it != l2.end(); it++)
-      it->first.add(notguardexpr);
+    for (auto & it : l2)
+      it.first.add(notguardexpr);
 
     l1.splice(l1.begin(), l2);
     return l1;
@@ -380,15 +378,14 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
   std::list<std::pair<guardt, symbol2tc> > l = get_function_list(func_ptr);
 
   // Store.
-  for (std::list<std::pair<guardt, symbol2tc> >::iterator it = l.begin();
-       it != l.end(); it++) {
+  for (auto & it : l) {
 
     goto_functionst::function_mapt::const_iterator fit =
-      goto_functions.function_map.find(it->second->thename);
+      goto_functions.function_map.find(it.second->thename);
     if (fit == goto_functions.function_map.end()) {
-      if (body_warnings.insert(it->second->thename).second) {
+      if (body_warnings.insert(it.second->thename).second) {
         std::string msg = "**** WARNING: no body for function " + id2string(
-          it->second->thename);
+          it.second->thename);
         std::cerr << msg << std::endl;
       }
 
@@ -397,9 +394,9 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
       // Where it probably shouldn't, as that var is defined. Module name
       // difference?
     } else if (!fit->second.body_available) {
-      if (body_warnings.insert(it->second->thename).second) {
+      if (body_warnings.insert(it.second->thename).second) {
         std::string msg = "**** WARNING: no body for function " + id2string(
-          it->second->thename);
+          it.second->thename);
         std::cerr << msg << std::endl;
       }
 
@@ -413,12 +410,12 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
 
     cur_state->top().cur_function_ptr_targets.push_back(
       std::pair<goto_programt::const_targett, symbol2tc>(
-        fit->second.body.instructions.begin(), it->second)
+        fit->second.body.instructions.begin(), it.second)
       );
 
     goto_state_list.push_back(statet::goto_statet(*cur_state));
     statet::goto_statet &new_state = goto_state_list.back();
-    expr2tc guardexpr = it->first.as_expr();
+    expr2tc guardexpr = it.first.as_expr();
     cur_state->rename(guardexpr);
     new_state.guard.add(guardexpr);
   }

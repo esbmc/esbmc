@@ -71,8 +71,8 @@ public:
   unsigned count_roots() const
   {
     unsigned c=0;
-    for(unsigned i=0; i<nodes.size(); i++)
-      if(nodes[i].root) c++;
+    for(auto node : nodes)
+      if(node.root) c++;
     return c;
   }
   

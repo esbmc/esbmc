@@ -19,11 +19,8 @@ void cpp_typecheckt::convert(cpp_linkage_spect &linkage_spec)
     current_mode="cpp";
 
   // do the declarations
-  for(cpp_linkage_spect::itemst::iterator
-      it=linkage_spec.items().begin();
-      it!=linkage_spec.items().end();
-      it++)
-    convert(*it);
+  for(auto & it : linkage_spec.items())
+    convert(it);
 
   // back to previous linkage spec
   current_mode=old_mode;

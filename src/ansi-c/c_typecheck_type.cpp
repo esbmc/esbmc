@@ -58,9 +58,8 @@ void c_typecheck_baset::typecheck_code_type(code_typet &type)
   }
   else
   {
-    for(unsigned i=0; i<code_type.arguments().size(); i++)
+    for(auto & argument : code_type.arguments())
     {
-      code_typet::argumentt &argument=code_type.arguments()[i];
       typet &type=argument.type();
 
       if(type.id()=="KnR")
@@ -154,12 +153,9 @@ void c_typecheck_baset::typecheck_compound_type(typet &type)
   struct_typet &struct_type=to_struct_type(type);
   struct_typet::componentst &components=struct_type.components();
 
-  for(struct_typet::componentst::iterator
-      it=components.begin();
-      it!=components.end();
-      it++)
+  for(auto & component : components)
   {
-    typet &type=it->type();
+    typet &type=component.type();
 
     typecheck_type(type);
 
@@ -205,11 +201,8 @@ void c_typecheck_baset::typecheck_compound_type(typet &type)
         const struct_typet::componentst &c_components=
           c_struct_type.components();
 
-        for(struct_typet::componentst::const_iterator
-            c_it=c_components.begin();
-            c_it!=c_components.end();
-            c_it++)
-          it=components.insert(it, *c_it);
+        for(const auto & c_component : c_components)
+          it=components.insert(it, c_component);
       }
       else
       {

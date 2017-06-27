@@ -14,11 +14,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void ansi_c_convertt::convert(ansi_c_parse_treet &ansi_c_parse_tree)
 {
-  for(ansi_c_parse_treet::declarationst::iterator
-      it=ansi_c_parse_tree.declarations.begin();
-      it!=ansi_c_parse_tree.declarations.end();
-      ++it)
-    convert_declaration(*it);
+  for(auto & declaration : ansi_c_parse_tree.declarations)
+    convert_declaration(declaration);
 }
 
 void ansi_c_convertt::convert_declaration(ansi_c_declarationt &declaration)
@@ -281,17 +278,14 @@ void ansi_c_convertt::convert_type(
       arguments.pop_back();
     }
 
-    for(code_typet::argumentst::iterator
-        it=arguments.begin();
-        it!=arguments.end();
-        ++it)
+    for(auto & it : arguments)
     {
-      if(it->id()=="declaration")
+      if(it.id()=="declaration")
       {
         code_typet::argumentt argument;
 
         ansi_c_declarationt &declaration=
-          to_ansi_c_declaration(*it);
+          to_ansi_c_declaration(it);
 
         convert_type(declaration.type());
 
@@ -303,12 +297,12 @@ void ansi_c_convertt::convert_type(
 
         argument.set_identifier(id2string(declaration.get_name()));
 
-        it->swap(argument);
+        it.swap(argument);
       }
-      else if(it->id()=="ansi_c_ellipsis")
+      else if(it.id()=="ansi_c_ellipsis")
         throw "ellipsis only allowed as last argument";
       else
-        throw "unexpected argument: "+it->id_string();
+        throw "unexpected argument: "+it.id_string();
     }
   }
   else if(type.is_array())

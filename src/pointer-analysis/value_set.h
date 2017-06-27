@@ -432,11 +432,8 @@ public:
   /** Add a value set for each variable in the given list. */
   void add_vars(const std::list<entryt> &vars)
   {
-    for(std::list<entryt>::const_iterator
-        it=vars.begin();
-        it!=vars.end();
-        it++)
-      add_var(*it);
+    for(const auto & var : vars)
+      add_var(var);
   }
 
   /** Dump the value set's textual representation to the given iostream.

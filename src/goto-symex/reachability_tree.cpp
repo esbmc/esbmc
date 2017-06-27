@@ -134,9 +134,8 @@ void
 reachability_treet::post_hash_collision_cleanup(void)
 {
 
-  for (std::vector<bool>::iterator it = get_cur_state().DFS_traversed.begin();
-       it != get_cur_state().DFS_traversed.end(); it++ )
-    *it = true;
+  for (auto && it : get_cur_state().DFS_traversed)
+    it = true;
 
   return;
 }

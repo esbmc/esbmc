@@ -51,12 +51,9 @@ void cpp_typecheckt::typecheck_throw_decl(codet &code)
 {
   codet::operandst &operands=code.operands();
 
-  for(codet::operandst::iterator
-      it=operands.begin();
-      it!=operands.end();
-      it++)
+  for(auto & operand : operands)
   {
-    codet &op=to_code(*it);
+    codet &op=to_code(operand);
 
     if(op.operands().size()!=1)
     {
@@ -73,7 +70,7 @@ void cpp_typecheckt::typecheck_throw_decl(codet &code)
     assert(type.is_not_nil());
 
     // annotate exception ID
-    it->set("throw_decl_id", cpp_exception_id(op.op0().type(), *this));
+    operand.set("throw_decl_id", cpp_exception_id(op.op0().type(), *this));
   }
 }
 

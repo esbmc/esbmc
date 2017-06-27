@@ -505,13 +505,10 @@ bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
       const struct_typet::componentst &components=
         struct_type.components();
 
-      for(struct_typet::componentst::const_iterator
-          it=components.begin();
-          it!=components.end();
-          it++)
+      for(const auto & component : components)
       {
-        if(!it->get_bool("from_base") &&
-           it->base_name() == op_name)
+        if(!component.get_bool("from_base") &&
+           component.base_name() == op_name)
         {
           found_in_struct = true;
           break;
@@ -1302,11 +1299,11 @@ void cpp_typecheckt::typecheck_expr_cpp_name(
   locationt location=
     to_cpp_name(expr).location();
 
-  for(unsigned i=0; i<expr.get_sub().size(); i++)
+  for(auto & i : expr.get_sub())
   {
-    if(expr.get_sub()[i].id()=="cpp-name")
+    if(i.id()=="cpp-name")
     {
-      typet &type=static_cast<typet &>(expr.get_sub()[i]);
+      typet &type=static_cast<typet &>(i);
       typecheck_type(type);
 
       std::string tmp="("+cpp_type2name(type)+")";

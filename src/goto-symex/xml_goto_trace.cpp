@@ -26,12 +26,9 @@ void convert(
 
   locationt previous_location;
 
-  for(goto_tracet::stepst::const_iterator
-      it=goto_trace.steps.begin();
-      it!=goto_trace.steps.end();
-      it++)
+  for(const auto & step : goto_trace.steps)
   {
-    const locationt &location=it->pc->location;
+    const locationt &location=step.pc->location;
     
     xmlt xml_location;
     if(location.is_not_nil() && location.get_file()!="")
@@ -40,15 +37,15 @@ void convert(
       xml_location.name="location";
     }
     
-    switch(it->type)
+    switch(step.type)
     {
     case goto_trace_stept::ASSERT:
-      if(!it->guard)
+      if(!step.guard)
       {
         xmlt &xml_failure=xml.new_element("failure");
-        xml_failure.new_element("reason").data=xmlt::escape(id2string(it->comment));
+        xml_failure.new_element("reason").data=xmlt::escape(id2string(step.comment));
         
-        xml_failure.new_element("thread").data=i2string(it->thread_nr);
+        xml_failure.new_element("thread").data=i2string(step.thread_nr);
 
         if(xml_location.name!="")
           xml_failure.new_element().swap(xml_location);
@@ -59,10 +56,10 @@ void convert(
       {
         irep_idt identifier;
 
-        if (!is_nil_expr(it->original_lhs))
-          identifier = to_symbol2t(it->original_lhs).get_symbol_name();
+        if (!is_nil_expr(step.original_lhs))
+          identifier = to_symbol2t(step.original_lhs).get_symbol_name();
         else
-          identifier = to_symbol2t(it->lhs).get_symbol_name();
+          identifier = to_symbol2t(step.lhs).get_symbol_name();
           
         xmlt &xml_assignment=xml.new_element("assignment");
 
@@ -71,11 +68,11 @@ void convert(
 
         std::string value_string, type_string;
         
-        if (!is_nil_expr(it->value)) {
+        if (!is_nil_expr(step.value)) {
           value_string = from_expr(ns, identifier,
-                                   migrate_expr_back(it->value));
+                                   migrate_expr_back(step.value));
           type_string=from_type(ns, identifier,
-                                migrate_type_back(it->value->type));
+                                migrate_type_back(step.value->type));
         }
 
         const symbolt *symbol;
@@ -91,13 +88,13 @@ void convert(
           xml_assignment.new_element("mode").data=xmlt::escape(id2string(symbol->mode));
         }
 
-        xml_assignment.new_element("thread").data=i2string(it->thread_nr);
+        xml_assignment.new_element("thread").data=i2string(step.thread_nr);
         xml_assignment.new_element("identifier").data=xmlt::escape(id2string(identifier));
         xml_assignment.new_element("base_name").data=xmlt::escape(id2string(base_name));
         xml_assignment.new_element("display_name").data=xmlt::escape(id2string(display_name));
         xml_assignment.new_element("value").data=xmlt::escape(id2string(value_string));
         xml_assignment.new_element("type").data=xmlt::escape(id2string(type_string));
-        xml_assignment.new_element("step_nr").data=i2string(it->step_nr);
+        xml_assignment.new_element("step_nr").data=i2string(step.step_nr);
       }
       break;
       
@@ -107,16 +104,16 @@ void convert(
 
         std::list<exprt> vec;
 
-        for (std::list<expr2tc>::const_iterator it2 = it->output_args.begin();
-             it2 != it->output_args.end(); it2++) {
+        for (std::list<expr2tc>::const_iterator it2 = step.output_args.begin();
+             it2 != step.output_args.end(); it2++) {
           vec.push_back(migrate_expr_back(*it2));
         }
 
-        printf_formatter(it->format_string, vec);
+        printf_formatter(step.format_string, vec);
         std::string text=printf_formatter.as_string();
         xmlt &xml_output=xml.new_element("output");
-        xml_output.new_element("step_nr").data=i2string(it->step_nr);
-        xml_output.new_element("thread").data=i2string(it->thread_nr);
+        xml_output.new_element("step_nr").data=i2string(step.step_nr);
+        xml_output.new_element("thread").data=i2string(step.thread_nr);
         xml_output.new_element("text").data=xmlt::escape(text);
         xml_output.new_element().swap(xml_location);
       }
@@ -129,8 +126,8 @@ void convert(
         if(xml_location.name!="")
         {
           xmlt &xml_location_only=xml.new_element("location-only");
-          xml_location_only.new_element("step_nr").data=i2string(it->step_nr);
-          xml_location_only.new_element("thread").data=i2string(it->thread_nr);
+          xml_location_only.new_element("step_nr").data=i2string(step.step_nr);
+          xml_location_only.new_element("thread").data=i2string(step.thread_nr);
           xml_location_only.new_element().swap(xml_location);
         }
       }

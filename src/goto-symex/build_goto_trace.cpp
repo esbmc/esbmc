@@ -54,12 +54,8 @@ void build_goto_trace(
     if(!is_nil_expr(SSA_step.lhs))
       goto_trace_step.value = smt_conv->get(SSA_step.lhs);
 
-    for(std::list<expr2tc>::const_iterator
-        j=SSA_step.converted_output_args.begin();
-        j!=SSA_step.converted_output_args.end();
-        j++)
+    for(const auto & arg : SSA_step.converted_output_args)
     {
-      const expr2tc &arg = *j;
       if (is_constant_expr(arg))
         goto_trace_step.output_args.push_back(arg);
       else
