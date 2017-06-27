@@ -90,7 +90,7 @@ pick_solver(bool int_encoding, const namespacet &ns,
             array_iface **array_api)
 {
   unsigned int i;
-  std::string the_solver = "";
+  std::string the_solver;
 
   for (i = 0; i < total_num_of_solvers; i++) {
     if (options.get_bool_option(list_of_all_solvers[i])) {

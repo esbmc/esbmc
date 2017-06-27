@@ -287,8 +287,8 @@ void generate_goto_trace_in_violation_graphml_format(
   boost::property_tree::ptree graph;
   std::map<std::string, int> function_control_map;
   boost::property_tree::ptree last_created_node;
-  std::string last_function = "";
-  std::string last_ver_filename = "";
+  std::string last_function;
+  std::string last_ver_filename;
   bool already_initialized = false;
 
   create_graph(graph, verification_file, specification, false);
@@ -474,8 +474,8 @@ void generate_goto_trace_in_correctness_graphml_format(
   std::map<std::string, int> function_control_map;
 
   boost::property_tree::ptree last_created_node;
-  std::string last_function = "";
-  std::string last_ver_file = "";
+  std::string last_function;
+  std::string last_ver_file;
 
   create_graph(graph, verification_file, specification, true);
   boost::property_tree::ptree first_node;

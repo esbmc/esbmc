@@ -2542,7 +2542,7 @@ void clang_c_convertert::get_start_location_from_stmt(
 {
   sm = &ASTContext->getSourceManager();
 
-  std::string function_name = "";
+  std::string function_name;
 
   if(current_functionDecl)
     function_name = current_functionDecl->getName().str();
@@ -2559,7 +2559,7 @@ void clang_c_convertert::get_final_location_from_stmt(
 {
   sm = &ASTContext->getSourceManager();
 
-  std::string function_name = "";
+  std::string function_name;
 
   if(current_functionDecl)
     function_name = current_functionDecl->getName().str();
@@ -2576,7 +2576,7 @@ void clang_c_convertert::get_location_from_decl(
 {
   sm = &ASTContext->getSourceManager();
 
-  std::string function_name = "";
+  std::string function_name;
 
   if(decl.getDeclContext()->isFunctionOrMethod())
   {

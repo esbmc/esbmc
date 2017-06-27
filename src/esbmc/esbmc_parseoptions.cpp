@@ -1385,7 +1385,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
       if (s.name.as_string().find("__ESBMC_property_") != std::string::npos)
       {
         // Munge back into the shape of an actual string
-        std::string str = "";
+        std::string str;
         forall_operands(iter2, s.value) {
           char c = (char)strtol(iter2->value().as_string().c_str(), nullptr, 2);
           if (c != 0)
@@ -1484,7 +1484,7 @@ expr2tc cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::
   languagest languages(ns, MODE_C);
 
   std::string expr_str = strings["__ESBMC_property_" + name];
-  std::string dummy_str = "";
+  std::string dummy_str;
 
   languages.to_expr(expr_str, dummy_str, main_expr, ui_message_handler);
 

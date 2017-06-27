@@ -48,7 +48,7 @@ std::string execute_cmd(std::string command)
   if (!pipe)
     return "ERROR";
   char buffer[128];
-  std::string result = "";
+  std::string result;
   while (!feof(pipe))
   {
     if (fgets(buffer, 128, pipe) != nullptr)

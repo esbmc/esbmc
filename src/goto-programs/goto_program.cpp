@@ -84,7 +84,7 @@ void goto_programt::instructiont::output_instruction(
 
   case RETURN:
     {
-    std::string arg = "";
+    std::string arg;
     const code_return2t &ref = to_code_return2t(code);
     if (!is_nil_expr(ref.operand))
       arg = from_expr(ns, "", ref.operand);
