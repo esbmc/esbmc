@@ -144,7 +144,7 @@ void get_code(const irept &location, std::string &dest)
 
   for(int l=line_start; l<=line_end && in; l++)
   {
-    lines.push_back(linet());
+    lines.emplace_back();
 
     std::string &line=lines.back().text;
     std::getline(in, line);

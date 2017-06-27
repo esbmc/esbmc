@@ -68,7 +68,7 @@ void irep_serializationt::read_irep(
   while (in.peek()=='S')
   {
     in.get();
-    irep.get_sub().push_back(irept());
+    irep.get_sub().emplace_back();
     reference_convert(in, irep.get_sub().back());
   }
   

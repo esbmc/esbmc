@@ -86,8 +86,8 @@ array_convt::new_array_id()
 
   array_relations.push_back(touched);
 
-  array_valuation.push_back(array_update_vect());
-  array_valuation.back().push_back(ast_vect());
+  array_valuation.emplace_back();
+  array_valuation.back().emplace_back();
 
   return new_base_array_id;
 }
@@ -303,7 +303,7 @@ array_convt::mk_unbounded_store(const array_ast *ma,
   array_updates[ma->base_array_id].insert(w);
 
   // Add storage for the eventual collation of all these values
-  array_valuation[ma->base_array_id].push_back(ast_vect());
+  array_valuation[ma->base_array_id].emplace_back();
 
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
@@ -367,7 +367,7 @@ array_convt::unbounded_array_ite(smt_astt cond,
   array_updates[new_arr_id].insert(w);
 
   // Add storage for the eventual collation of all these values
-  array_valuation[new_arr_id].push_back(ast_vect());
+  array_valuation[new_arr_id].emplace_back();
 
   return newarr;
 }

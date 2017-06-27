@@ -794,7 +794,7 @@ bool clang_c_convertert::get_type(
         if(get_type(ptype, param_type))
           return true;
 
-        type.arguments().push_back(param_type);
+        type.arguments().emplace_back(param_type);
       }
 
       // Apparently, if the type has no arguments, we assume ellipsis

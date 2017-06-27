@@ -71,7 +71,7 @@ insert_base_type(typet &dest, const typet &base_type)
       p=&(t.subtypes().back());
       if (p->id() != "pointer" && p->id() != "merged_type" &&
           !p->is_array() && p->id() !=  "incomplete_array") {
-        t.subtypes().push_back(typet());
+        t.subtypes().emplace_back();
         p=&(t.subtypes().back());
         p->make_nil();
       }

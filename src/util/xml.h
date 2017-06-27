@@ -78,14 +78,14 @@ public:
 
   xmlt &new_element(const std::string &name)
   {
-    elements.push_back(xmlt());
+    elements.emplace_back();
     elements.back().name=name;
     return elements.back();
   }
 
   xmlt &new_element()
   {
-    elements.push_back(xmlt());
+    elements.emplace_back();
     return elements.back();
   }
 

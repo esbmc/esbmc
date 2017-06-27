@@ -28,7 +28,7 @@ void symex_target_equationt::assignment(
 {
   assert(!is_nil_expr(lhs));
 
-  SSA_steps.push_back(SSA_stept());
+  SSA_steps.emplace_back();
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
@@ -51,7 +51,7 @@ void symex_target_equationt::output(
   const std::string &fmt,
   const std::list<expr2tc> &args)
 {
-  SSA_steps.push_back(SSA_stept());
+  SSA_steps.emplace_back();
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
@@ -69,7 +69,7 @@ void symex_target_equationt::assumption(
   const expr2tc &cond,
   const sourcet &source)
 {
-  SSA_steps.push_back(SSA_stept());
+  SSA_steps.emplace_back();
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
@@ -88,7 +88,7 @@ void symex_target_equationt::assertion(
   std::vector<stack_framet> stack_trace,
   const sourcet &source)
 {
-  SSA_steps.push_back(SSA_stept());
+  SSA_steps.emplace_back();
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
@@ -111,7 +111,7 @@ symex_target_equationt::renumber(
 {
   assert(is_symbol2t(symbol));
   assert(is_bv_type(size));
-  SSA_steps.push_back(SSA_stept());
+  SSA_steps.emplace_back();
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
@@ -352,7 +352,7 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
   : symex_target_equationt(_ns),
     conv(_conv)
 {
-  assert_vec_list.push_back(smt_convt::ast_vec());
+  assert_vec_list.emplace_back();
   assumpt_chain.push_back(conv.convert_ast(gen_true_expr()));
   cvt_progress = SSA_steps.end();
 }

@@ -1122,9 +1122,8 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
   std::vector<matcht> matches;
 
   // the baseline
-  matches.push_back(
-    matcht(full_template_args_tc, full_template_args_tc,
-           primary_template_symbol.name));
+  matches.emplace_back(full_template_args_tc, full_template_args_tc,
+           primary_template_symbol.name);
 
   for(auto it : id_set)
   {
@@ -1201,8 +1200,8 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
       if(partial_specialization_args_tc==
          full_template_args_tc)
       {
-        matches.push_back(matcht(
-          guessed_template_args, partial_specialization_args_tc, id));
+        matches.emplace_back(
+          guessed_template_args, partial_specialization_args_tc, id);
       }
     }
   }
@@ -1589,7 +1588,7 @@ exprt cpp_typecheck_resolvet::resolve(
       {
         const symbolt &instance=
           disambiguate_template_classes(base_name, id_set, template_args);
-        identifiers.push_back(exprt("type", symbol_typet(instance.name)));
+        identifiers.emplace_back("type", symbol_typet(instance.name));
       }
     }
 

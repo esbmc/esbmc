@@ -382,7 +382,7 @@ void cpp_typecheckt::typecheck_function_expr(
 
       // first do function/operator
       cpp_namet cpp_name;
-      cpp_name.get_sub().push_back(irept("name"));
+      cpp_name.get_sub().emplace_back("name");
       cpp_name.get_sub().back().identifier(op_name);
       cpp_name.get_sub().back().add("#location")=expr.location();
 
@@ -488,7 +488,7 @@ bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
     functioncall.location()=expr.location();
 
     cpp_namet cpp_name;
-    cpp_name.get_sub().push_back(irept("name"));
+    cpp_name.get_sub().emplace_back("name");
     cpp_name.get_sub().back().identifier(op_name);
     cpp_name.get_sub().back().add("#location")=expr.location();
 
@@ -564,7 +564,7 @@ bool cpp_typecheckt::operator_is_overloaded(exprt &expr)
 
       // first do function/operator
       cpp_namet cpp_name;
-      cpp_name.get_sub().push_back(irept("name"));
+      cpp_name.get_sub().emplace_back("name");
       cpp_name.get_sub().back().identifier(op_name);
       cpp_name.get_sub().back().add("#location")=expr.location();
 
@@ -1452,7 +1452,7 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
       // Ok! Let's create the temp object bad_typeid
       exprt bad_typeid;
       bad_typeid.identifier(bad_typeid_identifier);
-      bad_typeid.operands().push_back(exprt("sideeffect"));
+      bad_typeid.operands().emplace_back("sideeffect");
       bad_typeid.op0().type()=typet("symbol");
       bad_typeid.op0().type().identifier(bad_typeid_identifier);
 
@@ -2105,7 +2105,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
   }
 
   cpp_namet cpp_name;
-  cpp_name.get_sub().push_back(irept("name"));
+  cpp_name.get_sub().emplace_back("name");
   cpp_name.get_sub().front().identifier(strop);
   cpp_name.get_sub().front().set("#location", expr.location());
 
@@ -2176,7 +2176,7 @@ void cpp_typecheckt::typecheck_side_effect_increment(
   }
 
   cpp_namet cpp_name;
-  cpp_name.get_sub().push_back(irept("name"));
+  cpp_name.get_sub().emplace_back("name");
   cpp_name.get_sub().front().identifier(str_op);
   cpp_name.get_sub().front().set("#location", expr.location());
 

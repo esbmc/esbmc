@@ -291,7 +291,7 @@ void goto_programt::get_successors(
   if(i.is_goto())
   {
     for(auto target : i.targets)
-      successors.push_back(target);
+      successors.emplace_back(target);
 
     if(!is_true(i.guard))
       successors.push_back(next);

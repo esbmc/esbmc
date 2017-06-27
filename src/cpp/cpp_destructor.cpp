@@ -103,13 +103,13 @@ codet cpp_typecheckt::cpp_destructor(
 
     irept cpp_name("cpp-name");
 
-    cpp_name.get_sub().push_back(irept("name"));
+    cpp_name.get_sub().emplace_back("name");
     cpp_name.get_sub().back().identifier(symb.base_name);
     cpp_name.get_sub().back().set("#location", location);
 
-    cpp_name.get_sub().push_back(irept("::"));
+    cpp_name.get_sub().emplace_back("::");
 
-    cpp_name.get_sub().push_back(irept("name"));
+    cpp_name.get_sub().emplace_back("name");
     cpp_name.get_sub().back().identifier(dtor_name);
     cpp_name.get_sub().back().set("#location", location);
 

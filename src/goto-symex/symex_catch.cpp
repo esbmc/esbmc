@@ -314,7 +314,7 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
       if (i->function_identifier == target->function) {
         statet::goto_state_listt &goto_state_list = i->goto_state_map[target];
 
-        goto_state_list.push_back(statet::goto_statet(*cur_state));
+        goto_state_list.emplace_back(*cur_state);
         cur_state->guard.make_false();
         break;
       }

@@ -300,17 +300,17 @@ void c_typecastt::implicit_typecast_followed(
         // also generous: between any to scalar types it's ok
       }
       else
-        warnings.push_back("incompatible pointer types");
+        warnings.emplace_back("incompatible pointer types");
 
       // check qualifiers
 
       if(src_type.subtype().cmt_constant() &&
          !dest_type.subtype().cmt_constant())
-        warnings.push_back("disregarding const");
+        warnings.emplace_back("disregarding const");
 
       if(src_type.subtype().cmt_volatile() &&
          !dest_type.subtype().cmt_volatile())
-        warnings.push_back("disregarding volatile");
+        warnings.emplace_back("disregarding volatile");
 
       if(src_type==dest_type)
       {
@@ -337,7 +337,7 @@ void c_typecastt::implicit_typecast_followed(
   }
 
   if(check_c_implicit_typecast(src_type, dest_type))
-    errors.push_back("implicit conversion not permitted");
+    errors.emplace_back("implicit conversion not permitted");
   else if(src_type!=dest_type)
     do_typecast(expr, dest_type);
 }

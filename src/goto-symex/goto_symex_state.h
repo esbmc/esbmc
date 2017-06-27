@@ -301,7 +301,7 @@ public:
    */
   inline framet &
   new_frame(unsigned int thread_id) {
-    call_stack.push_back(framet(thread_id));
+    call_stack.emplace_back(thread_id);
     return call_stack.back();
   }
 

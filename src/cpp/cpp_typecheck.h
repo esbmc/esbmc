@@ -257,7 +257,7 @@ protected:
       instantiation_stackt &_instantiation_stack):
       instantiation_stack(_instantiation_stack)
     {
-      instantiation_stack.push_back(instantiationt());
+      instantiation_stack.emplace_back();
     }
 
     ~instantiation_levelt()
@@ -424,8 +424,8 @@ protected:
 
   void add_function_body(symbolt *_function_symbol)
   {
-    function_bodies.push_back(function_bodyt(
-      _function_symbol, template_map, instantiation_stack));
+    function_bodies.emplace_back(
+      _function_symbol, template_map, instantiation_stack);
   }
 
   // types

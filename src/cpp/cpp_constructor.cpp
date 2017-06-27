@@ -235,7 +235,7 @@ codet cpp_typecheckt::cpp_constructor(
     assert(constructor_name!="");
 
     irept cpp_name("cpp-name");
-    cpp_name.get_sub().push_back(irept("name"));
+    cpp_name.get_sub().emplace_back("name");
     cpp_name.get_sub().back().identifier(constructor_name);
     cpp_name.get_sub().back().set("#location", location);
 

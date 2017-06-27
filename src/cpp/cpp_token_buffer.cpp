@@ -69,7 +69,7 @@ extern char yycpptext[];
 
 void cpp_token_buffert::read_token()
 {
-  tokens.push_back(cpp_tokent());
+  tokens.emplace_back();
   token_vector.push_back(--tokens.end());
 
   int kind;

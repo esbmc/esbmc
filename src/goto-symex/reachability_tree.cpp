@@ -89,7 +89,7 @@ reachability_treet::setup_for_new_explore()
     schedule_target = nullptr;
   }
 
-  execution_states.push_back(boost::shared_ptr<execution_statet>(s));
+  execution_states.emplace_back(s);
   cur_state_it = execution_states.begin();
   targ->push_ctx(); // Start with a depth of 1.
 }

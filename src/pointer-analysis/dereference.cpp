@@ -1077,12 +1077,12 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       construct_from_dyn_struct_offset(field, new_offset, type, guard,
                                        alignment, mode, &failed_container);
-      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+      extract_list.emplace_back(field_guard, field);
     } else if (is_array_type(it)) {
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       build_reference_rec(field, new_offset, type, guard, mode, alignment);
-      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+      extract_list.emplace_back(field_guard, field);
     } else if (access_sz > (it->get_width() / 8)) {
       guardt newguard(guard);
       newguard.add(field_guard);
@@ -1096,7 +1096,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       expr2tc field = member2tc(it, value, struct_type.member_names[i]);
       if (!base_type_eq(field->type, type, ns))
         field = bitcast2tc(type, field);
-      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+      extract_list.emplace_back(field_guard, field);
     } else {
       // Not fully aligned; devolve to byte extract.
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
@@ -1107,7 +1107,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       stitch_together_from_byte_array(field, type, bytes);
       delete[] bytes;
 
-      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+      extract_list.emplace_back(field_guard, field);
     }
 
     i++;
@@ -1380,7 +1380,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     if (dereference_type_compare(tmp, type)) {
       // Excellent. Guard that the offset is zero and finish.
       expr2tc offs_is_zero = and2tc(accuml_guard, equality2tc(offs, gen_ulong(0)));
-      output.push_back(std::pair<expr2tc, expr2tc>(offs_is_zero, tmp));
+      output.emplace_back(offs_is_zero, tmp);
       return;
     }
 
@@ -1442,7 +1442,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
 
     // We now have a vector of fields reconstructed from the byte array
     constant_struct2tc the_struct(type, fields);
-    output.push_back(std::pair<expr2tc, expr2tc>(accuml_guard, the_struct));
+    output.emplace_back(accuml_guard, the_struct);
   } else {
     // Not legal
     return;

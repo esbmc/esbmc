@@ -18,7 +18,7 @@ void goto_program_serializationt::convert(
   const goto_programt& goto_program,
   std::ostream &out)
 {
-  irepcache.push_back(irept());
+  irepcache.emplace_back();
   ::convert(goto_program, irepcache.back());  
   irepconverter.reference_convert(irepcache.back(), out);  
 }

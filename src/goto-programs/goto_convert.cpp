@@ -265,7 +265,7 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
     irept type = irept(block.get("throw_decl_id"));
 
     // grab the ID and add to THROW_DECL instruction
-    throw_list.push_back(irept(type));
+    throw_list.emplace_back(type);
   }
 
   throw_decl_instruction->make_throw_decl();

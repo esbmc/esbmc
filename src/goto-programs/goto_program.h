@@ -338,7 +338,7 @@ public:
   //! \return The newly added instruction.
   inline targett add_instruction()
   {
-    instructions.push_back(instructiont());
+    instructions.emplace_back();
     targett tmp = instructions.end();
     return --tmp;
   }
@@ -347,7 +347,7 @@ public:
   //! \return The newly added instruction.
   inline targett add_instruction(instructiont &instruction)
   {
-    instructions.push_back(instructiont(instruction));
+    instructions.emplace_back(instruction);
     targett tmp = instructions.end();
     return --tmp;
   }
@@ -356,7 +356,7 @@ public:
   //! \return The newly added instruction.
   inline targett add_instruction(goto_program_instruction_typet type)
   {
-    instructions.push_back(instructiont(type));
+    instructions.emplace_back(type);
     targett tmp = instructions.end();
     return --tmp;
   }

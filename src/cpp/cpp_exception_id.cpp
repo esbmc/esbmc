@@ -31,7 +31,7 @@ void cpp_exception_list_rec(
     else if(src.subtype().id()=="empty") // throwing void*
     {
       irep_idt identifier = "void_ptr";
-      dest.push_back(id2string(identifier)+suffix);
+      dest.emplace_back(id2string(identifier)+suffix);
     }
     else
     {
@@ -58,26 +58,26 @@ void cpp_exception_list_rec(
          && bases.get_sub().size())
       {
         // Save the derived class
-        dest.push_back(id2string(identifier)+suffix);
+        dest.emplace_back(id2string(identifier)+suffix);
 
         // Save all the base classes
         for(const auto & i : bases.get_sub())
         {
           typet base_type = i.type();
           identifier = base_type.identifier();
-          dest.push_back(id2string(identifier)+suffix);
+          dest.emplace_back(id2string(identifier)+suffix);
         }
       }
       else // Throwing a base class
-        dest.push_back(id2string(identifier)+suffix);
+        dest.emplace_back(id2string(identifier)+suffix);
     }
     else
-      dest.push_back(id2string(identifier)+suffix);
+      dest.emplace_back(id2string(identifier)+suffix);
   }
   else if(src.id()=="ellipsis")
   {
     irep_idt identifier = "ellipsis";
-    dest.push_back(id2string(identifier)+suffix);
+    dest.emplace_back(id2string(identifier)+suffix);
   }
 
   // grab C++ type
@@ -85,7 +85,7 @@ void cpp_exception_list_rec(
 
   if(cpp_type!=irep_idt())
   {
-    dest.push_back(id2string(cpp_type)+suffix);
+    dest.emplace_back(id2string(cpp_type)+suffix);
     return;
   }
 

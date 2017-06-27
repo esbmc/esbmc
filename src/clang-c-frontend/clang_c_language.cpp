@@ -44,7 +44,7 @@ clang_c_languaget::clang_c_languaget()
 
 void clang_c_languaget::build_compiler_args(std::string tmp_dir)
 {
-  compiler_args.push_back("clang-tool");
+  compiler_args.emplace_back("clang-tool");
 
   compiler_args.push_back("-I" + tmp_dir);
 
@@ -52,15 +52,15 @@ void clang_c_languaget::build_compiler_args(std::string tmp_dir)
   switch(config.ansi_c.word_size)
   {
     case 16:
-      compiler_args.push_back("-m16");
+      compiler_args.emplace_back("-m16");
       break;
 
     case 32:
-      compiler_args.push_back("-m32");
+      compiler_args.emplace_back("-m32");
       break;
 
     case 64:
-      compiler_args.push_back("-m64");
+      compiler_args.emplace_back("-m64");
       break;
 
     default:
@@ -70,28 +70,28 @@ void clang_c_languaget::build_compiler_args(std::string tmp_dir)
   }
 
   if(config.ansi_c.char_is_unsigned)
-    compiler_args.push_back("-funsigned-char");
+    compiler_args.emplace_back("-funsigned-char");
 
   if(config.options.get_bool_option("deadlock-check"))
   {
-    compiler_args.push_back("-Dpthread_join=pthread_join_switch");
-    compiler_args.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
-    compiler_args.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
-    compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_check");
+    compiler_args.emplace_back("-Dpthread_join=pthread_join_switch");
+    compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_check");
+    compiler_args.emplace_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_check");
+    compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_check");
   }
   else if (config.options.get_bool_option("lock-order-check"))
   {
-    compiler_args.push_back("-Dpthread_join=pthread_join_noswitch");
-    compiler_args.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_nocheck");
-    compiler_args.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_nocheck");
-    compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
+    compiler_args.emplace_back("-Dpthread_join=pthread_join_noswitch");
+    compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_nocheck");
+    compiler_args.emplace_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_nocheck");
+    compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
   else
   {
-    compiler_args.push_back("-Dpthread_join=pthread_join_noswitch");
-    compiler_args.push_back("-Dpthread_mutex_lock=pthread_mutex_lock_noassert");
-    compiler_args.push_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_noassert");
-    compiler_args.push_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
+    compiler_args.emplace_back("-Dpthread_join=pthread_join_noswitch");
+    compiler_args.emplace_back("-Dpthread_mutex_lock=pthread_mutex_lock_noassert");
+    compiler_args.emplace_back("-Dpthread_mutex_unlock=pthread_mutex_unlock_noassert");
+    compiler_args.emplace_back("-Dpthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
   for(auto const &def : config.ansi_c.defines)
@@ -101,7 +101,7 @@ void clang_c_languaget::build_compiler_args(std::string tmp_dir)
     compiler_args.push_back("-I" + inc);
 
   // Ignore ctype defined by the system
-  compiler_args.push_back("-D__NO_CTYPE");
+  compiler_args.emplace_back("-D__NO_CTYPE");
 
 #ifdef __APPLE__
   compiler_args.push_back("-D_EXTERNALIZE_CTYPE_INLINES_");
@@ -112,15 +112,15 @@ void clang_c_languaget::build_compiler_args(std::string tmp_dir)
   // Force clang see all files as .c
   // This forces the preprocessor to be called even in preprocessed files
   // which allow us to perform transformations using -D
-  compiler_args.push_back("-x");
-  compiler_args.push_back("c");
+  compiler_args.emplace_back("-x");
+  compiler_args.emplace_back("c");
 
   // Add -Wunknown-attributes, preprocessed files with GCC generate a bunch
   // of __leaf__ attributes that we don't care about
-  compiler_args.push_back("-Wno-unknown-attributes");
+  compiler_args.emplace_back("-Wno-unknown-attributes");
 
   // Option to avoid creating a linking command
-  compiler_args.push_back("-fsyntax-only");
+  compiler_args.emplace_back("-fsyntax-only");
 }
 
 bool clang_c_languaget::parse(

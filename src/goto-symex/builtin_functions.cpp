@@ -72,7 +72,7 @@ goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     target->renumber(guard, item.object, realloc_size, cur_state->source);
     type2tc new_ptr = type2tc(new pointer_type2t(item.object->type));
     address_of2tc addrof(new_ptr, item.object);
-    result_list.push_back(std::pair<expr2tc,expr2tc>(addrof, item.guard));
+    result_list.emplace_back(addrof, item.guard);
 
     // Bump the realloc-numbering of the object. This ensures that, after
     // renaming, the address_of we just generated compares differently to
@@ -223,7 +223,7 @@ goto_symext::symex_mem(
   pointer_object2tc ptr_obj(pointer_type2(), ptr_rhs);
   track_new_pointer(ptr_obj, new_type);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, alloc_guard, !is_malloc));
+  dynamic_memory.emplace_back(rhs_copy, alloc_guard, !is_malloc);
 
   return rhs_addrof->ptr_obj;
 }
@@ -430,7 +430,7 @@ void goto_symext::symex_cpp_new(
 
   symex_assign_rec(idx, truth, guard, symex_targett::STATE);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard, false));
+  dynamic_memory.emplace_back(rhs_copy, cur_state->guard, false);
 }
 
 // XXX - implement as a call to free?

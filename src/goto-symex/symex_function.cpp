@@ -408,12 +408,11 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
     statet::goto_state_listt &goto_state_list =
       cur_state->top().goto_state_map[fit->second.body.instructions.begin()];
 
-    cur_state->top().cur_function_ptr_targets.push_back(
-      std::pair<goto_programt::const_targett, symbol2tc>(
-        fit->second.body.instructions.begin(), it.second)
+    cur_state->top().cur_function_ptr_targets.emplace_back(
+        fit->second.body.instructions.begin(), it.second
       );
 
-    goto_state_list.push_back(statet::goto_statet(*cur_state));
+    goto_state_list.emplace_back(*cur_state);
     statet::goto_statet &new_state = goto_state_list.back();
     expr2tc guardexpr = it.first.as_expr();
     cur_state->rename(guardexpr);
@@ -446,7 +445,7 @@ goto_symext::run_next_function_ptr_target(bool first)
   if (!first) {
     statet::goto_state_listt &goto_state_list =
       cur_state->top().goto_state_map[cur_state->top().function_ptr_combine_target];
-    goto_state_list.push_back(statet::goto_statet(*cur_state));
+    goto_state_list.emplace_back(*cur_state);
   }
 
   // Take one function ptr target out of the list and jump to it. A previously
@@ -591,7 +590,7 @@ goto_symext::symex_return()
   statet::goto_state_listt &goto_state_list =
     cur_state->top().goto_state_map[cur_state->top().end_of_function];
 
-  goto_state_list.push_back(statet::goto_statet(*cur_state));
+  goto_state_list.emplace_back(*cur_state);
 
   // kill this one
   cur_state->guard.make_false();

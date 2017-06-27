@@ -74,7 +74,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
              goto_program, 0);
 
   threads_state.push_back(state);
-  preserved_paths.push_back(std::list<std::pair<goto_programt::const_targett, goto_statet> >());
+  preserved_paths.emplace_back();
   cur_state = &threads_state.front();
   cur_state->global_guard.make_true();
   cur_state->global_guard.add(get_guard_identifier());
@@ -87,13 +87,13 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
     DFS_traversed[state.source.thread_nr] = false;
   }
 
-  thread_start_data.push_back(expr2tc());
+  thread_start_data.emplace_back();
 
   // Initial mpor tracking.
-  thread_last_reads.push_back(std::set<expr2tc>());
-  thread_last_writes.push_back(std::set<expr2tc>());
+  thread_last_reads.emplace_back();
+  thread_last_writes.emplace_back();
   // One thread with one dependancy relation.
-  dependancy_chain.push_back(std::vector<int>());
+  dependancy_chain.emplace_back();
   dependancy_chain.back().push_back(0);
   mpor_says_no = false;
 
@@ -565,7 +565,7 @@ execution_statet::preserve_last_paths()
     assert(tomerge != nullptr);
 
     // Alas, copies.
-    pp.push_back(std::make_pair(target_insn_it, goto_statet(*tomerge)));
+    pp.emplace_back(std::make_pair(target_insn_it, goto_statet(*tomerge)));
   }
 
   // We must have picked up at least one path to merge
@@ -622,7 +622,7 @@ execution_statet::restore_last_paths()
 
     // Create a fresh new goto_statet to be merged in at the target insn
     assert(cur_state->top().goto_state_map[loc].size() == 0);
-    cur_state->top().goto_state_map[loc].push_back(goto_statet(*cur_state));
+    cur_state->top().goto_state_map[loc].emplace_back(*cur_state);
     // Get ref to it
     auto &new_gs = *cur_state->top().goto_state_map[loc].begin();
 
@@ -733,7 +733,7 @@ execution_statet::add_thread(const goto_programt *prog)
   new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
-  preserved_paths.push_back(std::list<std::pair<goto_programt::const_targett, goto_statet> >());
+  preserved_paths.emplace_back();
   atomic_numbers.push_back(0);
 
   if (DFS_traversed.size() <= new_state.source.thread_nr) {
@@ -742,14 +742,14 @@ execution_statet::add_thread(const goto_programt *prog)
     DFS_traversed[new_state.source.thread_nr] = false;
   }
 
-  thread_start_data.push_back(expr2tc());
+  thread_start_data.emplace_back();
 
   // We invalidated all threads_state refs, so reset cur_state ptr.
   cur_state = &threads_state[active_thread];
 
   // Update MPOR tracking data with newly initialized thread
-  thread_last_reads.push_back(std::set<expr2tc>());
-  thread_last_writes.push_back(std::set<expr2tc>());
+  thread_last_reads.emplace_back();
+  thread_last_writes.emplace_back();
   // Unfortunately as each thread has a depenancy relation with every other
   // thread we have to do a lot of work to initialize a new one. And initially
   // all relations are '0', no transitions yet.
@@ -757,7 +757,7 @@ execution_statet::add_thread(const goto_programt *prog)
     it.push_back(0);
   }
   // And the new threads dependancies,
-  dependancy_chain.push_back(std::vector<int>());
+  dependancy_chain.emplace_back();
   for (unsigned int i = 0; i < dependancy_chain.size(); i++)
     dependancy_chain.back().push_back(0);
 

@@ -36,7 +36,7 @@ unsigned string_containert::get(const char *s)
   unsigned r=hash_table.size();
 
   // these are stable
-  string_list.push_back(std::string(s));
+  string_list.emplace_back(s);
   string_ptrt result(string_list.back());
 
   hash_table[result]=r;

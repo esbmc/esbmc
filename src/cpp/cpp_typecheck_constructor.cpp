@@ -26,33 +26,33 @@ static void copy_parent(
   code.location()=location;
 
   code.set_statement("assign");
-  code.operands().push_back(exprt("dereference"));
+  code.operands().emplace_back("dereference");
 
-  code.op0().operands().push_back(exprt("explicit-typecast"));
+  code.op0().operands().emplace_back("explicit-typecast");
 
   exprt &op0=code.op0().op0();
 
-  op0.operands().push_back(exprt("cpp-this"));
+  op0.operands().emplace_back("cpp-this");
   op0.type().id("pointer");
   op0.type().subtype().id("cpp-name");
-  op0.type().subtype().get_sub().push_back(irept("name"));
+  op0.type().subtype().get_sub().emplace_back("name");
   op0.type().subtype().get_sub().back().identifier(parent_base_name);
   op0.type().subtype().get_sub().back().set("#location", location);
   op0.location() = location;
 
-  code.operands().push_back(exprt("explicit-typecast"));
+  code.operands().emplace_back("explicit-typecast");
   exprt &op1 = code.op1();
 
   op1.type().id("pointer");
   op1.type().set("#reference", true);
   op1.type().subtype().set("#constant",true);
   op1.type().subtype().id("cpp-name");
-  op1.type().subtype().get_sub().push_back(irept("name"));
+  op1.type().subtype().get_sub().emplace_back("name");
   op1.type().subtype().get_sub().back().identifier(parent_base_name);
   op1.type().subtype().get_sub().back().set("#location", location);
 
-  op1.operands().push_back(exprt("cpp-name"));
-  op1.op0().get_sub().push_back(irept("name"));
+  op1.operands().emplace_back("cpp-name");
+  op1.op0().get_sub().emplace_back("name");
   op1.op0().get_sub().back().identifier(arg_name);
   op1.op0().get_sub().back().set("#location", location);
   op1.location() = location;
@@ -64,34 +64,34 @@ static void copy_member(
   const irep_idt &arg_name,
   exprt &block)
 {
-  block.operands().push_back(exprt("code"));
+  block.operands().emplace_back("code");
   exprt &code=block.operands().back();
 
   code.statement("expression");
   code.type()=typet("code");
-  code.operands().push_back(exprt("sideeffect"));
+  code.operands().emplace_back("sideeffect");
   code.op0().statement("assign");
-  code.op0().operands().push_back(exprt("cpp-name"));
+  code.op0().operands().emplace_back("cpp-name");
   code.location() = location;
 
   exprt& op0 = code.op0().op0();
   op0.location() = location;
 
-  op0.get_sub().push_back(irept("name"));
+  op0.get_sub().emplace_back("name");
   op0.get_sub().back().identifier(member_base_name);
   op0.get_sub().back().set("#location", location);
 
-  code.op0().operands().push_back(exprt("member"));
+  code.op0().operands().emplace_back("member");
 
   exprt& op1 = code.op0().op1();
 
   op1.add("component_cpp_name").id("cpp-name");
-  op1.add("component_cpp_name").get_sub().push_back(irept("name"));
+  op1.add("component_cpp_name").get_sub().emplace_back("name");
   op1.add("component_cpp_name").get_sub().back().identifier(member_base_name);
   op1.add("component_cpp_name").get_sub().back().set("#location", location);
 
-  op1.operands().push_back(exprt("cpp-name"));
-  op1.op0().get_sub().push_back(irept("name"));
+  op1.operands().emplace_back("cpp-name");
+  op1.op0().get_sub().emplace_back("name");
   op1.op0().get_sub().back().identifier(arg_name);
   op1.op0().get_sub().back().set("#location", location);
   op1.location() = location;
@@ -107,35 +107,35 @@ static void copy_array(
   // Build the index expression
   exprt constant=from_integer(i, int_type());
 
-  block.operands().push_back(exprt("code"));
+  block.operands().emplace_back("code");
   exprt& code = block.operands().back();
   code.location() = location;
 
   code.statement("expression");
   code.type()=typet("code");
-  code.operands().push_back(exprt("sideeffect"));
+  code.operands().emplace_back("sideeffect");
   code.op0().statement("assign");
-  code.op0().operands().push_back(exprt("index"));
+  code.op0().operands().emplace_back("index");
   exprt& op0 = code.op0().op0();
-  op0.operands().push_back(exprt("cpp-name"));
+  op0.operands().emplace_back("cpp-name");
   op0.location() = location;
 
-  op0.op0().get_sub().push_back(irept("name"));
+  op0.op0().get_sub().emplace_back("name");
   op0.op0().get_sub().back().identifier(member_base_name);
   op0.op0().get_sub().back().set("#location", location);
   op0.copy_to_operands(constant);
 
-  code.op0().operands().push_back(exprt("index"));
+  code.op0().operands().emplace_back("index");
 
   exprt& op1 = code.op0().op1();
-  op1.operands().push_back(exprt("member"));
+  op1.operands().emplace_back("member");
   op1.op0().add("component_cpp_name").id("cpp-name");
-  op1.op0().add("component_cpp_name").get_sub().push_back(irept("name"));
+  op1.op0().add("component_cpp_name").get_sub().emplace_back("name");
   op1.op0().add("component_cpp_name").get_sub().back().identifier(member_base_name);
   op1.op0().add("component_cpp_name").get_sub().back().set("#location", location);
 
-  op1.op0().operands().push_back(exprt("cpp-name"));
-  op1.op0().op0().get_sub().push_back(irept("name"));
+  op1.op0().operands().emplace_back("cpp-name");
+  op1.op0().op0().get_sub().emplace_back("name");
   op1.op0().op0().get_sub().back().identifier(arg_name);
   op1.op0().op0().get_sub().back().set("#location", location);
   op1.copy_to_operands(constant);
@@ -295,7 +295,7 @@ void cpp_typecheckt::default_cpctor(
 
       exprt ptrmember("ptrmember");
       ptrmember.set("component_name",mem_it->name());
-      ptrmember.operands().push_back(exprt("cpp-this"));
+      ptrmember.operands().emplace_back("cpp-this");
 
       code_assignt assign(ptrmember, address);
       initializers.move_to_sub(assign);
@@ -353,7 +353,7 @@ void cpp_typecheckt::default_assignop(
   cpctor.add("storage_spec").id("cpp-storage-spec");
   cpctor.type().id("symbol");
   cpctor.type().add("identifier").id(symbol.name);
-  cpctor.operands().push_back(exprt("cpp-declarator"));
+  cpctor.operands().emplace_back("cpp-declarator");
   cpctor.location() = location;
 
   cpp_declaratort &declarator = (cpp_declaratort&) cpctor.op0();
@@ -365,8 +365,8 @@ void cpp_typecheckt::default_assignop(
   declarator_type.location() = location;
 
   declarator_name.id("cpp-name");
-  declarator_name.get_sub().push_back(irept("operator"));
-  declarator_name.get_sub().push_back(irept("="));
+  declarator_name.get_sub().emplace_back("operator");
+  declarator_name.get_sub().emplace_back("=");
 
   declarator_type.id("function_type");
   declarator_type.subtype()=reference_typet();
@@ -376,27 +376,27 @@ void cpp_typecheckt::default_assignop(
   exprt& args = (exprt&) declarator.type().add("arguments");
   args.location() = location;
 
-  args.get_sub().push_back(irept("cpp-declaration"));
+  args.get_sub().emplace_back("cpp-declaration");
 
   cpp_declarationt& args_decl = (cpp_declarationt&) args.get_sub().back();
 
   irept& args_decl_type_sub = args_decl.type().add("subtypes");
 
   args_decl.type().id("merged_type");
-  args_decl_type_sub.get_sub().push_back(irept("cpp-name"));
-  args_decl_type_sub.get_sub().back().get_sub().push_back(irept("name"));
+  args_decl_type_sub.get_sub().emplace_back("cpp-name");
+  args_decl_type_sub.get_sub().back().get_sub().emplace_back("name");
   args_decl_type_sub.get_sub().back().get_sub().back().identifier(symbol.base_name);
   args_decl_type_sub.get_sub().back().get_sub().back().set("#location", location);
 
-  args_decl_type_sub.get_sub().push_back(irept("const"));
-  args_decl.operands().push_back(exprt("cpp-declarator"));
+  args_decl_type_sub.get_sub().emplace_back("const");
+  args_decl.operands().emplace_back("cpp-declarator");
   args_decl.location() = location;
 
   cpp_declaratort &args_decl_declor=
     (cpp_declaratort&) args_decl.operands().back();
 
   args_decl_declor.name().id("cpp-name");
-  args_decl_declor.name().get_sub().push_back(irept("name"));
+  args_decl_declor.name().get_sub().emplace_back("name");
   args_decl_declor.name().get_sub().back().add("identifier").id(arg_name);
   args_decl_declor.location() = location;
 
@@ -480,10 +480,10 @@ void cpp_typecheckt::default_assignop_value(
   }
 
   // Finally we add the return statement
-  block.operands().push_back(exprt("code"));
+  block.operands().emplace_back("code");
   exprt &ret_code = declarator.value().operands().back();
-  ret_code.operands().push_back(exprt("dereference"));
-  ret_code.op0().operands().push_back(exprt("cpp-this"));
+  ret_code.operands().emplace_back("dereference");
+  ret_code.op0().operands().emplace_back("cpp-this");
   ret_code.statement("return");
   ret_code.type()=code_typet();
 }
@@ -656,7 +656,7 @@ void cpp_typecheckt::full_member_initialization(
 
     {
       cpp_namet most_derived;
-      most_derived.get_sub().push_back(irept("name"));
+      most_derived.get_sub().emplace_back("name");
       most_derived.get_sub().back().identifier("@most_derived");
 
       exprt tmp;
@@ -796,7 +796,7 @@ void cpp_typecheckt::full_member_initialization(
 
       {
         cpp_namet most_derived;
-        most_derived.get_sub().push_back(irept("name"));
+        most_derived.get_sub().emplace_back("name");
         most_derived.get_sub().back().identifier("@most_derived");
 
         exprt tmp;
@@ -842,7 +842,7 @@ void cpp_typecheckt::full_member_initialization(
 
       exprt ptrmember("ptrmember");
       ptrmember.set("component_name",mem_it->name());
-      ptrmember.operands().push_back(exprt("cpp-this"));
+      ptrmember.operands().emplace_back("cpp-this");
 
       code_assignt assign(ptrmember, address);
       final_initializers.move_to_sub(assign);
@@ -1087,7 +1087,7 @@ void cpp_typecheckt::dtor(const symbolt &symb, code_blockt &vtables, code_blockt
 
       exprt ptrmember("ptrmember");
       ptrmember.component_name(cit->name());
-      ptrmember.operands().push_back(exprt("cpp-this"));
+      ptrmember.operands().emplace_back("cpp-this");
 
       code_assignt assign(ptrmember, address);
       vtables.operands().push_back(assign);
@@ -1122,7 +1122,7 @@ void cpp_typecheckt::dtor(const symbolt &symb, code_blockt &vtables, code_blockt
 
     exprt member("ptrmember");
     member.set("component_cpp_name", cppname);
-    member.operands().push_back(exprt("cpp-this"));
+    member.operands().emplace_back("cpp-this");
     member.location() = location;
 
     codet dtor_code =
@@ -1145,7 +1145,7 @@ void cpp_typecheckt::dtor(const symbolt &symb, code_blockt &vtables, code_blockt
     const symbolt& psymb = lookup(bit->type().identifier());
 
     exprt object("dereference");
-    object.operands().push_back(exprt("cpp-this"));
+    object.operands().emplace_back("cpp-this");
     object.location() = location;
 
     exprt dtor_code =

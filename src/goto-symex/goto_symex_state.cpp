@@ -414,9 +414,9 @@ goto_symex_statet::gen_stack_trace() const
       break;
     } else if (it->function_identifier == "main" &&
                src.pc->location == get_nil_irep()) {
-      trace.push_back(stack_framet(it->function_identifier));
+      trace.emplace_back(it->function_identifier);
     } else {
-      trace.push_back(stack_framet(irep_idt(it->function_identifier), src));
+      trace.emplace_back(irep_idt(it->function_identifier), src);
     }
   }
 

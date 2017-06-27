@@ -37,7 +37,7 @@ void build_goto_trace(
 
     step_nr++;
 
-    goto_trace.steps.push_back(goto_trace_stept());
+    goto_trace.steps.emplace_back();
     goto_trace_stept &goto_trace_step=goto_trace.steps.back();
 
     goto_trace_step.thread_nr=SSA_step.source.thread_nr;
@@ -80,7 +80,7 @@ void build_successful_goto_trace(
     if((it->is_assignment() || it->is_assert() || it->is_assume())
       && (is_valid_witness_expr(ns, it->lhs)))
     {
-      goto_trace.steps.push_back(goto_trace_stept());
+      goto_trace.steps.emplace_back();
       goto_trace_stept &goto_trace_step=goto_trace.steps.back();
       goto_trace_step.thread_nr=it->source.thread_nr;
       goto_trace_step.lhs=it->lhs;

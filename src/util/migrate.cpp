@@ -1469,7 +1469,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (t == sideeffect2t::function_call) {
       const exprt &arguments = expr.op1();
       forall_operands(it, arguments) {
-        args.push_back(expr2tc());
+        args.emplace_back();
         migrate_expr(*it, args.back());
       }
     }
@@ -1694,7 +1694,7 @@ migrate_type_back(const type2tc &ref)
     unsigned int i = 0;
     for(auto const &it :ref2.arguments)
     {
-      args.push_back(code_typet::argumentt(migrate_type_back(it)));
+      args.emplace_back(migrate_type_back(it));
       args.back().set_identifier(ref2.argument_names[i]);
       i++;
     }
@@ -2681,7 +2681,7 @@ migrate_expr_back(const expr2tc &ref)
     irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
 
     for(auto const &it : ref2.exception_list)
-      exceptions_thrown.push_back(irept(it));
+      exceptions_thrown.emplace_back(it);
 
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;

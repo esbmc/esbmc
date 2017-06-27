@@ -51,7 +51,7 @@ public:
     scopes.clear();
 
     // this is the global scope
-    scopes.push_back(scopet());
+    scopes.emplace_back();
   }
 
   // internal state scanner
@@ -130,7 +130,7 @@ public:
    
   void move_declaration(exprt &expr)
   {
-    parse_tree.declarations.push_back(ansi_c_declarationt());
+    parse_tree.declarations.emplace_back();
     parse_tree.declarations.back().swap(expr);
   }
    
@@ -142,7 +142,7 @@ public:
   void new_scope(const std::string &prefix)
   {
     const scopet &current=current_scope();
-    scopes.push_back(scopet());
+    scopes.emplace_back();
     scopes.back().prefix=current.prefix+prefix;
   }
 

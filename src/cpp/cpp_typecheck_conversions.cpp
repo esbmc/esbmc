@@ -1336,7 +1336,7 @@ bool cpp_typecheckt::dynamic_typecast(
     // Ok! Let's create the temp object badcast
     exprt badcast;
     badcast.identifier(badcast_identifier);
-    badcast.operands().push_back(exprt("sideeffect"));
+    badcast.operands().emplace_back("sideeffect");
     badcast.op0().type() = typet("symbol");
     badcast.op0().type().identifier(badcast_identifier);
 
