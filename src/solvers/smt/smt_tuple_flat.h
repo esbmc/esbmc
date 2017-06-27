@@ -103,7 +103,7 @@ class smt_tuple_node_flattener : public tuple_iface
 {
 public:
   smt_tuple_node_flattener(smt_convt *_ctx, const namespacet &_ns)
-    : tuple_iface(), ctx(_ctx), ns(_ns), array_conv(_ctx) { }
+    : ctx(_ctx), ns(_ns), array_conv(_ctx) { }
 
   smt_sortt mk_struct_sort(const type2tc &type) override;
   smt_astt tuple_create(const expr2tc &structdef) override;
@@ -195,7 +195,7 @@ class smt_tuple_sym_flattener : public tuple_iface
 {
 public:
   smt_tuple_sym_flattener(smt_convt *_ctx, const namespacet &_ns)
-    : tuple_iface(), ctx(_ctx), ns(_ns) { }
+    : ctx(_ctx), ns(_ns) { }
 
   smt_sortt mk_struct_sort(const type2tc &type) override;
   smt_astt tuple_create(const expr2tc &structdef) override;

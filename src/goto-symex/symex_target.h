@@ -99,7 +99,7 @@ public:
   stack_framet(const irep_idt &func, const symex_targett::sourcet &__src)
     : function(func), _src(__src), src(&_src) { }
   stack_framet(const irep_idt &func)
-    : function(func), _src(), src(nullptr) { }
+    : function(func), src(nullptr) { }
   stack_framet(const stack_framet &ref) {
     *this = ref;
     if (src != nullptr)

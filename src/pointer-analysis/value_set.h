@@ -150,7 +150,7 @@ public:
   class object_map_dt:public std::map<unsigned, objectt>
   {
   public:
-    object_map_dt() : std::map<unsigned, objectt>() { }
+    object_map_dt() {}
     const static object_map_dt empty;
   };
 
@@ -197,8 +197,6 @@ public:
    *  to an entryt, storing the value set of objects a variable might point
    *  at. */
   typedef hash_map_cont<string_wrapper, entryt, string_wrap_hash> valuest;
-
-//********************************** Methods ***********************************
 
   /** Get the natural alignment unit of a reference to e. I don't know a more
    *  appropriate term, but if we were to have an offset into e, then what is

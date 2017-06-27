@@ -241,7 +241,6 @@ namespace renaming {
       unsigned node_id;
       valuet():
         count(0),
-        constant(),
         node_id(0)
       {
       }

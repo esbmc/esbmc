@@ -41,7 +41,7 @@ public:
 #define array_downcast(x) static_cast<const array_ast*>(x)
 
   array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s)
-    : smt_ast(ctx, _s), symname(""), array_fields(), array_ctx(actx)
+    : smt_ast(ctx, _s), symname(""), array_ctx(actx)
   {
   }
 

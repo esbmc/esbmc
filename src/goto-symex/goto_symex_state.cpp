@@ -22,7 +22,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
                                      const namespacet &_ns)
-    : guard(), level2(l2), value_set(vs), ns(_ns)
+    : level2(l2), value_set(vs), ns(_ns)
 {
   use_value_set = true;
   depth = 0;

@@ -20,8 +20,8 @@ array_indexes_are_same(
   return true;
 }
 
-array_convt::array_convt(smt_convt *_ctx) : array_iface(true, true),
-  array_indexes(), array_selects(), array_updates(), ctx(_ctx)
+array_convt::array_convt(smt_convt *_ctx)
+ : array_iface(true, true), ctx(_ctx)
 {
 }
 

@@ -11,7 +11,7 @@
 
 class sexpr {
 public:
-  sexpr() : token(0), sexpr_list(), data() { sexpr_list.clear(); }
+  sexpr() : token(0) { sexpr_list.clear(); }
   unsigned int token; // If zero, then an sexpr list
   std::list<sexpr> sexpr_list;
   std::string data; // Text rep of parsed token.

@@ -1224,8 +1224,7 @@ execution_statet::init_property_monitors()
 
 execution_statet::ex_state_level2t::ex_state_level2t(
     execution_statet &ref)
-  : renaming::level2t(),
-    owner(&ref)
+  : owner(&ref)
 {
 }
 

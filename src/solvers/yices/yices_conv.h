@@ -9,13 +9,13 @@ class yices_smt_sort : public smt_sort
 public:
 #define yices_sort_downcast(x) static_cast<const yices_smt_sort *>(x)
   yices_smt_sort(smt_sort_kind i, type_t _t)
-    : smt_sort(i), type(_t), tuple_type(), arr_range(nullptr) { }
+    : smt_sort(i), type(_t), arr_range(nullptr) { }
   yices_smt_sort(smt_sort_kind i, type_t _t, unsigned int w)
-    : smt_sort(i, w), type(_t), tuple_type(), arr_range(nullptr) { }
+    : smt_sort(i, w), type(_t), arr_range(nullptr) { }
 
   yices_smt_sort(smt_sort_kind i, type_t _t, unsigned long w,
                  unsigned long d, const yices_smt_sort *rangetype)
-    : smt_sort(i, w, d), type(_t), tuple_type(), arr_range(rangetype) { }
+    : smt_sort(i, w, d), type(_t), arr_range(rangetype) { }
 
   // Constructor for structs. Bitwidth is set to 1 as an estople
   // that... it's a valid domain sort.
