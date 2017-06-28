@@ -37,7 +37,7 @@ public:
       _goto_function,
       _message_handler),
     unwind(_unwind),
-    tmp_goto_program(goto_programt())
+    tmp_goto_program()
   {
     // unwind loops
     if(function_loops.size())

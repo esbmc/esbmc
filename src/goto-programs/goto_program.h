@@ -61,28 +61,12 @@ public:
   /*! \brief copy constructor
       \param[in] src an empty goto program
   */
-  inline goto_programt(const goto_programt &src)
-  {
-    // CBMC didn't permit copy-construction, instead requiring calling
-    // copy_from instead. While explicit is better than implicit though,
-    // the only implication of allowing this is the occasional performance
-    // loss, which is best identified by a profiler.
-    copy_from(src);
-    update();
-  }
+  inline goto_programt(const goto_programt &src) = delete;
 
   /*! \brief assignment operator
       \param[in] src an empty goto program
   */
-  inline goto_programt &operator=(const goto_programt &src)
-
-  {
-    // DO NOT COPY ME! I HAVE POINTERS IN ME!
-    instructions.clear();
-    copy_from(src);
-    update();
-    return *this;
-  }
+  inline goto_programt &operator=(const goto_programt &src) = delete;
 
   bool hide;
 
