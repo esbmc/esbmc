@@ -909,9 +909,8 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
   bool overflows_boundaries = (deref_size > subtype_size);
 
   // No alignment guarantee: assert that it's correct.
-  if (!is_correctly_aligned) {
-    check_alignment(deref_size, mod, guard);
-  }
+  if (!is_correctly_aligned)
+    check_alignment(deref_size, std::move(mod), guard);
 
   if (!overflows_boundaries) {
     // Just extract an element and apply other standard extraction stuff.
@@ -1758,13 +1757,12 @@ dereferencet::check_data_obj_access(const expr2tc &value,
                       "Access to object out of bounds", tmp_guard);
 
   // Also, if if it's a scalar, check that the access being made is aligned.
-  if (is_scalar_type(type)) {
-    check_alignment(access_sz, offset, guard);
-  }
+  if (is_scalar_type(type))
+    check_alignment(access_sz, std::move(offset), guard);
 }
 
 void
-dereferencet::check_alignment(unsigned long minwidth, const expr2tc offset,
+dereferencet::check_alignment(unsigned long minwidth, const expr2tc&& offset,
                               const guardt &guard)
 {
   expr2tc mask_expr = gen_ulong(minwidth - 1);

@@ -1281,7 +1281,7 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
 }
 
 void
-z3_convt::debug_label_formula(std::string name, const z3::expr &formula)
+z3_convt::debug_label_formula(const std::string&& name, const z3::expr &formula)
 {
   std::stringstream ss;
   unsigned &num = debug_label_map[name];

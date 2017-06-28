@@ -196,7 +196,7 @@ goto_symext::symex_step(reachability_treet & art)
       const irep_idt &id = to_symbol2t(call.function).thename;
       if (has_prefix(id.as_string(), "__ESBMC")) {
         cur_state->source.pc++;
-        run_intrinsic(call, art, id.as_string());
+        run_intrinsic(call, art, std::move(id.as_string()));
         return;
       }
     }
@@ -322,7 +322,7 @@ void goto_symext::symex_assert()
 
 void
 goto_symext::run_intrinsic(const code_function_call2t &func_call,
-                           reachability_treet &art, const std::string symname)
+                           reachability_treet &art, const std::string&& symname)
 {
 
   if (symname == "__ESBMC_yield") {

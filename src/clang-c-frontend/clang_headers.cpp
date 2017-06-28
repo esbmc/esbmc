@@ -374,7 +374,7 @@ extern "C" {
   };
 }
 
-void clang_c_languaget::dump_clang_headers(std::string tmp_dir)
+void clang_c_languaget::dump_clang_headers(const std::string& tmp_dir)
 {
   for (struct hooked_header *h = &clang_headers[0]; h->basename != nullptr; h++)
   {

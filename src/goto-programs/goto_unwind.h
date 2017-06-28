@@ -51,7 +51,7 @@ protected:
   void goto_unwind();
   void unwind_program(
     goto_programt &goto_program,
-    function_loopst::reverse_iterator loop);
+    const function_loopst::reverse_iterator& loop);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_UNWIND_H_ */

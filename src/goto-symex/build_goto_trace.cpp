@@ -13,7 +13,7 @@ Author: Daniel Kroening
 #include <goto-symex/witnesses.h>
 
 void build_goto_trace(
-  const boost::shared_ptr<symex_target_equationt> target,
+  const boost::shared_ptr<symex_target_equationt>&& target,
   boost::shared_ptr<smt_convt> &smt_conv,
   goto_tracet &goto_trace)
 {
@@ -68,7 +68,7 @@ void build_goto_trace(
 }
 
 void build_successful_goto_trace(
-    const boost::shared_ptr<symex_target_equationt> target,
+    const boost::shared_ptr<symex_target_equationt>&& target,
     const namespacet &ns,
     goto_tracet &goto_trace)
 {

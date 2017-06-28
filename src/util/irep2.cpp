@@ -158,7 +158,7 @@ pretty_print_func(unsigned int indent, std::string ident, T obj)
   list_of_memberst memb = obj.tostring(indent+2);
 
   std::string indentstr = indent_str(indent);
-  std::string exprstr = ident;
+  std::string exprstr = std::move(ident);
 
   for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
        it++) {
@@ -535,7 +535,7 @@ type2t_traits<Args...>::make_contained(typename Args::result_type... args) -> ir
 
 /*************************** Base expr2t definitions **************************/
 
-expr2t::expr2t(const type2tc _type, expr_ids id)
+expr2t::expr2t(const type2tc& _type, expr_ids id)
   : std::enable_shared_from_this<expr2t>(), expr_id(id), type(_type), crc_val(0)
 {
 }

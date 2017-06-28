@@ -228,7 +228,7 @@ smt_convt::renumber_symbol_address(
 }
 
 smt_astt
-smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
+smt_convt::convert_identifier_pointer(const expr2tc &expr, const std::string& symbol)
 {
   smt_astt a;
   std::string cte, identifier;

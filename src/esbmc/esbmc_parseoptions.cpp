@@ -1406,7 +1406,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
       std::set<std::string> used_syms;
       expr2tc main_expr;
       std::string prop_name = str_it->first.substr(20, std::string::npos);
-      main_expr = calculate_a_property_monitor(prop_name, strings, used_syms);
+      main_expr = calculate_a_property_monitor(std::move(prop_name), strings, used_syms);
       monitors[prop_name] = std::pair<std::set<std::string>, expr2tc>
                                       (used_syms, main_expr);
     }
@@ -1475,7 +1475,7 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
   }
 }
 
-expr2tc cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+expr2tc cbmc_parseoptionst::calculate_a_property_monitor(const std::string&& name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
   exprt main_expr;
   std::map<std::string, std::string>::const_iterator it;

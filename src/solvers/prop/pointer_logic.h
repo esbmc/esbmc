@@ -32,7 +32,7 @@ public:
 
     pointert() = default;
 
-    pointert(unsigned _obj, mp_integer _off):object(_obj), offset(_off)
+    pointert(unsigned _obj, const mp_integer&& _off):object(_obj), offset(_off)
     {
     }
   };

@@ -153,7 +153,7 @@ public:
   void assert_formula(const z3::expr &ast);
   void assert_ast(const smt_ast *a) override;
 
-  void debug_label_formula(std::string name, const z3::expr &formula);
+  void debug_label_formula(const std::string&& name, const z3::expr &formula);
   void init_addr_space_array();
 
   const std::string solver_text() override

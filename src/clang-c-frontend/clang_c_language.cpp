@@ -36,13 +36,13 @@ clang_c_languaget::clang_c_languaget()
   }
 
   // Build the compile arguments
-  build_compiler_args(p.string());
+  build_compiler_args(std::move(p.string()));
 
   // Dump clang headers on the temporary folder
   dump_clang_headers(p.string());
 }
 
-void clang_c_languaget::build_compiler_args(std::string tmp_dir)
+void clang_c_languaget::build_compiler_args(const std::string&& tmp_dir)
 {
   compiler_args.emplace_back("clang-tool");
 

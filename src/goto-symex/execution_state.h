@@ -656,7 +656,7 @@ class dfs_execution_statet : public execution_statet
                    contextt &context,
                    optionst &options,
                    message_handlert &_message_handler)
-      : execution_statet(goto_functions, ns, art, _target, context,
+      : execution_statet(goto_functions, ns, art, std::move(_target), context,
                          options.get_bool_option("state-hashing")
                              ? boost::shared_ptr<state_hashing_level2t>(
                                  new state_hashing_level2t(*this))
@@ -690,7 +690,7 @@ class schedule_execution_statet : public execution_statet
                    unsigned int *ptotal_claims,
                    unsigned int *premaining_claims,
                    message_handlert &_message_handler)
-      : execution_statet(goto_functions, ns, art, _target, context,
+      : execution_statet(goto_functions, ns, art, std::move(_target), context,
                          boost::shared_ptr<ex_state_level2t>(
                            new ex_state_level2t(*this)),
                          options, _message_handler)

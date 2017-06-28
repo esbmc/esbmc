@@ -813,7 +813,7 @@ public:
    *  @param sym The textual representation of this symbol.
    *  @return A pointer-typed AST representing the address of this symbol. */
   smt_astt convert_identifier_pointer(const expr2tc &expr,
-                                            std::string sym);
+                                            const std::string& sym);
 
   smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
 

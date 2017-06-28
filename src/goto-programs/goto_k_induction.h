@@ -109,7 +109,7 @@ protected:
   symbol_exprt gen_state_vector();
   symbol_exprt gen_current_state();
 
-  exprt gen_state_vector_indexed(exprt index);
+  exprt gen_state_vector_indexed(const exprt& index);
 };
 
 #endif /* GOTO_PROGRAMS_GOTO_K_INDUCTION_H_ */

@@ -261,10 +261,10 @@ public:
   class dfs_position {
 public:
     dfs_position(const reachability_treet &rt);
-    dfs_position(const std::string filename);
-    bool write_to_file(const std::string filename) const;
+    dfs_position(const std::string&& filename);
+    bool write_to_file(const std::string&& filename) const;
 protected:
-    bool read_from_file(const std::string filename);
+    bool read_from_file(const std::string&& filename);
 public:
     struct dfs_state {
       unsigned int location_number;
@@ -312,7 +312,7 @@ public:
    *  Save RT reachability state to file.
    *  @param fname Name of file to save to.
    */
-  void save_checkpoint(const std::string fname) const;
+  void save_checkpoint(const std::string&& fname) const;
 
   /** GOTO functions we're operating over. */
   const goto_functionst &goto_functions;

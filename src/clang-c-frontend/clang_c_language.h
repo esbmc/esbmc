@@ -76,8 +76,8 @@ public:
 protected:
   std::string internal_additions();
 
-  void dump_clang_headers(std::string tmp_dir);
-  void build_compiler_args(std::string tmp_dir);
+  void dump_clang_headers(const std::string& tmp_dir);
+  void build_compiler_args(const std::string&& tmp_dir);
 
   std::vector<std::string> compiler_args;
   std::vector<std::unique_ptr<clang::ASTUnit> > ASTs;

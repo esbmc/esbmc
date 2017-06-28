@@ -45,7 +45,7 @@ void goto_unwindt::goto_unwind()
 
 void goto_unwindt::unwind_program(
   goto_programt &goto_program,
-  function_loopst::reverse_iterator loop)
+  const function_loopst::reverse_iterator& loop)
 {
   // Get loop exit goto number
   goto_programt::targett loop_exit = loop->get_original_loop_exit();

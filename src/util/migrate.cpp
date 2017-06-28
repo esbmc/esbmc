@@ -448,7 +448,7 @@ splice_expr(const exprt &expr, expr2tc &new_expr_ref)
 }
 
 static void
-convert_operand_pair(const exprt expr, expr2tc &arg1, expr2tc &arg2)
+convert_operand_pair(const exprt& expr, expr2tc &arg1, expr2tc &arg2)
 {
 
   migrate_expr(expr.op0(), arg1);

@@ -174,7 +174,7 @@ static const char *cpp_cpp_defs[] = {
 nullptr
 };
 
-int configure_and_run_cpp(const char *out_file_buf, std::string path,
+int configure_and_run_cpp(const char *out_file_buf, const std::string& path,
 		          const char **platformdefs, bool is_cpp);
 
 void setup_cpp_defs(const char **defs)
@@ -306,7 +306,7 @@ bool c_preprocess(
 #endif
 
 int
-configure_and_run_cpp(const char *out_file_buf, std::string path,
+configure_and_run_cpp(const char *out_file_buf, const std::string& path,
 		      const char **platform_defs, bool is_cpp)
 {
   int ret;

@@ -427,7 +427,7 @@ public:
    *  has it immediately to hand. */
   class dyn_sized_array_excp {
   public:
-    dyn_sized_array_excp(const expr2tc _size) : size(_size) {}
+    dyn_sized_array_excp(const expr2tc& _size) : size(_size) {}
     expr2tc size;
   };
 

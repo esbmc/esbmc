@@ -22,8 +22,8 @@
 #include <llvm/Support/Path.h>
 
 std::unique_ptr<clang::ASTUnit> buildASTs(
-  std::string intrinsics,
-  std::vector<std::string> compiler_args)
+  const std::string &intrinsics,
+  const std::vector<std::string> &compiler_args)
 {
   // Create virtual file system to add clang's headers
   llvm::IntrusiveRefCntPtr<clang::vfs::OverlayFileSystem> OverlayFileSystem(
@@ -99,7 +99,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   }
 
   // Create our custom action
-  auto action = new esbmc_action(intrinsics);
+  auto action = new esbmc_action(std::move(intrinsics));
 
   // Create ASTUnit
   std::unique_ptr<clang::ASTUnit> unit(

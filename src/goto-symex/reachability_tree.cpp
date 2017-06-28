@@ -57,7 +57,7 @@ reachability_treet::reachability_treet(
   else
     por = true;
 
-  target_template = target;
+  target_template = std::move(target);
 }
 
 void
@@ -367,16 +367,16 @@ reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)
   ileaves = 0; // Can use this depending on a future refactor.
 }
 
-reachability_treet::dfs_position::dfs_position(const std::string filename)
+reachability_treet::dfs_position::dfs_position(const std::string&& filename)
 {
 
-  read_from_file(filename);
+  read_from_file(std::move(filename));
 }
 
 const uint32_t reachability_treet::dfs_position::file_magic = 0x4543484B; //'ECHK'
 
 bool reachability_treet::dfs_position::write_to_file(
-                                       const std::string filename) const
+                                       const std::string&& filename) const
 {
   uint8_t buffer[8192];
   reachability_treet::dfs_position::file_hdr hdr;
@@ -439,7 +439,7 @@ fail:
 }
 
 bool reachability_treet::dfs_position::read_from_file(
-                                       const std::string filename)
+                                       const std::string&& filename)
 {
   reachability_treet::dfs_position::file_hdr hdr;
   reachability_treet::dfs_position::file_entry entry;
@@ -798,7 +798,7 @@ reachability_treet::restore_from_dfs_state(void *_dfs __attribute__((unused)))
   return false;
 }
 
-void reachability_treet::save_checkpoint(const std::string fname __attribute__((unused))) const
+void reachability_treet::save_checkpoint(const std::string&& fname __attribute__((unused))) const
 {
 
 #if 0

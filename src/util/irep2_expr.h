@@ -44,7 +44,7 @@ class constant_fixedbv_data : public constant2t
 {
 public:
   constant_fixedbv_data(const type2tc &t, expr2t::expr_ids id,
-                        fixedbvt fbv)
+                        const fixedbvt& fbv)
     : constant2t(t, id), value(std::move(fbv)) { }
   constant_fixedbv_data(const constant_fixedbv_data &ref) = default;
 
@@ -59,7 +59,7 @@ class constant_floatbv_data : public constant2t
 {
 public:
   constant_floatbv_data(const type2tc &t, expr2t::expr_ids id,
-                        ieee_floatt ieeebv)
+                        const ieee_floatt& ieeebv)
     : constant2t(t, id), value(std::move(ieeebv)) { }
   constant_floatbv_data(const constant_floatbv_data &ref) = default;
 
@@ -102,7 +102,7 @@ public:
 class constant_array_of_data : public constant2t
 {
 public:
-  constant_array_of_data(const type2tc &t, expr2t::expr_ids id, expr2tc value)
+  constant_array_of_data(const type2tc &t, expr2t::expr_ids id, const expr2tc& value)
     : constant2t(t, id), initializer(value) { }
   constant_array_of_data(const constant_array_of_data &ref) = default;
 
@@ -2233,7 +2233,7 @@ public:
 class dynamic_object2t : public dynamic_object_expr_methods
 {
 public:
-  dynamic_object2t(const type2tc &type, const expr2tc inst,
+  dynamic_object2t(const type2tc &type, const expr2tc& inst,
                    bool inv, bool uknown)
     : dynamic_object_expr_methods(type, dynamic_object_id, inst, inv, uknown) {}
   dynamic_object2t(const dynamic_object2t &ref) = default;
@@ -2458,7 +2458,7 @@ class code_function_call2t : public code_function_call_expr_methods
 {
 public:
   code_function_call2t(const expr2tc &r, const expr2tc &func,
-                       const std::vector<expr2tc> args)
+                       const std::vector<expr2tc>& args)
     : code_function_call_expr_methods(type_pool.get_empty(),
                                       code_function_call_id, r, func, args) {}
   code_function_call2t(const code_function_call2t &ref) = default;

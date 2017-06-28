@@ -45,7 +45,7 @@ const unsigned int esbmc_num_solvers =
 sizeof(esbmc_solvers) / sizeof(esbmc_solver_config);
 
 static smt_convt *
-create_solver(std::string the_solver,
+create_solver(const std::string&& the_solver,
             bool int_encoding, const namespacet &ns,
             const optionst &options, tuple_iface **tuple_api,
             array_iface **array_api)
@@ -106,7 +106,7 @@ pick_solver(bool int_encoding, const namespacet &ns,
   if (the_solver == "")
     the_solver = pick_default_solver();
 
-  return create_solver(the_solver, int_encoding, ns,
+  return create_solver(std::move(the_solver), int_encoding, ns,
                        options, tuple_api, array_api);
 }
 
@@ -121,7 +121,7 @@ create_solver_factory1(const std::string &solver_name,
     // Pick one based on options.
     return pick_solver(int_encoding, ns, options, tuple_api, array_api);
 
-  return create_solver(solver_name, int_encoding, ns,
+  return create_solver(std::move(solver_name), int_encoding, ns,
                        options, tuple_api, array_api);
 }
 

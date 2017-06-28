@@ -2411,8 +2411,8 @@ void clang_c_convertert::get_default_symbol(
 {
   symbol.mode = "C";
   symbol.module = module_name;
-  symbol.location = location;
-  symbol.type = type;
+  symbol.location = std::move(location);
+  symbol.type = std::move(type);
   symbol.base_name = base_name;
   symbol.pretty_name = pretty_name;
   symbol.name = pretty_name;

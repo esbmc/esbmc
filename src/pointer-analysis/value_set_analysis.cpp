@@ -102,7 +102,7 @@ void value_set_analysist::get_entries_rec(
   }
   else if(check_type(t))
   {
-    dest.emplace_back(identifier, suffix);
+    dest.emplace_back(identifier, std::move(suffix));
   }
 }
 

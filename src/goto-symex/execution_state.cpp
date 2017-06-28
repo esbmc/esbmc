@@ -38,7 +38,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    boost::shared_ptr<ex_state_level2t> l2init,
                                    optionst &options,
                                    message_handlert &_message_handler) :
-  goto_symext(ns, context, goto_functions, _target, options),
+  goto_symext(ns, context, goto_functions, std::move(_target), options),
   owning_rt(art),
   state_level2(std::move(l2init)),
   global_value_set(ns),
@@ -1158,7 +1158,7 @@ execution_statet::kill_monitor_thread()
   threads_state[monitor_tid].thread_ended = true;
 }
 
-static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+static void replace_symbol_names(exprt &e, const std::string&& prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
 
   if (e.id() ==  "symbol") {
@@ -1166,7 +1166,7 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
     used_syms.insert(sym);
   } else {
     Forall_operands(it, e)
-      replace_symbol_names(*it, prefix, strings, used_syms);
+      replace_symbol_names(*it, std::move(prefix), strings, used_syms);
   }
 }
 
@@ -1210,7 +1210,7 @@ execution_statet::init_property_monitors()
 
       languages.to_expr(expr_str, dummy_str, main_expr, message_handler);
 
-      replace_symbol_names(main_expr, prop_name, strings, used_syms);
+      replace_symbol_names(main_expr, std::move(prop_name), strings, used_syms);
 
       monitors[prop_name] = std::pair<std::set<std::string>, exprt>
                                       (used_syms, main_expr);

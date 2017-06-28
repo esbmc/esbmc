@@ -184,7 +184,7 @@ public:
 
     entryt() = default;
 
-    entryt(std::string _identifier, const std::string _suffix):
+    entryt(std::string _identifier, const std::string&& _suffix):
       identifier(std::move(_identifier)),
       suffix(_suffix)
     {
@@ -409,7 +409,7 @@ public:
   /** Look up the value set for the given variable name and suffix. */
   entryt &get_entry(const std::string &id, const std::string &suffix)
   {
-    return get_entry(entryt(id, suffix));
+    return get_entry(entryt(id, std::move(suffix)));
   }
 
   /** Look upt he value set for the variable name and suffix stored in the

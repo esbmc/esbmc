@@ -88,7 +88,7 @@ member_offset(const type2tc &type, const irep_idt &member)
 }
 
 mp_integer
-type_byte_size_default(const type2tc &type, mp_integer defaultval)
+type_byte_size_default(const type2tc &type, const mp_integer& defaultval)
 {
   try {
     return type_byte_size(type);

@@ -100,7 +100,7 @@ static void copy_member(
 static void copy_array(
   const locationt& location,
   const irep_idt &member_base_name,
-  mp_integer i,
+  const mp_integer& i,
   const irep_idt &arg_name,
   exprt &block)
 {

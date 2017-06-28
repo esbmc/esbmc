@@ -531,7 +531,7 @@ protected:
    *  @param type Type of this new expr
    *  @param id Class identifier for this new expr
    */
-  expr2t(const type2tc type, expr_ids id);
+  expr2t(const type2tc& type, expr_ids id);
   /** Copy constructor */
   expr2t(const expr2t &ref);
 
