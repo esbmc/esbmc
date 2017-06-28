@@ -156,7 +156,7 @@ namespace esbmct {
   typedef expr2t_traits<> expr2t_default_traits;
   template <typename ...Args> class type2t_traits;
   typedef type2t_traits<> type2t_default_traits;
-}
+} // namespace esbmct
 
 class type2t;
 class expr2t;
@@ -1307,7 +1307,7 @@ namespace esbmct {
   {
     typedef boost::mpl::vector<> type;
   };
-}; // esbmct
+} // namespace esbmct
 
 // In global namespace: to get boost to recognize something2tc's as being a
 // shared pointer type, we need to define get_pointer for it:

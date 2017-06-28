@@ -17,7 +17,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 // Forward dec, to avoid bringing in clang headers
 namespace clang {
   class ASTUnit;
-}
+} // namespace clang
 
 class clang_c_languaget: public languaget
 {

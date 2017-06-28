@@ -281,6 +281,6 @@ namespace renaming {
     current_state_hashest current_hashes;
   };
 
-}
+} // namespace renaming
 
 #endif /* _GOTO_SYMEX_RENAMING_H_ */

@@ -531,7 +531,7 @@ auto
 type2t_traits<Args...>::make_contained(typename Args::result_type... args) -> irep_container<base2t> {
   return irep_container<base2t>(new derived(args...));
 }
-}
+} // namespace esbmct
 
 /*************************** Base expr2t definitions **************************/
 
@@ -1029,7 +1029,7 @@ auto
 expr2t_traits_always_construct<Args...>::make_contained(typename Args::result_type... args) -> irep_container<base2t> {
   return irep_container<base2t>(new derived(args...));
 }
-}
+} // namespace esbmct
 
 /**************************** Expression constructors *************************/
 

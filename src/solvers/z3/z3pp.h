@@ -2523,7 +2523,7 @@ namespace z3 {
 
 
 
-}
+} // namespace z3
 
 /*@}*/
 /*@}*/
