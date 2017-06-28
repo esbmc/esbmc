@@ -371,16 +371,19 @@ bool clang_c_convertert::get_var(
     return true;
 
   // Check if we annotated it to be have an infinity size
-  for(auto const &attr : vd.getAttrs())
+  if(vd.hasAttrs())
   {
-    if (!llvm::isa<clang::AnnotateAttr>(attr))
-      continue;
-
-    const auto *a = llvm::cast<clang::AnnotateAttr>(attr);
-    if(a->getAnnotation().str() == "__ESBMC_inf_size")
+    for(auto const &attr : vd.getAttrs())
     {
-      assert(t.is_array());
-      t.size(exprt("infinity", uint_type()));
+      if (!llvm::isa<clang::AnnotateAttr>(attr))
+        continue;
+
+      const auto *a = llvm::cast<clang::AnnotateAttr>(attr);
+      if(a->getAnnotation().str() == "__ESBMC_inf_size")
+      {
+        assert(t.is_array());
+        t.size(exprt("infinity", uint_type()));
+      }
     }
   }
 
