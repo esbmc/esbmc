@@ -371,7 +371,7 @@ protected:
    *  @param symname Name of intrinsic we're calling.
    */
   void run_intrinsic(const code_function_call2t &call, reachability_treet &art,
-                     const std::string&& symname);
+                     const std::string& symname);
 
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
@@ -616,7 +616,7 @@ protected:
   expr2tc symex_mem(const bool is_malloc, const expr2tc &lhs, const sideeffect2t &code);
     /** Pointer modelling update function */
   void track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
-                         const expr2tc&& size = expr2tc());
+                         const expr2tc& size = expr2tc());
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */

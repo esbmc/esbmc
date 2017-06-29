@@ -108,7 +108,7 @@ goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
 
   // Install pointer modelling data into the relevant arrays.
   pointer_object2tc ptr_obj(pointer_type2(), result);
-  track_new_pointer(ptr_obj, type2tc(), std::move(realloc_size));
+  track_new_pointer(ptr_obj, type2tc(), realloc_size);
 
   guardt guard;
   symex_assign_rec(lhs, result, guard, symex_targett::STATE);
@@ -230,7 +230,7 @@ goto_symext::symex_mem(
 
 void
 goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
-                               const expr2tc&& size)
+                               const expr2tc& size)
 {
   guardt guard;
 

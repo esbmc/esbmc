@@ -113,7 +113,7 @@ void bmct::successful_trace(boost::shared_ptr<symex_target_equationt> &eq)
   {
     case ui_message_handlert::GRAPHML:
       status("Building successful trace");
-      build_successful_goto_trace(std::move(eq), ns, goto_trace);
+      build_successful_goto_trace(eq, ns, goto_trace);
       specification += options.get_bool_option("overflow-check") ? 1 : 0;
       specification += options.get_bool_option("memory-leak-check") ? 2 : 0;
       generate_goto_trace_in_correctness_graphml_format(
@@ -162,7 +162,7 @@ void bmct::error_trace(
 
   goto_tracet goto_trace;
   int specification = 0;
-  build_goto_trace(std::move(eq), smt_conv, goto_trace);
+  build_goto_trace(eq, smt_conv, goto_trace);
 
   std::string witness_output = options.get_option("witness-output");
   if(!witness_output.empty())
