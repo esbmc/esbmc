@@ -460,7 +460,7 @@ public:
   }
 
   /** When using value_sett for static analysis, takes a code statement and
-   *  sends any assignments contained within to the assign method. 
+   *  sends any assignments contained within to the assign method.
    *  @param code The statement to interpret. */
   void apply_code(const expr2tc &code);
 

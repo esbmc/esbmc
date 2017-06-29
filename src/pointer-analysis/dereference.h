@@ -69,7 +69,7 @@ Author: Daniel Kroening, kroening@kroening.com
  *  all struct fields (and that trailing padding exists). This is so that we
  *  can avoid all scenarios where dereferences cross field boundries, as that
  *  will ultimately be an alignment violation.
- *  
+ *
  *  The value set tracking code also maintains a 'minimum alignment' piece of
  *  data when the offset is nondeterministic, guarenteeing that the offset used
  *  will be aligned to at least that many bytes. This allows for reducing the
@@ -135,7 +135,7 @@ public:
   virtual void get_value_set(
     const expr2tc &expr,
     value_setst::valuest &value_set)=0;
-  
+
   /** Check whether a failed symbol already exists for the given symbol.
    *  This is legacy, and will be removed at some point soon. */
   virtual bool has_failed_symbol(
@@ -194,7 +194,7 @@ public:
   }
 
   virtual ~dereferencet() = default;
-  
+
   /** The different ways in which a pointer may be accessed. */
   typedef enum {
     READ,  /// The result of the expression is only read.
