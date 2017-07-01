@@ -685,18 +685,35 @@ dereferencet::build_reference_to(
 void
 dereferencet::deref_invalid_ptr(const expr2tc &deref_expr, const guardt &guard, modet mode)
 {
-  // constraint that it actually is an invalid pointer
 
+  if (mode == INTERNAL)
+    // The caller just wants a list of references -- ensuring that the correct
+    // assertions fire is a problem for something or someone else
+    return;
+
+  // constraint that it actually is an invalid pointer
   invalid_pointer2tc invalid_pointer_expr(deref_expr);
+
+  expr2tc validity_test;
+  std::string foo;
+
+  // Adjust error message and test depending on the context
+  if (mode == FREE) {
+    // You're allowed to free NULL.
+    symbol2tc null_ptr(type2tc(new pointer_type2t(get_empty_type())), "NULL");
+    notequal2tc neq(null_ptr, deref_expr);
+    and2tc and_(neq, invalid_pointer_expr);
+    validity_test = and_;
+    foo = "invalid pointer freed";
+  } else {
+    validity_test = invalid_pointer_expr;
+    foo = "invalid pointer";
+  }
 
   // produce new guard
 
   guardt tmp_guard(guard);
-  tmp_guard.add(invalid_pointer_expr);
-
-  // Adjust error message depending on the context
-  std::string foo =
-    (mode == FREE) ? "invalid pointer freed" : "invalid pointer";
+  tmp_guard.add(validity_test);
 
   dereference_failure("pointer dereference", foo, tmp_guard);
 }
