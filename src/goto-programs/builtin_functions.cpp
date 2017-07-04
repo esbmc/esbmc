@@ -632,11 +632,13 @@ void goto_convertt::do_function_call_symbol(
   {
     do_printf(lhs, function, arguments, dest);
   }
-  else if(base_name == "__ESBMC_atomic_begin")
+  else if((base_name == "__ESBMC_atomic_begin")
+          || (base_name == "__VERIFIER_atomic_begin"))
   {
     do_atomic_begin(lhs, function, arguments, dest);
   }
-  else if(base_name == "__ESBMC_atomic_end")
+  else if((base_name == "__ESBMC_atomic_end")
+          || (base_name == "__VERIFIER_atomic_end"))
   {
     do_atomic_end(lhs, function, arguments, dest);
   }
