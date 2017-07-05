@@ -1,5 +1,14 @@
 Release Notes of the ESBMC model checker
 
+*** Version 4.4
+* Fix crash with --smt-during-symex due to equations being shared_ptr
+* Fix a double increment when encoding tuples
+* Fix crash when building ESBMC with an assertions enabled clang build
+* Fix a bug when trying to verify a program with a free(NULL) statement
+* New --ssa-* options to add information and/or change SSA printing format
+* A number of improvements to the code base thanks to clang-tidy
+* Improved clang detection in autotools
+
 *** Version 4.3
 * New support to encode square root operations using fp.sqrt
 * Improvements to cex generation
