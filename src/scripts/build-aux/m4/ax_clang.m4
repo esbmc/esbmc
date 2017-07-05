@@ -22,16 +22,17 @@ AC_DEFUN([AX_CLANG],
                 if test -d "$withval"
                 then
                     ac_clang_path="$withval"
+                    AC_PATH_PROGS([CLANG],[clang],[],[$ac_clang_path/bin])
                 else
                     AC_MSG_ERROR(--with-clang expected directory name)
                 fi
             ],
             dnl defaults to /usr/
-            [ac_clang_path=$PATH]
+            [
+                ac_clang_path=$PATH
+                AC_PATH_PROGS([CLANG],[clang],[],[$ac_clang_path])
+            ]
     )
-
-    dnl Search clang
-    AC_PATH_PROG([CLANG],[clang],[],[],[$ac_clang_path])
 
     if test "x$CLANG" = "x"; then
         ifelse([$3], , :, [$3])
@@ -42,23 +43,19 @@ AC_DEFUN([AX_CLANG],
 
     clangversion=0
     _version=$1
-    if test "x$CLANG" = "x"; then
-        ax_clang_ok='no'
-    else
-        clangversion=`$CLANG --version 2>/dev/null`
-        if test "x$?" = "x0"; then
-            clangversion=`echo "$clangversion" | tr '\n' ' ' | sed 's/^[[^0-9]]*\([[0-9]][[0-9.]]*[[0-9]]\).*$/\1/g'`
-            clangversion=`echo "$clangversion" | sed 's/\([[0-9]]*\.[[0-9]]*\)\.[[0-9]]*/\1/g'`
-            V_CHECK=`expr $clangversion \>= $_version`
-            if test "$V_CHECK" != "1" ; then
-                AC_MSG_WARN([Failure: ESBMC requires clang >= $1 but only found clang $clangversion.])
-                ax_clang_ok='no'
-            else
-                ax_clang_ok='yes'
-            fi
-        else
+    clangversion=`$CLANG --version 2>/dev/null`
+    if test "x$?" = "x0"; then
+        clangversion=`echo "$clangversion" | tr '\n' ' ' | sed 's/^[[^0-9]]*\([[0-9]][[0-9.]]*[[0-9]]\).*$/\1/g'`
+        clangversion=`echo "$clangversion" | sed 's/\([[0-9]]*\.[[0-9]]*\)\.[[0-9]]*/\1/g'`
+        V_CHECK=`expr $clangversion \>= $_version`
+        if test "$V_CHECK" != "1" ; then
+            AC_MSG_WARN([Failure: ESBMC requires clang >= $1 but only found clang $clangversion.])
             ax_clang_ok='no'
+        else
+            ax_clang_ok='yes'
         fi
+    else
+        ax_clang_ok='no'
     fi
 
     if test "x$ax_clang_ok" = "xyes"; then
