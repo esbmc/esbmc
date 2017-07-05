@@ -11,7 +11,7 @@ libutil_la_SOURCES = \
       type_eq.cpp guard.cpp array_name.cpp message_stream.cpp union_find.cpp \
       xml.cpp xml_irep.cpp std_types.cpp std_code.cpp format_constant.cpp \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
-      signal_catcher.cpp migrate.cpp \
+      signal_catcher.cpp migrate.cpp show_symbol_table.cpp \
       thread.cpp crypto_hash.cpp type_byte_size.cpp dcutil.cpp \
       string_constant.cpp c_types.cpp ieee_float.cpp c_qualifiers.cpp
 AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir) -Wno-bool-compare
@@ -31,5 +31,5 @@ utilinclude_HEADERS = arith_tools.h array_name.h base_type.h bitvector.h \
       std_expr.h std_types.h string2array.h string_constant.h \
       string_container.h string_hash.h symbol.h symbol_serialization.h \
       thread.h threeval.h time_stopping.h type.h type_byte_size.h \
-      type_eq.h typecheck.h ui_message.h union_find.h xml.h xml_irep.h
-
+      type_eq.h typecheck.h ui_message.h union_find.h xml.h xml_irep.h \
+      show_symbol_table.h

@@ -37,6 +37,7 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <util/location.h>
 #include <util/message_stream.h>
 #include <util/migrate.h>
+#include <util/show_symbol_table.h>
 #include <util/time_stopping.h>
 
 bmct::bmct(const goto_functionst &funcs,
@@ -328,11 +329,13 @@ void bmct::report_failure()
 
 void bmct::show_program(boost::shared_ptr<symex_target_equationt> &eq)
 {
-  unsigned count=1;
+  unsigned int count=1;
+
+  if(config.options.get_bool_option("ssa-symbol-table"))
+    ::show_symbol_table_plain(ns, std::cout);
 
   languagest languages(ns, MODE_C);
-
-  std::cout << "\n" << "Program constraints: " << eq->SSA_steps.size() << "\n";
+  std::cout << "\n" << "Program constraints: " << "\n";
 
   bool print_guard = config.options.get_bool_option("ssa-guards");
   bool sparse = config.options.get_bool_option("ssa-no-location");

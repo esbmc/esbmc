@@ -19,6 +19,7 @@ const struct opt_templ esbmc_options[] = {
   { 0, "goto-functions-too", switc, "" },
   { 0, "program-only", switc, "" },
   { 0, "program-too", switc, "" },
+  { 0, "ssa-symbol-table", switc, "" },
   { 0, "ssa-guards", switc, "" },
   { 0, "ssa-no-sliced", switc, "" },
   { 0, "ssa-full-names", switc, "" },

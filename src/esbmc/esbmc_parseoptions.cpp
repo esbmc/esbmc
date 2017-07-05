@@ -386,14 +386,10 @@ int cbmc_parseoptionst::doit()
   if (opts.get_bool_option("skip-bmc"))
     return 0;
 
-  bool res = false;
-
   // do actual BMC
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
-  res = do_bmc(bmc);
-
-  return res;
+  return do_bmc(bmc);
 }
 
 int cbmc_parseoptionst::doit_k_induction_parallel()
@@ -1853,6 +1849,7 @@ void cbmc_parseoptionst::help()
     " --goto-functions-too         show goto program and verify\n"
     " --program-only               only show program expression\n"
     " --program-too                show program expression and verify\n"
+    " --ssa-symbol-table           show symbol table along with SSA\n"
     " --ssa-guards                 print SSA's guards, if any\n"
     " --ssa-no-location            do not print the SSA's original location\n"
     " --ssa-no-sliced              do not print the sliced SSAs\n"
