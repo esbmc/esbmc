@@ -105,19 +105,11 @@ AC_DEFUN([AX_CLANG],
     dnl Check the system location for clang libraries
     clang_includes_path=$ac_clang_path/include/clang
     for libsubdir in $libsubdirs ; do
-        if ls "$ac_clang_path/$libsubdir/libclang"* >/dev/null 2>&1 ; then break; fi
-    done
-
-    for i in `ls -d $ac_clang_path/$libsubdir/libclang.$lib_ext.* 2>/dev/null`; do
-        _version_tmp=`echo $i | sed "s#$ac_clang_path/$libsubdir/##" | sed "s/libclang.$lib_ext.//"`
-        V_CHECK=`expr $_version_tmp \> $_version`
-        if test "$V_CHECK" != "1" ; then
-                continue
+        if ls "$ac_clang_path/$libsubdir/libclang"* >/dev/null 2>&1 ; then
+            succeeded=yes
+            clang_libs_path=$ac_clang_path/$libsubdir
+            break;
         fi
-
-        succeeded=yes
-        clang_libs_path=$ac_clang_path/$libsubdir
-        break;
     done
 
     if test "$succeeded" != "yes" ; then
