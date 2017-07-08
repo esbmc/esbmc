@@ -745,7 +745,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         }
 
         // Send information to parent if no bug was found
-        if(res)
+        if(res == smt_convt::P_SATISFIABLE)
         {
           r.k = k_step;
 
@@ -857,7 +857,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         }
 
         // Send information to parent if no bug was found
-        if(!res)
+        if(res == smt_convt::P_UNSATISFIABLE)
         {
           r.k = k_step;
 
@@ -929,7 +929,7 @@ int cbmc_parseoptionst::doit_k_induction_parallel()
         }
 
         // Send information to parent if no bug was found
-        if(!res)
+        if(res == smt_convt::P_UNSATISFIABLE)
         {
           r.k = k_step;
 
@@ -1137,10 +1137,20 @@ int cbmc_parseoptionst::do_base_case(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  if(do_bmc(bmc))
+  switch(do_bmc(bmc))
   {
-    std::cout << "\nBug found at k = " << k_step << "\n";
-    return true;
+    case smt_convt::P_UNSATISFIABLE:
+    case smt_convt::P_SMTLIB:
+    case smt_convt::P_ERROR:
+      break;
+
+    case smt_convt::P_SATISFIABLE:
+      std::cout << "\nBug found at k = " << k_step << "\n";
+      return true;
+
+    default:
+      std::cout << "Unknown BMC result\n";
+      abort();
   }
 
   return false;
@@ -1161,11 +1171,21 @@ int cbmc_parseoptionst::do_forward_condition(
 
   bmc.options.set_option("unwind", integer2string(k_step));
 
-  if(!do_bmc(bmc))
+  switch(do_bmc(bmc))
   {
-    std::cout << "\nSolution found by the forward condition; "
-        << "all states are reachable (k = " << k_step << ")\n";
-    return false;
+    case smt_convt::P_SATISFIABLE:
+    case smt_convt::P_SMTLIB:
+    case smt_convt::P_ERROR:
+      break;
+
+    case smt_convt::P_UNSATISFIABLE:
+      std::cout << "\nSolution found by the forward condition; "
+                << "all states are reachable (k = " << k_step << ")\n";
+      return false;
+
+    default:
+      std::cout << "Unknown BMC result\n";
+      abort();
   }
 
   return true;
@@ -1191,11 +1211,21 @@ int cbmc_parseoptionst::do_inductive_step(
   bmc.options.set_option("unwind", integer2string(k_step));
 
   try {
-    if(!do_bmc(bmc))
+    switch(do_bmc(bmc))
     {
-      std::cout << "\nSolution found by the inductive step "
-        << "(k = " << k_step << ")\n";
-      return false;
+      case smt_convt::P_SATISFIABLE:
+      case smt_convt::P_SMTLIB:
+      case smt_convt::P_ERROR:
+        break;
+
+      case smt_convt::P_UNSATISFIABLE:
+        std::cout << "\nSolution found by the inductive step "
+                  << "(k = " << k_step << ")\n";
+        return false;
+
+      default:
+        std::cout << "Unknown BMC result\n";
+        abort();
     }
   }
   catch(...)

@@ -518,7 +518,7 @@ smt_convt::resultt bmct::run(boost::shared_ptr<symex_target_equationt> &eq)
 
     // Only run for one run
     if (options.get_bool_option("interactive-ileaves"))
-      return smt_convt::P_UNSATISFIABLE;
+      return res;
 
   } while(symex->setup_next_formula());
 
@@ -648,7 +648,17 @@ smt_convt::resultt bmct::run_thread(boost::shared_ptr<symex_target_equationt> &e
     }
 
     if(result->remaining_claims==0)
+    {
+      if(options.get_bool_option("smt-formula-too")
+         || options.get_bool_option("smt-formula-only"))
+      {
+        std::cout << "No VCC remaining, no SMT formula will be generated for"
+                  << " the program\n";
+        return smt_convt::P_SMTLIB;
+      }
+
       return smt_convt::P_UNSATISFIABLE;
+    }
 
     if (options.get_bool_option("ltl")) {
       int res = ltl_run_thread(eq);
