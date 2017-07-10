@@ -62,6 +62,8 @@ z3_convt::z3_convt(bool int_encoding, const namespacet &_ns)
 
   z3::params p(ctx);
   p.set("relevancy", (unsigned int) 0);
+  p.set("model", true);
+  p.set("proof", false);
   solver.set(p);
 
   Z3_set_ast_print_mode(ctx, Z3_PRINT_SMTLIB_COMPLIANT);
