@@ -803,8 +803,8 @@ smt_astt z3_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
     // transformed into fpa = b ? 1 : 0;
     const smt_ast *args[3];
     args[0] = from;
-    args[1] = convert_ast(gen_true_expr());
-    args[2] = convert_ast(gen_false_expr());
+    args[1] = convert_ast(gen_one(cast.type));
+    args[2] = convert_ast(gen_zero(cast.type));
 
     return mk_func_app(s, SMT_FUNC_ITE, args, 3);
   }
@@ -849,9 +849,7 @@ smt_astt z3_convt::mk_smt_bvfloat_arith_ops(const expr2tc& expr)
   const z3_smt_ast *ms1 = z3_smt_downcast(s1);
 
   if(is_ieee_sqrt2t(expr))
-  {
     return new_ast(ctx.fpa_sqrt(mrm->e, ms1->e), s);
-  }
 
   smt_astt s2 = convert_ast(*expr->get_sub_expr(2));
   const z3_smt_ast *ms2 = z3_smt_downcast(s2);

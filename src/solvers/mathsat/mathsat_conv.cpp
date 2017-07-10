@@ -702,8 +702,8 @@ smt_astt mathsat_convt::mk_smt_typecast_to_bvfloat(const typecast2t &cast)
     // transformed into fpa = b ? 1 : 0;
     const smt_ast *args[3];
     args[0] = from;
-    args[1] = convert_ast(gen_true_expr());
-    args[2] = convert_ast(gen_false_expr());
+    args[1] = convert_ast(gen_one(cast.type));
+    args[2] = convert_ast(gen_zero(cast.type));
 
     return mk_func_app(s, SMT_FUNC_ITE, args, 3);
   }
