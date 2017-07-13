@@ -98,8 +98,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   // backwards?
   if (!forward)
   {
-    unsigned &unwind = frame.loop_iterations[instruction.loop_number];
-    unwind++;
+    BigInt &unwind = frame.loop_iterations[instruction.loop_number];
+    ++unwind;
 
     if (get_unwind(cur_state->source, unwind)) {
       loop_bound_exceeded(new_guard);
@@ -367,11 +367,10 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
 }
 
 bool
-goto_symext::get_unwind(
-  const symex_targett::sourcet &source, unsigned unwind)
+goto_symext::get_unwind(const symex_targett::sourcet &source, BigInt unwind)
 {
   unsigned id = source.pc->loop_number;
-  unsigned long this_loop_max_unwind = max_unwind;
+  BigInt this_loop_max_unwind = max_unwind;
 
   if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
@@ -379,13 +378,12 @@ goto_symext::get_unwind(
   if (!options.get_bool_option("quiet"))
   {
     std::string msg =
-      "Unwinding loop " + i2string(id) + " iteration " + i2string(unwind) +
+      "Unwinding loop " + i2string(id) + " iteration " + integer2string(unwind) +
       " " + source.pc->location.as_string();
     std::cout << msg << std::endl;
   }
 
-  return this_loop_max_unwind != 0 &&
-         unwind >= this_loop_max_unwind;
+  return this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
 }
 
 hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;

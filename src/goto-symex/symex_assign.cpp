@@ -23,12 +23,13 @@ Author: Daniel Kroening, kroening@kroening.com
 goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
                          const goto_functionst &_goto_functions,
                          boost::shared_ptr<symex_targett> _target, optionst &opts) :
+  options(opts),
   guard_identifier_s("goto_symex::guard"),
   total_claims(0),
   remaining_claims(0),
+  max_unwind(options.get_option("unwind").c_str()),
   constant_propagation(true),
   ns(_ns),
-  options(opts),
   new_context(_new_context),
   goto_functions(_goto_functions),
   target(std::move(_target)),
@@ -57,13 +58,11 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
     std::string::size_type next = set.find(",", idx);
     std::string val = set.substr(idx, next - idx);
     unsigned long id = atoi(val.substr(0, val.find(":", 0)).c_str());
-    unsigned long uw = atol(val.substr(val.find(":", 0) + 1).c_str());
+    BigInt uw(val.substr(val.find(":", 0) + 1).c_str());
     unwind_set[id] = uw;
     if(next == std::string::npos) break;
     idx = next;
   }
-
-  max_unwind=atol(options.get_option("unwind").c_str());
 
   art1 = nullptr;
 
@@ -80,8 +79,8 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
 }
 
 goto_symext::goto_symext(const goto_symext &sym) :
-  ns(sym.ns),
   options(sym.options),
+  ns(sym.ns),
   new_context(sym.new_context),
   goto_functions(sym.goto_functions),
   last_throw(nullptr),

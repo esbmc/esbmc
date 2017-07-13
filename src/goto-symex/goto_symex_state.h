@@ -191,7 +191,7 @@ public:
     /** Record of how many loop unwinds we've performed. For each target in the
      *  program that contains a loop, record how many times we've unwound round
      *  it. */
-    typedef hash_map_cont<unsigned, unsigned> loop_iterationst;
+    typedef hash_map_cont<unsigned, BigInt> loop_iterationst;
     loop_iterationst loop_iterations;
 
     /** Record the first va_args index used in this function call, if any,
@@ -439,7 +439,7 @@ public:
    *  re-naming out of step with function invocations. */
   std::map<irep_idt, unsigned> variable_instance_nums;
   /** Record of how many times we've unwound function recursion. */
-  std::map<irep_idt, unsigned> function_unwind;
+  std::map<irep_idt, BigInt> function_unwind;
 
   /** Flag saying whether to maintain pointer value set tracking. */
   bool use_value_set;

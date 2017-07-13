@@ -993,10 +993,10 @@ int cbmc_parseoptionst::doit_k_induction()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << i2string((unsigned long) k_step);
+    std::cout << integer2string(k_step);
     std::cout << " ***\n";
     std::cout << "*** Checking base case\n";
 
@@ -1004,7 +1004,7 @@ int cbmc_parseoptionst::doit_k_induction()
       return true;
 
     std::cout << "\n*** K-Induction Loop Iteration ";
-    std::cout << i2string((unsigned long) k_step);
+    std::cout << integer2string(k_step);
     std::cout << " ***\n";
     std::cout << "*** Checking forward condition\n";
 
@@ -1014,7 +1014,7 @@ int cbmc_parseoptionst::doit_k_induction()
     if(k_step > 1)
     {
       std::cout << "\n*** K-Induction Loop Iteration ";
-      std::cout << i2string((unsigned long) k_step);
+      std::cout << integer2string( k_step);
       std::cout << " ***\n";
       std::cout << "*** Checking inductive step\n";
     }
@@ -1060,10 +1060,10 @@ int cbmc_parseoptionst::doit_falsification()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     std::cout << "\n*** Iteration number ";
-    std::cout << i2string((unsigned long) k_step);
+    std::cout << integer2string(k_step);
     std::cout << " ***\n";
 
     if(do_base_case(opts, goto_functions, k_step))
@@ -1106,10 +1106,10 @@ int cbmc_parseoptionst::doit_incremental()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  for(unsigned long k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  for(BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
   {
     std::cout << "\n*** Iteration number ";
-    std::cout << i2string((unsigned long) k_step);
+    std::cout << k_step;
     std::cout << " ***\n";
 
     if(do_base_case(opts, goto_functions, k_step))
@@ -1126,7 +1126,7 @@ int cbmc_parseoptionst::doit_incremental()
 }
 
 int cbmc_parseoptionst::do_base_case(
-  optionst &opts, goto_functionst &goto_functions, int k_step)
+  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
 {
   opts.set_option("base-case", true);
   opts.set_option("forward-condition", false);
@@ -1135,7 +1135,7 @@ int cbmc_parseoptionst::do_base_case(
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
-  bmc.options.set_option("unwind", i2string(k_step));
+  bmc.options.set_option("unwind", integer2string(k_step));
 
   if(do_bmc(bmc))
   {
@@ -1147,7 +1147,7 @@ int cbmc_parseoptionst::do_base_case(
 }
 
 int cbmc_parseoptionst::do_forward_condition(
-  optionst &opts, goto_functionst &goto_functions, int k_step)
+  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
 {
   if(opts.get_bool_option("disable-forward-condition"))
     return true;
@@ -1159,7 +1159,7 @@ int cbmc_parseoptionst::do_forward_condition(
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
-  bmc.options.set_option("unwind", i2string(k_step));
+  bmc.options.set_option("unwind", integer2string(k_step));
 
   if(!do_bmc(bmc))
   {
@@ -1172,7 +1172,7 @@ int cbmc_parseoptionst::do_forward_condition(
 }
 
 int cbmc_parseoptionst::do_inductive_step(
-  optionst &opts, goto_functionst &goto_functions, int k_step)
+  optionst &opts, goto_functionst &goto_functions, BigInt k_step)
 {
   // Don't run inductive step for k_step == 1
   if(k_step == 1)
@@ -1188,7 +1188,7 @@ int cbmc_parseoptionst::do_inductive_step(
   bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity_msg(bmc);
 
-  bmc.options.set_option("unwind", i2string(k_step));
+  bmc.options.set_option("unwind", integer2string(k_step));
 
   try {
     if(!do_bmc(bmc))

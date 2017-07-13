@@ -253,9 +253,7 @@ protected:
    *  @param unwind Number of unwinds that have already occured.
    *  @return True if we've unwound past the unwinding limit.
    */
-  bool get_unwind(
-    const symex_targett::sourcet &source,
-    unsigned unwind);
+  bool get_unwind(const symex_targett::sourcet &source, BigInt unwind);
 
   /**
    *  Encode unwinding assertions and assumption.
@@ -326,9 +324,7 @@ protected:
    *  @param unwind Number of times its been unwound already.
    *  @return True if unwind recursion has been exceeded.
    */
-  bool get_unwind_recursion(
-    const irep_idt &identifier,
-    unsigned unwind);
+  bool get_unwind_recursion(const irep_idt &identifier, BigInt unwind);
 
   /**
    *  Join up function arguments.
@@ -649,6 +645,8 @@ protected:
 
   // Members
 
+  /** Options we're working with */
+  optionst &options;
   /**
    *  Symbol prefix for guards.
    *  These guards are the symbolic names for the truth of whether a particular
@@ -656,7 +654,6 @@ protected:
    *  @see guard_identifier
    */
   irep_idt guard_identifier_s;
-
   /** Loop numbers. */
   std::stack<unsigned> loop_numbers;
   /** Number of assertions executed. */
@@ -666,15 +663,13 @@ protected:
   /** Reachability tree we're working with. */
   reachability_treet *art1;
   /** Unwind bounds, loop number -> max unwinds. */
-  std::map<unsigned, long> unwind_set;
+  std::map<unsigned, BigInt> unwind_set;
   /** Global maximum number of unwinds. */
-  unsigned int max_unwind;
+  BigInt max_unwind;
   /** Whether constant propagation is to be enabled. */
   bool constant_propagation;
   /** Namespace we're working in. */
   const namespacet &ns;
-  /** Options we're working with */
-  optionst &options;
   /** Context we're working with */
   contextt &new_context;
   /** GOTO functions that we're operating over. */
