@@ -105,8 +105,8 @@ AC_CHECK_LIB([gmp], [__gmpz_cmp],
 
 # Define what to do when clang is enabled
 m4_define(ESBMC_ENABLE_CLANG, [
-  AX_CLANG(3.8.0, [], AC_MSG_ERROR([Cannot find clang; please pass it in --with-clang argument]))
-  AX_LLVM(,AC_MSG_FAILURE(Cannot find llvm dir, please pass it in --with-llvm argument))
+  AX_CLANG(3.7, [], AC_MSG_ERROR([Cannot find clang; please pass it in --with-clang argument]))
+  AX_LLVM(,AC_MSG_ERROR([Cannot find llvm; please pass it in --with-llvm argument]))
   AC_SUBST([ESBMC_CLANG_SUBDIRS], " clang-c-frontend clang-cpp-frontend ")
   AC_SUBST([ESBMC_CLANG_ARCHIVES], " ../clang-c-frontend/libclangcfrontend.la ../clang-cpp-frontend/libclangcppfrontend.la ../clang-c-frontend/headers/libclangheaders.la ../clang-c-frontend/AST/libclangcfrontendast.la")
   ])
