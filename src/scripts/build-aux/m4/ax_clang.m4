@@ -64,8 +64,33 @@ AC_DEFUN([AX_CLANG],
         ifelse([$3], , :, [$3])
     fi
 
+    clang_base=/usr
+    if test "$ac_clang_path" != ""; then
+        clang_base=$ac_clang_path
+    fi
+
+    dnl Search for the includes
+    AC_MSG_CHECKING(clang include directory)
+    succeeded=no
+
+    includesubdirs="$clang_base $clang_base/lib64/llvm-$clangversion $clang_base/lib/llvm-$clangversion"
+    for includesubdir in $includesubdirs ; do
+        if ls "$includesubdir/include/clang/Tooling/Tooling.h" >/dev/null 2>&1 ; then
+            succeeded=yes
+            clang_includes_path=$includesubdir/include
+            break;
+        fi
+    done
+
+    if test "$succeeded" != "yes" ; then
+        AC_MSG_RESULT(no)
+        ifelse([$3], , :, [$3])
+    else
+        AC_MSG_RESULT($clang_includes_path)
+    fi
+
     dnl Now search for the libraries
-    AC_MSG_CHECKING(clang lib directory)
+    AC_MSG_CHECKING(clang library directory)
     succeeded=no
 
     dnl On 64-bit systems check for system libraries in both lib64 and lib.
@@ -90,15 +115,10 @@ AC_DEFUN([AX_CLANG],
     fi
 
     dnl Check the system location for clang libraries
-    clang_includes_path=/usr
-    if test "$ac_clang_lib_path" != ""; then
-        clang_includes_path=$ac_clang_path/include/clang
-    fi
-
     for libsubdir in $libsubdirs ; do
-        if ls "$clang_includes_path/$libsubdir/libclang"* >/dev/null 2>&1 ; then
+        if ls "$clang_base/$libsubdir/libclang"* >/dev/null 2>&1 ; then
             succeeded=yes
-            clang_libs_path=$clang_includes_path/$libsubdir
+            clang_libs_path=$clang_base/$libsubdir
             break;
         fi
     done
@@ -125,11 +145,13 @@ AC_DEFUN([AX_CLANG],
 
     dnl Search if clang was shipped with a symbolic link call libgomp.so
     dnl We actually link with libgomp.so and this link breaks the old frontend
-    AC_MSG_CHECKING(if $clang_libs_path/libgomp.so is present)
-    if ls -L "$clang_libs_path/libgomp.so" >/dev/null 2>&1 ; then
-        AC_MSG_ERROR([Found libgomp.so on $clang_libs_path. ESBMC is linked against the GNU libgomp and the one shipped with clang is known to cause issues on our tool. Please, remove it before continuing.])
+    if test -d "$withval" ; then
+        AC_MSG_CHECKING(if $clang_libs_path/libgomp.so is present)
+        if ls -L "$clang_libs_path/libgomp.so" >/dev/null 2>&1 ; then
+            AC_MSG_ERROR([Found libgomp.so on $clang_libs_path. ESBMC is linked against the GNU libgomp and the one shipped with clang is known to cause issues on our tool. Please, remove it before continuing.])
+        fi
+        AC_MSG_RESULT(no)
     fi
-    AC_MSG_RESULT(no)
 
     clang_CPPFLAGS="-I$clang_includes_path"
     clang_LDFLAGS="-L$clang_libs_path"

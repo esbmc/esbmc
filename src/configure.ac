@@ -65,13 +65,6 @@ dnl Continue looking at our compilation situation
 
 AX_CXX_COMPILE_STDCXX_11(noext,mandatory)
 
-AX_BOOST_BASE(1.47, [], AC_MSG_ERROR([Cannot find boost base dir; please pass it in --with-boost argument or set BOOST_ROOT]))
-AX_BOOST_FILESYSTEM
-AX_BOOST_SYSTEM
-
-AS_VAR_APPEND(CPPFLAGS, " $BOOST_CPPFLAGS")
-AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS $BOOST_FILESYSTEM_LIB $BOOST_SYSTEM_LIB")
-
 AS_VAR_SET(C2GOTO_LIBS, "")
 
 AM_PROG_AR
@@ -127,6 +120,13 @@ AC_ARG_ENABLE(clang, [AS_HELP_STRING([--disable-clang], Build ESBMC without clan
   ESBMC_ENABLE_CLANG
 ]
 )
+
+AX_BOOST_BASE(1.47, [], AC_MSG_ERROR([Cannot find boost base dir; please pass it in --with-boost argument or set BOOST_ROOT]))
+AX_BOOST_FILESYSTEM
+AX_BOOST_SYSTEM
+
+AS_VAR_APPEND(CPPFLAGS, " $BOOST_CPPFLAGS")
+AS_VAR_APPEND(LDFLAGS, " $BOOST_LDFLAGS $BOOST_FILESYSTEM_LIB $BOOST_SYSTEM_LIB")
 
 AC_CHECK_HEADERS([boost/mpl/if.hpp], [], AC_MSG_ERROR([No boost mpl found]))
 AC_CHECK_HEADERS([boost/shared_ptr.hpp], [], AC_MSG_ERROR([No boost shared ptr found]))
