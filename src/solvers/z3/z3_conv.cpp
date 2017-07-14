@@ -1237,14 +1237,37 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
     unsigned sw = Z3_fpa_get_sbits(ctx, e.get_sort()) - 1;
 
     ieee_float_spect spec(sw, ew);
-    ieee_floatt value(spec);
+    ieee_floatt number(spec);
+
+    // TODO: The next version of Z3 provides new functions:
+    // Z3_fpa_is_numeral_nan, Z3_fpa_is_numeral_inf and
+    // Z3_fpa_is_numeral_positive. We can replace the following
+    // code when the new version is released
+
+    z3::expr v1;
+    v1 = model.eval(z3::to_expr(ctx, Z3_mk_fpa_is_nan(ctx, e)));
+    if(v1.is_bool() && Z3_get_bool_value(ctx, v1) == Z3_L_TRUE)
+    {
+      number.make_NaN();
+      return constant_floatbv2tc(number);
+    }
+
+    v1 = model.eval(z3::to_expr(ctx, Z3_mk_fpa_is_infinite(ctx, e)));
+    if(v1.is_bool() && Z3_get_bool_value(ctx, v1) == Z3_L_TRUE)
+    {
+      v1 = model.eval(z3::to_expr(ctx, Z3_mk_fpa_is_positive(ctx, e)));
+      if(v1.is_bool() && Z3_get_bool_value(ctx, v1) == Z3_L_TRUE)
+        number.make_plus_infinity();
+      else
+        number.make_minus_infinity();
+
+      return constant_floatbv2tc(number);
+    }
 
     Z3_ast v;
     if(Z3_model_eval(ctx, model, Z3_mk_fpa_to_ieee_bv(ctx, e), 1, &v))
     {
-      ieee_floatt number(spec);
       number.unpack(BigInt(Z3_get_numeral_string(ctx, v)));
-
       return constant_floatbv2tc(number);
     }
   }
