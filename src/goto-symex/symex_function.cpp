@@ -356,7 +356,7 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
   // Generate a list of functions to call. We'll then proceed to call them,
   // and will later on merge them.
   expr2tc func_ptr = call.function;
-  dereference(func_ptr, false);
+  dereference(func_ptr, dereferencet::READ);
 
   // Match the two varieties of failed symbol we can encounter,
   if (is_symbol2t(func_ptr) && (
@@ -554,7 +554,7 @@ goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
   if (!is_nil_expr(ret.operand)) {
     expr2tc value = ret.operand;
 
-    dereference(value, false);
+    dereference(value, dereferencet::READ);
 
     if (!is_nil_expr(frame.return_value)) {
       assign = code_assign2tc(frame.return_value, value);

@@ -109,8 +109,7 @@ symex_dereference_statet::dump_internal_state(
                           data.begin(), data.end());
 }
 
-void goto_symext::dereference(expr2tc &expr, const bool write, bool free,
-                              bool internal)
+void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)
 {
 
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
@@ -126,22 +125,25 @@ void goto_symext::dereference(expr2tc &expr, const bool write, bool free,
   cur_state->top().level1.rename(expr);
 
   guardt guard;
-  if (internal) {
-    dereference.dereference_expr(expr, guard, dereferencet::INTERNAL);
-  } else if (free) {
-    expr2tc tmp = expr;
-    while (is_typecast2t(tmp))
-      tmp = to_typecast2t(tmp).from;
+  switch(mode)
+  {
+    case dereferencet::FREE:
+    {
+      expr2tc tmp = expr;
+      while (is_typecast2t(tmp))
+        tmp = to_typecast2t(tmp).from;
 
-    assert(is_pointer_type(tmp));
-    std::list<expr2tc> dummy;
-    // Dereference to byte type, because it's guarenteed to succeed.
-    tmp = dereference2tc(get_uint8_type(), tmp);
+      assert(is_pointer_type(tmp));
+      std::list<expr2tc> dummy;
+      // Dereference to byte type, because it's guarenteed to succeed.
+      tmp = dereference2tc(get_uint8_type(), tmp);
 
-    dereference.dereference_expr(tmp, guard, dereferencet::FREE);
-    expr = tmp;
-  } else {
-    dereference.dereference_expr(expr, guard, (write) ? dereferencet::WRITE
-                                                      : dereferencet::READ);
+      dereference.dereference_expr(tmp, guard, dereferencet::FREE);
+      expr = tmp;
+      break;
+    }
+
+    default:
+      dereference.dereference_expr(expr, guard, mode);
   }
 }

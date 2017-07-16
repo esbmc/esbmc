@@ -107,7 +107,7 @@ goto_symext::symex_step(reachability_treet & art)
     expr2tc tmp(instruction.guard);
     replace_nondet(tmp);
 
-    dereference(tmp, false);
+    dereference(tmp, dereferencet::READ);
     replace_dynamic_allocation(tmp);
 
     symex_goto(tmp);
@@ -161,8 +161,8 @@ goto_symext::symex_step(reachability_treet & art)
 
       code_assign2t &assign = to_code_assign2t(deref_code);
 
-      dereference(assign.target, true);
-      dereference(assign.source, false);
+      dereference(assign.target, dereferencet::WRITE);
+      dereference(assign.source, dereferencet::READ);
       replace_dynamic_allocation(deref_code);
 
       symex_assign(deref_code);
@@ -179,14 +179,14 @@ goto_symext::symex_step(reachability_treet & art)
     code_function_call2t &call = to_code_function_call2t(deref_code);
 
     if (!is_nil_expr(call.ret)) {
-      dereference(call.ret, true);
+      dereference(call.ret, dereferencet::WRITE);
     }
 
     replace_dynamic_allocation(deref_code);
 
     for (auto & operand : call.operands)
       if (!is_nil_expr(operand))
-        dereference(operand, false);
+        dereference(operand, dereferencet::READ);
 
     // Always run intrinsics, whether guard is false or not. This is due to the
     // unfortunate circumstance where a thread starts with false guard due to
@@ -264,7 +264,7 @@ void goto_symext::symex_assume()
   expr2tc cond = cur_state->source.pc->guard;
 
   replace_nondet(cond);
-  dereference(cond, false);
+  dereference(cond, dereferencet::READ);
   replace_dynamic_allocation(cond);
 
   cur_state->rename(cond);
@@ -314,7 +314,7 @@ void goto_symext::symex_assert()
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
 
-  dereference(tmp, false);
+  dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
 
   claim(tmp, msg);

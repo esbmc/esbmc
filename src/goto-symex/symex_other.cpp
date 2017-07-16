@@ -25,7 +25,7 @@ void goto_symext::symex_other()
     // invalid pointer. Therefore, dereference it.
     const code_expression2t &expr = to_code_expression2t(code2);
     expr2tc operand = expr.operand;
-    dereference(operand, false, false);
+    dereference(operand, dereferencet::READ);
   }
   else if (is_code_cpp_del_array2t(code2) || is_code_cpp_delete2t(code2))
   {
@@ -33,7 +33,7 @@ void goto_symext::symex_other()
 
     replace_dynamic_allocation(deref_code);
     replace_nondet(deref_code);
-    dereference(deref_code, false);
+    dereference(deref_code, dereferencet::READ);
 
     symex_cpp_delete(deref_code);
   }
@@ -45,14 +45,14 @@ void goto_symext::symex_other()
   {
     replace_dynamic_allocation(code2);
     replace_nondet(code2);
-    dereference(code2, false);
+    dereference(code2, dereferencet::READ);
     symex_printf(expr2tc(), code2);
   }
   else if (is_code_decl2t(code2))
   {
     replace_dynamic_allocation(code2);
     replace_nondet(code2);
-    dereference(code2, false);
+    dereference(code2, dereferencet::READ);
 
     const code_decl2t &decl_code = to_code_decl2t(code2);
 
