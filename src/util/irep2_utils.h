@@ -114,6 +114,15 @@ is_true(const expr2tc &expr)
   if (is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
     return true;
 
+  if (is_constant_int2t(expr) && !to_constant_int2t(expr).value.is_zero())
+    return true;
+
+  if (is_constant_floatbv2t(expr) && !to_constant_floatbv2t(expr).value.is_zero())
+    return true;
+
+  if (is_constant_fixedbv2t(expr) && !to_constant_fixedbv2t(expr).value.is_zero())
+    return true;
+
   return false;
 }
 
@@ -127,6 +136,15 @@ inline bool
 is_false(const expr2tc &expr)
 {
   if (is_constant_bool2t(expr) && !to_constant_bool2t(expr).value)
+    return true;
+
+  if (is_constant_int2t(expr) && to_constant_int2t(expr).value.is_zero())
+    return true;
+
+  if (is_constant_floatbv2t(expr) && to_constant_floatbv2t(expr).value.is_zero())
+    return true;
+
+  if (is_constant_fixedbv2t(expr) && to_constant_fixedbv2t(expr).value.is_zero())
     return true;
 
   return false;
