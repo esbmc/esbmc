@@ -159,11 +159,9 @@ protected:
    *  it might point at, according to value set tracking, and builds an
    *  if-then-else list of concrete references that it might point at.
    *  @param expr Expression to eliminate dereferences from.
-   *  @param write Whether or not we're writing into this object.
-   *  @param free Whether we're freeing this pointer.
+   *  @param mode The dereference mode.
    */
-  void dereference(expr2tc &expr, const bool write, bool free = false,
-                   bool internal = false);
+  void dereference(expr2tc &expr, dereferencet::modet mode);
 
   // symex
 

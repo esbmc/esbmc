@@ -52,7 +52,7 @@ goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
 
   internal_deref_items.clear();
   dereference2tc deref(get_empty_type(), src_ptr);
-  dereference(deref, false, false, true);
+  dereference(deref, dereferencet::INTERNAL);
   // src_ptr is now invalidated.
 
   // Free the given pointer. This just uses the pointer object from the pointer
@@ -283,16 +283,18 @@ void goto_symext::symex_free(const expr2tc &expr)
   // Trigger 'free'-mode dereference of this pointer. Should generate various
   // dereference failure callbacks.
   expr2tc tmp = code.operand;
-  dereference(tmp, false, true);
+  dereference(tmp, dereferencet::FREE);
 
   // Don't rely on the output of dereference in free mode; instead fetch all
   // the internal dereference state for pointed at objects, and creates claims
   // that if pointed at, their offset is zero.
   internal_deref_items.clear();
   tmp = code.operand;
+
   // Create temporary, dummy, dereference
   tmp = dereference2tc(get_uint8_type(), tmp);
-  dereference(tmp, false, false, true); // 'internal' dereference
+  dereference(tmp, dereferencet::INTERNAL);
+
   for (auto const &item : internal_deref_items) {
     guardt g = cur_state->guard;
     g.add(item.guard);
@@ -307,7 +309,7 @@ void goto_symext::symex_free(const expr2tc &expr)
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), code.operand);
-  dereference(ptr_obj, false);
+  dereference(ptr_obj, dereferencet::READ);
 
   symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
   index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
